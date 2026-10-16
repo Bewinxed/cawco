@@ -17,9 +17,11 @@
 # working row: a failure fails the run, as an OPEN escape row does.
 # It starts its own sessiond on a scratch socket, creates one workspace through
 # the product code (rig-workspace.ts, which first hands the agent the upstream
-# rules a hub would: guarded, SOURCE_REPO's remotes its own, so the gh rows
-# need SOURCE_REPO's remotes on GitHub), runs everything through the workspace's
-# executor, then archives the workspace and stops what it started.
+# rule this fleet's hub sends: unguarded, SOURCE_REPO's remotes its own) and
+# keeps that rig up for the whole run, serving the workspace's doors as the
+# agent does (git.sock, github.sock, tools.sock). It runs everything through
+# the workspace's executor, then stops the rig by its pid, archives the
+# workspace and stops its sessiond.
 set -u
 source_repo=$1 other_env=$2 swift_package=${3:-} xcode_dir=${4:-} xcode_scheme=${5:-}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -80,11 +82,31 @@ sys.exit(0 if kr == 0 else 1)'
 sessiond=$!
 for _ in $(seq 100); do [ -S "$CAWCO_SESSIOND_ENDPOINT" ] && break; sleep 0.1; done
 id=$(uuidgen | tr 'A-Z' 'a-z')
-created=$(cd "$checkout" && bun artifacts/srt-eval/rig-workspace.ts create "$source_repo" "$id") || { echo "the workspace did not start"; kill "$sessiond"; exit 1; }
+# The rig stays up serving the workspace's doors; its JSON line says it is armed.
+(cd "$checkout" && exec bun artifacts/srt-eval/rig-workspace.ts create "$source_repo" "$id") > "$scratch/rig.out" 2> "$scratch/rig.log" &
+rig=$!
+until [ "$(wc -l < "$scratch/rig.out")" -gt 0 ] || ! kill -0 "$rig" 2>/dev/null; do sleep 0.2; done
+created=$(head -1 "$scratch/rig.out")
+if [ -z "$created" ]; then
+  echo "the workspace did not start:"; sed 's/^/    /' "$scratch/rig.log"
+  kill "$rig" 2>/dev/null; kill "$sessiond"; exit 1
+fi
 clone=$(printf '%s' "$created" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
 state=$HOME/.cawco/workspaces/$id
-echo "workspace $id: $clone"
+echo "workspace $id: $clone (rig pid $rig)"
 r() { (cd "$clone" && "$state/exec" "$@"); }
+connect() { r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$1' 2>/dev/null"; }
+# The workspace's doors (paths.ts `workspaceDoorDir`), each connected to from inside.
+door_dir=/private/tmp/cawco-$(id -u)/$id
+doors_served() {
+  local door
+  for door in git github tools; do
+    connect "$door_dir/$door.sock" && works "connect the $door door ($1)" PASS || works "connect the $door door ($1)" "FAIL (not served)"
+  done
+}
+echo "its upstream rule: $(cat "$state/ro/upstream.json")"
+step "the workspace's doors, served by the rig"
+doors_served "at the start"
 # The workspace's scratch dir, as its commands see it: their TMPDIR.
 tmp=$(r 'printf %s "$TMPDIR"')
 echo "its TMPDIR: $tmp"
@@ -116,6 +138,14 @@ else
   [ -s "$state/gh-token" ] && works "the executor wrote its gh-token cache" PASS || works "the executor wrote its gh-token cache" FAIL
   login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
   if [ -n "$login" ]; then works "gh api user (token from the cache)" "PASS ($login)"; else works "gh api user (token from the cache)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+fi
+# The GitHub door forwards on the host with the host's login (github-door.ts):
+# GitHub answers its GET /user from inside, the token staying outside.
+if [ -n "$no_login" ]; then
+  skip "the GitHub door answers GET /user" "$no_login"
+else
+  code=$(r "/usr/bin/curl -s --noproxy '*' --unix-socket '$door_dir/github.sock' -o /dev/null -w '%{http_code}' http://api.github.com/user" 2>/dev/null)
+  [ "$code" = 200 ] && works "the GitHub door answers GET /user" "PASS (HTTP $code)" || works "the GitHub door answers GET /user" "FAIL (HTTP ${code:-none})"
 fi
 helpers=$(r "git config --show-origin --get-regexp '^credential\..*helper\$'" 2>&1)
 echo "git's credential helpers inside:"; printf '%s\n' "$helpers" | sed 's/^/    /'
@@ -267,7 +297,6 @@ s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(
   for _ in $(seq 50); do [ -S "$1" ] && break; sleep 0.1; done
   [ -S "$1" ]
 }
-connect() { r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$1' 2>/dev/null"; }
 for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock" "/private/var/tmp (simulators' sockets):$var_tmp/host.sock" "a simulator's webinspectord in /private/var/tmp:$sim_var/com.apple.webinspectord_sim.socket" "testmanagerd's name outside a simulator's dir:$var_tmp/$testmanagerd"; do
   label="connect a socket in ${place%%:*}" sock=${place#*:}
   if ! listen "$sock"; then
@@ -435,9 +464,14 @@ step "overhead (exec true, n=20)"
 for _ in $(seq 20); do s=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); r true; e=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); echo $((e - s)); done | sort -n | awk '{ a[NR] = $1 } END { printf "median %d ms   p90 %d ms   (n=%d)\n", a[int((NR + 1) / 2)], a[int(NR * 0.9 + 0.5)], NR }'
 uptime
 
+step "the workspace's doors at the end of the run"
+doors_served "at the end"
+
 step "archive"
+kill "$rig" 2>/dev/null; wait "$rig" 2>/dev/null
 (cd "$checkout" && bun artifacts/srt-eval/rig-workspace.ts archive "$id" "$clone")
 kill "$sessiond" 2>/dev/null
+if [ "$fail" -ne 0 ]; then echo "the rig's log (its last lines):"; tail -20 "$scratch/rig.log" | sed 's/^/    /'; fi
 rm -rf "$scratch"
 echo
 if [ "$open" -eq 0 ]; then echo "every escape row BLOCKED"; else echo "$open escape row(s) OPEN"; fi

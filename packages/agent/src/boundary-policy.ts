@@ -141,7 +141,7 @@ const KEYCHAIN_MACH_SERVICES = [
 /** What a macOS profile names besides the policy. */
 export interface SeatbeltPlace {
   /**
-   * The tool door's and the git door's sockets, the unix sockets under
+   * The tool, git and GitHub doors' sockets, the unix sockets under
    * CawCo's dirs a command connects to, and its `TMPDIR`'s short name
    * (paths.ts `workspaceTmpDir`), through which a tool reaches its own socket.
    */
@@ -175,8 +175,8 @@ export interface SeatbeltPlace {
  * run (so nothing reaches launchd), the scratch dir itself cannot be removed,
  * no keychain service is looked up ({@link KEYCHAIN_MACH_SERVICES}), and no
  * unix socket under {@link SeatbeltPlace.hostSockets} or a read-denied path
- * (the home dir, every credential store) is reached but the tool and git
- * doors' and those under the workspace's own writable roots: tools put their
+ * (the home dir, every credential store) is reached but the tool, git and
+ * GitHub doors' and those under the workspace's own writable roots: tools put their
  * own sockets where they write and connect back to them (a browser's process
  * singleton in `$TMPDIR`, a language server, a probe's sessiond under
  * `$XDG_CACHE_HOME`). So a daemon's socket under home stays out of reach

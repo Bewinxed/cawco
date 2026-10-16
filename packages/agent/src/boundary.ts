@@ -2148,7 +2148,12 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     const profile = seatbeltProfile(policy, {
       // With the scratch dir's short name, its `TMPDIR`: a tool's socket
       // there (Chromium's singleton) is reached by that name too.
-      doors: [toolDoorOf(id), gitDoorOf(id), workspaceTmpDir(id)],
+      doors: [
+        toolDoorOf(id),
+        gitDoorOf(id),
+        githubDoorOf(id),
+        workspaceTmpDir(id),
+      ],
       hostSockets: await Promise.all(
         [
           dirname(workspacesDir()),
