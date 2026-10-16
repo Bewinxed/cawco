@@ -92,7 +92,10 @@ const du = async (path: string): Promise<number> => {
     stdout: "pipe",
     stderr: "ignore",
   });
-  const [out] = await Promise.all([new Response(run.stdout).text(), run.exited]);
+  const [out] = await Promise.all([
+    new Response(run.stdout).text(),
+    run.exited,
+  ]);
   return Number(out.split("\t")[0]) * 1024 || 0;
 };
 

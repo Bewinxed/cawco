@@ -83,9 +83,10 @@ const runsScript = async (dir: string): Promise<boolean> => {
  */
 const scriptedPackages = async (clone: string): Promise<string[]> => {
   const inDependencies = "*/node_modules/*";
-  const listed = await Bun.$`/usr/bin/find ${clone} -xdev -path ${inDependencies} -name package.json -type f -print0`
-    .quiet()
-    .nothrow();
+  const listed =
+    await Bun.$`/usr/bin/find ${clone} -xdev -path ${inDependencies} -name package.json -type f -print0`
+      .quiet()
+      .nothrow();
   const roots = listed.stdout
     .toString()
     .split("\0")
