@@ -767,11 +767,14 @@ const run = async (kit: Kit) => {
     limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
     await fleet.send(s.id, "ORG-MARK go on");
     // A held move is looked at again within 5 minutes (at-limit `unmoved`).
+    // Right after case 3 restarts the agent, the first look can find the
+    // machine still taking its sessions over ("its custody is still being
+    // decided"): the move goes at the next look, so two looks and slack.
     const landed = await until(
       `${name}: the at-limit controller moves it`,
       () => accountOf(s.id) ?? undefined,
       (one) => one === B || one === C,
-      330_000
+      660_000
     ).catch(() => accountOf(s.id));
     kit.check(
       `${name}: the at-limit controller carries it to B, in A's organization, not C`,
