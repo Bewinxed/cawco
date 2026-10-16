@@ -1099,6 +1099,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
+  /**
+   * A delivered page's latest picture of the person's ink (the crop of the
+   * last stroke group that went) becomes a page's or preview's picture, as a
+   * canvas keeps its own; `artifact_promote` writes it.
+   */
+  const keepInkPicture = (row: ArtifactRow, png: string | null) => {
+    if (!png || row.kind === "canvas") {
+      return;
+    }
+    writeStateFileSync(
+      picturePath(deps.root, row.id),
+      Buffer.from(png, "base64")
+    );
+  };
+
   /*
    * The person's marks (pins, replies, resolves, ink) go by themselves
    * (core comments.ts). Each person's write on an artifact's `pins` or `ink`
@@ -1305,6 +1320,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       url
     );
     errorsHeard(id, errors);
+    keepInkPicture(
+      row,
+      loose.map(pictureOfGroup).findLast((png) => png !== null) ?? null
+    );
     letGoPictures(
       id,
       [...owed.map((pin) => pin.id), ...loose.map((group) => group.id)],
