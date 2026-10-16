@@ -8,18 +8,12 @@
    */
   const TRAILING_SPACE = / $/;
 
-  function broken(host: HTMLElement, text: string): string {
-    const parent = host.parentElement;
-    if (!parent) {
+  /** `text` with a "\n" wherever it wraps in `probe`, laid out already. */
+  function linesIn(probe: HTMLElement, text: string): string {
+    const node = probe.firstChild as Text | null;
+    if (!node) {
       return text;
     }
-    const probe = host.cloneNode(false) as HTMLElement;
-    // Its width to the subpixel: rounded down, a line that just fits at rest
-    // wrapped in the copy, and the morph broke it where it never breaks.
-    probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;inset-inline-start:0;inset-block-start:0;inline-size:${host.getBoundingClientRect().width}px`;
-    probe.textContent = text;
-    parent.append(probe);
-    const node = probe.firstChild as Text;
     const range = document.createRange();
     let out = "";
     let top: number | null = null;
@@ -35,7 +29,32 @@
       }
       out += text[i];
     }
-    probe.remove();
+    return out;
+  }
+
+  /**
+   * Each of `texts` broken where it wraps at `width`, the host's: every copy
+   * put in at once and read together, one layout for them all.
+   */
+  function broken(host: HTMLElement, width: number, texts: string[]): string[] {
+    const parent = host.parentElement;
+    if (!parent) {
+      return texts;
+    }
+    const probes = texts.map((text) => {
+      const probe = host.cloneNode(false) as HTMLElement;
+      // Its width to the subpixel: rounded down, a line that just fits at
+      // rest wrapped in the copy, and the morph broke it where it never
+      // breaks.
+      probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;inset-inline-start:0;inset-block-start:0;inline-size:${width}px`;
+      probe.textContent = text;
+      return probe;
+    });
+    parent.append(...probes);
+    const out = texts.map((text, i) => linesIn(probes[i], text));
+    for (const probe of probes) {
+      probe.remove();
+    }
     return out;
   }
 </script>
@@ -76,9 +95,6 @@
   }: { text: string; wrap?: boolean; still?: boolean } = $props();
 
   let host = $state<HTMLElement | null>(null);
-  /** As the morph is handed it: broken at its wraps, for a paragraph. */
-  const lines = (value: string): string =>
-    wrap && host ? broken(host, value) : value;
 
   let morphMs = $state(0);
   $effect(() => {
@@ -130,24 +146,29 @@
       morphing = false;
       return;
     }
-    const to = untrack(() => lines(next));
+    const paragraph = untrack(() => wrap);
     if (morph) {
-      // Mid-morph: the next step starts from what is drawn.
+      // Mid-morph: the next step starts from what is drawn; a paragraph's
+      // words are broken at the host's width first.
+      const [to] =
+        paragraph && host
+          ? broken(host, host.getBoundingClientRect().width, [next])
+          : [next];
       step(morph, to);
       return;
     }
     if (!host) {
       return;
     }
+    // The host read once: its box is what the swap holds, and its width is
+    // what a paragraph's two sides are broken at, read together.
     const box = host.getBoundingClientRect();
+    const [from, to] = paragraph
+      ? broken(host, box.width, [was, next])
+      : [was, next];
     // Inline, its rect is the run of its words; its height is the font's,
     // not the line's, so only a block (a paragraph) holds its height.
-    swap = {
-      from: untrack(() => lines(was)),
-      to,
-      width: box.width,
-      height: wrap ? box.height : 0,
-    };
+    swap = { from, to, width: box.width, height: paragraph ? box.height : 0 };
     morphing = true;
   });
 </script>

@@ -81,8 +81,13 @@ function arrive(el: HTMLElement, run: Run, fade: boolean): void {
 }
 
 /** A letter that stays glides from where it was drawn, and fades up if it was fading. */
-function glide(el: HTMLElement, was: Drawn, origin: DOMRect, run: Run): void {
-  const at = el.getBoundingClientRect();
+function glide(
+  el: HTMLElement,
+  was: Drawn,
+  at: DOMRect,
+  origin: DOMRect,
+  run: Run
+): void {
   const dx = was.x - (at.left - origin.left);
   const dy = was.y - (at.top - origin.top);
   if (dx !== 0 || dy !== 0) {
@@ -125,6 +130,8 @@ export class Morph {
   #leaving: HTMLElement[] = [];
   #clock: Animation[] = [];
   #step = 0;
+  /** The letters of the words split this step, waiting to be placed (`#place`). */
+  readonly #pieces: { el: HTMLElement; first: HTMLElement; was: Drawn }[] = [];
 
   constructor(
     root: HTMLElement,
@@ -159,6 +166,9 @@ export class Morph {
   async to(value: string): Promise<boolean> {
     this.#step += 1;
     const step = this.#step;
+    // Every read of what is drawn, then every write, then every read of
+    // what is laid out, then the animations: read between writes, each read
+    // laid the page out again, a pass per letter in a tab switch.
     const box = this.#root.getBoundingClientRect();
     const drawn = this.#read(box);
     for (const animation of this.#clock) {
@@ -205,19 +215,48 @@ export class Morph {
     for (const [id, pieces] of splits) {
       this.#split(id, pieces, drawn);
     }
+    this.#place(drawn);
     this.#leave(new Set(segments.map((segment) => segment.id)), drawn);
   }
 
-  /** What is drawn now, where it is drawn: mid-step, its moves included. */
+  /**
+   * Every letter of every word split this step placed from where its word
+   * was drawn, read once all the words are split: a word's first letter
+   * stands where the word stood, and the others as far from it as they are.
+   */
+  #place(drawn: Map<HTMLElement, Drawn>): void {
+    const pieces = this.#pieces.splice(0);
+    const own = pieces.map(({ el }) => el.getBoundingClientRect());
+    const leads = new Map(
+      pieces.map(({ first }) => [first, first.getBoundingClientRect()])
+    );
+    for (const [i, { el, first, was }] of pieces.entries()) {
+      const lead = leads.get(first);
+      if (lead) {
+        drawn.set(el, {
+          opacity: was.opacity,
+          x: was.x + (own[i].left - lead.left),
+          y: was.y + (own[i].top - lead.top),
+        });
+      }
+    }
+  }
+
+  /**
+   * What is drawn now, where it is drawn: mid-step, its moves included. With
+   * no step running every letter stands at full opacity, and its opacity is
+   * not asked of its style.
+   */
   #read(box: DOMRect): Map<HTMLElement, Drawn> {
     const drawn = new Map<HTMLElement, Drawn>();
+    const running = this.#clock.length > 0;
     for (const el of [...this.#flow.values(), ...this.#leaving]) {
       if (isBreak(el)) {
         continue;
       }
       const at = el.getBoundingClientRect();
       drawn.set(el, {
-        opacity: Number(getComputedStyle(el).opacity),
+        opacity: running ? Number(getComputedStyle(el).opacity) : 1,
         x: at.left - box.left,
         y: at.top - box.top,
       });
@@ -235,22 +274,16 @@ export class Morph {
       return;
     }
     const was = drawn.get(whole);
-    const at = whole.getBoundingClientRect();
     const els = pieces.map(make);
     whole.replaceWith(...els);
     this.#flow.delete(id);
+    const [first] = els;
     for (const [i, piece] of pieces.entries()) {
       const el = els[i];
       this.#flow.set(piece.id, el);
-      if (!was || isBreak(el)) {
-        continue;
+      if (was && first && !isBreak(el)) {
+        this.#pieces.push({ el, first, was });
       }
-      const own = el.getBoundingClientRect();
-      drawn.set(el, {
-        opacity: was.opacity,
-        x: was.x + (own.left - at.left),
-        y: was.y + (own.top - at.top),
-      });
     }
   }
 
@@ -311,7 +344,16 @@ export class Morph {
     const run: Run = (el, keyframes) => {
       clock.push(el.animate(keyframes, timing));
     };
+    // Where everything is laid out, read in one go before any animation is
+    // started: each animation started restyles, and a read after it laid
+    // the page out again.
     const origin = this.#root.getBoundingClientRect();
+    const laid = new Map<HTMLElement, DOMRect>();
+    for (const el of flow) {
+      if (!(isBreak(el) || arriving.has(el))) {
+        laid.set(el, el.getBoundingClientRect());
+      }
+    }
     for (const el of flow) {
       if (isBreak(el)) {
         continue;
@@ -321,8 +363,9 @@ export class Morph {
         continue;
       }
       const was = drawn.get(el);
-      if (was) {
-        glide(el, was, origin, run);
+      const at = laid.get(el);
+      if (was && at) {
+        glide(el, was, at, origin, run);
       }
     }
     for (const el of this.#leaving) {
@@ -335,13 +378,14 @@ export class Morph {
     return clock;
   }
 
-  /** Holds the box at least `was`, and at least what it lays out at now. */
+  /**
+   * Holds the box at least `was`. The box is its letters' own size, so what
+   * they lay out at wider or taller than `was` it takes from them: a floor
+   * of `was` alone draws the box the larger of the two, as a floor of the
+   * larger did, with nothing read to find it.
+   */
   #hold(was: { width: number; height: number }): void {
-    const root = this.#root;
-    root.style.minInlineSize = "";
-    root.style.minBlockSize = "";
-    const now = root.getBoundingClientRect();
-    root.style.minInlineSize = `${Math.max(was.width, now.width)}px`;
-    root.style.minBlockSize = `${Math.max(was.height, now.height)}px`;
+    this.#root.style.minInlineSize = `${was.width}px`;
+    this.#root.style.minBlockSize = `${was.height}px`;
   }
 }
