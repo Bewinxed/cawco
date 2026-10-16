@@ -386,9 +386,9 @@ export function tableReflow(options: {
  * Layout changes once, in the update that changes the DOM, and everything
  * marked that moved starts, in that same update, on a transform that holds
  * it where it was drawn, then slides home. So nothing is ever painted where
- * it jumped to: a MutationObserver hears the change, and the frame's
- * callbacks read every place it moved (`heard`), once a frame, before the
- * frame is painted. Places are layout boxes
+ * it jumped to: a MutationObserver hears the change, and every place it
+ * moved is read once a frame, after the frame's layout and before its paint
+ * (`heard`). Places are layout boxes
  * (offsets, which transforms never move), each read against its nearest
  * marked ancestor, so a group that slides carries its rows and a row that
  * moves inside it adds only its own step. A box takes its new room in the
@@ -1565,21 +1565,44 @@ export function reread(containers: HTMLElement[]): void {
  */
 const changed = new Map<Reflow, number>();
 /**
- * Once a frame, in its callbacks: every container that heard a change since
- * the last frame reads where its rows are then, before the frame lays the
- * page out and paints. Read in the microtask behind each update, a list's
+ * Once a frame, after its layout and before its paint: every container that
+ * heard a change since reads where its rows are then, off the layout the
+ * frame has just made. Read in the microtask behind each update, a list's
  * places were read right after that update wrote them: a streaming session
  * rewrites a row's words with every message, and each one laid the page out
- * on the spot (`offsetParent` alone 487–500ms a 20s two-pane stream). A
- * frame's callbacks run before it paints, so nothing is drawn where it
- * jumped to, and a frame's worth of changes is one reading.
+ * on the spot (`offsetParent` alone 487–500ms a 20s two-pane stream). The
+ * turn between a frame's layout and its paint is a ResizeObserver's: the
+ * flush is woken there by a box of no size of its own that a change resizes
+ * (`wake`), so nothing is drawn where it jumped to, whatever task made the
+ * change (one in a frame's callbacks included, which a frame callback asked
+ * from would have read a frame late), and a frame's changes are one reading
+ * that lays nothing out.
  */
+let wake: HTMLElement | null = null;
+let woken: (() => void) | null = null;
+function afterLayout(run: () => void): void {
+  if (!wake) {
+    const box = document.createElement("div");
+    box.setAttribute("aria-hidden", "true");
+    box.style.cssText =
+      "position:fixed;left:0;top:0;width:0;height:0;contain:strict;visibility:hidden;pointer-events:none";
+    document.body.append(box);
+    new ResizeObserver(() => {
+      const go = woken;
+      woken = null;
+      go?.();
+    }).observe(box);
+    wake = box;
+  }
+  woken = run;
+  wake.style.width = wake.style.width === "1px" ? "0px" : "1px";
+}
 function heard(state: Reflow, depth: number): void {
   if (state.skipped || state.resting) {
     return;
   }
   if (changed.size === 0) {
-    requestAnimationFrame(() => {
+    afterLayout(() => {
       const order = [...changed].sort((a, b) => b[1] - a[1]);
       changed.clear();
       const settles = [...settling];
@@ -1601,10 +1624,9 @@ function heard(state: Reflow, depth: number): void {
 const settling = new Set<() => void>();
 
 /**
- * Runs `settle` once, before the next change reads where rows are: in the
- * frame's callbacks after the update that made it (`heard`), which come after
- * everything the update set off (Svelte starts a transition in a microtask
- * of its own). A
+ * Runs `settle` once, before the next change reads where rows are: after
+ * the next frame's layout (`heard`), which comes after everything the
+ * update set off (Svelte starts a transition in a microtask of its own). A
  * nested list's inset (motion/branch `nestFrom`) lands here: measured in a
  * microtask of its own, it ran before the transition that holds its list
  * out of the layout, and laid out a tree of forty in the click.
