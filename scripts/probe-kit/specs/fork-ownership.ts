@@ -222,12 +222,56 @@ const respond = (request: Seen): Reply => {
   return text("ok");
 };
 
+/** Lines of a role's log a delegation that went nowhere would leave. */
+const TELLING = /work.?item|delegat|workspace|refus|error|fail|boundary/i;
+
+/**
+ * What the fleet holds about a parent whose delegate never declared its
+ * wait: its items, its children's rows, the model requests since its ask,
+ * and the hub's and agent's telling lines.
+ */
+const stuck = async (
+  fleet: KitFleet,
+  parentId: string,
+  since: number
+): Promise<string> => {
+  const items = fleet.query(
+    "SELECT id, instance_id, state, wait_reason, error FROM work_items WHERE parent_instance_id = ?",
+    parentId
+  );
+  const children = fleet.query(
+    "SELECT id, status, last_error, work_item_id FROM instances WHERE parent_instance_id = ?",
+    parentId
+  );
+  const requests = fleet.seen
+    .filter((one) => one.at >= since && one.tools)
+    .slice(-12)
+    .map((one) => {
+      const calls = callsOf(one).slice(-2);
+      return `- last=${JSON.stringify(one.last.slice(0, 160))} afterTool=${one.afterTool} offers=${[DELEGATE, WAIT, "ToolSearch"].filter((name) => one.toolNames.includes(name)).join(",")} calls=${JSON.stringify(calls).slice(0, 400)}`;
+    });
+  const telling = async (role: "hub" | "agent") =>
+    (await fleet.logs(role))
+      .split("\n")
+      .filter((line) => TELLING.test(line))
+      .slice(-25)
+      .join("\n");
+  return [
+    `items: ${JSON.stringify(items)}`,
+    `children: ${JSON.stringify(children)}`,
+    `requests since the ask:\n${requests.join("\n") || "(none)"}`,
+    `hub:\n${await telling("hub")}`,
+    `agent:\n${await telling("agent")}`,
+  ].join("\n");
+};
+
 /** A parent with a live delegate that has declared its wait: the two ids. */
 const parentWithDelegate = async (
   fleet: KitFleet,
   which: Case
 ): Promise<{ parent: string; child: string }> => {
   const id = await fleet.spawn("claude", `Parent ${which}`, repo);
+  const sentAt = Date.now();
   await fleet.send(id, PARENTS[which].ask);
   const item = (await until(
     `${which}: the parent's delegate is waiting`,
@@ -238,7 +282,12 @@ const parentWithDelegate = async (
       )[0],
     (row) => Boolean(row?.wait_reason),
     300_000
-  )) as { instance_id: string };
+  ).catch(async (error: unknown) => {
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\n${await stuck(fleet, id, sentAt)}`,
+      { cause: error }
+    );
+  })) as { instance_id: string };
   await until(
     `${which}: the parent's turn ended`,
     () => fleet.instance(id),
