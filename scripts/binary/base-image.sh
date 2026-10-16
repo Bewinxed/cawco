@@ -14,11 +14,16 @@ BASE_LOCAL=localhost/cawco-proof-ubuntu:24.04
 
 # The Claude Code every proof machine has installed: the CLI the SDK in this tree is built against (its
 # package.json's claudeCodeVersion, read from packages/agent's installed dependencies), so an image's recipe names it.
-# CawCo ships none of its own; the agent runs the `claude` on its PATH.
+# CawCo ships none of its own; the agent runs the `claude` on its PATH. That version is refused here when it is older
+# than the agent's CLAUDE_VERSION_FLOOR (claude-version.ts), below which the agent runs no `claude` at all: nightly
+# b01eb1b87's stage 1 installed the SDK's 2.1.296 under a 2.1.301 floor, so its agent never ran `auth status`, the stub
+# account never read signed-in, and both stacks failed "Did not become ready: http://127.0.0.1:43456/api/accounts".
 sdk_claude_version() {
-  local version
-  version=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../packages/agent" && bun -e 'console.log(require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion)') &&
-    [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "could not read the SDK's claudeCodeVersion (got '${version:-}'): run bun install --frozen-lockfile" >&2; return 1; }
+  local said version floor older
+  said=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../packages/agent" && bun -e 'const { CLAUDE_VERSION_FLOOR, olderThan } = await import("./src/claude-version.ts"); const v = require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion; console.log(`${v} ${CLAUDE_VERSION_FLOOR} ${olderThan(v, CLAUDE_VERSION_FLOOR)}`)') &&
+    read -r version floor older <<< "$said" &&
+    [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "could not read the SDK's claudeCodeVersion (got '${said:-}'): run bun install --frozen-lockfile" >&2; return 1; }
+  [[ $older == false ]] || { echo "the SDK's Claude Code $version is older than $floor, the oldest the agent runs (claude-version.ts CLAUDE_VERSION_FLOOR): move packages/agent's @anthropic-ai/claude-agent-sdk to one built against $floor or newer" >&2; return 1; }
   echo "$version"
 }
 
