@@ -206,13 +206,14 @@
             {@const column = header.column}
             {@const sorted = column.getIsSorted()}
             {@const sort = ariaSort(sorted)}
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               aria-sort={sort}
               class="col-{column.id}"
               data-task-table-col={column.id}
               scope="col"
             >
+              <!-- biome-ignore-end lint/a11y/noHeaderScope: the tag above -->
               {#if column.id === "pick"}
                 {@const ids = shownIds()}
                 {@const count = ids.filter((id) => picked?.(id)).length}
