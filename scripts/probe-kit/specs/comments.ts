@@ -2471,7 +2471,7 @@ const mapPressChecks = async (on: On) => {
     const pin = id
       ? (pins[id] as { anchor: { selector: string }; number: number })
       : undefined;
-    const names = pin
+    const names: { intro: boolean; tag: string } = pin
       ? await frame.evaluate((selector) => {
           const el = document.querySelector(selector);
           return {
