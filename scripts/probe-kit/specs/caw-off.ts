@@ -8,6 +8,8 @@
  * running-sessions tray in the page (StopTray, `data-stop-tray`): in his
  * panel under the switch, under the head's ⋯ for forget. In order:
  *
+ * 0. Caw, a Claude lead, starts with keep-alive on (caw.ts `startLead`):
+ *    his context is the project's history, kept warm under keep-alive's cap.
  * 1. His settings popover (the head's ⋯ › Caw settings…) stands in the
  *    glass card's frame (web/caw-seat-pop's check); nothing he started runs: the switch flips at once, no tray.
  * 2. Only his own turn (a routine's) runs: one line under the switch, no
@@ -157,6 +159,16 @@ const run = async (kit: Kit) => {
       )[0]?.lead_instance_id ?? undefined,
     Boolean,
     180_000
+  );
+  // 0. Caw starts kept warm.
+  const [lead] = fleet.query<{ harness: string; keep_alive: number }>(
+    "SELECT harness, keep_alive FROM instances WHERE id = ?",
+    leadId
+  );
+  kit.check(
+    "0: Caw, a Claude lead, starts with keep-alive on",
+    lead?.harness === "claude" && lead.keep_alive === 1,
+    JSON.stringify(lead)
   );
   const cawOn = () =>
     fleet.query<{ caw: number }>(

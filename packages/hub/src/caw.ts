@@ -538,6 +538,7 @@ export interface CawDeps {
     | "threadMessages"
     | "threadMessage"
     | "threadOfTask"
+    | "updateKeepAlive"
     | "updateWorkItem"
     | "workItem"
   >;
@@ -1170,6 +1171,17 @@ export const createCaw = ({
       requestId: crypto.randomUUID(),
     });
     db.setProjectCaw(project.id, { leadInstanceId: instanceId });
+    // A Claude lead's context is the project's whole history, and an idle
+    // hour costs it a full rewrite: kept warm, under keep-alive's cap of one
+    // rewrite's worth of pings (caw-cost.md: $1.01 of pings against $10.18
+    // of rewrites over 10-15/16).
+    if (project.cawHarness === "claude") {
+      db.updateKeepAlive(instanceId, {
+        keepAliveEnabled: true,
+        keepAliveStopped: null,
+        keepAliveSent: 0,
+      });
+    }
     const lead = row(instanceId);
     if (!lead) {
       throw new Error(`Caw's session ${instanceId} has no row on this hub.`);
