@@ -156,7 +156,6 @@ const OFFSET = /offset=([\d.-]+)/;
 const COMMENT_PART = /^task-activity-comment-\d+$/;
 const CHANGE_PART = /^task-activity-change-\d+$/;
 const SESSION_PART = /^task-session-/;
-const SPACES = /\s+/;
 
 /** What the sheet should show for a task, as its hub reads it. */
 interface ReadTask {
@@ -417,6 +416,8 @@ async function device(
   const parts = new Map<string, Part>();
   /** Each part as it was last seen, kept after it scrolls away. */
   const seen = new Map<string, Part>();
+  /** Each part as it last stood on screen. */
+  const onShow = new Map<string, Part>();
   /** Text the app laid out wider than its view (ProseView's DEBUG `prose overflow`). */
   const overflow: string[] = [];
   /** Inline code chips narrower than a line laid across two (`prose chip split`). */
@@ -473,6 +474,9 @@ async function device(
             };
             parts.set(part[1], read);
             seen.set(part[1], read);
+            if (read.shows) {
+              onShow.set(part[1], read);
+            }
           } else if (line.startsWith("gone ")) {
             parts.delete(line.slice(5));
           }
@@ -699,26 +703,12 @@ async function device(
       await tapLabel("Details");
       await waitFor("the details", () => !!part("task-details")?.shows, 15_000);
       await pause(1500);
-      // The main thread at rest on the details: a sample beside the captures.
-      const [pid] = (
-        await sh(
-          `xcrun simctl spawn ${udid} launchctl list | grep 'UIKitApplication:dev.cawco.app' || true`
-        )
-      )
-        .trim()
-        .split(SPACES);
-      kit.note(
-        `${tag} (${theme}): the app's pid on its details: ${pid || "none"}`
-      );
-      if (pid && pid !== "-") {
-        await sh(
-          `sample ${pid} 3 -file "${join(kit.out, `${tag}-details-${theme}.sample.txt`)}" >/dev/null 2>&1 || true`
-        );
-      }
       await shot(`details-${theme}`);
+      // Each part as it stood when it was on screen: the list hides a cell
+      // it has scrolled away, so one passed on the way down reads hidden after.
       for (
         let n = 0;
-        n < 24 && !DETAIL_PARTS.every((id) => seen.get(id)?.shows);
+        n < 24 && !DETAIL_PARTS.every((id) => onShow.has(id));
         n += 1
       ) {
         await scroll(true);
@@ -728,7 +718,7 @@ async function device(
       if (theme !== "light") {
         continue;
       }
-      const shownParts = DETAIL_PARTS.map((id) => seen.get(id));
+      const shownParts = DETAIL_PARTS.map((id) => onShow.get(id));
       const sessions = [...seen.keys()].filter((id) => SESSION_PART.test(id));
       const changes = [...seen.keys()].filter((id) => CHANGE_PART.test(id));
       kit.check(
