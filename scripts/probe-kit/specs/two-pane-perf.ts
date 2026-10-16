@@ -39,8 +39,9 @@
  * trace's style recalculations and layouts that did anything are counted,
  * with the elements they restyled (`workOf`), and its interaction is read
  * off Event Timing (noted). Two panes' passes, each way of switching, are
- * held within `PASS_SHARE` of one pane's in the same run, and no focus
- * switch restyles more than `FOCUS_RESTYLED` elements. Each phase's longest task on the
+ * held within `PASS_SHARE` of one pane's in the same run, and a focus switch
+ * restyles only what it shows: within `SHOWN_SHARE` of the elements of the
+ * shown pane's rows in view, measured in the same switch. Each phase's longest task on the
  * slower CPU is noted against `LONG_TASK_MS`, its longest animation frame
  * by the scripts that filled it, and the hub's messages that took 4ms or
  * more by kind; every number is written to `numbers.json` in the spec's out
@@ -119,14 +120,15 @@ const REST_MS = 2000;
  */
 const PASS_SHARE = 1.1;
 /**
- * The most elements a focus switch may restyle, from its input to the frame
- * that shows its pane. Its pane was laid out while the focus rested, so what
- * the switch restyles is the strip's tabs, the composer it trades, the
- * rail's marks and what the shown pane changes, not every element the pane
- * holds (778 to 1,307 of them when `.pane-settling` was lifted whole). Our
- * own call.
+ * A switch restyles only what it shows: a focus switch's restyled elements
+ * (from its input to the frame that shows its pane, every style pass's
+ * count added, so an element restyled twice counts twice) within this many
+ * times the elements of the shown pane's rows that stand in view, counted
+ * the frame after. Its pane was laid out while the focus rested; what is
+ * left is what it shows, and the strip and composer it trades inside the
+ * tenth over.
  */
-const FOCUS_RESTYLED = 400;
+const SHOWN_SHARE = 1.1;
 /** A box holding this many elements or more is named when a switch changes it. */
 const ROOT_ELEMENTS = 100;
 /** How long after its press a switch's own changes are taken to be, ms, the page's clock. */
@@ -144,6 +146,8 @@ interface Reading {
   maxInput: number;
   /** How many hub messages the page took over the phase. */
   messages: number;
+  /** Each switch's shown pane's row elements in view, the frame after it showed (switch phases). */
+  onScreen: number[];
   /** The longest task between a reach and its switch, CPU ms (switch phases). */
   reachCpu: number;
   /** What the longest task restyled, and its style and layout time. */
@@ -1295,6 +1299,8 @@ async function measure(
   >;
   /** Each switch's input on the page's clock, by phase: where its Event Timing entries are read from. */
   const madeAts: Partial<Record<Phase, number[]>> = {};
+  /** Each switch's shown pane's elements in view, the frame after it showed, by phase. */
+  const onScreens: Partial<Record<Phase, number[]>> = {};
   // The main thread's CPU, off a DevTools trace's top-level tasks; in a
   // switch phase, the longest task of each switch's reach and of the switch
   // itself (its marks, `two-pane:reach:<n>` and `two-pane:switch:<n>`); and
@@ -1623,6 +1629,12 @@ async function measure(
     await phase(how, async () => {
       // A leg voided for pressure runs again whole: its inputs with it.
       madeAts[how] = [];
+      onScreens[how] = [];
+      await page.evaluate(() => {
+        (
+          window as unknown as { __onScreen?: Record<string, number> }
+        ).__onScreen = {};
+      });
       for (const [n, id] of order.entries()) {
         const tab = tabOf(id);
         await marked(`two-pane:reach:${n}`);
@@ -1644,9 +1656,38 @@ async function measure(
               );
             };
             const began = performance.now();
+            // The elements of the shown pane's rows in view, counted the
+            // frame after the one that shows it: its boxes read there, not
+            // inside the switch being counted.
+            const onScreen = () => {
+              const box = document.querySelector(
+                `.pane[data-pane="${CSS.escape(pane)}"]`
+              );
+              const view = box
+                ?.querySelector('[aria-label="Session transcript"]')
+                ?.getBoundingClientRect();
+              const items = box?.querySelector(".listing > :first-child");
+              let count = 0;
+              for (const item of items?.children ?? []) {
+                const r = item.getBoundingClientRect();
+                if (
+                  view &&
+                  r.height > 0 &&
+                  r.bottom > view.top &&
+                  r.top < view.bottom
+                ) {
+                  count += 1 + item.getElementsByTagName("*").length;
+                }
+              }
+              const w = window as unknown as {
+                __onScreen?: Record<string, number>;
+              };
+              w.__onScreen = { ...w.__onScreen, [shown]: count };
+            };
             const look = () => {
               if (drawn()) {
                 performance.mark(shown);
+                requestAnimationFrame(onScreen);
               } else if (performance.now() - began < 2000) {
                 requestAnimationFrame(look);
               }
@@ -1664,6 +1705,14 @@ async function measure(
         madeAts[how].push(madeAt);
         await way.make(tab);
         await page.waitForTimeout(SETTLE_MS);
+        onScreens[how].push(
+          await page.evaluate(
+            (shown) =>
+              (window as unknown as { __onScreen?: Record<string, number> })
+                .__onScreen?.[shown] ?? 0,
+            `two-pane:shown:${n}`
+          )
+        );
         const said = await page.evaluate(
           // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialized into the page whole, so it cannot lean on helpers out here
           ([since, within, least]) => {
@@ -1889,6 +1938,7 @@ async function measure(
       switchCpu: Math.round(switchCpu),
       switchInputs,
       work,
+      onScreen: onScreens[name] ?? [],
       worstFrame: `${worst ? `${Math.round(worst[1])}ms frame: ${worst[2]}` : "no long frame"}; hub messages of 4ms or more: ${heavy || "none"}`,
     };
   }
@@ -2083,18 +2133,37 @@ const spec: Spec = {
         `${(twoPasses / Math.max(1, onePasses)).toFixed(2)}x: two panes ${twoPasses} passes over ${two[how].work.length} switches, one pane ${onePasses} over ${one[how].work.length}; elements restyled ${restyledOf(two[how])} against ${restyledOf(one[how])}`
       );
     }
-    // A switch the reader reached by the keyboard only shows what is new:
-    // its pane was laid out while the focus rested, so what it restyles is
-    // the tab strip, the composer and what the shown pane changes.
+    // A switch restyles only what it shows: a focus switch's pane was laid
+    // out while the focus rested.
     for (const mode of ["one", "two"] as Layout[]) {
-      const { work } = numbers[mode].focus;
-      const most = Math.max(0, ...work.map((w) => w.restyled));
+      const { work, onScreen } = numbers[mode].focus;
+      const each = work.map(
+        (w, i) => `${w.restyled} restyled against ${onScreen[i] ?? 0} in view`
+      );
       kit.check(
-        `${mode} pane(s), focus: no switch restyles more than ${FOCUS_RESTYLED} elements`,
-        most <= FOCUS_RESTYLED && work.length > 0 && work.every((w) => w.shown),
-        `the most ${most}; ${workLine(work)}`
+        `${mode} pane(s), focus: each switch restyles within ${SHOWN_SHARE}x the elements of the shown pane's rows in view`,
+        work.length > 0 &&
+          work.every(
+            (w, i) => w.shown && w.restyled <= (onScreen[i] ?? 0) * SHOWN_SHARE
+          ),
+        each.join("; ")
       );
     }
+    kit.note(
+      `point switches, restyled against the shown pane's rows in view: ${(
+        ["one", "two"] as Layout[]
+      )
+        .map(
+          (mode) =>
+            `${mode} pane(s) ${numbers[mode].point.work
+              .map(
+                (w, i) =>
+                  `${w.restyled}/${numbers[mode].point.onScreen[i] ?? 0}`
+              )
+              .join(", ")}`
+        )
+        .join("; ")}`
+    );
     // A switch nobody reached for first lays its pane out in the switch:
     // held to one pane's.
     kit.check(
