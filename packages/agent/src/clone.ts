@@ -10,9 +10,10 @@
  * possible"), so the cut costs about what a shared clone did, and a gc in
  * the source unlinks only its own names for those files.
  *
- * Workspaces were git worktrees before they were clones, and shared clones
- * (`--shared`, objects read through the source's) before they had stores of
- * their own. A worktree's `.git` is a file pointing into the source
+ * Workspaces were git worktrees before they were clones, and clones that
+ * borrowed the source's objects (an alternates file naming its store) before
+ * they had stores of their own. A worktree's `.git` is a file pointing into
+ * the source
  * repository, so everything a delegate commits there is written into the
  * source, which the boundary keeps read-only. {@link cloneInPlace} turns such
  * a workspace into a clone where it stands: same path, branch and HEAD, the
