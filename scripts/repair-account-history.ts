@@ -213,40 +213,75 @@ const rebuild = (account: string): void => {
     .all(account) as HistoryRow[];
   const was = db
     .query(
-      "SELECT windows, subscription, overage, last_seen_at FROM account_readings WHERE account_id = ?"
+      "SELECT subscription, overage, last_seen_at FROM account_readings WHERE account_id = ?"
     )
     .get(account) as {
     last_seen_at: number;
     overage: string | null;
     subscription: string | null;
-    windows: string;
   } | null;
+  // Its windows as their rows hold them (`account_windows`), in their order.
+  const rowsNow = JSON.stringify(
+    db
+      .query(
+        'SELECT kind, scope_label, "group", is_active, percent, severity, resets_at FROM account_windows WHERE account_id = ? ORDER BY rowid'
+      )
+      .all(account)
+  );
+  // A script's connection keeps no foreign keys: a reading's windows go by hand.
+  const dropWindows = () =>
+    db.run("DELETE FROM account_windows WHERE account_id = ?", [account]);
   if (latest.length === 0) {
     if (was) {
+      dropWindows();
       db.run("DELETE FROM account_readings WHERE account_id = ?", [account]);
       process.stdout.write(`reading of ${nameOf(account)} removed: no rows\n`);
     }
     return;
   }
-  const windows = JSON.stringify(latest.map(windowOf));
+  const windows = latest.map(windowOf).map((w) => ({
+    kind: w.kind,
+    scope_label: w.scopeLabel ?? "",
+    group: w.group,
+    is_active: w.isActive ? 1 : 0,
+    percent: w.percent,
+    severity: w.severity,
+    resets_at: w.resetsAt,
+  }));
   const lastRead = Math.max(...latest.map((row) => row.fetched_at));
   // The overage is from the account's last event: kept only when that event
   // is one of its own rows' (not read after them).
   const overage = was && was.last_seen_at <= lastRead ? was.overage : null;
   if (
     was &&
-    was.windows === windows &&
+    rowsNow === JSON.stringify(windows) &&
     was.overage === overage &&
     was.last_seen_at === lastRead
   ) {
     return;
   }
   db.run(
-    `INSERT INTO account_readings (account_id, windows, subscription, overage, last_seen_at)
-     VALUES (?1, ?2, ?3, ?4, ?5)
-     ON CONFLICT (account_id) DO UPDATE SET windows = ?2, overage = ?4, last_seen_at = ?5`,
-    [account, windows, was?.subscription ?? null, overage, lastRead]
+    `INSERT INTO account_readings (account_id, subscription, overage, last_seen_at)
+     VALUES (?1, ?2, ?3, ?4)
+     ON CONFLICT (account_id) DO UPDATE SET overage = ?3, last_seen_at = ?4`,
+    [account, was?.subscription ?? null, overage, lastRead]
   );
+  dropWindows();
+  const insert = db.prepare(
+    'INSERT INTO account_windows (account_id, kind, scope_label, "group", is_active, percent, severity, resets_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  for (const w of windows) {
+    insert.run(
+      account,
+      w.kind,
+      w.scope_label,
+      w.group,
+      w.is_active,
+      w.percent,
+      w.severity,
+      w.resets_at
+    );
+  }
   process.stdout.write(
     `reading of ${nameOf(account)} rebuilt: ${latest
       .map(
