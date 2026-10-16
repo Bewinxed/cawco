@@ -62,7 +62,7 @@ import {
   NESTED_BOUNDARY_LABEL,
   nestedBoundaryReason,
 } from "@cawco/core/boundary-nesting";
-import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import { projectClaudeRelative, TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import { isGitDirSync } from "@cawco/core/git-dir";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -462,6 +462,9 @@ const PROTECTED = [
     "hooks",
     "commands",
     "agents",
+    // The skills the fleet places, and the store their links land in.
+    "skills",
+    TREE_STORE_DIR,
   ].map((name) => projectClaudeRelative(name)),
   "opencode.json",
   "opencode.jsonc",

@@ -54,6 +54,7 @@ import {
   hostToolCaches,
   hubProjectsDir,
   isSecretFileName,
+  placedSyncedPaths,
   projectClaudeDir,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
@@ -151,7 +152,11 @@ const SRT_DIRS = [".vscode", ".idea"];
  * hooks, its submodules' git dirs. And the harness project config the host
  * loads at the workspace's next session, outside any boundary: Claude Code's
  * project settings (hooks), hooks, commands and agents, OpenCode's config
- * (plugins, MCP commands), both `.mcp.json`.
+ * (plugins, MCP commands), both `.mcp.json`; and the project skills, where
+ * the fleet places a project's skills with the store their links land in
+ * (core paths.ts `placedSyncedPaths`). On Linux a link in a dir the
+ * sandbox writes can be swapped for another, so the whole skills dir is held,
+ * as `commands` and `agents` are.
  *
  * Linux: srt binds `/dev/null` over a deny path that does not exist, and
  * bwrap leaves a read-only empty file on the host at it for the sandbox's
@@ -173,6 +178,9 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
     path: projectClaudeDir(clone, name),
     empty: DIR,
   })),
+  // The skills the fleet places in the clone, and the store their links
+  // land in: a fleet skill, never the delegate's to change.
+  ...placedSyncedPaths(clone).map((path) => ({ path, empty: DIR })),
   { path: join(clone, "opencode.json"), empty: OPENCODE_EMPTY },
   { path: join(clone, "opencode.jsonc"), empty: OPENCODE_EMPTY },
   { path: join(clone, ".opencode"), empty: OPENCODE_DIR },

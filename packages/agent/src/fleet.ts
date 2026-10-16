@@ -52,6 +52,7 @@ import {
   accountIds,
   claudeHomeJson,
   claudeSkillsDir,
+  placedSkillsDir,
   projectClaudeDir,
   treeStoreOf,
   userLayerPath,
@@ -1772,10 +1773,6 @@ const syncSkillFiles = async (
   }
   return written;
 };
-
-/** Where a project's skill is placed in a folder: its project skills, which Claude Code and OpenCode both read. */
-const placedSkillsDir = (cwd: string): string =>
-  projectClaudeDir(cwd, "skills");
 
 /**
  * Whether `cwd` is a delegate workspace's clone that is no git clone any

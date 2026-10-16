@@ -47,9 +47,9 @@ import { join } from "node:path";
 import {
   CLAUDE_DIR_NAME,
   projectClaudeRelative,
+  TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
 import type { FleetSyncReport } from "../../../packages/core/src/fleet";
-import { TREE_STORE_DIR } from "../../../packages/core/src/paths";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 

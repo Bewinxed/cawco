@@ -1,6 +1,7 @@
 /**
  * Every file of a fleet skill a harness loads is readable, and read only,
- * from inside every workspace boundary (core paths.ts `fleetSyncedPaths`).
+ * from inside every workspace boundary (core paths.ts `fleetSyncedPaths`, and
+ * in a clone `placedSyncedPaths`).
  *
  * A fleet skill is a relative link into the tree store beside its dir
  * (`~/.claude/skills/<name>` → `../.cawco-trees/skills/<name>-<8 hex>`,
@@ -9,31 +10,51 @@
  * at the account's own name, so the link resolved beside that name, where no
  * store was: on 2026-10-16 every leaf read `$CLAUDE_CONFIG_DIR/skills/
  * interface-craft/` as "No such file or directory". pi keeps its own copy in
- * `~/.pi/agent/skills`, inside a credential store the boundary hid whole.
+ * its agent dir, inside a credential store the boundary hid whole. A skill
+ * bound to a project is placed in each delegate's clone
+ * (`.claude/skills/<name>` → `.claude/.cawco-trees/skills/<tree>`), which the
+ * delegate could write.
  *
  * A scratch fleet (real hub, agent and sessiond; each harness against the
- * mock) carries one skill with a sub-file, from a `.tar.gz` this spec serves.
- * Then one delegate per harness (Claude Code on the account, OpenCode, pi)
- * runs one shell command in its workspace that, through every name its
- * harness hands a skill out by (Claude Code: `~/.claude/skills` and
- * `$CLAUDE_CONFIG_DIR/skills`; OpenCode: Claude Code's dir, which it reads;
- * pi: `~/.pi/agent/skills`):
+ * mock) carries a skill with a sub-file, and one bound to a project, each
+ * from a `.tar.gz` this spec serves. One delegate per harness (Claude Code on
+ * the account, OpenCode, pi) runs one shell command in its workspace that,
+ * through every name its harness hands a skill out by (Claude Code:
+ * `~/.claude/skills` and `$CLAUDE_CONFIG_DIR/skills`; OpenCode: Claude Code's
+ * dir, which it reads; pi: `~/.pi/agent/skills`) and through its clone's
+ * `.claude/skills` for the placed one:
  *
  * (a) reads SKILL.md and `reference/detail.md`, each answering its own
  *     content;
- * (b) appends to `reference/detail.md` and makes a new file in the skill,
- *     each refused as a read-only file system (EROFS, Linux) or not
- *     permitted (EPERM, macOS); the host's copy unchanged after.
+ * (b) appends to `reference/detail.md`, makes a new file in the skill, and
+ *     moves the skill's entry away, each refused as a read-only file system
+ *     (EROFS, Linux) or not permitted (EPERM, macOS); every copy on the host
+ *     unchanged after.
+ *
+ * (c) pi's agent dir follows `PI_CODING_AGENT_DIR`, as pi's own
+ *     `getAgentDir` does: sessiond and the agent started again with it set,
+ *     the fleet writes pi's skills there, a pi delegate reads them there and
+ *     cannot write them, and the dir's `models.json` stays hidden as a
+ *     credential store.
  *
  * It delegates, so it runs as a `host` check:
  *
  *   bun scripts/probe-kit/run.ts fleet-reads
  */
-import { lstat, mkdir, readFile, readlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
-import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import type { FleetSyncReport } from "../../../packages/core/src/fleet";
-import { TREE_STORE_DIR } from "../../../packages/core/src/paths";
+import {
+  CLAUDE_DIR_NAME,
+  projectClaudeRelative,
+  TREE_STORE_DIR,
+} from "../../../packages/core/src/claude-dirs";
 import {
   type Harness,
   MACHINE,
@@ -42,128 +63,339 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Spec } from "../kit";
+import type { Kit, Spec } from "../kit";
 
 const SKILL = "probe-reads";
+/** The same files, bound to the project and placed in each clone. */
+const PLACED = "probe-placed";
 /** Each file's whole content: a word the command that reads it never spells. */
 const SKILL_TOKEN = "skillmd-7c41e2";
 const DETAIL_TOKEN = "detail-93b0af";
 const DETAIL = "reference/detail.md";
-const TAG = /PROBE-READS-(claude|opencode|pi):/;
+/** The models file the mock's pi provider is in (scratch-fleet.ts `furnish`). */
+const PI_MODELS = "models.json";
 /** A refusal to write: Linux binds the trees read only, Seatbelt denies the write. */
 const REFUSED = /Read-only file system|Operation not permitted/;
+/** How long a command waits for the fleet to place the project's skill in its clone. */
+const PLACED_WAIT_S = 100;
 
-/** Each harness's shell tool, as `send-backgrounds` drives it. */
-const SHELL: Record<
-  Harness,
-  (command: string) => { name: string; input: object }
-> = {
-  claude: (command) => ({
-    name: "Bash",
-    input: { command, description: "Read the fleet skill" },
-  }),
-  opencode: (command) => ({ name: "shell", input: { command } }),
-  pi: (command) => ({ name: "bash", input: { command } }),
+/** Where one leg reads a skill: a dir as the shell names it, and the skill's name there. */
+interface Root {
+  readonly dir: string;
+  readonly skill: string;
+}
+
+/** One delegate: its harness, and the roots it reads through. */
+interface Leg {
+  readonly harness: Harness;
+  /** Paths the boundary hides, each read and expected refused. */
+  readonly hidden?: Record<string, string>;
+  readonly key: string;
+  readonly roots: Record<string, Root>;
+}
+
+const placedRoot: Root = {
+  dir: `$PWD/${projectClaudeRelative("skills")}`,
+  skill: PLACED,
 };
 
-/** The skill dirs each harness hands its model, as the shell names them. */
-const ROOTS: Record<Harness, Record<string, string>> = {
-  claude: {
-    home: `$HOME/${CLAUDE_DIR_NAME}/skills`,
-    account: "$CLAUDE_CONFIG_DIR/skills",
+const LEGS: Leg[] = [
+  {
+    key: "claude",
+    harness: "claude",
+    roots: {
+      home: { dir: `$HOME/${CLAUDE_DIR_NAME}/skills`, skill: SKILL },
+      account: { dir: "$CLAUDE_CONFIG_DIR/skills", skill: SKILL },
+      placed: placedRoot,
+    },
   },
-  opencode: { home: `$HOME/${CLAUDE_DIR_NAME}/skills` },
-  pi: { home: "$HOME/.pi/agent/skills" },
-};
+  {
+    key: "opencode",
+    harness: "opencode",
+    roots: {
+      home: { dir: `$HOME/${CLAUDE_DIR_NAME}/skills`, skill: SKILL },
+      placed: placedRoot,
+    },
+  },
+  {
+    key: "pi",
+    harness: "pi",
+    roots: {
+      home: { dir: "$HOME/.pi/agent/skills", skill: SKILL },
+      placed: placedRoot,
+    },
+  },
+];
+
+/** pi's agent dir for leg (c), under the fleet's home. */
+const piElsewhere = (home: string) => join(home, "pi-elsewhere");
+
+const envLeg = (home: string): Leg => ({
+  key: "pienv",
+  harness: "pi",
+  roots: { env: { dir: join(piElsewhere(home), "skills"), skill: SKILL } },
+  hidden: { models: join(piElsewhere(home), PI_MODELS) },
+});
+
+const tagOf = (key: string) => `PROBE-READS-${key.toUpperCase()}:`;
+const TAG = /PROBE-READS-([A-Z]+):/;
 
 /**
- * One line per probe, `FR|<harness>|<root>|<what>|<answer>`, its prefix
- * spelled apart in the command, so only the command's output carries it.
+ * One line per probe, `FR|<leg>|<root>|<what>|<answer>`, its prefix spelled
+ * apart in the command, so only the command's output carries it.
  */
-const line = (harness: Harness, root: string, what: string, answer: string) =>
-  `echo "F""R|${harness}|${root}|${what}|$(printf '%s' "${answer}" | tr '\\n|' '  ' | head -c 300)"`;
+const line = (key: string, root: string, what: string) =>
+  `echo "F""R|${key}|${root}|${what}|$(printf '%s' "$r" | tr '\\n|' '  ' | head -c 300)"`;
 
-const commandFor = (harness: Harness): string =>
-  [
-    `echo "F""R|${harness}|env|config|$CLAUDE_CONFIG_DIR"`,
-    ...Object.entries(ROOTS[harness]).flatMap(([root, dir]) => {
-      const detail = `"${dir}/${SKILL}/${DETAIL}"`;
-      const fresh = `"${dir}/${SKILL}/probe-new.md"`;
+const commandFor = (leg: Leg): string => {
+  const waitPlaced = Object.values(leg.roots).includes(placedRoot)
+    ? [
+        `for i in $(seq ${PLACED_WAIT_S * 2}); do [ -e "${placedRoot.dir}/${PLACED}/SKILL.md" ] && break; sleep 0.5; done`,
+      ]
+    : [];
+  return [
+    ...waitPlaced,
+    `r="$CLAUDE_CONFIG_DIR"`,
+    line(leg.key, "env", "config"),
+    ...Object.entries(leg.roots).flatMap(([root, { dir, skill }]) => {
+      const at = `${dir}/${skill}`;
       return [
-        `r=$(cat "${dir}/${SKILL}/SKILL.md" 2>&1)`,
-        line(harness, root, "read-skill", "$r"),
-        `r=$(cat ${detail} 2>&1)`,
-        line(harness, root, "read-detail", "$r"),
-        `if r=$( { printf x >> ${detail}; } 2>&1 ); then r=WROTE; fi`,
-        line(harness, root, "append-detail", "$r"),
-        `if r=$( { : > ${fresh}; } 2>&1 ); then r=WROTE; fi`,
-        line(harness, root, "new-file", "$r"),
+        `r=$(cat "${at}/SKILL.md" 2>&1)`,
+        line(leg.key, root, "read-skill"),
+        `r=$(cat "${at}/${DETAIL}" 2>&1)`,
+        line(leg.key, root, "read-detail"),
+        `if r=$( { printf x >> "${at}/${DETAIL}"; } 2>&1 ); then r=WROTE; fi`,
+        line(leg.key, root, "append-detail"),
+        `if r=$( { : > "${at}/probe-new.md"; } 2>&1 ); then r=WROTE; fi`,
+        line(leg.key, root, "new-file"),
+        `if r=$(mv "${at}" "${at}.moved" 2>&1); then r=WROTE; fi`,
+        line(leg.key, root, "move-entry"),
       ];
     }),
-    `echo "F""R|${harness}|end|end|done"`,
+    ...Object.entries(leg.hidden ?? {}).flatMap(([what, path]) => [
+      `r=$(cat "${path}" 2>&1)`,
+      line(leg.key, "hidden", what),
+    ]),
+    `echo "F""R|${leg.key}|end|end|done"`,
   ].join("; ");
+};
 
-const steps: Partial<
-  Record<Harness, { finished?: boolean; ran?: boolean; searched?: boolean }>
-> = {};
+/** The shell tool a harness offers, and its input for `command`. */
+const shellCall = (
+  offered: readonly string[],
+  command: string
+): { name: string; input: object } | undefined => {
+  if (offered.includes("Bash")) {
+    return {
+      name: "Bash",
+      input: { command, description: "Read the fleet skill", timeout: 300_000 },
+    };
+  }
+  if (offered.includes("shell")) {
+    return { name: "shell", input: { command, timeout: 300_000 } };
+  }
+  return offered.includes("bash")
+    ? { name: "bash", input: { command } }
+    : undefined;
+};
+
+const legs = new Map<string, Leg>();
+const steps = new Map<
+  string,
+  { finished?: boolean; offered?: string[]; ran?: boolean; searched?: boolean }
+>();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const call = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
 
 /** Each delegate runs its one command, then finishes its item if it is offered. */
 const respond = (request: Seen): Reply => {
-  const harness = request.tools
-    ? (TAG.exec(request.all)?.[1] as Harness | undefined)
+  const key = request.tools
+    ? TAG.exec(request.all)?.[1]?.toLowerCase()
     : undefined;
-  if (!harness) {
+  const leg = key ? legs.get(key) : undefined;
+  if (!(key && leg)) {
     return text(request.tools ? "ok" : "Probe title");
   }
-  const step = steps[harness] ?? {};
-  steps[harness] = step;
+  const step = steps.get(key) ?? {};
+  steps.set(key, step);
+  step.offered = request.toolNames;
   if (!step.ran) {
+    const shell = shellCall(request.toolNames, commandFor(leg));
+    if (!shell) {
+      return text("No shell tool is offered.");
+    }
     step.ran = true;
-    return { everyMs: 5, words: [], tool: SHELL[harness](commandFor(harness)) };
+    return call(shell.name, shell.input);
   }
   const finish = request.toolNames.find((name) => name.endsWith("finish_item"));
   if (!step.finished && finish) {
     step.finished = true;
-    return {
-      everyMs: 5,
-      words: [],
-      tool: {
-        name: finish,
-        input: { headline: "Read the skill.", summary: "Read the skill." },
-      },
-    };
+    return call(finish, {
+      headline: "Read the skill.",
+      summary: "Read the skill.",
+    });
   }
   if (
     !(step.finished || step.searched) &&
     request.toolNames.includes("ToolSearch")
   ) {
     step.searched = true;
-    return {
-      everyMs: 5,
-      words: [],
-      tool: {
-        name: "ToolSearch",
-        input: { query: "select:mcp__cawco__finish_item", max_results: 1 },
-      },
-    };
+    return call("ToolSearch", {
+      query: "select:mcp__cawco__finish_item",
+      max_results: 1,
+    });
   }
   return text("Done.");
 };
 
-/** The answers of `harness`'s command, by `<root>|<what>`, read from the request that carried its output. */
-const answersOf = (body: string, harness: Harness): Map<string, string> => {
+/** The answers of leg `key`'s command, by `<root>|<what>`, read from the request that carried its output. */
+const answersOf = (body: string, key: string): Map<string, string> => {
   const found = new Map<string, string>();
   // In a request body as JSON: a line ends at an escaped newline or a quote.
   const each = new RegExp(
-    `FR\\|${harness}\\|([a-z]+)\\|([a-z-]+)\\|((?:[^"\\\\]|\\\\[^n])*)`,
+    `FR\\|${key}\\|([a-z]+)\\|([a-z-]+)\\|((?:[^"\\\\]|\\\\[^n])*)`,
     "g"
   );
   for (const match of body.matchAll(each)) {
     found.set(`${match[1]}|${match[2]}`, (match[3] ?? "").trim());
   }
   return found;
+};
+
+type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
+
+/** A skill folder with its sub-file, packed as the hub fetches a URL source. */
+const pack = async (sandbox: string, name: string): Promise<void> => {
+  const folder = join(sandbox, "skill-source", name);
+  await mkdir(join(folder, "reference"), { recursive: true });
+  await writeFile(
+    join(folder, "SKILL.md"),
+    `---\nname: ${name}\ndescription: A skill whose sub-file a workspace reads.\n---\n\n${SKILL_TOKEN}\n`
+  );
+  await writeFile(join(folder, DETAIL), `${DETAIL_TOKEN}\n`);
+  await Bun.$`tar -czf ${join(sandbox, `${name}.tar.gz`)} -C ${join(sandbox, "skill-source")} ${name}`.quiet();
+};
+
+/** The copy at `path` is a link into its dir's tree store, holding the sub-file as packed. */
+const linkedCopy = async (path: string, name: string) => {
+  const link = await lstat(path).catch(() => undefined);
+  const target = link?.isSymbolicLink() ? await readlink(path) : "";
+  const detail = await readFile(join(path, DETAIL), "utf8").catch(() => "");
+  return {
+    ok:
+      target.includes(`${TREE_STORE_DIR}/skills/${name}-`) &&
+      detail === `${DETAIL_TOKEN}\n`,
+    words: `${path}: ${target || "no link"}`,
+  };
+};
+
+/** A copy as packed, with nothing written into it: its sub-file's bytes and no new file. */
+const untouched = async (path: string): Promise<boolean> =>
+  (await readFile(join(path, DETAIL), "utf8").catch(() => "")) ===
+    `${DETAIL_TOKEN}\n` &&
+  !(await lstat(join(path, "probe-new.md")).then(
+    () => true,
+    () => false
+  )) &&
+  !(await lstat(`${path}.moved`).then(
+    () => true,
+    () => false
+  ));
+
+/** A delegate per leg, in a project of `src` under `parent`; each one's workspace path by leg. */
+const delegate = async (
+  fleet: Fleet,
+  parent: string,
+  src: string,
+  among: readonly Leg[]
+): Promise<Map<string, string>> => {
+  const paths = new Map<string, string>();
+  for (const leg of among) {
+    legs.set(leg.key, leg);
+    // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each its own workspace
+    const started = await fleet.api<{ workspaceId: string }>(
+      "/api/work-items",
+      {
+        parentInstanceId: parent,
+        title: `Read the skill, ${leg.key}`,
+        prompt: `${tagOf(leg.key)} read the fleet skills.`,
+        harness: leg.harness,
+        model: MODEL[leg.harness],
+        cwd: src,
+        checks: [{ name: "Probe check", command: "true" }],
+      }
+    );
+    const [row] = fleet.query<{ path: string }>(
+      "SELECT path FROM workspaces WHERE id = ?",
+      started.workspaceId
+    );
+    paths.set(leg.key, row?.path ?? "");
+  }
+  return paths;
+};
+
+/** (a) and (b) for each leg, from the request that carried its command's output. */
+const judge = async (kit: Kit, fleet: Fleet, among: readonly Leg[]) => {
+  for (const leg of among) {
+    // biome-ignore lint/performance/noAwaitInLoops: each leg's answer read in turn, all running at once
+    const carried = await until(
+      `${leg.key}'s command output`,
+      () =>
+        fleet.seen.find(
+          (one) =>
+            one.afterTool && one.body.includes(`FR|${leg.key}|end|end|done`)
+        ),
+      Boolean,
+      600_000
+    ).catch(() => undefined);
+    const step = steps.get(leg.key);
+    if (!carried) {
+      kit.check(
+        `${leg.key}: the delegate's command ran in its workspace`,
+        false,
+        `ran: ${Boolean(step?.ran)}; offered: ${step?.offered?.join(", ") ?? "no request seen"}`
+      );
+      continue;
+    }
+    const answers = answersOf(carried.body, leg.key);
+    if (leg.key === "claude") {
+      const config = answers.get("env|config") ?? "";
+      kit.check(
+        "claude: the delegate runs on the account, its CLAUDE_CONFIG_DIR an account's dir",
+        config.includes("/accounts/"),
+        config || "unset"
+      );
+    }
+    for (const [root, { skill }] of Object.entries(leg.roots)) {
+      const of = (what: string) => answers.get(`${root}|${what}`) ?? "";
+      kit.check(
+        `${leg.key} (${root}): (a) ${skill}'s SKILL.md and ${DETAIL} read inside the workspace, each its own content`,
+        of("read-skill").includes(SKILL_TOKEN) &&
+          of("read-detail") === DETAIL_TOKEN,
+        `SKILL.md: ${of("read-skill").slice(-160)}; ${DETAIL}: ${of("read-detail")}`
+      );
+      kit.check(
+        `${leg.key} (${root}): (b) an append to ${DETAIL}, a new file in the skill and moving the skill's entry away are each refused (EROFS or EPERM)`,
+        REFUSED.test(of("append-detail")) &&
+          REFUSED.test(of("new-file")) &&
+          REFUSED.test(of("move-entry")),
+        `append: ${of("append-detail")}; new file: ${of("new-file")}; move: ${of("move-entry")}`
+      );
+    }
+    for (const what of Object.keys(leg.hidden ?? {})) {
+      const answer = answers.get(`hidden|${what}`) ?? "";
+      kit.check(
+        `${leg.key}: (c) the agent dir's ${PI_MODELS} stays hidden as a credential store`,
+        answer !== "" && !answer.includes("mockpi"),
+        answer || "no answer"
+      );
+    }
+  }
 };
 
 const spec: Spec = {
@@ -186,22 +418,38 @@ const spec: Spec = {
     }
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
-
-    // The skill, served packed as the hub fetches a URL source.
-    const source = join(fleet.sandbox, "skill-source", SKILL);
-    await mkdir(join(source, "reference"), { recursive: true });
-    await writeFile(
-      join(source, "SKILL.md"),
-      `---\nname: ${SKILL}\ndescription: A skill whose sub-file a workspace reads.\n---\n\n${SKILL_TOKEN}\n`
-    );
-    await writeFile(join(source, DETAIL), `${DETAIL_TOKEN}\n`);
-    const archive = join(fleet.sandbox, `${SKILL}.tar.gz`);
-    await Bun.$`tar -czf ${archive} -C ${join(fleet.sandbox, "skill-source")} ${SKILL}`.quiet();
+    await pack(fleet.sandbox, SKILL);
+    await pack(fleet.sandbox, PLACED);
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: () => new Response(Bun.file(archive)),
+      fetch: (request) =>
+        new Response(
+          Bun.file(join(fleet.sandbox, new URL(request.url).pathname.slice(1)))
+        ),
     });
+    const put = async (name: string, extra: object = {}) => {
+      const response = await fetch(`${fleet.base}/api/fleet/skills/${name}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
+          ...extra,
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      check(
+        `the hub takes ${name}`,
+        response.ok,
+        `${response.status} ${await response.text()}`
+      );
+    };
+    const boot = async () => {
+      fleet.launch("sessiond");
+      await fleet.sessiondUp();
+      fleet.launch("agent");
+      await fleet.agentUp();
+    };
 
     try {
       fleet.launch("sessiond");
@@ -213,61 +461,8 @@ const spec: Spec = {
       await fleet.agentUp();
       await fleet.accountSignedIn();
 
-      const response = await fetch(`${fleet.base}/api/fleet/skills/${SKILL}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          source: `http://127.0.0.1:${server.port}/${SKILL}.tar.gz`,
-        }),
-        signal: AbortSignal.timeout(120_000),
-      });
-      check(
-        "the hub takes the skill",
-        response.ok,
-        `${response.status} ${await response.text()}`
-      );
-
-      // Written on the machine for Claude Code (OpenCode reads it) and pi,
-      // each a link into its dir's tree store.
-      const copies = {
-        claude: join(home, CLAUDE_DIR_NAME, "skills", SKILL),
-        pi: join(home, ".pi", "agent", "skills", SKILL),
-      };
-      const layout = async () =>
-        Promise.all(
-          Object.entries(copies).map(async ([harness, path]) => {
-            const link = await lstat(path).catch(() => undefined);
-            const target = link?.isSymbolicLink() ? await readlink(path) : "";
-            const detail = await readFile(join(path, DETAIL), "utf8").catch(
-              () => ""
-            );
-            return {
-              harness,
-              ok:
-                target.includes(`${TREE_STORE_DIR}/skills/${SKILL}-`) &&
-                detail === `${DETAIL_TOKEN}\n`,
-              words: `${harness}: ${target || "no link"}`,
-            };
-          })
-        );
-      const written = await until(
-        "the skill written for Claude Code and pi",
-        layout,
-        (rows) => rows.every((row) => row.ok),
-        240_000
-      ).catch(layout);
-      const report = (
-        await fleet.api<{ fleet?: FleetSyncReport; machineId: string }[]>(
-          "/api/agents"
-        )
-      ).find((row) => row.machineId === MACHINE)?.fleet;
-      check(
-        "the skill is written for Claude Code and pi, each a link into its dir's tree store",
-        written.every((row) => row.ok),
-        `${written.map((row) => row.words).join("; ")}; report ${JSON.stringify(report?.skills?.[SKILL])}`
-      );
-
-      // A project, its lead, and one delegate per harness.
+      // A project, its lead, and the skills: one for every session, one
+      // bound to the project.
       const src = join(fleet.sandbox, "src");
       await mkdir(src, { recursive: true });
       await writeFile(
@@ -283,80 +478,89 @@ const spec: Spec = {
         machineId: MACHINE,
         cwd: src,
       });
+      await put(SKILL);
+      await put(PLACED, { projectId: project.id });
+
+      // Written on the machine for Claude Code (OpenCode reads it) and pi,
+      // each a link into its dir's tree store.
+      const copies = [
+        join(home, CLAUDE_DIR_NAME, "skills", SKILL),
+        join(home, ".pi", "agent", "skills", SKILL),
+      ];
+      const layout = () =>
+        Promise.all(copies.map((path) => linkedCopy(path, SKILL)));
+      const written = await until(
+        "the skill written for Claude Code and pi",
+        layout,
+        (rows) => rows.every((row) => row.ok),
+        240_000
+      ).catch(layout);
+      check(
+        "the skill is written for Claude Code and pi, each a link into its dir's tree store",
+        written.every((row) => row.ok),
+        written.map((row) => row.words).join("; ")
+      );
+
       const parent = await fleet.spawn("claude", "Parent", src, {
         projectId: project.id,
       });
-      const harnesses: Harness[] = ["claude", "opencode", "pi"];
-      for (const harness of harnesses) {
-        // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each its own workspace
-        await fleet.api("/api/work-items", {
-          parentInstanceId: parent,
-          title: `Read the skill on ${harness}`,
-          prompt: `PROBE-READS-${harness}: read the fleet skill ${SKILL}.`,
-          harness,
-          model: MODEL[harness],
-          cwd: src,
-          checks: [{ name: "Probe check", command: "true" }],
-        });
-      }
-
-      for (const harness of harnesses) {
-        // biome-ignore lint/performance/noAwaitInLoops: each harness's answer read in turn, all running at once
-        const carried = await until(
-          `${harness}'s command output`,
-          () =>
-            fleet.seen.find(
-              (one) =>
-                one.afterTool &&
-                TAG.exec(one.all)?.[1] === harness &&
-                one.body.includes(`FR|${harness}|end|end|done`)
-            ),
-          Boolean,
-          600_000
-        ).catch(() => undefined);
-        const answers = answersOf(carried?.body ?? "", harness);
-        if (harness === "claude") {
-          const config = answers.get("env|config") ?? "";
-          check(
-            "claude: the delegate runs on the account, its CLAUDE_CONFIG_DIR an account's dir",
-            config.includes("/accounts/"),
-            config || "unset"
-          );
-        }
-        for (const root of Object.keys(ROOTS[harness])) {
-          const of = (what: string) => answers.get(`${root}|${what}`) ?? "";
-          check(
-            `${harness} (${root}): (a) SKILL.md and ${DETAIL} read inside the workspace, each its own content`,
-            of("read-skill").includes(SKILL_TOKEN) &&
-              of("read-detail") === DETAIL_TOKEN,
-            `SKILL.md: ${of("read-skill").slice(-120)}; ${DETAIL}: ${of("read-detail")}`
-          );
-          check(
-            `${harness} (${root}): (b) an append to ${DETAIL} and a new file in the skill are refused (EROFS or EPERM)`,
-            REFUSED.test(of("append-detail")) && REFUSED.test(of("new-file")),
-            `append: ${of("append-detail")}; new file: ${of("new-file")}`
-          );
-        }
-      }
-
-      const after = await Promise.all(
-        Object.values(copies).map((path) =>
-          readFile(join(path, DETAIL), "utf8").catch(() => "")
-        )
+      const clones = await delegate(fleet, parent, src, LEGS);
+      await judge(kit, fleet, LEGS);
+      const placedCopies = [...clones.values()].map((clone) =>
+        join(clone, projectClaudeRelative("skills", PLACED))
       );
-      const fresh = await Promise.all(
-        Object.values(copies).map((path) =>
-          lstat(join(path, "probe-new.md")).then(
-            () => true,
-            () => false
-          )
-        )
+      const placedLayout = await Promise.all(
+        placedCopies.map((path) => linkedCopy(path, PLACED))
       );
       check(
-        "(b) the host's copies are unchanged: no byte appended, no new file",
-        after.every((content) => content === `${DETAIL_TOKEN}\n`) &&
-          !fresh.some(Boolean),
-        `${after.map((content) => JSON.stringify(content)).join(", ")}; new files: ${fresh.join(", ")}`
+        "the project's skill is placed in each clone, a link into the clone's tree store",
+        placedLayout.every((row) => row.ok),
+        placedLayout.map((row) => row.words).join("; ")
+      );
+      const kept = await Promise.all(
+        [...copies, ...placedCopies].map(untouched)
+      );
+      check(
+        "(b) every copy on the host is unchanged: no byte appended, no new file, nothing moved",
+        kept.every(Boolean),
+        [...copies, ...placedCopies]
+          .map((path, at) => `${path}: ${kept[at] ? "kept" : "changed"}`)
+          .join("; ")
+      );
+
+      // (c) pi's agent dir elsewhere: sessiond and the agent started again
+      // with PI_CODING_AGENT_DIR, the mock's models carried there.
+      const elsewhere = piElsewhere(home);
+      await mkdir(elsewhere, { recursive: true });
+      await copyFile(
+        join(home, ".pi", "agent", PI_MODELS),
+        join(elsewhere, PI_MODELS)
+      );
+      await fleet.stop("agent");
+      await fleet.stop("sessiond");
+      fleet.env.PI_CODING_AGENT_DIR = elsewhere;
+      await boot();
+      const moved = await until(
+        "the skill written into pi's agent dir elsewhere",
+        () => linkedCopy(join(elsewhere, "skills", SKILL), SKILL),
+        (row) => row.ok,
+        240_000
+      ).catch(() => linkedCopy(join(elsewhere, "skills", SKILL), SKILL));
+      check(
+        "(c) with PI_CODING_AGENT_DIR set, the fleet writes pi's skill there, a link into that dir's tree store",
+        moved.ok,
+        moved.words
+      );
+      const leg = envLeg(home);
+      const lead = await fleet.spawn("claude", "Parent again", src, {
+        projectId: project.id,
+      });
+      const envClone = await delegate(fleet, lead, src, [leg]);
+      await judge(kit, fleet, [leg]);
+      check(
+        "(c) pi's skill in the agent dir elsewhere is unchanged on the host",
+        await untouched(join(elsewhere, "skills", SKILL)),
+        envClone.get(leg.key) ?? ""
       );
     } finally {
       await server.stop(true);

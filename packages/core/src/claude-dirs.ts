@@ -38,3 +38,16 @@ export const CLAUDE_JSON_LABEL = `~/${CLAUDE_JSON_NAME}`;
 
 /** The dir name `paths.ts` joins onto a home or a project. */
 export const CLAUDE_DIR_NAME = CLAUDE_DIR;
+
+/**
+ * Where the trees behind a dir of CawCo-written trees live: beside that dir,
+ * `<parent>/.cawco-trees/<dir name>/` (paths.ts `treeStoreOf`). Each entry of
+ * the dir (a fleet skill, a vendored plugin) is a relative link into it,
+ * swapped with one rename (agent tree-swap.ts), so a session never reads a
+ * missing or half-written tree. Kept outside the dir itself because OpenCode
+ * finds skills with `**\/SKILL.md` and follows dot dirs. In `~/.claude` it
+ * holds the fleet's skills, which every session reads; in a project's
+ * `.claude`, the skills placed there. Here, with the names, so the
+ * boundary's host names it too.
+ */
+export const TREE_STORE_DIR = ".cawco-trees";

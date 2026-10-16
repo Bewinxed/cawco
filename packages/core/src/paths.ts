@@ -12,7 +12,12 @@ import {
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { CLAUDE_DIR_NAME, CLAUDE_JSON_NAME } from "./claude-dirs";
+import { fileURLToPath } from "node:url";
+import {
+  CLAUDE_DIR_NAME,
+  CLAUDE_JSON_NAME,
+  TREE_STORE_DIR,
+} from "./claude-dirs";
 import { sessiondEndpoint } from "./sessiond";
 
 /**
@@ -91,18 +96,7 @@ export const sessionConfigDir = ({
 export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
   join(cwd, CLAUDE_DIR_NAME, ...parts);
 
-/**
- * Where the trees behind a dir of CawCo-written trees live: beside that dir,
- * `<parent>/.cawco-trees/<dir name>/` ({@link treeStoreOf}). Each entry of
- * the dir (a fleet skill, a vendored plugin) is a relative link into it,
- * swapped with one rename (agent tree-swap.ts), so a session never reads a
- * missing or half-written tree. Kept outside the dir itself because OpenCode
- * finds skills with `**\/SKILL.md` and follows dot dirs. In
- * {@link claudeHome} it holds the fleet's skills, which every session reads.
- */
-export const TREE_STORE_DIR = ".cawco-trees";
-
-/** The store of the trees the entries of `dir` link to ({@link TREE_STORE_DIR}). */
+/** The store of the trees the entries of `dir` link to (claude-dirs.ts {@link TREE_STORE_DIR}). */
 export const treeStoreOf = (dir: string): string =>
   join(dirname(dir), TREE_STORE_DIR, basename(dir));
 
@@ -151,8 +145,30 @@ export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
 /** The fleet's skills for Claude Code, which OpenCode reads too (agent session.ts `#fleetHoldings`). */
 export const claudeSkillsDir = (): string => userLayerPath("skills");
 
-/** pi's agent dir, `~/.pi/agent`: its login, its settings, and what the fleet writes for it. */
-export const piAgentDir = (): string => join(homedir(), ".pi", "agent");
+/**
+ * pi's agent dir: its login, its settings, and what the fleet writes for it.
+ * pi's own rule (`getAgentDir` in @earendil-works/pi-coding-agent 1.0.1,
+ * dist/config.js: `const envDir = process.env[ENV_AGENT_DIR]; if (envDir) {
+ * return expandTildePath(envDir); } return join(homedir(), CONFIG_DIR_NAME,
+ * "agent");`, `ENV_AGENT_DIR` being `PI_CODING_AGENT_DIR` and
+ * `CONFIG_DIR_NAME` `.pi`), its tilde and `file://` expansion as its
+ * `normalizePath` (dist/utils/paths.js) does it: core does not load pi, and
+ * pi's sessions, the fleet's writes for it, its credential store and every
+ * workspace's view of them all follow this one dir.
+ */
+export const piAgentDir = (): string => {
+  const named = process.env.PI_CODING_AGENT_DIR;
+  if (!named) {
+    return join(homedir(), ".pi", "agent");
+  }
+  if (named === "~") {
+    return homedir();
+  }
+  if (named.startsWith("~/")) {
+    return join(homedir(), named.slice(2));
+  }
+  return named.startsWith("file://") ? fileURLToPath(named) : named;
+};
 
 /** The fleet's skills for pi. */
 export const piSkillsDir = (): string => join(piAgentDir(), "skills");
@@ -179,6 +195,24 @@ export const fleetSyncedPaths = (): string[] => [
   userLayerPath(VENDOR_MARKETPLACES_DIR),
   piMemoryFile(),
 ];
+
+/** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
+export const placedSkillsDir = (cwd: string): string =>
+  projectClaudeDir(cwd, "skills");
+
+/**
+ * What the fleet sync places in a folder that a harness loads, the folder's
+ * part of {@link fleetSyncedPaths}: its skills dir ({@link placedSkillsDir})
+ * and the tree store beside it that its links land in (`.claude/.cawco-trees`,
+ * agent fleet.ts `placeSkill`). In a workspace's clone each is held read only
+ * (core workspace-policy.ts `cloneDenies`): a delegate reads a placed skill
+ * and cannot change it, nor put another in its place for the clone's later
+ * sessions to load.
+ */
+export const placedSyncedPaths = (cwd: string): string[] => {
+  const dir = placedSkillsDir(cwd);
+  return [dir, dirname(treeStoreOf(dir))];
+};
 
 /** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
 export const USER_LAYER_FILES = [

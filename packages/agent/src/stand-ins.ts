@@ -293,7 +293,8 @@ const lfsMarker = async (path: string, found: Stats): Promise<boolean> =>
  * sandbox left there, the `.git/config` of git-lfs's marker alone
  * ({@link LFS_MARKER}), a project's skill or memory document exactly as CawCo placed it
  * (`placed`, the paths fleet.ts `placedAsMade` answers for the folder),
- * and a dir above any of those (`.git`, `.claude`) holding only them. A husk
+ * and a dir above any of those (`.git`, `.claude`, the project skills)
+ * holding only them. A husk
  * has none: nothing of anyone's is lost when it goes.
  */
 export const straysIn = async (
@@ -313,7 +314,11 @@ export const straysIn = async (
       if (!found || placed.includes(entry)) {
         continue;
       }
-      if (deny) {
+      // A dir above something CawCo's, a deny dir among them (the project
+      // skills, holding the skills the fleet placed): walked.
+      const holds =
+        found.isDirectory() && known.some((one) => one.startsWith(`${entry}/`));
+      if (deny && !holds) {
         const ours =
           leftMountPoint(found) ||
           (await asMade({ path: entry, empty: deny.empty, found })) ||
@@ -321,10 +326,7 @@ export const straysIn = async (
         if (!ours) {
           strays.push(relative(folder, entry));
         }
-      } else if (
-        found.isDirectory() &&
-        known.some((one) => one.startsWith(`${entry}/`))
-      ) {
+      } else if (holds) {
         strays.push(...(await walk(entry)));
       } else {
         strays.push(relative(folder, entry));
