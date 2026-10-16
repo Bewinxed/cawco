@@ -30,7 +30,13 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MODEL, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const DELEGATE = "mcp__cawco__delegate";
@@ -122,6 +128,11 @@ const callsOf = (request: Seen): Call[] => {
 };
 
 let repo = "";
+/**
+ * The project the repository is in: a repository with no origin remote has
+ * a workspace cut from its project's hub remote, and none without one.
+ */
+let projectId = "";
 /** The live delegate the fork reaches for, once (a) found it. */
 let forkChild = "";
 const delegated = new Set<Case>();
@@ -270,7 +281,9 @@ const parentWithDelegate = async (
   fleet: KitFleet,
   which: Case
 ): Promise<{ parent: string; child: string }> => {
-  const id = await fleet.spawn("claude", `Parent ${which}`, repo);
+  const id = await fleet.spawn("claude", `Parent ${which}`, repo, {
+    projectId,
+  });
   const sentAt = Date.now();
   await fleet.send(id, PARENTS[which].ask);
   const item = (await until(
@@ -331,6 +344,13 @@ const run = async (kit: Kit) => {
     .cwd(repo)
     .env({ ...process.env, HOME: home })
     .quiet();
+  // Caw off: only the sessions this spec starts take turns.
+  ({ id: projectId } = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Forks",
+    machineId: MACHINE,
+    cwd: repo,
+    caw: false,
+  }));
 
   // ── a. a parent with a live delegate ───────────────────────────────────
   const one = await parentWithDelegate(fleet, "fork");
