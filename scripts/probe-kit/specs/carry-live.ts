@@ -752,6 +752,23 @@ const run = async (kit: Kit) => {
   // in order: the move stays in A's organization.
   const orgLimitCase = async () => {
     const name = "at its limit, two free";
+    // A and B signed in again first: case 3 restarted the agent, which
+    // reports its logins at its next read (within a minute), and until then
+    // the hub places nothing on A and refuses a move onto it ("Probe isn't
+    // signed in on obelisk-of-light", host run at 6cb393d64).
+    for (const account of [ACCOUNT, B]) {
+      // biome-ignore lint/performance/noAwaitInLoops: two accounts, each read until it is signed in
+      await until(
+        `${account} signed in again after case 3's restart`,
+        () =>
+          fleet.query<{ state: string }>(
+            "SELECT state FROM account_signins WHERE account_id = ?",
+            account
+          )[0],
+        (row) => row?.state === "signed-in",
+        180_000
+      );
+    }
     // The session first, on A, before C exists: placed with C first in order
     // it lands on C and is moved onto A by hand (host run at 48cc01b91), and
     // its turn there never reached A's limit.
