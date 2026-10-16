@@ -2,422 +2,573 @@
   "marketing": {
     "site-heading-ink": {
       "$type": "color",
-      "$value": "{color.crow-ink}",
-      "$extensions": { "dev.cawco": { "dark": "{color.spark}" } }
+      "$value": "{color.crow-ink}"
     },
-    "site-caw-scale": { "$type": "number", "$value": "1.5" },
+    "site-caw-scale": {
+      "$type": "number",
+      "$value": 1.5
+    },
     "site-canvas": {
       "$type": "color",
-      "$value": "{color.spark}",
-      "$extensions": { "dev.cawco": { "dark": "{color.crow-ink}" } }
+      "$value": "{color.spark}"
     },
     "site-ink": {
       "$type": "color",
-      "$value": "{color.crow-ink}",
-      "$extensions": { "dev.cawco": { "dark": "{color.paper}" } }
+      "$value": "{color.crow-ink}"
     },
     "site-secondary": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.crow-ink} 80%, {color.spark})",
-      "$extensions": { "dev.cawco": { "dark": "{color.neutral-11}" } }
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.337569, -0.002237, 0.028588]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.crow-ink} 80%, {color.spark})"
+        }
+      }
     },
     "site-line": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.crow-ink} 22%, transparent)",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.203828, -0.00112, 0.003725],
+        "alpha": 0.22
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.paper} 22%, transparent)"
+          "css": "color-mix(in oklab, {color.crow-ink} 22%, transparent)"
         }
       }
     },
     "site-panel": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.spark} 84%, {color.paper})",
-      "$extensions": { "dev.cawco": { "dark": "{color.surface-raised}" } }
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.885806, -0.005582, 0.109787]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.spark} 84%, {color.paper})"
+        }
+      }
     },
     "site-display": {
       "$type": "dimension",
-      "$value": "clamp(3rem, 6.8vw, 6rem)"
+      "$value": {
+        "value": 3,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(3rem, 6.8vw, 6rem)"
+        }
+      }
     },
     "site-display-phone": {
       "$type": "dimension",
-      "$value": "clamp(2.25rem, 10vw, 3rem)"
+      "$value": {
+        "value": 2.25,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(2.25rem, 10vw, 3rem)"
+        }
+      }
     },
     "site-price-display": {
       "$type": "dimension",
-      "$value": "clamp(2.5rem, 4.5vw, 4rem)"
+      "$value": {
+        "value": 2.5,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(2.5rem, 4.5vw, 4rem)"
+        }
+      }
     },
     "site-plan-display": {
       "$type": "dimension",
-      "$value": "clamp(1.5rem, 2.5vw, 2rem)"
+      "$value": {
+        "value": 1.5,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(1.5rem, 2.5vw, 2rem)"
+        }
+      }
     },
     "site-body": {
       "$type": "dimension",
-      "$value": "clamp(1rem, 1.4vw, 1.25rem)"
+      "$value": {
+        "value": 1,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(1rem, 1.4vw, 1.25rem)"
+        }
+      }
     },
-    "site-heading-leading": { "$type": "number", "$value": "1.02" },
-    "site-display-weight": { "$type": "fontWeight", "$value": "600" },
-    "site-gutter": { "$type": "dimension", "$value": "clamp(18px, 4vw, 64px)" },
-    "site-max-width": { "$type": "dimension", "$value": "1440px" },
-    "site-copy-width": { "$type": "dimension", "$value": "640px" },
-    "site-stage-width": { "$type": "dimension", "$value": "900px" },
-    "site-stage-min": { "$type": "dimension", "$value": "130px" },
-    "site-stage-max": { "$type": "dimension", "$value": "340px" },
+    "site-heading-leading": {
+      "$type": "number",
+      "$value": 1.02
+    },
+    "site-display-weight": {
+      "$type": "fontWeight",
+      "$value": 600
+    },
+    "site-gutter": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(18px, 4vw, 64px)"
+        }
+      }
+    },
+    "site-max-width": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1440,
+        "unit": "px"
+      }
+    },
+    "site-copy-width": {
+      "$type": "dimension",
+      "$value": {
+        "value": 640,
+        "unit": "px"
+      }
+    },
+    "site-stage-width": {
+      "$type": "dimension",
+      "$value": {
+        "value": 900,
+        "unit": "px"
+      }
+    },
+    "site-stage-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 130,
+        "unit": "px"
+      }
+    },
+    "site-stage-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 340,
+        "unit": "px"
+      }
+    },
     "site-mascot-size": {
       "$type": "dimension",
-      "$value": "clamp(140px, 31svh, 330px)"
+      "$value": {
+        "value": 140,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(140px, 31svh, 330px)"
+        }
+      }
     },
     "site-mascot-phone": {
       "$type": "dimension",
-      "$value": "clamp(120px, 24svh, 190px)"
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(120px, 24svh, 190px)"
+        }
+      }
     },
     "site-pricing-mascot": {
       "$type": "dimension",
-      "$value": "clamp(140px, 24svh, 230px)"
+      "$value": {
+        "value": 140,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(140px, 24svh, 230px)"
+        }
+      }
     },
-    "site-pricing-mascot-phone": { "$type": "dimension", "$value": "100px" },
-    "site-badge-height": { "$type": "dimension", "$value": "40px" },
-    "site-badge-width": { "$type": "dimension", "$value": "120px" },
-    "site-cta-height": { "$type": "dimension", "$value": "48px" },
-    "site-brand-size": { "$type": "dimension", "$value": "28px" },
-    "site-orbit-size": { "$type": "dimension", "$value": "56px" },
-    "site-hairline": { "$type": "dimension", "$value": "1px" }
+    "site-pricing-mascot-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 100,
+        "unit": "px"
+      }
+    },
+    "site-badge-height": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      }
+    },
+    "site-badge-width": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      }
+    },
+    "site-cta-height": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      }
+    },
+    "site-brand-size": {
+      "$type": "dimension",
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      }
+    },
+    "site-orbit-size": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      }
+    },
+    "site-hairline": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      }
+    }
   },
   "color": {
     "neutral-1": {
       "$type": "color",
-      "$value": "oklch(99.3% 0.004 85)",
-      "$description": "Warm neutrals (hue ~85 paper by day, ~70 roost at night). Chroma stays low so chrome reads neutral; colour is reserved for action, status and identity.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(18.4% 0.004 70)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 85]
+      },
+      "$description": "Warm neutrals (hue ~85 paper by day, ~70 roost at night). Chroma stays low so chrome reads neutral; colour is reserved for action, status and identity."
     },
     "neutral-2": {
       "$type": "color",
-      "$value": "oklch(96.6% 0.008 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(21% 0.005 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.966, 0.008, 85]
       }
     },
     "neutral-3": {
       "$type": "color",
-      "$value": "oklch(94.4% 0.010 84)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.944, 0.01, 84]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(24.8% 0.006 70)"
+          "css": "oklch(94.4% 0.010 84)"
         }
       }
     },
     "neutral-4": {
       "$type": "color",
-      "$value": "oklch(92% 0.011 83)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(28.2% 0.007 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.92, 0.011, 83]
       }
     },
     "neutral-5": {
       "$type": "color",
-      "$value": "oklch(89% 0.013 82)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(31.4% 0.008 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.89, 0.013, 82]
       }
     },
     "neutral-6": {
       "$type": "color",
-      "$value": "oklch(85.4% 0.014 82)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(35.2% 0.009 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.854, 0.014, 82]
       }
     },
     "neutral-7": {
       "$type": "color",
-      "$value": "oklch(81% 0.016 80)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(40.2% 0.010 72)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.81, 0.016, 80]
       }
     },
     "neutral-8": {
       "$type": "color",
-      "$value": "oklch(73.5% 0.017 78)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(48.8% 0.012 74)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.735, 0.017, 78]
       }
     },
     "neutral-9": {
       "$type": "color",
-      "$value": "oklch(52% 0.016 76)"
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.52, 0.016, 76]
+      }
     },
     "neutral-11": {
       "$type": "color",
-      "$value": "oklch(49.5% 0.014 74)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(77.8% 0.012 78)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.495, 0.014, 74]
       }
     },
     "neutral-12": {
       "$type": "color",
-      "$value": "oklch(29.5% 0.010 70)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.295, 0.01, 70]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(93.4% 0.010 82)"
+          "css": "oklch(29.5% 0.010 70)"
         }
       }
     },
     "coral-3": {
       "$type": "color",
-      "$value": "oklch(94.6% 0.030 38)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.946, 0.03, 38]
+      },
       "$description": "Caw coral: brand and the action. #E65D46 at rest.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(28% 0.060 32)"
+          "css": "oklch(94.6% 0.030 38)"
         }
       }
     },
     "coral-5": {
       "$type": "color",
-      "$value": "oklch(88% 0.065 36)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(36% 0.090 32)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.88, 0.065, 36]
       }
     },
     "coral-9": {
       "$type": "color",
-      "$value": "oklch(64.5% 0.175 33)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(66.5% 0.170 33)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.645, 0.175, 33]
       }
     },
     "coral-10": {
       "$type": "color",
-      "$value": "oklch(60% 0.175 33)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70.5% 0.160 34)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.6, 0.175, 33]
       }
     },
     "coral-11": {
       "$type": "color",
-      "$value": "oklch(50% 0.150 32)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.15, 32]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(80% 0.100 34)"
+          "css": "oklch(50% 0.150 32)"
         }
       }
     },
     "spark": {
       "$type": "color",
-      "$value": "#F2D36B",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.949019607843, 0.827450980392, 0.419607843137],
+        "hex": "#F2D36B"
+      },
       "$description": "Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art)."
     },
     "paper": {
       "$type": "color",
-      "$value": "#F4F0E6"
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.956862745098, 0.941176470588, 0.901960784314],
+        "hex": "#F4F0E6"
+      }
     },
     "crow-ink": {
       "$type": "color",
-      "$value": "#171715"
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.0901960784314, 0.0901960784314, 0.0823529411765],
+        "hex": "#171715"
+      }
     },
     "error-3": {
       "$type": "color",
-      "$value": "oklch(90% 0.050 12)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.9, 0.05, 12]
+      },
       "$description": "Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(30% 0.080 12)"
+          "css": "oklch(90% 0.050 12)"
         }
       }
     },
     "error-9": {
       "$type": "color",
-      "$value": "oklch(50% 0.170 15)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.17, 15]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(58% 0.170 15)"
+          "css": "oklch(50% 0.170 15)"
         }
       }
     },
     "error-11": {
       "$type": "color",
-      "$value": "oklch(36% 0.110 15)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.36, 0.11, 15]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(86% 0.070 12)"
+          "css": "oklch(36% 0.110 15)"
         }
       }
     },
     "warning-3": {
       "$type": "color",
-      "$value": "oklch(91.4% 0.087 93.2)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(37% 0.074 88.4)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.914, 0.087, 93.2]
       }
     },
     "warning-9": {
       "$type": "color",
-      "$value": "oklch(63.3% 0.129 85.8)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(68.3% 0.138 86.8)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.633, 0.129, 85.8]
       }
     },
     "warning-11": {
       "$type": "color",
-      "$value": "oklch(37% 0.074 88.4)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(85% 0.131 92.3)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.37, 0.074, 88.4]
       }
     },
     "success-3": {
       "$type": "color",
-      "$value": "oklch(81% 0.098 115.5)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(33.8% 0.076 121.9)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.81, 0.098, 115.5]
       }
     },
     "success-9": {
       "$type": "color",
-      "$value": "oklch(55.9% 0.134 122.9)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(60.5% 0.132 121.2)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.559, 0.134, 122.9]
       }
     },
     "success-11": {
       "$type": "color",
-      "$value": "oklch(33.8% 0.076 121.9)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(81% 0.098 115.5)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.338, 0.076, 121.9]
       }
     },
     "info-3": {
       "$type": "color",
-      "$value": "oklch(88.4% 0.029 228.1)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(30.6% 0.069 253.5)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.884, 0.029, 228.1]
       }
     },
     "info-9": {
       "$type": "color",
-      "$value": "oklch(48.2% 0.131 254.8)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(53.9% 0.121 251.4)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.482, 0.131, 254.8]
       }
     },
     "info-11": {
       "$type": "color",
-      "$value": "oklch(30.6% 0.069 253.5)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(78.2% 0.062 235.9)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.306, 0.069, 253.5]
       }
     },
     "mark-1": {
       "$type": "color",
-      "$value": "oklch(51% 0.168 27.9)",
-      "$description": "Identity marks: eight hues at one lightness (projects, sessions).",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.17 27.9)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.168, 27.9]
+      },
+      "$description": "Identity marks: eight hues at one lightness (projects, sessions)."
     },
     "mark-2": {
       "$type": "color",
-      "$value": "oklch(53% 0.15 47.4)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.15 47.4)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.53, 0.15, 47.4]
       }
     },
     "mark-3": {
       "$type": "color",
-      "$value": "oklch(50% 0.115 86.8)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.12 86.8)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.115, 86.8]
       }
     },
     "mark-4": {
       "$type": "color",
-      "$value": "oklch(51% 0.132 121.2)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.135 121.2)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.132, 121.2]
       }
     },
     "mark-5": {
       "$type": "color",
-      "$value": "oklch(51% 0.093 186.7)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.095 186.7)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.093, 186.7]
       }
     },
     "mark-6": {
       "$type": "color",
-      "$value": "oklch(51% 0.14 251.4)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.145 251.4)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.14, 251.4]
       }
     },
     "mark-7": {
       "$type": "color",
-      "$value": "oklch(51% 0.15 292.5)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.155 292.5)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.15, 292.5]
       }
     },
     "mark-8": {
       "$type": "color",
-      "$value": "oklch(51% 0.165 349.8)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(70% 0.17 349.8)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.165, 349.8]
       }
     },
     "account-amber": {
@@ -451,239 +602,216 @@
     },
     "account-week-toward": {
       "$type": "color",
-      "$description": "What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance.",
-      "$value": "oklch(0% 0 none)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(100% 0 none)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0, 0, "none"]
+      },
+      "$description": "What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance."
     },
     "ring-track-spent": {
       "$type": "color",
-      "$description": "The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial.",
       "$value": "{color.neutral-7}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-8}"
-        }
-      }
+      "$description": "The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial."
     },
     "account-reserved": {
       "$type": "color",
-      "$description": "The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.",
       "$value": "{color.neutral-9}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-8}"
-        }
-      }
+      "$description": "The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night."
     },
     "mark-glyph": {
       "$type": "color",
-      "$value": "oklch(99% 0 0)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-1}"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.99, 0, 0]
       }
     },
     "mark-overlay": {
       "$type": "gradient",
-      "$value": "linear-gradient(oklch(from {color.neutral-1} l c h / 0.22), oklch(from {color.neutral-12} l c h / 0.06))",
-      "$description": "Identity-mark sheen."
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.993, 0.004, 85],
+            "alpha": 0.22
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.295, 0.01, 70],
+            "alpha": 0.06
+          },
+          "position": 1
+        }
+      ],
+      "$description": "Identity-mark sheen.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.neutral-1} l c h / 0.22), oklch(from {color.neutral-12} l c h / 0.06))"
+        }
+      }
     },
     "mark-deck-shade": {
       "$type": "color",
-      "$value": "oklch(14% 0.01 60)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.14, 0.01, 60]
+      },
       "$description": "Laid over a session mark's deck cards, a step stronger per card (SessionMark): the delegates behind the tile, darker with depth."
     },
     "mark-deck-cast": {
       "$type": "color",
-      "$value": "oklch(0 0 0 / 0.16)",
-      "$description": "The shadow the card in front casts on the band of the next deck card that shows."
-    },
-    "hue-cyan-400": {
-      "$type": "color",
-      "$value": "oklch(75.35% 0.139 232.66)",
-      "$description": "Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness.",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0, 0, 0],
+        "alpha": 0.16
+      },
+      "$description": "The shadow the card in front casts on the band of the next deck card that shows.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(80% 0.139 232.66)"
+          "css": "oklch(0 0 0 / 0.16)"
         }
       }
     },
+    "hue-cyan-400": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7535, 0.139, 232.66]
+      },
+      "$description": "Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness."
+    },
     "hue-cyan-500": {
       "$type": "color",
-      "$value": "oklch(70.66% 0.1331 226.72)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(78% 0.1331 226.72)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7066, 0.1331, 226.72]
       }
     },
     "hue-amber-500": {
       "$type": "color",
-      "$value": "oklch(79.08% 0.1577 79.28)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(82% 0.1577 79.28)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7908, 0.1577, 79.28]
       }
     },
     "hue-orange-500": {
       "$type": "color",
-      "$value": "oklch(70.49% 0.1867 47.6)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.1867 47.6)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7049, 0.1867, 47.6]
       }
     },
     "hue-green-500": {
       "$type": "color",
-      "$value": "oklch(72.27% 0.192 149.58)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.192 149.58)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7227, 0.192, 149.58]
       }
     },
     "hue-green-600": {
       "$type": "color",
-      "$value": "oklch(62.71% 0.1699 149.21)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.1699 149.21)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.6271, 0.1699, 149.21]
       }
     },
     "hue-blue-500": {
       "$type": "color",
-      "$value": "oklch(61.52% 0.2076 262.53)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.2076 262.53)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.6152, 0.2076, 262.53]
       }
     },
     "hue-blue-600": {
       "$type": "color",
-      "$value": "oklch(53.18% 0.2148 265.52)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(72% 0.2148 265.52)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5318, 0.2148, 265.52]
       }
     },
     "tool-run": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 52)",
-      "$description": "Tool ink: one hue per tool family, one lightness per scheme.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 52)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 52]
+      },
+      "$description": "Tool ink: one hue per tool family, one lightness per scheme."
     },
     "tool-mcp": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 176)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 176)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 176]
       }
     },
     "tool-search": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 195)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 195)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 195]
       }
     },
     "tool-ask": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 214)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 214)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 214]
       }
     },
     "tool-web": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 234)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 234)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 234]
       }
     },
     "tool-read": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 253)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 253)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 253]
       }
     },
     "tool-agent": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 272)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 272)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 272]
       }
     },
     "tool-edit": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 292)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 292)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 292]
       }
     },
     "tool-write": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 311)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 311)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 311]
       }
     },
     "tool-skill": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 330)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 330)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 330]
       }
     },
     "tool-plan": {
       "$type": "color",
-      "$value": "oklch(50% 0.12 350)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.11 350)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.12, 350]
       }
     },
     "background": {
       "$type": "color",
-      "$value": "{color.neutral-2}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-1}"
-        }
-      }
+      "$value": "{color.neutral-2}"
     },
     "foreground": {
       "$type": "color",
@@ -692,12 +820,7 @@
     "card": {
       "$type": "color",
       "$value": "{color.neutral-1}",
-      "$description": "shadcn bridge: the kit's own names, resolved to the ramps.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-2}"
-        }
-      }
+      "$description": "shadcn bridge: the kit's own names, resolved to the ramps."
     },
     "card-foreground": {
       "$type": "color",
@@ -714,12 +837,7 @@
     "accent": {
       "$type": "color",
       "$value": "{color.neutral-3}",
-      "$description": "The subtle hover surface, never brand.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-4}"
-        }
-      }
+      "$description": "The subtle hover surface, never brand."
     },
     "destructive": {
       "$type": "color",
@@ -760,12 +878,7 @@
     },
     "surface-raised": {
       "$type": "color",
-      "$value": "{color.neutral-1}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-3}"
-        }
-      }
+      "$value": "{color.neutral-1}"
     },
     "surface-card": {
       "$type": "color",
@@ -773,51 +886,32 @@
     },
     "surface-recess": {
       "$type": "color",
-      "$value": "oklch(96.7% 0.008 84)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(22.2% 0.006 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.967, 0.008, 84]
       }
     },
     "surface-band": {
       "$type": "color",
-      "$value": "oklch(95.7% 0.009 84)",
-      "$description": "A table's header band, one step under the field.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(21.4% 0.006 70)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.957, 0.009, 84]
+      },
+      "$description": "A table's header band, one step under the field."
     },
     "surface-recess-deep": {
       "$type": "color",
-      "$value": "{color.neutral-4}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-1}"
-        }
-      }
+      "$value": "{color.neutral-4}"
     },
     "surface-well": {
       "$type": "color",
       "$value": "{color.surface-recess}",
-      "$description": "A content well inside a raised card (the plan's and the preview's beside a conversation): the recess by day; at night the deep recess, which the raised card's own lightness would otherwise all but meet.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-1}"
-        }
-      }
+      "$description": "A content well inside a raised card (the plan's and the preview's beside a conversation): the recess by day; at night the deep recess, which the raised card's own lightness would otherwise all but meet."
     },
     "surface-shelf": {
       "$type": "color",
       "$value": "{color.neutral-5}",
-      "$description": "The bar folder tabs stand on, a step below recess-deep.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(15.6% 0.004 70)"
-        }
-      }
+      "$description": "The bar folder tabs stand on, a step below recess-deep."
     },
     "tab-sheet": {
       "$type": "color",
@@ -831,240 +925,182 @@
     },
     "tab-recede-2": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.surface-recess-deep} 50%, {color.surface-shelf})",
-      "$description": "An unchosen folder tab on the phone's row, two tabs from the chosen one."
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.905, 0.001575, 0.011896]
+      },
+      "$description": "An unchosen folder tab on the phone's row, two tabs from the chosen one.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.surface-recess-deep} 50%, {color.surface-shelf})"
+        }
+      }
     },
     "tab-recede-3": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.surface-recess-deep} 30%, {color.surface-shelf})",
-      "$description": "An unchosen folder tab on the phone's row, three or more tabs from the chosen one."
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.899, 0.001669, 0.012287]
+      },
+      "$description": "An unchosen folder tab on the phone's row, three or more tabs from the chosen one.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.surface-recess-deep} 30%, {color.surface-shelf})"
+        }
+      }
     },
     "surface-lift": {
       "$type": "color",
-      "$value": "{color.neutral-1}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-6}"
-        }
-      }
+      "$value": "{color.neutral-1}"
     },
     "surface-tile": {
       "$type": "color",
       "$value": "{color.neutral-1}",
-      "$description": "An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-5}"
-        }
-      }
+      "$description": "An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on."
     },
     "surface-fill": {
       "$type": "color",
-      "$value": "{color.neutral-4}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-5}"
-        }
-      }
+      "$value": "{color.neutral-4}"
     },
     "surface-fill-strong": {
       "$type": "color",
       "$value": "{color.neutral-6}",
-      "$description": "A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-7}"
-        }
-      }
+      "$description": "A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open)."
     },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-4}",
-      "$description": "Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-4}"
-        }
-      }
+      "$description": "Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike."
     },
     "well-edge": {
       "$type": "color",
       "$value": "{color.neutral-5}",
-      "$description": "The reader's well edge: darker than the well by day, the ink at 8% at night.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(from {color.neutral-12} l c h / 0.08)"
-        }
-      }
+      "$description": "The reader's well edge: darker than the well by day, the ink at 8% at night."
     },
     "seam": {
       "$type": "color",
-      "$value": "oklch(from {color.coral-9} l c h / 0.32)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.645, 0.175, 33],
+        "alpha": 0.32
+      },
       "$description": "Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.coral-9} l c h / 0.38)"
+          "css": "oklch(from {color.coral-9} l c h / 0.32)"
         }
       }
     },
     "code-bg": {
       "$type": "color",
-      "$value": "{color.neutral-3}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(15.6% 0.004 70)"
-        }
-      }
+      "$value": "{color.neutral-3}"
     },
     "surface-1": {
       "$type": "color",
       "$value": "{color.neutral-2}",
-      "$description": "Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(18.4% 0.004 70)"
-        }
-      }
+      "$description": "Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step."
     },
     "surface-2": {
       "$type": "color",
-      "$value": "oklch(99.3% 0.004 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(21.6% 0.005 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 85]
       }
     },
     "surface-3": {
       "$type": "color",
-      "$value": "oklch(99.6% 0.003 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(24.8% 0.006 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.996, 0.003, 85]
       }
     },
     "surface-4": {
       "$type": "color",
-      "$value": "oklch(99.6% 0.003 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(28% 0.007 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.996, 0.003, 85]
       }
     },
     "surface-5": {
       "$type": "color",
-      "$value": "oklch(99.6% 0.003 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(31.2% 0.008 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.996, 0.003, 85]
       }
     },
     "surface-6": {
       "$type": "color",
-      "$value": "oklch(99.6% 0.003 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(34.4% 0.009 72)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.996, 0.003, 85]
       }
     },
     "surface-7": {
       "$type": "color",
-      "$value": "oklch(99.6% 0.003 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(37.6% 0.010 72)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.996, 0.003, 85]
       }
     },
     "surface-8": {
       "$type": "color",
-      "$value": "oklch(99.6% 0.003 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(40.8% 0.011 74)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.996, 0.003, 85]
       }
     },
     "border": {
       "$type": "color",
       "$value": "{color.neutral-6}",
-      "$description": "Borders: graded, never flattened to one value.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(from {color.neutral-12} l c h / 0.08)"
-        }
-      }
+      "$description": "Borders: graded, never flattened to one value."
     },
     "border-hairline": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.neutral-4} 34%, {color.neutral-3})",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.93584, 0.001146, 0.010276]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.neutral-5} 40%, {color.neutral-4})"
+          "css": "color-mix(in oklab, {color.neutral-4} 34%, {color.neutral-3})"
         }
       }
     },
     "border-well": {
       "$type": "color",
       "$value": "{color.border-hairline}",
-      "$description": "The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-6}"
-        }
-      }
+      "$description": "The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess."
     },
     "border-control": {
       "$type": "color",
-      "$value": "{color.neutral-5}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-6}"
-        }
-      }
+      "$value": "{color.neutral-5}"
     },
     "border-contrast": {
       "$type": "color",
       "$value": "{color.neutral-9}",
-      "$description": "The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night).",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.neutral-9}, {color.neutral-11} 25%)"
-        }
-      }
+      "$description": "The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night)."
     },
     "border-card": {
       "$type": "color",
       "$value": "{color.neutral-5}",
-      "$description": "An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-7}"
-        }
-      }
+      "$description": "An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess."
     },
     "border-button-outline": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.neutral-8}, {color.neutral-9} 40%)",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.649, 0.003669, 0.016187]
+      },
       "$description": "The outline button's edge, 3:1 against the raised surface it stands on, where the control edge measures 1.37:1 by day and 1.43:1 at night (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.neutral-9}, {color.neutral-11} 10%)"
+          "css": "color-mix(in oklab, {color.neutral-8}, {color.neutral-9} 40%)"
         }
       }
     },
     "input": {
       "$type": "color",
-      "$value": "{color.neutral-7}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(from {color.neutral-12} l c h / 0.14)"
-        }
-      }
+      "$value": "{color.neutral-7}"
     },
     "ink-strong": {
       "$type": "color",
@@ -1073,21 +1109,27 @@
     },
     "ink-row": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.neutral-12} 68%, {color.neutral-11})",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.359, 0.003561, 0.010696]
+      },
       "$description": "A ledger row's name, just under the strongest ink.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.neutral-12} 88%, {color.neutral-11})"
+          "css": "color-mix(in oklab, {color.neutral-12} 68%, {color.neutral-11})"
         }
       }
     },
     "ink-stat": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.neutral-12} 60%, {color.neutral-11})",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.375, 0.003596, 0.011021]
+      },
       "$description": "A stat tile's figure, a step lighter than the strongest ink.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.neutral-12} 72%, {color.neutral-11})"
+          "css": "color-mix(in oklab, {color.neutral-12} 60%, {color.neutral-11})"
         }
       }
     },
@@ -1097,11 +1139,14 @@
     },
     "ink-subtle": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.neutral-8} 6%, {color.neutral-11})",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.5094, 0.003839, 0.013648]
+      },
       "$description": "Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 4.55 / 5.66:1 at 6%, hover being the fill's own step; the cool ramp's 8.3% measured 4.47 on the warm fill).",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.neutral-8} 33.3%, {color.neutral-11})"
+          "css": "color-mix(in oklab, {color.neutral-8} 6%, {color.neutral-11})"
         }
       }
     },
@@ -1124,12 +1169,7 @@
     },
     "brand-wash": {
       "$type": "color",
-      "$value": "{color.coral-3}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(from {color.coral-9} l c h / 0.16)"
-        }
-      }
+      "$value": "{color.coral-3}"
     },
     "brand-ink": {
       "$type": "color",
@@ -1137,13 +1177,11 @@
     },
     "brand-ink-strong": {
       "$type": "color",
-      "$value": "oklch(55% 0.165 33)",
-      "$description": "Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.12 34)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.55, 0.165, 33]
+      },
+      "$description": "Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills."
     },
     "link-ink": {
       "$type": "color",
@@ -1155,26 +1193,25 @@
     },
     "action-solid": {
       "$type": "color",
-      "$value": "oklch(55.5% 0.17 33)",
-      "$description": "The action: coral under a white label. Darkened from the direction's 58.5/63% so white holds 4.5:1 on every stop of the gradient.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(54% 0.165 33)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.555, 0.17, 33]
+      },
+      "$description": "The action: coral under a white label. Darkened from the direction's 58.5/63% so white holds 4.5:1 on every stop of the gradient."
     },
     "action-hover": {
       "$type": "color",
-      "$value": "oklch(51% 0.165 33)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(49.5% 0.16 34)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.165, 33]
       }
     },
     "on-action": {
       "$type": "color",
-      "$value": "oklch(100% 0 0)"
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [1, 0, 0]
+      }
     },
     "on-brand": {
       "$type": "color",
@@ -1182,54 +1219,83 @@
     },
     "action-surface": {
       "$type": "gradient",
-      "$value": "linear-gradient(oklch(from {color.action-solid} calc(l + 0.03) c h), oklch(from {color.action-solid} calc(l - 0.03) c h))",
-      "$description": "The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white."
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.585, 0.17, 33]
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.525, 0.17, 33]
+          },
+          "position": 1
+        }
+      ],
+      "$description": "The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.action-solid} calc(l + 0.03) c h), oklch(from {color.action-solid} calc(l - 0.03) c h))"
+        }
+      }
     },
     "action-surface-hover": {
       "$type": "gradient",
-      "$value": "linear-gradient(oklch(from {color.action-hover} calc(l + 0.03) c h), oklch(from {color.action-hover} calc(l - 0.03) c h))"
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.54, 0.165, 33]
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.48, 0.165, 33]
+          },
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.action-hover} calc(l + 0.03) c h), oklch(from {color.action-hover} calc(l - 0.03) c h))"
+        }
+      }
     },
     "selected-bg": {
       "$type": "color",
-      "$value": "oklch(90.5% 0.062 48)",
-      "$description": "Selected nav / chosen row: warm apricot wash, coral ink, no shadow.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(34% 0.075 40)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.905, 0.062, 48]
+      },
+      "$description": "Selected nav / chosen row: warm apricot wash, coral ink, no shadow."
     },
     "selected-ink": {
       "$type": "color",
-      "$value": "{color.coral-11}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(83% 0.085 34)"
-        }
-      }
+      "$value": "{color.coral-11}"
     },
     "selected-icon": {
       "$type": "color",
-      "$value": "{color.coral-10}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.13 34)"
-        }
-      }
+      "$value": "{color.coral-10}"
     },
     "chip-chosen-bg": {
       "$type": "color",
-      "$value": "oklch(55% 0.17 33)",
-      "$description": "Chosen option chip (1/2/3 keys in agent questions): solid vermillion, no ring. Dark sits at the dark action's lightness so the white digit holds 4.5:1 (the direction's 66% measured 3.33:1).",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(54% 0.165 33)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.55, 0.17, 33]
+      },
+      "$description": "Chosen option chip (1/2/3 keys in agent questions): solid vermillion, no ring. Dark sits at the dark action's lightness so the white digit holds 4.5:1 (the direction's 66% measured 3.33:1)."
     },
     "chip-chosen-ink": {
       "$type": "color",
-      "$value": "oklch(100% 0 0)"
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [1, 0, 0]
+      }
     },
     "ink-solid": {
       "$type": "color",
@@ -1242,75 +1308,115 @@
     },
     "focus-ring": {
       "$type": "color",
-      "$value": "oklch(55% 0.165 33)",
-      "$description": "Focus: one 2px coral ring, keyboard focus only.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.12 34)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.55, 0.165, 33]
+      },
+      "$description": "Focus: one 2px coral ring, keyboard focus only."
     },
     "selection": {
       "$type": "color",
-      "$value": "oklch(64.5% 0.175 33 / 0.2)",
-      "$description": "Selection: coral tint.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(64.5% 0.175 33 / 0.3)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.645, 0.175, 33],
+        "alpha": 0.2
+      },
+      "$description": "Selection: coral tint."
     },
     "status-live-bg": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.info-3} 76%, {color.info-9})",
-      "$description": "Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person."
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.78752, -0.022962, -0.046745]
+      },
+      "$description": "Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.info-3} 76%, {color.info-9})"
+        }
+      }
     },
     "status-attn-bg": {
       "$type": "color",
-      "$value": "oklch(91% 0.115 95)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(37% 0.07 92)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.91, 0.115, 95]
       }
     },
     "status-done-bg": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.success-3} 76%, {color.success-9})"
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.74976, -0.049533, 0.094227]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.success-3} 76%, {color.success-9})"
+        }
+      }
     },
     "status-fail-bg": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.error-3} 76%, {color.error-9})",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.804, 0.076579, 0.01846]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklab, {color.error-3} 68%, {color.error-9})"
+          "css": "color-mix(in oklab, {color.error-3} 76%, {color.error-9})"
         }
       }
     },
     "status-idle-bg": {
       "$type": "color",
-      "$value": "transparent"
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0
+      }
     },
     "status-live-ink": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.info-11} 76%, {color.neutral-12})"
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.30336, -0.014073, -0.048025]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.info-11} 76%, {color.neutral-12})"
+        }
+      }
     },
     "status-attn-ink": {
       "$type": "color",
-      "$value": "oklch(35% 0.075 88)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(90% 0.115 95)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.35, 0.075, 88]
       }
     },
     "status-done-ink": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.success-11} 76%, {color.neutral-12})"
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.32768, -0.029702, 0.051292]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.success-11} 76%, {color.neutral-12})"
+        }
+      }
     },
     "status-fail-ink": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.error-11} 76%, {color.neutral-12})"
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.3444, 0.081572, 0.023893]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.error-11} 76%, {color.neutral-12})"
+        }
+      }
     },
     "status-idle-ink": {
       "$type": "color",
@@ -1318,49 +1424,39 @@
     },
     "status-live-glyph": {
       "$type": "color",
-      "$value": "oklch(50% 0.15 252)",
-      "$description": "Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.12 245)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.15, 252]
+      },
+      "$description": "Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral."
     },
     "status-attn-glyph": {
       "$type": "color",
-      "$value": "oklch(57% 0.125 78)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(87% 0.14 92)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.57, 0.125, 78]
       }
     },
     "tab-rim-attn": {
       "$type": "color",
-      "$value": "oklch(48% 0.125 78)",
-      "$description": "A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(87% 0.14 92)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.48, 0.125, 78]
+      },
+      "$description": "A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own."
     },
     "status-done-glyph": {
       "$type": "color",
-      "$value": "oklch(52% 0.14 140)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.15 135)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.52, 0.14, 140]
       }
     },
     "status-fail-glyph": {
       "$type": "color",
-      "$value": "oklch(53% 0.19 22)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(71% 0.16 20)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.53, 0.19, 22]
       }
     },
     "status-idle-glyph": {
@@ -1369,11 +1465,14 @@
     },
     "nest-ink": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.neutral-8} 85%, {color.neutral-9})",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.70275, 0.01685, 77.7]
+      },
       "$description": "The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklch, {color.neutral-7} 50%, {color.neutral-8})"
+          "css": "color-mix(in oklch, {color.neutral-8} 85%, {color.neutral-9})"
         }
       }
     },
@@ -1384,140 +1483,140 @@
     },
     "meter-calm-track": {
       "$type": "color",
-      "$value": "oklch(75.5% 0.085 36)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(45% 0.085 32)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.755, 0.085, 36]
       }
     },
     "meter-near": {
       "$type": "color",
-      "$value": "oklch(62% 0.135 88)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(86% 0.14 95)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.62, 0.135, 88]
       }
     },
     "meter-near-track": {
       "$type": "color",
-      "$value": "oklch(69.5% 0.095 90)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(53% 0.08 92)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.695, 0.095, 90]
       }
     },
     "meter-over": {
       "$type": "color",
-      "$value": "oklch(50% 0.17 15)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(68% 0.16 15)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.17, 15]
       }
     },
     "meter-over-track": {
       "$type": "color",
-      "$value": "oklch(72% 0.08 15)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(53% 0.09 15)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.72, 0.08, 15]
       }
     },
     "meter-stale": {
       "$type": "color",
-      "$value": "oklch(56% 0.012 265)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(64% 0.01 265)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.56, 0.012, 265]
       }
     },
     "meter-stale-track": {
       "$type": "color",
-      "$value": "oklch(75% 0.008 265)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(45% 0.008 265)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.75, 0.008, 265]
       }
     },
     "meter-share": {
       "$type": "color",
-      "$value": "oklch(55% 0.012 265)",
-      "$description": "The one neutral the usage breakdown and history bars draw in.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(72% 0.01 265)"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.55, 0.012, 265]
+      },
+      "$description": "The one neutral the usage breakdown and history bars draw in."
     },
     "meter-wash-near": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.status-attn-ink} 6%, transparent)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.35, 0.075, 88],
+        "alpha": 0.06
+      },
       "$description": "A near or over row's only tint: a faint wash of its status ink (owner: \"the tints for yellow/red are too overwhelming\").",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklch, {color.status-attn-ink} 10%, transparent)"
+          "css": "color-mix(in oklch, {color.status-attn-ink} 6%, transparent)"
         }
       }
     },
     "meter-wash-over": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.3444, 0.084999, 16.325323],
+        "alpha": 0.06
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
+          "css": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)"
         }
       }
     },
     "count-wash-live": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.status-live-ink} 6%, transparent)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.30336, 0.050045, 253.667746],
+        "alpha": 0.06
+      },
       "$description": "The chosen work tab's count, washed in its status ink at the usage tints' strength.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklch, {color.status-live-ink} 10%, transparent)"
+          "css": "color-mix(in oklch, {color.status-live-ink} 6%, transparent)"
         }
       }
     },
     "count-wash-done": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.status-done-ink} 6%, transparent)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.32768, 0.059271, 120.073986],
+        "alpha": 0.06
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklch, {color.status-done-ink} 10%, transparent)"
+          "css": "color-mix(in oklch, {color.status-done-ink} 6%, transparent)"
         }
       }
     },
     "count-wash-fail": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.3444, 0.084999, 16.325323],
+        "alpha": 0.06
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
+          "css": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)"
         }
       }
     },
     "presence-online": {
       "$type": "color",
-      "$value": "oklch(62.7% 0.17 149)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(74% 0.17 149)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.627, 0.17, 149]
       }
     },
     "presence-away": {
       "$type": "color",
-      "$value": "oklch(70.5% 0.187 47.6)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.187 47.6)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.705, 0.187, 47.6]
       }
     },
     "presence-off": {
@@ -1526,145 +1625,206 @@
     },
     "scrollbar-thumb": {
       "$type": "color",
-      "$value": "oklch(from {color.muted-foreground} l c h / 0.35)",
-      "$description": "Every scrollbar's thumb, inherited from the root."
-    },
-    "skeleton-sheen": {
-      "$type": "color",
-      "$value": "oklch(from {color.surface-raised} l c h / 0.6)",
-      "$description": "The band of raised surface that crosses a skeleton once per loop."
-    },
-    "prose-bullet": {
-      "$type": "color",
-      "$value": "oklch(from {color.muted-foreground} l c h / 0.55)",
-      "$description": "List bullets in rendered markdown."
-    },
-    "identity-ink": {
-      "$type": "color",
-      "$value": "oklch(48% 0.12 0)",
-      "$description": "Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1.",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.495, 0.014, 74],
+        "alpha": 0.35
+      },
+      "$description": "Every scrollbar's thumb, inherited from the root.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(74% 0.11 0)"
+          "css": "oklch(from {color.muted-foreground} l c h / 0.35)"
         }
       }
     },
+    "skeleton-sheen": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 85],
+        "alpha": 0.6
+      },
+      "$description": "The band of raised surface that crosses a skeleton once per loop.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-raised} l c h / 0.6)"
+        }
+      }
+    },
+    "prose-bullet": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.495, 0.014, 74],
+        "alpha": 0.55
+      },
+      "$description": "List bullets in rendered markdown.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.muted-foreground} l c h / 0.55)"
+        }
+      }
+    },
+    "identity-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.48, 0.12, 0]
+      },
+      "$description": "Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1."
+    },
     "machine-offline": {
       "$type": "color",
-      "$value": "color-mix(in oklab, {color.neutral-8} 62%, {color.neutral-11})",
-      "$description": "A machine that is not online: between the mid and muted neutrals."
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.6438, 0.003658, 0.015424]
+      },
+      "$description": "A machine that is not online: between the mid and muted neutrals.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-8} 62%, {color.neutral-11})"
+        }
+      }
     },
     "data-ok": {
       "$type": "color",
-      "$value": "oklch(from {color.success-9} 46% 0.125 h)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.46, 0.125, 122.9]
+      },
       "$description": "Data colour: chroma survives in numerals.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.success-9} 78% 0.135 h)"
+          "css": "oklch(from {color.success-9} 46% 0.125 h)"
         }
       }
     },
     "data-warn": {
       "$type": "color",
-      "$value": "oklch(from {color.warning-9} 46% 0.125 h)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.46, 0.125, 85.8]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.warning-9} 80% 0.13 h)"
+          "css": "oklch(from {color.warning-9} 46% 0.125 h)"
         }
       }
     },
     "data-bad": {
       "$type": "color",
-      "$value": "oklch(from {color.error-9} 46% 0.135 h)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.46, 0.135, 15]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.error-9} 81% 0.13 h)"
+          "css": "oklch(from {color.error-9} 46% 0.135 h)"
         }
       }
     },
     "diff-add-bg": {
       "$type": "color",
-      "$value": "oklch(from {color.success-9} l c h / 0.15)",
-      "$description": "A diff's added row, over code-bg."
-    },
-    "diff-del-bg": {
-      "$type": "color",
-      "$value": "oklch(from {color.error-9} l c h / 0.15)",
-      "$description": "A diff's removed row, over code-bg."
-    },
-    "diff-add-emphasis": {
-      "$type": "color",
-      "$value": "oklch(from {color.success-9} l c h / 0.10)",
-      "$description": "The words an added row changed, over diff-add-bg."
-    },
-    "diff-del-emphasis": {
-      "$type": "color",
-      "$value": "oklch(from {color.error-9} l c h / 0.10)",
-      "$description": "The words a removed row changed, over diff-del-bg."
-    },
-    "note-new-ink": {
-      "$type": "color",
-      "$value": "oklch(44% 0.11 149)",
-      "$description": "Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes.",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.559, 0.134, 122.9],
+        "alpha": 0.15
+      },
+      "$description": "A diff's added row, over code-bg.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(86% 0.12 149)"
+          "css": "oklch(from {color.success-9} l c h / 0.15)"
         }
       }
     },
-    "note-new-bg": {
+    "diff-del-bg": {
       "$type": "color",
-      "$value": "oklch(95% 0.04 149)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.17, 15],
+        "alpha": 0.15
+      },
+      "$description": "A diff's removed row, over code-bg.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(31% 0.055 149)"
+          "css": "oklch(from {color.error-9} l c h / 0.15)"
         }
+      }
+    },
+    "diff-add-emphasis": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.559, 0.134, 122.9],
+        "alpha": 0.1
+      },
+      "$description": "The words an added row changed, over diff-add-bg.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.success-9} l c h / 0.10)"
+        }
+      }
+    },
+    "diff-del-emphasis": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.5, 0.17, 15],
+        "alpha": 0.1
+      },
+      "$description": "The words a removed row changed, over diff-del-bg.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.error-9} l c h / 0.10)"
+        }
+      }
+    },
+    "note-new-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.44, 0.11, 149]
+      },
+      "$description": "Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes."
+    },
+    "note-new-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.95, 0.04, 149]
       }
     },
     "note-improved-ink": {
       "$type": "color",
-      "$value": "oklch(44% 0.1 225)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(86% 0.1 225)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.44, 0.1, 225]
       }
     },
     "note-improved-bg": {
       "$type": "color",
-      "$value": "oklch(95% 0.035 225)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(31% 0.05 225)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.95, 0.035, 225]
       }
     },
     "note-fixed-ink": {
       "$type": "color",
-      "$value": "oklch(46% 0.1 70)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(87% 0.13 79)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.46, 0.1, 70]
       }
     },
     "note-fixed-bg": {
       "$type": "color",
-      "$value": "oklch(95% 0.05 85)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(32% 0.055 79)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.95, 0.05, 85]
       }
     },
     "chart-1": {
       "$type": "color",
-      "$value": "{color.neutral-12}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-11}"
-        }
-      }
+      "$value": "{color.neutral-12}"
     },
     "chart-brand": {
       "$type": "color",
@@ -1693,54 +1853,71 @@
     },
     "code-keyword": {
       "$type": "color",
-      "$value": "oklch(45% 0.15 33)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(76% 0.12 34)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.45, 0.15, 33]
       }
     },
     "code-fn": {
       "$type": "color",
-      "$value": "oklch(43% 0.10 245)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.43, 0.1, 245]
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(80% 0.07 240)"
+          "css": "oklch(43% 0.10 245)"
         }
       }
     },
     "code-string": {
       "$type": "color",
-      "$value": "oklch(42% 0.105 122)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(84% 0.10 118)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.42, 0.105, 122]
       }
     },
     "code-number": {
       "$type": "color",
-      "$value": "oklch(44% 0.115 55)",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(84% 0.10 70)"
-        }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.44, 0.115, 55]
       }
     },
     "code-comment": {
       "$type": "color",
-      "$value": "oklch(43% 0.014 74)",
-      "$description": "By day a step under ink-subtle's lightness, which reads 4.3:1 on a diff's tinted row; at night ink-subtle itself.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.ink-subtle}"
-        }
-      }
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.43, 0.014, 74]
+      },
+      "$description": "By day a step under ink-subtle's lightness, which reads 4.3:1 on a diff's tinted row; at night ink-subtle itself."
     },
     "rail": {
       "$type": "gradient",
-      "$value": "linear-gradient(oklch(from {color.neutral-11} l c h / 0.4), oklch(from {color.neutral-11} l c h / 0.4))",
-      "$description": "The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them."
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.495, 0.014, 74],
+            "alpha": 0.4
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.495, 0.014, 74],
+            "alpha": 0.4
+          },
+          "position": 1
+        }
+      ],
+      "$description": "The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.neutral-11} l c h / 0.4), oklch(from {color.neutral-11} l c h / 0.4))"
+        }
+      }
     },
     "rail-body": {
       "$type": "color",
@@ -1748,129 +1925,716 @@
     },
     "head-tint-ramp": {
       "$type": "gradient",
-      "$value": "linear-gradient(rgb(0 0 0 / 1), rgb(0 0 0 / 0.996), rgb(0 0 0 / 0.968), rgb(0 0 0 / 0.892), rgb(0 0 0 / 0.744), rgb(0 0 0 / 0.5), rgb(0 0 0 / 0.256), rgb(0 0 0 / 0.108), rgb(0 0 0 / 0.032), rgb(0 0 0 / 0.004), rgb(0 0 0 / 0))",
-      "$description": "The transcript head's colour ramp, a mask over c-head-fade: how much of the chosen tab's sheet (tab-sheet) stands over the rows, inOutCubic(x) at each tenth of the band from its foot (x = 0, the gradient's end) to the strip's edge (x = 1, its start), the curve the head blur's slices are bounded on, so the blur and the colour arrive together. Flat at both ends: no line where the band starts on the rows, and none where it meets the tab's foot, where it is the sheet whole."
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0]
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.996
+          },
+          "position": 0.1
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.968
+          },
+          "position": 0.2
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.892
+          },
+          "position": 0.3
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.744
+          },
+          "position": 0.4
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.5
+          },
+          "position": 0.5
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.256
+          },
+          "position": 0.6
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.108
+          },
+          "position": 0.7
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.032
+          },
+          "position": 0.8
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0.004
+          },
+          "position": 0.9
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0, 0, 0],
+            "alpha": 0
+          },
+          "position": 1
+        }
+      ],
+      "$description": "The transcript head's colour ramp, a mask over c-head-fade: how much of the chosen tab's sheet (tab-sheet) stands over the rows, inOutCubic(x) at each tenth of the band from its foot (x = 0, the gradient's end) to the strip's edge (x = 1, its start), the curve the head blur's slices are bounded on, so the blur and the colour arrive together. Flat at both ends: no line where the band starts on the rows, and none where it meets the tab's foot, where it is the sheet whole.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(rgb(0 0 0 / 1), rgb(0 0 0 / 0.996), rgb(0 0 0 / 0.968), rgb(0 0 0 / 0.892), rgb(0 0 0 / 0.744), rgb(0 0 0 / 0.5), rgb(0 0 0 / 0.256), rgb(0 0 0 / 0.108), rgb(0 0 0 / 0.032), rgb(0 0 0 / 0.004), rgb(0 0 0 / 0))"
+        }
+      }
     },
     "material-panel": {
       "$type": "color",
-      "$value": "oklch(from {color.surface-raised} l c h / 0.72)",
-      "$description": "Chrome materials: structural translucency, never decoration."
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 85],
+        "alpha": 0.72
+      },
+      "$description": "Chrome materials: structural translucency, never decoration.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-raised} l c h / 0.72)"
+        }
+      }
     },
     "scrim": {
       "$type": "color",
-      "$value": "oklch(from {color.background} l c h / {effect.scrim-mix})",
-      "$description": "What a dialog's backdrop paints: the page itself, translucent."
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.966, 0.008, 85],
+        "alpha": 0.72
+      },
+      "$description": "What a dialog's backdrop paints: the page itself, translucent.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.background} l c h / {effect.scrim-mix})"
+        }
+      }
     },
     "image-outline": {
       "$type": "color",
-      "$value": "oklch(0 0 0 / 0.1)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0, 0, 0],
+        "alpha": 0.1
+      },
       "$description": "The 1px edge drawn inside a raster image (the brand row's icon), so it keeps its shape on any surface. Pure black by day and pure white at night, never a tinted neutral: a tint picks up the surface under it and reads as dirt on the image's edge. An image whose own edge is darker than the surface it sits on (the paywall's night film band on the raised sheet) takes it one width outside instead: inside, 10% white over its near-black edge comes out the surface's own colour and parts nothing.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(1 0 0 / 0.1)"
+          "css": "oklch(0 0 0 / 0.1)"
         }
       }
     },
     "shadow-tint": {
       "$type": "color",
-      "$value": "oklch(from {color.neutral-12} l c h / 0.09)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.295, 0.01, 70],
+        "alpha": 0.09
+      },
       "$description": "Elevation tints: warm ink by day, the deepest surface at night, never rgba black.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.neutral-1} l c h / 0.55)"
+          "css": "oklch(from {color.neutral-12} l c h / 0.09)"
         }
       }
     },
     "shadow-tint-2": {
       "$type": "color",
-      "$value": "oklch(from {color.neutral-12} l c h / 0.14)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.295, 0.01, 70],
+        "alpha": 0.14
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.neutral-1} l c h / 0.66)"
+          "css": "oklch(from {color.neutral-12} l c h / 0.14)"
         }
       }
     },
     "shadow-tint-3": {
       "$type": "color",
-      "$value": "oklch(from {color.neutral-12} l c h / 0.2)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.295, 0.01, 70],
+        "alpha": 0.2
+      },
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.neutral-1} l c h / 0.76)"
+          "css": "oklch(from {color.neutral-12} l c h / 0.2)"
         }
       }
     },
     "tab-shade": {
       "$type": "color",
-      "$value": "oklch(from {color.neutral-12} l c h / 0.24)",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.295, 0.01, 70],
+        "alpha": 0.24
+      },
       "$description": "What a folder tab casts on the tab behind it (shadow-tab-start, shadow-tab-end): warm ink by day; at night the ink lit, since the tabs are the darkest surfaces and no shadow shows on them.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(from {color.neutral-12} l c h / 0.14)"
+          "css": "oklch(from {color.neutral-12} l c h / 0.24)"
         }
       }
     },
     "tab-shade-chosen": {
       "$type": "color",
       "$value": "{color.tab-shade}",
-      "$description": "What the chosen folder tab casts on the tabs behind it: tab-shade by day; nothing at night, where its sheet is the lightest of them and lit ink beside it would only blur its edge (its rim draws it).",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "transparent"
-        }
-      }
+      "$description": "What the chosen folder tab casts on the tabs behind it: tab-shade by day; nothing at night, where its sheet is the lightest of them and lit ink beside it would only blur its edge (its rim draws it)."
     },
     "night-ring": {
       "$type": "color",
-      "$value": "transparent",
-      "$description": "At night every raised shadow adds a 1px inner ring of ink.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "oklch(from {color.neutral-12} l c h / 0.07)"
-        }
-      }
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0
+      },
+      "$description": "At night every raised shadow adds a 1px inner ring of ink."
     }
   },
   "shadow": {
     "shadow-xs": {
       "$type": "shadow",
-      "$value": "0 1px 2px {color.shadow-tint}"
+      "$value": {
+        "color": "{color.shadow-tint}",
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 1,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 2,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        }
+      }
     },
     "shadow-tile": {
       "$type": "shadow",
-      "$value": "0 1px 2px light-dark(oklch(from {color.neutral-12} l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 0 0 1px light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06))"
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.295, 0.01, 70],
+            "alpha": 0.07
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 2,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.295, 0.01, 70],
+            "alpha": 0.035
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          }
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0 1px 2px light-dark(oklch(from {color.neutral-12} l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 0 0 1px light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06))"
+        }
+      }
     },
     "shadow-raised": {
       "$type": "shadow",
-      "$value": "0 1px 3px {color.shadow-tint}, 0 1px 1px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 3,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 1,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "shadow-hairline": {
       "$type": "shadow",
-      "$value": "0 3px 7px -2px {color.shadow-tint-2}"
+      "$value": {
+        "color": "{color.shadow-tint-2}",
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 3,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 7,
+          "unit": "px"
+        },
+        "spread": {
+          "value": -2,
+          "unit": "px"
+        }
+      }
     },
     "shadow-stat": {
       "$type": "shadow",
-      "$value": "0 3px 7px -2px {color.shadow-tint-2}, inset 0 0 0 1px {color.night-ring}",
+      "$value": [
+        {
+          "color": "{color.shadow-tint-2}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 3,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 7,
+            "unit": "px"
+          },
+          "spread": {
+            "value": -2,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ],
       "$description": "A stat tile's lift: drawn below the card, not around it; ringed at night."
     },
     "shadow-md": {
       "$type": "shadow",
-      "$value": "0 3px 10px {color.shadow-tint-2}, 0 1px 2px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint-2}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 3,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 10,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 2,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "shadow-lg": {
       "$type": "shadow",
-      "$value": "0 10px 30px {color.shadow-tint-2}, 0 3px 8px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint-2}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 10,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 30,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 3,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 8,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "shadow-xl": {
       "$type": "shadow",
-      "$value": "0 24px 64px {color.shadow-tint-3}, 0 6px 16px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint-3}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 24,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 64,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 6,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 16,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "shadow-overlay": {
       "$type": "shadow",
-      "$value": "0 18px 48px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint-3}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 18,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 48,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 2,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 6,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "shadow-overlay-hung": {
       "$type": "shadow",
-      "$value": "0 18px 48px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}",
+      "$value": [
+        {
+          "color": "{color.shadow-tint-3}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 18,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 48,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 2,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 6,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        }
+      ],
       "$description": "A hanging surface whose top shows its own surface across the cut into its anchor (Caw's panel, kit-hang): the overlay's drop without the night ring, which would draw across the cut as a seam."
     },
     "shadow-modal": {
@@ -1879,45 +2643,217 @@
     },
     "shadow-drawer": {
       "$type": "shadow",
-      "$value": "0 12px 40px {color.shadow-tint-3}"
+      "$value": {
+        "color": "{color.shadow-tint-3}",
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 12,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 40,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        }
+      }
     },
     "shadow-drop": {
       "$type": "shadow",
-      "$value": "0 14px 28px {color.shadow-tint-2}",
+      "$value": {
+        "color": "{color.shadow-tint-2}",
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 14,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 28,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        }
+      },
       "$description": "A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near."
     },
     "shadow-drop-near": {
       "$type": "shadow",
-      "$value": "0 2px 4px {color.shadow-tint}"
+      "$value": {
+        "color": "{color.shadow-tint}",
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 2,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 4,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        }
+      }
     },
     "shadow-tab-start": {
       "$type": "shadow",
-      "$value": "-2px 0 5px -1px {color.tab-shade}",
+      "$value": {
+        "color": "{color.tab-shade}",
+        "offsetX": {
+          "value": -2,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 0,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 5,
+          "unit": "px"
+        },
+        "spread": {
+          "value": -1,
+          "unit": "px"
+        }
+      },
       "$description": "A folder tab's edge on the tab behind it, at its leading side: one-sided, never above its top (PaneTabs .shade)."
     },
     "shadow-tab-end": {
       "$type": "shadow",
-      "$value": "2px 0 5px -1px {color.tab-shade}",
+      "$value": {
+        "color": "{color.tab-shade}",
+        "offsetX": {
+          "value": 2,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 0,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 5,
+          "unit": "px"
+        },
+        "spread": {
+          "value": -1,
+          "unit": "px"
+        }
+      },
       "$description": "A folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade)."
     },
     "shadow-tab-start-chosen": {
       "$type": "shadow",
-      "$value": "-2px 0 5px -1px {color.tab-shade-chosen}",
+      "$value": {
+        "color": "{color.tab-shade-chosen}",
+        "offsetX": {
+          "value": -2,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 0,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 5,
+          "unit": "px"
+        },
+        "spread": {
+          "value": -1,
+          "unit": "px"
+        }
+      },
       "$description": "The chosen folder tab's edge on the tab behind it, at its leading side (PaneTabs .shade)."
     },
     "shadow-tab-end-chosen": {
       "$type": "shadow",
-      "$value": "2px 0 5px -1px {color.tab-shade-chosen}",
+      "$value": {
+        "color": "{color.tab-shade-chosen}",
+        "offsetX": {
+          "value": 2,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 0,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 5,
+          "unit": "px"
+        },
+        "spread": {
+          "value": -1,
+          "unit": "px"
+        }
+      },
       "$description": "The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade)."
     },
     "shadow-inset-sel": {
       "$type": "shadow",
-      "$value": "inset 0 1px 1px {color.shadow-tint}"
+      "$value": {
+        "color": "{color.shadow-tint}",
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 1,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 1,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        },
+        "inset": true
+      }
     },
     "surface-shadow-1": {
       "$type": "shadow",
-      "$value": "none",
-      "$description": "Shadow per surface level, paired with --surface-1…8."
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0, 0, 0],
+          "alpha": 0
+        },
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 0,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 0,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        }
+      },
+      "$description": "Shadow per surface level, paired with --surface-1…8.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "none"
+        }
+      }
     },
     "surface-shadow-2": {
       "$type": "shadow",
@@ -1925,7 +2861,66 @@
     },
     "surface-shadow-3": {
       "$type": "shadow",
-      "$value": "0 1px 3px {color.shadow-tint}, 0 1px 1px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 3,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 1,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "surface-shadow-4": {
       "$type": "shadow",
@@ -1933,7 +2928,66 @@
     },
     "surface-shadow-5": {
       "$type": "shadow",
-      "$value": "0 6px 18px {color.shadow-tint-2}, 0 2px 4px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint-2}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 6,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 18,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 2,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 4,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "surface-shadow-6": {
       "$type": "shadow",
@@ -1941,7 +2995,66 @@
     },
     "surface-shadow-7": {
       "$type": "shadow",
-      "$value": "0 14px 40px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+      "$value": [
+        {
+          "color": "{color.shadow-tint-3}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 14,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 40,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 2,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 6,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ]
     },
     "surface-shadow-8": {
       "$type": "shadow",
@@ -1949,29 +3062,175 @@
     },
     "action-ring": {
       "$type": "shadow",
-      "$value": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4))",
-      "$description": "The action's edge: a white top hairline and a coral-tinted drop."
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [1, 0, 0],
+            "alpha": 0.18
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          },
+          "inset": true
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.45, 0.12, 33],
+            "alpha": 0.25
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 2,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        }
+      ],
+      "$description": "The action's edge: a white top hairline and a coral-tinted drop.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4))"
+        }
+      }
     },
     "code-ring": {
       "$type": "shadow",
-      "$value": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))",
-      "$description": "Inner vermillion ring and soft inner glow on code blocks."
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.585, 0.17, 33],
+            "alpha": 0.28
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.585, 0.17, 33],
+            "alpha": 0.06
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 6,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ],
+      "$description": "Inner vermillion ring and soft inner glow on code blocks.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))"
+        }
+      }
     },
     "selected-shadow": {
       "$type": "shadow",
-      "$value": "none"
+      "$value": {
+        "color": {
+          "colorSpace": "srgb",
+          "components": [0, 0, 0],
+          "alpha": 0
+        },
+        "offsetX": {
+          "value": 0,
+          "unit": "px"
+        },
+        "offsetY": {
+          "value": 0,
+          "unit": "px"
+        },
+        "blur": {
+          "value": 0,
+          "unit": "px"
+        },
+        "spread": {
+          "value": 0,
+          "unit": "px"
+        }
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "none"
+        }
+      }
     }
   },
   "font": {
     "font-wordmark": {
       "$type": "fontFamily",
-      "$value": "\"Nunito Variable\", ui-rounded, system-ui, sans-serif",
+      "$value": ["Nunito Variable", "ui-rounded", "system-ui", "sans-serif"],
       "$description": "Caw&Co wordmark: the approved landing's Nunito Variable face."
     },
     "font-sans": {
       "$type": "fontFamily",
-      "$value": "\"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "$description": "Figtree for UI and transcript prose, 400 and 500 only."
+      "$value": [
+        "Figtree Variable",
+        "ui-sans-serif",
+        "system-ui",
+        "-apple-system",
+        "Segoe UI",
+        "sans-serif"
+      ],
+      "$description": "Figtree for UI and transcript prose, 400 and 500 only.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "\"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+        }
+      }
     },
     "font-body": {
       "$type": "fontFamily",
@@ -1979,252 +3238,426 @@
     },
     "font-mono": {
       "$type": "fontFamily",
-      "$value": "\"JetBrains Mono Variable\", ui-monospace, \"SF Mono\", monospace",
+      "$value": [
+        "JetBrains Mono Variable",
+        "ui-monospace",
+        "SF Mono",
+        "monospace"
+      ],
       "$description": "JetBrains Mono for code, paths, IDs and measurements; ligatures off."
     },
     "font-display": {
       "$type": "fontFamily",
-      "$value": "\"Fredoka\", \"Figtree Variable\", ui-rounded, system-ui, sans-serif",
+      "$value": [
+        "Fredoka",
+        "Figtree Variable",
+        "ui-rounded",
+        "system-ui",
+        "sans-serif"
+      ],
       "$description": "Fredoka 600: brand display only."
     }
   },
   "type": {
     "mono-figure-cap": {
       "$type": "number",
-      "$value": "0.703",
+      "$value": 0.703,
       "$description": "Figtree's cap height (0.703em). JetBrains Mono figures set beside Figtree words take it as `font-size-adjust: cap-height`, so their digits stand as tall as Figtree's at the same size step (unadjusted, Mono's stand 4% taller)."
     },
     "weight-wordmark": {
       "$type": "number",
-      "$value": "1000",
+      "$value": 1000,
       "$description": "The landing wordmark's variable-font weight. Brand only."
     },
     "track-wordmark": {
       "$type": "dimension",
-      "$value": "-0.045em",
-      "$description": "The landing wordmark's tracking; the ampersand shares its face and size."
+      "$value": {
+        "value": -0.72,
+        "unit": "px"
+      },
+      "$description": "The landing wordmark's tracking; the ampersand shares its face and size.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "-0.045em"
+        }
+      }
     },
     "text-meta": {
       "$type": "dimension",
-      "$value": "0.75rem",
+      "$value": {
+        "value": 0.75,
+        "unit": "rem"
+      },
       "$description": "The six sizes text takes. Dense roles hold one size at every width; title and kpi scale with the viewport between 390 and 1024px."
     },
     "text-label": {
       "$type": "dimension",
-      "$value": "0.8125rem"
+      "$value": {
+        "value": 0.8125,
+        "unit": "rem"
+      }
     },
     "text-body": {
       "$type": "dimension",
-      "$value": "0.875rem"
+      "$value": {
+        "value": 0.875,
+        "unit": "rem"
+      }
     },
     "text-code": {
       "$type": "dimension",
-      "$value": "0.75rem",
+      "$value": {
+        "value": 0.75,
+        "unit": "rem"
+      },
       "$description": "Code runs a step under body: JetBrains Mono sets large."
     },
     "text-title": {
       "$type": "dimension",
-      "$value": "clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem)"
+      "$value": {
+        "value": 1.125,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem)"
+        }
+      }
     },
     "text-kpi": {
       "$type": "dimension",
-      "$value": "clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem)"
+      "$value": {
+        "value": 1.25,
+        "unit": "rem"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem)"
+        }
+      }
     },
     "text-display": {
       "$type": "dimension",
-      "$value": "2.5rem",
+      "$value": {
+        "value": 2.5,
+        "unit": "rem"
+      },
       "$description": "Brand and marketing only."
     },
     "leading-meta": {
       "$type": "number",
-      "$value": "1.35"
+      "$value": 1.35
     },
     "leading-label": {
       "$type": "number",
-      "$value": "1.3"
+      "$value": 1.3
     },
     "leading-tight": {
       "$type": "number",
-      "$value": "1.2"
+      "$value": 1.2
     },
     "leading-ui": {
       "$type": "number",
-      "$value": "1.25"
+      "$value": 1.25
     },
     "leading-body": {
       "$type": "number",
-      "$value": "1.45"
+      "$value": 1.45
     },
     "leading-prose": {
       "$type": "number",
-      "$value": "1.55"
+      "$value": 1.55
     },
     "leading-code": {
       "$type": "number",
-      "$value": "1.6"
+      "$value": 1.6
     },
     "leading-kpi": {
       "$type": "number",
-      "$value": "1"
+      "$value": 1
     },
     "leading-root": {
       "$type": "number",
-      "$value": "1.5",
+      "$value": 1.5,
       "$description": "Tailwind preflight's root line height: what a row that sets no leading of its own inherits (the transcript's rail lines)."
     },
     "leading-prose-sm": {
       "$type": "number",
-      "$value": "1.7142857",
+      "$value": 1.7142857,
       "$description": "A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14."
     },
     "prose-sm-title-before": {
       "$type": "number",
-      "$value": "1.6",
+      "$value": 1.6,
       "$description": "prose-sm: above an h2, in the heading's own ems."
     },
     "prose-sm-title-after": {
       "$type": "number",
-      "$value": "0.8",
+      "$value": 0.8,
       "$description": "prose-sm: below an h1 or h2, in the heading's own ems."
     },
     "prose-sm-h3-before": {
       "$type": "number",
-      "$value": "1.5555556",
+      "$value": 1.5555556,
       "$description": "prose-sm: above an h3, in the heading's own ems."
     },
     "prose-sm-h3-after": {
       "$type": "number",
-      "$value": "0.4444444",
+      "$value": 0.4444444,
       "$description": "prose-sm: below an h3, in the heading's own ems."
     },
     "prose-sm-h4-before": {
       "$type": "number",
-      "$value": "1.4285714",
+      "$value": 1.4285714,
       "$description": "prose-sm: above an h4 to h6, in the heading's own ems."
     },
     "prose-sm-h4-after": {
       "$type": "number",
-      "$value": "0.5714286",
+      "$value": 0.5714286,
       "$description": "prose-sm: below an h4 to h6, in the heading's own ems."
     },
     "prose-sm-quote": {
       "$type": "number",
-      "$value": "1.3333333",
+      "$value": 1.3333333,
       "$description": "prose-sm: above and below a blockquote, in the body's ems."
     },
     "prose-sm-quote-inset": {
       "$type": "number",
-      "$value": "1.1111111",
+      "$value": 1.1111111,
       "$description": "prose-sm: a blockquote's text inset from its rule, in the body's ems."
     },
     "prose-sm-rule": {
       "$type": "number",
-      "$value": "2.8571429",
+      "$value": 2.8571429,
       "$description": "prose-sm: above and below a horizontal rule, in the body's ems."
     },
     "prose-sm-table-size": {
       "$type": "number",
-      "$value": "0.8571429",
+      "$value": 0.8571429,
       "$description": "prose-sm: a table's font size, in the body's ems. A hair over 12px of 14px, which is what makes a browser take the face's 3px descent up to 4."
     },
     "weight-body": {
       "$type": "fontWeight",
-      "$value": "400"
+      "$value": 400
     },
     "weight-strong": {
       "$type": "fontWeight",
-      "$value": "500",
+      "$value": 500,
       "$description": "Nothing in product UI goes above 500."
     },
     "track-display": {
       "$type": "dimension",
-      "$value": "-0.008em"
+      "$value": {
+        "value": -0.128,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "-0.008em"
+        }
+      }
     },
     "track-title": {
       "$type": "dimension",
-      "$value": "-0.01em"
+      "$value": {
+        "value": -0.16,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "-0.01em"
+        }
+      }
     },
     "track-caps": {
       "$type": "dimension",
-      "$value": "0.06em"
+      "$value": {
+        "value": 0.96,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0.06em"
+        }
+      }
     },
     "type-meta": {
       "$type": "typography",
-      "$value": "400 {type.text-meta} / 1.35 {font.font-body}",
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-meta}",
+        "fontWeight": 400,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1.35
+      },
       "$description": "Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric."
     },
     "type-label": {
       "$type": "typography",
-      "$value": "500 {type.text-label} / 1.3 {font.font-body}"
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-label}",
+        "fontWeight": 500,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1.3
+      }
     },
     "type-body": {
       "$type": "typography",
-      "$value": "400 {type.text-body} / 1.45 {font.font-body}"
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-body}",
+        "fontWeight": 400,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1.45
+      }
     },
     "type-prose": {
       "$type": "typography",
-      "$value": "400 {type.text-body} / 1.55 {font.font-body}"
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-body}",
+        "fontWeight": 400,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1.55
+      }
     },
     "type-button": {
       "$type": "typography",
-      "$value": "500 {type.text-body} / 1 {font.font-body}"
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-body}",
+        "fontWeight": 500,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1
+      }
     },
     "type-title": {
       "$type": "typography",
-      "$value": "500 {type.text-title} / 1.25 {font.font-body}",
-      "$description": "Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token.",
-      "$extensions": {
-        "dev.cawco.type": {
-          "tracking": "{type.track-title}"
-        }
-      }
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-title}",
+        "fontWeight": 500,
+        "letterSpacing": "{type.track-title}",
+        "lineHeight": 1.25
+      },
+      "$description": "Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token."
     },
     "type-kpi": {
       "$type": "typography",
-      "$value": "500 {type.text-kpi} / 1 {font.font-body}"
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": "{type.text-kpi}",
+        "fontWeight": 500,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1
+      }
     },
     "type-code": {
       "$type": "typography",
-      "$value": "400 {type.text-code} / 1.6 {font.font-mono}"
+      "$value": {
+        "fontFamily": "{font.font-mono}",
+        "fontSize": "{type.text-code}",
+        "fontWeight": 400,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1.6
+      }
     },
     "type-caps": {
       "$type": "typography",
-      "$value": "500 11px / 1 {font.font-body}"
+      "$value": {
+        "fontFamily": "{font.font-body}",
+        "fontSize": {
+          "value": 11,
+          "unit": "px"
+        },
+        "fontWeight": 500,
+        "letterSpacing": {
+          "value": 0,
+          "unit": "px"
+        },
+        "lineHeight": 1
+      }
     }
   },
   "space": {
     "space-1": {
       "$type": "dimension",
-      "$value": "4px",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
       "$description": "Measured off the comps, deliberately not a 4px ladder. Keep the odd values."
     },
     "space-2": {
       "$type": "dimension",
-      "$value": "7px"
+      "$value": {
+        "value": 7,
+        "unit": "px"
+      }
     },
     "space-3": {
       "$type": "dimension",
-      "$value": "11px"
+      "$value": {
+        "value": 11,
+        "unit": "px"
+      }
     },
     "space-4": {
       "$type": "dimension",
-      "$value": "14px"
+      "$value": {
+        "value": 14,
+        "unit": "px"
+      }
     },
     "space-5": {
       "$type": "dimension",
-      "$value": "18px"
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      }
     },
     "space-6": {
       "$type": "dimension",
-      "$value": "21px"
+      "$value": {
+        "value": 21,
+        "unit": "px"
+      }
     },
     "space-7": {
       "$type": "dimension",
-      "$value": "25px"
+      "$value": {
+        "value": 25,
+        "unit": "px"
+      }
     },
     "space-8": {
       "$type": "dimension",
-      "$value": "32px"
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
     },
     "space-group": {
       "$type": "dimension",
@@ -2233,181 +3666,273 @@
     },
     "space-row": {
       "$type": "dimension",
-      "$value": "2px",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "Between the rows of one list in the rail (the home's Working and Finished, a tree's children there): rows of one list, not separate things."
     }
   },
   "radius": {
     "radius-hair": {
       "$type": "dimension",
-      "$value": "2px",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "Hair: chart swatches, a tooltip's arrow."
     },
     "radius-xs": {
       "$type": "dimension",
-      "$value": "5px",
+      "$value": {
+        "value": 5,
+        "unit": "px"
+      },
       "$description": "Marks, tiles, badges, kbd."
     },
     "radius-sm": {
       "$type": "dimension",
-      "$value": "8px",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
       "$description": "Controls inside a surface, nav rows, menu items."
     },
     "radius-md": {
       "$type": "dimension",
-      "$value": "10px",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
       "$description": "Buttons, inputs, the segmented groove."
     },
     "radius-lg": {
       "$type": "dimension",
-      "$value": "12px",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
       "$description": "Cards, menus, popovers."
     },
     "radius-well": {
       "$type": "dimension",
-      "$value": "7px",
+      "$value": {
+        "value": 7,
+        "unit": "px"
+      },
       "$description": "The stat tile's recessed well."
     },
     "radius-panel": {
       "$type": "dimension",
-      "$value": "16px",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
       "$description": "A panel's shell: the paywall's hero, a decision page's panels."
     },
     "radius-modal": {
       "$type": "dimension",
-      "$value": "18px",
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      },
       "$description": "Dialog tray: 6px pad + 12px body, concentric."
     },
     "radius-pill": {
       "$type": "dimension",
-      "$value": "999px"
+      "$value": {
+        "value": 999,
+        "unit": "px"
+      }
     },
     "well-r": {
       "$type": "dimension",
-      "$value": "7px",
+      "$value": {
+        "value": 7,
+        "unit": "px"
+      },
       "$description": "The reader's well."
     },
     "row-mark-r": {
       "$type": "dimension",
-      "$value": "4.6px",
+      "$value": {
+        "value": 4.6,
+        "unit": "px"
+      },
       "$description": "The reader's row mark."
     },
     "tab-icon-r": {
       "$type": "dimension",
-      "$value": "4px",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
       "$description": "The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side."
     }
   },
   "size": {
     "caw-peek": {
       "$type": "dimension",
-      "$value": "160px",
+      "$value": {
+        "value": 160,
+        "unit": "px"
+      },
       "$description": "Caw's 512 box on the channel cards: he stands behind the chosen card and looks over its top edge."
     },
     "caw-peek-rise": {
       "$type": "dimension",
-      "$value": "91px",
+      "$value": {
+        "value": 91,
+        "unit": "px"
+      },
       "$description": "How far that box rises above the cards (56.84% of caw-peek): clear room kept above them."
     },
     "channel-card-max": {
       "$type": "dimension",
-      "$value": "280px",
+      "$value": {
+        "value": 280,
+        "unit": "px"
+      },
       "$description": "A channel card's widest."
     },
     "c-btn-h": {
       "$type": "dimension",
-      "$value": "36px"
+      "$value": {
+        "value": 36,
+        "unit": "px"
+      }
     },
     "c-btn-h-sm": {
       "$type": "dimension",
-      "$value": "30px"
+      "$value": {
+        "value": 30,
+        "unit": "px"
+      }
     },
     "c-btn-h-xs": {
       "$type": "dimension",
-      "$value": "24px"
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
     },
     "c-btn-h-lg": {
       "$type": "dimension",
-      "$value": "44px"
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      }
     },
     "c-input-h": {
       "$type": "dimension",
-      "$value": "36px"
+      "$value": {
+        "value": 36,
+        "unit": "px"
+      }
     },
     "c-nav-h": {
       "$type": "dimension",
-      "$value": "40px",
-      "$description": "A nav row; touch screens and narrow windows take the 44px row.",
-      "$extensions": {
-        "dev.cawco": {
-          "compact": "44px"
-        }
-      }
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "A nav row; touch screens and narrow windows take the 44px row."
     },
     "c-rail-row-h": {
       "$type": "dimension",
-      "$value": "38px",
-      "$description": "A Configure rail row; touch screens and narrow windows take the 44px row.",
-      "$extensions": {
-        "dev.cawco": {
-          "compact": "44px"
-        }
-      }
+      "$value": {
+        "value": 38,
+        "unit": "px"
+      },
+      "$description": "A Configure rail row; touch screens and narrow windows take the 44px row."
     },
     "c-artifact-row-h": {
       "$type": "dimension",
-      "$value": "44px",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
       "$description": "A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink)."
     },
     "c-pin": {
       "$type": "dimension",
-      "$value": "20px",
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      },
       "$description": "tsk-3's numbered pin: the coral disc on the page, in the pins list and on the card (DESIGN.md Artifact panel, canvas and ink)."
     },
     "c-pin-card-w": {
       "$type": "dimension",
-      "$value": "280px",
+      "$value": {
+        "value": 280,
+        "unit": "px"
+      },
       "$description": "A pin's card over the page, at its widest: the anchor line with Resolve, ⋯ and Close, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px is the narrowest that keeps the anchor line beside its four controls."
     },
     "c-pin-list-share": {
       "$type": "number",
-      "$value": "0.22",
+      "$value": 0.22,
       "$description": "The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max."
     },
     "c-pin-list-min": {
       "$type": "dimension",
-      "$value": "260px",
+      "$value": {
+        "value": 260,
+        "unit": "px"
+      },
       "$description": "The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line."
     },
     "c-pin-list-max": {
       "$type": "dimension",
-      "$value": "340px",
+      "$value": {
+        "value": 340,
+        "unit": "px"
+      },
       "$description": "The Comments panel at its widest."
     },
     "c-review-words": {
       "$type": "dimension",
-      "$value": "320px",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
       "$description": "A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview)."
     },
     "c-mark": {
       "$type": "dimension",
-      "$value": "26px"
+      "$value": {
+        "value": 26,
+        "unit": "px"
+      }
     },
     "c-mark-glyph": {
       "$type": "dimension",
-      "$value": "16px"
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
     },
     "c-row-mark": {
       "$type": "dimension",
-      "$value": "18px"
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      }
     },
     "c-pill-h": {
       "$type": "dimension",
-      "$value": "24px"
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
     },
     "c-pill-gap": {
       "$type": "dimension",
-      "$value": "6px"
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
     },
     "c-pill-fs": {
       "$type": "dimension",
@@ -2415,30 +3940,48 @@
     },
     "c-badge-h": {
       "$type": "dimension",
-      "$value": "20px"
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      }
     },
     "c-stat-h": {
       "$type": "dimension",
-      "$value": "90px",
+      "$value": {
+        "value": 90,
+        "unit": "px"
+      },
       "$description": "A stat tile's height."
     },
     "c-toolbar-zone": {
       "$type": "dimension",
-      "$value": "55px",
+      "$value": {
+        "value": 55,
+        "unit": "px"
+      },
       "$description": "A ledger's toolbar zone, holding 32px controls 11px in."
     },
     "c-toolbar-ctl": {
       "$type": "dimension",
-      "$value": "32px"
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
     },
     "c-find-w": {
       "$type": "dimension",
-      "$value": "520px",
+      "$value": {
+        "value": 520,
+        "unit": "px"
+      },
       "$description": "Find, as the glass's card on a desk: wide enough that a row's meta line (\"Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux\", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md)."
     },
     "c-panel-w": {
       "$type": "dimension",
-      "$value": "380px",
+      "$value": {
+        "value": 380,
+        "unit": "px"
+      },
       "$description": "A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line (\"back in 4h 50m\", 82px in meta) stands on one line."
     },
     "c-caw-panel-h": {
@@ -2448,132 +3991,212 @@
     },
     "c-top-bar-h": {
       "$type": "dimension",
-      "$value": "44px",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
       "$description": "The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top."
     },
     "c-bar-toggle-glyph": {
       "$type": "dimension",
-      "$value": "18px",
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      },
       "$description": "The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area."
     },
     "c-bar-phone-edge": {
       "$type": "dimension",
-      "$value": "12px",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
       "$description": "The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges."
     },
     "c-side-divider-hit": {
       "$type": "dimension",
-      "$value": "44px",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
       "$description": "The handle between a conversation and the side surface beside it, under a finger: its hit area about the hairline (Apple HIG's 44pt touch target). While the surface is expanded the hit area stands just inside the session area's edge, space-3 wide."
     },
     "c-corner-grip-leg": {
       "$type": "dimension",
-      "$value": "12px",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
       "$description": "The composer canvas's corner resize grip: each leg of its L, drawn along the corner's two edges (the typical window corner grip)."
     },
     "c-corner-grip-inset": {
       "$type": "dimension",
-      "$value": "6px",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
       "$description": "How far inside the canvas's top corner its resize grip stands from each edge; the grip turns concentric with the corner's radius, so it sits under it."
     },
     "c-corner-grip-stroke": {
       "$type": "dimension",
-      "$value": "1.5px",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
       "$description": "The corner resize grip's line, in border-control."
     },
     "c-bar-phone-gap": {
       "$type": "dimension",
-      "$value": "8px",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
       "$description": "On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass."
     },
     "c-edge-pull": {
       "$type": "dimension",
-      "$value": "16px",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
       "$description": "On a phone, the strip along the screen's left edge where a finger that travels right pulls the sidebar out; a drag that starts further in is the page's (the chat swipe)."
     },
     "c-tab-lead": {
       "$type": "dimension",
-      "$value": "12px",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
       "$description": "A phone tab's pad before its title past the folder overlap, the tab's corner radius (the approved row's 12px): the row draws no status glyph, its rim is the status. Its title's trailing room is the folder overlap plus the chosen sheet's flare. Both ends keep the overlap on every tab, chosen or not, so a neighbour tucked over either end never touches the title and a choice never resizes a tab."
     },
     "c-tab-row-h": {
       "$type": "dimension",
-      "$value": "36px",
+      "$value": {
+        "value": 36,
+        "unit": "px"
+      },
       "$description": "A session tab row: its list's 4px pad over 32px tabs (PaneTabs)."
     },
     "c-head-fade": {
       "$type": "dimension",
-      "$value": "24px",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
       "$description": "A transcript's head, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end) and dissolve into the chosen tab's sheet (tab-sheet, on head-tint-ramp), so at the edge they have become the tab's fill and the transcript and its tab read as one sheet. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (the web's transcript head). On iOS the same band fades the rows out toward the edge with an alpha mask instead (EdgeFade in CawCoKit): a tint-free variable blur there is private API."
     },
     "c-head-fade-blur": {
       "$type": "dimension",
-      "$value": "4px",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
       "$description": "The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (the web's transcript head; iOS fades the band instead, c-head-fade). The colour over it is head-tint-ramp's. The recall wheel's rows go out of focus up to this radius as they rise through its far edge's band, a row and the room above it (RecallWheel)."
     },
     "c-recall-cross-blur": {
       "$type": "dimension",
-      "$value": "2px",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "A pick taken off the recall wheel: the row on the line gives way to the field's own text in place, blurring out by this much as it fades, so the words it shares with the field read as one and only the rest dissolves (transitions.dev, text swap soft)."
     },
     "c-deck-peek": {
       "$type": "dimension",
-      "$value": "4px",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
       "$description": "While the recall wheel is up, the composer's buttons fold into a deck at the pill's trailing end, Send in front: how far each button peeks out past the one in front of it (Composer)."
     },
     "c-deck-scale": {
       "$type": "number",
-      "$value": "0.94",
+      "$value": 0.94,
       "$description": "A button in the recall wheel's deck, against the one in front of it: its size (Composer). Each stays whole, its edge at the outline button's 3:1, so it reads behind the one in front."
     },
     "c-tab-max-w": {
       "$type": "dimension",
-      "$value": "240px",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
       "$description": "The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs)."
     },
     "c-bar-group-pad": {
       "$type": "dimension",
-      "$value": "4px",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
       "$description": "The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it."
     },
     "c-bar-item": {
       "$type": "dimension",
-      "$value": "calc({size.c-btn-h} - 2 * {size.c-bar-group-pad})",
-      "$description": "An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides."
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
+      "$description": "An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-btn-h} - 2 * {size.c-bar-group-pad})"
+        }
+      }
     },
     "c-bar-symbol": {
       "$type": "dimension",
-      "$value": "20px",
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      },
       "$description": "A symbol in the top bar's glass group: the machines glyph and Caw's head."
     },
     "c-bar-caw-glass-phone": {
       "$type": "dimension",
-      "$value": "32px",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
       "$description": "Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, flush with the screen's trailing edge. Caw's phone glass tops with the tabs and stands clear of the floor; open, his panel hangs from the floor through a neck (c-tab-row-h less this, his glass's foot to the row's floor)."
     },
     "c-bar-caw-head-phone": {
       "$type": "dimension",
-      "$value": "24px",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
       "$description": "Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side."
     },
     "c-caw-ring": {
       "$type": "dimension",
-      "$value": "2px",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator."
     },
     "c-page-head-h": {
       "$type": "dimension",
-      "$value": "96px",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
       "$description": "A page head under the top bar."
     },
     "c-sidebar-w": {
       "$type": "dimension",
-      "$value": "228px",
+      "$value": {
+        "value": 228,
+        "unit": "px"
+      },
       "$description": "The desk's sidebar rail at its default width (DESIGN.md, the shell: \"a resizable rail (228px by default, the reader's own width wins)\"). The rail reads it until the reader drags or steps it to a width of their own."
     },
     "c-composer-field": {
       "$type": "dimension",
-      "$value": "34px",
+      "$value": {
+        "value": 34,
+        "unit": "px"
+      },
       "$description": "The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot."
     },
     "c-composer-inset": {
@@ -2582,142 +4205,253 @@
     },
     "c-ask-diff-share": {
       "$type": "number",
-      "$value": "0.4",
+      "$value": 0.4,
       "$description": "How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach."
     },
     "c-composer-panel": {
       "$type": "dimension",
-      "$value": "calc({size.c-composer-field} + {size.c-composer-inset} * 2 + 2px)"
+      "$value": {
+        "value": 50,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-composer-field} + {size.c-composer-inset} * 2 + 2px)"
+        }
+      }
     },
     "c-composer-w": {
       "$type": "dimension",
-      "$value": "min(720px, calc(100% - 50px))",
-      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line)."
+      "$value": {
+        "value": 720,
+        "unit": "px"
+      },
+      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "min(720px, calc(100% - 50px))"
+        }
+      }
     },
     "c-suggest-chip": {
       "$type": "dimension",
-      "$value": "calc(1.25rem + {space.space-1} * 2 + 2px)",
-      "$description": "A suggestion chip: its Tab key cap, padding and border."
+      "$value": {
+        "value": 30,
+        "unit": "px"
+      },
+      "$description": "A suggestion chip: its Tab key cap, padding and border.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(1.25rem + {space.space-1} * 2 + 2px)"
+        }
+      }
     },
     "c-suggest-row": {
       "$type": "dimension",
-      "$value": "calc({space.space-4} + {space.space-1} * 2 + {size.c-suggest-chip})"
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({space.space-4} + {space.space-1} * 2 + {size.c-suggest-chip})"
+        }
+      }
     },
     "c-suggest-room": {
       "$type": "dimension",
-      "$value": "calc({size.c-suggest-row} + {space.space-2})"
+      "$value": {
+        "value": 59,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-suggest-row} + {space.space-2})"
+        }
+      }
     },
     "c-starter-w": {
       "$type": "dimension",
-      "$value": "11rem",
+      "$value": {
+        "value": 11,
+        "unit": "rem"
+      },
       "$description": "A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters)."
     },
     "c-starter-h": {
       "$type": "dimension",
-      "$value": "56px",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
       "$description": "A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone."
     },
     "c-starters-w": {
       "$type": "dimension",
-      "$value": "calc({size.c-starter-w} * 4 + {space.space-2} * 3)",
-      "$description": "The column an empty state with starters takes at most: four cards across with their gaps."
+      "$value": {
+        "value": 725,
+        "unit": "px"
+      },
+      "$description": "The column an empty state with starters takes at most: four cards across with their gaps.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-starter-w} * 4 + {space.space-2} * 3)"
+        }
+      }
     },
     "c-row-lead": {
       "$type": "dimension",
-      "$value": "28px",
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
       "$description": "A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after."
     },
     "c-row-h": {
       "$type": "dimension",
-      "$value": "44px",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
       "$description": "A routines-page row's pitch: the whole row is its own 44px opener on every pointer."
     },
     "c-routine-time-w": {
       "$type": "dimension",
-      "$value": "9rem",
+      "$value": {
+        "value": 9,
+        "unit": "rem"
+      },
       "$description": "The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and \"23h ago\", or \"Tomorrow 13:30\", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say."
     },
     "c-routines-w": {
       "$type": "dimension",
-      "$value": "1120px",
+      "$value": {
+        "value": 1120,
+        "unit": "px"
+      },
       "$description": "The widest the routines ledger runs: a few rows of name, schedule and two times read as one line each, never across a 2560px screen (Hex's and Cursor's bounded schedule tables)."
     },
     "c-routines-bento-at": {
       "$type": "dimension",
-      "$value": "1600px",
+      "$value": {
+        "value": 1600,
+        "unit": "px"
+      },
       "$description": "The page width from which the routines page holds its three parts at once, a bento filling the page's height (Routines two thirds, Event sources over Approved actions in the last third, each scrolling in itself); narrower, they are views behind tabs, each at --c-routines-w."
     },
     "c-tray-chip": {
       "$type": "dimension",
-      "$value": "28px",
-      "$description": "The delegate tray's row: a chip, and the step down to the pill.",
-      "$extensions": {
-        "dev.cawco": {
-          "coarse": "34px"
-        }
-      }
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
+      "$description": "The delegate tray's row: a chip, and the step down to the pill."
     },
     "c-tray-gap": {
       "$type": "dimension",
-      "$value": "{space.space-2}",
-      "$extensions": {
-        "dev.cawco": {
-          "coarse": "{space.space-3}"
-        }
-      }
+      "$value": "{space.space-2}"
     },
     "c-tray-row": {
       "$type": "dimension",
-      "$value": "calc({size.c-tray-chip} + {size.c-tray-gap})"
+      "$value": {
+        "value": 35,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-tray-chip} + {size.c-tray-gap})"
+        }
+      }
     },
     "icon-sm": {
       "$type": "dimension",
-      "$value": "12px"
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
     },
     "icon-md": {
       "$type": "dimension",
-      "$value": "16px"
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
     },
     "icon-lg": {
       "$type": "dimension",
-      "$value": "20px"
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      }
     },
     "row-mark": {
       "$type": "dimension",
-      "$value": "17px",
+      "$value": {
+        "value": 17,
+        "unit": "px"
+      },
       "$description": "The reader's row mark: 17×17 with an 11px glyph, centred in the 18px speaker cell."
     },
     "row-mark-glyph": {
       "$type": "dimension",
-      "$value": "11px"
+      "$value": {
+        "value": 11,
+        "unit": "px"
+      }
     },
     "row-mark-box": {
       "$type": "dimension",
-      "$value": "18px"
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      }
     },
     "well-x": {
       "$type": "dimension",
-      "$value": "calc(({size.row-mark-box} - {size.row-mark}) / 2)"
+      "$value": {
+        "value": 0.5,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(({size.row-mark-box} - {size.row-mark}) / 2)"
+        }
+      }
     },
     "focus-ring-width": {
       "$type": "dimension",
-      "$value": "2px"
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      }
     },
     "focus-ring-offset": {
       "$type": "dimension",
-      "$value": "2px"
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      }
     },
     "focus-ring-inset": {
       "$type": "dimension",
-      "$value": "-2px"
+      "$value": {
+        "value": -2,
+        "unit": "px"
+      }
     },
     "material-blur": {
       "$type": "dimension",
-      "$value": "20px"
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      }
     },
     "scrim-blur": {
       "$type": "dimension",
-      "$value": "2px"
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      }
     },
     "tx-x-rail": {
       "$type": "dimension",
@@ -2726,31 +4460,54 @@
     },
     "tx-x-rail-narrow": {
       "$type": "dimension",
-      "$value": "0px"
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0px"
+        }
+      }
     },
     "tx-w-glyph": {
       "$type": "dimension",
-      "$value": "16px",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
       "$description": "The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell."
     },
     "tail-row": {
       "$type": "dimension",
-      "$value": "24px",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
       "$description": "One row of a session's live tail (DelegateTail.svelte ROW): six stand in the tail, the top one dissolving under the mask."
     },
     "hover-panel-max": {
       "$type": "dimension",
-      "$value": "440px",
+      "$value": {
+        "value": 440,
+        "unit": "px"
+      },
       "$description": "The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding."
     },
     "hover-panel-inset": {
       "$type": "dimension",
-      "$value": "8px",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
       "$description": "The least room between the shared hover panel and the viewport's block edges when it stands beside a list (HoverPanel.svelte .panel.right)."
     },
     "tx-line": {
       "$type": "dimension",
-      "$value": "26px",
+      "$value": {
+        "value": 26,
+        "unit": "px"
+      },
       "$description": "A transcript rail line's least height: a tool call, a note, a branch head."
     },
     "tx-line-touch": {
@@ -2760,7 +4517,10 @@
     },
     "tx-compact-caw": {
       "$type": "dimension",
-      "$value": "18px",
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      },
       "$description": "Caw's head before the word on a compaction's divider (CompactionDivider.svelte `.caw`)."
     },
     "tx-compacting-caw": {
@@ -2770,456 +4530,671 @@
     },
     "tx-compact-wave": {
       "$type": "dimension",
-      "$value": "6px",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
       "$description": "The box a compaction divider's wave is drawn in (CompactionDivider.svelte `.wave`): its line runs along the middle, 1.5px either side."
     },
     "tx-code-pad-block": {
       "$type": "dimension",
-      "$value": "10px",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
       "$description": "A code well's padding (OutputBlock)."
     },
     "tx-code-pad-inline": {
       "$type": "dimension",
-      "$value": "12px"
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
     },
     "tx-code-margin": {
       "$type": "dimension",
-      "$value": "12px",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
       "$description": "A fenced block's margin in a message (my-3)."
     },
     "tx-diff-row": {
       "$type": "dimension",
-      "$value": "20px",
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      },
       "$description": "A diff's row (@pierre/diffs), its bar between hunks, its box's cap."
     },
     "tx-diff-bar": {
       "$type": "dimension",
-      "$value": "32px"
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
     },
     "tx-diff-cap": {
       "$type": "dimension",
-      "$value": "400px"
+      "$value": {
+        "value": 400,
+        "unit": "px"
+      }
     },
     "tx-diff-head-block": {
       "$type": "dimension",
-      "$value": "8px",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
       "$description": "A diff's file header padding (py-2 px-3)."
     },
     "tx-diff-head-inline": {
       "$type": "dimension",
-      "$value": "12px"
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
     },
     "tx-field-cap": {
       "$type": "dimension",
-      "$value": "300px",
+      "$value": {
+        "value": 300,
+        "unit": "px"
+      },
       "$description": "A tool call's disclosed field, before it scrolls."
     },
     "tx-shot": {
       "$type": "dimension",
-      "$value": "240px",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
       "$description": "An image card's box (Shot), and a thumbnail's."
     },
     "prose-sm-block": {
       "$type": "dimension",
-      "$value": "16px",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
       "$description": "prose-sm: above and below a paragraph or a list (1.1428571em of 14px)."
     },
     "prose-sm-table": {
       "$type": "dimension",
-      "$value": "24px",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
       "$description": "prose-sm: above and below a table, inside its scrolling wrapper, so it never collapses into its neighbours' margins (2em of the table's 12px)."
     },
     "prose-sm-list-inset": {
       "$type": "dimension",
-      "$value": "22px",
+      "$value": {
+        "value": 22,
+        "unit": "px"
+      },
       "$description": "prose-sm: a list's inset (1.5714286em of 14px)."
     },
     "prose-sm-item-inset": {
       "$type": "dimension",
-      "$value": "6px",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
       "$description": "prose-sm: an item's own inset past its list's (0.4285714em of 14px)."
     },
     "prose-sm-nested-list": {
       "$type": "dimension",
-      "$value": "8px",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
       "$description": "prose-sm: above and below a list inside an item (0.5714286em of 14px)."
     },
     "list-marker-padding": {
       "$type": "dimension",
-      "$value": "7px",
+      "$value": {
+        "value": 7,
+        "unit": "px"
+      },
       "$description": "The browser's own gap between an outside disc marker and its item (WebKit RenderListMarker `markerPadding`): the disc's start stands this far, plus two thirds of the font's ascent and a pixel, out from where the item starts."
     },
     "prose-code-pad": {
       "$type": "dimension",
-      "$value": "2px",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "Inline code's block padding where the shared prose classes set it (lib/prose.ts `[&_code]:py-0.5`): a document, a tool's markdown, a reasoning step."
     },
     "tx-code-span-pad": {
       "$type": "dimension",
-      "$value": "1px",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
       "$description": "Inline code's block padding in a turn's words (MessageBody `code`)."
     },
     "tx-shot-thumb": {
       "$type": "dimension",
-      "$value": "48px"
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      }
     },
     "tx-option": {
       "$type": "dimension",
-      "$value": "30px",
+      "$value": {
+        "value": 30,
+        "unit": "px"
+      },
       "$description": "A question card's option, at its least."
     },
     "tx-step-col": {
       "$type": "dimension",
-      "$value": "15px",
+      "$value": {
+        "value": 15,
+        "unit": "px"
+      },
       "$description": "A reasoning step's icon column (thinking-step)."
     },
     "tx-beat": {
       "$type": "dimension",
-      "$value": "5px",
+      "$value": {
+        "value": 5,
+        "unit": "px"
+      },
       "$description": "A branch's live beat; the compacting and catch-up beat is tx-beat-lg."
     },
     "tx-beat-lg": {
       "$type": "dimension",
-      "$value": "6px"
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
     },
     "tx-chev-box": {
       "$type": "dimension",
-      "$value": "13px",
+      "$value": {
+        "value": 13,
+        "unit": "px"
+      },
       "$description": "A branch head's chevron cell."
     },
     "tx-preview-max": {
       "$type": "dimension",
-      "$value": "440px",
+      "$value": {
+        "value": 440,
+        "unit": "px"
+      },
       "$description": "A preview tool's card: widest, least tall, its thumbnail."
     },
     "tx-preview-min": {
       "$type": "dimension",
-      "$value": "80px"
+      "$value": {
+        "value": 80,
+        "unit": "px"
+      }
     },
     "tx-preview-thumb-w": {
       "$type": "dimension",
-      "$value": "90px"
+      "$value": {
+        "value": 90,
+        "unit": "px"
+      }
     },
     "tx-preview-thumb-h": {
       "$type": "dimension",
-      "$value": "64px"
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      }
     },
     "status-dot-size": {
       "$type": "dimension",
-      "$value": "6px",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
       "$description": "A tree mark's status dot, centred on the tile's top-right corner (TreeMark)."
     },
     "status-dot-cut": {
       "$type": "dimension",
-      "$value": "1.5px",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
       "$description": "How much of the tile is cut away round its status dot, so the dot reads on any tile hue."
     },
     "row-compact-h": {
       "$type": "dimension",
-      "$value": "28px",
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
       "$description": "A compact session row's height: one line, in a tree in the rail (SessionRow)."
     },
     "row-compact-gap": {
       "$type": "dimension",
-      "$value": "6px",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
       "$description": "A compact session row's gap between its mark, its name and its age, and its leading inset: tight, where the name has the least room, and wide enough that the mark's status dot clears the name."
     },
     "row-compact-pad-end": {
       "$type": "dimension",
-      "$value": "8px",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
       "$description": "A compact session row's trailing inset: where every row in the rail ends."
     }
   },
   "effect": {
     "scrim-mix": {
       "$type": "number",
-      "$value": "72%",
-      "$description": "How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge."
+      "$value": 0.72,
+      "$description": "How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "72%"
+        }
+      }
     },
     "ghost-presence": {
       "$type": "number",
-      "$value": "0.7",
+      "$value": 0.7,
       "$description": "A message not yet said in the conversation (sending, queued)."
     },
     "material-saturate": {
       "$type": "number",
-      "$value": "1.6"
+      "$value": 1.6
     },
     "surface-hover-mix": {
       "$type": "number",
-      "$value": "6%",
-      "$description": "Relative tints for rows inside any surface: hover +6%, selected +10% ink."
+      "$value": 0.06,
+      "$description": "Relative tints for rows inside any surface: hover +6%, selected +10% ink.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "6%"
+        }
+      }
     },
     "surface-selected-mix": {
       "$type": "number",
-      "$value": "10%"
+      "$value": 0.1,
+      "$extensions": {
+        "dev.cawco": {
+          "css": "10%"
+        }
+      }
     },
     "tab-rim-mix": {
       "$type": "number",
-      "$value": "83%",
+      "$value": 0.83,
       "$description": "The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest.",
-      "$extensions": { "dev.cawco": { "dark": "64%" } }
+      "$extensions": {
+        "dev.cawco": {
+          "css": "83%"
+        }
+      }
     },
     "tab-rim-mix-chosen": {
       "$type": "number",
-      "$value": "0.97",
-      "$description": "The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.",
-      "$extensions": { "dev.cawco": { "dark": "0.78" } }
+      "$value": 0.97,
+      "$description": "The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle."
     },
     "tab-rim-mix-idle": {
       "$type": "number",
-      "$value": "0.86",
-      "$description": "The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1.",
-      "$extensions": { "dev.cawco": { "dark": "0.54" } }
+      "$value": 0.86,
+      "$description": "The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1."
     },
     "tab-rim-mix-subtle": {
       "$type": "number",
-      "$value": "0.5",
+      "$value": 0.5,
       "$description": "An unchosen session tab's rim strength when its session is anything but idle (working, needs you, done, failed): the same outline and taper as the chosen tab's, clearly quieter (owner: other tabs have no rim \"unless they are active, then they should have a more subtle rim\", \"or any other status\"). An unchosen idle tab draws no rim. It is a status mark, not a boundary: the tab's card edge is the boundary, so it is not held to 3:1. The owner's tuning on the bench: 0.5 by day and by night (\"50pct\")."
     },
     "tab-rim-width": {
       "$type": "number",
-      "$value": "1",
+      "$value": 1,
       "$description": "A session tab's rim stroke, in px, on every tab, in both themes (1 under Increase Contrast and Reduce Transparency). A plain number for the rim's arithmetic (PaneTabs `.rim`); its shoulders, its feet's narrowing to a point and a gliding seam's stop (`--seam-stroke`) all follow it."
     },
     "tab-rim-taper": {
       "$type": "number",
-      "$value": "32",
+      "$value": 32,
       "$description": "The owner's tuning on the bench (\"32\"). How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: \"the rim should taper-progress-fade at the very edges\"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders."
     },
     "tab-rim-taper-ease": {
       "$type": "number",
-      "$value": "6",
+      "$value": 6,
       "$description": "The shape of a rim's taper along the stroke from its tip: its ink rises as 1 - (1 - s/tab-rim-taper)^p, an ease-out from the tip, 0 at the tip and full at tab-rim-taper (or at the shoulder, where that comes first). At 6 it is half up 3.5px from the tip and 90% up by 32% of the taper's length (10.2px of 32), so the chosen tab's sides stand whole at their mid-height and hold 3:1 against the shelf, while the faint tail stays at the very tip. A plain number for the rim's arithmetic (PaneTabs `.rim`, as gradient stops through pow()); the stroke's narrowing to a point ends where this curve's ink is 90% whole."
     }
   },
   "motion": {
     "ease-out": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.23, 1, 0.32, 1)",
+      "$value": [0.23, 1, 0.32, 1],
       "$description": "Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in."
     },
     "ease-in-out": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.77, 0, 0.175, 1)"
+      "$value": [0.77, 0, 0.175, 1]
     },
     "ease-drawer": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.32, 0.72, 0, 1)"
+      "$value": [0.32, 0.72, 0, 1]
     },
     "ease-crossfade": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.42, 0, 0.58, 1)",
+      "$value": [0.42, 0, 0.58, 1],
       "$description": "Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
     },
     "ease-arrive": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.2, 0, 0, 1)",
+      "$value": [0.2, 0, 0, 1],
       "$description": "A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap."
     },
     "ease-figure": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      "$value": [0.2, 0.8, 0.2, 1],
       "$description": "A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths)."
     },
     "ease-glide-in": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
+      "$value": [0.3333, 0, 0.6667, 0.3333],
       "$description": "A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at."
     },
     "ease-glide-out": {
       "$type": "cubicBezier",
-      "$value": "cubic-bezier(0.3333, 0.6667, 0.6667, 1)",
+      "$value": [0.3333, 0.6667, 0.6667, 1],
       "$description": "A glide's last stretch: from the steady pace, speed falling evenly to rest."
     },
     "dur-stagger": {
       "$type": "duration",
-      "$value": "60ms",
+      "$value": {
+        "value": 60,
+        "unit": "ms"
+      },
       "$description": "Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger."
     },
     "dur-cascade": {
       "$type": "duration",
-      "$value": "480ms",
+      "$value": {
+        "value": 480,
+        "unit": "ms"
+      },
       "$description": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."
     },
     "dur-ghost": {
       "$type": "duration",
-      "$value": "80ms",
+      "$value": {
+        "value": 80,
+        "unit": "ms"
+      },
       "$description": "The hover ghost following the pointer from row to row."
     },
     "dur-control": {
       "$type": "duration",
-      "$value": "120ms"
+      "$value": {
+        "value": 120,
+        "unit": "ms"
+      }
     },
     "dur-menu": {
       "$type": "duration",
-      "$value": "140ms"
+      "$value": {
+        "value": 140,
+        "unit": "ms"
+      }
     },
     "dur-toggle": {
       "$type": "duration",
-      "$value": "160ms",
+      "$value": {
+        "value": 160,
+        "unit": "ms"
+      },
       "$description": "A switch's knob and a checkbox's tick."
     },
     "dur-exit": {
       "$type": "duration",
-      "$value": "160ms"
+      "$value": {
+        "value": 160,
+        "unit": "ms"
+      }
     },
     "dur-morph": {
       "$type": "duration",
-      "$value": "180ms",
+      "$value": {
+        "value": 180,
+        "unit": "ms"
+      },
       "$description": "A button's width following its label while it works."
     },
     "dur-rail": {
       "$type": "duration",
-      "$value": "180ms",
+      "$value": {
+        "value": 180,
+        "unit": "ms"
+      },
       "$description": "A transcript row's place opening, its rail drawing down with it."
     },
     "dur-fade": {
       "$type": "duration",
-      "$value": "200ms",
+      "$value": {
+        "value": 200,
+        "unit": "ms"
+      },
       "$description": "Fades that carry a state change in place."
     },
     "dur-mark-hold": {
       "$type": "duration",
-      "$value": "200ms",
+      "$value": {
+        "value": 200,
+        "unit": "ms"
+      },
       "$description": "The longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn, so the first frame that shows the list shows him. A bound, not a pace: the list is shown the moment he is ready (about 90ms on a cold load), and at the bound without him. Under --dur-wait-grace, so the hold shows nothing of its own."
     },
     "dur-wait-grace": {
       "$type": "duration",
-      "$value": "1000ms",
+      "$value": {
+        "value": 1000,
+        "unit": "ms"
+      },
       "$description": "How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second."
     },
     "dur-pop": {
       "$type": "duration",
-      "$value": "260ms"
+      "$value": {
+        "value": 260,
+        "unit": "ms"
+      }
     },
     "dur-panel": {
       "$type": "duration",
-      "$value": "280ms"
+      "$value": {
+        "value": 280,
+        "unit": "ms"
+      }
     },
     "dur-grow": {
       "$type": "duration",
-      "$value": "320ms",
+      "$value": {
+        "value": 320,
+        "unit": "ms"
+      },
       "$description": "The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited."
     },
     "dur-grow-exit": {
       "$type": "duration",
-      "$value": "220ms",
+      "$value": {
+        "value": 220,
+        "unit": "ms"
+      },
       "$description": "The grown composer folding back into its pill, shorter than its growth."
     },
     "dur-lift": {
       "$type": "duration",
-      "$value": "340ms",
+      "$value": {
+        "value": 340,
+        "unit": "ms"
+      },
       "$description": "A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve."
     },
     "dur-press-hold": {
       "$type": "duration",
-      "$value": "380ms",
+      "$value": {
+        "value": 380,
+        "unit": "ms"
+      },
       "$description": "How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it."
     },
     "dur-settle": {
       "$type": "duration",
-      "$value": "400ms",
+      "$value": {
+        "value": 400,
+        "unit": "ms"
+      },
       "$description": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, \"Slow · 400ms\")."
     },
     "dur-reveal": {
       "$type": "duration",
-      "$value": "240ms",
+      "$value": {
+        "value": 240,
+        "unit": "ms"
+      },
       "$description": "A disclosure growing open (collapsible-content); it folds shut over dur-exit."
     },
     "dur-hold": {
       "$type": "duration",
-      "$value": "1.2s",
+      "$value": {
+        "value": 1.2,
+        "unit": "s"
+      },
       "$description": "How long a done state stays up."
     },
     "dur-loop": {
       "$type": "duration",
-      "$value": "1.2s",
+      "$value": {
+        "value": 1.2,
+        "unit": "s"
+      },
       "$description": "One turn of an ambient loop: spinner, pulse, ping."
     },
     "c-500": {
       "$type": "duration",
-      "$value": "500ms"
+      "$value": {
+        "value": 500,
+        "unit": "ms"
+      }
     },
     "breath": {
       "$type": "duration",
-      "$value": "calc({motion.c-500} * 4)"
+      "$value": {
+        "value": 2000,
+        "unit": "ms"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({motion.c-500} * 4)"
+        }
+      }
     },
     "press-scale": {
       "$type": "number",
-      "$value": "0.97"
+      "$value": 0.97
     },
     "leave-scale": {
       "$type": "number",
-      "$value": "0.97",
+      "$value": 0.97,
       "$description": "How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms."
     },
     "pop-scale": {
       "$type": "number",
-      "$value": "0.92"
+      "$value": 0.92
     },
     "deck-step": {
       "$type": "dimension",
-      "$value": "1.25px",
+      "$value": {
+        "value": 1.25,
+        "unit": "px"
+      },
       "$description": "How far each card of a session mark's deck shows below the one in front (SessionMark)."
     },
     "deck-shrink": {
       "$type": "number",
-      "$value": "0.11",
+      "$value": 0.11,
       "$description": "How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i."
     },
     "deck-shade-step": {
       "$type": "number",
-      "$value": "0.2",
+      "$value": 0.2,
       "$description": "How much more of the deck's shade each card behind takes."
     },
     "echo-scale": {
       "$type": "number",
-      "$value": "1.45",
+      "$value": 1.45,
       "$description": "How far a working session's echo grows from its tile before it has faded (motion/echo)."
     },
     "echo-opacity": {
       "$type": "number",
-      "$value": "0.45",
+      "$value": 0.45,
       "$description": "A working session's echo as it leaves the tile."
     },
     "glyph-duo-status-opacity": {
       "$type": "number",
-      "$value": "0.81",
+      "$value": 0.81,
       "$description": "The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5."
     },
     "account-week-mix": {
       "$type": "number",
-      "$value": "0.32",
-      "$description": "How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track.",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "0.63"
-        }
-      }
+      "$value": 0.32,
+      "$description": "How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track."
     },
     "account-stale-opacity": {
       "$type": "number",
-      "$value": "0.82",
+      "$value": 0.82,
       "$description": "An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more."
     },
     "ride-fade": {
       "$type": "dimension",
-      "$value": "14px",
+      "$value": {
+        "value": 14,
+        "unit": "px"
+      },
       "$description": "The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch)."
     },
     "pop-rise": {
       "$type": "dimension",
-      "$value": "8px"
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
     },
     "fold-blur": {
       "$type": "dimension",
-      "$value": "2px",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
       "$description": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
     },
     "transition-control": {
       "$type": "transition",
-      "$value": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+      "$value": {
+        "duration": "{motion.dur-control}",
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+        }
+      }
     }
   }
 }

@@ -1,0 +1,27 @@
+{
+  "size": {
+    "c-tray-chip": {
+      "$type": "dimension",
+      "$value": {
+        "value": 34,
+        "unit": "px"
+      }
+    },
+    "c-tray-gap": {
+      "$type": "dimension",
+      "$value": "{space.space-3}"
+    },
+    "c-tray-row": {
+      "$type": "dimension",
+      "$value": {
+        "value": 45,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-tray-chip} + {size.c-tray-gap})"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "size": {
+    "c-nav-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      }
+    },
+    "c-rail-row-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      }
+    }
+  }
+}

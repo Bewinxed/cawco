@@ -139,8 +139,10 @@ function pageMarkup(): Plugin {
  * token and stops if either has drifted.
  */
 const PAPER = (
-  require('../design/tokens/cawco.tokens.json') as { color: { paper: { $value: string } } }
-).color.paper.$value.toLowerCase();
+  require('../design/tokens/cawco.tokens.json') as {
+    color: { paper: { $value: { hex: string } } };
+  }
+).color.paper.$value.hex.toLowerCase();
 
 function mustBePaper(where: string, found: string | undefined): void {
   if (found?.toLowerCase() !== PAPER) {

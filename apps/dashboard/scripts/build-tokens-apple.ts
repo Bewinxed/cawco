@@ -1,17 +1,17 @@
 /**
  * The Apple platform of the token build (build-tokens.ts runs it beside the
- * CSS platform, from the same source and the same Style Dictionary config).
+ * CSS platform, from the same token system).
  *
  * The Apple apps are UIKit. Colours: every colour token becomes one
  * asset-catalog colour set with an Any and a Dark appearance, plus a `UIColor`
  * accessor in `Palette` that resolves against the trait collection it is drawn
- * in. A token's light value is its `$value`; its dark value is
- * `$extensions["dev.cawco"].dark` when authored, else `$value` evaluated with
- * every reference in its dark value: exactly how `light-dark()` and `var()`
- * resolve in the dashboard's cascade. The CSS colour forms the source uses
- * (oklch, hex, `transparent`, `color-mix(in <space>, …)`, relative
- * `oklch(from … )` with `calc()`) are evaluated here, converted to Display P3
- * and gamut-mapped with CSS Color 4's algorithm.
+ * in. A token's values are read from its CSS form (the hub's token view,
+ * packages/hub/src/design-tokens.ts): its light value its base CSS, its dark
+ * value the dark context's CSS when that differs, else the base CSS
+ * evaluated with every reference in its dark value: exactly how
+ * `light-dark()` and `var()` resolve in the dashboard's cascade. The CSS is
+ * evaluated by the hub's one evaluator (packages/hub/src/design-css.ts),
+ * converted to Display P3 and gamut-mapped with CSS Color 4's algorithm.
  *
  * Everything else becomes a Swift constant in a namespace per group: points
  * for dimensions (1rem = 16pt), seconds for durations, `UIFont.Weight`,
@@ -25,16 +25,23 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import Color from "colorjs.io";
+import type Color from "colorjs.io";
 import type {
   Dictionary,
   PlatformConfig,
   TransformedToken,
 } from "style-dictionary/types";
+import {
+  CssEvaluator,
+  call,
+  splitTop,
+} from "../../../packages/hub/src/design-css";
+import type {
+  TokenView,
+  ViewToken,
+} from "../../../packages/hub/src/design-tokens";
 import { isProductToken } from "./token-groups";
 
-const EXT = "dev.cawco";
-const REM = 16;
 const CATALOG = "Resources/Tokens.xcassets";
 const AUTHOR = { author: "xcode", version: 1 };
 
@@ -66,17 +73,7 @@ const WEIGHTS: Record<string, string> = {
   "900": ".black",
 };
 
-const WHITESPACE = /\s/;
-const CALL = /^([a-z-]+)\((.*)\)$/s;
-const ARITH_TOKENS = /\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[a-z]+|[-+*/()]/gi;
-const NUMBER = /^(\d*\.?\d+(?:e[+-]?\d+)?)([a-z%]*)$/i;
-const NAME = /^[a-z]+$/i;
 const REF = /^\{([^}]+)\}$/;
-const VIEWPORT_TERM = /^(-?\d*\.?\d+)(?:vi|vw)$/;
-const REFS = /\{([^}]+)\}/g;
-/** A value that is one reference and nothing else. */
-const WHOLE_REF = /^\{([^}]+)\}$/;
-const MIX_SPACE = /^in\s+([a-z0-9-]+)$/;
 const KEBAB = /-([a-z0-9])/g;
 const SWIFT_ID = /^[a-z][A-Za-z0-9]*$/;
 const QUOTES = /^["']|["']$/g;
@@ -89,385 +86,27 @@ const LENGTH = /^-?\d*\.?\d+(?:px|rem)?$/;
 
 type Mode = "light" | "dark";
 
-interface Variants {
-  coarse?: string;
-  compact?: string;
-  dark?: string;
-}
+/** The token view, read through the hub's evaluator. */
+class Tokens extends CssEvaluator {
+  private readonly view: TokenView;
 
-function variantsOf(token: TransformedToken): Variants {
-  return (token.original.$extensions?.[EXT] ?? {}) as Variants;
-}
-
-function authored(token: TransformedToken): string {
-  return String(token.original.$value).trim();
-}
-
-/** Splits at `sep` outside parentheses and braces; " " means any whitespace. */
-function splitTop(s: string, sep: "," | " "): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let cur = "";
-  for (const ch of s) {
-    if (ch === "(" || ch === "{") {
-      depth += 1;
-    } else if (ch === ")" || ch === "}") {
-      depth -= 1;
-    }
-    const cut = sep === " " ? WHITESPACE.test(ch) : ch === sep;
-    if (depth === 0 && cut) {
-      if (cur.trim()) {
-        out.push(cur.trim());
-      }
-      cur = "";
-      continue;
-    }
-    cur += ch;
-  }
-  if (cur.trim()) {
-    out.push(cur.trim());
-  }
-  return out;
-}
-
-/** `name(args)` when the whole string is one call. */
-function call(s: string): { name: string; args: string } | undefined {
-  const m = CALL.exec(s);
-  if (!m) {
-    return;
-  }
-  let depth = 0;
-  for (let i = m[1].length; i < s.length; i += 1) {
-    if (s[i] === "(") {
-      depth += 1;
-    } else if (s[i] === ")") {
-      depth -= 1;
-      if (depth === 0 && i !== s.length - 1) {
-        return;
-      }
-    }
-  }
-  return { name: m[1], args: m[2] };
-}
-
-/** Base units: px for lengths (rem at 16), seconds for time, % as a fraction. */
-function unit(n: number, u: string, where: string): number {
-  switch (u) {
-    case "":
-    case "px":
-    case "em":
-    case "s":
-      return n;
-    case "rem":
-      return n * REM;
-    case "ms":
-      return n / 1000;
-    case "%":
-      return n / 100;
-    default:
-      throw new Error(`${where}: unit "${u}" has no Apple value`);
-  }
-}
-
-/** + - * / and parentheses over numbers with units and named channels. */
-function arith(
-  expr: string,
-  where: string,
-  ident: (id: string) => number = (id) => {
-    throw new Error(`${where}: unknown name "${id}"`);
-  }
-): number {
-  const toks = expr.match(ARITH_TOKENS) ?? [];
-  let i = 0;
-  const next = (): string | undefined => {
-    const t = toks[i];
-    i += 1;
-    return t;
-  };
-  const primary = (): number => {
-    const t = next();
-    if (t === "(") {
-      const v = sum();
-      if (next() !== ")") {
-        throw new Error(`${where}: unbalanced "${expr}"`);
-      }
-      return v;
-    }
-    if (t === "-") {
-      return -primary();
-    }
-    const num = NUMBER.exec(t ?? "");
-    if (num) {
-      return unit(Number(num[1]), num[2], where);
-    }
-    if (t && NAME.test(t)) {
-      return ident(t);
-    }
-    throw new Error(`${where}: cannot read "${expr}"`);
-  };
-  const product = (): number => {
-    let v = primary();
-    while (toks[i] === "*" || toks[i] === "/") {
-      const op = next();
-      const r = primary();
-      v = op === "*" ? v * r : v / r;
-    }
-    return v;
-  };
-  const sum = (): number => {
-    let v = product();
-    while (toks[i] === "+" || toks[i] === "-") {
-      const op = next();
-      const r = product();
-      v = op === "+" ? v + r : v - r;
-    }
-    return v;
-  };
-  const v = sum();
-  if (i !== toks.length) {
-    throw new Error(`${where}: cannot read "${expr}"`);
-  }
-  return v;
-}
-
-class Tokens {
-  readonly byPath = new Map<string, TransformedToken>();
-  private readonly colours = new Map<string, Color>();
-
-  constructor(dictionary: Dictionary) {
-    for (const token of dictionary.allTokens) {
-      this.byPath.set(token.path.join("."), token);
-    }
+  constructor(view: TokenView) {
+    super((path) => view.byPath.get(path), view.darkContexts);
+    this.view = view;
   }
 
-  lookup(ref: string, where: string): TransformedToken {
-    const token = this.byPath.get(ref);
-    if (!token) {
-      throw new Error(`${where}: unknown reference {${ref}}`);
+  /** A token's CSS form and its contexts', by the token Style Dictionary parsed. */
+  own(token: TransformedToken): ViewToken {
+    const own = this.view.byPath.get(token.path.join("."));
+    if (!own) {
+      throw new Error(`${token.name}: not in the token view`);
     }
-    return token;
+    return own;
   }
 
-  /** A token's colour under one scheme, as the dashboard's cascade resolves it. */
-  colourOf(token: TransformedToken, mode: Mode): Color {
-    const key = `${token.path.join(".")}@${mode}`;
-    let colour = this.colours.get(key);
-    if (!colour) {
-      const { dark } = variantsOf(token);
-      const raw =
-        mode === "dark" && dark !== undefined ? dark : authored(token);
-      colour = this.colour(raw, mode, token.name);
-      this.colours.set(key, colour);
-    }
-    return colour;
-  }
-
-  colour(raw: string, mode: Mode, where: string): Color {
-    const s = raw.trim();
-    const ref = REF.exec(s);
-    if (ref) {
-      return this.colourOf(this.lookup(ref[1], where), mode);
-    }
-    const fn = call(s);
-    if (fn?.name === "color-mix") {
-      return this.mix(fn.args, mode, where);
-    }
-    if (fn?.name === "light-dark") {
-      const [light, dark] = splitTop(fn.args, ",");
-      if (!(light && dark)) {
-        throw new Error(`${where}: unsupported light-dark(${fn.args})`);
-      }
-      return this.colour(mode === "light" ? light : dark, mode, where);
-    }
-    if (fn?.name === "oklch" && fn.args.trimStart().startsWith("from ")) {
-      return this.relative(fn.args, mode, where);
-    }
-    if (fn?.name === "linear-gradient") {
-      // A flat gradient (every stop the same colour) is that colour.
-      const [first, ...rest] = splitTop(fn.args, ",").map((stop) =>
-        this.colour(stop, mode, where)
-      );
-      if (!(first && rest.every((stop) => stop.equals(first)))) {
-        throw new Error(
-          `${where}: a gradient with distinct stops is not a colour`
-        );
-      }
-      return first;
-    }
-    if (s.includes("{")) {
-      throw new Error(`${where}: unsupported colour form "${s}"`);
-    }
-    return new Color(s);
-  }
-
-  /** CSS Color 5 color-mix(): percentages normalised, alpha-multiplied under 100%. */
-  private mix(args: string, mode: Mode, where: string): Color {
-    const [method, ...stops] = splitTop(args, ",");
-    const space = MIX_SPACE.exec(method ?? "")?.[1];
-    if (!space || stops.length !== 2) {
-      throw new Error(`${where}: unsupported color-mix(${args})`);
-    }
-    const parsed = stops.map((stop) => {
-      const parts = splitTop(stop, " ");
-      const last = parts.at(-1) ?? "";
-      const pct = last.endsWith("%")
-        ? Number(last.slice(0, -1)) / 100
-        : undefined;
-      const body = pct === undefined ? stop : parts.slice(0, -1).join(" ");
-      return { colour: this.colour(body, mode, where), pct };
-    });
-    const [a, b] = parsed;
-    let p1 = a.pct;
-    let p2 = b.pct;
-    if (p1 === undefined && p2 === undefined) {
-      p1 = 0.5;
-      p2 = 0.5;
-    } else if (p1 === undefined) {
-      p1 = 1 - (p2 ?? 0);
-    } else if (p2 === undefined) {
-      p2 = 1 - p1;
-    }
-    const total = (p1 ?? 0) + (p2 ?? 0);
-    if (total <= 0) {
-      throw new Error(`${where}: color-mix percentages sum to zero`);
-    }
-    const mixed = Color.mix(a.colour, b.colour, (p2 ?? 0) / total, {
-      space,
-      outputSpace: space,
-      premultiplied: true,
-    });
-    if (total < 1) {
-      mixed.alpha = Number(mixed.alpha) * total;
-    }
-    return mixed;
-  }
-
-  /** oklch(from <colour> L C H [/ A]) with channel keywords and calc(). */
-  private relative(args: string, mode: Mode, where: string): Color {
-    const parts = splitTop(args, " ");
-    const slash = parts.indexOf("/");
-    const [, origin, L, C, H] = parts;
-    const A = slash === -1 ? "alpha" : parts[slash + 1];
-    if (!(origin && L && C && H) || (slash !== -1 && slash !== 5)) {
-      throw new Error(`${where}: unsupported oklch(${args})`);
-    }
-    const base = this.colour(origin, mode, where).to("oklch");
-    const [l, c, h] = base.coords;
-    const channels: Record<string, number> = {
-      l: Number(l ?? 0),
-      c: Number(c ?? 0),
-      h: Number(h ?? 0),
-      alpha: Number(base.alpha),
-    };
-    const read = (authoredTok: string, full: number): number => {
-      // A channel that is a token (the scrim's alpha, effect.scrim-mix)
-      // reads as that token's own value.
-      const ref = WHOLE_REF.exec(authoredTok);
-      const tok = ref ? authored(this.lookup(ref[1], where)) : authoredTok;
-      if (tok in channels) {
-        return channels[tok];
-      }
-      const inner = call(tok);
-      const expr = inner?.name === "calc" ? inner.args : tok;
-      if (!inner && tok.endsWith("%")) {
-        return (Number(tok.slice(0, -1)) / 100) * full;
-      }
-      return arith(expr, where, (id) => {
-        if (id in channels) {
-          return channels[id];
-        }
-        throw new Error(`${where}: unknown channel "${id}"`);
-      });
-    };
-    return new Color(
-      "oklch",
-      [read(L, 1), read(C, 0.4), read(H, 360)],
-      read(A, 1)
-    );
-  }
-
-  /** A length, duration or number in base units; references resolved. */
-  numeric(raw: string, where: string): number {
-    const s = raw.trim();
-    const fn = call(s);
-    const expr = fn?.name === "calc" ? fn.args : s;
-    if (fn && fn.name !== "calc") {
-      throw new Error(`${where}: "${s}" is not a single value`);
-    }
-    const substituted = expr.replace(REFS, (_, ref: string) => {
-      const token = this.lookup(ref, where);
-      return `(${this.numeric(authored(token), where)})`;
-    });
-    return arith(substituted, where);
-  }
-
-  /**
-   * A web `min()` of a length and a share of its container (`%`), as the
-   * length: the most the size may be. The container's side has no meaning
-   * outside a layout, so a min() of anything else is refused.
-   */
-  cap(raw: string, where: string): number {
-    const fn = call(raw.trim());
-    const fixed = fn
-      ? splitTop(fn.args, ",").filter((arg) => !arg.includes("%"))
-      : [];
-    if (!(fn?.name === "min" && fixed.length === 1)) {
-      throw new Error(`${where}: unsupported "${raw}"`);
-    }
-    return this.numeric(fixed[0], where);
-  }
-
-  /** A size as min...max: one value is min == max, a clamp() its bounds. */
-  range(raw: string, where: string): [number, number] {
-    const s = raw.trim();
-    const ref = REF.exec(s);
-    if (ref) {
-      return this.range(authored(this.lookup(ref[1], where)), where);
-    }
-    const fn = call(s);
-    if (fn?.name === "clamp") {
-      const [min, , max] = splitTop(fn.args, ",");
-      if (!(min && max)) {
-        throw new Error(`${where}: unsupported clamp(${fn.args})`);
-      }
-      return [this.numeric(min, where), this.numeric(max, where)];
-    }
-    const v = this.numeric(s, where);
-    return [v, v];
-  }
-
-  /**
-   * A clamp()'s preferred value, `<length> + <n>vi` (or `vw`), as points
-   * plus points per point of viewport width; null for a fixed size.
-   */
-  fluid(
-    raw: string,
-    where: string
-  ): { base: number; perViewport: number } | null {
-    const s = raw.trim();
-    const ref = REF.exec(s);
-    if (ref) {
-      return this.fluid(authored(this.lookup(ref[1], where)), where);
-    }
-    const fn = call(s);
-    if (fn?.name !== "clamp") {
-      return null;
-    }
-    const [, preferred] = splitTop(fn.args, ",");
-    let base = 0;
-    let perViewport = 0;
-    for (const term of (preferred ?? "")
-      .replace(/\s*-\s*/g, " + -")
-      .split("+")) {
-      const t = term.trim();
-      const viewport = VIEWPORT_TERM.exec(t);
-      if (viewport) {
-        perViewport += Number(viewport[1]) / 100;
-      } else if (t) {
-        base += this.numeric(t, where);
-      }
-    }
-    return { base, perViewport };
+  /** The base CSS of the token `ref` names. */
+  css(ref: string, where: string): string {
+    return this.token(ref, where).css.trim();
   }
 }
 
@@ -508,40 +147,36 @@ function colourTokens(dictionary: Dictionary): TransformedToken[] {
 }
 
 /** Rewrites the asset catalog: one colour set per colour token, Any and Dark. */
-function writeColourSets(
-  dictionary: Dictionary,
-  platform: PlatformConfig
-): void {
-  const tokens = new Tokens(dictionary);
-  const catalog = join(platform.buildPath ?? "", CATALOG);
-  rmSync(catalog, { recursive: true, force: true });
-  mkdirSync(catalog, { recursive: true });
-  writeFileSync(join(catalog, "Contents.json"), json({ info: AUTHOR }));
-  for (const token of colourTokens(dictionary)) {
-    const dir = join(catalog, `${token.name}.colorset`);
-    mkdirSync(dir);
-    writeFileSync(
-      join(dir, "Contents.json"),
-      json({
-        colors: [
-          appearance(tokens.colourOf(token, "light"), false),
-          appearance(tokens.colourOf(token, "dark"), true),
-        ],
-        info: AUTHOR,
-      })
-    );
-  }
-}
-
-export const colourSetsAction = {
-  do: writeColourSets,
+export const colourSetsAction = (view: TokenView) => ({
+  do: (dictionary: Dictionary, platform: PlatformConfig): void => {
+    const tokens = new Tokens(view);
+    const catalog = join(platform.buildPath ?? "", CATALOG);
+    rmSync(catalog, { recursive: true, force: true });
+    mkdirSync(catalog, { recursive: true });
+    writeFileSync(join(catalog, "Contents.json"), json({ info: AUTHOR }));
+    for (const token of colourTokens(dictionary)) {
+      const dir = join(catalog, `${token.name}.colorset`);
+      const path = token.path.join(".");
+      mkdirSync(dir);
+      writeFileSync(
+        join(dir, "Contents.json"),
+        json({
+          colors: [
+            appearance(tokens.colourOf(path, "light", token.name), false),
+            appearance(tokens.colourOf(path, "dark", token.name), true),
+          ],
+          info: AUTHOR,
+        })
+      );
+    }
+  },
   undo: (_dictionary: Dictionary, platform: PlatformConfig) => {
     rmSync(join(platform.buildPath ?? "", CATALOG), {
       recursive: true,
       force: true,
     });
   },
-};
+});
 
 // MARK: - Swift
 
@@ -561,7 +196,7 @@ function swiftNumber(n: number): string {
 function stack(raw: string, tokens: Tokens, where: string): string[] {
   let value = raw.trim();
   for (let ref = REF.exec(value); ref; ref = REF.exec(value)) {
-    value = authored(tokens.lookup(ref[1], where));
+    value = tokens.css(ref[1], where);
   }
   return splitTop(value, ",").map((f) => f.replace(QUOTES, ""));
 }
@@ -570,8 +205,8 @@ function swiftString(s: string): string {
   return `"${s.replace(BACKSLASH, "\\\\").replace(DOUBLE_QUOTE, '\\"')}"`;
 }
 
-/** The letter-spacing a type role is set with, named by its token:
-    `$extensions["dev.cawco.type"].tracking`, a reference to a `track-*`. */
+/** The letter-spacing a type role is set with, named by its token: its
+    DTCG `letterSpacing`, when that references a `track-*`. */
 const TRACK_REF = /^\{type\.(track-[a-z0-9-]+)\}$/;
 
 function roleTracking(
@@ -579,15 +214,18 @@ function roleTracking(
   tokens: Tokens,
   where: string
 ): string {
-  const authoredRef = token.original.$extensions?.["dev.cawco.type"]?.tracking;
-  if (authoredRef === undefined) {
+  const spacing = (token.original.$value as { letterSpacing?: unknown })
+    .letterSpacing;
+  if (typeof spacing !== "string") {
     return "";
   }
-  const ref = TRACK_REF.exec(String(authoredRef));
+  const ref = TRACK_REF.exec(spacing);
   if (!ref?.[1]) {
-    throw new Error(`${where}: tracking must reference a type.track-* token`);
+    throw new Error(
+      `${where}: letterSpacing must reference a type.track-* token`
+    );
   }
-  tokens.lookup(`type.${ref[1]}`, where);
+  tokens.token(`type.${ref[1]}`, where);
   return `, tracking: ${swiftName(ref[1])}`;
 }
 
@@ -609,7 +247,7 @@ function typeRole(
   ) {
     throw new Error(`${where}: unsupported typography "${raw}"`);
   }
-  tokens.lookup(`font.${familyRef[1]}`, where);
+  tokens.token(`font.${familyRef[1]}`, where);
   const [min, max] = tokens.range(size, where);
   const preferred = tokens.fluid(size, where);
   const fluid = preferred
@@ -637,16 +275,12 @@ function shadowLayers(raw: string, tokens: Tokens, where: string): string[] {
   }
   const ref = REF.exec(s);
   if (ref) {
-    return shadowLayers(authored(tokens.lookup(ref[1], where)), tokens, where);
+    return shadowLayers(tokens.css(ref[1], where), tokens, where);
   }
   return splitTop(s, ",").flatMap((layer) => {
     const inner = REF.exec(layer);
     if (inner) {
-      return shadowLayers(
-        authored(tokens.lookup(inner[1], where)),
-        tokens,
-        where
-      );
+      return shadowLayers(tokens.css(inner[1], where), tokens, where);
     }
     const parts = splitTop(layer, " ");
     const inset = parts.includes("inset");
@@ -710,8 +344,9 @@ function numberDeclaration(
 ): Declaration {
   const name = swiftName(token.name);
   const where = token.name;
-  const light = swiftNumber(tokens.numeric(authored(token), where));
-  const { dark } = variantsOf(token);
+  const own = tokens.own(token);
+  const light = swiftNumber(tokens.numeric(own.css.trim(), where));
+  const { dark } = own.variants;
   if (dark === undefined) {
     return one(`public static let ${name}: Double = ${light}`);
   }
@@ -724,7 +359,7 @@ function numberDeclaration(
 
 function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
   const name = swiftName(token.name);
-  const raw = authored(token);
+  const raw = tokens.own(token).css.trim();
   const where = token.name;
   const doc = token.$description ? [token.$description] : [];
   const one = (line: string, extra: string[] = []): Declaration => ({
@@ -766,7 +401,7 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
           )
         );
       }
-      const variants = variantsOf(token);
+      const { variants } = tokens.own(token);
       for (const key of ["coarse", "compact"] as const) {
         const value = variants[key];
         if (value !== undefined) {
@@ -840,12 +475,11 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
   }
 }
 
-export function swiftFormat({
-  dictionary,
-}: {
-  dictionary: Dictionary;
-}): string {
-  const tokens = new Tokens(dictionary);
+/** Each Swift namespace's declarations, in token order. */
+function namespaces(
+  dictionary: Dictionary,
+  tokens: Tokens
+): Map<string, Declaration[]> {
   const groups = new Map<string, Declaration[]>();
   for (const token of dictionary.allTokens) {
     const [group] = token.path;
@@ -860,28 +494,35 @@ export function swiftFormat({
     list.push(...declare(token, tokens));
     groups.set(namespace, list);
   }
-  const lines = [
-    "// Generated by `bun run tokens` (apps/dashboard) from design/tokens/cawco.tokens.json.",
-    "// Do not edit: change the token source and rebuild.",
-    "",
-    "import UIKit",
-  ];
-  for (const [namespace, declarations] of groups) {
-    const seen = new Set<string>();
-    lines.push("", `public enum ${namespace} {`);
-    for (const { doc, line } of declarations) {
-      const id = DECLARED.exec(line)?.[1] ?? line;
-      if (seen.has(id)) {
-        throw new Error(`${namespace}.${id}: two tokens share this name`);
-      }
-      seen.add(id);
-      for (const d of doc) {
-        lines.push(`    /// ${d}`);
-      }
-      lines.push(`    ${line}`);
-    }
-    lines.push("}");
-  }
-  lines.push("");
-  return lines.join("\n");
+  return groups;
 }
+
+export const swiftFormat =
+  (view: TokenView) =>
+  ({ dictionary }: { dictionary: Dictionary }): string => {
+    const groups = namespaces(dictionary, new Tokens(view));
+    const lines = [
+      "// Generated by `bun run tokens` (apps/dashboard) from design/tokens/cawco.tokens.json.",
+      "// Do not edit: change the token source and rebuild.",
+      "",
+      "import UIKit",
+    ];
+    for (const [namespace, declarations] of groups) {
+      const seen = new Set<string>();
+      lines.push("", `public enum ${namespace} {`);
+      for (const { doc, line } of declarations) {
+        const id = DECLARED.exec(line)?.[1] ?? line;
+        if (seen.has(id)) {
+          throw new Error(`${namespace}.${id}: two tokens share this name`);
+        }
+        seen.add(id);
+        for (const d of doc) {
+          lines.push(`    /// ${d}`);
+        }
+        lines.push(`    ${line}`);
+      }
+      lines.push("}");
+    }
+    lines.push("");
+    return lines.join("\n");
+  };

@@ -396,11 +396,12 @@ const run = async (kit: Kit) => {
   await open(page, `${base}/session/${session}`, ".artifact-trigger");
   // The shell's rail, in a browser with no width of its own, is drawn at the
   // `c-sidebar-w` token (DESIGN.md: "228px by default"), its one source.
-  const token = (
+  const width = (
     (await Bun.file(TOKENS).json()) as {
-      size: { "c-sidebar-w": { $value: string } };
+      size: { "c-sidebar-w": { $value: { value: number; unit: string } } };
     }
   ).size["c-sidebar-w"].$value;
+  const token = `${width.value}${width.unit}`;
   const rail = await page.evaluate(() => ({
     css: getComputedStyle(document.documentElement)
       .getPropertyValue("--c-sidebar-w")

@@ -32022,12 +32022,6 @@
               "of"
             ]
           },
-          "classes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "rect": {
             "type": "object",
             "properties": {
@@ -32050,6 +32044,12 @@
               "x",
               "y"
             ]
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "selector": {
             "type": "string"

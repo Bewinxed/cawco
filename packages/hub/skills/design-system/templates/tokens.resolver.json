@@ -1,0 +1,24 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/resolver.json",
+  "name": "PROJECT",
+  "version": "2025.10",
+  "sets": {
+    "base": { "sources": [{ "$ref": "tokens.json" }] }
+  },
+  "modifiers": {
+    "theme": {
+      "contexts": {
+        "light": [],
+        "dark": [{ "$ref": "themes/dark.tokens.json" }]
+      },
+      "default": "light",
+      "$extensions": {
+        "dev.cawco": { "contexts": { "dark": { "scheme": "dark" } } }
+      }
+    }
+  },
+  "resolutionOrder": [
+    { "$ref": "#/sets/base" },
+    { "$ref": "#/modifiers/theme" }
+  ]
+}

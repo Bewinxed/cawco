@@ -1,33 +1,46 @@
 /**
  * A builder writes a project's design system with `design_write`, and the
- * hub keeps the folder contract (design-system plan §2, slice 1). On a
+ * hub keeps the folder contract (design-system plan §2, slice 1): conformant
+ * DTCG 2025.10 tokens, themes through a resolver, tokens.css generated. On a
  * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
- * model, which plays the builder's calls), a worker session in a project on
- * a fixture repository (two stylesheets, a font, a logo), one run each:
+ * model, which plays the builder's calls), two legs, one run each:
  *
- * 1. The first build writes design/ at the repository's root: DESIGN.md,
- *    tokens.json, tokens.css, manifest.json, SKILL.md,
- *    specimens/index.html, and the material in fonts/ and assets/, the
- *    font and the logo byte-identical; the answer lists nothing missing.
- * 2. Every token in tokens.json has a source in manifest.json.
- * 3. tokens.css is the generator's output for tokens.json, byte for byte,
- *    and the manifest's fingerprint of every file it wrote matches.
- * 4. A tokens.json with a token the manifest gives no source is refused,
- *    naming it, and nothing changes on disk.
- * 5. After the person edits DESIGN.md and commits it, a second build keeps
- *    their DESIGN.md and lists it as kept, while its new tokens.json is
- *    written and tokens.css regenerated from it.
+ * - **repository**: a worker in a project on a fixture repository (two
+ *   stylesheets, a font, a logo); design/ lands at the repository's root.
+ * - **hub folder**: a worker in a project with no repository, working in
+ *   the project's folder on the hub; design/ lands there, committed.
+ *
+ * In each leg:
+ *
+ * 1. The first build writes design/'s parts (DESIGN.md, tokens.resolver.json,
+ *    tokens.json, themes/dark.tokens.json, tokens.css, manifest.json,
+ *    SKILL.md, specimens/index.html) and the material in fonts/ and assets/,
+ *    the font and the logo byte-identical; the answer lists nothing missing.
+ *    In the folder, the folder's git log names the commit.
+ * 2. Every token in every token file has a source in manifest.json.
+ * 3. tokens.css is the generator's output for the files on disk, byte for
+ *    byte; the files pass the DTCG 2025.10 schemas; the recipe token
+ *    `color.ink-quiet` has its `$value` computed (the ink at 0.64 alpha), and
+ *    the dark file has gained its dark value; every fingerprint matches.
+ * 4. A token the manifest gives no source is refused by name, and nothing
+ *    changes on disk.
+ * 5. After the person edits DESIGN.md (a commit in the repository, the
+ *    folder editor's write in the folder), a second build keeps it and
+ *    lists it as kept, while its new token moves tokens.css on.
  *
  *   bun scripts/probe-kit/run.ts design-system
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one call at a time, as the builder makes them
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
-  designTokensCss,
+  buildDesignTokens,
   fingerprint,
-  tokenPaths,
 } from "../../../packages/hub/src/design-system";
+import {
+  schemaProblems,
+  tokensIn,
+} from "../../../packages/hub/src/dtcg-resolver";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { FONT } from "./web/oui-mockup/bytes";
@@ -104,46 +117,94 @@ const COMPONENTS_CSS = `.card {
 `;
 const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#2f6fde"/></svg>\n`;
 
-/** The builder's tokens, in the fixture's own role names. */
+const oklch = (l: number, c: number, h: number, alpha?: number) => ({
+  colorSpace: "oklch",
+  components: [l, c, h],
+  ...(alpha === undefined ? {} : { alpha }),
+});
+const recipe = (css: string) => ({ "dev.cawco": { css } });
+
+/** The builder's base set, in the fixture's own role names, DTCG 2025.10 values. */
 const TOKENS = {
   color: {
-    $type: "color",
-    paper: {
-      $value: "oklch(98.4% 0.004 85)",
-      $extensions: { "dev.cawco": { dark: "oklch(19.6% 0.009 265)" } },
-    },
+    paper: { $type: "color", $value: oklch(0.984, 0.004, 85) },
     ink: {
-      $value: "oklch(26.4% 0.022 265)",
+      $type: "color",
+      $value: oklch(0.264, 0.022, 265),
       $description: "Body text and icons.",
-      $extensions: { "dev.cawco": { dark: "oklch(93.4% 0.007 90)" } },
     },
-    "ink-quiet": { $value: "oklch(from {color.ink} l c h / 0.64)" },
-    accent: { $value: "oklch(56.6% 0.18 260)" },
+    // A recipe: the builder's value is a placeholder the hub computes.
+    "ink-quiet": {
+      $type: "color",
+      $value: oklch(0, 0, 0),
+      $extensions: recipe("oklch(from {color.ink} l c h / 0.64)"),
+    },
+    accent: { $type: "color", $value: oklch(0.566, 0.18, 260) },
   },
   font: {
-    $type: "fontFamily",
-    "body-face": { $value: '"Harbour Round", sans-serif' },
+    "body-face": {
+      $type: "fontFamily",
+      $value: ["Harbour Round", "sans-serif"],
+    },
   },
   size: {
-    $type: "dimension",
-    body: { $value: "clamp(1rem, 0.95rem + 0.25vw, 1.125rem)" },
-    gap: { $value: "clamp(0.875rem, 0.8rem + 0.4cqi, 1rem)" },
-    "radius-card": { $value: "0.75rem" },
+    body: {
+      $type: "dimension",
+      $value: { value: 1, unit: "rem" },
+      $extensions: recipe("clamp(1rem, 0.95rem + 0.25vw, 1.125rem)"),
+    },
+    gap: {
+      $type: "dimension",
+      $value: { value: 0.875, unit: "rem" },
+      $extensions: recipe("clamp(0.875rem, 0.8rem + 0.4cqi, 1rem)"),
+    },
+    "radius-card": { $type: "dimension", $value: { value: 0.75, unit: "rem" } },
   },
   shadow: {
-    $type: "shadow",
-    card: { $value: "0 1px 3px oklch(0% 0 0 / 0.12)" },
+    card: {
+      $type: "shadow",
+      $value: {
+        color: oklch(0, 0, 0, 0.12),
+        offsetX: { value: 0, unit: "px" },
+        offsetY: { value: 1, unit: "px" },
+        blur: { value: 3, unit: "px" },
+        spread: { value: 0, unit: "px" },
+      },
+    },
   },
   motion: {
-    quick: { $type: "duration", $value: "160ms" },
-    settle: { $type: "cubicBezier", $value: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+    quick: { $type: "duration", $value: { value: 160, unit: "ms" } },
+    settle: { $type: "cubicBezier", $value: [0.2, 0.8, 0.2, 1] },
   },
+};
+const DARK = {
+  color: {
+    paper: { $type: "color", $value: oklch(0.196, 0.009, 265) },
+    ink: { $type: "color", $value: oklch(0.934, 0.007, 90) },
+  },
+};
+const RESOLVER = {
+  $schema: "https://www.designtokens.org/schemas/2025.10/resolver.json",
+  name: "Harbour",
+  version: "2025.10",
+  sets: { base: { sources: [{ $ref: "tokens.json" }] } },
+  modifiers: {
+    theme: {
+      contexts: {
+        light: [],
+        dark: [{ $ref: "themes/dark.tokens.json" }],
+      },
+      default: "light",
+      $extensions: { "dev.cawco": { contexts: { dark: { scheme: "dark" } } } },
+    },
+  },
+  resolutionOrder: [{ $ref: "#/sets/base" }, { $ref: "#/modifiers/theme" }],
 };
 const SOURCES: Record<string, string> = {
   "color.paper": "styles/base.css:2 (--paper: #fbfaf7), dark styles/base.css:9",
   "color.ink": "styles/base.css:3 (--ink: #1f2430), dark styles/base.css:10",
   "color.ink-quiet":
-    "derived from color.ink: styles/components.css has no quiet ink, decision page card quiet-ink",
+    "derived from color.ink: the material has no quiet ink, decision page card quiet-ink",
   "color.accent": "styles/base.css:4 (--accent: #2f6fde)",
   "font.body-face": 'styles/base.css:18 (font-family: "Harbour Round")',
   "size.body": "styles/base.css:19 (font-size: clamp(…))",
@@ -157,7 +218,13 @@ const SECOND_TOKENS = {
   ...TOKENS,
   color: {
     ...TOKENS.color,
-    line: { $value: "color-mix(in oklch, {color.ink} 14%, {color.paper})" },
+    line: {
+      $type: "color",
+      $value: oklch(0, 0, 0),
+      $extensions: recipe(
+        "color-mix(in oklch, {color.ink} 14%, {color.paper})"
+      ),
+    },
   },
 };
 const SECOND_SOURCES = {
@@ -175,10 +242,22 @@ const BUILDER_DESIGN =
   "# Harbour design system\n\nThe builder's first guide.\n";
 const PERSON_DESIGN =
   "# Harbour design system\n\nThe person's own words: the accent is for actions only.\n";
+const PARTS = [
+  "DESIGN.md",
+  "tokens.resolver.json",
+  "tokens.json",
+  "themes/dark.tokens.json",
+  "tokens.css",
+  "manifest.json",
+  "SKILL.md",
+  "specimens/index.html",
+  "fonts/harbour-round.woff2",
+  "assets/logo.svg",
+];
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
-/** The builder's `design_write` of `files`, asked in the worker's session: what the tool answered. */
+/** The builder's `design_write` of `files`, asked in `worker`'s session: what the tool answered. */
 async function builderWrites(
   kit: Kit,
   fleet: KitFleet,
@@ -223,6 +302,168 @@ const answerOf = (
   return {};
 };
 
+interface Leg {
+  /** Says the person's edit of DESIGN.md into the place, and commits it. */
+  edit: (content: string) => Promise<void>;
+  /** The place's newest commit subjects, newest first. */
+  log: () => Promise<string>;
+  name: string;
+  /** Where design/ lands. */
+  root: string;
+  worker: string;
+}
+
+async function runLeg(
+  kit: Kit,
+  fleet: KitFleet,
+  leg: Leg,
+  font: Buffer
+): Promise<void> {
+  const design = (path: string) => join(leg.root, "design", path);
+  const bytesOf = (path: string) =>
+    readFile(design(path)).catch(() => Buffer.alloc(0));
+  const textOf = async (path: string) => (await bytesOf(path)).toString();
+  const build = () =>
+    buildDesignTokens(async (path) => JSON.parse(await textOf(path)));
+  const say = (n: number, claim: string) => `${leg.name} ${n}: ${claim}`;
+
+  // ── 1–3: the first build ─────────────────────────────────────────────
+  const first = await builderWrites(kit, fleet, leg.worker, [
+    { path: "manifest.json", content: json({ sources: SOURCES }) },
+    { path: "tokens.resolver.json", content: json(RESOLVER) },
+    { path: "tokens.json", content: json(TOKENS) },
+    { path: "themes/dark.tokens.json", content: json(DARK) },
+    { path: "DESIGN.md", content: BUILDER_DESIGN },
+    {
+      path: "SKILL.md",
+      content:
+        "---\nname: harbour-design\ndescription: Harbour's design system. Use when building Harbour's screens.\n---\n\nRead DESIGN.md and tokens.css first.\n",
+    },
+    { path: "specimens/index.html", content: FOUNDATIONS },
+    {
+      path: "fonts/harbour-round.woff2",
+      content: font.toString("base64"),
+      encoding: "base64",
+    },
+    { path: "assets/logo.svg", content: LOGO },
+  ]);
+  const firstAnswer = answerOf(first);
+  const present = await Promise.all(
+    PARTS.map(async (path) => (await bytesOf(path)).byteLength > 0)
+  );
+  const fontBack = await bytesOf("fonts/harbour-round.woff2");
+  const log = await leg.log();
+  kit.check(
+    say(
+      1,
+      "the first build writes design/'s parts and its material, the font and logo byte-identical, nothing missing, committed where the place commits"
+    ),
+    present.every(Boolean) &&
+      fontBack.equals(font) &&
+      (await textOf("assets/logo.svg")) === LOGO &&
+      firstAnswer.missing?.length === 0 &&
+      (leg.name !== "hub folder" ||
+        log.includes("design: write the design system")),
+    `present ${PARTS.filter((_, i) => present[i]).join(", ")}; missing in answer ${JSON.stringify(firstAnswer.missing)}; font equal ${fontBack.equals(font)}; log “${log.slice(0, 160)}”; answer “${first.slice(0, 300)}”`
+  );
+
+  const built = await build();
+  const manifest = JSON.parse(await textOf("manifest.json")) as {
+    files: Record<string, string>;
+    sources: Record<string, string>;
+  };
+  const paths = [
+    ...new Set(
+      [...built.system.files]
+        .filter(([path]) => path !== built.system.resolver)
+        .flatMap(([, tree]) => [...tokensIn(tree)].map((token) => token.path))
+    ),
+  ];
+  const unsourced = paths.filter((path) => !manifest.sources[path]);
+  kit.check(
+    say(2, "every token in every token file has a source in manifest.json"),
+    paths.length === Object.keys(SOURCES).length && unsourced.length === 0,
+    `${paths.length} token paths, unsourced: ${unsourced.join(", ") || "none"}`
+  );
+
+  const onDisk = await textOf("tokens.css");
+  const base = JSON.parse(await textOf("tokens.json"));
+  const dark = JSON.parse(await textOf("themes/dark.tokens.json"));
+  const quiet = base.color["ink-quiet"].$value;
+  const quietDark = dark.color?.["ink-quiet"]?.$value;
+  const problems = schemaProblems(built.system);
+  const fingerprints = await Promise.all(
+    Object.entries(manifest.files).map(
+      async ([path, print]) => fingerprint(await bytesOf(path)) === print
+    )
+  );
+  kit.check(
+    say(
+      3,
+      "tokens.css is the generator's output byte for byte, the files pass the DTCG 2025.10 schemas, the recipe's value is computed in both schemes, every fingerprint matches"
+    ),
+    onDisk === built.css &&
+      onDisk.includes("--ink: light-dark(") &&
+      onDisk.includes("--ink-quiet: oklch(from var(--ink) l c h / 0.64)") &&
+      problems.length === 0 &&
+      quiet.alpha === 0.64 &&
+      Math.abs(quiet.components[0] - 0.264) < 1e-4 &&
+      quietDark?.alpha === 0.64 &&
+      Math.abs(quietDark.components[0] - 0.934) < 1e-4 &&
+      built.changed.size === 0 &&
+      fingerprints.length === PARTS.length - 1 &&
+      fingerprints.every(Boolean),
+    `equal ${onDisk === built.css} (${onDisk.length} vs ${built.css.length} bytes); schema problems ${problems.length} ${problems.slice(0, 2).join("; ")}; ink-quiet ${JSON.stringify(quiet)}, dark ${JSON.stringify(quietDark)}; settled again ${built.changed.size}; ${fingerprints.filter(Boolean).length} of ${fingerprints.length} fingerprints match`
+  );
+  await writeFile(
+    join(kit.out, `${leg.name.replace(" ", "-")}-tokens.css`),
+    onDisk
+  );
+
+  // ── 4: a token with no source ────────────────────────────────────────
+  const before = await textOf("tokens.json");
+  const refused = await builderWrites(kit, fleet, leg.worker, [
+    { path: "tokens.json", content: json(SECOND_TOKENS) },
+  ]);
+  kit.check(
+    say(
+      4,
+      "a token the manifest gives no source is refused by name, and nothing changes"
+    ),
+    refused.includes("Nothing was written") &&
+      refused.includes("color.line") &&
+      (await textOf("tokens.json")) === before,
+    `design_write said “${refused.slice(0, 300)}”`
+  );
+
+  // ── 5: the person edits DESIGN.md; a second build keeps it ───────────
+  await leg.edit(PERSON_DESIGN);
+  const second = await builderWrites(kit, fleet, leg.worker, [
+    { path: "manifest.json", content: json({ sources: SECOND_SOURCES }) },
+    { path: "tokens.json", content: json(SECOND_TOKENS) },
+    {
+      path: "DESIGN.md",
+      content: "# Harbour design system\n\nThe builder's second guide.\n",
+    },
+  ]);
+  const secondAnswer = answerOf(second);
+  const rebuilt = await build();
+  const css = await textOf("tokens.css");
+  kit.check(
+    say(
+      5,
+      "a second build keeps the person's DESIGN.md and lists it as kept, while the new token moves tokens.css on"
+    ),
+    (await textOf("DESIGN.md")) === PERSON_DESIGN &&
+      (secondAnswer.kept ?? []).some(
+        (file) => file.path === "design/DESIGN.md"
+      ) &&
+      css === rebuilt.css &&
+      css.includes("--line: color-mix("),
+    `DESIGN.md kept ${(await textOf("DESIGN.md")) === PERSON_DESIGN}; kept in answer ${JSON.stringify(secondAnswer.kept?.map((file) => file.path))}; tokens.css regenerated ${css === rebuilt.css}; answer “${second.slice(0, 300)}”`
+  );
+}
+
 const spec: Spec = {
   name: "design-system",
   run: async (kit) => {
@@ -235,10 +476,10 @@ const spec: Spec = {
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-
-    // The fixture repository: two stylesheets, a font, a logo.
-    const repo = join(fleet.sandbox, "harbour");
     const font = await readFile(FONT);
+
+    // ── The repository leg: two stylesheets, a font, a logo ──────────────
+    const repo = join(fleet.sandbox, "harbour");
     await Bun.$`mkdir -p ${join(repo, "styles")} ${join(repo, "fonts")} ${join(repo, "brand")}`;
     await writeFile(join(repo, "styles/base.css"), BASE_CSS);
     await writeFile(join(repo, "styles/components.css"), COMPONENTS_CSS);
@@ -251,132 +492,73 @@ const spec: Spec = {
     await Bun.$`git init -q -b main`.cwd(repo).quiet();
     await git("add -A");
     await git("commit -qm 'Harbour'");
-
-    const made = await fleet.api<{ id?: string; project?: { id: string } }>(
+    const inRepo = await fleet.api<{ id?: string; project?: { id: string } }>(
       "/api/projects",
       { name: "Harbour", machineId: MACHINE, cwd: repo, caw: false }
     );
-    const projectId = made.project?.id ?? made.id ?? "";
-    const worker = await fleet.spawn("claude", "Design builder", repo, {
-      projectId,
-    });
-
-    const design = (path: string) => join(repo, "design", path);
-    const bytesOf = (path: string) =>
-      readFile(design(path)).catch(() => Buffer.alloc(0));
-    const textOf = async (path: string) => (await bytesOf(path)).toString();
-
-    // ── 1–3: the first build ───────────────────────────────────────────
-    const first = await builderWrites(kit, fleet, worker, [
-      { path: "manifest.json", content: json({ sources: SOURCES }) },
-      { path: "tokens.json", content: json(TOKENS) },
-      { path: "DESIGN.md", content: BUILDER_DESIGN },
+    const repoProject = inRepo.project?.id ?? inRepo.id ?? "";
+    await runLeg(
+      kit,
+      fleet,
       {
-        path: "SKILL.md",
-        content:
-          "---\nname: harbour-design\ndescription: Harbour's design system. Use when building Harbour's screens.\n---\n\nRead DESIGN.md and tokens.css first.\n",
+        name: "repository",
+        root: repo,
+        worker: await fleet.spawn("claude", "Design builder", repo, {
+          projectId: repoProject,
+        }),
+        edit: async (content) => {
+          await writeFile(join(repo, "design/DESIGN.md"), content);
+          await git("add -A");
+          await git("commit -qm 'My words in DESIGN.md'");
+        },
+        log: async () =>
+          (await Bun.$`git log --format=%s -5`.cwd(repo).quiet()).text(),
       },
-      { path: "specimens/index.html", content: FOUNDATIONS },
+      font
+    );
+
+    // ── The hub-folder leg: a project with no repository ─────────────────
+    const made = await fleet.api<{ id?: string; project?: { id: string } }>(
+      "/api/projects",
+      { name: "Harbour brand", caw: false }
+    );
+    const folderProject = made.project?.id ?? made.id ?? "";
+    // Its folder is made on first read (project-folder.ts `listFolder`).
+    await fleet.api(`/api/projects/${folderProject}/folder`);
+    const folder = join(
+      dirname(fleet.env.CAWCO_DB_PATH ?? ""),
+      "projects",
+      folderProject
+    );
+    await runLeg(
+      kit,
+      fleet,
       {
-        path: "fonts/harbour-round.woff2",
-        content: font.toString("base64"),
-        encoding: "base64",
+        name: "hub folder",
+        root: folder,
+        worker: await fleet.spawn("claude", "Brand builder", folder, {
+          projectId: folderProject,
+        }),
+        // The person's edit through the folder editor, a commit as them.
+        edit: async (content) => {
+          const written = await fetch(
+            `${fleet.base}/api/projects/${folderProject}/folder/file`,
+            {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ path: "design/DESIGN.md", content }),
+            }
+          );
+          if (!written.ok) {
+            throw new Error(
+              `the folder editor's write: ${written.status} ${await written.text()}`
+            );
+          }
+        },
+        log: async () =>
+          (await Bun.$`git log --format=%s -5`.cwd(folder).quiet()).text(),
       },
-      { path: "assets/logo.svg", content: LOGO },
-    ]);
-    const firstAnswer = answerOf(first);
-    const parts = [
-      "DESIGN.md",
-      "tokens.json",
-      "tokens.css",
-      "manifest.json",
-      "SKILL.md",
-      "specimens/index.html",
-      "fonts/harbour-round.woff2",
-      "assets/logo.svg",
-    ];
-    const present = await Promise.all(
-      parts.map(async (path) => (await bytesOf(path)).byteLength > 0)
-    );
-    const fontBack = await bytesOf("fonts/harbour-round.woff2");
-    kit.check(
-      "1: the first build writes design/ at the repository's root with its parts, the font and logo byte-identical, nothing missing",
-      present.every(Boolean) &&
-        fontBack.equals(font) &&
-        (await textOf("assets/logo.svg")) === LOGO &&
-        firstAnswer.missing?.length === 0,
-      `present ${parts.filter((_, i) => present[i]).join(", ")}; missing in answer ${JSON.stringify(firstAnswer.missing)}; font equal ${fontBack.equals(font)}; answer “${first.slice(0, 300)}”`
-    );
-
-    const tokens = JSON.parse(await textOf("tokens.json"));
-    const manifest = JSON.parse(await textOf("manifest.json")) as {
-      sources: Record<string, string>;
-      files: Record<string, string>;
-    };
-    const paths = tokenPaths(tokens);
-    const unsourced = paths.filter((path) => !manifest.sources[path]);
-    kit.check(
-      "2: every token in tokens.json has a source in manifest.json",
-      paths.length === Object.keys(SOURCES).length && unsourced.length === 0,
-      `${paths.length} tokens, unsourced: ${unsourced.join(", ") || "none"}`
-    );
-
-    const generated = await designTokensCss(tokens);
-    const onDisk = await textOf("tokens.css");
-    const fingerprints = await Promise.all(
-      Object.entries(manifest.files).map(
-        async ([path, print]) => fingerprint(await bytesOf(path)) === print
-      )
-    );
-    kit.check(
-      "3: tokens.css is the generator's output byte for byte, and every fingerprint matches its file",
-      onDisk === generated &&
-        onDisk.includes("light-dark(") &&
-        fingerprints.length === parts.length - 1 &&
-        fingerprints.every(Boolean),
-      `equal ${onDisk === generated} (${onDisk.length} vs ${generated.length} bytes); ${fingerprints.filter(Boolean).length} of ${fingerprints.length} fingerprints match`
-    );
-    await writeFile(join(kit.out, "tokens.css"), onDisk);
-
-    // ── 4: a token with no source ──────────────────────────────────────
-    const before = await textOf("tokens.json");
-    const refused = await builderWrites(kit, fleet, worker, [
-      { path: "tokens.json", content: json(SECOND_TOKENS) },
-    ]);
-    kit.check(
-      "4: a token the manifest gives no source is refused by name, and nothing changes",
-      refused.includes("Nothing was written") &&
-        refused.includes("color.line") &&
-        (await textOf("tokens.json")) === before,
-      `design_write said “${refused.slice(0, 300)}”`
-    );
-
-    // ── 5: the person edits DESIGN.md; a second build keeps it ─────────
-    await writeFile(design("DESIGN.md"), PERSON_DESIGN);
-    await git("add -A");
-    await git("commit -qm 'Design system, and my words in DESIGN.md'");
-    const second = await builderWrites(kit, fleet, worker, [
-      { path: "manifest.json", content: json({ sources: SECOND_SOURCES }) },
-      { path: "tokens.json", content: json(SECOND_TOKENS) },
-      {
-        path: "DESIGN.md",
-        content: "# Harbour design system\n\nThe builder's second guide.\n",
-      },
-    ]);
-    const secondAnswer = answerOf(second);
-    const regenerated = await designTokensCss(
-      JSON.parse(await textOf("tokens.json"))
-    );
-    const css = await textOf("tokens.css");
-    kit.check(
-      "5: a second build keeps the person's DESIGN.md and lists it as kept, while tokens.json and tokens.css move on",
-      (await textOf("DESIGN.md")) === PERSON_DESIGN &&
-        (secondAnswer.kept ?? []).some(
-          (file) => file.path === "design/DESIGN.md"
-        ) &&
-        css === regenerated &&
-        css.includes("--line: color-mix("),
-      `DESIGN.md kept ${(await textOf("DESIGN.md")) === PERSON_DESIGN}; kept in answer ${JSON.stringify(secondAnswer.kept?.map((file) => file.path))}; tokens.css regenerated ${css === regenerated}; answer “${second.slice(0, 300)}”`
+      font
     );
   },
 };

@@ -13,8 +13,9 @@ import { fileURLToPath } from 'node:url';
 
 const at = (path) => new URL(path, import.meta.url);
 const tokens = JSON.parse(readFileSync(at('../../design/tokens/cawco.tokens.json'), 'utf8'));
-const paper = tokens.color.paper.$value;
-const ink = tokens.color['crow-ink'].$value;
+// DTCG colours: both are sRGB, written with their hex.
+const paper = tokens.color.paper.$value.hex;
+const ink = tokens.color['crow-ink'].$value.hex;
 
 const clip = readFileSync(at('../src/assets/caw/ready-enter-distance.svg'), 'utf8');
 const last = clip

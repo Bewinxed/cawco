@@ -1,0 +1,95 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/resolver.json",
+  "name": "CawCo",
+  "version": "2025.10",
+  "description": "CawCo's design tokens: the base set, then the scheme, the pointer and the density each product surface draws under.",
+  "sets": {
+    "cawco": {
+      "sources": [
+        {
+          "$ref": "cawco.tokens.json"
+        }
+      ]
+    }
+  },
+  "modifiers": {
+    "theme": {
+      "description": "The colour scheme.",
+      "contexts": {
+        "light": [],
+        "dark": [
+          {
+            "$ref": "cawco.dark.tokens.json"
+          }
+        ]
+      },
+      "default": "light",
+      "$extensions": {
+        "dev.cawco": {
+          "contexts": {
+            "dark": {
+              "scheme": "dark",
+              "selector": ":root.dark"
+            }
+          }
+        }
+      }
+    },
+    "pointer": {
+      "description": "The pointer: touch draws larger targets.",
+      "contexts": {
+        "fine": [],
+        "coarse": [
+          {
+            "$ref": "cawco.coarse.tokens.json"
+          }
+        ]
+      },
+      "default": "fine",
+      "$extensions": {
+        "dev.cawco": {
+          "contexts": {
+            "coarse": {
+              "media": "(pointer: coarse)"
+            }
+          }
+        }
+      }
+    },
+    "density": {
+      "description": "Compact: a coarse pointer or a window under 640px wide.",
+      "contexts": {
+        "regular": [],
+        "compact": [
+          {
+            "$ref": "cawco.compact.tokens.json"
+          }
+        ]
+      },
+      "default": "regular",
+      "$extensions": {
+        "dev.cawco": {
+          "contexts": {
+            "compact": {
+              "media": "(pointer: coarse), (width < 640px)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "resolutionOrder": [
+    {
+      "$ref": "#/sets/cawco"
+    },
+    {
+      "$ref": "#/modifiers/theme"
+    },
+    {
+      "$ref": "#/modifiers/pointer"
+    },
+    {
+      "$ref": "#/modifiers/density"
+    }
+  ]
+}

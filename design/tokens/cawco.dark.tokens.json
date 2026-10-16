@@ -1,0 +1,1768 @@
+{
+  "marketing": {
+    "site-heading-ink": {
+      "$type": "color",
+      "$value": "{color.spark}"
+    },
+    "site-canvas": {
+      "$type": "color",
+      "$value": "{color.crow-ink}"
+    },
+    "site-ink": {
+      "$type": "color",
+      "$value": "{color.paper}"
+    },
+    "site-secondary": {
+      "$type": "color",
+      "$value": "{color.neutral-11}"
+    },
+    "site-line": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.9555, 0.00032, 0.013947],
+        "alpha": 0.22
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.paper} 22%, transparent)"
+        }
+      }
+    },
+    "site-panel": {
+      "$type": "color",
+      "$value": "{color.surface-raised}"
+    }
+  },
+  "color": {
+    "neutral-1": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.184, 0.004, 70]
+      }
+    },
+    "neutral-2": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.21, 0.005, 70]
+      }
+    },
+    "neutral-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.248, 0.006, 70]
+      }
+    },
+    "neutral-4": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.282, 0.007, 70]
+      }
+    },
+    "neutral-5": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.314, 0.008, 70]
+      }
+    },
+    "neutral-6": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.352, 0.009, 70]
+      }
+    },
+    "neutral-7": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.402, 0.01, 72]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(40.2% 0.010 72)"
+        }
+      }
+    },
+    "neutral-8": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.488, 0.012, 74]
+      }
+    },
+    "neutral-11": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.778, 0.012, 78]
+      }
+    },
+    "neutral-12": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.934, 0.01, 82]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(93.4% 0.010 82)"
+        }
+      }
+    },
+    "coral-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.28, 0.06, 32]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(28% 0.060 32)"
+        }
+      }
+    },
+    "coral-5": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.36, 0.09, 32]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(36% 0.090 32)"
+        }
+      }
+    },
+    "coral-9": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.665, 0.17, 33]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(66.5% 0.170 33)"
+        }
+      }
+    },
+    "coral-10": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.705, 0.16, 34]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(70.5% 0.160 34)"
+        }
+      }
+    },
+    "coral-11": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.8, 0.1, 34]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(80% 0.100 34)"
+        }
+      }
+    },
+    "error-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.3, 0.08, 12]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(30% 0.080 12)"
+        }
+      }
+    },
+    "error-9": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.58, 0.17, 15]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(58% 0.170 15)"
+        }
+      }
+    },
+    "error-11": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.86, 0.07, 12]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(86% 0.070 12)"
+        }
+      }
+    },
+    "warning-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.37, 0.074, 88.4]
+      }
+    },
+    "warning-9": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.683, 0.138, 86.8]
+      }
+    },
+    "warning-11": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.85, 0.131, 92.3]
+      }
+    },
+    "success-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.338, 0.076, 121.9]
+      }
+    },
+    "success-9": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.605, 0.132, 121.2]
+      }
+    },
+    "success-11": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.81, 0.098, 115.5]
+      }
+    },
+    "info-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.306, 0.069, 253.5]
+      }
+    },
+    "info-9": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.539, 0.121, 251.4]
+      }
+    },
+    "info-11": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.782, 0.062, 235.9]
+      }
+    },
+    "mark-1": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.17, 27.9]
+      }
+    },
+    "mark-2": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.15, 47.4]
+      }
+    },
+    "mark-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.12, 86.8]
+      }
+    },
+    "mark-4": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.135, 121.2]
+      }
+    },
+    "mark-5": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.095, 186.7]
+      }
+    },
+    "mark-6": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.145, 251.4]
+      }
+    },
+    "mark-7": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.155, 292.5]
+      }
+    },
+    "mark-8": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.7, 0.17, 349.8]
+      }
+    },
+    "account-week-toward": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [1, 0, "none"]
+      }
+    },
+    "ring-track-spent": {
+      "$type": "color",
+      "$value": "{color.neutral-8}"
+    },
+    "account-reserved": {
+      "$type": "color",
+      "$value": "{color.neutral-8}"
+    },
+    "mark-glyph": {
+      "$type": "color",
+      "$value": "{color.neutral-1}"
+    },
+    "hue-cyan-400": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.8, 0.139, 232.66]
+      }
+    },
+    "hue-cyan-500": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.78, 0.1331, 226.72]
+      }
+    },
+    "hue-amber-500": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.82, 0.1577, 79.28]
+      }
+    },
+    "hue-orange-500": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.1867, 47.6]
+      }
+    },
+    "hue-green-500": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.192, 149.58]
+      }
+    },
+    "hue-green-600": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.1699, 149.21]
+      }
+    },
+    "hue-blue-500": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.2076, 262.53]
+      }
+    },
+    "hue-blue-600": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.72, 0.2148, 265.52]
+      }
+    },
+    "tool-run": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 52]
+      }
+    },
+    "tool-mcp": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 176]
+      }
+    },
+    "tool-search": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 195]
+      }
+    },
+    "tool-ask": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 214]
+      }
+    },
+    "tool-web": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 234]
+      }
+    },
+    "tool-read": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 253]
+      }
+    },
+    "tool-agent": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 272]
+      }
+    },
+    "tool-edit": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 292]
+      }
+    },
+    "tool-write": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 311]
+      }
+    },
+    "tool-skill": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 330]
+      }
+    },
+    "tool-plan": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 350]
+      }
+    },
+    "background": {
+      "$type": "color",
+      "$value": "{color.neutral-1}"
+    },
+    "card": {
+      "$type": "color",
+      "$value": "{color.neutral-2}"
+    },
+    "accent": {
+      "$type": "color",
+      "$value": "{color.neutral-4}"
+    },
+    "surface-raised": {
+      "$type": "color",
+      "$value": "{color.neutral-3}"
+    },
+    "surface-recess": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.222, 0.006, 70]
+      }
+    },
+    "surface-band": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.214, 0.006, 70]
+      }
+    },
+    "surface-recess-deep": {
+      "$type": "color",
+      "$value": "{color.neutral-1}"
+    },
+    "surface-well": {
+      "$type": "color",
+      "$value": "{color.neutral-1}"
+    },
+    "surface-shelf": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.156, 0.004, 70]
+      }
+    },
+    "surface-lift": {
+      "$type": "color",
+      "$value": "{color.neutral-6}"
+    },
+    "surface-tile": {
+      "$type": "color",
+      "$value": "{color.neutral-5}"
+    },
+    "surface-fill": {
+      "$type": "color",
+      "$value": "{color.neutral-5}"
+    },
+    "surface-fill-strong": {
+      "$type": "color",
+      "$value": "{color.neutral-7}"
+    },
+    "surface-hover": {
+      "$type": "color",
+      "$value": "{color.neutral-4}"
+    },
+    "well-edge": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.934, 0.01, 82],
+        "alpha": 0.08
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-12} l c h / 0.08)"
+        }
+      }
+    },
+    "seam": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.665, 0.17, 33],
+        "alpha": 0.38
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.coral-9} l c h / 0.38)"
+        }
+      }
+    },
+    "code-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.156, 0.004, 70]
+      }
+    },
+    "surface-1": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.184, 0.004, 70]
+      }
+    },
+    "surface-2": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.216, 0.005, 70]
+      }
+    },
+    "surface-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.248, 0.006, 70]
+      }
+    },
+    "surface-4": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.28, 0.007, 70]
+      }
+    },
+    "surface-5": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.312, 0.008, 70]
+      }
+    },
+    "surface-6": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.344, 0.009, 72]
+      }
+    },
+    "surface-7": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.376, 0.01, 72]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(37.6% 0.010 72)"
+        }
+      }
+    },
+    "surface-8": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.408, 0.011, 74]
+      }
+    },
+    "border": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.934, 0.01, 82],
+        "alpha": 0.08
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-12} l c h / 0.08)"
+        }
+      }
+    },
+    "border-hairline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.2948, 0.002531, 0.006954]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-5} 40%, {color.neutral-4})"
+        }
+      }
+    },
+    "border-well": {
+      "$type": "color",
+      "$value": "{color.neutral-6}"
+    },
+    "border-control": {
+      "$type": "color",
+      "$value": "{color.neutral-6}"
+    },
+    "border-contrast": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.5845, 0.003527, 0.014578]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-9}, {color.neutral-11} 25%)"
+        }
+      }
+    },
+    "border-card": {
+      "$type": "color",
+      "$value": "{color.neutral-7}"
+    },
+    "border-button-outline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.5458, 0.003733, 0.015146]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-9}, {color.neutral-11} 10%)"
+        }
+      }
+    },
+    "input": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.934, 0.01, 82],
+        "alpha": 0.14
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-12} l c h / 0.14)"
+        }
+      }
+    },
+    "ink-row": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.91528, 0.001524, 0.010123]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-12} 88%, {color.neutral-11})"
+        }
+      }
+    },
+    "ink-stat": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.89032, 0.001701, 0.010417]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-12} 72%, {color.neutral-11})"
+        }
+      }
+    },
+    "ink-subtle": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.68143, 0.002766, 0.01167]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-8} 33.3%, {color.neutral-11})"
+        }
+      }
+    },
+    "brand-wash": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.665, 0.17, 33],
+        "alpha": 0.16
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.coral-9} l c h / 0.16)"
+        }
+      }
+    },
+    "brand-ink-strong": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.12, 34]
+      }
+    },
+    "action-solid": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.54, 0.165, 33]
+      }
+    },
+    "action-hover": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.495, 0.16, 34]
+      }
+    },
+    "selected-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.34, 0.075, 40]
+      }
+    },
+    "selected-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.83, 0.085, 34]
+      }
+    },
+    "selected-icon": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.13, 34]
+      }
+    },
+    "chip-chosen-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.54, 0.165, 33]
+      }
+    },
+    "focus-ring": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.12, 34]
+      }
+    },
+    "selection": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.645, 0.175, 33],
+        "alpha": 0.3
+      }
+    },
+    "status-attn-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.37, 0.07, 92]
+      }
+    },
+    "status-fail-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.3896, 0.105758, 0.02539]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.error-3} 68%, {color.error-9})"
+        }
+      }
+    },
+    "status-attn-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.9, 0.115, 95]
+      }
+    },
+    "status-live-glyph": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.12, 245]
+      }
+    },
+    "status-attn-glyph": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.87, 0.14, 92]
+      }
+    },
+    "tab-rim-attn": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.87, 0.14, 92]
+      }
+    },
+    "status-done-glyph": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.15, 135]
+      }
+    },
+    "status-fail-glyph": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.71, 0.16, 20]
+      }
+    },
+    "nest-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.445, 0.011, 73]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.neutral-7} 50%, {color.neutral-8})"
+        }
+      }
+    },
+    "meter-calm-track": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.45, 0.085, 32]
+      }
+    },
+    "meter-near": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.86, 0.14, 95]
+      }
+    },
+    "meter-near-track": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.53, 0.08, 92]
+      }
+    },
+    "meter-over": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.68, 0.16, 15]
+      }
+    },
+    "meter-over-track": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.53, 0.09, 15]
+      }
+    },
+    "meter-stale": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.64, 0.01, 265]
+      }
+    },
+    "meter-stale-track": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.45, 0.008, 265]
+      }
+    },
+    "meter-share": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.72, 0.01, 265]
+      }
+    },
+    "meter-wash-near": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.9, 0.115, 95],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.status-attn-ink} 10%, transparent)"
+        }
+      }
+    },
+    "meter-wash-over": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.87776, 0.054068, 14.390596],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
+        }
+      }
+    },
+    "count-wash-live": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.81848, 0.044977, 234.554838],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.status-live-ink} 10%, transparent)"
+        }
+      }
+    },
+    "count-wash-done": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.83976, 0.076493, 114.507742],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.status-done-ink} 10%, transparent)"
+        }
+      }
+    },
+    "count-wash-fail": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.87776, 0.054068, 14.390596],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
+        }
+      }
+    },
+    "presence-online": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.17, 149]
+      }
+    },
+    "presence-away": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.187, 47.6]
+      }
+    },
+    "identity-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.74, 0.11, 0]
+      }
+    },
+    "data-ok": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.78, 0.135, 121.2]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.success-9} 78% 0.135 h)"
+        }
+      }
+    },
+    "data-warn": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.8, 0.13, 86.8]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.warning-9} 80% 0.13 h)"
+        }
+      }
+    },
+    "data-bad": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.81, 0.13, 15]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.error-9} 81% 0.13 h)"
+        }
+      }
+    },
+    "note-new-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.86, 0.12, 149]
+      }
+    },
+    "note-new-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.31, 0.055, 149]
+      }
+    },
+    "note-improved-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.86, 0.1, 225]
+      }
+    },
+    "note-improved-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.31, 0.05, 225]
+      }
+    },
+    "note-fixed-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.87, 0.13, 79]
+      }
+    },
+    "note-fixed-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.32, 0.055, 79]
+      }
+    },
+    "chart-1": {
+      "$type": "color",
+      "$value": "{color.neutral-11}"
+    },
+    "code-keyword": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.76, 0.12, 34]
+      }
+    },
+    "code-fn": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.8, 0.07, 240]
+      }
+    },
+    "code-string": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.84, 0.1, 118]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(84% 0.10 118)"
+        }
+      }
+    },
+    "code-number": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.84, 0.1, 70]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(84% 0.10 70)"
+        }
+      }
+    },
+    "code-comment": {
+      "$type": "color",
+      "$value": "{color.ink-subtle}"
+    },
+    "image-outline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [1, 0, 0],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(1 0 0 / 0.1)"
+        }
+      }
+    },
+    "shadow-tint": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.184, 0.004, 70],
+        "alpha": 0.55
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-1} l c h / 0.55)"
+        }
+      }
+    },
+    "shadow-tint-2": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.184, 0.004, 70],
+        "alpha": 0.66
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-1} l c h / 0.66)"
+        }
+      }
+    },
+    "shadow-tint-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.184, 0.004, 70],
+        "alpha": 0.76
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-1} l c h / 0.76)"
+        }
+      }
+    },
+    "tab-shade": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.934, 0.01, 82],
+        "alpha": 0.14
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-12} l c h / 0.14)"
+        }
+      }
+    },
+    "tab-shade-chosen": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0
+      }
+    },
+    "night-ring": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.934, 0.01, 82],
+        "alpha": 0.07
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.neutral-12} l c h / 0.07)"
+        }
+      }
+    },
+    "mark-overlay": {
+      "$type": "gradient",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.184, 0.004, 70],
+            "alpha": 0.22
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.934, 0.01, 82],
+            "alpha": 0.06
+          },
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.neutral-1} l c h / 0.22), oklch(from {color.neutral-12} l c h / 0.06))"
+        }
+      }
+    },
+    "tab-recede-2": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.17, 0.001368, 0.003759]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.surface-recess-deep} 50%, {color.surface-shelf})"
+        }
+      }
+    },
+    "tab-recede-3": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.1644, 0.001368, 0.003759]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.surface-recess-deep} 30%, {color.surface-shelf})"
+        }
+      }
+    },
+    "action-surface": {
+      "$type": "gradient",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.57, 0.165, 33]
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.51, 0.165, 33]
+          },
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.action-solid} calc(l + 0.03) c h), oklch(from {color.action-solid} calc(l - 0.03) c h))"
+        }
+      }
+    },
+    "action-surface-hover": {
+      "$type": "gradient",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.525, 0.16, 34]
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.465, 0.16, 34]
+          },
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.action-hover} calc(l + 0.03) c h), oklch(from {color.action-hover} calc(l - 0.03) c h))"
+        }
+      }
+    },
+    "status-live-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.36192, -0.024156, -0.077804]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.info-3} 76%, {color.info-9})"
+        }
+      }
+    },
+    "status-done-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.40208, -0.046934, 0.076135]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.success-3} 76%, {color.success-9})"
+        }
+      }
+    },
+    "status-live-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.81848, -0.026083, -0.036642]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.info-11} 76%, {color.neutral-12})"
+        }
+      }
+    },
+    "status-done-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.83976, -0.03173, 0.069601]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.success-11} 76%, {color.neutral-12})"
+        }
+      }
+    },
+    "status-fail-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.87776, 0.052371, 0.013438]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.error-11} 76%, {color.neutral-12})"
+        }
+      }
+    },
+    "scrollbar-thumb": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.778, 0.012, 78],
+        "alpha": 0.35
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.muted-foreground} l c h / 0.35)"
+        }
+      }
+    },
+    "skeleton-sheen": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.248, 0.006, 70],
+        "alpha": 0.6
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-raised} l c h / 0.6)"
+        }
+      }
+    },
+    "prose-bullet": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.778, 0.012, 78],
+        "alpha": 0.55
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.muted-foreground} l c h / 0.55)"
+        }
+      }
+    },
+    "machine-offline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.5982, 0.002999, 0.011612]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-8} 62%, {color.neutral-11})"
+        }
+      }
+    },
+    "diff-add-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.605, 0.132, 121.2],
+        "alpha": 0.15
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.success-9} l c h / 0.15)"
+        }
+      }
+    },
+    "diff-del-bg": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.58, 0.17, 15],
+        "alpha": 0.15
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.error-9} l c h / 0.15)"
+        }
+      }
+    },
+    "diff-add-emphasis": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.605, 0.132, 121.2],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.success-9} l c h / 0.10)"
+        }
+      }
+    },
+    "diff-del-emphasis": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.58, 0.17, 15],
+        "alpha": 0.1
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.error-9} l c h / 0.10)"
+        }
+      }
+    },
+    "rail": {
+      "$type": "gradient",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.778, 0.012, 78],
+            "alpha": 0.4
+          },
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.778, 0.012, 78],
+            "alpha": 0.4
+          },
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "linear-gradient(oklch(from {color.neutral-11} l c h / 0.4), oklch(from {color.neutral-11} l c h / 0.4))"
+        }
+      }
+    },
+    "material-panel": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.248, 0.006, 70],
+        "alpha": 0.72
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-raised} l c h / 0.72)"
+        }
+      }
+    },
+    "scrim": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.184, 0.004, 70],
+        "alpha": 0.72
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.background} l c h / {effect.scrim-mix})"
+        }
+      }
+    }
+  },
+  "effect": {
+    "tab-rim-mix": {
+      "$type": "number",
+      "$value": 0.64,
+      "$extensions": {
+        "dev.cawco": {
+          "css": "64%"
+        }
+      }
+    },
+    "tab-rim-mix-chosen": {
+      "$type": "number",
+      "$value": 0.78
+    },
+    "tab-rim-mix-idle": {
+      "$type": "number",
+      "$value": 0.54
+    }
+  },
+  "motion": {
+    "account-week-mix": {
+      "$type": "number",
+      "$value": 0.63
+    }
+  },
+  "shadow": {
+    "shadow-tile": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0, 0, 0],
+            "alpha": 0.3
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 2,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.934, 0.01, 82],
+            "alpha": 0.06
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          }
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0 1px 2px light-dark(oklch(from {color.neutral-12} l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 0 0 1px light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06))"
+        }
+      }
+    },
+    "action-ring": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [1, 0, 0],
+            "alpha": 0.18
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          },
+          "inset": true
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0, 0, 0],
+            "alpha": 0.4
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 2,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4))"
+        }
+      }
+    },
+    "code-ring": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.66, 0.16, 34],
+            "alpha": 0.32
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.66, 0.16, 34],
+            "alpha": 0.1
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 6,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))"
+        }
+      }
+    }
+  }
+}

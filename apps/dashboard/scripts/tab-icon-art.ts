@@ -21,6 +21,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
+import { cssOfNode } from "../../../packages/hub/src/design-tokens";
 import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
 import { TAB_ICON } from "./tab-icon-tile";
 
@@ -42,16 +43,16 @@ interface Job {
   side: number;
 }
 
-/** A token's value, wherever its group is. */
+/** A token's CSS (its base value), wherever its group is. */
 function token(name: string): string {
   const find = (node: unknown): string | undefined => {
     if (!node || typeof node !== "object") {
       return;
     }
     const group = node as Record<string, unknown>;
-    const hit = group[name] as { $value?: string } | undefined;
-    if (hit?.$value) {
-      return hit.$value;
+    const hit = group[name] as Record<string, unknown> | undefined;
+    if (hit && "$value" in hit) {
+      return cssOfNode(String(hit.$type), hit, name);
     }
     for (const child of Object.values(group)) {
       const found = find(child);
