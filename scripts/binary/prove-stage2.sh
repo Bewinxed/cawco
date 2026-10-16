@@ -28,12 +28,18 @@ bins=${2:+$(realpath "$2")}
 here=$(dirname "$(realpath "$0")")
 self=$(realpath "$0")
 [[ "$out" != *" "* ]] || { echo "output path may not contain spaces" >&2; exit 2; }
-# podman's exec with a terminal (every installer that answers prompts) makes its console socket in TMPDIR,
-# $out/tmp/conmon-term.XXXXXX, and a unix socket's path holds 107 bytes: past that the exec fails with
-# "crun: error opening …/conmon-term.XXXXXX: No such file or directory" (run-2, a 109-byte path).
-TERM_SOCKET=/tmp/conmon-term.XXXXXX
-(( ${#out} + ${#TERM_SOCKET} <= 107 )) || { echo "the output path is ${#out} characters; podman's console socket under it, $out$TERM_SOCKET, must fit 107, so it may be at most $(( 107 - ${#TERM_SOCKET} ))" >&2; exit 2; }
-export TMPDIR="$out/tmp"
+# podman's exec with a terminal (every installer that answers prompts) makes its console socket in TMPDIR and binds
+# it by that path as given (conmon src/conn_sock.c `setup_console_socket`: `g_build_filename(g_get_tmp_dir(),
+# "conmon-term.XXXXXX", NULL)`, copied into `sun_path`), and a unix socket's path holds 107 bytes: past that the exec
+# fails with "crun: error opening …/conmon-term.XXXXXX: No such file or directory" (run-2, a 109-byte path). So
+# TMPDIR is a short link in the user's runtime dir to $out/tmp: the files stay on disk under the output, and the
+# socket's path is short whatever the output's is (a host check's 90-character output was refused, 549538c11). Its
+# name comes from the output, so the orchestrator and each rig it starts (this script again) name the same link; the
+# orchestrator removes it as it ends (orchestrator_done), and so does an image-only run.
+mkdir -p "$out/tmp"
+TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-tmp-$(printf %s "$out" | sha256sum | cut -c1-12)"
+ln -sfn "$out/tmp" "$TMPDIR"
+export TMPDIR
 
 # The builds (scripts/binary/build-stage2.ts): build 1 from before keepers ran side by side, and two of this tree.
 export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 LEGACY=0.0.1-test.1
@@ -203,7 +209,7 @@ orchestrate() {
     local pids
     pids=$(jobs -rp)
     [[ -z $pids ]] || { kill $pids 2> /dev/null; wait 2> /dev/null; }
-    rm -f "$bins/keys/test-release-private.pem"
+    rm -f "$bins/keys/test-release-private.pem" "$TMPDIR"
   }
   trap orchestrator_done EXIT
   trap 'trap "" INT TERM; exit 130' INT
@@ -470,7 +476,7 @@ EOF
 if [[ -n $IMAGE_ONLY ]]; then
   # The images alone, as the orchestrator's setup builds them: the tags on stdout, the build's output on stderr.
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
-  mkdir -p "$out/tmp"
+  trap 'rm -f "$TMPDIR"' EXIT
   write_images || exit 1
   proof_images "$out/images" host machine || { echo "the images failed to build" >&2; exit 1; }
   exit 0
