@@ -3,7 +3,11 @@
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
  *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]
- *   bun scripts/probe-kit/run.ts <spec>
+ *   bun scripts/probe-kit/run.ts <spec> [--approve[ <spec>:<entry>,…]] [--<flag>=<value>…]
+ *
+ * A spec reads its own `--<flag>=<value>` arguments off `process.argv`
+ * (`style-snapshot --surfaces=session,home`); a spec of its own takes
+ * `--approve` alone as approving itself.
  *
  * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
  * web specs: a feature's probe (`artifacts`), on the same kit. A name found
@@ -65,7 +69,16 @@ if (kind !== "web" && !(own && existsSync(own))) {
   process.exit(2);
 }
 const approveAt = rest.indexOf("--approve");
-const approveArg = approveAt === -1 ? null : (rest[approveAt + 1] ?? null);
+/** `--approve`'s own value: the word after it, unless that is another flag. */
+const approveNamed = (): string | null => {
+  const next = approveAt === -1 ? undefined : rest[approveAt + 1];
+  return next && !next.startsWith("--") ? next : null;
+};
+// A spec of its own takes `--approve` alone as its own (`run.ts
+// style-snapshot --approve`); a flag of the form `--name=value`
+// (`--surfaces=a,b`) is the spec's own, read off `process.argv`.
+const approveArg =
+  approveAt === -1 ? null : (approveNamed() ?? (kind === "web" ? null : kind));
 // `<spec>` approves every baseline it writes; `<spec>:<entry>,…` those named.
 const colon = approveArg?.indexOf(":") ?? -1;
 const approve =
@@ -95,9 +108,10 @@ const named =
     ? rest.filter(
         (one, i) =>
           one !== "--approve" &&
-          (approveAt === -1 || i !== approveAt + 1) &&
+          (approveNamed() === null || i !== approveAt + 1) &&
           one !== "--review" &&
-          (reviewAt === -1 || i !== reviewAt + 1)
+          (reviewAt === -1 || i !== reviewAt + 1) &&
+          !(one.startsWith("--") && one.includes("="))
       )
     : [kind];
 const dir =

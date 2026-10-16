@@ -1,0 +1,383 @@
+/**
+ * The surfaces the style snapshot and the surfaces pixel spec read, named as
+ * the Tailwind cutover's lanes name them (one lane's `--surfaces=`), each a
+ * route and the states it opens.
+ *
+ * Every root and every action finds its element by what a restyle keeps:
+ * a tag, a role, an accessible name, a `data-*` attribute, a kit recipe
+ * class (`.kit-pop`, `.kit-hang`, which stay classes). Never by a
+ * component's own class: the lanes delete those.
+ *
+ * A route opens on the built dashboard against the hub tape ("built"), or,
+ * for a `/motion/` bench (a built dashboard 404s them), on the dev server
+ * against the same tape ("dev").
+ */
+import type { Page } from "playwright-core";
+import { COMPOSER_FIELD } from "../kit";
+import type { Scene } from "./scene";
+
+export type Width = "desk" | "tablet" | "phone";
+
+export interface State {
+  /** What opens it, on the page as the route (and the states before it) left it. */
+  act?: (page: Page) => Promise<unknown>;
+  name: string;
+  /**
+   * What is read: a selector, the largest visible match when several match
+   * (the open layer over its own trigger). `body` reads the whole page.
+   */
+  root: string;
+  /** A route of its own, opened fresh for this state (the scene's ids filled in). */
+  route?: (scene: Scene) => string;
+  /** The widths it exists at; every width when left out. */
+  widths?: Width[];
+}
+
+export interface Surface {
+  name: string;
+  /** The surface's own route; each state that names none runs on it, in order. */
+  route: (scene: Scene) => string;
+  serve: "built" | "dev";
+  /** Read first: the route as it opens. */
+  states: State[];
+}
+
+/** An open layer: a dialog, sheet, drawer, menu or popover standing open. */
+export const LAYER =
+  "[role=dialog][data-state=open], [role=menu][data-state=open], [data-slot$='-content'][data-state=open], .kit-pop[data-state=open], .kit-hang[data-state=open]";
+
+/** Presses the first visible button named `name`. */
+const press = (name: string | RegExp) => (page: Page) =>
+  page.getByRole("button", { name }).filter({ visible: true }).first().click();
+
+/** The phone and tablet's rail: the sheet the navigation button opens. */
+const openRail = async (page: Page) => {
+  const burger = page.getByRole("button", { name: "Open navigation" });
+  if (await burger.isVisible()) {
+    await burger.click();
+  }
+};
+
+const MAIN = "main";
+/** The scene's finished session's row in the rail. */
+const IDLE_ROW = /Idle: Fix tray chip overflow/;
+/** The chips session's tool rows, in the transcript's order: one of each tool's card. */
+const TOOL_ROWS = [
+  /Todo write/,
+  /List the repository/,
+  /Read README/,
+  /Wrote chip\.css/,
+  /Searched/,
+];
+/** The rail's sort menu. */
+const SORT = /Sort sessions/;
+/** The phone rail's way into Jump. */
+const JUMP_BUTTON = /Jump|Search/;
+const BENCHES: [string, string][] = [
+  ["caw", "/motion/caw"],
+  ["caw-notices", "/motion/caw-notices?fixture=full"],
+  ["delegate-tray", "/motion/delegate-tray"],
+  ["echo", "/motion/echo"],
+  ["folder-proof", "/motion/folder-proof?at=1&work=working"],
+  ["head-tint", "/motion/head-tint"],
+  ["lift", "/motion/lift"],
+  ["mac-readiness", "/motion/mac-readiness"],
+  ["new-session", "/motion/new-session"],
+  ["oui-mockup", "/motion/oui-mockup"],
+  ["overlays", "/motion/overlays"],
+  ["recall", "/motion/recall"],
+  ["seed-tabs", "/motion/seed-tabs"],
+  ["session-limit", "/motion/session-limit"],
+  ["traffic", "/motion/traffic"],
+  ["updates", "/motion/updates"],
+  ["usage-limits", "/motion/usage-limits"],
+  ["usage-relay", "/motion/usage-relay"],
+  ["finder", "/dev/finder"],
+];
+const CONFIG = [
+  "accounts",
+  "cli-tools",
+  "connections",
+  "delegate-types",
+  "devices",
+  "hooks",
+  "mcp",
+  "memory",
+  "models",
+  "phone",
+  "previews",
+  "rules",
+  "skills",
+  "spend",
+  "subagents",
+  "updates",
+];
+
+export const SURFACES: Surface[] = [
+  {
+    name: "home",
+    serve: "built",
+    route: () => "/",
+    states: [
+      { name: "rest", root: "body" },
+      {
+        name: "machines",
+        widths: ["desk"],
+        act: press(/machine/),
+        root: LAYER,
+      },
+    ],
+  },
+  {
+    name: "rail",
+    serve: "built",
+    route: () => "/",
+    states: [
+      {
+        name: "rest",
+        act: openRail,
+        root: "aside:has([data-slot=sidebar-content]), [data-slot=sheet-content][data-state=open]",
+      },
+      {
+        name: "sort",
+        act: async (page) => {
+          await openRail(page);
+          await press(SORT)(page);
+        },
+        root: LAYER,
+      },
+      {
+        name: "row-menu",
+        act: async (page) => {
+          await page.keyboard.press("Escape");
+          await page
+            .getByRole("link", { name: IDLE_ROW })
+            .first()
+            .click({ button: "right" });
+        },
+        root: LAYER,
+        widths: ["desk"],
+      },
+    ],
+  },
+  {
+    name: "usage-popover",
+    serve: "built",
+    route: () => "/",
+    states: [{ name: "open", act: press(/Show every limit/), root: LAYER }],
+  },
+  {
+    name: "session",
+    serve: "built",
+    route: (s) => `/session/${s.chips}`,
+    states: [
+      { name: "rest", root: "body" },
+      {
+        name: "tools-open",
+        act: async (page) => {
+          for (const name of TOOL_ROWS) {
+            // biome-ignore lint/performance/noAwaitInLoops: one tool row at a time, in the transcript's order
+            await press(name)(page);
+          }
+        },
+        root: MAIN,
+      },
+      {
+        name: "composer-grown",
+        act: async (page) => {
+          await page.locator(COMPOSER_FIELD).first().click();
+          await page.keyboard.type("Wrap the chip's label at the badge.");
+          await page.keyboard.press("Shift+Enter");
+          await page.keyboard.type("Keep the count whole.");
+          await page.keyboard.press("Shift+Enter");
+          await page.keyboard.type("Then measure it on a phone.");
+        },
+        root: MAIN,
+      },
+      {
+        name: "attach-menu",
+        act: press("Attach or draw"),
+        root: LAYER,
+      },
+      {
+        name: "session-card",
+        act: async (page) => {
+          await page.keyboard.press("Escape");
+          await page.focus("[data-chosen] [data-session-tab]");
+          await page.keyboard.press("ArrowDown");
+        },
+        root: ".kit-hang[data-state=open]",
+      },
+      {
+        name: "tab-menu",
+        act: async (page) => {
+          await page.keyboard.press("Escape");
+          await page.evaluate(() =>
+            document.querySelector("[data-chosen] [role='tab']")?.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "F10",
+                shiftKey: true,
+                bubbles: true,
+              })
+            )
+          );
+        },
+        root: LAYER,
+      },
+      { name: "question", route: (s) => `/session/${s.ask}`, root: MAIN },
+      {
+        name: "permission",
+        route: (s) => `/session/${s.permission}`,
+        root: MAIN,
+      },
+    ],
+  },
+  {
+    name: "project",
+    serve: "built",
+    route: (s) => `/project/${s.project}`,
+    states: [
+      { name: "rest", root: "body" },
+      { name: "more-menu", act: press(/More for cawco/), root: LAYER },
+      {
+        name: "new",
+        route: () => "/project/new",
+        root: MAIN,
+      },
+    ],
+  },
+  {
+    name: "board",
+    serve: "built",
+    route: (s) => `/project/${s.project}`,
+    states: [
+      { name: "rest", root: MAIN },
+      {
+        name: "filter",
+        act: press("Filter"),
+        root: LAYER,
+        widths: ["desk"],
+      },
+    ],
+  },
+  {
+    name: "task",
+    serve: "built",
+    route: (s) => `/project/${s.project}?task=${s.task}`,
+    states: [{ name: "open", root: "body" }],
+  },
+  {
+    name: "views",
+    serve: "built",
+    route: (s) => `/project/${s.project}`,
+    // Each view is the project's route with its `view` (the view tabs' own hrefs).
+    states: ["table", "pipeline", "routines", "decisions"].map(
+      (view): State => ({
+        name: view,
+        route: (s) => `/project/${s.project}?view=${view}`,
+        root: MAIN,
+      })
+    ),
+  },
+  ...CONFIG.map((section): Surface => ({
+    name: `config-${section}`,
+    serve: "built",
+    route: () => `/config/${section}`,
+    states: [{ name: "rest", root: "body" }],
+  })),
+  {
+    name: "usage",
+    serve: "built",
+    route: () => "/usage",
+    states: [{ name: "rest", root: "body" }],
+  },
+  {
+    name: "new-session",
+    serve: "built",
+    route: () => "/",
+    states: [
+      {
+        name: "open",
+        act: press("Start session"),
+        root: "[role=dialog][data-state=open]",
+      },
+    ],
+  },
+  {
+    name: "jump",
+    serve: "built",
+    route: () => "/",
+    states: [
+      {
+        name: "open",
+        act: async (page) => {
+          if (
+            await page
+              .getByRole("button", { name: "Open navigation" })
+              .isVisible()
+          ) {
+            await openRail(page);
+            await press(JUMP_BUTTON)(page);
+            return;
+          }
+          await page.keyboard.press("Control+k");
+        },
+        root: LAYER,
+      },
+    ],
+  },
+  {
+    name: "caw-panel",
+    serve: "built",
+    route: () => "/",
+    states: [
+      {
+        name: "open",
+        act: (page) => page.click("[data-needs-caw]"),
+        root: LAYER,
+      },
+    ],
+  },
+  {
+    name: "workflows",
+    serve: "built",
+    route: () => "/workflows",
+    states: [{ name: "rest", root: "body" }],
+  },
+  {
+    name: "artifact",
+    serve: "built",
+    route: (s) => `/artifact/${s.artifact}`,
+    states: [
+      { name: "rest", root: "body" },
+      { name: "in-session", route: (s) => `/session/${s.art}`, root: "body" },
+    ],
+  },
+  {
+    name: "not-found",
+    serve: "built",
+    route: () => "/no-such-page",
+    states: [{ name: "rest", root: "body" }],
+  },
+  ...BENCHES.map(([name, path]): Surface => ({
+    name: `bench-${name}`,
+    serve: "dev",
+    route: () => path,
+    states: [{ name: "rest", root: "body" }],
+  })),
+];
+
+/** The surfaces `--surfaces=a,b` names (every one when none is named); an unknown name throws. */
+export function chosen(arg: string | undefined): Surface[] {
+  if (!arg) {
+    return SURFACES;
+  }
+  const names = arg.split(",").filter(Boolean);
+  const unknown = names.filter((n) => !SURFACES.some((s) => s.name === n));
+  if (unknown.length > 0) {
+    throw new Error(
+      `no such surface: ${unknown.join(", ")} (have ${SURFACES.map((s) => s.name).join(", ")})`
+    );
+  }
+  return SURFACES.filter((s) => names.includes(s.name));
+}
