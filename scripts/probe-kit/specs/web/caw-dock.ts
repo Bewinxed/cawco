@@ -450,7 +450,8 @@ const pageColumn = (page: Page) =>
     };
     return {
       page: read(".project-page"),
-      pane: read(".project-page > .pane"),
+      // The view's pane, under the page or in the task split's main side.
+      pane: read(".project-page .pane[data-view]"),
     };
   });
 
@@ -466,7 +467,7 @@ async function checkPageStays(
   seat: string
 ) {
   await page.evaluate(() => {
-    for (const sel of [".project-page", ".project-page > .pane"]) {
+    for (const sel of [".project-page", ".project-page .pane[data-view]"]) {
       const el = document.querySelector<HTMLElement>(sel);
       if (el) {
         el.scrollTop = 40;

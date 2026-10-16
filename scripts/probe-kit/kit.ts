@@ -346,6 +346,8 @@ const NO_HUB = "http://127.0.0.1:9";
 /** What one run holds across its specs: the browsers, the build and its servers. */
 export class Run {
   failures = 0;
+  /** Each failed assertion's line, said again over the run's last line (a host check reports its tail). */
+  readonly failed: string[] = [];
   notes = 0;
   /** Every capture this run that differs from its baseline, in run order. */
   readonly changed: Changed[] = [];
@@ -434,11 +436,11 @@ export class Run {
         this.changed.push({ ...change, spec: spec.name });
       },
       check: (assertion, ok, detail) => {
-        console.log(
-          `${ok ? "PASS" : "FAIL"} ${spec.name}: ${assertion}${detail ? ` (${detail})` : ""}`
-        );
+        const line = `${ok ? "PASS" : "FAIL"} ${spec.name}: ${assertion}${detail ? ` (${detail})` : ""}`;
+        console.log(line);
         if (!ok) {
           this.failures += 1;
+          this.failed.push(line.slice(0, 600));
         }
         return ok;
       },

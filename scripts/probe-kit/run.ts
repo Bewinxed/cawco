@@ -146,6 +146,9 @@ if (review !== null) {
 }
 const seconds = ((performance.now() - started) / 1000).toFixed(0);
 const notes = run.notes > 0 ? `, ${run.notes} note(s)` : "";
+if (run.failed.length > 0) {
+  console.log(`FAILED ASSERTIONS:\n${run.failed.join("\n")}`);
+}
 console.log(
   run.failures === 0
     ? `ALL PASS (${chosen.length} specs, ${seconds}s${notes})`
