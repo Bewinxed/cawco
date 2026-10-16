@@ -30,8 +30,8 @@
   } = $props();
 </script>
 
-<div class="field">
-  <label class="label" for={id}>{label}</label>
+<div data-slot="field-field" class="field">
+  <label data-field-label class="label" for={id}>{label}</label>
   {@render children()}
   {#if problem || warn || hint}
     <div class="line" in:unfold out:unfold {@attach morph()}>

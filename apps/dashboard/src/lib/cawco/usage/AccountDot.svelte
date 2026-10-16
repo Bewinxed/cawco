@@ -38,6 +38,7 @@
   <Tip label={name}>
     {#snippet children(tip)}
       <span
+        data-account-dot-dot
         {...tip}
         aria-label="On {name}"
         class={["dot", inline && "inline"]}

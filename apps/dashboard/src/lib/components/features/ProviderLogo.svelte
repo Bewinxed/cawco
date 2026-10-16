@@ -105,6 +105,7 @@
     instead. The attributes stay for the intrinsic size before CSS applies.
   -->
   <Logo
+    data-provider-logo-class={className}
     aria-hidden="true"
     class={INK.has(key) ? `${className} provider-ink` : className}
     style={`${box}${style}`}

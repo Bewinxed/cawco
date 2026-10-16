@@ -56,29 +56,31 @@
 </script>
 
 <nav
+  data-slot="rail"
   aria-label={words.title}
   class="rail"
   data-variant={variant}
   {@attach highlight({ rows: ".row", selected: '[aria-current="page"]' })}
 >
   {#each GROUPS as { group, sections } (group)}
-    <div class="group">
-      <h2 class="label">{group}</h2>
-      <ul class="list">
+    <div data-slot="group" class="group">
+      <h2 data-slot="config-rail-label" class="label">{group}</h2>
+      <ul data-slot="list" class="list">
         {#each sections as section (section.slug)}
           {@const count = countOf(store, section.slug)}
           {@const waiting = section.badge === "updates-waiting"}
           {@const faults = badgeOf(store, section)}
           <li>
             <a
+              data-slot="row"
               aria-current={current === section.slug ? "page" : undefined}
               class="row focus-inset press-tint"
               href="/config/{section.slug}"
             >
-              <span class="tile" style="color:{section.hue}"
+              <span data-slot="tile" class="tile" style="color:{section.hue}"
                 ><section.icon /></span
               >
-              <span class="name">{section.label}</span>
+              <span data-slot="name" class="name">{section.label}</span>
               {#if unsavedIn(store, section.slug)}
                 <span class="unsaved" title={words.unsaved}
                   ><span class="sr-only">{words.unsaved}</span></span
@@ -86,6 +88,7 @@
               {/if}
               {#if faults > 0}
                 <span
+                  data-slot="num"
                   class="fault num"
                   title={waiting
                     ? words.badgeWaiting(faults)
@@ -103,9 +106,9 @@
                 <!-- The figure is its own element, not the dash's text
                      rewritten: it arrives in place rather than moving in. -->
                 {#if count === null}
-                  <span class="count">—</span>
+                  <span data-slot="count" class="count">—</span>
                 {:else}
-                  <span class="count">{count}</span>
+                  <span data-slot="count" class="count">{count}</span>
                 {/if}
               {/if}
             </a>

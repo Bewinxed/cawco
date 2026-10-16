@@ -120,13 +120,21 @@
     class="rollout-chip mark-line"
     data-fail={failed > 0 ? "" : undefined}
   >
-    <span aria-hidden="true" class="glyph" data-box data-glyph={glyph}>
+    <span
+      data-slot="glyph"
+      aria-hidden="true"
+      class="glyph"
+      data-box
+      data-glyph={glyph}
+    >
       <IconWarningTriangle data-for="fail" />
       <IconCheck data-for="done" />
       <Spinner aria-hidden="true" data-for="busy" role="presentation" />
     </span>
     <!-- A machine catching up ticks the count over rather than swapping it. -->
-    <span class="count"><MorphText text="{applied}/{machines.length}" /></span>
+    <span data-slot="count" class="count"
+      ><MorphText text="{applied}/{machines.length}" /></span
+    >
     <span class="unit">machines</span>
   </Popover.Trigger>
   <Popover.Content align="end" class="w-[360px] max-w-[calc(100vw-2rem)] gap-1">
@@ -139,7 +147,7 @@
     {#each machines as machine, index (machine.machineId)}
       {@const item = stateOf(machine)}
       {@const online = machine.status === "online"}
-      <div class="machine">
+      <div data-slot="machine" class="machine">
         <div class="line">
           <MachineRow
             hue={machineHue(index, online)}
@@ -152,9 +160,11 @@
           >
             {#snippet trailing()}
               {#if item?.state === "failed"}
-                <span class="mark fail"><IconWarningTriangle /></span>
+                <span data-slot="mark" class="mark fail"
+                  ><IconWarningTriangle /></span
+                >
               {:else if item?.state === "applied"}
-                <span class="mark"><IconCheck /></span>
+                <span data-slot="mark" class="mark"><IconCheck /></span>
               {:else}
                 {@const syncing = asked[machine.machineId] === true}
                 <button
@@ -185,7 +195,7 @@
           {#each Object.entries(machine.fleet?.mcpByHarness ?? {}) as [harness, rows] (harness)}
             {@const runtime = rows?.[name]}
             {#if runtime}
-              <p class="note">
+              <p data-slot="note" class="note">
                 <span
                   >{harness}: {SAID[runtime.state]}
                   {runtime.detail ? ` · ${runtime.detail}` : ""}</span
@@ -195,7 +205,13 @@
           {/each}
         {/if}
         {#if refused[machine.machineId]}
-          <p class="note refused mark-line" role="alert" in:appear>
+          <p
+            data-rollout-chip-refused
+            data-slot="note"
+            class="note refused mark-line"
+            role="alert"
+            in:appear
+          >
             <span class="mark-cell"><IconWarningTriangle /></span>
             <span>{refused[machine.machineId]}</span>
           </p>
@@ -222,7 +238,7 @@
           />
         {:else if item?.detail}
           <!-- A detail on a row that did not fail is a note, not an error. -->
-          <p class="note mark-line">
+          <p data-slot="note" class="note mark-line">
             <span class="mark-cell"><IconInfo /></span>
             <span>{item.detail}</span>
           </p>

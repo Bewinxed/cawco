@@ -91,12 +91,12 @@
     <div aria-hidden="true" class="icon-column">
       <span class="icon"
         >{#key glyph}
-          <span class="glyph" in:glyphFade out:glyphFade
+          <span data-slot="glyph" class="glyph" in:glyphFade out:glyphFade
             >{#if glyph}
               {@const Glyph = glyph}
               <Glyph />
             {:else}
-              <span class="dot"></span>
+              <span data-slot="dot" class="dot"></span>
             {/if}</span
           >
         {/key}</span
@@ -107,10 +107,14 @@
     </div>
     <div class="copy" class:enters={entering}>
       {#if label}
-        <span class="label" class:shimmer={status === "active"}>{label}</span>
+        <span
+          data-slot="thinking-step-label"
+          class="label"
+          class:shimmer={status === "active"}>{label}</span
+        >
       {/if}
       {#if description && markdown}
-        <div class="description md">
+        <div data-slot="md" class="description md">
           <Markdown
             {fades}
             source={description}

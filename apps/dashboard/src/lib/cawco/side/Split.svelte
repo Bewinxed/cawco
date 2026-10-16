@@ -328,6 +328,8 @@
 <svelte:window onkeydown={escapeExpanded} />
 
 <div
+  data-slot="side-split"
+  data-split-expanded={expanded || undefined}
   class={["side-split", { expanded, open, resizing, sliding }]}
   bind:this={root}
   bind:clientWidth={width}
@@ -339,6 +341,7 @@
          nothing in it takes a press or the keyboard. -->
     <Resizable.Pane
       class="main-pane {mainClass}"
+      data-split-main-class={mainClass}
       collapsedSize={0}
       collapsible
       defaultSize={100 - sideSize}
@@ -350,6 +353,7 @@
     <!-- Expanded, the handle stays on the far edge: it is how the page is
          dragged back out. -->
     <Resizable.Handle
+      data-side-divider={open || !open || undefined}
       class={open ? "side-divider" : "side-divider hidden"}
       onDraggingChange={(dragging) => {
         resizing = dragging;
@@ -363,6 +367,7 @@
       }}
     />
     <Resizable.Pane
+      data-side-pane
       class="side-pane"
       collapsedSize={0}
       collapsible
@@ -395,6 +400,7 @@
     >
       {#if mounted}
         <div
+          data-split-shown={open || undefined}
           class="side-surface"
           class:shown={open}
           in:surfaceIn

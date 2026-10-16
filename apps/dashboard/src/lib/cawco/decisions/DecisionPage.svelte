@@ -211,14 +211,15 @@
     style:--dock-room="{dockRoom}px"
     bind:this={scroller}
   >
-    <div class="page-head">
+    <div data-slot="page-head" class="page-head">
       <div class="head-row">
         <Button class="back" onclick={onback} size="sm" variant="ghost">
           <IconChevronLeft />
           <span>Decisions</span>
         </Button>
-        <div class="what">
+        <div data-slot="what" class="what">
           <span
+            data-slot="title"
             class="title"
             data-share="dpage:{name}:title"
             {@attach land(() => `dpage:${name}:title`)}
@@ -234,7 +235,7 @@
                 done={isDecided(shown) ? 1 : shown.picked}
                 total={isDecided(shown) ? 1 : shown.cards}
               />
-              <span class="num">{figure}</span>
+              <span data-slot="num" class="num">{figure}</span>
             </span>
           {/if}
           {#if pill}
@@ -276,6 +277,7 @@
     {:else}
       <div aria-hidden="true" class="opening">
         <span
+          data-slot="block"
           class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
         ></span>
       </div>
@@ -284,6 +286,7 @@
 
   <FootFade solid="calc({dockRoom}px)" />
   <form
+    data-slot="dock"
     class="dock"
     onsubmit={(event) => {
       event.preventDefault();
@@ -292,10 +295,13 @@
     bind:this={dock}
   >
     {#if refusal}
-      <p class="feedback" role="alert" in:appear>{refusal}</p>
+      <p data-slot="feedback" class="feedback" role="alert" in:appear>
+        {refusal}
+      </p>
     {/if}
-    <div class="cin kit-dock-shell">
+    <div data-slot="cin" class="cin kit-dock-shell">
       <Textarea
+        data-note
         aria-label="Add a note for the session"
         class="note"
         oninput={() => {
@@ -324,6 +330,7 @@
       {#if primary}
         <span class="primary-slot">
           <Button
+            data-primary
             class="primary"
             {failed}
             label={primary.label}

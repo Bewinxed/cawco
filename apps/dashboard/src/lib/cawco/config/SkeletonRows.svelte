@@ -9,7 +9,13 @@
   const rows = $derived(Array.from({ length: fill ? 40 : 3 }, (_, i) => i));
 </script>
 
-<div aria-label="Loading" class="rows" role="status" class:fill>
+<div
+  data-fill={fill || undefined}
+  aria-label="Loading"
+  class="rows"
+  role="status"
+  class:fill
+>
   {#each rows as row (row)}
     <Skeleton class="h-14 w-full" />
   {/each}

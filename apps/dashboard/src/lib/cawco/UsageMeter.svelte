@@ -476,7 +476,9 @@
       {#if claude}
         <span class="cell" data-cell="claude">
           <span class="l1">
-            <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
+            <span data-slot="mark" aria-hidden="true" class="mark"
+              ><ClaudeIcon /></span
+            >
             <span
               class="marks"
               data-strip-marks
@@ -485,6 +487,7 @@
             >
               {#each stripMarks as ring, i (ring.id)}
                 <span
+                  data-slot="slot"
                   class="slot"
                   style:inset-inline-start={slotAt(
                     i,
@@ -498,6 +501,8 @@
               {#if stripMore > 0}
                 <!-- The rest, counted: the popover shows every one. -->
                 <span
+                  data-slot="slot"
+                  data-more
                   class="slot more"
                   data-strip-more
                   style:inset-inline-start={slotAt(
@@ -531,7 +536,9 @@
       {#if openCode}
         <span class="cell oc" data-cell="opencode">
           <span class="l1">
-            <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
+            <span data-slot="mark" aria-hidden="true" class="mark"
+              ><OpenCodeLogo /></span
+            >
             <Rings reveal ring={openCode} size={16} />
             <!-- As its popover cell says it: how long it lasts, or at its
                  limit the refresh mark and when it's back. -->
@@ -599,6 +606,7 @@
     <Tip anchor={rowOf(ring.id)} label={tip} {side} tap>
       {#snippet children(props)}
         <span
+          data-usage-meter-glyph
           {...props}
           aria-label={tip}
           class="status glyph"
@@ -611,6 +619,7 @@
     <span class="status tilde mono-figure" data-status-slot>~</span>
   {/if}
   <span
+    data-slot="time"
     class="line time"
     data-time
     class:guess={time.kind === "stop" && time.guess}
@@ -690,7 +699,9 @@
     {@render dial(ring, c, shown, side)}
     <span class="l1">
       {#if go}
-        <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
+        <span data-slot="mark" aria-hidden="true" class="mark"
+          ><OpenCodeLogo /></span
+        >
       {/if}
       <span class="nm" data-name>
         <span class="nm-local">{name.local}</span>
@@ -732,7 +743,9 @@
       <header class="pop-head" data-pop-head>
         <div class="head-line">
           <h3 class="provider mark-line">
-            <span aria-hidden="true" class="mark" data-box><ClaudeIcon /></span>
+            <span data-slot="mark" aria-hidden="true" class="mark" data-box
+              ><ClaudeIcon /></span
+            >
             <span>Claude</span>
           </h3>
           <!-- The answer first: how long until nothing can carry you, or,
@@ -741,6 +754,7 @@
           <Tip label={stop?.tip ?? ""} side="bottom" tap>
             {#snippet children(props)}
               <span
+                data-num
                 {...props}
                 aria-label={stop?.said}
                 class="kpi num"
@@ -781,6 +795,7 @@
     >
       {#if claude}
         <div
+          data-slot="group"
           class="group orgs"
           data-burn={claude.burn}
           data-burn-week={claude.burnWeek}
@@ -792,7 +807,11 @@
                wall, so the next block starts a row. -->
           <div class="wall" data-flyover-span>
             {#each wall as block (block.org ?? "")}
-              <div class="block" data-org-group={block.org ?? ""}>
+              <div
+                data-slot="block"
+                class="block"
+                data-org-group={block.org ?? ""}
+              >
                 {#if block.head}
                   <h4 class="org" data-flyover-edge data-org-head>
                     {block.head}
@@ -808,7 +827,7 @@
                    Claude's x's: a cell of the same recipe on the first
                    column, named by its provider, after the hairline that
                    parts the providers, drawn edge to edge. -->
-              <div class="block" data-org-group="opencode">
+              <div data-slot="block" class="block" data-org-group="opencode">
                 <hr class="seam" />
                 {@render cell(openCode, null, sideFor())}
               </div>
@@ -820,7 +839,7 @@
         <!-- The Go plan: a cell of the same recipe on the wall's first
              column, named by its provider; the hairline before it parts it
              from Claude's. -->
-        <section class="group go">
+        <section data-slot="group" class="group go">
           <div class="wall" data-flyover-span>
             {@render cell(openCode, null, sideFor())}
           </div>
@@ -831,7 +850,9 @@
              the sign-in that fixes it when one does. -->
         <div class="pop-empty pop-gap">
           <p class="pop-note mark-line">
-            <span aria-hidden="true" class="mark" data-box><ClaudeIcon /></span>
+            <span data-slot="mark" aria-hidden="true" class="mark" data-box
+              ><ClaudeIcon /></span
+            >
             <span>{gap.reason}</span>
           </p>
           {#if gap.signIn}
@@ -849,18 +870,20 @@
         {@const Mark = note.mark}
         <!-- A provider with nothing to draw: why, and what to do about it. -->
         <p class="pop-empty pop-note mark-line">
-          <span aria-hidden="true" class="mark" data-box><Mark /></span>
+          <span data-slot="mark" aria-hidden="true" class="mark" data-box
+            ><Mark /></span
+          >
           <span>{note.text}</span>
         </p>
       {/each}
     </div>
-    <div class="foot" data-pop-foot>
+    <div data-slot="foot" class="foot" data-pop-foot>
       <Button href="/usage" label="Open usage" size="sm" variant="outline" />
     </div>
   </div>
 {/snippet}
 
-<div class="strip" data-variant={variant}>
+<div data-slot="strip" class="strip" data-variant={variant}>
   {#if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->

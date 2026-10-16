@@ -341,8 +341,9 @@
       {@const runId = runIdOf(id)}
       {@const thread = cawco.threadOf(id)}
       <div data-nest-host>
-        <div class="head mark-line">
+        <div data-slot="head" class="head mark-line">
           <span
+            data-slot="mark"
             aria-hidden="true"
             class="mark m{markHue(row?.cwd || id)}"
             data-box
@@ -353,15 +354,18 @@
               <Sprite />
             {/if}
           </span>
-          <span class="title">{row ? instanceTitle(row) : "Session"}</span>
+          <span data-slot="title" class="title"
+            >{row ? instanceTitle(row) : "Session"}</span
+          >
           <span
             aria-label={WORD[tone]}
             class="state {tone}"
+            data-session-hover-tone={tone}
             data-box
             role="img"
           >
             {#if tone === "live"}
-              <span class="dot"></span>
+              <span data-slot="dot" class="dot"></span>
             {:else if tone === "needs"}
               <IconAsk />
             {:else if tone === "stopping"}
@@ -379,7 +383,7 @@
           {@const line = newestLine(newest)}
           {#if newest && line}
             <p class="newest">
-              <span class="who">{SPEAKER[newest.author]}</span>
+              <span data-slot="who" class="who">{SPEAKER[newest.author]}</span>
               <span class="said">{line}</span>
             </p>
           {/if}

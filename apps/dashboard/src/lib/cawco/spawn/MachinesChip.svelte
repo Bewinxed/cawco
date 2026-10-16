@@ -80,7 +80,7 @@
 >
   {#snippet trigger()}
     <Server style="color:var(--hue-cyan-500)" />
-    <span class="chip-label">{label}</span>
+    <span data-slot="chip-label" class="chip-label">{label}</span>
     <Down class="chevron" />
   {/snippet}
   {#if pairing}
@@ -113,6 +113,7 @@
     {#each machines as row, index (row.id)}
       {@const on = selected.includes(row.id)}
       <button
+        data-slot="row"
         aria-pressed={on}
         class="row ns-in press-tint"
         data-fh="1"
@@ -139,15 +140,17 @@
     {#if machines.length === 0}
       <div class="none ns-in">No machines have checked in.</div>
     {/if}
-    <div class="divider"></div>
+    <div data-slot="divider" class="divider"></div>
     <button
+      data-slot="row"
+      data-add
       class="row add ns-in press-tint"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"
       type="button"
     >
-      <span class="ns-tile tile dashed"><Add /></span>
+      <span data-slot="tile" class="ns-tile tile dashed"><Add /></span>
       <span class="add-label">Connect a machine…</span>
     </button>
   {/if}

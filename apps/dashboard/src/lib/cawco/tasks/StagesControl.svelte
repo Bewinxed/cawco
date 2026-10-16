@@ -146,7 +146,9 @@
     side="bottom"
   >
     <div class="intro">
-      <p class="lead">This project has no stages of its own yet</p>
+      <p data-slot="lead" class="lead">
+        This project has no stages of its own yet
+      </p>
       <p class="line">
         The code stages stand in until you pick a set. The set is written to
         stages.md in the project folder.
@@ -159,7 +161,7 @@
       class="stages-fault"
       reason={problem}
     />
-    <ul class="list">
+    <ul data-slot="list" class="list">
       {#if templates}
         {#each templates as template (template.name)}
           <li>
@@ -173,7 +175,7 @@
               }}
               type="button"
             >
-              <span class="name mark-line" data-box>
+              <span data-slot="name" class="name mark-line" data-box>
                 <span>{NAMES[template.name]}</span>
                 {#if applying === template.name}
                   <Spinner class="ml-auto" />

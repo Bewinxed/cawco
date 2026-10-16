@@ -81,6 +81,7 @@
      blur it, so a picked row lands its chip where the words were typed. -->
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
+  data-slot="menu"
   class={["menu", { phone }]}
   onmousedown={(event) => event.preventDefault()}
   role="presentation"

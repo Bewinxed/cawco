@@ -76,7 +76,7 @@
 <svelte:head><title>Overlays bench · CawCo</title></svelte:head>
 
 <main>
-  <div class="openers">
+  <div data-slot="openers" class="openers">
     {#if shows("sheet")}
       <Sheet.Root bind:open={open.sheet}>
         <Sheet.Trigger data-open="sheet">Sheet</Sheet.Trigger>
@@ -84,7 +84,7 @@
           <Sheet.Header>
             <Sheet.Title>Sheet</Sheet.Title>
           </Sheet.Header>
-          <div class="body">
+          <div data-slot="body" class="body">
             <Button data-inside="sheet" onclick={() => inside("sheet")}
               >Press</Button
             >
@@ -134,7 +134,7 @@
           <Drawer.Header>
             <Drawer.Title>Drawer</Drawer.Title>
           </Drawer.Header>
-          <div class="body">
+          <div data-slot="body" class="body">
             <Button data-inside="drawer" onclick={() => inside("drawer")}
               >Press</Button
             >

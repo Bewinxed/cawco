@@ -720,8 +720,17 @@
   style:--top="{(-size * BOX.y) / BOX.side}px"
 >
   {#each layers as layer (layer.id)}
-    <div class="layer" class:behind={ledge && layer.status !== "peek"}>
-      <canvas class:shown={layer.shown} {@attach mount(layer)}></canvas>
+    <div
+      data-slot="layer"
+      data-behind={(ledge && layer.status !== "peek") || undefined}
+      class="layer"
+      class:behind={ledge && layer.status !== "peek"}
+    >
+      <canvas
+        data-caw-shown={layer.shown || undefined}
+        class:shown={layer.shown}
+        {@attach mount(layer)}
+      ></canvas>
     </div>
   {/each}
 </div>

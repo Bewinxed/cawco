@@ -57,7 +57,7 @@
 </svelte:head>
 
 <div class="bench">
-  <div class="dock">
+  <div data-slot="dock" class="dock">
     <Composer
       {draft}
       onstop={() => undefined}

@@ -119,7 +119,7 @@
 </script>
 
 <div class="view-dock">
-  <div class="view-bar kit-dock-shell" bind:this={shell}>
+  <div data-slot="view-bar" class="view-bar kit-dock-shell" bind:this={shell}>
     <Select.Root
       onValueChange={(value) => {
         if (value) {
@@ -139,6 +139,7 @@
         <span aria-hidden="true" class="measure" bind:this={measure}></span>
       </Select.Trigger>
       <Select.Content
+        data-view-list
         align="start"
         class="view-list"
         collisionPadding={8}
@@ -153,7 +154,7 @@
               {#if view.draft}
                 <Badge variant="secondary"><span>draft</span></Badge>
               {:else if view.count > 0}
-                <span class="count">{view.count}</span>
+                <span data-slot="count" class="count">{view.count}</span>
               {/if}
             {/snippet}
           </Select.Item>

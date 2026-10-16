@@ -97,9 +97,20 @@
   } = $props();
 </script>
 
-<li class={["item", flash && "flash"]} data-flip data-row-name={name}>
-  <div class="row" class:off={enabled === false} class:two={meta !== undefined}>
+<li
+  data-slot="item"
+  class={["item", flash && "flash"]}
+  data-flip
+  data-row-name={name}
+>
+  <div
+    data-slot="row"
+    class="row"
+    class:off={enabled === false}
+    class:two={meta !== undefined}
+  >
     <span
+      data-slot="tile"
       class="tile"
       data-share={href ? `icon:${href}` : undefined}
       style={hue ? `color:${hue}` : undefined}
@@ -114,8 +125,8 @@
         <Icon />
       {/if}
     </span>
-    <span class="text">
-      <span class={["name", mono && "mono"]}>
+    <span data-slot="text" class="text">
+      <span data-slot="name" class={["name", mono && "mono"]}>
         {#if href}
           <a
             class="link"
@@ -125,6 +136,7 @@
           >
         {:else}
           <span
+            data-slot="section-row-label"
             class="label"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
@@ -136,10 +148,10 @@
         {/if}
       </span>
       {#if meta !== undefined}
-        <span class="meta" title={meta}>{meta}</span>
+        <span data-slot="meta" class="meta" title={meta}>{meta}</span>
       {/if}
     </span>
-    <span class="controls">
+    <span data-slot="controls" class="controls">
       {#if rollout}
         {@render rollout()}
       {/if}
@@ -164,6 +176,7 @@
     <div class="below">
       {#if note}
         <p
+          data-slot="note"
           class="note mark-line"
           data-flip
           data-tone={note.tone}

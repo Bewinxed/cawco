@@ -325,10 +325,10 @@
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
-    <p class="note">
+    <p data-slot="note" class="note">
       CawCo reads what a session writes, not what you write to it.
     </p>
-    <div class="fold">
+    <div data-slot="fold" class="fold">
       <Choice
         label="Match"
         onchange={(next) => setMatchKind(next as RuleMatchKind)}
@@ -391,6 +391,7 @@
       </Field>
       <!-- Text-matching options fold away for a meaning rule rather than popping. -->
       <div
+        data-slot="fold"
         class="fold"
         inert={draft.matchKind === "meaning"}
         {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
@@ -425,6 +426,7 @@
         </p>
       {/if}
       <div
+        data-slot="fold"
         class="fold"
         inert={draft.matchKind === "meaning"}
         {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
@@ -435,11 +437,11 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
-    <p class="note">
+    <p data-slot="note" class="note">
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
-    <div class="fold">
+    <div data-slot="fold" class="fold">
       <Field id="rule-reply" label="Reply" problem={shown("reply")}>
         <Textarea
           aria-invalid={shown("reply") ? "true" : undefined}
@@ -477,7 +479,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p class="note">
+    <p data-slot="note" class="note">
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
       every dated build of it.
@@ -531,7 +533,7 @@
     </div>
   </EditorSection>
 
-  <div class="fold">
+  <div data-slot="fold" class="fold">
     <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
       <SwitchField
         id="rule-repeat"
@@ -540,7 +542,7 @@
       >
         {#snippet hint()}
           <!-- The two readings cross-fade in one box, its height following. -->
-          <span class="swap" {@attach morph()}>
+          <span data-slot="swap" class="swap" {@attach morph()}>
             {#if draft.repeat}
               <span in:crossIn out:crossOut>
                 The session gets your reply each time it is tripped. It stops

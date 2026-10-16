@@ -163,7 +163,12 @@
      clock and the last words and nothing else. -->
 {#snippet body(live: Live | Said, phase: Phase)}
   {#if phase === "answer"}
-    <section class="turn" class:grouped={live.grouped}>
+    <section
+      data-slot="turn"
+      data-grouped={live.grouped || undefined}
+      class="turn"
+      class:grouped={live.grouped}
+    >
       <Who
         grouped={live.grouped}
         live={live.kind === "live"}
@@ -180,7 +185,12 @@
     <!-- A voice with a face of its own (a project's Caw, turn/voice.ts)
          is on his speaker line from the first beat of a turn: his working
          still over what he is thinking. -->
-    <section class="turn" class:grouped={live.grouped}>
+    <section
+      data-slot="turn"
+      data-grouped={live.grouped || undefined}
+      class="turn"
+      class:grouped={live.grouped}
+    >
       <Who grouped={live.grouped} live name={agentName} />
       {@render thinking(live)}
     </section>
@@ -201,7 +211,7 @@
   />
 {/snippet}
 
-<div class={["live", { tweening }]} bind:this={box}>
+<div data-slot="live" class={["live", { tweening }]} bind:this={box}>
   {#each faces as face (face.id)}
     <div
       aria-hidden={face.leaving ? true : undefined}

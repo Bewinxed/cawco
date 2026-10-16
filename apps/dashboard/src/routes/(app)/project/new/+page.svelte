@@ -161,14 +161,22 @@
 <main class="new-project">
   <!-- His slot goes with him when he peeks over a card, and comes back
        with him: the hero's height tweens (morph) rather than leaving a band. -->
-  <div class="ask" {@attach morph()}>
+  <div data-slot="ask" class="ask" {@attach morph()}>
     {#if caw === "page"}
-      <div class="caw-80" data-share={made ? `caw:${made}` : undefined}>
+      <div
+        data-slot="caw-80"
+        class="caw-80"
+        data-share={made ? `caw:${made}` : undefined}
+      >
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <h1 class="title">What are we working on?</h1>
-    <div class="field" style:block-size="calc({footHeight}px + var(--space-4))">
+    <h1 data-slot="title" class="title">What are we working on?</h1>
+    <div
+      data-slot="new-page-field"
+      class="field"
+      style:block-size="calc({footHeight}px + var(--space-4))"
+    >
       <Composer
         agentName="Caw"
         attach={false}
@@ -187,7 +195,7 @@
         sending={starting}
       />
     </div>
-    <div class="chips kit-chips">
+    <div data-slot="chips" class="chips kit-chips">
       {#each STARTERS as text (text)}
         <button
           class="kit-chip touch-hit"
@@ -200,7 +208,7 @@
     </div>
   </div>
 
-  <div class="cards">
+  <div data-slot="cards" class="cards">
     <TemplateCards
       action={noMachine
         ? {

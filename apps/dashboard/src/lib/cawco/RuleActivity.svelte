@@ -48,7 +48,7 @@
   );
 </script>
 
-<p class="note">
+<p data-slot="note" class="note">
   Sessions see the reply but never this rule's history, so this is the only
   place it is visible.
 </p>
@@ -56,29 +56,29 @@
 <!-- Rows that arrive, leave or move (a catch coming in, Show all) go
      through reflow: uncovered and faded in, closed and faded out, what
      follows sliding (motion/rows.svelte.ts). -->
-<div class="activity" {@attach reflow()}>
+<div data-slot="activity" class="activity" {@attach reflow()}>
   {#if loading}
-    <p class="note">Loading…</p>
+    <p data-slot="note" class="note">Loading…</p>
   {:else if failed}
     <p class="caution" role="alert">{failed}</p>
   {:else if rows.length === 0}
-    <p class="note">
+    <p data-slot="note" class="note">
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
   {:else}
     {#if waiting > 0}
-      <p class="caution num" data-flip>
+      <p data-slot="num" class="caution num" data-flip>
         {waiting}
         {waiting === 1 ? "session is" : "sessions are"}
         still pending — it clears when their next turn ends without matching.
       </p>
     {/if}
-    <ul class="list">
+    <ul data-slot="list" class="list">
       {#each visible as row (row.instanceId)}
-        <li class="entry" data-flip>
-          <div class="top">
-            <span class="where">
-              <span class="path">{row.where}</span>
+        <li data-slot="entry" class="entry" data-flip>
+          <div data-slot="top" class="top">
+            <span data-slot="where" class="where">
+              <span data-slot="path" class="path">{row.where}</span>
               {#if row.harness}
                 <span class="muted">{row.harness}</span>
               {/if}
@@ -95,7 +95,7 @@
       {/each}
     </ul>
     {#if rows.length > LATEST}
-      <div class="more" data-flip>
+      <div data-slot="more" class="more" data-flip>
         <Button
           onclick={() => {
             all = !all;

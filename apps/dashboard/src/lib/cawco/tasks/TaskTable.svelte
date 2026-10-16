@@ -197,8 +197,8 @@
   }
 </script>
 
-<div class="ledger" data-pickable={onpick ? "" : undefined}>
-  <Table.Root class="tasks table-fixed" ghostRows="tbody tr">
+<div data-slot="ledger" class="ledger" data-pickable={onpick ? "" : undefined}>
+  <Table.Root data-tasks class="tasks table-fixed" ghostRows="tbody tr">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
         <Table.Row class="band border-0">
@@ -207,11 +207,17 @@
             {@const sorted = column.getIsSorted()}
             {@const sort = ariaSort(sorted)}
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head aria-sort={sort} class="col-{column.id}" scope="col">
+            <Table.Head
+              aria-sort={sort}
+              class="col-{column.id}"
+              data-task-table-col={column.id}
+              scope="col"
+            >
               {#if column.id === "pick"}
                 {@const ids = shownIds()}
                 {@const count = ids.filter((id) => picked?.(id)).length}
                 <Checkbox
+                  data-task-table-pick
                   aria-label={count === ids.length && count > 0
                     ? "Untick every task shown"
                     : "Pick every task shown"}
@@ -249,14 +255,19 @@
         {@const task = row.original}
         {@const on = picked?.(task.id) ?? false}
         <Table.Row
+          data-task-table-row
           class="row"
           data-picked={on || undefined}
           data-task={task.id}
         >
           {#each row.getAllCells() as cell (cell.id)}
-            <Table.Cell class="col-{cell.column.id}">
+            <Table.Cell
+              class="col-{cell.column.id}"
+              data-task-table-col={cell.column.id}
+            >
               {#if cell.column.id === "pick"}
                 <Checkbox
+                  data-task-table-pick
                   aria-label="Pick {task.id} {task.title}"
                   checked={on}
                   class="pick"
@@ -270,17 +281,22 @@
                   }}
                 />
               {:else if cell.column.id === "id"}
-                <span class="id">{task.id}</span>
+                <span data-slot="id" class="id">{task.id}</span>
               {:else if cell.column.id === "title"}
                 <a
+                  data-slot="title"
                   class="title focus-inset"
                   href={hrefOf(task.id)}
                   onclick={(event) => open(event, task.id)}
                 >
-                  <span class="name">{task.title}</span>
+                  <span data-slot="name" class="name">{task.title}</span>
                 </a>
               {:else if cell.column.id === "stage"}
-                <span class="stage mark-line" data-kind={task.kind ?? "none"}>
+                <span
+                  data-slot="stage"
+                  class="stage mark-line"
+                  data-kind={task.kind ?? "none"}
+                >
                   {#if task.kind === "you"}
                     <IconNeedsYou aria-hidden="true" />
                   {/if}
@@ -300,7 +316,8 @@
                       size="sm"
                       total={task.todos.total}
                     />
-                    <span class="num">{task.todos.done}/{task.todos.total}</span
+                    <span data-slot="num" class="num"
+                      >{task.todos.done}/{task.todos.total}</span
                     >
                   </span>
                 {/if}
@@ -310,6 +327,7 @@
                     ? task.createdAt
                     : task.updatedAt}
                 <time
+                  data-slot="num"
                   class="num"
                   datetime={new Date(at).toISOString()}
                   title={new Date(at).toLocaleString()}

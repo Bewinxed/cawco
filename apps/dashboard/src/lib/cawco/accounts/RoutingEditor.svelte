@@ -148,7 +148,7 @@
     <ProviderMark {provider} />
   {/snippet}
   {#snippet header()}
-    <h1 class="title">{title}</h1>
+    <h1 data-slot="title" class="title">{title}</h1>
     {#if refused}
       <p class="problem" role="alert" in:appear>{refused}</p>
     {/if}
@@ -178,7 +178,7 @@
     </Tabs>
     <div class="slide" {@attach morph()}>
       {#key tab}
-        <div class="pane" in:slideIn out:slideOut>
+        <div data-slot="pane" class="pane" in:slideIn out:slideOut>
           <StrategyPicker
             {accounts}
             choice={draft[tab]}
@@ -198,7 +198,7 @@
   </section>
 
   {#if limits}
-    <section class="well">
+    <section data-slot="well" class="well">
       <AtLimitBlock
         accounts={limitLanes}
         terms={provider === "anthropic"}

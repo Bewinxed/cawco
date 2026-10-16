@@ -184,6 +184,7 @@
 </script>
 
 <aside
+  data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
   class="inspector"
   class:sheet={layout === "sheet"}
@@ -191,8 +192,8 @@
   in:slide={{ leaving: false }}
   out:slide={{ leaving: true }}
 >
-  <header class="head">
-    <h2 class="title">Inspect</h2>
+  <header data-slot="head" class="head">
+    <h2 data-slot="title" class="title">Inspect</h2>
     <Button
       aria-label="Close the inspector"
       class="touch-hit"
@@ -399,7 +400,7 @@
                   >
                 </p>
               {:else}
-                <p class="code" id={fieldId(prop)}>
+                <p data-slot="code" class="code" id={fieldId(prop)}>
                   <code>{inspector.code(prop) ?? prop.type.raw}</code>
                   <span
                     >{inspector.code(prop) === null
@@ -451,7 +452,7 @@
         {#if nameProblem}
           <p class="problem">{nameProblem}</p>
         {/if}
-        <div class="actions">
+        <div data-slot="actions" class="actions">
           <Button
             label="Cancel"
             onclick={() => {
@@ -471,7 +472,7 @@
         </div>
       </form>
     {:else}
-      <div class="actions">
+      <div data-slot="actions" class="actions">
         <Button
           disabled={!sheet || !!inspector.writing}
           icon={IconPlus}

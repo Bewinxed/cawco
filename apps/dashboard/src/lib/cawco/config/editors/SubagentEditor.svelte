@@ -159,8 +159,10 @@ You are a <role>, working in one repository at a time.
   title={agent ? agent.name : "New subagent"}
 >
   {#snippet header()}
-    <h1 class="title">{agent ? agent.name : front.name || "New subagent"}</h1>
-    <p class="note">
+    <h1 data-slot="title" class="title">
+      {agent ? agent.name : front.name || "New subagent"}
+    </h1>
+    <p data-slot="note" class="note">
       The file is the definition. It lands at
       <span class="font-mono"
         >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
@@ -174,12 +176,12 @@ You are a <role>, working in one repository at a time.
 
   <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <span class="claims num">{claims.join(" · ")}</span>
+      <span data-slot="num" class="claims num">{claims.join(" · ")}</span>
     {/snippet}
     {#if problem}
       <p class="caution">Not storable yet — {problem}.</p>
     {:else if front.description}
-      <p class="note">{front.description}</p>
+      <p data-slot="note" class="note">{front.description}</p>
     {/if}
     <Textarea
       aria-label="{target ?? 'New'} definition"

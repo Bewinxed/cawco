@@ -133,11 +133,13 @@
   {#snippet children(limit)}
     {@const drawn = shown.slice(0, limit)}
     {@const runs = wellRuns(drawn)}
-    <div class="inner">
+    <div data-slot="inner" class="inner">
       {#if loading}
-        <p class="empty">Loading its transcript…</p>
+        <p data-slot="inline-transcript-empty" class="empty">
+          Loading its transcript…
+        </p>
       {:else if shown.length === 0 && fault}
-        <p class="empty">
+        <p data-slot="inline-transcript-empty" class="empty">
           {#if fault.reason !== "offline"}
             Its transcript couldn't be read:
           {:else if reconnectingNow(fault)}
@@ -161,7 +163,7 @@
           Try again
         </Button>
       {:else if shown.length === 0}
-        <p class="empty">
+        <p data-slot="inline-transcript-empty" class="empty">
           {id
             ? "Nothing in its transcript yet."
             : "Still starting — no transcript to show."}

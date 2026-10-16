@@ -189,7 +189,7 @@
   <!-- What is selected gives way to the next in place: the two cross-fade
        (the one leaving is taken out of the flow) while the box tweens to
        the new one's height, and the problems below slide with it. -->
-  <div class="swap" {@attach morph({ ms: dur("--dur-pop") })}>
+  <div data-slot="swap" class="swap" {@attach morph({ ms: dur("--dur-pop") })}>
     {#key node?.id ?? edge?.id ?? "settings"}
       <div class="view wf-stack" in:crossIn out:crossOut>
         {#if node}
@@ -1204,7 +1204,7 @@
     {/key}
   </div>
   <section aria-label="Problems" class="wf-stack">
-    <h2 class="num">Problems · {problems.length}</h2>
+    <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
     {#if !problems.length}
       <p class="wf-muted">No problems found.</p>
     {/if}

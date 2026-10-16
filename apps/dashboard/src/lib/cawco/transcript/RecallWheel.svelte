@@ -873,6 +873,7 @@
 <!-- The field keeps focus and points at the row on the line
      (aria-activedescendant): the list and its rows are never focused. -->
 <div
+  data-slot="ghosts"
   aria-label="What you sent here"
   class="ghosts"
   {id}
@@ -895,6 +896,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys for every row (aria-activedescendant) -->
     <div
+      data-slot="ghost"
       aria-selected={k === pick}
       class="ghost"
       data-k={k}
@@ -929,7 +931,7 @@
           {oneLine(entry.entry?.text ?? "")}
         {/if}
       </span>
-      <span class="m num">{meta(entry.entry)}</span>
+      <span data-slot="num" class="m num">{meta(entry.entry)}</span>
     </div>
   {/each}
 </div>
@@ -944,7 +946,9 @@
     <span class="qchip mark-line" bind:offsetWidth={chipWidth}>
       <IconSearch aria-hidden="true" />
       <span class="q">{query}</span>
-      <span class="n num">{rows[0]?.kind === "none" ? 0 : pickable}</span>
+      <span data-slot="num" class="n num"
+        >{rows[0]?.kind === "none" ? 0 : pickable}</span
+      >
     </span>
   </div>
 {/if}

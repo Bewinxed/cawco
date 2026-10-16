@@ -27,6 +27,7 @@
 
 <span class="flex min-w-0" role="alert">
   <button
+    data-error-text-class={className}
     class={cn(
       "min-w-0 cursor-pointer truncate text-start underline-offset-2 hover:underline",
       className

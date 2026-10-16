@@ -211,7 +211,7 @@
       placeholder="explore"
       bind:value={draft.name}
     />
-    <p class="note">
+    <p data-slot="note" class="note">
       {name
         ? "The name is the key a running call already asks for by; renaming means creating a new type."
         : "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."}
@@ -254,7 +254,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconCpu} label="What it runs on">
-    <p class="note">
+    <p data-slot="note" class="note">
       The harness and model the delegate spawns on, and how hard it should
       think.
     </p>
@@ -300,7 +300,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconKey} label="What it can reach">
-    <p class="note">
+    <p data-slot="note" class="note">
       Comma-separated. Both are optional narrowings — empty means the delegate
       has the harness's ordinary defaults.
     </p>

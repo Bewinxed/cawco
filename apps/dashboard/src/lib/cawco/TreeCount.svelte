@@ -34,6 +34,8 @@
 
 <!-- biome-ignore lint/a11y/useSemanticElements: the chip's markup and press are the kit's span control (.pressable), as they were inside a row's link. -->
 <span
+  data-num
+  data-slot="count"
   aria-expanded={open}
   aria-label={open ? `Hide ${label}` : `Show ${label}`}
   class="count num pressable focus-inset pointer-hit touch-hit"

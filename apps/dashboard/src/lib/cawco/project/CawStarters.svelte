@@ -25,7 +25,11 @@
 </script>
 
 {#if starters.length > 0}
-  <ul aria-label="Things to ask Caw" class="caw-starters kit-chips">
+  <ul
+    data-slot="caw-starters"
+    aria-label="Things to ask Caw"
+    class="caw-starters kit-chips"
+  >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
       <li>
@@ -34,7 +38,7 @@
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph aria-hidden="true" class="starter-glyph" />
+          <Glyph data-starter-glyph aria-hidden="true" class="starter-glyph" />
           <span>{starter.text}</span>
         </button>
       </li>

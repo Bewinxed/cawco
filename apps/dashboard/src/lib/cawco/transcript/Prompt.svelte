@@ -635,11 +635,17 @@
      refusal is heard. -->
 {#snippet wait()}
   {#if refused}
-    <p class="wait refused" role="status">{refused}</p>
+    <p data-wait data-slot="refused" class="wait refused" role="status">
+      {refused}
+    </p>
   {:else if pressed === null && offline}
-    <p class="wait" role="status">Machine offline — can't answer yet.</p>
+    <p data-slot="wait" class="wait" role="status">
+      Machine offline — can't answer yet.
+    </p>
   {:else if pressed === null && !reachable}
-    <p class="wait" role="status">Reconnecting — can't answer yet.</p>
+    <p data-slot="wait" class="wait" role="status">
+      Reconnecting — can't answer yet.
+    </p>
   {/if}
 {/snippet}
 
@@ -647,16 +653,16 @@
      waiting when there are several ("2 of 3"): they come one at a time. -->
 {#snippet title(text: string)}
   <h2 class="part mark-line" style:--part="0">
-    <span aria-hidden="true" class="glyph" data-box>
+    <span data-slot="glyph" aria-hidden="true" class="glyph" data-box>
       {#if questions}
         <IconAsk />
       {:else}
         <IconShield />
       {/if}
     </span>
-    <span class="title">{text}</span>
+    <span data-slot="title" class="title">{text}</span>
     {#if place && place.of > 1}
-      <Kbd class="place num" data-box>{place.at} of {place.of}</Kbd>
+      <Kbd data-num class="place num" data-box>{place.at} of {place.of}</Kbd>
     {/if}
     {#if questions && onminimize}
       <!-- Folds the card to its bar over the composer; answers nothing. -->
@@ -676,6 +682,8 @@
 {/snippet}
 
 <section
+  data-prompt-shown={shown || undefined}
+  data-slot="hitl"
   aria-label={questions
     ? `Question from ${asker}`
     : `Permission request from ${who}`}
@@ -690,12 +698,14 @@
   {#if questions}
     {@render title(`Question from ${asker}`)}
     <div
+      data-slot="body"
       class="body part kit-edge-fade-block"
       style:--part="1"
       class:railed={questions.length > 1}
     >
       {#if rail}
         <span
+          data-slot="rail"
           aria-hidden="true"
           class="rail"
           style:block-size="{rail.height}px"
@@ -705,7 +715,12 @@
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
         {@const list = listed(q)}
-        <p class="lede" id="{claimId}-q{qi}" bind:this={ledes[qi]}>
+        <p
+          data-slot="lede"
+          class="lede"
+          id="{claimId}-q{qi}"
+          bind:this={ledes[qi]}
+        >
           {q.question}
         </p>
         <!-- An option's keycap and words: in a list, the keycap stands on
@@ -716,13 +731,15 @@
             <span class="mark-cell"
               ><span class="kit-keycap">{digit}</span></span
             ><span class="opt-text"
-              ><span class="opt-label">{label}</span>{#if description}<span
-                  class="opt-desc">{description}</span
+              ><span data-slot="opt-label" class="opt-label">{label}</span
+              >{#if description}<span data-slot="opt-desc" class="opt-desc"
+                  >{description}</span
                 >{/if}</span
             >
           {:else}
-            <span class="kit-keycap">{digit}</span><span class="opt-label"
-              >{label}</span
+            <span class="kit-keycap">{digit}</span><span
+              data-slot="opt-label"
+              class="opt-label">{label}</span
             >
           {/if}
         {/snippet}
@@ -731,6 +748,7 @@
             {@const live = ownsKeys && qi === current && i < 9}
             {@const sel = isSelected(q.question, opt.label)}
             <ToggleGroup.Item
+              data-sel={sel || undefined}
               aria-keyshortcuts={live ? String(i + 1) : undefined}
               class="kit-chip touch-hit{sel ? ' sel' : ''}"
               onkeydown={optionKey}
@@ -744,6 +762,7 @@
           {#if own < 9}
             {@const live = ownsKeys && qi === current}
             <ToggleGroup.Item
+              data-sel={otherPicked(q) || otherAt === qi || undefined}
               aria-keyshortcuts={live ? String(own + 1) : undefined}
               class="kit-chip touch-hit{otherPicked(q) || otherAt === qi
                 ? ' sel'
@@ -764,6 +783,7 @@
              digits answer, and the rail moves to it. -->
         {#if q.multiSelect}
           <ToggleGroup.Root
+            data-list={list || undefined}
             aria-labelledby="{claimId}-q{qi}"
             class={["qopts kit-chips", { list }]}
             onfocusin={() => {
@@ -778,6 +798,7 @@
           </ToggleGroup.Root>
         {:else}
           <ToggleGroup.Root
+            data-list={list || undefined}
             aria-labelledby="{claimId}-q{qi}"
             class={["qopts kit-chips", { list }]}
             onfocusin={() => {
@@ -795,6 +816,7 @@
           <!-- The reader's own answer, a field under the choices it stands
                in for, before the card's actions. -->
           <Input
+            data-other
             aria-label={`Your answer to: ${q.question}`}
             class="other"
             disabled={!answerable}
@@ -807,7 +829,7 @@
         {/if}
       {/each}
     </div>
-    <div class="foot part" style:--part="2">
+    <div data-slot="foot" class="foot part" style:--part="2">
       <div class="qact">
         <Button
           class={primary}
@@ -838,18 +860,19 @@
          grant is made on what runs, never on a sentence about it alone. The
          words are the hub's (core permission-presentation.ts), the same on
          iOS and Telegram; secrets in the fields are already hidden. -->
-    <div class="body part" style:--part="1">
-      <p class="lede summary">{presentation.summary}</p>
+    <div data-slot="body" class="body part" style:--part="1">
+      <p data-slot="lede" class="lede summary">{presentation.summary}</p>
       {#if presentation.detail}
-        <p class="detail">{presentation.detail}</p>
+        <p data-slot="detail" class="detail">{presentation.detail}</p>
       {/if}
       {#if command}
         <div class="cmd" class:open={commandOpen}>
-          <code class="cmd-text" bind:this={commandLine}
+          <code data-slot="cmd-text" class="cmd-text" bind:this={commandLine}
             >{commandOpen ? command : command.trim().split("\n")[0]}</code
           >
           {#if commandOpen || commandClipped}
             <Button
+              data-cmd-toggle
               aria-expanded={commandOpen}
               aria-label={commandOpen
                 ? "Show the command on one line"
@@ -882,7 +905,7 @@
       {#if presentation.fields.length > 0}
         <dl class="fields">
           {#each presentation.fields as field, i (`${i}:${field.key}`)}
-            <div class="field">
+            <div data-slot="prompt-field" class="field">
               <dt class="k">{field.key}</dt>
               <dd class="v">{field.value}</dd>
             </div>
@@ -890,10 +913,11 @@
         </dl>
       {/if}
     </div>
-    <div class="foot part" style:--part="2">
-      <div class="choice">
+    <div data-slot="foot" class="foot part" style:--part="2">
+      <div data-slot="choice" class="choice">
         <Button
           class={grant}
+          data-prompt-grant={grant}
           disabled={disabledOf("allow")}
           failed={failedOf("allow")}
           icon={IconTick}
@@ -905,6 +929,7 @@
         />
         <Button
           class={refuse}
+          data-prompt-refuse={refuse}
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
           icon={IconClose}

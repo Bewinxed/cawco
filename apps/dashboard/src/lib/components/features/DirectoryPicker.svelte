@@ -195,7 +195,9 @@
                 {/each}
               </div>
             {:else if errorMessage}
-              <span class="block px-2 py-1 text-meta text-destructive"
+              <span
+                data-slot="block"
+                class="block px-2 py-1 text-meta text-destructive"
                 >{errorMessage}</span
               >
             {:else}
@@ -214,7 +216,9 @@
                   >
                 </Button>
               {:else}
-                <span class="block px-2 py-1 text-meta text-muted-foreground"
+                <span
+                  data-slot="block"
+                  class="block px-2 py-1 text-meta text-muted-foreground"
                   >No subdirectories.</span
                 >
               {/each}

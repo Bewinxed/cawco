@@ -250,11 +250,11 @@
   transition:unfold
   {@attach escapes}
 >
-  <div class="tile">
+  <div data-slot="tile" class="tile">
     <!-- Place: where it lives, its places, and adding one. -->
-    <div class="row" data-detail="place" bind:this={placesRow}>
-      <p class="label">Place</p>
-      <div class="value">
+    <div data-slot="row" class="row" data-detail="place" bind:this={placesRow}>
+      <p data-slot="project-details-label" class="label">Place</p>
+      <div data-slot="value" class="value">
         <!-- mark-line: the machine's mark heads its whole folder, which wraps (the head's line cuts it short): it stands in a mark cell, one line tall, on the first line -->
         <p class="fact place-fact">
           {#if machine}
@@ -262,7 +262,9 @@
           {/if}
           <span class="fact-words" data-place-words>{place}</span>
         </p>
-        <p class="note">Its folder stays where it is; CawCo can't move it.</p>
+        <p data-slot="note" class="note">
+          Its folder stays where it is; CawCo can't move it.
+        </p>
         <div class="places-head">
           <button
             aria-expanded={listOpen}
@@ -273,10 +275,10 @@
             }}
             type="button"
           >
-            <span class="num"
+            <span data-slot="num" class="num"
               >{checkouts} {checkouts === 1 ? "place" : "places"}</span
             >
-            <IconChevronDown class="chev" />
+            <IconChevronDown data-chev class="chev" />
           </button>
           {#if !adding}
             <Button
@@ -295,12 +297,12 @@
               <li data-place={each.id}>
                 <div class="place-row">
                   <div class="place-words">
-                    <span class="host"
+                    <span data-slot="host" class="host"
                       >{each.kind === "hub"
                         ? "The hub"
                         : hostWords(each.machineId)}</span
                     >
-                    <span class="path" title={each.path}
+                    <span data-slot="path" class="path" title={each.path}
                       ><bdi>{each.path}</bdi></span
                     >
                   </div>
@@ -364,6 +366,7 @@
         {/if}
         {#if adding}
           <form
+            data-slot="add"
             class="add"
             data-add-place-form
             onsubmit={(event) => {
@@ -416,14 +419,14 @@
     </div>
 
     <!-- Repository: a fact, with where it comes from. -->
-    <div class="row" data-detail="repository">
-      <p class="label">Repository</p>
-      <div class="value">
+    <div data-slot="row" class="row" data-detail="repository">
+      <p data-slot="project-details-label" class="label">Repository</p>
+      <div data-slot="value" class="value">
         {#if project.remote}
           <p class="fact"><bdi>{project.remote}</bdi></p>
-          <p class="note">From the folder's remote.</p>
+          <p data-slot="note" class="note">From the folder's remote.</p>
         {:else}
-          <p class="note">
+          <p data-slot="note" class="note">
             No remote on the folder yet. Add one in the folder and it shows
             here.
           </p>
@@ -432,9 +435,11 @@
     </div>
 
     <!-- Work lands: the segment asked breathes until the hub answers. -->
-    <div class="row" data-detail="lands">
-      <p class="label" id="{uid}-lands">Work lands</p>
-      <div class="value">
+    <div data-slot="row" class="row" data-detail="lands">
+      <p data-slot="project-details-label" class="label" id="{uid}-lands">
+        Work lands
+      </p>
+      <div data-slot="value" class="value">
         <ToggleGroup.Root
           aria-labelledby="{uid}-lands"
           class="lands"
@@ -454,7 +459,7 @@
             >
           {/each}
         </ToggleGroup.Root>
-        <p class="note" data-lands-says>{LANDS[lands].says}</p>
+        <p data-slot="note" class="note" data-lands-says>{LANDS[lands].says}</p>
         <RowFault
           again={() => (landsTried ? setLands(landsTried) : undefined)}
           data-lands-fault
@@ -464,9 +469,9 @@
     </div>
 
     <!-- Caw: his own switch, its ways off with it. -->
-    <div class="row" data-detail="caw">
-      <p class="label">Caw</p>
-      <div class="value">
+    <div data-slot="row" class="row" data-detail="caw">
+      <p data-slot="project-details-label" class="label">Caw</p>
+      <div data-slot="value" class="value">
         <CawLeadSwitch
           label="Leads this project"
           {lead}
@@ -477,9 +482,9 @@
     </div>
 
     <!-- Review before done. -->
-    <div class="row" data-detail="review">
-      <p class="label">Review</p>
-      <div class="value">
+    <div data-slot="row" class="row" data-detail="review">
+      <p data-slot="project-details-label" class="label">Review</p>
+      <div data-slot="value" class="value">
         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
         <label class="switch-line">
           <Switch
@@ -491,7 +496,7 @@
           />
           <span>Review before done</span>
         </label>
-        <p class="note">
+        <p data-slot="note" class="note">
           Only you move a task to done; landed work waits in review.
         </p>
         <RowFault
@@ -502,7 +507,7 @@
       </div>
     </div>
 
-    <div class="foot">
+    <div data-slot="foot" class="foot">
       <!-- Each row commits on its own: Done only folds the tray, so it
            stays quiet beside the head's New session. -->
       <Button

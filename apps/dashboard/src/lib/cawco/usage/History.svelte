@@ -238,9 +238,9 @@
   }>();
 </script>
 
-<section aria-labelledby="history-title" class="card">
-  <header class="head">
-    <h2 class="title" id="history-title">History</h2>
+<section data-slot="history-card" aria-labelledby="history-title" class="card">
+  <header data-slot="head" class="head">
+    <h2 data-slot="title" class="title" id="history-title">History</h2>
     <Tabs
       onValueChange={(next) => {
         const to = next as "chart" | "table";
@@ -267,8 +267,10 @@
   </header>
 
   {#if failed && !ready}
-    <div class="failed" role="alert">
-      <p class="note">Could not read the history from the hub.</p>
+    <div data-slot="failed" class="failed" role="alert">
+      <p data-slot="note" class="note">
+        Could not read the history from the hub.
+      </p>
       <Button
         icon={IconRefresh}
         label="Retry"
@@ -284,20 +286,22 @@
       {#each charts as chart (chart.harness)}
         <figure class="chart">
           <figcaption class="caption">
-            <span class="name">{chart.title}</span>
+            <span data-slot="name" class="name">{chart.title}</span>
             {#if ready && !chart.missing}
-              <span class="num total">{chart.approx}{money(chart.total)}</span>
+              <span data-slot="num" class="num total"
+                >{chart.approx}{money(chart.total)}</span
+              >
             {/if}
           </figcaption>
           {#if chart.missing}
-            <p class="note">No 5-hour window is running.</p>
+            <p data-slot="note" class="note">No 5-hour window is running.</p>
           {:else if !ready}
             <Skeleton class="h-24 w-full" />
           {:else}
             {@const i = chart.harness === "claude" ? 0 : 1}
             <!-- One slot: the old view leaves over its top while the new one
                  waits for it, and the slot's height morphs to the new. -->
-            <div class="body" {@attach morph()}>
+            <div data-slot="body" class="body" {@attach morph()}>
               {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
                 <div
                   aria-hidden="true"
@@ -336,7 +340,7 @@
     <div class="bars">
       {#each chart.points as point (point.at)}
         {#if !live}
-          <span class="slot"
+          <span data-slot="slot" class="slot"
             ><span
               class="bar"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
@@ -347,6 +351,7 @@
             <Tooltip.Trigger>
               {#snippet child({ props })}
                 <span
+                  data-history-slot
                   {...props}
                   aria-label="{periodLabel(point.at)}: {chart.approx}{money(
                     point.cost
@@ -383,7 +388,7 @@
     <thead>
       <tr>
         <th scope="col">{byHour ? "Hour" : "Day"}</th>
-        <th class="num" scope="col">
+        <th data-slot="num" class="num" scope="col">
           {chart.harness === "claude" ? "API price" : "Spend"}
         </th>
       </tr>
@@ -392,7 +397,7 @@
       {#each chart.points as point (point.at)}
         <tr>
           <td>{periodLabel(point.at)}</td>
-          <td class="num">{chart.approx}{money(point.cost)}</td>
+          <td data-slot="num" class="num">{chart.approx}{money(point.cost)}</td>
         </tr>
       {/each}
     </tbody>

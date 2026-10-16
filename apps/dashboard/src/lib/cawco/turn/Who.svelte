@@ -72,16 +72,29 @@
 <!-- With its mark the line is a mark line (app.css): the name and the clock
      stand on the mark's middle. Grouped it has no mark, and its clock keeps
      its own line box in the body's first line. -->
-<h2 class="who" class:grouped class:mark-line={!grouped}>
+<h2
+  data-slot="who"
+  data-grouped={grouped || undefined}
+  class="who"
+  class:grouped
+  class:mark-line={!grouped}
+>
   {#if grouped}
     <span class="sr-only">{name}</span>
   {:else}
     {#if !you && voice?.face}
-      <span aria-hidden="true" class="dot face" data-box
+      <span data-slot="dot" aria-hidden="true" class="dot face" data-box
         >{@render voice.face(live)}</span
       >
     {:else}
-      <span aria-hidden="true" class="dot {you ? 'u' : 'a'}" data-box>
+      <span
+        data-u={you || undefined}
+        data-slot="dot"
+        data-a={!you || undefined}
+        aria-hidden="true"
+        class="dot {you ? 'u' : 'a'}"
+        data-box
+      >
         {#if you}
           <IconUser />
         {:else}
@@ -89,13 +102,15 @@
         {/if}
       </span>
     {/if}
-    <span class="role">{name}</span>
+    <span data-slot="role" class="role">{name}</span>
   {/if}
   {#if note}
-    <span class="note">{note}</span>
+    <span data-slot="note" class="note">{note}</span>
   {/if}
   {#if validAt}
-    <time class="when" datetime={validAt.toISOString()}>{clock}</time>
+    <time data-slot="when" class="when" datetime={validAt.toISOString()}
+      >{clock}</time
+    >
   {/if}
 </h2>
 

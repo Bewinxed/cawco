@@ -58,32 +58,35 @@
   </li>
 {/snippet}
 
-<div class="group">
+<div data-slot="group" class="group">
   <NoticeRow
     dismissLabel="Dismiss all {plural(moved.length, 'moved login')}"
     label={heading}
     ondismiss={() => ondismiss(moved.map((one) => one.id))}
   >
     {#snippet lead()}
-      <span class="glyph"><IconAccounts aria-hidden="true" /></span>
+      <span data-slot="glyph" class="glyph"
+        ><IconAccounts aria-hidden="true" /></span
+      >
     {/snippet}
-    <h3 class="head">{heading}</h3>
-    <p class="explainer">
+    <h3 data-slot="head" class="head">{heading}</h3>
+    <p data-slot="explainer" class="explainer">
       Found signed in on your machines and kept as fleet accounts; any session
       can use them now.
     </p>
   </NoticeRow>
-  <div class="entries">
+  <div data-slot="entries" class="entries">
     {#if todo.length > 0}
-      <ul class="list">
+      <ul data-slot="list" class="list">
         {#each todo as one (one.id)}
           {@render entry(one)}
         {/each}
       </ul>
     {/if}
     {#if done.length > 0}
-      <div class="more" data-flip>
+      <div data-slot="more" class="more" data-flip>
         <Button
+          data-toggle
           aria-controls="moved-done"
           aria-expanded={open}
           class="toggle"
@@ -99,6 +102,7 @@
             signed in everywhere</span
           >
           <IconChevronDown
+            data-chev
             aria-hidden="true"
             class="chev"
             data-icon="inline-end"
@@ -106,14 +110,15 @@
         </Button>
       </div>
       <div
+        data-slot="fold"
         class="fold"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
         ontransitionend={settled}
       >
-        <div class="fold-inner">
-          <ul class="list">
+        <div data-slot="fold-inner" class="fold-inner">
+          <ul data-slot="list" class="list">
             {#each done as one (one.id)}
               {@render entry(one)}
             {/each}

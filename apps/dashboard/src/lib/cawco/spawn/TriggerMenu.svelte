@@ -41,6 +41,7 @@
   {#each items as item, i (item.key)}
     {@const Icon = item.icon}
     <button
+      data-slot="row"
       class="row press-tint"
       data-fh="1"
       onmousedown={(event) => {
@@ -51,9 +52,11 @@
       type="button"
       class:active={i === index}
     >
-      <span class="ns-tile tile" style={`color:${item.hue}`}><Icon /></span>
-      <span class="label">{item.label}</span>
-      <span class="kind">{item.kind}</span>
+      <span data-slot="tile" class="ns-tile tile" style={`color:${item.hue}`}
+        ><Icon /></span
+      >
+      <span data-slot="trigger-menu-label" class="label">{item.label}</span>
+      <span data-slot="kind" class="kind">{item.kind}</span>
     </button>
   {/each}
   {#if items.length === 0}

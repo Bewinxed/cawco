@@ -76,7 +76,7 @@
 </script>
 
 <div class="actions-ledger">
-  <Table.Root aria-label={label} class="actions table-fixed">
+  <Table.Root data-actions aria-label={label} class="actions table-fixed">
     <Table.Header>
       <Table.Row class="band border-0">
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -95,18 +95,24 @@
       {#each actions as action (action.id)}
         {@const said = actionOf(action)}
         {@const from = routineNames ? fromOf(action) : null}
-        <Table.Row class="action" data-status={said.status}>
+        <Table.Row
+          data-actions-table-action
+          class="action"
+          data-status={said.status}
+        >
           <Table.Cell class="col-mark"
-            ><span class="mark"
+            ><span data-slot="mark" class="mark"
               ><ProviderLogo provider={action.service.toLowerCase()} /></span
             ></Table.Cell
           >
           <Table.Cell class="col-action">
-            <span class="what" title="{action.service} · {action.tool}"
-              >{action.reason}</span
+            <span
+              data-slot="what"
+              class="what"
+              title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span class="from">From {from}</span>
+              <span data-slot="from" class="from">From {from}</span>
             {/if}
           </Table.Cell>
           <Table.Cell class="col-status" data-cell="status">
@@ -114,8 +120,11 @@
           </Table.Cell>
           <Table.Cell class="col-when" data-cell="when">
             {#if said.at !== null}
-              <time class="when num" title={exactOf(said.at)}
-                >{since(said.at)}</time
+              <time
+                data-when
+                data-slot="num"
+                class="when num"
+                title={exactOf(said.at)}>{since(said.at)}</time
               >
             {/if}
           </Table.Cell>

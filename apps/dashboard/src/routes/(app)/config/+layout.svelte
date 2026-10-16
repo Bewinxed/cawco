@@ -74,7 +74,7 @@
     <!-- Keyed on the path, so a section change or a drill into an editor
          swaps only this pane (motion/route.svelte.ts) while the rail beside
          it holds still and its pill glides to the new section. -->
-    <div class="pane">
+    <div data-slot="pane" class="pane">
       {#key page.url.pathname}
         <div class="page" in:pageIn out:pageOut>{@render children()}</div>
       {/key}

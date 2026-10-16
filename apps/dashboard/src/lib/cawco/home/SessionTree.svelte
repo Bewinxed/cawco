@@ -56,8 +56,17 @@
   );
 </script>
 
-<li class="tree-node" data-flip={flip ? "box" : undefined}>
-  <div class="tree-line" data-key={row.id} style={styleOf?.(row.id)}>
+<li
+  data-slot="tree-node"
+  class="tree-node"
+  data-flip={flip ? "box" : undefined}
+>
+  <div
+    data-slot="tree-line"
+    class="tree-line"
+    data-key={row.id}
+    style={styleOf?.(row.id)}
+  >
     {#if shape?.parent && shape.depth > 0}
       {@const above = shape.parent}
       <!-- The parent's column: a click on its rail folds it. -->
@@ -73,6 +82,7 @@
   </div>
   {#if kids.length > 0}
     <ul
+      data-slot="tree-branch"
       class="kit-nest tree-branch"
       data-flip-anchor
       in:branch={TREE}

@@ -53,20 +53,22 @@
   const conversation = $derived(result.kind === "conversation" ? result : null);
 </script>
 
-<div {id} class={["peek", { phone }]}>
+<div data-slot="peek" {id} class={["peek", { phone }]}>
   {#if conversation?.purpose}
-    <span class="label">purpose</span>
-    <span class="value">{conversation.purpose}</span>
+    <span data-slot="find-peek-label" class="label">purpose</span>
+    <span data-slot="value" class="value">{conversation.purpose}</span>
   {/if}
   {#if conversation?.lastReport}
-    <span class="label">last</span>
-    <span class="value"
+    <span data-slot="find-peek-label" class="label">last</span>
+    <span data-slot="value" class="value"
       >report “{conversation.lastReport.headline}”<span class="sep">·</span
-      ><span class="num">{age(conversation.lastReport.at, now)}</span></span
+      ><span data-slot="num" class="num"
+        >{age(conversation.lastReport.at, now)}</span
+      ></span
     >
   {/if}
   {#if moments.length > 0}
-    <span class="label">said</span>
+    <span data-slot="find-peek-label" class="label">said</span>
     <span class="moments" role="presentation">
       {#each moments as moment, i (moment.docId)}
         {@const key = keyOf(i)}
@@ -84,22 +86,24 @@
           <span class="clip"
             >{AUTHOR[moment.author]}{#if moment.at !== null}<span class="sep"
                 >·</span
-              ><span class="num">{age(moment.at, now)}</span>{/if}<span
-              class="sep">·</span
+              ><span data-slot="num" class="num">{age(moment.at, now)}</span
+              >{/if}<span class="sep">·</span
             >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark
                   >{part.text}</mark
                 >{:else}{part.text}{/if}{/each}”</span
           >
-          <span class="enter" aria-hidden="true">↵</span>
+          <span data-slot="enter" class="enter" aria-hidden="true">↵</span>
         </button>
       {/each}
     </span>
   {:else if momentsState.state === "asking"}
-    <span class="label">said</span>
-    <span class="value muted">Asking {momentsState.machine}…</span>
+    <span data-slot="find-peek-label" class="label">said</span>
+    <span data-slot="value" class="value muted"
+      >Asking {momentsState.machine}…</span
+    >
   {:else if momentsState.state === "missing"}
-    <span class="label">said</span>
-    <span class="value muted"
+    <span data-slot="find-peek-label" class="label">said</span>
+    <span data-slot="value" class="value muted"
       >{momentsState.machine} didn't answer<span class="sep">·</span><button
         class="link"
         onclick={onretry}
@@ -108,17 +112,19 @@
     >
   {/if}
   {#if conversation && conversation.children.count > 0}
-    <span class="label">delegates</span>
-    <span class="value"
-      ><span class="num">{conversation.children.count}</span
+    <span data-slot="find-peek-label" class="label">delegates</span>
+    <span data-slot="value" class="value"
+      ><span data-slot="num" class="num">{conversation.children.count}</span
       >{#if conversation.children.needsYou > 0}<span class="sep">·</span><span
           class="attn"
-          ><span class="num">{conversation.children.needsYou}</span> needs you</span
+          ><span data-slot="num" class="num"
+            >{conversation.children.needsYou}</span
+          > needs you</span
         >{/if}</span
     >
   {/if}
   {#if !phone}
-    <span class="foot" aria-hidden="true"
+    <span data-slot="foot" class="foot" aria-hidden="true"
       >↵ open<span class="sep">·</span>← fold</span
     >
   {/if}

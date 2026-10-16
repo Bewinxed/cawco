@@ -41,11 +41,18 @@
   const ago = $derived(age(row.at, now));
 </script>
 
-<div class={["slot", { phone }]} data-flip data-key={row.key} role="none">
+<div
+  data-slot="slot"
+  class={["slot", { phone }]}
+  data-flip
+  data-key={row.key}
+  role="none"
+>
   <!-- The glyph, title and age are the mark line (DESIGN.md The Mark Line
        Rule): the glyph's cell is a box on it, and the meta and reason lines
        stand under it, boxes the recipe leaves as they are. -->
   <button
+    data-slot="row"
     {id}
     class={["row mark-line", { phone, "has-reason": row.reason !== null }]}
     aria-describedby={peeked ? `${id}-peek` : undefined}
@@ -60,6 +67,7 @@
     type="button"
   >
     <span
+      data-slot="glyph"
       class={["glyph", { breathes: row.breathes }]}
       data-tone={row.state.tone}
       aria-hidden="true"
@@ -67,18 +75,18 @@
     >
       <row.glyph />
     </span>
-    <span class="title">{row.title}</span>
+    <span data-slot="title" class="title">{row.title}</span>
     {#if ago}
-      <span class="age num" aria-hidden="true">{ago}</span>
+      <span data-slot="num" class="age num" aria-hidden="true">{ago}</span>
     {/if}
-    <span class="meta" aria-hidden="true" data-box>
+    <span data-slot="meta" class="meta" aria-hidden="true" data-box>
       <span class="state" data-tone={row.state.tone}>{row.state.word}</span>
       {#each row.meta as word (word)}
         <span class="sep">·</span>{word}
       {/each}
     </span>
     {#if row.reason}
-      <span class="reason" aria-hidden="true" data-box>
+      <span data-slot="reason" class="reason" aria-hidden="true" data-box>
         <span class="clip"
           ><span class="arrow">↳</span>
           {row.reason.source}

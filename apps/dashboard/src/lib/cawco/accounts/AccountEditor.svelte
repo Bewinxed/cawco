@@ -196,6 +196,7 @@
         <!-- The figure and its unit hold together on one line. -->
         <span class="amount">
           <Input
+            data-field
             aria-describedby={reservePct === undefined
               ? "reserve-line"
               : undefined}

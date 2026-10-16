@@ -132,7 +132,7 @@
   ready={loaded}
   title={section.label}
 >
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconPhone} label="Devices">
       {#snippet right()}
         <Button
@@ -145,18 +145,23 @@
         />
       {/snippet}
     </SectionHeader>
-    <p class="note">
+    <p data-slot="note" class="note">
       A push names the session or task and nothing else; the app reads the rest
       over your tailnet.
     </p>
     {#each testLines as line, index (index)}
-      <p class="status num mark-line" data-tone={line.tone} transition:unfold>
-        <span aria-hidden="true" class="dot" data-box></span>
+      <p
+        data-slot="num"
+        class="status num mark-line"
+        data-tone={line.tone}
+        transition:unfold
+      >
+        <span data-slot="dot" aria-hidden="true" class="dot" data-box></span>
         <span>{line.text}</span>
       </p>
     {/each}
     {#if devices.length === 0}
-      <p class="note">
+      <p data-slot="note" class="note">
         Your devices will appear here. Open the CawCo app on your phone and
         allow notifications to register it.
       </p>
@@ -164,10 +169,14 @@
       <ul class="devices">
         {#each devices as device (device.id)}
           <li class="device">
-            <div class="who">
-              <span class="name">{device.name}</span>
-              <span class="meta num">{platformName(device.platform)}</span>
+            <div data-slot="who" class="who">
+              <span data-slot="name" class="name">{device.name}</span>
+              <span data-num data-slot="meta" class="meta num"
+                >{platformName(device.platform)}</span
+              >
               <span
+                data-num
+                data-slot="meta"
                 class="meta num"
                 data-tone={device.lastError ? "bad" : "ok"}
               >

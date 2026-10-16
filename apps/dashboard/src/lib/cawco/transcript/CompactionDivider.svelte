@@ -152,6 +152,9 @@
 </script>
 
 <button
+  data-compaction-divider-live={live || undefined}
+  data-compaction-divider-failed={failed || undefined}
+  data-slot="divider"
   aria-expanded={row.brief === null || failed ? undefined : open}
   aria-label={row.brief === null || failed
     ? undefined
@@ -210,7 +213,9 @@
       {:else}
         Compacted
       {/if}</span
-    ><span class="chev"><IconChevron aria-hidden="true" /></span></span
+    ><span data-slot="chev" class="chev"
+      ><IconChevron aria-hidden="true" /></span
+    ></span
   >
   <span class="arm">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
@@ -220,11 +225,11 @@
          line, why and the way on hung at the text column (SystemLine). -->
     <span class="fail" in:fade={{ duration: dur("--dur-fade") }}>
       <span class="rail-line"
-        ><span class="rail-cell"><IconError /></span><b
+        ><span data-slot="rail-cell" class="rail-cell"><IconError /></span><b
           >Couldn't compact the conversation</b
         ></span
       >
-      <span class="reason rail-hang">{reason}</span>
+      <span data-slot="reason" class="reason rail-hang">{reason}</span>
     </span>
   {/if}
 </button>
@@ -233,7 +238,7 @@
 {/if}
 {#if open && row.brief !== null}
   <div class="brief" data-state="open" onintrostart={opening} transition:unfold>
-    <div class="body" {@attach morph()}>
+    <div data-slot="body" class="body" {@attach morph()}>
       {#if facts}
         <p class="facts">{facts}</p>
       {/if}

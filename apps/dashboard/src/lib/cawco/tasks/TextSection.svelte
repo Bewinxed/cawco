@@ -49,6 +49,7 @@
     <span>{heading}</span>
     {#if draft === null}
       <Button
+        data-text-section-count
         data-box
         class="count"
         onclick={() => {
@@ -80,7 +81,7 @@
       {#if problem}
         <p class="problem" role="alert">{problem}</p>
       {/if}
-      <div class="actions">
+      <div data-slot="actions" class="actions">
         <Button
           onclick={() => {
             draft = null;
@@ -105,7 +106,7 @@
       <Markdown source={text} />
     </div>
   {:else}
-    <p class="empty">{empty}</p>
+    <p data-slot="text-section-empty" class="empty">{empty}</p>
   {/if}
 </section>
 

@@ -361,7 +361,7 @@
       The real transcript, driven without a model. Sequence it from
       <code>window.__traffic</code>, or use these.
     </p>
-    <div class="controls">
+    <div data-slot="controls" class="controls">
       <button onclick={() => reset(14)} type="button">load history</button>
       <button onclick={() => run(6, 900)} type="button">6 tools @900ms</button>
       <button onclick={() => run(6, 120)} type="button">6 tools @120ms</button>
@@ -370,11 +370,13 @@
       </button>
       <button onclick={() => note("task done")} type="button">note</button>
       <button onclick={() => reset(0)} type="button">reset</button>
-      <span class="count">{session.messages.length} messages</span>
+      <span data-slot="count" class="count"
+        >{session.messages.length} messages</span
+      >
     </div>
   </header>
 
-  <div class="pane">
+  <div data-slot="pane" class="pane">
     {#key generation}
       <Transcript
         agentName="Traffic"

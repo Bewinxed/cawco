@@ -213,7 +213,7 @@
   }
 </script>
 
-<div class="suggest">
+<div data-slot="suggest" class="suggest">
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure. Its row is kept whether it is drawn or not
        (app.css `--c-suggest-room`), so coming and going moves nothing. -->
@@ -238,13 +238,25 @@
           }}
         >
           {#if candidate.kind === "skill"}
-            <IconToolSkill aria-hidden="true" class="glyph" />
+            <IconToolSkill
+              data-suggestion-chips-glyph
+              aria-hidden="true"
+              class="glyph"
+            />
           {:else if candidate.kind === "tool"}
-            <IconToolGeneric aria-hidden="true" class="glyph" />
+            <IconToolGeneric
+              data-suggestion-chips-glyph
+              aria-hidden="true"
+              class="glyph"
+            />
           {:else}
-            <IconToolMcp aria-hidden="true" class="glyph" />
+            <IconToolMcp
+              data-suggestion-chips-glyph
+              aria-hidden="true"
+              class="glyph"
+            />
           {/if}
-          <span class="name">{candidate.name}</span>
+          <span data-slot="name" class="name">{candidate.name}</span>
           {#if i === 0}
             <Kbd aria-hidden="true" class="key" data-box>Tab</Kbd>
           {/if}

@@ -44,10 +44,11 @@
 </script>
 
 {#if folded || draft.images.length || draft.texts.length || draft.files.length}
-  <div class="atts" transition:unfold {@attach reflow()}>
+  <div data-slot="atts" class="atts" transition:unfold {@attach reflow()}>
     {#if folded}
       <!-- The canvas, folded: a tap opens it again out of this box. -->
       <span
+        data-slot="canvas-chip"
         class="att canvas-chip"
         data-artifact={folded.id}
         data-flip="pop"
@@ -55,6 +56,7 @@
         style:visibility={canvasHidden ? "hidden" : null}
       >
         <button
+          data-slot="canvas-open"
           aria-label="Open the canvas"
           class="canvas-open mark-line touch-hit"
           onclick={onopencanvas}
@@ -65,7 +67,7 @@
           {:else}
             <IconArtifactCanvas aria-hidden="true" />
           {/if}
-          <span class="att-name">Canvas</span>
+          <span data-slot="att-name" class="att-name">Canvas</span>
         </button>
         <button
           aria-label="Remove the canvas"
@@ -80,7 +82,7 @@
     {#each draft.images as img, i (img.name + i)}
       <span class="att mark-line" data-flip="pop">
         <img alt="" src="data:{img.mediaType};base64,{img.data}" />
-        <span class="att-name">{img.name}</span>
+        <span data-slot="att-name" class="att-name">{img.name}</span>
         <button
           aria-label={`Remove ${img.name}`}
           class="touch-hit"

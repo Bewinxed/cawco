@@ -32,6 +32,7 @@
       <WeekMark {ring} />
     {:else if row.glyph}
       <svg
+        data-slot="glyph"
         aria-hidden="true"
         class={["glyph", row.glyph]}
         height="10"
@@ -45,8 +46,9 @@
     {:else}
       <span data-box></span>
     {/if}
-    <span class="label">{row.label}</span>
-    <span class="value mark-text" data-key-value>{@render said(row.value)}</span
+    <span data-slot="rings-key-label" class="label">{row.label}</span>
+    <span data-slot="value" class="value mark-text" data-key-value
+      >{@render said(row.value)}</span
     >
     <span class="reset mark-text">{@render said(row.reset)}</span>
   {/each}

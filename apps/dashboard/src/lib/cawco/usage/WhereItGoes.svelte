@@ -475,9 +475,13 @@
   }
 </script>
 
-<section aria-labelledby="where-title" class="card">
-  <header class="head">
-    <h2 class="title" id="where-title">Where it goes</h2>
+<section
+  data-slot="where-it-goes-card"
+  aria-labelledby="where-title"
+  class="card"
+>
+  <header data-slot="head" class="head">
+    <h2 data-slot="title" class="title" id="where-title">Where it goes</h2>
     <div class="switches">
       <Tabs
         onValueChange={(next) => {
@@ -506,13 +510,15 @@
   </header>
 
   {#if start === null}
-    <p class="note">
+    <p data-slot="note" class="note">
       No 5-hour window is running for
       {harness === "claude" ? "Claude" : "opencode"}.
     </p>
   {:else if failed && !view}
-    <div class="failed" role="alert">
-      <p class="note">Could not read where it goes. {failed}</p>
+    <div data-slot="failed" class="failed" role="alert">
+      <p data-slot="note" class="note">
+        Could not read where it goes. {failed}
+      </p>
       <Button
         icon={IconRefresh}
         label="Retry"
@@ -524,18 +530,19 @@
       />
     </div>
   {:else if !view}
-    <div class="skeleton" data-slot="skeleton-rows">
+    <div data-skeleton class="skeleton" data-slot="skeleton-rows">
       {#each [0, 1, 2, 3, 4] as row (row)}
         <Skeleton class="h-6 w-full" />
       {/each}
     </div>
   {:else if empty && !plan}
-    <p class="note">Nothing recorded in this range.</p>
+    <p data-slot="note" class="note">Nothing recorded in this range.</p>
   {:else}
-    <div class="list" bind:this={listEl} {@attach reflow()}>
+    <div data-slot="list" class="list" bind:this={listEl} {@attach reflow()}>
       {#each drawn as entry (entry.group.machineId)}
         {@const id = entry.group.machineId}
         <div
+          data-slot="group"
           class="group"
           data-flip={plan ? undefined : "box"}
           data-kind={entry.kind}
@@ -544,6 +551,7 @@
           {#if id !== FLAT}
             <!-- Where these ran, said once for the rows under it. -->
             <h3
+              data-slot="machine"
               class="machine mark-line"
               data-key="head:{id}"
               style={headStyle(entry.kind, id)}
@@ -594,29 +602,36 @@
   {/if}
 
   {#if harness === "claude"}
-    <p class="note">~ is the API price of work the plan already covers.</p>
+    <p data-slot="note" class="note">
+      ~ is the API price of work the plan already covers.
+    </p>
   {/if}
 </section>
 
 {#snippet line(item: Item, live: boolean)}
-  <div class="row">
+  <div data-slot="row" class="row">
     {#if item.href && live}
-      <a class="name" href={item.href} title={item.label}>{item.label}</a>
+      <a data-slot="name" class="name" href={item.href} title={item.label}
+        >{item.label}</a
+      >
     {:else if item.os}
-      <span class="name machine-name mark-line">
+      <span data-slot="name" class="name machine-name mark-line">
         <OsMark class="size-4 shrink-0" os={item.os} />
         <span>{item.label}</span>
       </span>
     {:else}
-      <span class="name" title={item.label}>{item.label}</span>
+      <span data-slot="name" class="name" title={item.label}>{item.label}</span>
     {/if}
     {#if live}
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <span {...props} class="measure">
-              <span class="fill" style:--share={item.share}></span>
-              <span class="value num">{item.value}</span>
+              <span data-slot="fill" class="fill" style:--share={item.share}
+              ></span>
+              <span data-where-it-goes-value data-slot="num" class="value num"
+                >{item.value}</span
+              >
             </span>
           {/snippet}
         </Tooltip.Trigger>
@@ -624,8 +639,10 @@
       </Tooltip.Root>
     {:else}
       <span class="measure">
-        <span class="fill" style:--share={item.share}></span>
-        <span class="value num">{item.value}</span>
+        <span data-slot="fill" class="fill" style:--share={item.share}></span>
+        <span data-where-it-goes-value data-slot="num" class="value num"
+          >{item.value}</span
+        >
       </span>
     {/if}
   </div>
@@ -633,6 +650,7 @@
 
 {#snippet leaving(lines: Line[], layer: boolean)}
   <div
+    data-layer={layer || undefined}
     aria-hidden="true"
     class={layer ? "leaving layer" : "leaving"}
     data-leaving

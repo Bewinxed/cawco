@@ -43,6 +43,7 @@
     Cancel
   </button>
   <button
+    data-slot="primary"
     aria-busy={busy || undefined}
     aria-disabled={busy || undefined}
     class="ns-btn primary touch-hit"

@@ -519,7 +519,7 @@
 
 {#snippet modelChip()}
   <ProviderLogo model={model ?? ""} size={15} />
-  <span class="chip-label"
+  <span data-slot="chip-label" class="chip-label"
     >{model
       ? modelName(model, modelInfo?.displayName).name
       : "Model not reported"}</span
@@ -536,30 +536,48 @@
      flow so the card only ever holds the one arriving. -->
 {#snippet feedback(slot: Slot)}
   {#if failure(slot)}
-    <p class="failure" role="alert" in:crossIn out:crossOut>
+    <p data-slot="failure" class="failure" role="alert" in:crossIn out:crossOut>
       {failure(slot)}
     </p>
   {:else if pending(slot)}
-    <p class="feedback" role="status" in:crossIn out:crossOut>
+    <p
+      data-slot="feedback"
+      class="feedback"
+      role="status"
+      in:crossIn
+      out:crossOut
+    >
       {slot === "account" && row
         ? `Moving to ${accountName(movingTo(row))}…`
         : "Applying change…"}
     </p>
   {:else if done[slot]}
-    <p class="feedback done mark-line" role="status" in:crossIn out:crossOut>
+    <p
+      data-feedback
+      data-slot="done"
+      class="feedback done mark-line"
+      role="status"
+      in:crossIn
+      out:crossOut
+    >
       <IconCheck aria-hidden="true" />
       <span>{DONE[slot]()}</span>
     </p>
   {/if}
 {/snippet}
 
-<div class="session-details ns-theme" bind:this={rootEl} style:--dir={dir}>
+<div
+  data-slot="session-details"
+  class="session-details ns-theme"
+  bind:this={rootEl}
+  style:--dir={dir}
+>
   <div class="details-body">
     <!-- The head is the tab's own surface, continued through the junction
          where the card hangs from the tab: the folder's label band. -->
-    <div class="head">
+    <div data-slot="head" class="head">
       <div class="identity">
-        <div class="title">
+        <div data-slot="title" class="title">
           <h2 id={`${uid}-title`} {title}>
             <MorphText text={title} wrap />
           </h2>
@@ -588,11 +606,11 @@
           </span>
         {/if}
       </div>
-      <p class="meta" bind:this={metaEl}>
+      <p data-slot="meta" class="meta" bind:this={metaEl}>
         <SessionStatus {sessionId} />
         {#if machine?.hostname || machineId}
           <span aria-hidden="true" class="sep">·</span>
-          <span class="host"
+          <span data-slot="host" class="host"
             ><MorphText text={machine?.hostname || machineId || ""} /></span
           >
         {/if}
@@ -615,7 +633,7 @@
       <!-- The harness the picker lists: a kept setting's browsed one, else the session's. -->
       {@const shownHarness = kept ? (browsing ?? harness) : harness}
       <div class="configuration">
-        <div class="settings">
+        <div data-slot="settings" class="settings">
           {#if editable || kept}
             <NsPopover
               aria-label="Models"
@@ -659,7 +677,11 @@
               </div>
             </NsPopover>
           {:else}
-            <span class="ns-chip-btn tool static model-chip"
+            <span
+              data-tool
+              data-slot="ns-chip-btn"
+              data-model-chip
+              class="ns-chip-btn tool static model-chip"
               >{@render modelChip()}</span
             >
           {/if}
@@ -696,7 +718,7 @@
           {@render feedback("permission")}
           {@render feedback("account")}
           {#if !editable}
-            <p class="feedback">
+            <p data-slot="feedback" class="feedback">
               {kept
                 ? "Effort and permission unlock while the session is running."
                 : "Controls unlock while the session is running."}
@@ -727,7 +749,9 @@
       {:else if reading}
         <span>Reading…</span>
       {:else if refusal}
-        <span class="refusal" title={refusal}>{refusal}</span>
+        <span data-slot="refusal" class="refusal" title={refusal}
+          >{refusal}</span
+        >
       {:else}
         <span>Context not reported</span>
       {/if}
@@ -736,13 +760,14 @@
       <ProviderLimit label={providerLimit.label} meter={providerLimit.meter} />
     {/if}
     {#if session?.mcp}
-      <a class="tools" href="/config/mcp"
+      <a data-slot="tools" class="tools" href="/config/mcp"
         >{@render figure(`${session.mcp.length} MCP`)}</a
       >
     {/if}
   </div>
   <div class="footer">
     <button
+      data-slot="primary"
       class="ns-btn primary xs"
       onclick={() => {
         onclose();

@@ -577,6 +577,8 @@
      panel hangs. -->
 {#snippet rim(low: boolean)}
   <svg
+    data-slot="rim"
+    data-foot={low || undefined}
     aria-hidden="true"
     class={["rim", low && "foot"]}
     data-count={count}
@@ -591,6 +593,7 @@
       {/each}
       {#if ringClosed}
         <path
+          data-slot="whole"
           class="arc lap whole"
           d={low ? ROUND_HALF.low : ROUND_HALF.high}
           pathLength="1"
@@ -598,7 +601,7 @@
         />
       {/if}
     </g>
-    <g class="standing">
+    <g data-slot="standing" class="standing">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path class="arc" d={outlinePath(k)} pathLength="1" transition:drawn />
       {/each}
@@ -612,6 +615,7 @@
       {/each}
       {#if ringClosed}
         <path
+          data-slot="whole"
           class="arc lap whole"
           d={low ? STAND_HALF.low : STAND_HALF.high}
           pathLength="1"
@@ -625,6 +629,7 @@
 <Tip label={tipText}>
   {#snippet children(tip)}
     <button
+      data-bar-item
       {...mergeProps(tip, {
         onclick: choose,
         onpointerdown: press,
@@ -640,6 +645,7 @@
     >
       <span class={["mug", { pressed }]}>
         <span
+          data-needs-caw-covered={covering || undefined}
           class="face"
           data-caw-phase={phase}
           style:--bleed="{CAW_STILL_BLEED}px"

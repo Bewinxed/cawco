@@ -119,6 +119,7 @@
       aria-haspopup="dialog"
       aria-label={label}
       class="touch-hit {triggerClass}"
+      data-ns-popover-trigger-class={triggerClass}
       data-state={open ? "open" : "closed"}
       {id}
       onclick={toggle}
@@ -135,6 +136,7 @@
       <PopoverPrimitive.Trigger
         aria-label={label}
         class="touch-hit {triggerClass}"
+        data-ns-popover-trigger-class={triggerClass}
         {id}
         style={triggerStyle}
       >
@@ -148,6 +150,7 @@
     {/if}
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        data-ns-pop
         {align}
         aria-label={rest["aria-label"]}
         class="ns-theme ns-pop"

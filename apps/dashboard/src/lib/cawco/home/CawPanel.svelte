@@ -148,19 +148,28 @@
 <!-- More than the panel holds: the house edge fade at the foot while more
      is below, and at the head once scrolled. -->
 <div
+  data-slot="list"
   class={["list", overflowing && "kit-edge-fade-block"]}
   data-safe-bottom
   {@attach reflow()}
   {@attach measured}
 >
   {#if needs.length > 0}
-    <section aria-labelledby="caw-needs" class="section" data-flip="box">
-      <div class="head mark-line">
-        <span class="glyph needs" data-box
-          ><IconNeedsYou aria-hidden="true" /></span
+    <section
+      data-slot="section"
+      aria-labelledby="caw-needs"
+      class="section"
+      data-flip="box"
+    >
+      <div data-slot="head" class="head mark-line">
+        <span
+          data-slot="needs"
+          data-caw-panel-glyph
+          class="glyph needs"
+          data-box><IconNeedsYou aria-hidden="true" /></span
         >
-        <span class="title" id="caw-needs">Needs you</span>
-        <span class="count">{needs.length}</span>
+        <span data-slot="title" class="title" id="caw-needs">Needs you</span>
+        <span data-slot="count" class="count">{needs.length}</span>
       </div>
       <ul class="rows" {@attach echoBeat()}>
         {#each needs as item (item.key)}
@@ -171,13 +180,21 @@
   {/if}
 
   {#if noticeCount > 0}
-    <section aria-labelledby="caw-notices" class="section" data-flip="box">
-      <div class="head mark-line">
-        <span class="glyph" data-box><IconNotices aria-hidden="true" /></span>
-        <span class="title" id="caw-notices">Notices</span>
-        <span class="count">{noticeCount}</span>
+    <section
+      data-slot="section"
+      aria-labelledby="caw-notices"
+      class="section"
+      data-flip="box"
+    >
+      <div data-slot="head" class="head mark-line">
+        <span data-slot="glyph" class="glyph" data-box
+          ><IconNotices aria-hidden="true" /></span
+        >
+        <span data-slot="title" class="title" id="caw-notices">Notices</span>
+        <span data-slot="count" class="count">{noticeCount}</span>
         {#if clearable}
           <Button
+            data-clear
             aria-label="Clear all {noticeCount} notices"
             data-box
             class="clear text-[var(--ink-muted)] hover:text-[var(--ink-strong)]"
@@ -187,10 +204,10 @@
           >
         {/if}
       </div>
-      <ul class="rows notices">
+      <ul data-slot="notices" class="rows notices">
         {#if damaged}
           <li class="damaged" data-flip>
-            <p class="words" role="alert">
+            <p data-slot="words" class="words" role="alert">
               {damagedHubRecordWords("notices", damaged)}
             </p>
             <Button
@@ -248,7 +265,13 @@
 
   {#if needs.length === 0 && noticeCount === 0}
     <!-- mark-line: Caw stands above the words, not beside them -->
-    <div class="empty" data-flip role="status" tabindex="-1">
+    <div
+      data-slot="caw-panel-empty"
+      class="empty"
+      data-flip
+      role="status"
+      tabindex="-1"
+    >
       {#if feed.connected}
         <CawFace size={48} status="ready" />
       {/if}

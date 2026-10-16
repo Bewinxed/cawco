@@ -111,9 +111,10 @@
   });
 </script>
 
-<div class="detail">
-  <div class="instruction-wrap">
+<div data-slot="detail" class="detail">
+  <div data-slot="instruction-wrap" class="instruction-wrap">
     <div
+      data-slot="instruction"
       bind:this={body}
       class="instruction"
       data-clamped={whole ? undefined : ""}
@@ -123,6 +124,7 @@
     </div>
     {#if long}
       <Button
+        data-more
         aria-controls="instruction-{routine.id}"
         aria-expanded={whole}
         class="more"
@@ -136,10 +138,11 @@
   </div>
 
   {#if recent.length > 0}
-    <section aria-labelledby="runs-{routine.id}" class="runs">
+    <section data-slot="runs" aria-labelledby="runs-{routine.id}" class="runs">
       <h4 class="runs-head" id="runs-{routine.id}">Recent runs</h4>
       <div class="runs-ledger">
         <Table.Root
+          data-runs
           aria-labelledby="runs-{routine.id}"
           class="runs table-fixed"
         >
@@ -160,9 +163,10 @@
               {@const outcome = outcomeOf(run)}
               {@const result = resultOf(run)}
               {@const href = runHref(run)}
-              <Table.Row class="run" data-outcome={outcome.status}>
+              <Table.Row data-run class="run" data-outcome={outcome.status}>
                 <Table.Cell class="col-when" data-cell="when">
                   <time
+                    data-slot="num"
                     class="num"
                     datetime={new Date(run.startedAt).toISOString()}
                     title={exactOf(run.startedAt)}>{since(run.startedAt)}</time
@@ -172,16 +176,21 @@
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell class="col-took" data-cell="took">
-                  <span class="num">{tookOf(run)}</span>
+                  <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
                 <Table.Cell class="col-result" data-cell="result">
                   {#if href}
-                    <a class="result" {href} title={result || undefined}
-                      >{result || "Read the run"}</a
+                    <a
+                      data-slot="result"
+                      class="result"
+                      {href}
+                      title={result || undefined}>{result || "Read the run"}</a
                     >
                   {:else}
-                    <span class="result" title={result || undefined}
-                      >{result}</span
+                    <span
+                      data-slot="result"
+                      class="result"
+                      title={result || undefined}>{result}</span
                     >
                   {/if}
                 </Table.Cell>
@@ -194,7 +203,11 @@
   {/if}
 
   {#if actions.length > 0}
-    <section aria-labelledby="actions-{routine.id}" class="runs">
+    <section
+      data-slot="runs"
+      aria-labelledby="actions-{routine.id}"
+      class="runs"
+    >
       <h4 class="runs-head" id="actions-{routine.id}">Actions</h4>
       <div class="runs-ledger">
         <ActionsTable {actions} label="Actions" />

@@ -23,6 +23,7 @@
 </script>
 
 <button
+  data-slot="plan-ring"
   aria-label={total > 0 ? `Plan, ${done} of ${total} done` : "Plan"}
   aria-pressed={open}
   class="plan-ring kit-tray-chip touch-hit"
@@ -32,7 +33,7 @@
   {#if total > 0}
     <TaskRing {done} size="md" {total} />
     <span>Plan</span>
-    <span class="num">{done}/{total}</span>
+    <span data-slot="num" class="num">{done}/{total}</span>
   {:else}
     <IconToolTodo aria-hidden="true" />
     <span>Plan</span>

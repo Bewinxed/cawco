@@ -1356,6 +1356,7 @@
   {#if artifact && unsentPicks}
     <!-- The page's picks the session has not heard; pins and ink go by themselves. -->
     <button
+      data-slot="send"
       aria-busy={sending || undefined}
       aria-disabled={sending || undefined}
       class="send touch-hit"
@@ -1364,7 +1365,7 @@
       type="button"
     >
       <PendingContent icon={IconSend} pending={sending} />
-      <span class="send-label">Send picks</span>
+      <span data-slot="send-label" class="send-label">Send picks</span>
     </button>
   {/if}
   {#if !(ownTab || linkSession)}
@@ -1382,6 +1383,7 @@
   {/if}
   {#if canUndock}
     <button
+      data-slot="other"
       aria-label="Undock"
       class="other touch-hit"
       disabled={!stage}
@@ -1395,6 +1397,7 @@
   {#if artifact && !ownTab}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
     <a
+      data-slot="other"
       aria-label="Open in new tab"
       class="other touch-hit"
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
@@ -1453,6 +1456,7 @@
     </div>
     <!-- The Comments panel, floating over the page's top-right; the count is the open pins'. -->
     <button
+      data-slot="comments"
       aria-expanded={listOpen}
       aria-haspopup="dialog"
       aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
@@ -1464,7 +1468,7 @@
       type="button"
     >
       <IconChat /><span class="comments-label">Comments</span>
-      <span class="count">{openCount}</span>
+      <span data-slot="count" class="count">{openCount}</span>
       {#if !pinsShown}
         <!-- ⇧C hid the pins: said where the person looks for them. -->
         <IconEyeClosed class="pins-hidden" />
@@ -1472,6 +1476,7 @@
     </button>
   {/if}
   <button
+    data-slot="other"
     aria-label="Reload"
     class="other touch-hit"
     onclick={() => {
@@ -1505,6 +1510,7 @@
        an Esc once no card is open and the mode is Interact. -->
   <Popover.Root onOpenChange={showList} open={listOpen && !!well}>
     <Popover.Content
+      data-pin-list-pop
       align="end"
       class="pin-list-pop"
       bind:ref={listPanel}
@@ -1542,6 +1548,8 @@
 {#if inset}
   <!-- Inset: no head and no modes; the page as the panel draws it. -->
   <section
+    data-slot="preview-pane"
+    data-preview-inset
     aria-label={artifact?.name ?? "Preview"}
     class="preview-pane preview-inset"
     bind:this={section}
@@ -1573,11 +1581,16 @@
 {#snippet framed()}
   {#if isCanvas}
     <!-- The canvas's stage stands over this box: its one iframe. -->
-    <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
+    <div
+      data-slot="canvas-slot"
+      aria-hidden="true"
+      class="canvas-slot"
+      bind:this={canvasSlot}
+    ></div>
   {:else if unreached}
     <!-- This tab can't reach the preview's own origin: what previews need,
          and where to switch how they are reached. -->
-    <div class="down" role="alert" transition:appear>
+    <div data-slot="down" class="down" role="alert" transition:appear>
       <EmptyState icon={IconAlert} title="This preview can't be reached">
         {#snippet line()}
           {unreachedWhy}.
@@ -1610,6 +1623,7 @@
       {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
+        data-ready={!current || loaded || undefined}
         allow="clipboard-write"
         inert={!current}
         onerror={() => arrived(key)}
@@ -1645,12 +1659,15 @@
       ></iframe>
     {/each}
     <div
+      data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
+      data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
       class="cover"
       class:ready={(loaded || standing !== null) && !stageWaiting}
       role={stageWaiting ? "status" : undefined}
     >
       <span
+        data-slot="block"
         class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
       ></span>
       {#if stageWaiting}
@@ -1662,7 +1679,12 @@
       {@const first = compileErrors[0]}
       <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
       <div aria-hidden="true" class="sheet-dim" transition:appear></div>
-      <div class="sheet-error" role="alert" transition:appear>
+      <div
+        data-slot="sheet-error"
+        class="sheet-error"
+        role="alert"
+        transition:appear
+      >
         <p class="sheet-error-title">
           Doesn't compile: <code>{errorPlace(first)}</code>
         </p>
@@ -1680,7 +1702,7 @@
   {/if}
   {#if sheetStage?.status === "error"}
     <!-- The stage didn't start, or failed its restarts: where the page would be. -->
-    <div class="down" role="alert" transition:appear>
+    <div data-slot="down" class="down" role="alert" transition:appear>
       <EmptyState
         icon={IconAlert}
         title={`The stage for ${sheetStage.dir} didn't start`}
@@ -1705,7 +1727,7 @@
   {/if}
   {#if down}
     <!-- What happened, why and the way back, where the page would be. -->
-    <div class="down" role="alert" transition:appear>
+    <div data-slot="down" class="down" role="alert" transition:appear>
       <EmptyState icon={IconAlert} title={downTitle}>
         {#snippet line()}
           {#if down === "workspace"}
@@ -1771,7 +1793,12 @@
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
   <!-- The open pin's card, over the page beside its pin (the frame fills the well). -->
-  <div class="pin-room" bind:clientHeight={roomH} bind:clientWidth={roomW}>
+  <div
+    data-slot="pin-room"
+    class="pin-room"
+    bind:clientHeight={roomH}
+    bind:clientWidth={roomW}
+  >
     {#if cardPin}
       <PinCard
         agentName={owner ? ownerName : "The session"}

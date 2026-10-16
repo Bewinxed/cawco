@@ -72,23 +72,33 @@
   };
 </script>
 
-<div class="branch rail-row">
+<div data-slot="rail-row" class="branch rail-row">
   <Collapsible.Root bind:open={open.get, open.set}>
-    <Collapsible.Trigger class="bhead rail-line press-tint">
-      <span aria-hidden="true" class="mark rail-cell m{markHue(seed)}"
-        ><Sprite /></span
+    <Collapsible.Trigger data-bhead class="bhead rail-line press-tint">
+      <span
+        data-rail-cell
+        data-slot="mark"
+        aria-hidden="true"
+        class="mark rail-cell m{markHue(seed)}"><Sprite /></span
       >
       <span class="tk">{branch.subagentType}</span>
-      <span aria-hidden="true" class="chev" data-box><IconChevronRight /></span>
+      <span data-slot="chev" aria-hidden="true" class="chev" data-box
+        ><IconChevronRight /></span
+      >
       {#if title !== branch.subagentType}
         <span class="arg">{title}</span>
       {/if}
       {#if model}
-        <span class="model">{modelLabel(model)}</span>
+        <span data-slot="model" class="model">{modelLabel(model)}</span>
       {/if}
       <!-- The clock is a timer (live off): in the transcript's log the phase
            and its steps are read when they change, not every second. -->
-      <span class="pill mark-text {phase}" data-box {@attach clock.watch}>
+      <span
+        class="pill mark-text {phase}"
+        data-subagent-phase={phase}
+        data-box
+        {@attach clock.watch}
+      >
         {phase}
         {#if view.steps}
           · {view.steps} step{view.steps === 1 ? "" : "s"}
@@ -102,7 +112,7 @@
          column under the mark. -->
     {#if view.running}
       <p class="now rail-line">
-        <span aria-hidden="true" class="rail-cell"
+        <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
           ><span class="beat"></span></span
         ><span>{view.currentStep}</span>
       </p>
@@ -116,7 +126,7 @@
       <!-- The branch's transcript exists only while it is open (and folding
            shut): bits-ui keeps a closed Content's children mounted. -->
       <CollapsibleLazy count={1} open={open.get()}>
-        <div class="inner">
+        <div data-slot="inner" class="inner">
           {#each rows as row (row.key)}
             {#if row.kind === "tools"}
               <ToolGroup messages={row.messages} />

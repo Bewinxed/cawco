@@ -561,7 +561,7 @@
     {/if}
   </div>
 {/snippet}
-<div class="wf editor" bind:clientWidth={panelWidth}>
+<div data-slot="editor" class="wf editor" bind:clientWidth={panelWidth}>
   <header class="wf-stack">
     <div class="wf-row wf-spread">
       <div class="breadcrumb">
@@ -632,6 +632,7 @@
           >
             + Add node
           </button><button
+            data-slot="num"
             class="wf-btn narrow-only num"
             onclick={openInspector}
             type="button"
@@ -640,7 +641,7 @@
           </button>
         {/if}
       </div>
-      <span class="wf-muted num save-state" role="status"
+      <span data-slot="num" class="wf-muted num save-state" role="status"
         ><MorphText text={saveState} /></span
       >
     </div>
@@ -677,7 +678,12 @@
          tab order (pane-slide). -->
     <div class="panes">
       {#key tab}
-        <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
+        <div
+          data-slot="pane"
+          class="pane"
+          in:paneSlide={{ dir }}
+          out:paneSlide={{ dir }}
+        >
           {#if tab === "program"}
             <WorkflowProgram
               {live}
@@ -722,7 +728,11 @@
               >
             {/if}
           {:else}
-            <div class="runs" {@attach highlight({ rows: ".run-entry" })}>
+            <div
+              data-slot="runs"
+              class="runs"
+              {@attach highlight({ rows: ".run-entry" })}
+            >
               <!-- A run that starts, or a filter that changes what is
                    listed, moves the rows the house way (motion/rows). -->
               <aside class="run-list wf-stack" {@attach reflow()}>

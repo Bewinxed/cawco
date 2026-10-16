@@ -45,12 +45,13 @@
           {@const going = account.id === target}
           <ContextMenu.RadioItem disabled={going} value={account.id}>
             <i
+              data-slot="dot"
               aria-hidden="true"
               class="dot"
               data-box
               style:--c={hueVar(account.hue)}
             ></i>
-            <span class="name"
+            <span data-slot="name" class="name"
               >{going ? `Moving to ${nameOf(account)}…` : nameOf(account)}</span
             >
           </ContextMenu.RadioItem>

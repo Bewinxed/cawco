@@ -29,6 +29,7 @@
 
 <!-- A label, so its touch area around the 24px title focuses the field. -->
 <label
+  data-slot="title"
   class="title touch-hit"
   data-share="title:{page.url.pathname}"
   {@attach land(() => `title:${page.url.pathname}`, { uniform: true })}

@@ -150,8 +150,8 @@
 </svelte:head>
 
 <div class="page">
-  <div class="col">
-    <header class="top">
+  <div data-slot="col" class="col">
+    <header data-slot="top" class="top">
       <!-- The shell's bar already names the page; the heading is for
            assistive tech only, so the name is not said twice. -->
       <h1 class="sr-only">Usage</h1>
@@ -176,7 +176,7 @@
         </Select.Content>
       </Select.Root>
       {#if !filtered}
-        <div class="controls">
+        <div data-slot="controls" class="controls">
           <Tabs
             onValueChange={(next) => {
               range = next as Range;
@@ -203,7 +203,7 @@
 
     {#if cawco.spendFailed}
       <div class="page-error" role="alert">
-        <p class="note">
+        <p data-slot="note" class="note">
           Could not reach the hub for usage data. Check that it is running, then
           try again.
         </p>

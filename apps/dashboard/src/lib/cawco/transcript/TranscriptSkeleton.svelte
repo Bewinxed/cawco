@@ -19,22 +19,36 @@
   const AFTER = ["72%", "35%"];
 </script>
 
-<div aria-busy="true" class="skeleton tx-columns" role="status">
+<div
+  data-slot="tx-columns"
+  data-skeleton
+  aria-busy="true"
+  class="skeleton tx-columns"
+  role="status"
+>
   <span class="spoken">Reading transcript…</span>
 
   <!-- The reader's turn: its mark on the pane, one short line in the well. -->
-  <div class="block you">
-    <div class="who">
-      <Skeleton class="mark" /><Skeleton class="name" />
+  <div data-you data-slot="block" class="block you">
+    <div data-slot="who" class="who">
+      <Skeleton data-transcript-skeleton-mark class="mark" /><Skeleton
+        data-transcript-skeleton-name
+        class="name"
+      />
     </div>
-    <div class="well">
+    <div data-slot="well" class="well">
       <div class="prose"><Skeleton class="ln" style="width: 52%" /></div>
     </div>
   </div>
 
   <!-- The agent's answer: two paragraphs, ragged the way prose is. -->
-  <div class="block">
-    <div class="who"><Skeleton class="mark" /><Skeleton class="name" /></div>
+  <div data-slot="block" class="block">
+    <div data-slot="who" class="who">
+      <Skeleton data-transcript-skeleton-mark class="mark" /><Skeleton
+        data-transcript-skeleton-name
+        class="name"
+      />
+    </div>
     {#each ANSWER as lines, i (i)}
       <div class="prose">
         {#each lines as width (width)}
@@ -45,18 +59,30 @@
   </div>
 
   <!-- Its tool calls, one row each, on the rail. -->
-  <div class="tools rail-row">
+  <div
+    data-slot="tools"
+    data-transcript-skeleton-rail-row
+    class="tools rail-row"
+  >
     {#each TOOLS as width (width)}
       <div class="trow rail-line">
-        <Skeleton class="ic rail-cell" /><Skeleton class="tk" data-box />
+        <Skeleton data-rail-cell class="ic rail-cell" /><Skeleton
+          class="tk"
+          data-box
+        />
         <Skeleton class="arg" data-box style="width: {width}" />
       </div>
     {/each}
   </div>
 
   <!-- And what it said about them. -->
-  <div class="block">
-    <div class="who"><Skeleton class="mark" /><Skeleton class="name" /></div>
+  <div data-slot="block" class="block">
+    <div data-slot="who" class="who">
+      <Skeleton data-transcript-skeleton-mark class="mark" /><Skeleton
+        data-transcript-skeleton-name
+        class="name"
+      />
+    </div>
     <div class="prose">
       {#each AFTER as width (width)}
         <Skeleton class="ln" style="width: {width}" />

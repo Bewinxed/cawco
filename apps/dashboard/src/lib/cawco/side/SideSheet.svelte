@@ -296,6 +296,7 @@
 
 <Portal
   ><div
+    data-slot="preview-sheet-host"
     class="preview-sheet-host"
     data-active-snap={typeof snap === "string" ? 0.6 : snap}
     style={`height:${availableHeight}px`}
@@ -321,6 +322,7 @@
     bind:activeSnapPoint={snap}
   >
     <Drawer.Content
+      data-preview-sheet
       class="preview-sheet"
       hosted
       modal={false}
@@ -342,11 +344,13 @@
     >
       <Drawer.Title class="sr-only">Beside the conversation</Drawer.Title>
       <div
+        data-slot="sheet"
         class="sheet"
         style:--sheet-hidden="{hidden}px"
         {@attach land(() => share, { mode: "clip" })}
       >
         <Vaul.Handle
+          data-preview-grab
           class="preview-grab"
           onclick={cycleSnap}
           onpointerdown={(event) => {

@@ -11,7 +11,11 @@
   const node = $derived(data as { name: string; picked: boolean });
 </script>
 
-<div class="decision-node" data-picked={node.picked || undefined}>
+<div
+  data-slot="decision-node"
+  class="decision-node"
+  data-picked={node.picked || undefined}
+>
   <Handle
     id="in-left"
     isConnectable={false}
@@ -24,7 +28,7 @@
     position={Position.Top}
     type="target"
   />
-  <span class="name">{node.name}</span>
+  <span data-slot="name" class="name">{node.name}</span>
   <span aria-hidden="true" class="ring"></span>
   <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
   <Handle

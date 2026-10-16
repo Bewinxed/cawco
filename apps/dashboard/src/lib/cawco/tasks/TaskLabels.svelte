@@ -48,7 +48,7 @@
 
 <div class="labels">
   {#each labels as label (label)}
-    <Badge class="label" data-label variant="secondary">
+    <Badge data-task-labels-label class="label" data-label variant="secondary">
       <span>{label}</span>
       <button
         aria-label="Remove the label {label}"
@@ -61,6 +61,7 @@
   {/each}
   {#if adding}
     <input
+      data-slot="task-labels-field"
       aria-label="New label"
       autocomplete="off"
       class="field"
@@ -87,6 +88,7 @@
     </datalist>
   {:else}
     <button
+      data-slot="add"
       class="add kit-chip touch-hit mark-line"
       onclick={() => {
         adding = true;

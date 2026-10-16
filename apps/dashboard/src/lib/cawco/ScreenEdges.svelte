@@ -73,12 +73,13 @@
 </svelte:head>
 
 <div
+  data-slot="edge-top"
   aria-hidden="true"
   class="edge-top"
   ontransitionend={read}
   bind:this={top}
 ></div>
-<div aria-hidden="true" class="edge-bottom"></div>
+<div data-slot="edge-bottom" aria-hidden="true" class="edge-bottom"></div>
 
 <style>
   /* css-scope: the screen's edges are the document's own, set on its root */

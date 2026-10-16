@@ -291,13 +291,18 @@
 >
   {#if shown.length}
     <div
+      data-slot="column"
       class="column"
       bind:this={column}
       in:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
-        <div class="row mark-line {row?.kind ?? ''}">
+        <div
+          data-slot="row"
+          class="row mark-line {row?.kind ?? ''}"
+          data-delegate-tail-kind={row?.kind}
+        >
           {#if row?.kind === "tool"}
             {@const Icon = row.icon}
             <span class="ic {row.color}" class:breathe={row.live} data-box
@@ -311,27 +316,32 @@
             <span class="ic" data-box><IconCpu /></span>
             <span class="verb">Reasoning</span>
           {:else if row?.kind === "say"}
-            <span class="text">{row.text}</span>
+            <span data-slot="text" class="text">{row.text}</span>
           {:else if row?.kind === "stream"}
-            <span class="text" data-box
+            <span data-slot="text" class="text" data-box
               ><MessageBody source={row.text} streaming /></span
             >
           {:else if row?.kind === "peer"}
             {@const Icon = row.icon}
             <span class="ic" data-box><Icon /></span>
             <span class="verb">{row.lead}</span>
-            <span class="text">{row.name}</span>
+            <span data-slot="text" class="text">{row.name}</span>
           {:else if row}
-            <span class="text">{row.text}</span>
+            <span data-slot="text" class="text">{row.text}</span>
           {/if}
         </div>
       {/each}
     </div>
   {:else if loading}
     <!-- Its transcript is on the way: three rows' worth of the house skeleton. -->
-    <div aria-label="Loading its transcript" class="column" role="status">
+    <div
+      data-slot="column"
+      aria-label="Loading its transcript"
+      class="column"
+      role="status"
+    >
       {#each [240, 180, 280] as width (width)}
-        <div class="row">
+        <div data-slot="row" class="row">
           <Skeleton class="h-3" style="inline-size: {width}px" />
         </div>
       {/each}

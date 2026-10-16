@@ -101,6 +101,7 @@
 </script>
 
 <a
+  data-slot="task-card"
   class="task-card press-tint focus-inset"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
@@ -113,10 +114,10 @@
   {@attach land(() => key, { uniform: true })}
 >
   {#if titleFirst}
-    <span class="title">{task.title}</span>
+    <span data-slot="title" class="title">{task.title}</span>
   {/if}
-  <span class="head">
-    <span class="id">{task.id}</span>
+  <span data-slot="head" class="head">
+    <span data-slot="id" class="id">{task.id}</span>
     {#if task.problem}
       <span class="problem" title={task.problem}>
         <IconWarningTriangle aria-hidden="true" />
@@ -131,7 +132,7 @@
     {/if}
   </span>
   {#if !titleFirst}
-    <span class="title">{task.title}</span>
+    <span data-slot="title" class="title">{task.title}</span>
   {/if}
   {#if flags.live || task.kind === "you" || asks || approves || date}
     <span class="live-foot mark-line">
@@ -140,7 +141,13 @@
         <IconNeedsYou aria-hidden="true" class="attn" />
         <span>{asks ? "its session asks you" : "an action waits on you"}</span>
       {:else if flags.live}
-        <span aria-hidden="true" class="dot live" data-box></span>
+        <span
+          data-task-card-live
+          data-slot="dot"
+          aria-hidden="true"
+          class="dot live"
+          data-box
+        ></span>
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>
         {:else}
@@ -151,19 +158,21 @@
         <IconNeedsYou aria-hidden="true" class="attn" />
         <span>waiting on you</span>
       {:else if date}
-        <span class="when num">{date}</span>
+        <span data-when data-slot="num" class="when num">{date}</span>
       {/if}
     </span>
   {/if}
   {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0}
-    <span class="foot">
+    <span data-slot="foot" class="foot">
       {#if task.todos.total > 0}
         <span
           class="todos mark-line"
           title="{task.todos.done} of {task.todos.total} to-dos done"
         >
           <TaskRing done={task.todos.done} size="sm" total={task.todos.total} />
-          <span class="num">{task.todos.done}/{task.todos.total}</span>
+          <span data-slot="num" class="num"
+            >{task.todos.done}/{task.todos.total}</span
+          >
         </span>
       {/if}
       {#if waitsOn.length > 0}
@@ -172,7 +181,7 @@
           <span>after</span>
           <span class="ref">{waitsOn[0]}</span>
           {#if waitsOn.length > 1}
-            <span class="num">+{waitsOn.length - 1}</span>
+            <span data-slot="num" class="num">+{waitsOn.length - 1}</span>
           {/if}
         </span>
       {/if}
@@ -180,7 +189,7 @@
         <Badge variant="secondary"><span>{label}</span></Badge>
       {/each}
       {#if task.labels.length > 2}
-        <Badge class="num" variant="secondary"
+        <Badge data-num class="num" variant="secondary"
           ><span>+{task.labels.length - 2}</span></Badge
         >
       {/if}

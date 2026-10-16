@@ -312,6 +312,7 @@
 <div class="editor-wrap" data-keeps-draft>
   <!-- biome-ignore lint/a11y/useSemanticElements: a contenteditable is the only element that can hold inline chips; textarea cannot -->
   <div
+    data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
     class="editor fai-scroll"

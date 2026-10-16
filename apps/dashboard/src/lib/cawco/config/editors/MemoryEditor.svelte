@@ -514,13 +514,13 @@
         />
       {/if}
     </div>
-    <h1 class="title">{label}</h1>
+    <h1 data-slot="title" class="title">{label}</h1>
     {#if !main}
       <p class="facts">
         <span>Loaded into: {loadedInto(scope, cawco.projects)}</span>
       </p>
     {/if}
-    <p class="facts num">
+    <p data-slot="num" class="facts num">
       <span>{formatBytes(bytes)}</span>
       <span
         class="tokens"
@@ -558,7 +558,7 @@
             oldContent={conflict.content}
           />
         {/key}
-        <div class="acts">
+        <div data-slot="acts" class="acts">
           <Button
             disabled={busy}
             onclick={takeLatest}
@@ -580,7 +580,7 @@
         </div>
       </div>
     {/if}
-    <div class="well">
+    <div data-slot="well" class="well">
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->
       {#if kept.restored}
@@ -599,9 +599,9 @@
     {#if historyError}
       <p class="caution" role="alert">{historyError}</p>
     {:else if versions === null}
-      <p class="note">Loading…</p>
+      <p data-slot="note" class="note">Loading…</p>
     {:else if versions.length === 0}
-      <p class="note">
+      <p data-slot="note" class="note">
         Nothing replaced yet. Every version a save, an adopt or an overwrite
         replaces is kept here.
       </p>
@@ -610,18 +610,22 @@
            reflow, what follows sliding; a row's compare folds open inside
            it. -->
       <div class="history" {@attach reflow()}>
-        <ul class="list">
+        <ul data-slot="list" class="list">
           {#each visibleVersions as row (row.id)}
-            <li class="entry" data-flip>
+            <li data-slot="entry" class="entry" data-flip>
               <div class="line">
-                <span class="label"
+                <span data-slot="memory-editor-label" class="label"
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
-                <span class="note">from {sourceLabel(row.source)}</span>
-                <span class="note font-mono" title={row.hash}
+                <span data-slot="note" class="note"
+                  >from {sourceLabel(row.source)}</span
+                >
+                <span data-slot="note" class="note font-mono" title={row.hash}
                   >{row.hash.slice(0, 8)}</span
                 >
-                <span class="note">{formatBytes(row.bytes)}</span>
+                <span data-slot="note" class="note"
+                  >{formatBytes(row.bytes)}</span
+                >
                 <Button
                   class="ml-auto"
                   onclick={() => openVersion(row)}
@@ -635,9 +639,10 @@
                 <!-- The compare folds open (240 / 160); inside, reading
                    cross-fades to the diff as the box follows its height. -->
                 <div class="reveal" in:unfold out:unfold>
-                  <div class="swap" {@attach morph()}>
+                  <div data-slot="swap" class="swap" {@attach morph()}>
                     {#if reading[row.id]}
                       <p
+                        data-slot="note"
                         class="note busy mark-line"
                         role="status"
                         in:crossIn
@@ -684,7 +689,7 @@
           {/each}
         </ul>
         {#if versions.length > LATEST}
-          <div class="more" data-flip>
+          <div data-slot="more" class="more" data-flip>
             <Button
               onclick={() => {
                 allVersions = !allVersions;
@@ -707,13 +712,13 @@
   {#if !scoped(savedScope)}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <p class="note">
+        <p data-slot="note" class="note">
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
-          <p class="note">
+          <p data-slot="note" class="note">
             In sync on {applied.length} machine{applied.length === 1
               ? ""
               : "s"}.
@@ -723,13 +728,13 @@
             {/if}
           </p>
         {/if}
-        <ul class="list">
+        <ul data-slot="list" class="list">
           {#each machines as machine, index (machine.machineId)}
             {@const item = memoryStateOf(machine, path)}
             {@const online = machine.status === "online"}
             {@const drifted = item?.state === "failed"}
             {@const comparingThis = comparing === machine.machineId}
-            <li class="entry">
+            <li data-slot="entry" class="entry">
               <div class="line">
                 <MachineRow
                   hue={machineHue(index, online)}
@@ -743,7 +748,7 @@
                 />
                 {#if drifted || !saved}
                   {@const settle = settling[machine.machineId]}
-                  <span class="acts" in:crossIn out:crossOut>
+                  <span data-slot="acts" class="acts" in:crossIn out:crossOut>
                     {#if drifted}
                       <Button
                         disabled={!online}
@@ -787,9 +792,10 @@
                 <!-- The machine's copy folds open under its row; reading
                    cross-fades to what was read as the box follows. -->
                 <div class="reveal" in:unfold out:unfold>
-                  <div class="swap" {@attach morph()}>
+                  <div data-slot="swap" class="swap" {@attach morph()}>
                     {#if peeking[machine.machineId]}
                       <p
+                        data-slot="note"
                         class="note busy mark-line"
                         role="status"
                         in:crossIn
@@ -804,7 +810,7 @@
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
-                      <p class="note" in:crossIn out:crossOut>
+                      <p data-slot="note" class="note" in:crossIn out:crossOut>
                         This machine has no copy of this file.
                       </p>
                     {:else if copies[machine.machineId] !== undefined}

@@ -68,12 +68,13 @@
 <section class="part">
   <h3 class="kit-section-head">Fields</h3>
   {#if Object.keys(fields).length > 0}
-    <dl class="grid">
+    <dl data-slot="grid" class="grid">
       {#each Object.entries(fields) as [key, value] (key)}
         <dt class="key">{key}</dt>
-        <dd class="value">
+        <dd data-slot="value" class="value">
           {#if editing === key}
             <input
+              data-slot="task-fields-field"
               aria-label={key}
               class="field"
               onblur={() => commit(key)}
@@ -91,6 +92,7 @@
             />
           {:else}
             <button
+              data-slot="shown"
               class="shown press-tint focus-inset"
               onclick={() => {
                 editing = key;
@@ -100,6 +102,7 @@
               type="button">{said(value)}</button
             >
             <Button
+              data-drop
               aria-label="Remove {key}"
               class="drop"
               onclick={() => save({ [key]: "" })}
@@ -124,6 +127,7 @@
       }}
     >
       <input
+        data-slot="task-fields-field"
         aria-label="Field name"
         class="field key-in"
         placeholder="name"
@@ -131,6 +135,7 @@
         {@attach (node) => node.focus()}
       />
       <input
+        data-slot="task-fields-field"
         aria-label="Field value"
         class="field"
         placeholder="value"

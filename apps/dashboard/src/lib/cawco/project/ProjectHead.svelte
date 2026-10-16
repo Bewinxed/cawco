@@ -343,18 +343,20 @@
   }
 </script>
 
-<header class="project-head">
-  <div class="who">
+<header data-slot="project-head" class="project-head">
+  <div data-slot="who" class="who">
     {#if seated}
-      <div class="seat" transition:slot>
+      <div data-slot="seat" class="seat" transition:slot>
         <CawSeat {lead} projectId={project.id} projectName={project.name} />
       </div>
     {/if}
-    <div class="txt">
-      <h1 class="title">
+    <div data-slot="txt" class="txt">
+      <h1 data-slot="title" class="title">
         {#if draft !== null}
           <!-- svelte-ignore a11y_autofocus -->
           <input
+            data-slot="name"
+            data-field
             aria-label="Project name"
             autocomplete="off"
             autofocus
@@ -383,6 +385,7 @@
           />
         {:else}
           <button
+            data-slot="name"
             class="name press-tint"
             onclick={editName}
             title="Rename"
@@ -400,11 +403,12 @@
            tween. -->
       <p class="line mark-line">
         {#if words?.kind === "ask"}
-          <a class="ask" href="/session/thread:{words.threadId}"
+          <a data-slot="ask" class="ask" href="/session/thread:{words.threadId}"
             ><MorphText text={words.text} /></a
           >
           {#if words.more > 0}
-            <span class="more num">+{words.more}</span>
+            <span data-num data-slot="more" class="more num">+{words.more}</span
+            >
           {/if}
         {:else if words}
           <span class="said"><MorphText text={words.text} /></span>
@@ -446,7 +450,7 @@
       <RowFault again={() => startSession("spin")} reason={spinFault} />
     </div>
   </div>
-  <div class="acts">
+  <div data-slot="acts" class="acts">
     {#if !primary}
       <!-- No checkout yet: a session needs a machine and folder, which the
            New Session dialog asks for. -->

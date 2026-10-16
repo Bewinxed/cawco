@@ -44,12 +44,14 @@
 <div
   aria-label={label}
   class={`segmented ${size} ${className}`}
+  data-segmented-size={size}
   onkeydown={keydown}
   role="radiogroup"
   style={`--n:${items.length}`}
   tabindex="-1"
 >
   <span
+    data-slot="thumb"
     aria-hidden="true"
     class="thumb"
     style={`transform:translateX(calc(${index} * (100% + 2px)))`}
@@ -57,6 +59,7 @@
   {#each items as item (item.value)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a designed segmented control with a sliding thumb; native radios cannot render it -->
     <button
+      data-slot="tab"
       aria-checked={item.value === value}
       class="tab press-tint"
       onclick={() => onchange(item.value)}

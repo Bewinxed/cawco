@@ -32,6 +32,9 @@
 </script>
 
 <div
+  data-slot="well"
+  data-runs-on={runsOn || undefined}
+  data-grouped={grouped || undefined}
   class={["well", grouped && "grouped", runsOn && "runs-on", extra]}
   class:lifted
   {...rest}

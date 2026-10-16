@@ -28,11 +28,15 @@
   } = $props();
 </script>
 
-<span class="tile" style={ink ? "" : `color:${hue}`} class:ink><Icon /></span>
-<span class="text">
-  <span class="name">{name}</span>
-  <span class="meta mark-line"
+<span data-slot="tile" class="tile" style={ink ? "" : `color:${hue}`} class:ink
+  ><Icon /></span
+>
+<span data-slot="text" class="text">
+  <span data-slot="name" class="name">{name}</span>
+  <span data-slot="meta" class="meta mark-line"
     ><span
+      data-slot="dot"
+      data-machine-row-away={presence === "away" || undefined}
       class="dot"
       data-box
       class:away={presence === "away"}

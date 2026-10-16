@@ -70,6 +70,7 @@
 
 <div class="chooser">
   <RadioGroup.Root
+    data-cards
     aria-label="Channel"
     class="cards"
     onValueChange={(next) => {
@@ -102,13 +103,15 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item class="ccard" value={card.channel}>
-        <span class="name">{card.name}</span>
+        <span data-slot="name" class="name">{card.name}</span>
         <span class="description">{card.description}</span>
         <span class="release">
           {#if channels === null}
             —
           {:else if found}
-            <code class="num">{displayVersion(found.version)}</code>
+            <code data-slot="num" class="num"
+              >{displayVersion(found.version)}</code
+            >
           {:else}
             <span class="none">No release yet</span>
           {/if}

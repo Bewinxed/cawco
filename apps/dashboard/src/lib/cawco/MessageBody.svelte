@@ -25,7 +25,7 @@
   } = $props();
 </script>
 
-<div class="msg">
+<div data-slot="msg" class="msg">
   <Markdown {fades} {source} {streaming} />
 </div>
 

@@ -44,6 +44,7 @@
 </script>
 
 <a
+  data-slot="tile"
   class="tile press-tint"
   data-page={page.name}
   {href}
@@ -60,8 +61,9 @@
     onopen(page.name, event.currentTarget);
   }}
 >
-  <span class="line head">
+  <span data-slot="head" class="line head">
     <span
+      data-slot="title"
       class="title"
       data-share="dpage:{page.name}:title"
       {@attach land(() => `dpage:${page.name}:title`)}>{page.title}</span
@@ -85,20 +87,20 @@
         done={decided ? 1 : page.picked}
         total={decided ? 1 : page.cards}
       />
-      <span class="num">{progressWords(page)}</span>
+      <span data-slot="num" class="num">{progressWords(page)}</span>
     </span>
     {#if notes}
-      <span class="more">{notes}</span>
+      <span data-slot="more" class="more">{notes}</span>
     {/if}
   </span>
   {#if page.writer}
-    <span class="line meta mark-line">
+    <span data-slot="meta" class="line meta mark-line">
       <SessionMark
         id={page.writer.instanceId}
         place={row?.cwd || row?.machineId || page.writer.instanceId}
         status={sessionStatus(row)}
       />
-      <span class="who">{page.writer.title}</span>
+      <span data-slot="who" class="who">{page.writer.title}</span>
       {#if page.updatedAt > 0}
         <span class="age">· {formatAgeShort(page.updatedAt, now)}</span>
       {/if}

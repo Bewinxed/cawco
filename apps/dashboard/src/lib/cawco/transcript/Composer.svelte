@@ -2955,6 +2955,8 @@
 <svelte:window onkeydown={windowKey} />
 
 <div
+  data-slot="dock"
+  data-asking={askRaised || undefined}
   class="dock"
   data-keeps-draft
   data-safe-bottom
@@ -2973,9 +2975,10 @@
     >
       <!-- Each conversation's offer, built, standing on the stack's foot;
            the one written to is seen, and the stack is as tall as it. -->
-      <div class="stack" style:block-size="{stack}px">
+      <div data-slot="stack" class="stack" style:block-size="{stack}px">
         {#each offered as row (row.id)}
           <div
+            data-composer-away={row.id !== showing || undefined}
             class="offer"
             class:away={row.id !== showing}
             bind:clientHeight={offerHeights[row.id]}
@@ -2991,6 +2994,7 @@
        flow). Both rows are kept clear at every transcript's foot (app.css
        `--c-tray-row`, `--c-suggest-room`). An offer stands on top of both. -->
   <div
+    data-slot="lift"
     class="lift"
     inert={askRaised}
     bind:clientHeight={lift}
@@ -3005,6 +3009,7 @@
       {@const [first] = askQuestions}
       <div class="asked" in:askedIn out:askedOut>
         <button
+          data-slot="asked-chip"
           aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
           class="asked-chip kit-tray-chip touch-hit"
           onclick={restoreAsk}
@@ -3016,7 +3021,7 @@
           </span>
           <span class="asked-text">{first?.question ?? first?.header}</span>
           {#if ask.more > 0}
-            <span class="asked-more num">+{ask.more}</span>
+            <span data-slot="num" class="asked-more num">+{ask.more}</span>
           {/if}
           <IconChevronUp aria-hidden="true" />
         </button>
@@ -3049,7 +3054,12 @@
         <!-- Each conversation's tray, built, in the slot's one cell: handed
              the next, the one written to fades in over the last. -->
         {#each trayed as row (row.id)}
-          <div class="tray" class:away={row.id !== showing}>
+          <div
+            data-slot="tray"
+            data-composer-away={row.id !== showing || undefined}
+            class="tray"
+            class:away={row.id !== showing}
+          >
             <DelegateTray
               {held}
               onshelf={(px) => {
@@ -3063,6 +3073,7 @@
     {/if}
   </div>
   <div
+    data-slot="composer"
     class="composer"
     bind:this={column}
     bind:clientHeight={panel}
@@ -3072,7 +3083,12 @@
     {#if canvasStands}
       <!-- The canvas's box over the field: its stage (canvas/) stands on
            it, the grown shape round it and the field. -->
-      <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
+      <div
+        data-slot="canvas-slot"
+        aria-hidden="true"
+        class="canvas-slot"
+        bind:this={canvasSlot}
+      ></div>
     {/if}
     <!-- The row of attachments is one block above the field, the canvas's
          chip leading it. -->
@@ -3086,7 +3102,12 @@
 
     <!-- A send that failed says so right over the field it left. -->
     {#if sendNotice}
-      <div class="send-error" role="alert" transition:unfold>
+      <div
+        data-slot="send-error"
+        class="send-error"
+        role="alert"
+        transition:unfold
+      >
         <p>{sendNotice}</p>
         {#if sendAgain && sendError === sendNotice}
           <Button
@@ -3105,7 +3126,13 @@
          recall wheel, or the row that says a queued message is being
          edited. Both stand on the pill's foot, absolutely, so nothing above
          them moves. -->
-    <div class="shell" bind:this={shell} class:rolling={!!recall}>
+    <div
+      data-slot="shell"
+      data-rolling={!!recall || undefined}
+      class="shell"
+      bind:this={shell}
+      class:rolling={!!recall}
+    >
       {#if recall && shell && fieldWrap}
         <RecallWheel
           deck={deckAt}
@@ -3135,6 +3162,8 @@
         <!-- What is happening, and the two ways out: the keys on a desk, a
              button on a touch screen, which has no Esc. -->
         <div
+          data-composer-shown={edit.shown || undefined}
+          data-slot="edit-row"
           class="edit-row"
           bind:this={editRow}
           style:--edit-inset="{edit.inset}px"
@@ -3142,7 +3171,7 @@
           style:height="{edit.row}px"
           class:shown={edit.shown}
         >
-          <span class="what">Editing your queued message</span>
+          <span data-slot="what" class="what">Editing your queued message</span>
           <span class="hint">
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -3161,6 +3190,7 @@
         <!-- The ask the composer has grown into, on the shell's foot over
              the pill and cut to the shape as it grows and folds. -->
         <div
+          data-slot="ask"
           class="ask"
           inert={!askShown}
           bind:this={askPanel}
@@ -3183,6 +3213,8 @@
          touches. -->
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑, the field's aria-keyshortcuts) -->
       <form
+        data-slot="cin"
+        data-asking={askOpen || undefined}
         aria-keyshortcuts={recallOf
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
@@ -3213,6 +3245,7 @@
            would blur it, so a clicked row lands on the message being written. -->
           <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the field, it is not a user interaction target. -->
           <div
+            data-slot="menu"
             class="menu kit-pop"
             data-side="top"
             data-state="open"
@@ -3231,9 +3264,13 @@
                         onSelect={() => choose(entry)}
                         value={entry.id}
                       >
-                        <span class="e-label">{entry.label}</span>
+                        <span data-slot="e-label" class="e-label"
+                          >{entry.label}</span
+                        >
                         {#if entry.detail}
-                          <span class="e-detail">{entry.detail}</span>
+                          <span data-slot="e-detail" class="e-detail"
+                            >{entry.detail}</span
+                          >
                         {/if}
                       </Command.Item>
                     {/each}
@@ -3251,6 +3288,8 @@
         <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <div
+          data-folded={folded || undefined}
+          data-slot="composer-field"
           class="field touch-hit"
           inert={askOpen}
           bind:this={fieldWrap}
@@ -3345,7 +3384,7 @@
             <!-- What the folded field keeps out of sight, over its faded line
                end: standing in the field, it takes none of the field's width,
                so the text wraps as it does unfolded. -->
-            <span aria-hidden="true" class="more"
+            <span data-slot="more" aria-hidden="true" class="more"
               >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
             >
           {/if}
@@ -3361,7 +3400,7 @@
         <!-- While the wheel is up its buttons fold into a deck at the pill's
              trailing end, which is not a control: Esc, ↓ past the draft or
              a press outside put the wheel away. -->
-        <div class="ctrls" inert={!!recall} bind:this={ctrls}>
+        <div data-slot="ctrls" class="ctrls" inert={!!recall} bind:this={ctrls}>
           {#if attach}
             <AttachButton
               {draft}
@@ -3371,6 +3410,7 @@
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
           <button
+            data-slot="stop"
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
@@ -3388,7 +3428,7 @@
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
             {#key pending ? "wait" : stops}
-              <span class="swap" out:glyphOut>
+              <span data-slot="swap" class="swap" out:glyphOut>
                 {#if pending}
                   <Spinner aria-hidden="true" role="presentation" />
                 {:else if stops}

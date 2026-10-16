@@ -3383,6 +3383,8 @@
 </p>
 
 <div
+  data-tx-columns
+  data-slot="tr"
   aria-label="Session transcript"
   class="tr tx-columns"
   {onscroll}
@@ -3394,7 +3396,7 @@
        as its retry comes in is not empty for the frame between the two, and
        the empty state shown there pushed the fold 53px down. -->
   {#if (session.loading || session.cursor !== null) && renderedRows.length === 0}
-    <p class="empty">Loading transcript…</p>
+    <p data-slot="transcript-empty" class="empty">Loading transcript…</p>
   {:else if renderedRows.length === 0 && !bare}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
@@ -3414,7 +3416,7 @@
        of the rows held; a page is asked for a viewport before that. -->
   <div class="older" {@attach keepPlace}>
     {#if renderedRows.length > 0 && session.olderFault}
-      <p class="empty">
+      <p data-slot="transcript-empty" class="empty">
         {#if session.olderFault.reason !== "offline"}
           The turns before these couldn't be read:
         {:else if reconnectingNow(session.olderFault)}
@@ -3432,12 +3434,14 @@
         Try again
       </Button>
     {:else if renderedRows.length > 0 && session.cursor !== null}
-      <p class="empty">Loading transcript…</p>
+      <p data-slot="transcript-empty" class="empty">Loading transcript…</p>
     {/if}
   </div>
 
   <!-- The list's own box: what the pin reads virtua's container off. -->
   <div
+    data-transcript-shown={shown || undefined}
+    data-slot="listing"
     class="listing"
     bind:this={listing}
     style:padding-top={spare ? `${spare}px` : undefined}
@@ -3522,8 +3526,15 @@
                 "pending"
               )}
               {@const LiveIcon = d.icon}
-              <div class="livetool rail-row rail-line">
-                <span class="ic rail-cell breathe {d.color}"><LiveIcon /></span>
+              <div
+                data-transcript-rail-row
+                data-slot="livetool"
+                class="livetool rail-row rail-line"
+              >
+                <span
+                  data-slot="rail-cell"
+                  class="ic rail-cell breathe {d.color}"><LiveIcon /></span
+                >
                 <!-- The same anatomy the settled ToolGroup row has: the
                      descriptor's verb, then the mono argument, the verb
                      omitted where the object is the whole sentence. Printing
@@ -3562,11 +3573,12 @@
     style:--shelf-room="{shelfHeight}px"
     bind:this={shelfRoom}
   ></div>
-  <div aria-hidden="true" class="foot" bind:this={foot}></div>
+  <div data-slot="foot" aria-hidden="true" class="foot" bind:this={foot}></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back. -->
   <div
+    data-slot="dock"
     class="dock"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight + shelfHeight}px"

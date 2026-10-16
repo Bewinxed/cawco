@@ -54,13 +54,16 @@
     <div class="groups" {@attach reflow()}>
       {#each groups as group (group.provider)}
         <section
+          data-slot="group"
           aria-labelledby="provider-{group.provider}"
           class="group"
           data-flip
         >
-          <header class="head mark-line">
+          <header data-slot="head" class="head mark-line">
             <ProviderMark provider={group.provider} />
-            <h2 class="name" id="provider-{group.provider}">{group.name}</h2>
+            <h2 data-slot="name" class="name" id="provider-{group.provider}">
+              {group.name}
+            </h2>
             {#if hasRouting(group.accounts.length)}
               <a
                 class="routing mark-line"

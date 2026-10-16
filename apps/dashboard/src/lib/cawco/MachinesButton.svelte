@@ -70,6 +70,8 @@
 <Tip label={tip}>
   {#snippet children(tipProps)}
     <button
+      data-machines
+      data-bar-item
       {...mergeProps(tipProps, { onclick: () => barGlass.toggle("machines") })}
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
@@ -79,7 +81,7 @@
       type="button"
     >
       <IconServer aria-hidden="true" class="bar-symbol" />
-      <span class="num">{count}</span>
+      <span data-slot="num" class="num">{count}</span>
     </button>
   {/snippet}
 </Tip>

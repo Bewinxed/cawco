@@ -203,7 +203,9 @@
   ></iframe>
 {:else}
   <div aria-hidden="true" class="opening">
-    <span class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+    <span
+      data-slot="block"
+      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
     ></span>
   </div>
 {/if}

@@ -48,13 +48,14 @@
     {@const delta = index - focusedIndex}
     {@const focused = delta === 0}
     <div
+      data-slot="pane-deck-card"
       class="card"
       data-delta={delta}
       data-leaf={leaf.id}
       inert={!focused}
       class:card-hidden={Math.abs(delta) > 1}
     >
-      <div class="lift">
+      <div data-slot="lift" class="lift">
         <div class="clip">
           <PaneLeaf {leaf} swipeable={focused} />
         </div>
@@ -71,7 +72,10 @@
       <div class="dots-in" transition:fadeDots>
         {#each workspace.leaves as leaf (leaf.id)}
           <span class="dot-slot" transition:fadeDots>
-            <span class="dot" class:dot-on={leaf.id === workspace.focusedLeafId}
+            <span
+              data-slot="dot"
+              class="dot"
+              class:dot-on={leaf.id === workspace.focusedLeafId}
             ></span>
           </span>
         {/each}

@@ -97,29 +97,35 @@
 
 <div class="ground">
   <div
+    data-slot="body"
     class="body"
     style:min-height={card === null ? undefined : `${card}px`}
     {@attach morph()}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >
-    <header class="head">
+    <header data-slot="head" class="head">
       <div class="titles">
-        <h1 class="title">{title}</h1>
+        <h1 data-slot="title" class="title">{title}</h1>
         {#if purpose}
           <p class="purpose">{purpose}</p>
         {/if}
       </div>
       {#if actions}
-        <div class="actions">{@render actions(down)}</div>
+        <div data-slot="actions" class="actions">{@render actions(down)}</div>
       {/if}
     </header>
     {#if !ready && problem}
       {@render fault(problem)}
     {:else}
       <!-- The toolbar acts on the rows, so it arrives with them. -->
-      <div class="content" class:fill={!ready && card !== null}>
+      <div
+        data-fill={(!ready && card !== null) || undefined}
+        class="content"
+        class:fill={!ready && card !== null}
+      >
         {#if ready}
           <div
+            data-slot="slot"
             class="slot"
             in:appear
             {@attach holding && !settling ? settleThen : undefined}
@@ -134,6 +140,7 @@
           </div>
         {:else}
           <div
+            data-slot="slot"
             class="slot"
             out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
           >

@@ -544,6 +544,7 @@
        departed by Composer's submit under the message's own id): the whole
        turn when it starts a run, its words when it joins one. -->
   <Turn
+    data-ghost={ghost || waiting || undefined}
     class={ghost || waiting ? "ghost" : undefined}
     data-message={message.id}
     {grouped}
@@ -565,6 +566,7 @@
     {/if}
     <Well {grouped} {lifted} {runsOn} {@attach openWell}>
       <div
+        data-slot="words"
         class="words"
         bind:this={words}
         {@attach land(() => (grouped ? sent : undefined), {
@@ -592,7 +594,12 @@
             easing: CURVE.drawer,
           })}
         >
-          <div data-lift-words class:away={wordsAway} {@attach morph()}>
+          <div
+            data-message-row-away={wordsAway || undefined}
+            data-lift-words
+            class:away={wordsAway}
+            {@attach morph()}
+          >
             {#if editing}
               <Textarea
                 aria-label="Edit message"
@@ -601,8 +608,9 @@
                 bind:ref={editor}
                 bind:value={editContent}
               />
-              <div class="actions">
+              <div data-slot="actions" class="actions">
                 <button
+                  data-slot="action"
                   class="pressable action"
                   disabled={editPending}
                   onclick={cancelEditing}
@@ -611,6 +619,7 @@
                   Cancel edit
                 </button>
                 <button
+                  data-slot="action"
                   aria-busy={editPending || undefined}
                   aria-disabled={editPending || undefined}
                   class="pressable action"
@@ -630,6 +639,8 @@
               <MessageBody source={shownContent} />
               {#if (hasActions || retried) && !wordsAway}
                 <div
+                  data-message-row-shown={actionsShown || undefined}
+                  data-slot="actions"
                   class="actions turn-actions"
                   class:flipped={actionsFlipped}
                   class:pending={forkPending || retrying}
@@ -653,6 +664,7 @@
                   {/if}
                   {#if (recoverable || retried) && !shownRecovery}
                     <button
+                      data-slot="action"
                       aria-busy={retrying || undefined}
                       aria-disabled={retrying || undefined}
                       class="pressable action"
@@ -669,6 +681,7 @@
                   {/if}
                   {#if editable || (retried && heldEdit)}
                     <button
+                      data-slot="action"
                       class="pressable action"
                       disabled={retrying}
                       onclick={edit}
@@ -706,12 +719,12 @@
               {/if}
             {/if}
             {#if editError}
-              <p class="reason" role="alert">{editError}</p>
+              <p data-slot="reason" class="reason" role="alert">{editError}</p>
             {/if}
           </div>
         </div>
         {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
-          <div class="chips" data-gallery>
+          <div data-slot="chips" class="chips" data-gallery>
             {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
               {#if att.kind === "file"}
                 <DocThumb href={att.ref} name={att.name} size={att.size} />
@@ -743,27 +756,43 @@
              transcript it grows, so its tail is held while it does. Once a
              retry has gone out its contents stay, inert, for the fold to
              close over; a row that never failed renders none of it. -->
-        <div class="failure" data-opens inert={!open} class:open>
+        <div
+          data-slot="failure"
+          class="failure"
+          data-opens
+          inert={!open}
+          class:open
+        >
           <div class="failure-inner">
             {#if failed || retried}
-              <p class="reason" class:going={line === SENDING_AGAIN}>
+              <p
+                data-slot="reason"
+                class="reason"
+                class:going={line === SENDING_AGAIN}
+              >
                 {line}
               </p>
               <!-- The way back, right under why (send-recovery.svelte.ts):
                    while what refused it holds, what fixes it; once it no
                    longer does, Send again. -->
               {#if shownRecovery && (shownRecovery.actions.length > 0 || !shownRecovery.holds)}
-                <div class="actions recovery">
+                <div data-slot="actions" class="actions recovery">
                   {#if shownRecovery.holds}
                     {#each shownRecovery.actions as action, i (i)}
                       {#if action.kind === "link"}
-                        <a class="pressable action" href={action.href}
-                          ><span class="label">{action.label}</span></a
+                        <a
+                          data-slot="action"
+                          class="pressable action"
+                          href={action.href}
+                          ><span data-slot="message-row-label" class="label"
+                            >{action.label}</span
+                          ></a
                         >
                       {:else if action.kind === "move"}
                         {@const going =
                           !!target && movingTo(target) === action.account.id}
                         <button
+                          data-slot="action"
                           aria-busy={going || undefined}
                           aria-disabled={going || undefined}
                           class="pressable action mark-line"
@@ -774,6 +803,7 @@
                           type="button"
                         >
                           <i
+                            data-slot="dot"
                             aria-hidden="true"
                             class="dot"
                             data-box
@@ -787,6 +817,7 @@
                         </button>
                       {:else}
                         <button
+                          data-slot="action"
                           aria-busy={starting || undefined}
                           aria-disabled={starting || undefined}
                           class="pressable action mark-line"
@@ -806,6 +837,7 @@
                     {/each}
                   {:else}
                     <button
+                      data-slot="action"
                       aria-busy={retrying || undefined}
                       aria-disabled={retrying || undefined}
                       class="pressable action"

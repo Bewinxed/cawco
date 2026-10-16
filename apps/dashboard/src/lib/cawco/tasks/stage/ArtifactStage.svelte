@@ -64,8 +64,10 @@
 {:else if staged && drawn}
   <PreviewPane inset instanceId={staged.instanceId} />
 {:else}
-  <div aria-hidden="true" class="cover">
-    <span class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+  <div data-slot="cover" aria-hidden="true" class="cover">
+    <span
+      data-slot="block"
+      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
     ></span>
   </div>
 {/if}

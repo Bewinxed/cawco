@@ -133,6 +133,7 @@
 <svelte:head><title>{configureWords.documentTitle(title)}</title></svelte:head>
 
 <form
+  data-slot="editor"
   class="editor"
   onsubmit={(event) => {
     event.preventDefault();
@@ -141,6 +142,7 @@
 >
   <div class="scroll" data-safe-bottom bind:this={scroller}>
     <div
+      data-slot="body"
       class="body"
       bind:this={body}
       style:min-height={card === null ? undefined : `${card}px`}
@@ -148,9 +150,10 @@
         ? rememberCard(page.url.pathname)
         : undefined}
     >
-      <header class="head">
+      <header data-slot="head" class="head">
         {#if tile}
           <span
+            data-slot="tile"
             class="tile"
             data-share="icon:{page.url.pathname}"
             {@attach land(() => `icon:${page.url.pathname}`)}
@@ -159,6 +162,7 @@
           </span>
         {:else if section}
           <span
+            data-slot="tile"
             class="tile"
             data-share="icon:{page.url.pathname}"
             style="color:{section.hue}"
@@ -167,7 +171,7 @@
             <section.icon />
           </span>
         {/if}
-        <div class="lead">{@render header()}</div>
+        <div data-slot="lead" class="lead">{@render header()}</div>
         {#if ondelete && deleteLabel}
           <span class="narrow-menu">
             <DropdownMenu.Root>
@@ -192,10 +196,17 @@
           </span>
         {/if}
       </header>
-      <div class="content" class:fill={veiled && card !== null}>
-        <div class="slot" class:veiled>{@render children()}</div>
+      <div
+        data-fill={(veiled && card !== null) || undefined}
+        class="content"
+        class:fill={veiled && card !== null}
+      >
+        <div data-slot="slot" class="slot" class:veiled>
+          {@render children()}
+        </div>
         {#if veiled}
           <div
+            data-slot="slot"
             aria-hidden="true"
             class="slot"
             out:fade={{ duration: dur("--dur-control"), easing: easeOut }}

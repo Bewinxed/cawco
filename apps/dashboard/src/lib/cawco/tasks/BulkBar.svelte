@@ -121,20 +121,28 @@
   }
 </script>
 
-<div aria-label="Selected tasks" class="bulk floating" role="toolbar">
+<div
+  data-floating
+  data-slot="bulk"
+  aria-label="Selected tasks"
+  class="bulk floating"
+  role="toolbar"
+>
   {#if run}
     <!-- The change in flight, drawn where it was asked for. -->
     <span class="progress mark-line" role="status">
       <TaskRing done={run.done} size="sm" total={run.total} />
       {#if run.failed}
-        <span class="failed"
+        <span data-slot="failed" class="failed"
           >{run.verb} stopped at {run.failed.id}: {run.failed.text}</span
         >
       {:else}
         <span
           >{run.verb}
-          <span class="num">{Math.min(run.done + 1, run.total)}</span>
-          of <span class="num">{run.total}</span></span
+          <span data-slot="num" class="num"
+            >{Math.min(run.done + 1, run.total)}</span
+          >
+          of <span data-slot="num" class="num">{run.total}</span></span
         >
       {/if}
     </span>
@@ -150,7 +158,9 @@
       >
     {/if}
   {:else}
-    <span class="count"><span class="num">{picked.length}</span> selected</span>
+    <span data-slot="count" class="count"
+      ><span data-slot="num" class="num">{picked.length}</span> selected</span
+    >
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
@@ -205,7 +215,7 @@
           >
         </form>
         {#if labels.length > 0}
-          <ul class="known" aria-label="The project's labels">
+          <ul data-slot="known" class="known" aria-label="The project's labels">
             {#each labels as each (each)}
               <li>
                 <button
@@ -242,6 +252,7 @@
       </Popover.Trigger>
       <Popover.Content align="end" class="w-80" side="top">
         <form
+          data-slot="drop"
           class="drop"
           onsubmit={(event) => {
             event.preventDefault();
@@ -269,6 +280,7 @@
                   <span class="ref-title">{task.title}</span>
                   {#if task.attempts[0]}
                     <a
+                      data-slot="session"
                       class="session"
                       href="/session/{task.attempts[0].instanceId}"
                       >its session</a

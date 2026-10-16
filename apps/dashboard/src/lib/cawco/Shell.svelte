@@ -713,6 +713,8 @@
       // One mounted hidden stands out of the row, as one that has left does.
       node.classList.toggle("lifted", !seen);
       node.classList.toggle("away", !seen);
+      // The probe kit's hook for `.away` (data-away is a selector's already).
+      node.toggleAttribute("data-shell-away", !seen);
       node.inert = !seen;
       $effect(() => {
         const next = shown();
@@ -729,6 +731,7 @@
           };
           if (next) {
             node.classList.remove("lifted", "away");
+            node.removeAttribute("data-shell-away");
             fading = node.animate(
               motionOk.current
                 ? [
@@ -750,6 +753,7 @@
             () => {
               if (fading === out) {
                 node.classList.add("away");
+                node.toggleAttribute("data-shell-away", true);
                 out.cancel();
               }
             },
@@ -920,7 +924,7 @@
 
 <svelte:window onkeydown={shortcut} />
 
-<a class="skip" href="#main-content">Skip to content</a>
+<a data-slot="skip" class="skip" href="#main-content">Skip to content</a>
 
 <!-- `--rail-w` is set before the body parses (app.html) from the same key this
      component writes; the server's cookie width is the fallback under it, and
@@ -932,13 +936,14 @@
   <!-- As tall as the visible area reaches, so the composer and a page's
        footer stand on a keyboard (cawco/visible-viewport `floor`). -->
   <div
+    data-slot="shell"
     class="shell"
     style="--sidebar-width: var(--rail-w, {railWidth === null
       ? 'var(--c-sidebar-w)'
       : `${railWidth}px`})"
     style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
-    <aside class="rail hidden min-[900px]:flex">
+    <aside data-slot="rail" class="rail hidden min-[900px]:flex">
       {#if railed}
         <RegionBoundary region="sidebar">
           <Sidebar {narrow} scroller={keepScroll} />
@@ -972,6 +977,7 @@
       <!-- Closed by its search field, the focus stays in the Jump palette
            it opened, which hangs from the bar's glass. -->
       <Sheet.Content
+        data-rail-sheet
         class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
         onCloseAutoFocus={(event) => {
           if (barGlass.open === "jump") {
@@ -992,9 +998,14 @@
     </Sheet.Root>
 
     <div class="main">
-      <header class={["top", { floating, hosting }]}>
+      <header
+        data-slot="top"
+        data-floating={floating || undefined}
+        class={["top", { floating, hosting }]}
+      >
         <!-- The sidebar toggle. -->
         <button
+          data-slot="burger"
           aria-label="Open navigation"
           class="burger min-[900px]:hidden"
           onclick={() => {
@@ -1008,9 +1019,10 @@
         <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. -->
-        <div class="slot">
+        <div data-slot="slot" class="slot">
           {#if barLeaves.length > 0}
             <div
+              data-slot="slot-tabs"
               class="slot-tabs"
               {@attach barTabs(() => hosting)}
               {@attach followPanes}
@@ -1019,6 +1031,7 @@
                 <!-- Each group's tabs, standing over the group they belong
                    to: its box follows the group's (followPanes). -->
                 <div
+                  data-slot="col"
                   class="col"
                   data-col={leaf.id}
                   data-focused={workspace.focusedLeafId === leaf.id ||
@@ -1036,7 +1049,11 @@
           {#if stripMounted && !narrow}
             <!-- The page's own strip (bar-strip), standing where the crumb
                would. -->
-            <div class="slot-strip" {@attach barTabs(() => stripHosted)}>
+            <div
+              data-slot="slot-strip"
+              class="slot-strip"
+              {@attach barTabs(() => stripHosted)}
+            >
               {#if stripHosted}
                 <div class="strip-held" out:stands>
                   {@render barStrip.strip?.()}
@@ -1051,13 +1068,14 @@
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
             <a
+              data-slot="crumb"
               class="crumb back mark-line pressable"
               href="/config"
               in:riseIn
               out:crossOut><IconChevronLeft /><span>Configure</span></a
             >
           {:else}
-            <span class="crumb" in:riseIn out:crossOut>
+            <span data-slot="crumb" class="crumb" in:riseIn out:crossOut>
               <MorphText text={crumb} />
             </span>
           {/if}
@@ -1069,6 +1087,7 @@
              alone. -->
         <div class="right">
           <div
+            data-slot="tools"
             class="tools"
             data-bar-group
             data-instant={barGlass.instant ? "" : undefined}
@@ -1076,11 +1095,12 @@
           >
             <!-- The glass as one shape with the card hanging from it while
                  one does (bar-glass: Caw's panel, the machines, Jump). -->
-            <span aria-hidden="true" class="join"></span>
+            <span data-slot="join" aria-hidden="true" class="join"></span>
             {#if railed}
               <Tip keys="⌘K" label="Jump to session">
                 {#snippet children(tip)}
                   <button
+                    data-bar-item
                     {...tip}
                     aria-expanded={barGlass.open === "jump"}
                     aria-haspopup="dialog"
@@ -1171,6 +1191,7 @@
          the scroll region pads the home-indicator safe area itself so the last
          row is never tucked under it. -->
       <main
+        data-floating={floating || undefined}
         class="content"
         data-safe-bottom
         id="main-content"
@@ -1182,7 +1203,7 @@
            both stand in this one grid cell while they overlap. Every
            conversation is one key, and so is Configure, which keys its own
            pane so its rail holds still. -->
-        <div class="swap">
+        <div data-slot="swap" class="swap">
           {#key pageKey}
             <div class="page" in:pageIn out:pageOut>
               <RegionBoundary region="page">{@render children()}</RegionBoundary

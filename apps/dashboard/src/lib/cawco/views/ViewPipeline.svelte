@@ -40,18 +40,22 @@
 {#snippet row(stage: Pick<Stage, "kind" | "name">)}
   {@const count = counts.get(stage.name) ?? 0}
   <li>
-    <div class="row" data-kind={stage.kind}>
-      <span class="name mark-line">
+    <div data-slot="row" class="row" data-kind={stage.kind}>
+      <span data-slot="name" class="name mark-line">
         {#if stage.kind === "you"}
           <IconNeedsYou aria-hidden="true" />
         {/if}
-        <span class="label">{stageLabel(stage.name)}</span>
+        <span data-slot="view-pipeline-label" class="label"
+          >{stageLabel(stage.name)}</span
+        >
       </span>
-      <span class="kind">{KIND_LABEL[stage.kind]}</span>
+      <span data-slot="kind" class="kind">{KIND_LABEL[stage.kind]}</span>
       <span aria-hidden="true" class="track">
         <span class="bar" style:inline-size="{(count / most) * 100}%"></span>
       </span>
-      <span class="count num"><MorphText text={String(count)} /></span>
+      <span data-num data-slot="count" class="count num"
+        ><MorphText text={String(count)} /></span
+      >
     </div>
   </li>
 {/snippet}

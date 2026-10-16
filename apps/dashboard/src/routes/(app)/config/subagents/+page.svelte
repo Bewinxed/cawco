@@ -232,15 +232,15 @@
   {/if}
   {#each Object.entries(unpushable) as [machineId, why] (machineId)}
     {@const machine = machines.find((row) => row.machineId === machineId)}
-    <p class="note">
+    <p data-slot="note" class="note">
       {machine ? machineLabel(machine.hostname) : machineId}
       — {why}.
     </p>
   {/each}
 
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
-    <p class="note">
+    <p data-slot="note" class="note">
       The definition files each machine really has, read live off its disk. One
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
@@ -249,14 +249,16 @@
          in any order, and one listed above another would push the rows
          already drawn down the page. -->
     {#if online.length === 0}
-      <p class="note">No machine is online to ask.</p>
+      <p data-slot="note" class="note">No machine is online to ask.</p>
     {:else if Object.keys(reading).length > 0}
-      <p class="note busy mark-line" role="status">
+      <p data-slot="note" class="note busy mark-line" role="status">
         <Spinner class="size-4 shrink-0" />
         <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
-      <p class="note">No machine has any subagent files yet.</p>
+      <p data-slot="note" class="note">
+        No machine has any subagent files yet.
+      </p>
     {:else}
       <RowList label="Subagents on machines">
         {#each discovered as { machine, row } (`${machine.machineId}:${row.path}`)}

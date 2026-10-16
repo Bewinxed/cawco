@@ -55,9 +55,9 @@
   {#snippet trigger()}
     {@const Icon = current.icon}
     {#key current.name}
-      <span class="swap">
+      <span data-slot="swap" class="swap">
         <Icon style={`color:${current.hue}`} />
-        <span class="chip-label">{current.name}</span>
+        <span data-slot="chip-label" class="chip-label">{current.name}</span>
       </span>
     {/key}
     <Down class="chevron" />
@@ -66,6 +66,7 @@
     {@const Icon = option.icon}
     {@const on = option.ephemeral === ephemeral}
     <button
+      data-slot="row"
       aria-pressed={on}
       class="row ns-in press-tint"
       data-fh="1"
@@ -77,10 +78,12 @@
       type="button"
       class:on
     >
-      <span class="ns-tile tile" style={`color:${option.hue}`}><Icon /></span>
-      <span class="text">
-        <span class="name">{option.name}</span>
-        <span class="meta">{option.desc}</span>
+      <span data-slot="tile" class="ns-tile tile" style={`color:${option.hue}`}
+        ><Icon /></span
+      >
+      <span data-slot="text" class="text">
+        <span data-slot="name" class="name">{option.name}</span>
+        <span data-slot="meta" class="meta">{option.desc}</span>
       </span>
       {#if on}
         <Check class="check ns-check" />

@@ -44,9 +44,13 @@
 </script>
 
 <Popover.Root bind:open={expanded}>
-  <Popover.Trigger aria-label="{label}: {chosen}" class="picker-chip mark-line">
+  <Popover.Trigger
+    data-picker-chip
+    aria-label="{label}: {chosen}"
+    class="picker-chip mark-line"
+  >
     <span class="k">{label}</span>
-    <span class="v num"><MorphText text={chosen} /></span>
+    <span data-slot="num" class="v num"><MorphText text={chosen} /></span>
     <IconChevronDown />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
@@ -61,9 +65,10 @@
     >
       {#each options as option, index (option.value)}
         {#if option.group && option.group !== options[index - 1]?.group}
-          <span class="group">{option.group}</span>
+          <span data-slot="group" class="group">{option.group}</span>
         {/if}
         <button
+          data-slot="item"
           aria-selected={isChosen(option.value)}
           class="kit-item item focus-inset"
           onclick={() => {
@@ -74,7 +79,8 @@
           role="option"
           type="button"
         >
-          <span class="label">{option.label}</span>
+          <span data-slot="picker-chip-label" class="label">{option.label}</span
+          >
           {#if isChosen(option.value)}
             <IconCheck />
           {/if}

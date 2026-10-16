@@ -865,6 +865,7 @@
            hanging from the bar's glass. -->
       <div class="px-2 pb-1">
         <button
+          data-slot="search"
           aria-haspopup="dialog"
           class="search mark-line press-tint focus-inset"
           data-share="jump"

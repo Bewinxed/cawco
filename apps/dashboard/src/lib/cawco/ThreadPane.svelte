@@ -856,6 +856,7 @@
 {#snippet perch()}
   <!-- He lands here from wherever he stood (the empty board's 80px Caw). -->
   <div
+    data-slot="seat"
     class="seat"
     style:--seat="{seatSize}px"
     {@attach land(() => (projectId ? `caw:${projectId}` : undefined), {
@@ -888,6 +889,7 @@
         >
           {#snippet mark()}
             <div
+              data-slot="caw-80"
               class="caw-80"
               data-share={projectId ? `caw:${projectId}` : undefined}
               out:seatHim|global
@@ -939,8 +941,9 @@
   </div>
 {/snippet}
 
-<div class="pane" bind:clientWidth={paneWidth}>
+<div data-slot="pane" class="pane" bind:clientWidth={paneWidth}>
   <div
+    data-slot="body"
     class="body"
     style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
   >
@@ -969,7 +972,7 @@
     {#if docked && writable}
       <!-- No group lends this pane a composer: it draws its own, where the
            group's stands (PaneLeaf `.dock`), from the same binding. -->
-      <div class="composer-dock">
+      <div data-slot="composer-dock" class="composer-dock">
         <RegionBoundary kept="Your draft is kept." region="composer">
           <Composer
             agentName={binding.agentName}

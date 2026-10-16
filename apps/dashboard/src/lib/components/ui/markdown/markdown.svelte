@@ -246,7 +246,7 @@
      animation is switched off below, so mounting with spans replays nothing;
      the chunk fade above is the only motion text has. A message that mounts
      settled renders static: plain text nodes, the same layout. -->
-<div class="md" bind:this={host}>
+<div data-slot="md" class="md" bind:this={host}>
   <Streamdown
     animation={{
       enabled: tokens,

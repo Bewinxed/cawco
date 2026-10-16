@@ -82,18 +82,21 @@
   } = $props();
 </script>
 
-<div class="starter-cards">
-  <ul aria-label="Starters" class="cards">
+<div data-slot="starter-cards" class="starter-cards">
+  <ul data-slot="cards" aria-label="Starters" class="cards">
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
       <li>
         <button
+          data-slot="starter"
           class="starter mark-line press-tint"
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph aria-hidden="true" class="starter-glyph" />
-          <span class="starter-text">{starter.text}</span>
+          <Glyph data-starter-glyph aria-hidden="true" class="starter-glyph" />
+          <span data-slot="starter-text" class="starter-text"
+            >{starter.text}</span
+          >
         </button>
       </li>
     {/each}

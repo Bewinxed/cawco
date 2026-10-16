@@ -224,7 +224,7 @@
 </script>
 
 {#snippet lines(n: Notice)}
-  <div class="body">
+  <div data-slot="body" class="body">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
         <div class="ink busy mark-line">
@@ -259,30 +259,31 @@
       />
     {/if}
   {/snippet}
-  <div class="card" bind:this={card}>
+  <div data-slot="update-card-card" class="card" bind:this={card}>
     <!-- What the row showed, copied where it stood, leaving. -->
     <div aria-hidden="true" class="leaving" inert bind:this={layer}></div>
     {#if leaving}
       <span class="line" {@attach arrive}>{GOODBYE}</span>
     {:else if notice}
-      <h2 class="title mark-line">
+      <h2 data-slot="title" class="title mark-line">
         {#if notice.failed}
           <IconError aria-hidden="true" class="fail size-4 shrink-0" />
         {/if}
         <span>{notice.title}</span>
       </h2>
       {#if meta}
-        <p class="meta">{meta}</p>
+        <p data-slot="meta" class="meta">{meta}</p>
       {/if}
       {#if notes}
         <div
+          data-slot="fold"
           class="fold"
           data-open={open || undefined}
           id="update-notes"
           inert={!open}
           ontransitionend={settled}
         >
-          <div class="fold-inner">
+          <div data-slot="fold-inner" class="fold-inner">
             <div class="fold-body">
               <div class="notes"><ReleaseNotes source={notes.full} /></div>
               {#if said}
@@ -295,9 +296,10 @@
         {@render lines(notice)}
       {/if}
       {#if footer}
-        <div class="actions" {@attach held}>
+        <div data-slot="actions" class="actions" {@attach held}>
           {#if showConfigure}
             <Button
+              data-settings
               class={["settings", notes !== null && "leading"]}
               href="/config/updates"
               label="Configure update behaviour"
@@ -307,6 +309,7 @@
           {/if}
           {#if notes}
             <Button
+              data-toggle
               aria-controls="update-notes"
               aria-expanded={open}
               class="toggle"
@@ -316,6 +319,7 @@
             >
               <span>{open ? "Hide changes" : "Show changes"}</span>
               <IconChevronDown
+                data-chev
                 aria-hidden="true"
                 class="chev"
                 data-icon="inline-end"

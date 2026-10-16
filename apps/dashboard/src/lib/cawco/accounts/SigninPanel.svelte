@@ -34,7 +34,7 @@
   {#if !online}
     <p class="line">{words.offline(machine)}</p>
   {/if}
-  <div class="row">
+  <div data-slot="row" class="row">
     {#if flow.url}
       <Button
         href={flow.url}
@@ -60,6 +60,7 @@
     <span class="line">{words.thenPaste}</span>
   </div>
   <form
+    data-slot="row"
     class="row"
     onsubmit={(event) => {
       event.preventDefault();

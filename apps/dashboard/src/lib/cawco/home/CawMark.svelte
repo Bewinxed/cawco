@@ -90,6 +90,7 @@
 </script>
 
 <span
+  data-slot="mark"
   aria-hidden="true"
   class="mark"
   data-box

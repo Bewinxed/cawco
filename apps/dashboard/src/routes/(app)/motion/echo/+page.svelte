@@ -36,7 +36,7 @@
             <span></span>
           {/snippet}
         </TreeMark>
-        <span class="controls">
+        <span data-slot="controls" class="controls">
           {#each STATUSES as s (s)}
             <button
               aria-pressed={status === s}

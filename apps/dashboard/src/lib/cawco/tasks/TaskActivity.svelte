@@ -200,9 +200,9 @@
 
 {#snippet line(each: Line)}
   {#if each.kind === "comment"}
-    <li class="comment">
+    <li data-slot="comment" class="comment">
       <span class="by"
-        ><span class="who">{each.who}</span>
+        ><span data-slot="who" class="who">{each.who}</span>
         <time
           class="at"
           datetime={new Date(each.at).toISOString()}
@@ -213,9 +213,11 @@
     </li>
   {:else}
     <!-- mark-line: the glyph heads words that may wrap: it stands in a mark cell, one line tall, on the first line -->
-    <li class="change">
+    <li data-slot="change" class="change">
       <span class="mark-cell"><IconHistory aria-hidden="true" /></span>
-      <span class="what"><span class="who">{each.who}</span> {each.text}</span>
+      <span data-slot="what" class="what"
+        ><span data-slot="who" class="who">{each.who}</span> {each.text}</span
+      >
       <time
         class="at"
         datetime={new Date(each.at).toISOString()}
@@ -225,7 +227,7 @@
   {/if}
 {/snippet}
 
-<section class="part activity">
+<section data-slot="activity" class="part activity">
   <div class="part-head">
     <h3 class="kit-section-head">Activity</h3>
     <Choice
@@ -258,10 +260,10 @@
         {#if piece.kind === "one"}
           {@render line(piece.line)}
         {:else}
-          <li class="fold">
+          <li data-slot="fold" class="fold">
             <Collapsible.Root>
               <Collapsible.Trigger class="fold-head press-tint mark-line">
-                <IconChevronRight aria-hidden="true" class="chev" />
+                <IconChevronRight data-chev aria-hidden="true" class="chev" />
                 <span>{piece.lines.length} changes</span>
                 <span class="at"
                   >{ago(piece.lines[0].at)} – {ago(
@@ -270,7 +272,7 @@
                 >
               </Collapsible.Trigger>
               <Collapsible.Content fade reveal>
-                <ol class="stream inner">
+                <ol data-slot="inner" class="stream inner">
                   {#each piece.lines as each (`${each.at}-${each.text}`)}
                     {@render line(each)}
                   {/each}
@@ -282,10 +284,11 @@
       {/each}
     </ol>
   {/if}
-  <div class="composer">
+  <div data-slot="composer" class="composer">
     <!-- The session Composer, words only; it stands on this box's foot
          (Composer .dock), the box as tall as what it stands. -->
     <div
+      data-slot="task-activity-field"
       class="field"
       style:block-size="calc({commentFoot}px + var(--space-4) +
       var(--safe-bottom))"

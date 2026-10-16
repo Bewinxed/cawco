@@ -210,11 +210,12 @@
       </div>
       {#if choices.length > 0}
         <div class="choices" transition:unfold>
-          <span class="note"
+          <span data-slot="note" class="note"
             >That repo holds several skills. Pick the one to fetch.</span
           >
           {#each choices as choice (choice)}
             <button
+              data-slot="choice"
               class="kit-item choice focus-inset"
               disabled={busy}
               onclick={() => choose(choice)}

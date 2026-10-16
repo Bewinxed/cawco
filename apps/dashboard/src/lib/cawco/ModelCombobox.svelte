@@ -150,7 +150,9 @@
           : value || "The model the harness picks for itself"}
         variant="outline"
       >
-        <span class="num min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        <span
+          data-slot="num"
+          class="num min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{unreported ? "—" : modelLabel(value, harness)}</span
         >
         <!-- 16px, the control size, so this unfold mark matches the one on

@@ -34,10 +34,12 @@
   <span class="st-label">{label}</span>
   <span class="st-figure">
     <!-- A new figure morphs out of the old one, digit by digit, in place. -->
-    <span class="st-value num"><MorphText text={String(value)} /></span>
+    <span data-slot="num" class="st-value num"
+      ><MorphText text={String(value)} /></span
+    >
     {#if unit}
       {#key unit}
-        <span class="st-unit num" data-flip="pop">{unit}</span>
+        <span data-slot="num" class="st-unit num" data-flip="pop">{unit}</span>
       {/key}
     {/if}
   </span>

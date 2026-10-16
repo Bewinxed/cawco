@@ -245,7 +245,11 @@
 
 <main>
   {#each CASES as one, i (one.name)}
-    <section data-case={i} class:grid={one.grid}>
+    <section
+      data-grid={one.grid || undefined}
+      data-case={i}
+      class:grid={one.grid}
+    >
       {#key views[i]}
         <div class="view" data-view={views[i]} in:crossIn out:leaving={i}>
           <span>{one.name} · {views[i]}</span>

@@ -1680,6 +1680,7 @@
     shouldScaleBackground={false}
   >
     <DrawerContent
+      data-session-card
       aria-label="New Session"
       class="session-card ns-theme"
       data-ns-dialog
@@ -1717,6 +1718,7 @@
         {/snippet}
       </DialogPrimitive.Overlay>
       <DialogPrimitive.Content
+        data-session-card
         aria-label="New Session"
         class="session-card ns-theme"
         data-ns-dialog
@@ -1747,10 +1749,10 @@
   <!-- While a start runs the form takes no input; the footer stays live so
        the pending Start keeps its focus (a focused element in an inert
        subtree drops focus to the body). -->
-  <div class="head kit-sheet-head" inert={busy}>
+  <div data-slot="head" class="head kit-sheet-head" inert={busy}>
     <div class="head-left">
       <span class="bolt"><Bolt /></span>
-      <h2 class="title">
+      <h2 data-slot="title" class="title">
         <MorphText text={headTitle} />
       </h2>
     </div>
@@ -1767,8 +1769,9 @@
           type="button"
         >
           <span class="head-glyph" data-back={moveStep || undefined}>
-            <span class="glyph close"><X /></span>
-            <span class="glyph back"><IconChevronLeft /></span>
+            <span data-slot="glyph" data-close class="glyph close"><X /></span>
+            <span data-slot="glyph" class="glyph back"><IconChevronLeft /></span
+            >
           </span>
         </button>
       {/snippet}
@@ -1782,6 +1785,7 @@
        fade): where the system hides its scrollbar (macOS), that edge is
        what says the form runs on past it. -->
   <div
+    data-slot="body"
     class="body fai-scroll kit-sheet-scroll kit-edge-fade-block"
     data-vaul-no-drag
     inert={busy}
@@ -1792,7 +1796,11 @@
          the chosen model's effort and permission chips glide between each
          other. -->
     <NsPopoverGroup>
-      <section class="sec prompt-sec" style="--delay:0ms">
+      <section
+        data-slot="prompt-sec"
+        class="sec prompt-sec"
+        style="--delay:0ms"
+      >
         <div class="prompt-head">
           <SectionHeader
             hue="var(--hue-blue-500)"
@@ -1801,7 +1809,7 @@
           />
         </div>
         <div class="fai-comb"></div>
-        <div class="composer field-shell">
+        <div data-slot="composer" class="composer field-shell">
           <div class="prompt-body">
             <PromptEditor
               lead={sourceChip}
@@ -1816,7 +1824,7 @@
               <AttachmentChips draft={firstMessage} />
             </div>
           </div>
-          <div class="chips" inert={moveStep}>
+          <div data-slot="chips" class="chips" inert={moveStep}>
             <MachinesChip
               machines={machineItems}
               onchange={(value) => {
@@ -1828,11 +1836,14 @@
             />
             {#if sourceProject}
               <span
+                data-slot="ns-chip-btn"
                 class="ns-chip-btn static"
                 title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
               >
                 <Files style="color:var(--hue-amber-500)" />
-                <span class="chip-label">Starts in {sourceProject.name}</span>
+                <span data-slot="chip-label" class="chip-label"
+                  >Starts in {sourceProject.name}</span
+                >
               </span>
             {:else}
               <ProjectChip
@@ -1912,6 +1923,7 @@
         </div>
         <!-- A move's line may take two lines; its height follows (morph). -->
         <p
+          data-why={readingSaysWhy || undefined}
           aria-live="polite"
           class="reading"
           title={reading}
@@ -1923,13 +1935,13 @@
           {reading || "\u00a0"}
         </p>
         {#if moveStep && moveEstimated?.ask}
-          <div class="tray" in:unfold out:unfold>
+          <div data-slot="tray" class="tray" in:unfold out:unfold>
             <MoveAskBody ask={moveEstimated.ask} />
           </div>
         {/if}
       </section>
       <div class="fai-comb comb-gap"></div>
-      <div class="stack">
+      <div data-slot="stack" class="stack">
         {#if continueFrom}
           <div class="carry" in:unfold|global out:unfold>
             <Segmented

@@ -173,7 +173,7 @@
   title={section.label}
 >
   {#if policy}
-    <div class="group">
+    <div data-slot="group" class="group">
       <SectionHeader
         hue="var(--hue-blue-500)"
         icon={IconDownload}
@@ -220,7 +220,7 @@
         {/key}
       </div>
       {#if release && notes}
-        <div class="fold">
+        <div data-slot="fold" class="fold">
           <button
             aria-expanded={foldOpen}
             class="trigger mark-line"
@@ -229,7 +229,7 @@
             }}
             type="button"
           >
-            <IconChevronRight class="chev" />
+            <IconChevronRight data-chev class="chev" />
             <span>What's new in {displayVersion(release.version)}</span>
           </button>
           {#if foldOpen}
@@ -241,14 +241,14 @@
       {/if}
     </div>
 
-    <div class="group">
+    <div data-slot="group" class="group">
       <SectionHeader
         hue="var(--hue-green-500)"
         icon={IconMonitor}
         label="Machines"
       >
         {#snippet right()}
-          <div class="actions">
+          <div data-slot="actions" class="actions">
             {#if waiting.length >= 2}
               <Button
                 label="Install on all {waiting.length}"

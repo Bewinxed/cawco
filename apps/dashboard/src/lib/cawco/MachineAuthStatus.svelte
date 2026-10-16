@@ -61,11 +61,11 @@
           tabindex="-1"
           {@attach (node) => node.focus()}
         >
-          <span class="mark text-muted-foreground">
+          <span data-slot="mark" class="mark text-muted-foreground">
             <Spinner aria-hidden="true" class="size-6" role="presentation" />
           </span>
-          <p class="title" id={titleId}>{working.title}</p>
-          <p class="body">{working.step}</p>
+          <p data-slot="title" class="title" id={titleId}>{working.title}</p>
+          <p data-slot="body" class="body">{working.step}</p>
         </div>
         <!-- Closing does not stop the machine; it only stops watching. -->
         <div class="mt-auto flex justify-end">
@@ -76,15 +76,19 @@
       {:else if answer}
         <!-- mark-line: a column; the mark stands above the title -->
         <div class="flex flex-col gap-[var(--space-2)]" role="status">
-          <span class="mark enter {ok ? 'text-success' : 'text-warning'}">
+          <span
+            data-slot="mark"
+            data-enter
+            class="mark enter {ok ? 'text-success' : 'text-warning'}"
+          >
             {#if ok}
               <IconSuccess class="size-9" />
             {:else}
               <IconWarningTriangle class="size-9" />
             {/if}
           </span>
-          <p class="title" id={titleId}>{answer.title}</p>
-          <p class="body">{answer.body}</p>
+          <p data-slot="title" class="title" id={titleId}>{answer.title}</p>
+          <p data-slot="body" class="body">{answer.body}</p>
         </div>
         <div class="mt-auto flex justify-end">
           <Button

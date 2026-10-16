@@ -141,6 +141,7 @@
 
 <div class="templates">
   <RadioGroup.Root
+    data-cards
     aria-label="Template"
     class="icon-cards cards"
     onValueChange={(next) => {
@@ -199,6 +200,7 @@
 
     {#if peek && peekAt}
       <div
+        data-slot="peek"
         aria-hidden="true"
         class="peek"
         data-share={peekShare}

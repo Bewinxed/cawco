@@ -215,17 +215,17 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
-    <p class="note">No file matches “{filter.trim()}”.</p>
+    <p data-slot="note" class="note">No file matches “{filter.trim()}”.</p>
   {/if}
 
   {#if hookFailed.length > 0}
-    <div class="group">
+    <div data-slot="group" class="group">
       <SectionHeader
         hue="var(--status-attn-ink)"
         icon={IconWarningTriangle}
         label="Model documents are not being loaded everywhere"
       />
-      <p class="note">
+      <p data-slot="note" class="note">
         The documents are put in front of a session by a SessionStart hook CawCo
         registers. Where it did not register, the files are on the machine and
         nothing reads them.

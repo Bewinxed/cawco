@@ -11,6 +11,7 @@
 </script>
 
 <div
+  data-num
   class={cn(
     "pointer-events-none absolute right-1 flex flex h-5 min-w-5",
     "select-none items-center justify-center",

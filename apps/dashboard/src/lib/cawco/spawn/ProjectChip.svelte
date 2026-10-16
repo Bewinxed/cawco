@@ -93,11 +93,14 @@
   {#snippet trigger()}
     <Files style="color:var(--hue-amber-500)" />
     {#key project?.id}
-      <span class="chip-label swap">{project?.name ?? "No project"}</span>
+      <span data-slot="swap" data-chip-label class="chip-label swap"
+        >{project?.name ?? "No project"}</span
+      >
     {/key}
     {#if project}
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
+        data-slot="clear"
         class="clear ns-check"
         onclick={(event) => {
           event.stopPropagation();
@@ -120,7 +123,7 @@
   {/snippet}
   {#if draft}
     <div class="ns-panel form">
-      <label class="field field-shell">
+      <label data-slot="project-chip-field" class="field field-shell">
         <Files />
         <input
           aria-label="Project name"
@@ -131,7 +134,7 @@
           value={draft.name}
         />
       </label>
-      <label class="field field-shell">
+      <label data-slot="project-chip-field" class="field field-shell">
         <Folder />
         <input
           aria-label="Project path"
@@ -147,7 +150,7 @@
           value={draft.path}
         />
       </label>
-      <div class="actions">
+      <div data-slot="actions" class="actions">
         <span class="error" role="alert">{createError}</span>
         <button
           class="ns-btn sm touch-hit"
@@ -159,6 +162,7 @@
           Back
         </button>
         <button
+          data-slot="primary"
           aria-busy={creating || undefined}
           aria-disabled={creating || undefined}
           class="ns-btn sm primary touch-hit"
@@ -179,6 +183,7 @@
     {#each projects as row, index (row.id)}
       {@const on = row.id === projectId}
       <button
+        data-slot="row"
         aria-pressed={on}
         class="row ns-in press-tint"
         data-fh="1"
@@ -187,18 +192,22 @@
         type="button"
         class:on
       >
-        <span class="ns-tile tile" style={`color:${row.hue}`}><Files /></span>
-        <span class="text">
-          <span class="name">{row.name}</span>
-          <span class="meta">{row.path}</span>
+        <span data-slot="tile" class="ns-tile tile" style={`color:${row.hue}`}
+          ><Files /></span
+        >
+        <span data-slot="text" class="text">
+          <span data-slot="name" class="name">{row.name}</span>
+          <span data-slot="meta" class="meta">{row.path}</span>
         </span>
         {#if on}
           <Check class="check ns-check" />
         {/if}
       </button>
     {/each}
-    <div class="divider"></div>
+    <div data-slot="divider" class="divider"></div>
     <button
+      data-slot="row"
+      data-add
       class="row add ns-in press-tint"
       data-fh="1"
       onclick={() => {
@@ -207,8 +216,8 @@
       style="--delay:110ms"
       type="button"
     >
-      <span class="ns-tile tile dashed"><Add /></span>
-      <span class="name">New project…</span>
+      <span data-slot="tile" class="ns-tile tile dashed"><Add /></span>
+      <span data-slot="name" class="name">New project…</span>
     </button>
   {/if}
 </NsPopover>

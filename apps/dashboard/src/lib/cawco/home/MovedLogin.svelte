@@ -40,11 +40,12 @@
       size={28}
     />
   {/snippet}
-  <span class="name">{one.name}</span>
-  <span class="sub">
-    <span class="from">{one.from}</span>
+  <span data-slot="name" class="name">{one.name}</span>
+  <span data-slot="sub" class="sub">
+    <span data-slot="from" class="from">{one.from}</span>
     {#if one.missing > 0}
       <a
+        data-slot="todo"
         class="todo mark-line"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
@@ -52,7 +53,7 @@
         <IconChevronRight aria-hidden="true" /></a
       >
     {:else}
-      <span class="done mark-line"
+      <span data-slot="done" class="done mark-line"
         ><IconSuccess aria-hidden="true" /><span>Signed in everywhere</span
         ></span
       >

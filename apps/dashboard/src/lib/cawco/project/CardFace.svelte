@@ -29,15 +29,15 @@
   } = $props();
 </script>
 
-<span class="head">
-  <span class="tile" style:color={hue}><Icon /></span>
+<span data-slot="head" class="head">
+  <span data-slot="tile" class="tile" style:color={hue}><Icon /></span>
   {@render aside?.()}
 </span>
 {#if art}
   <span class="art">{@render art()}</span>
 {/if}
-<span class="name">{name}</span>
-<span class="meta">{meta}</span>
+<span data-slot="name" class="name">{name}</span>
+<span data-slot="meta" class="meta">{meta}</span>
 
 <style>
   /* Over the card's highlight layers. */

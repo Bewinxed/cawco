@@ -103,16 +103,16 @@
     transition:unfold
     {@attach arrive}
   >
-    <div class="tile">
-      <p class="title" id="{id}-title">{asked.title}</p>
+    <div data-slot="tile" class="tile">
+      <p data-slot="title" class="title" id="{id}-title">{asked.title}</p>
       {#each paragraphs as paragraph, index (index)}
-        <p class="body">{paragraph}</p>
+        <p data-slot="body" class="body">{paragraph}</p>
       {/each}
       {#if items.length > 0}
         <AskItems {items} label="What this reaches" />
       {/if}
       <RowFault reason={failure} />
-      <div class="actions">
+      <div data-slot="actions" class="actions">
         <Button
           data-ask-cancel
           disabled={running}

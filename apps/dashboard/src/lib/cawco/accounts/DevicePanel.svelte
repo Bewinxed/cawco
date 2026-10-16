@@ -78,16 +78,20 @@
     </p>
   {:else}
     {#if shown}
-      <div class={["well", flow.phase === "expired" && "dim"]} in:openPlace>
+      <div
+        data-slot="well"
+        class={["well", flow.phase === "expired" && "dim"]}
+        in:openPlace
+      >
         <span class="sr-only">{words.said(flow.code ?? "")}</span>
-        <span aria-hidden="true" class="code">
+        <span data-slot="code" aria-hidden="true" class="code">
           {#each groups as group, at (at)}
             <span>{group}</span>
           {/each}
         </span>
       </div>
     {/if}
-    <div class="row">
+    <div data-slot="row" class="row">
       {#if flow.phase === "waiting"}
         <CopyButton size="sm" text={flow.code ?? ""} variant="outline"
           >{words.copy}</CopyButton
@@ -117,7 +121,7 @@
     {#if flow.phase === "waiting"}
       <p class="line">
         {words.enterWithin}
-        <span class="num">{clock}</span>
+        <span data-slot="num" class="num">{clock}</span>
       </p>
     {:else if flow.phase === "expired"}
       <p class="line">{words.expired}</p>

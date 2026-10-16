@@ -80,6 +80,7 @@
 </script>
 
 <section
+  data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
   class="column"
   data-closed={closed ? "" : undefined}
@@ -88,17 +89,19 @@
   data-picking={picking ? "" : undefined}
   {@attach drop}
 >
-  <header class="head">
+  <header data-slot="head" class="head">
     <span class="line mark-line">
       {#if kind === "you"}
         <IconNeedsYou aria-hidden="true" class="you-glyph" />
       {/if}
-      <h3 class="name">{label}</h3>
-      <span class="count num"><MorphText text={String(count)} /></span>
+      <h3 data-slot="name" class="name">{label}</h3>
+      <span data-num data-slot="count" class="count num"
+        ><MorphText text={String(count)} /></span
+      >
     </span>
-    <span class="kind">{kindWord}</span>
+    <span data-slot="kind" class="kind">{kindWord}</span>
   </header>
-  <ol class="cards" {@attach reflow()}>
+  <ol data-slot="cards" class="cards" {@attach reflow()}>
     {#each cards as task (task.id)}
       {@const fault = refused?.(task.id) ?? null}
       {@const on = picked?.(task.id) ?? false}
@@ -120,6 +123,7 @@
         {#if onpick}
           <!-- The tick stands beside the card, not in it: the card is a link. -->
           <Checkbox
+            data-task-column-pick
             aria-label="Pick {task.id} {task.title}"
             checked={on}
             class="pick"
@@ -130,7 +134,7 @@
           />
         {/if}
         {#if moving?.(task.id)}
-          <span class="moving mark-line"
+          <span data-slot="moving" class="moving mark-line"
             ><Spinner aria-hidden="true" /><span>Moving…</span></span
           >
         {/if}
@@ -139,7 +143,7 @@
     {/each}
   </ol>
   {#if foot}
-    <div class="foot">{@render foot()}</div>
+    <div data-slot="foot" class="foot">{@render foot()}</div>
   {/if}
 </section>
 

@@ -180,7 +180,7 @@
 </script>
 
 {#snippet well(source: string)}
-  <div class="well"><ToolProse {source} /></div>
+  <div data-slot="well" class="well"><ToolProse {source} /></div>
 {/snippet}
 
 <div class="memory">
@@ -193,7 +193,9 @@
         {before.why}.
       </p>
     {:else if before.kind === "unchanged"}
-      <p class="label">Saved unchanged: the content matched what was there.</p>
+      <p data-slot="memory-body-label" class="label">
+        Saved unchanged: the content matched what was there.
+      </p>
     {:else}
       <DiffView
         filePath={diffPath}
@@ -202,29 +204,34 @@
       />
     {/if}
     {#if footer}
-      <span class="foot">{footer}</span>
+      <span data-slot="foot" class="foot">{footer}</span>
     {/if}
   {:else if action === "get" && parsed.kind === "doc"}
     {@render well(parsed.content)}
     {#if footer}
-      <span class="foot">{footer}</span>
+      <span data-slot="foot" class="foot">{footer}</span>
     {/if}
   {:else if action === "list_docs" && parsed.kind === "docs"}
     <div class="docs">
       {#each parsed.docs as doc (doc.path)}
         <Collapsible.Root>
-          <Collapsible.Trigger class="doc mark-line">
-            <span class="path">{doc.path}</span>
+          <Collapsible.Trigger data-doc class="doc mark-line">
+            <span data-slot="path" class="path">{doc.path}</span>
             {#if doc.updatedAt}
-              <span class="meta">{day(doc.updatedAt)}</span>
+              <span data-slot="meta" class="meta">{day(doc.updatedAt)}</span>
             {/if}
-            <span class="meta">{lines(doc.content)} lines</span>
-            <span class="chev" data-box><IconChevronRight /></span>
+            <span data-slot="meta" class="meta">{lines(doc.content)} lines</span
+            >
+            <span data-slot="chev" class="chev" data-box
+              ><IconChevronRight /></span
+            >
           </Collapsible.Trigger>
           <!-- Folds like the row that holds it: grows open and folds shut
                from the header, which the transcript holds in place. -->
           <Collapsible.Content reveal>
-            <div class="doc-body">{@render well(doc.content)}</div>
+            <div data-slot="doc-body" class="doc-body">
+              {@render well(doc.content)}
+            </div>
           </Collapsible.Content>
         </Collapsible.Root>
       {/each}

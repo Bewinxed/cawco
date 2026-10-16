@@ -105,14 +105,15 @@
      stays however the reader left it. `data-message` on the outer element
      is what the delegate tray's chip flies onto. -->
 <div
+  data-slot="rail-row"
   class="sysrow rail-row"
   data-message={message.id}
   class:err={row.failed}
   class:waiting={message.state === "pending"}
 >
   <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-    <p class="label rail-line">
-      <span class="glyph rail-cell">
+    <p data-slot="peer-label" class="label rail-line">
+      <span data-rail-cell data-slot="glyph" class="glyph rail-cell">
         {#if row.kind === "rule"}
           <IconRules />
         {:else if row.kind === "ask"}
@@ -127,14 +128,16 @@
           <IconHandoff />
         {/if}
       </span>
-      <span class="text">
+      <span data-slot="text" class="text">
         {row.lead}
         {#if senderId}
-          <a class="name" href={conversationHref(senderId, cawco.instanceIndex)}
-            >{row.name}</a
+          <a
+            data-slot="name"
+            class="name"
+            href={conversationHref(senderId, cawco.instanceIndex)}>{row.name}</a
           >
         {:else}
-          <span class="name">{row.name}</span>
+          <span data-slot="name" class="name">{row.name}</span>
         {/if}
       </span>
       {#if message.state === "failed"}
@@ -154,14 +157,18 @@
         class="peer-toggle press-tint"
         data-box
       >
-        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+        <span data-slot="chev" aria-hidden="true" class="chev"
+          ><IconChevronRight /></span
+        >
       </Collapsible.Trigger>
     </p>
     {#if message.state === "failed" && meta.sendFailed}
-      <p class="reason rail-hang">{meta.sendFailed}</p>
+      <p data-slot="reason" class="reason rail-hang">{meta.sendFailed}</p>
     {/if}
     <Collapsible.Content reveal>
-      <div class="body rail-hang"><MessageBody source={message.content} /></div>
+      <div data-slot="body" class="body rail-hang">
+        <MessageBody source={message.content} />
+      </div>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>

@@ -58,9 +58,13 @@
   {#each sections as section, i (i)}
     {#if section.heading}
       {@const known = TONES[section.heading]}
-      <h3 class="label" data-tone={known?.tone}>
+      <h3 data-slot="release-notes-label" class="label" data-tone={known?.tone}>
         {#if known}
-          <known.icon aria-hidden="true" class="glyph" />
+          <known.icon
+            data-release-notes-glyph
+            aria-hidden="true"
+            class="glyph"
+          />
         {/if}
         {section.heading}
       </h3>

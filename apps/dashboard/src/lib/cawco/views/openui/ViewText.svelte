@@ -11,7 +11,7 @@
   );
 </script>
 
-<p class="text" data-role={role}>{String(props.text ?? "")}</p>
+<p data-slot="text" class="text" data-role={role}>{String(props.text ?? "")}</p>
 
 <style>
   .text {

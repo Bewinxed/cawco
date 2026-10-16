@@ -368,6 +368,7 @@
 <!-- mark-line: a grid whose first row is the mark line; its words take
      .mark-text, centred on the lead (the rows under it hold other things) -->
 <div
+  data-slot="row"
   class="row"
   data-flip
   data-kind={item.kind}
@@ -379,6 +380,7 @@
        it is answered here. -->
   {#if href !== undefined}
     <a
+      data-slot="cover"
       aria-label="Open {item.title}"
       class="cover press-tint focus-inset"
       {href}
@@ -387,7 +389,7 @@
     >
   {/if}
   <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
-  <span class="lead">
+  <span data-slot="lead" class="lead">
     {#if item.kind === "ask" || item.kind === "watch"}
       <SessionMark
         caw={cawOf(item.instanceId)}
@@ -421,16 +423,19 @@
       <IconDollar aria-hidden="true" />
     {/if}
   </span>
-  <span class="name mark-text">{item.title}</span>
+  <span data-slot="name" class="name mark-text">{item.title}</span>
   {#if item.raisedAt !== undefined}
-    <span class="wait mark-text">{span(clock.now - item.raisedAt)}</span>
+    <span data-slot="wait" class="wait mark-text"
+      >{span(clock.now - item.raisedAt)}</span
+    >
   {/if}
   {#if peeks}
     <!-- Glance → peek → dive: read what led here before answering. -->
-    <span class="end">
+    <span data-slot="end" class="end">
       <Tip disabled={peekTipOff()} label="Peek">
         {#snippet children(tip)}
           <button
+            data-needs-card-peek
             {...tip}
             aria-label="Peek {item.title}"
             class="peek touch-hit pointer-hit focus-inset"
@@ -444,7 +449,7 @@
       </Tip>
     </span>
   {/if}
-  <span class="want">{want}</span>
+  <span data-slot="want" class="want">{want}</span>
   {#if item.kind === "ask" && item.request.presentation.command}
     <!-- What runs, under why: its first line, so Approve here is made on
          the command as much as on the card. -->
@@ -455,82 +460,91 @@
   {#if item.kind === "ask"}
     <!-- Where it came from: the project first, in its mark and strong ink;
          then what it asks for; then the machine, by its OS mark. -->
-    <span class="meta where mark-line">
+    <span data-where data-slot="meta" class="meta where mark-line">
       {#if item.project}
-        <span class="project mark-line" data-box>
+        <span data-slot="project" class="project mark-line" data-box>
           <IconFolder
+            data-needs-card-mark
             aria-hidden="true"
             class="mark"
             style="color: var(--mark-{item.project.hue})"
           />
-          <span class="project-name">{item.project.name}</span>
+          <span data-slot="project-name" class="project-name"
+            >{item.project.name}</span
+          >
         </span>
-        <span aria-hidden="true" class="dot">·</span>
+        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       {/if}
       <span>{item.isQuestion ? "Question" : "Permission"}</span>
-      <span aria-hidden="true" class="dot">·</span>
-      <span class="machine mark-line" data-box>
+      <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+      <span data-slot="machine" class="machine mark-line" data-box>
         <OsMark class="mark" os={item.machine.os} />
         <span class="machine-name">{item.machine.name}</span>
       </span>
       {#if item.stale}
-        <span aria-hidden="true" class="dot">·</span>
+        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
         <span>machine offline</span>
       {/if}
     </span>
   {:else if item.kind === "action" && call}
     <!-- The exact call: when, through which account, the tool, the arguments. -->
-    <dl class="call">
+    <dl data-slot="call" class="call">
       <dt>Runs</dt>
       <dd>{call.when}</dd>
       <dt>Through</dt>
       <dd>{call.through}</dd>
       <dt>Tool</dt>
-      <dd class="tool">{call.tool}</dd>
+      <dd data-slot="tool" class="tool">{call.tool}</dd>
     </dl>
     <!-- A scroller with no focusable child is itself in the tab order
          (keyboard-focusable scrollers), so a keyboard scrolls it too. -->
-    <pre class="args focus-inset">{call.args}</pre>
-    <span class="meta where mark-line">
+    <pre data-slot="args" class="args focus-inset">{call.args}</pre>
+    <span data-where data-slot="meta" class="meta where mark-line">
       {#if item.project}
-        <span class="project mark-line" data-box>
+        <span data-slot="project" class="project mark-line" data-box>
           <IconFolder
+            data-needs-card-mark
             aria-hidden="true"
             class="mark"
             style="color: var(--mark-{item.project.hue})"
           />
-          <span class="project-name">{item.project.name}</span>
+          <span data-slot="project-name" class="project-name"
+            >{item.project.name}</span
+          >
         </span>
-        <span aria-hidden="true" class="dot">·</span>
+        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       {/if}
       <span>Approved action</span>
       {#if item.action.taskId}
-        <span aria-hidden="true" class="dot">·</span>
+        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
         <span class="task">{item.action.taskId}</span>
       {/if}
     </span>
   {:else if item.kind === "task"}
-    <span class="meta where mark-line">
+    <span data-where data-slot="meta" class="meta where mark-line">
       {#if item.project}
-        <span class="project mark-line" data-box>
+        <span data-slot="project" class="project mark-line" data-box>
           <IconFolder
+            data-needs-card-mark
             aria-hidden="true"
             class="mark"
             style="color: var(--mark-{item.project.hue})"
           />
-          <span class="project-name">{item.project.name}</span>
+          <span data-slot="project-name" class="project-name"
+            >{item.project.name}</span
+          >
         </span>
-        <span aria-hidden="true" class="dot">·</span>
+        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       {/if}
       <span>Task</span>
-      <span aria-hidden="true" class="dot">·</span>
+      <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       <span class="task">{item.taskId}</span>
     </span>
   {:else}
-    <span class="meta">{meta}</span>
+    <span data-slot="meta" class="meta">{meta}</span>
   {/if}
   {#if item.kind === "ask" && answerable}
-    <div class="peers">
+    <div data-slot="peers" class="peers">
       {#if answerRefused}
         <ErrorText
           class="refusal"
@@ -539,6 +553,7 @@
         />
       {/if}
       <Button
+        data-deny
         aria-label="Deny {item.ask} on {item.title}"
         class="peer deny"
         disabled={held || (answering && pressed !== "deny")}
@@ -553,6 +568,7 @@
         variant="secondary"
       />
       <Button
+        data-approve
         aria-label="Approve {item.ask} on {item.title}"
         class="peer approve"
         disabled={held || (answering && pressed !== "allow")}
@@ -570,7 +586,7 @@
   {:else if item.kind === "choice"}
     <!-- Its two options as the peers: same size, type and fill (The Peer
          Rule); keeping agents off comes first, as the recommended one. -->
-    <div class="peers">
+    <div data-slot="peers" class="peers">
       {#if choiceRefusal}
         <ErrorText
           class="refusal"
@@ -605,7 +621,7 @@
       item.kind === "pairing"
         ? `${item.title}, code ${item.request.userCode}`
         : item.title}
-    <div class="peers">
+    <div data-slot="peers" class="peers">
       {#if refusal}
         <ErrorText
           class="refusal"
@@ -614,6 +630,7 @@
         />
       {/if}
       <Button
+        data-deny
         aria-label="Deny {who}"
         class="peer deny"
         disabled={held || admitting === true}
@@ -626,6 +643,7 @@
         variant="secondary"
       />
       <Button
+        data-approve
         aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
         class="peer approve"
         disabled={held || admitting === false}
@@ -639,7 +657,7 @@
       />
     </div>
   {:else if item.kind === "action"}
-    <div class="peers">
+    <div data-slot="peers" class="peers">
       {#if refusal}
         <ErrorText
           class="refusal"
@@ -649,6 +667,7 @@
       {/if}
       {#if approvable}
         <Button
+          data-deny
           aria-label="Deny {item.action.tool} on {item.action.connection}"
           class="peer deny"
           disabled={held || deciding}
@@ -661,6 +680,7 @@
           <span>Deny</span>
         </Button>
         <Button
+          data-approve
           aria-label="Approve {item.action.tool} on {item.action.connection}"
           class="peer approve"
           disabled={held || deciding}

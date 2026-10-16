@@ -69,7 +69,7 @@
      a canvas stands on over the pane's slot, and the toasts the artifact
      menu says a refusal in. -->
 <Overlays>
-  <div class="artifact-tab">
+  <div data-slot="artifact-tab" class="artifact-tab">
     {#if problem}
       <EmptyState icon={IconAlert} title="This artifact didn't open">
         {#snippet line()}
@@ -85,6 +85,7 @@
     {:else}
       <div aria-hidden="true" class="opening">
         <span
+          data-slot="block"
           class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
         ></span>
       </div>

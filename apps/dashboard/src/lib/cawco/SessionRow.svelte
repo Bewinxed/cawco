@@ -277,10 +277,12 @@
        with the row's trailing edge. -->
   <!-- Each line's words stand on the middle of their cell (app.css, the mark
        line), the line the mark centres on. -->
-  <span class="words mark-line">
+  <span data-slot="words" class="words mark-line">
     {#if draft !== null}
       <!-- svelte-ignore a11y_autofocus -->
       <input
+        data-slot="title"
+        data-field
         aria-label="Session title"
         autocomplete="off"
         autofocus
@@ -306,7 +308,7 @@
         {@attach (node) => node.select()}
       />
     {:else}
-      <span class="cell title"
+      <span data-slot="title" class="cell title"
         ><span class="sr-only"
           >{pending ?? statusWord(instance, status)}:
         </span>
@@ -318,7 +320,7 @@
            in it on vertical-align: middle, the x-height's middle -->
       <span class="cell line">
         {#if pending || renaming !== null}
-          <span class="doing mark-line"
+          <span data-slot="doing" class="doing mark-line"
             ><Spinner aria-hidden="true" />
             <span>{renaming === null ? pending : "Renaming…"}</span></span
           >
@@ -330,8 +332,12 @@
       </span>
     {/if}
   </span>
-  <span class="end" {@attach trailWidth}>
-    <span class="cell num trail mark-line" title={pending ?? hint}>
+  <span data-slot="end" class="end" {@attach trailWidth}>
+    <span
+      data-slot="num"
+      class="cell num trail mark-line"
+      title={pending ?? hint}
+    >
       {#if compact && (pending || renaming !== null)}
         <Spinner aria-hidden="true" class="size-3.5" />
       {:else}
@@ -346,6 +352,7 @@
 
 {#snippet body(trigger: Record<string, unknown>)}
   <div
+    data-slot="item"
     class="item"
     data-archivable={onarchive ? true : undefined}
     data-branch-item
@@ -367,6 +374,7 @@
       <!-- Being renamed: the row is the field's form, not a link, until the
            name settles or Escape puts it back. -->
       <form
+        data-slot="row"
         class="row"
         data-rail-row
         onsubmit={(event) => {
@@ -378,6 +386,7 @@
       </form>
     {:else}
       <a
+        data-session-row-row
         {...trigger}
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
@@ -408,6 +417,7 @@
       <Tip label="Archive">
         {#snippet children(tip)}
           <button
+            data-archive
             {...tip}
             aria-label="Archive {title}"
             class="row-action archive touch-hit focus-inset"
@@ -427,6 +437,7 @@
       <Tip disabled={peekTipOff()} label="Peek">
         {#snippet children(tip)}
           <button
+            data-session-row-peek
             {...tip}
             aria-label="Peek {title}"
             class="row-action peek touch-hit focus-inset"

@@ -179,7 +179,7 @@
   );
 </script>
 
-<div class="think rail-row">
+<div data-slot="rail-row" class="think rail-row">
   <ThinkingSteps
     onOpenChange={(value) => {
       expanded = value;
@@ -193,7 +193,7 @@
           <span class="tail" in:tailIn out:tailOut><span>{tail}</span></span>
         {/if}
       {/snippet}
-      <span class="label" bind:this={cell}>
+      <span data-slot="thinking-label" class="label" bind:this={cell}>
         {#if liveLabel}
           <span class="face" in:faceIn out:faceOut
             ><ThinkingIndicator
@@ -203,9 +203,9 @@
           >
         {:else}
           <span class="face identity rail-line" in:faceIn out:faceOut
-            ><span class="icon rail-cell"><IconCpu /></span><span
-              >Reasoning</span
-            ></span
+            ><span data-slot="rail-cell" class="icon rail-cell"
+              ><IconCpu /></span
+            ><span>Reasoning</span></span
           >
         {/if}
       </span>

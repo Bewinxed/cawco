@@ -186,9 +186,13 @@
     </Segmented>
   {/snippet}
 
-  <div class="field field-shell" class:locked>
-    <div class="row">
-      <FolderOpen class="lead" />
+  <div
+    data-slot="location-section-field"
+    class="field field-shell"
+    class:locked
+  >
+    <div data-slot="row" class="row">
+      <FolderOpen data-location-section-lead class="lead" />
       <input
         aria-invalid={reading && !informational ? true : undefined}
         aria-label="Directory"
@@ -234,14 +238,16 @@
       <div class="clip">
         <div class="browser">
           <div class="crumbs">
-            <span class="machine mark-line"
-              ><span class="dot" data-box></span><span>{machineName}</span
+            <span data-slot="machine" class="machine mark-line"
+              ><span data-slot="dot" class="dot" data-box></span><span
+                >{machineName}</span
               ></span
             >
             <div class="trail">
               <div class="ancestors fai-scroll">
                 {#each crumbs.slice(0, -1) as crumb (crumb.to)}
                   <button
+                    data-slot="crumb"
                     class="crumb"
                     onclick={() => list(crumb.to)}
                     type="button"
@@ -252,6 +258,7 @@
                 {/each}
               </div>
               <button
+                data-slot="crumb"
                 aria-current="location"
                 class="crumb current"
                 onclick={() => list(path)}
@@ -268,9 +275,21 @@
               </button>
             {/if}
             {#if listing}
-              <div class="empty" role="status">Loading folders...</div>
+              <div
+                data-slot="location-section-empty"
+                class="empty"
+                role="status"
+              >
+                Loading folders...
+              </div>
             {:else if listError}
-              <div class="empty error" role="alert">{listError}</div>
+              <div
+                data-slot="location-section-empty"
+                class="empty error"
+                role="alert"
+              >
+                {listError}
+              </div>
             {:else}
               {#each folders as folder (`${path}/${folder.name}`)}
                 <button
@@ -282,18 +301,25 @@
                   <Folder
                     style={`color:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
                   />
-                  <span class="name">{folder.name}</span>
+                  <span data-slot="name" class="name">{folder.name}</span>
                   <Right class="go" />
                 </button>
               {/each}
               {#if !folders.length}
-                <div class="empty" role="status">No subfolders</div>
+                <div
+                  data-slot="location-section-empty"
+                  class="empty"
+                  role="status"
+                >
+                  No subfolders
+                </div>
               {/if}
             {/if}
           </div>
           <div class="use">
-            <span class="path" title={path}>{path}</span>
+            <span data-slot="path" class="path" title={path}>{path}</span>
             <button
+              data-slot="primary"
               class="ns-btn sm primary touch-hit"
               onclick={useFolder}
               type="button"
@@ -312,8 +338,8 @@
         class="repo"
         style={`transform:translateY(${mode === "repo" ? 0 : -12}px);opacity:${mode === "repo" ? 1 : 0};pointer-events:${mode === "repo" ? "auto" : "none"}`}
       >
-        <div class="field">
-          <div class="row repo-row">
+        <div data-slot="location-section-field" class="field">
+          <div data-slot="row" class="row repo-row">
             <ProviderLogo class="lead gh" provider="github" size={null} />
             <input
               aria-label="Repository"
@@ -328,7 +354,7 @@
             />
           </div>
         </div>
-        <div class="note">
+        <div data-slot="note" class="note">
           <Refresh />
           <span
             >Cloned into <span class="mono">{dir.trim() || "~"}</span> on each machine,

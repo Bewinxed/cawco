@@ -105,6 +105,9 @@
 </script>
 
 <section
+  data-wide={width === "wide" || undefined}
+  data-narrow={width === "narrow" || undefined}
+  data-slot="block"
   aria-labelledby={headId}
   class="block"
   class:narrow={width === "narrow"}
@@ -119,15 +122,18 @@
   {@attach resizing && morph({ width: true })}
 >
   <header
+    data-slot="block-head"
     class="block-head mark-line press-tint"
     {@attach dragHead(drag, () => ({ block: id, page }))}
   >
-    <span aria-hidden="true" class="glyph" data-box><Glyph /></span>
-    <h2 class="title" id={headId}>{title}</h2>
+    <span data-slot="glyph" aria-hidden="true" class="glyph" data-box
+      ><Glyph /></span
+    >
+    <h2 data-slot="title" class="title" id={headId}>{title}</h2>
     {#if meta}
-      <span class="meta" data-box>{@render meta()}</span>
+      <span data-slot="meta" class="meta" data-box>{@render meta()}</span>
     {/if}
-    <span class="tools" data-block-tools data-box>
+    <span data-slot="tools" class="tools" data-block-tools data-box>
       {@render action?.()}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
@@ -182,9 +188,16 @@
       </DropdownMenu.Root>
     </span>
   </header>
-  <div class={["block-body", card && "card"]}>{@render children()}</div>
+  <div
+    data-card={card || undefined}
+    data-slot="block-body"
+    class={["block-body", card && "card"]}
+  >
+    {@render children()}
+  </div>
   {#if over}
-    <span aria-hidden="true" class="drop" data-edge={over}></span>
+    <span data-slot="drop" aria-hidden="true" class="drop" data-edge={over}
+    ></span>
   {/if}
 </section>
 

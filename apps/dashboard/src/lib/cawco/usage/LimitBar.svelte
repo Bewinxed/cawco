@@ -72,7 +72,7 @@
   role="progressbar"
   style:--h="{size}px"
 >
-  <span class="fill" style:--share={shown / 100}></span>
+  <span data-slot="fill" class="fill" style:--share={shown / 100}></span>
   {#if tick !== null}
     <span aria-hidden="true" class="tick" style:--at={tick}></span>
   {/if}

@@ -151,7 +151,12 @@
     {#if status === "completed"}
       <IconTick class="tick" />
     {:else}
-      <span class="dot" class:live={status === "in_progress"}></span>
+      <span
+        data-plan-pane-live={status === "in_progress" || undefined}
+        data-slot="dot"
+        class="dot"
+        class:live={status === "in_progress"}
+      ></span>
     {/if}
   </span>
 {/snippet}
@@ -165,9 +170,9 @@
   >
     {#each nodes as node (node.id)}
       <li data-flip data-status={node.status}>
-        <span class="row">
+        <span data-slot="row" class="row">
           {@render mark(node.status)}
-          <span class="text">{node.text}</span>
+          <span data-slot="text" class="text">{node.text}</span>
         </span>
         {#if node.children.length > 0}
           {@render tree(node.children, true)}
@@ -180,6 +185,9 @@
 <!-- The parts, flat on the surface: a heading, then what it names. -->
 {#snippet body()}
   <div
+    data-sheet={sheet || undefined}
+    data-plan-pane-expanded={!!expand?.expanded || undefined}
+    data-slot="body"
     class={[
       "body kit-edge-fade-block",
       { sheet, "kit-sheet-scroll": sheet, expanded: !!expand?.expanded },
@@ -204,6 +212,7 @@
       {@render tree(todos, false)}
       {#if projectId}
         <Button
+          data-more
           class="more"
           href="/project/{encodeURIComponent(
             projectId

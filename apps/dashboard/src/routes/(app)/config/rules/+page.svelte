@@ -206,7 +206,9 @@
         >
           {#snippet badge()}
             {#if row.stats.pending > 0}
-              <span class="waiting num">{row.stats.pending} waiting</span>
+              <span data-slot="num" class="waiting num"
+                >{row.stats.pending} waiting</span
+              >
             {/if}
           {/snippet}
           {#snippet below()}

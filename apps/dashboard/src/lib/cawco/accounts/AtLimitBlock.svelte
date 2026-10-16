@@ -48,7 +48,7 @@
 </script>
 
 <div class="lim">
-  <h3 class="head">{words.head}</h3>
+  <h3 data-slot="head" class="head">{words.head}</h3>
   <div class="switch-line">
     <label for="{id}-move">{words.move}</label>
     <Switch id="{id}-move" bind:checked={atLimit.move} />
@@ -58,6 +58,8 @@
       <p class="pr">
         <label for="{id}-wait">{words.wait}</label>
         <Input
+          data-num
+          data-field
           class="num field"
           id="{id}-wait"
           inputmode="numeric"
@@ -73,6 +75,8 @@
       <p class="pr">
         <label for="{id}-under">{words.under}</label>
         <Input
+          data-num
+          data-field
           class="num field"
           id="{id}-under"
           inputmode="numeric"
@@ -90,6 +94,8 @@
       <p class="pr">
         <label for="{id}-at">{words.early}</label>
         <Input
+          data-num
+          data-field
           class="num field"
           id="{id}-at"
           inputmode="numeric"

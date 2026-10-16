@@ -280,7 +280,7 @@
   }
 </script>
 
-<section class="model">
+<section data-slot="model" class="model">
   {#if !runtime}
     <SectionHeader hue="var(--hue-cyan-500)" icon={Cpu} {label}>
       {#snippet right()}
@@ -299,7 +299,7 @@
       {/snippet}
     </SectionHeader>
   {/if}
-  <div class="picker" class:railed={!runtime}>
+  <div data-slot="picker" class="picker" class:railed={!runtime}>
     {#if !runtime}
       <Rail
         axis="y"
@@ -334,9 +334,9 @@
         {/snippet}
       </Rail>
     {/if}
-    <div class="pick">
-      <label class="search field-underline">
-        <Search class="lead" />
+    <div data-slot="pick" class="pick">
+      <label data-slot="search" class="search field-underline">
+        <Search data-model-section-lead class="lead" />
         <input
           aria-controls={`${uid}-models`}
           aria-label="Search models"
@@ -362,6 +362,7 @@
         />
         {#if query}
           <button
+            data-slot="clear"
             aria-label="Clear"
             class="clear"
             onclick={() => {
@@ -375,6 +376,7 @@
       </label>
 
       <div
+        data-slot="list"
         aria-label={`${harnessName(listHarness)} models`}
         class="list fai-scroll"
         id={`${uid}-models`}
@@ -386,6 +388,7 @@
         <!-- Every option above the chosen one is a row (46px a step), so the
              fill travels by its index; it is as tall as the chosen option. -->
         <span
+          data-slot="fill"
           aria-hidden="true"
           class="fill"
           style={`transform:translateY(calc(${modelIdx} * 46px));height:${chosenHeight}px;opacity:${hiOpacity}`}
@@ -393,7 +396,11 @@
         {#if swap.leaving.length}
           <div aria-hidden="true" class="leaving" data-leaving inert>
             {#each swap.leaving as entry, i (entry.id)}
-              <div class="row" style={`animation:${swap.leaveAnim(i)}`}>
+              <div
+                data-slot="row"
+                class="row"
+                style={`animation:${swap.leaveAnim(i)}`}
+              >
                 {@render rowBody(entry)}
               </div>
             {/each}
@@ -403,6 +410,7 @@
              the one leaving keeps its place while the other fades in. -->
         {#if showCustomRow}
           <button
+            data-slot="row"
             class="row custom press-tint"
             data-fh="1"
             onclick={pickCustom}
@@ -410,10 +418,10 @@
             in:crossIn
             out:crossOut
           >
-            <span class="ns-tile tile ink"><Code /></span>
-            <span class="text">
-              <span class="name">Use custom model id</span>
-              <span class="meta mono">{query}</span>
+            <span data-slot="tile" class="ns-tile tile ink"><Code /></span>
+            <span data-slot="text" class="text">
+              <span data-slot="name" class="name">Use custom model id</span>
+              <span data-slot="meta" class="meta mono">{query}</span>
             </span>
             <span class="hint">↵ Enter</span>
           </button>
@@ -433,11 +441,13 @@
                the row's end while the row holds its name beside them, on a
                line of their own under it where it cannot (a phone). -->
           <div
+            data-slot="option"
             class="option"
             style={`animation:${swap.rowAnim(i)}`}
             {@attach picked && tools ? chosen : undefined}
           >
             <button
+              data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
               class="row press-tint"
@@ -453,8 +463,8 @@
             {#if picked && tools}
               <!-- The chips' line folds open and shut under the name, so the
                    rows after it glide; the chips glide between rows in it. -->
-              <div class="tools" in:line out:line>
-                <div class="chips" in:toolsIn out:toolsOut>
+              <div data-slot="tools" class="tools" in:line out:line>
+                <div data-slot="chips" class="chips" in:toolsIn out:toolsOut>
                   <ToolChips {tools} />
                 </div>
               </div>
@@ -469,7 +479,7 @@
 {#snippet rowBody(entry: ModelEntry, reason?: string)}
   {@const provider = providerOf(entry.id)}
   {#if mixedMakers}
-    <span class="ns-tile tile vendor">
+    <span data-slot="tile" class="ns-tile tile vendor">
       {#if provider}
         <ProviderLogo model={entry.id} size={16} />
       {:else}
@@ -477,12 +487,14 @@
       {/if}
     </span>
   {/if}
-  <span class="text">
-    <span class="name" class:mono={entry.mono}>{entry.name}</span>
+  <span data-slot="text" class="text">
+    <span data-slot="name" class="name" class:mono={entry.mono}
+      >{entry.name}</span
+    >
     {#if reason}
-      <span class="meta reason">{reason}</span>
+      <span data-slot="reason" data-meta class="meta reason">{reason}</span>
     {:else}
-      <span class="meta"
+      <span data-slot="meta" class="meta"
         ><span class="mono">{entry.id}</span>
         {vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}</span
       >

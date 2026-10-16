@@ -111,9 +111,10 @@
   {#if question}
     <AskHere asker={question.asker} at="editor" class="editor-ask" />
   {/if}
-  <div class="inner">
+  <div data-slot="inner" class="inner">
     {#if ondelete && deleteLabel}
       <Button
+        data-delete
         class="delete"
         disabled={down !== null || saving}
         {failed}
@@ -129,7 +130,7 @@
     {/if}
     <span class="spacer"></span>
     {#if result}
-      <span class="result">{@render result()}</span>
+      <span data-slot="result" class="result">{@render result()}</span>
     {/if}
     <Button
       class="footer-btn"

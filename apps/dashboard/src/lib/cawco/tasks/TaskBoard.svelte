@@ -144,7 +144,7 @@
 {/snippet}
 
 <div class="board-wrap" data-rail-open={railed && railOpen ? "" : undefined}>
-  <div class="board kit-edge-fade">
+  <div data-slot="board" class="board kit-edge-fade">
     {#each stages as stage (stage.name)}
       {@render column(
         stage.name,
@@ -159,7 +159,7 @@
   </div>
   {#if railed}
     {#if railOpen}
-      <div class="rail-open">
+      <div data-slot="rail-open" class="rail-open">
         <TaskColumn
           archived
           cards={archived}
@@ -171,6 +171,7 @@
           {onopen}
         />
         <button
+          data-slot="rail-close"
           bind:this={foldButton}
           class="rail-close press-tint"
           onclick={() => setRail(false)}
@@ -182,6 +183,7 @@
     {:else}
       <!-- mark-line: the rail stacks its glyph above its word, set vertically; they share no line -->
       <button
+        data-slot="archive-rail"
         bind:this={railButton}
         aria-label="Archived, {archived.length} {archived.length === 1
           ? 'task'
@@ -192,7 +194,7 @@
       >
         <IconArchive aria-hidden="true" />
         <span class="rail-name">Archived</span>
-        <span class="rail-count num">{archived.length}</span>
+        <span data-slot="num" class="rail-count num">{archived.length}</span>
       </button>
     {/if}
   {/if}

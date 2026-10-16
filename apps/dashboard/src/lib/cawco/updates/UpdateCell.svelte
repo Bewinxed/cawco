@@ -35,14 +35,14 @@
 
 <div class="cell" {@attach morph()}>
   {#key cell.row}
-    <div class="swap">
+    <div data-slot="swap" class="swap">
       {#if cell.plain}
         <span class="plain">{cell.text}</span>
       {:else if cell.text}
         {#if cell.icon === "spinner"}
           <span class="line mark-line">
             <Spinner class="size-4 shrink-0 text-muted-foreground" />
-            <span class="words">{cell.text}</span>
+            <span data-slot="words" class="words">{cell.text}</span>
           </span>
         {:else}
           <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
@@ -58,7 +58,7 @@
           </Badge>
         {/if}
         {#if cell.meta}
-          <span class="meta num">{cell.meta}</span>
+          <span data-num data-slot="meta" class="meta num">{cell.meta}</span>
         {/if}
         {#each cell.buttons as button (button)}
           {#if button === "retry"}

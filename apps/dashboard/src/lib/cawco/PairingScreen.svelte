@@ -34,49 +34,49 @@
   );
 </script>
 
-<main class="pairing">
-  <div class="caw-80">
+<main data-slot="pairing" class="pairing">
+  <div data-slot="caw-80" class="caw-80">
     <Caw next={["ready", "idle"]} size={CAW_SIZE} status="idle" />
   </div>
-  <div class="body">
+  <div data-slot="body" class="body">
     {#key stage.kind}
-      <div class="words" in:crossIn out:crossOut>
+      <div data-slot="words" class="words" in:crossIn out:crossOut>
         {#if stage.kind === "waiting"}
-          <h1 class="title">Pair this browser</h1>
+          <h1 data-slot="title" class="title">Pair this browser</h1>
           <p class="line">
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices, or in Telegram.
           </p>
-          <p class="code num">
+          <p data-num data-slot="code" class="code num">
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
-          <p class="meta num">
+          <p data-num data-slot="meta" class="meta num">
             Waiting for approval… The code expires {left < 60_000
               ? "in under a minute"
               : `in ${Math.ceil(left / 60_000)} min`}.
           </p>
         {:else if stage.kind === "denied"}
-          <h1 class="title">Pairing was denied</h1>
+          <h1 data-slot="title" class="title">Pairing was denied</h1>
           <p class="line">
             A paired device denied this browser. If that was a mistake, start
             again and approve the new code.
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "expired"}
-          <h1 class="title">The code expired</h1>
+          <h1 data-slot="title" class="title">The code expired</h1>
           <p class="line">
             Nobody approved it within 10 minutes. Start again for a new code.
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "failed"}
-          <h1 class="title">Pairing didn't start</h1>
+          <h1 data-slot="title" class="title">Pairing didn't start</h1>
           <ErrorText
             message={stage.message}
             title="The hub refused to start pairing"
           />
           <Button onclick={startPairing}>Start pairing</Button>
         {:else}
-          <h1 class="title">Pair this browser</h1>
+          <h1 data-slot="title" class="title">Pair this browser</h1>
           <p aria-live="polite" class="line">Asking the hub for a code…</p>
         {/if}
       </div>

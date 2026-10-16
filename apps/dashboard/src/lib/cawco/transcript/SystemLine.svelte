@@ -192,15 +192,17 @@
 {#if harness}
   <!-- Harness plumbing, folded onto the rail: the summary and how it went on
        one quiet line, the report itself behind it. -->
-  <div class="note rail-row">
+  <div data-system-line-rail-row data-slot="note" class="note rail-row">
     {#if harness.body}
       <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
         <Collapsible.Trigger class="ftrig hn rail-line">
-          <span class="rail-cell"><IconInfo /></span>
-          <span class="ftitle">{harness.title}</span>
+          <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+          <span data-slot="ftitle" class="ftitle">{harness.title}</span>
           {#if harness.status}
-            <span class="hstatus" class:bad={harness.status === "failed"}
-              >{harness.status}</span
+            <span
+              data-slot="hstatus"
+              class="hstatus"
+              class:bad={harness.status === "failed"}>{harness.status}</span
             >
           {/if}
           <span class={["hchev", { open }]} data-box><IconChevronRight /></span>
@@ -215,11 +217,13 @@
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
            empty body is the dead disclosure the tool rows already refuse. -->
       <span class="hline rail-line">
-        <span class="rail-cell"><IconInfo /></span>
-        <span class="ftitle">{harness.title}</span>
+        <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+        <span data-slot="ftitle" class="ftitle">{harness.title}</span>
         {#if harness.status}
-          <span class="hstatus" class:bad={harness.status === "failed"}
-            >{harness.status}</span
+          <span
+            data-slot="hstatus"
+            class="hstatus"
+            class:bad={harness.status === "failed"}>{harness.status}</span
           >
         {/if}
       </span>
@@ -228,9 +232,9 @@
 {:else if type === "system.task"}
   <!-- A plain task's completion: the verb AND the task it reports. A bare
        "task done" with no reference to which task is a line that says nothing. -->
-  <div class="note rail-row">
+  <div data-system-line-rail-row data-slot="note" class="note rail-row">
     <span class="hline rail-line">
-      <span class="rail-cell"><IconInfo /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
       <span class="tverb" class:bad={message?.content === "task failed"}
         >{message?.content}</span
       >
@@ -242,31 +246,33 @@
 {:else if isOutput}
   <!-- A command's output: the command it answers on the line, the output in
        its recessed well under it. -->
-  <div class="note rail-row">
+  <div data-system-line-rail-row data-slot="note" class="note rail-row">
     <span class="hline rail-line">
-      <span class="rail-cell"><IconTerminal /></span>
-      <span class="ftitle">{foldCommand ?? "Output"}</span>
+      <span data-slot="rail-cell" class="rail-cell"><IconTerminal /></span>
+      <span data-slot="ftitle" class="ftitle">{foldCommand ?? "Output"}</span>
     </span>
-    <pre class="well">{message?.content}</pre>
+    <pre data-slot="well" class="well">{message?.content}</pre>
   </div>
 {:else if isInterrupted}
   <!-- One quiet word for a deliberate act. The colour budget is for things
        that happened TO the operator, not things they did. -->
-  <div class="note rail-row">
+  <div data-system-line-rail-row data-slot="note" class="note rail-row">
     <span class="hline rail-line">
-      <span class="rail-cell"><IconStop /></span>
-      <span class="ftitle">Interrupted</span>
+      <span data-slot="rail-cell" class="rail-cell"><IconStop /></span>
+      <span data-slot="ftitle" class="ftitle">Interrupted</span>
     </span>
   </div>
 {:else if responses}
   <div
+    data-system-line-rail-row
+    data-slot="note"
     class="note responses rail-row"
     data-artifact-responses={responses.id}
     class:waiting={message?.state === "pending"}
   >
     <span class="hline rail-line">
-      <span class="rail-cell"><ResponseGlyph /></span>
-      <span class="ftitle"
+      <span data-slot="rail-cell" class="rail-cell"><ResponseGlyph /></span>
+      <span data-slot="ftitle" class="ftitle"
         >{responses.said} on
         <button
           aria-busy={opening}
@@ -278,21 +284,30 @@
           {responses.name}
         </button></span
       >
-      <span class="hstatus" class:bad={message?.state === "failed"}
-        >{responsesState}</span
+      <span
+        data-slot="hstatus"
+        class="hstatus"
+        class:bad={message?.state === "failed"}>{responsesState}</span
       >
     </span>
     {#if message?.state === "failed" && message.metadata?.sendFailed}
-      <p class="reason rail-hang">{message.metadata.sendFailed}</p>
+      <p data-slot="reason" class="reason rail-hang">
+        {message.metadata.sendFailed}
+      </p>
     {:else if openFailed}
-      <p class="reason rail-hang">{openFailed}</p>
+      <p data-slot="reason" class="reason rail-hang">{openFailed}</p>
     {/if}
   </div>
 {:else if moved}
-  <div class="note moved rail-row">
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    data-moved
+    class="note moved rail-row"
+  >
     <span class="hline rail-line">
-      <span class="rail-cell"><IconSuccess /></span>
-      <span class="ftitle">{title}</span>
+      <span data-slot="rail-cell" class="rail-cell"><IconSuccess /></span>
+      <span data-slot="ftitle" class="ftitle">{title}</span>
     </span>
     {#if message?.content}
       <p class="stayed rail-hang">{message.content}</p>
@@ -304,46 +319,64 @@
        The clock in the glyph cell, the title on the line with its time, and
        under it, at the text column, why and the way on (the pane's
        `event`: the reason and Try again). -->
-  <div class="note unread rail-row" data-unread-note={message?.id}>
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="note unread rail-row"
+    data-unread-note={message?.id}
+  >
     <span class="hline rail-line">
-      <span class="rail-cell"><IconClock /></span>
-      <span class="ftitle">Caw hasn't read this</span>
+      <span data-slot="rail-cell" class="rail-cell"><IconClock /></span>
+      <span data-slot="ftitle" class="ftitle">Caw hasn't read this</span>
       {#if eventAt}
-        <time class="eat num" datetime={eventAt.toISOString()}
-          >{eventClock}</time
+        <time
+          data-slot="num"
+          data-eat
+          class="eat num"
+          datetime={eventAt.toISOString()}>{eventClock}</time
         >
       {/if}
     </span>
     {#if under}
-      <div class="why rail-hang">{@render under.snippet(under.id)}</div>
+      <div data-slot="why" class="why rail-hang">
+        {@render under.snippet(under.id)}
+      </div>
     {/if}
   </div>
 {:else if isFail}
   <!-- A failure takes the rail like every other line, in the fail colours:
        what failed on the line, why under it. -->
-  <div class="note fail rail-row">
+  <div data-system-line-rail-row data-slot="note" class="note fail rail-row">
     <span class="hline rail-line">
-      <span class="rail-cell"><IconError /></span>
-      <b class="ftitle">{failTitle}</b>
+      <span data-slot="rail-cell" class="rail-cell"><IconError /></span>
+      <b data-slot="ftitle" class="ftitle">{failTitle}</b>
     </span>
     <p class="handoff rail-hang">{message?.content}</p>
   </div>
 {:else if foldCommand || foldBody}
-  <div class="note rail-row" data-code={wokeCaw || undefined}>
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="note rail-row"
+    data-code={wokeCaw || undefined}
+  >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger class="ftrig rail-line">
-        <span class="rail-cell"><IconInfo /></span>
-        <span class="ftitle">{foldTitle}</span>
+        <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+        <span data-slot="ftitle" class="ftitle">{foldTitle}</span>
         {#if eventAt}
-          <time class="eat num" datetime={eventAt.toISOString()}
-            >{eventClock}</time
+          <time
+            data-slot="num"
+            data-eat
+            class="eat num"
+            datetime={eventAt.toISOString()}>{eventClock}</time
           >
         {/if}
         <span class={["hchev", { open }]} data-box><IconChevronRight /></span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}
-          <pre class="well">{foldCommand}</pre>
+          <pre data-slot="well" class="well">{foldCommand}</pre>
         {:else if foldBody}
           <div class="hbody rail-hang"><MessageBody source={foldBody} /></div>
         {/if}
@@ -359,13 +392,21 @@
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
        refusal the harness line and the tool rows already make. -->
-  <div class="note rail-row" data-code={wokeCaw || undefined}>
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="note rail-row"
+    data-code={wokeCaw || undefined}
+  >
     <span class="hline rail-line">
-      <span class="rail-cell"><IconInfo /></span>
-      <span class="ftitle">{foldTitle}</span>
+      <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+      <span data-slot="ftitle" class="ftitle">{foldTitle}</span>
       {#if eventAt}
-        <time class="eat num" datetime={eventAt.toISOString()}
-          >{eventClock}</time
+        <time
+          data-slot="num"
+          data-eat
+          class="eat num"
+          datetime={eventAt.toISOString()}>{eventClock}</time
         >
       {/if}
     </span>

@@ -168,6 +168,7 @@
     style={`opacity:${n ? 1 : 0.55};pointer-events:${n ? "auto" : "none"}`}
   >
     <div
+      data-ready={ready || undefined}
       class="track"
       onpointercancel={() => {
         draft = null;
@@ -185,6 +186,7 @@
       bind:clientWidth={trackWidth}
     >
       <div
+        data-slot="fill"
         class="fill"
         style={`width:calc(var(--kw) + ${p} * (100% - var(--kw)))`}
       >
@@ -196,7 +198,7 @@
           <!-- The chip is as wide as its longest label so the rail never moves.
                The ghost holds that width; the icon and the label sit together,
                centred in it, so a short label leaves no gap beside it. -->
-          <span aria-hidden="true" class="ghost">
+          <span data-slot="ghost" aria-hidden="true" class="ghost">
             {#each efforts as level, i (level)}
               <span>{level}</span>
             {/each}

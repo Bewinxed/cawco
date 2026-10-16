@@ -81,6 +81,7 @@
       <FolderOpen style="color:var(--hue-amber-500)" />
     {/if}
     <span
+      data-slot="chip-label"
       class="chip-label"
       title={mode === "repo" ? repo : dir}
       class:mono={!empty}>{label}</span

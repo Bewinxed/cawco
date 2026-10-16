@@ -160,7 +160,7 @@
 </script>
 
 {#snippet line(step: WorkflowStep)}
-  <span class="title">{titleOf(step)}</span>
+  <span data-slot="title" class="title">{titleOf(step)}</span>
 {/snippet}
 
 {#if steps.length > 0}
@@ -212,7 +212,7 @@
               <span class="sr-only">Open {titleOf(step)}</span>
             </a>
           {/if}
-          <span class="num time"
+          <span data-slot="time" data-num class="num time"
             >{duration(step.startedAt, step.endedAt, clock.now)}</span
           >
           {#if foldable}
@@ -239,6 +239,7 @@
             {#if step.instanceId}
               {@const row = cawco.instanceIndex.byId.get(step.instanceId)}
               <div
+                data-slot="well"
                 class="well"
                 data-branch-item
                 {@attach following(step.instanceId)}
@@ -252,12 +253,15 @@
             {/if}
             {#if result}
               <pre
+                data-slot="result"
                 class="result"
                 data-branch-item
                 class:err={!!step.failure}>{result}</pre>
             {/if}
             {#if more}
-              <div class="more" data-branch-item>{@render more(step)}</div>
+              <div data-slot="more" class="more" data-branch-item>
+                {@render more(step)}
+              </div>
             {/if}
           </div>
         {/if}

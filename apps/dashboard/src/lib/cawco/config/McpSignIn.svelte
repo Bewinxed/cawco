@@ -76,7 +76,12 @@
       variant="outline"
     />
   {/if}
-  <RowFault again={signIn} class="sign-in-fault" reason={problem} />
+  <RowFault
+    data-sign-in-fault
+    again={signIn}
+    class="sign-in-fault"
+    reason={problem}
+  />
 {/if}
 
 <style>

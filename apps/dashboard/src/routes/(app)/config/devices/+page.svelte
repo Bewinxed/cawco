@@ -120,7 +120,7 @@
   ready={loaded}
   title={section.label}
 >
-  <div class="group">
+  <div data-slot="group" class="group">
     <SectionHeader hue={HUE} icon={IconLock} label="Pairing" />
     <!-- The switch shows the change while it is confirmed, and goes back on Cancel. -->
     <SwitchField
@@ -137,7 +137,9 @@
     />
     {#if confirming === "on"}
       <div class="confirm" transition:unfold>
-        <p class="lead">Require paired devices? From the moment you confirm:</p>
+        <p data-slot="lead" class="lead">
+          Require paired devices? From the moment you confirm:
+        </p>
         <ul class="effects">
           <li>This browser is the first paired device.</li>
           <li>
@@ -181,7 +183,7 @@
       </div>
     {:else if confirming === "off"}
       <div class="confirm" transition:unfold>
-        <p class="lead">
+        <p data-slot="lead" class="lead">
           Stop requiring paired devices? Every device on your network reaches
           the fleet again. The paired devices and machine keys are forgotten:
           turning it on again starts from the device that does.
@@ -210,20 +212,21 @@
   </div>
 
   {#if required && (hubAuth.requests.length > 0 || hubAuth.waiting.length > 0)}
-    <div class="group" transition:unfold>
+    <div data-slot="group" class="group" transition:unfold>
       <SectionHeader hue={HUE} icon={IconClock} label="Waiting for you" />
       <ul class="rows">
         {#each hubAuth.requests as request (request.userCode)}
-          <li class="row">
-            <div class="who">
-              <span class="name">{request.name}</span>
-              <span class="meta num">
-                Code <span class="code">{request.userCode}</span
+          <li data-slot="row" class="row">
+            <div data-slot="who" class="who">
+              <span data-slot="name" class="name">{request.name}</span>
+              <span data-num data-slot="meta" class="meta num">
+                Code <span data-slot="code" class="code"
+                  >{request.userCode}</span
                 >{request.address ? ` · ${request.address}` : ""} · asked {formatDistanceToNow(
                   new Date(request.at)
                 )}
               </span>
-              <span class="meta">
+              <span data-slot="meta" class="meta">
                 Approve only if this is the code on the device in front of you.
               </span>
             </div>
@@ -253,10 +256,12 @@
           </li>
         {/each}
         {#each hubAuth.waiting as machine (machine.machineId)}
-          <li class="row">
-            <div class="who">
-              <span class="name">{machine.hostname ?? machine.machineId}</span>
-              <span class="meta num">
+          <li data-slot="row" class="row">
+            <div data-slot="who" class="who">
+              <span data-slot="name" class="name"
+                >{machine.hostname ?? machine.machineId}</span
+              >
+              <span data-num data-slot="meta" class="meta num">
                 Machine{machine.platform
                   ? ` · ${machine.platform}`
                   : ""}{machine.address ? ` · ${machine.address}` : ""} · waiting
@@ -293,18 +298,18 @@
   {/if}
 
   {#if required}
-    <div class="group" transition:unfold>
+    <div data-slot="group" class="group" transition:unfold>
       <SectionHeader hue={HUE} icon={IconLaptop} label="Paired devices" />
       <ul class="rows">
         {#each devices as device (device.id)}
-          <li class="row devices">
-            <div class="who">
-              <span class="name"
+          <li data-slot="row" class="row devices">
+            <div data-slot="who" class="who">
+              <span data-slot="name" class="name"
                 >{device.name}{device.id === current
                   ? " · this browser"
                   : ""}</span
               >
-              <span class="meta num">
+              <span data-num data-slot="meta" class="meta num">
                 {KINDS[device.kind]} · paired {formatDistanceToNow(
                   new Date(device.createdAt)
                 )}{device.lastUsedAt
@@ -325,7 +330,7 @@
         {/each}
       </ul>
       {#if devices.length === 1}
-        <p class="note">
+        <p data-slot="note" class="note">
           The only paired device stays until you pair another or turn pairing
           off, so the fleet always has someone who can approve.
         </p>

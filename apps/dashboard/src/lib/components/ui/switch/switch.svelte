@@ -34,6 +34,7 @@
   {...restProps}
 >
   <SwitchPrimitive.Thumb
+    data-switch-block
     class="rounded-[var(--radius-pill)] bg-background group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground kit-switch-thumb pointer-events-none block ring-0 rtl:data-[state=checked]:translate-x-[calc(-100%)]"
     data-slot="switch-thumb"
   />

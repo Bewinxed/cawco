@@ -1112,6 +1112,7 @@
 {#snippet mark(item: WorkItemSummary, flies: boolean)}
   {@const Sprite = sessionSprite(item.instanceId)}
   <span
+    data-slot="mark"
     aria-hidden="true"
     class="mark m{markHue(item.instanceId)}"
     data-box
@@ -1124,7 +1125,11 @@
   {#if tone === "starting"}
     <Spinner aria-hidden="true" role="presentation" />
   {:else if tone === "running"}
-    <span class="dot" style:animation-delay="-{Date.now() % 2000}ms"></span>
+    <span
+      data-slot="dot"
+      class="dot"
+      style:animation-delay="-{Date.now() % 2000}ms"
+    ></span>
   {:else if tone === "asked" || tone === "needs"}
     <IconAsk />
   {:else if tone === "done"}
@@ -1143,10 +1148,12 @@
   {@const flies = entry === "fly"}
   {@const failed = tone === "failed"}
   <button
+    data-end={failed || undefined}
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
     class="chip kit-tray-chip touch-hit {tone}"
+    data-delegate-tray-tone={tone}
     data-flip="pop"
     data-flip-enter={entry === "fade" ? undefined : "own"}
     data-key={item.id}
@@ -1169,21 +1176,24 @@
     {@attach measureFloor(item.id)}
   >
     {@render mark(item, flies)}
-    <span aria-hidden="true" class="words mark-line" data-box>
-      <span class="title">{item.title}</span>
+    <span data-slot="words" aria-hidden="true" class="words mark-line" data-box>
+      <span data-slot="title" class="title">{item.title}</span>
       {#if item.queued}
-        <span class="note">{queuedWords(item)}</span>
+        <span data-slot="note" class="note">{queuedWords(item)}</span>
       {:else if item.checkQueue}
-        <span class="note">{checkQueueWords(item)}</span>
+        <span data-slot="note" class="note">{checkQueueWords(item)}</span>
       {:else if tone === "needs"}
-        <span class="note">{questionWords(chip.questions)}</span>
+        <span data-slot="note" class="note"
+          >{questionWords(chip.questions)}</span
+        >
       {:else if tone === "failed" || tone === "cancelled"}
-        <span class="note">{tone}</span>
+        <span data-slot="note" class="note">{tone}</span>
       {/if}
     </span>
-    <span aria-hidden="true" class="slot" data-box>
+    <span data-slot="slot" aria-hidden="true" class="slot" data-box>
       {#key slotOf(tone)}
         <span
+          data-slot="glyph"
           class="glyph"
           in:slotIn={tone === "done" || tone === "failed"}
           out:slotOut
@@ -1202,7 +1212,7 @@
   {@const doing = acting.get(item.id)}
   {@const reason = reasons.get(item.id)}
   {@const later = laterThan(item)}
-  <li class="srow" data-flip data-shelf-row={item.id}>
+  <li data-slot="srow" class="srow" data-flip data-shelf-row={item.id}>
     <div class="sline mark-line">
       {@render mark(item, false)}
       <span class="stitle">{item.title}</span>
@@ -1262,7 +1272,11 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {:else}
-          <span class="nolater" title="No later item to point at yet">
+          <span
+            data-slot="nolater"
+            class="nolater"
+            title="No later item to point at yet"
+          >
             <Button disabled size="sm" variant="ghost"
               ><span>Replaced by</span><IconChevronDown /></Button
             >
@@ -1279,6 +1293,7 @@
       </div>
     {:else}
       <form
+        data-slot="reason"
         class="sacts reason"
         onsubmit={(event) => {
           event.preventDefault();
@@ -1320,12 +1335,19 @@
 <!-- A delegate "+N" holds, as a row: what it is doing, for how long. -->
 {#snippet moreRow(chip: Chip)}
   {@const { item, tone } = chip}
-  <li class="srow" data-flip data-shelf-row={item.id}>
+  <li data-slot="srow" class="srow" data-flip data-shelf-row={item.id}>
     <div class="sline mark-line">
       {@render mark(item, false)}
       <span class="stitle">{item.title}</span>
-      <span class="smeta swords {tone}">{stateWords(chip)}</span>
-      <span aria-hidden="true" class="pstate {tone}" data-box>
+      <span class="smeta swords {tone}" data-delegate-tray-tone={tone}
+        >{stateWords(chip)}</span
+      >
+      <span
+        aria-hidden="true"
+        class="pstate {tone}"
+        data-delegate-tray-tone={tone}
+        data-box
+      >
         {@render glyph(tone)}
       </span>
       <span class="elapsed">{span(item.createdAt, item.endedAt ?? minute)}</span
@@ -1347,9 +1369,10 @@
 
 <svelte:window onkeydown={onwindowkey} />
 
-<div class="host" bind:contentRect={hostBox}>
+<div data-slot="host" class="host" bind:contentRect={hostBox}>
   {#if chips.length}
     <div
+      data-slot="tray"
       class="tray"
       onpointerenter={() => {
         hovering = true;
@@ -1362,6 +1385,7 @@
     >
       <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is toolbar or group (a binding the rule cannot read); both take a label. -->
       <div
+        data-slot="row"
         aria-label="Delegates"
         class="row"
         inert={held}
@@ -1375,6 +1399,9 @@
         {/each}
         {#if hidden.length}
           <button
+            data-needs={hidden.some((chip) => chip.tone === "needs") ||
+              undefined}
+            data-slot="more"
             aria-controls={shelfId}
             aria-expanded={shelf === "more"}
             aria-label="{hidden.length} more delegates"
@@ -1398,6 +1425,9 @@
           {@render chipButton(lone, keys.length - 1)}
         {:else if failures.length}
           <button
+            data-delegate-tray-failed
+            data-slot="end"
+            data-delegate-tray-count
             aria-controls={shelfId}
             aria-expanded={shelf === "failed"}
             aria-label="{failures.length} failed delegates"
@@ -1414,10 +1444,10 @@
             type="button"
             bind:offsetWidth={countWidth}
           >
-            <span aria-hidden="true" class="slot" data-box
+            <span data-slot="slot" aria-hidden="true" class="slot" data-box
               ><IconWarningTriangle /></span
             >
-            <span class="num">{failures.length} failed</span>
+            <span data-slot="num" class="num">{failures.length} failed</span>
           </button>
         {/if}
       </div>
@@ -1426,6 +1456,7 @@
         <!-- The shelf, between the row and the field: the dock grows up for
              it and the transcript keeps its room, so it covers no line. -->
         <div
+          data-slot="shelf-slot"
           class="shelf-slot"
           inert={held}
           onoutroend={() => {
@@ -1438,6 +1469,7 @@
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape inside the shelf (a row's reason field, then the shelf) is heard on the region; every control in it is its own button or field -->
           <section
+            data-slot="shelf"
             aria-label={shelf === "failed"
               ? "Failed delegates"
               : "More delegates"}
@@ -1467,7 +1499,12 @@
                 variant="ghost"><IconClose /></Button
               >
             </header>
-            <ul class="slist" {@attach reflow()} {@attach capRows}>
+            <ul
+              data-slot="slist"
+              class="slist"
+              {@attach reflow()}
+              {@attach capRows}
+            >
               {#if shelf === "failed"}
                 {#each failedRows as chip (chip.item.id)}
                   {@render failRow(chip)}
@@ -1479,7 +1516,7 @@
               {/if}
             </ul>
             {#if shelf === "failed" && failures.length > 1}
-              <footer class="sfoot">
+              <footer data-slot="sfoot" class="sfoot">
                 {#if allReason === null}
                   <Button
                     label="Dismiss all {failures.length} with one reason…"
@@ -1493,6 +1530,7 @@
                   />
                 {:else}
                   <form
+                    data-slot="reason"
                     class="sacts reason"
                     onsubmit={(event) => {
                       event.preventDefault();
@@ -1554,6 +1592,7 @@
               <span
                 aria-label={stateWords(openChip)}
                 class="pstate {tone}"
+                data-delegate-tray-tone={tone}
                 data-box
                 role="img"
               >
@@ -1580,7 +1619,7 @@
               note={noteOf(openChip)}
             />
             {#if tone === "needs"}
-              <div class="acts">
+              <div data-slot="acts" class="acts">
                 <Button href={hrefOf(item)} size="sm" variant="outline"
                   >Open question</Button
                 >

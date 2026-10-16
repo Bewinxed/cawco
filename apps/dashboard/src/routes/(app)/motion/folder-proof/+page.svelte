@@ -297,12 +297,18 @@
   style:--tab-rim-width={width === null ? undefined : String(width)}
 >
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="group" data-strip="session" onclickcapture={benchClick(leaf)}>
+  <div
+    data-slot="group"
+    class="group"
+    data-strip="session"
+    onclickcapture={benchClick(leaf)}
+  >
     <PaneTabs {leaf} />
     <div class="page"></div>
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
+    data-slot="group"
     class="group"
     data-strip="session-idle"
     onclickcapture={benchClick(idleLeaf)}

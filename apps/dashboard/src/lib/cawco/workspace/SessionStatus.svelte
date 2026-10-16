@@ -43,12 +43,13 @@
 <span
   aria-label={status.label}
   class="session-status mark-line {status.tone}"
+  data-session-status-tone={status.tone}
   role="img"
   class:compact
 >
-  <span class="glyph" data-box>
+  <span data-slot="glyph" class="glyph" data-box>
     {#key status.icon}
-      <span class="mark" in:glyphIn out:glyphOut>
+      <span data-slot="mark" class="mark" in:glyphIn out:glyphOut>
         {#if status.icon}
           <status.icon aria-hidden="true" />
         {:else}

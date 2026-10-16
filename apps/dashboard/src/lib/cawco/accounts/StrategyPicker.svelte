@@ -111,12 +111,19 @@
   }
 </script>
 
-<div class="picker">
-  <div aria-label={label} class="cards" role="radiogroup" bind:this={grid}>
+<div data-slot="picker" class="picker">
+  <div
+    data-slot="cards"
+    aria-label={label}
+    class="cards"
+    role="radiogroup"
+    bind:this={grid}
+  >
     {#each offered as strategy, at (strategy.id)}
       {@const checked = choice.strategy === strategy.id}
       <!-- biome-ignore lint/a11y/useSemanticElements: the card is a radio holding its own controls (Pinned's account, Fill first's order), which a native radio or button cannot hold -->
       <div
+        data-slot="strategy-picker-card"
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
         class="card"
@@ -135,9 +142,9 @@
         role="radio"
         tabindex={checked ? 0 : -1}
       >
-        <div class="top">
+        <div data-slot="top" class="top">
           <span aria-hidden="true" class="radio"></span>
-          <span class="words">
+          <span data-slot="words" class="words">
             {strategy.label}
             <small>{strategy.line}</small>
           </span>

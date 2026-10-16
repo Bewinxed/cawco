@@ -96,7 +96,9 @@
             · {row.os}
           </Select.Item>
         {:else}
-          <span class="block px-2 py-1.5 text-label">No machines online</span>
+          <span data-slot="block" class="block px-2 py-1.5 text-label"
+            >No machines online</span
+          >
         {/each}
       </Select.Content>
     </Select.Root>

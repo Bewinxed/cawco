@@ -30,6 +30,10 @@
 </script>
 
 <section
+  data-you={you || undefined}
+  data-slot="turn"
+  data-runs-on={runsOn || undefined}
+  data-grouped={grouped || undefined}
   class={[
     "turn",
     you && "you",
