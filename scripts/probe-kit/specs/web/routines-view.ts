@@ -14,9 +14,9 @@
  * 3. "why are you repeating this info that is already up there", "this
  *    should be a proper table", "why is this not formatted?": the detail
  *    holds no schedule line, its runs are a table, its instruction markdown.
- * 4. T5, "this button doesn't seem to do anything": archived tasks stand
- *    dimmed in their columns once the strip's Archived is on, the first of
- *    them brought into the board's view.
+ * 4. T5, the owner's pick "Archived rail": archived tasks never stand in
+ *    the columns; they fold into a rail beside them, in view however wide
+ *    the board runs, which opens into a column of its own.
  *
  * On the built dashboard against a scratch fleet whose hub holds them:
  * "cawco" (code stages, the owner's four routines, three archived tasks),
@@ -42,8 +42,11 @@
  * Desk 1440: one clock per row; New routine and an empty project's starters
  * are the session Composer with no attach control.
  * Phone 390: Last and Next fold into the schedule's line.
- * T5 at desk 1440: pressing the strip's Archived shows the three dimmed in
- * their columns, the first brought into the board's view.
+ * T5 at desk 1440 and phone 390: the folded rail stands inside the
+ * viewport after the columns, none of the three in them; pressed, it opens
+ * in view listing the three under its count of 3, the page no wider than
+ * the viewport, focus on its Fold control; folded again, the columns are
+ * as they were and focus is back on the rail.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one width at a time
 import { randomBytes } from "node:crypto";
@@ -663,53 +666,94 @@ async function phone(kit: Kit, base: string, projectId: string) {
 /** The board's archived tasks, as the engine has them. */
 const archiveState = (page: Page) =>
   page.evaluate(() => {
-    const board = document.querySelector(".board")?.getBoundingClientRect();
-    const dimmed = [...document.querySelectorAll("li[data-archived]")];
-    const first = dimmed[0]?.getBoundingClientRect();
+    const box = (selector: string) => {
+      const r = document.querySelector(selector)?.getBoundingClientRect();
+      return r && r.width > 0
+        ? { left: r.left, right: r.right, width: r.width }
+        : null;
+    };
     return {
-      dimmed: dimmed.length,
-      opacity: dimmed.map(
-        (li) => getComputedStyle(li.firstElementChild as Element).opacity
-      ),
-      firstInView:
-        first && board
-          ? first.left >= board.left - 0.5 && first.right <= board.right + 0.5
-          : false,
-      toggle:
-        document
-          .querySelector(".archived-toggle")
-          ?.getAttribute("aria-pressed") ?? null,
+      vw: innerWidth,
+      scrollW: document.documentElement.scrollWidth,
+      rail: box(".archive-rail"),
+      railOpen: box(".rail-open"),
+      railCount:
+        document.querySelector(".rail-open .count")?.textContent?.trim() ??
+        null,
+      railCards: document.querySelectorAll(".rail-open li[data-archived]")
+        .length,
+      railKind:
+        document.querySelector(".rail-open .kind")?.textContent?.trim() ?? null,
+      railOpacity: [
+        ...document.querySelectorAll(".rail-open li[data-archived] > *"),
+      ].map((card) => getComputedStyle(card).opacity),
+      foldH:
+        document.querySelector(".rail-close")?.getBoundingClientRect().height ??
+        0,
+      board: box(".board"),
+      inColumns: document.querySelectorAll(".board li[data-archived]").length,
+      focused: document.activeElement?.className ?? null,
     };
   });
 
 async function archive(kit: Kit, base: string, projectId: string) {
-  const page = await kit.page("desk");
-  page.setDefaultTimeout(60_000);
-  await open(page, `${base}/project/${projectId}`, ".archived-toggle");
-  await settle(page);
-  const before = await archiveState(page);
-  await page.click(".archived-toggle");
-  await page.waitForFunction(
-    (n) => document.querySelectorAll("li[data-archived]").length === n,
-    ARCHIVED
-  );
-  await settle(page, 400);
-  const dim = await archiveState(page);
-  kit.check(
-    `T5 dimmed at 1440: the strip's Archived, pressed, shows the ${ARCHIVED} dimmed in their columns`,
-    before.dimmed === 0 &&
-      before.toggle === "false" &&
-      dim.dimmed === ARCHIVED &&
-      dim.toggle === "true" &&
-      dim.opacity.every((o) => Number(o) < 1),
-    `${JSON.stringify(before)} → ${JSON.stringify(dim)}`
-  );
-  kit.check(
-    "T5 dimmed at 1440: the first dimmed card is brought into the board's view",
-    dim.firstInView,
-    JSON.stringify(dim)
-  );
-  await page.close();
+  for (const device of ["desk", "phone"] as const) {
+    const page = await kit.page(device);
+    page.setDefaultTimeout(60_000);
+    const at = `T5 rail at ${device === "desk" ? 1440 : 390}`;
+    await open(page, `${base}/project/${projectId}`, ".archive-rail");
+    await settle(page);
+    const folded = await archiveState(page);
+    kit.check(
+      `${at}: folded, the Archived rail stands inside the viewport beside the columns, none of the ${ARCHIVED} in them`,
+      folded.rail !== null &&
+        folded.rail.left >= 0 &&
+        folded.rail.right <= folded.vw &&
+        folded.board !== null &&
+        folded.board.right <= folded.rail.left &&
+        folded.inColumns === 0 &&
+        folded.scrollW <= folded.vw,
+      JSON.stringify(folded)
+    );
+    await page.click(".archive-rail");
+    await page.waitForSelector(".rail-open");
+    await settle(page, 400);
+    const opened = await archiveState(page);
+    await page.screenshot({
+      path: join(kit.out, `board-archived-open-${opened.vw}.png`),
+    });
+    kit.check(
+      `${at}: pressed, the rail opens in view and lists the ${ARCHIVED} archived tasks, undimmed, under its count and the word archived, none in the columns; Fold the archive ${device === "phone" ? "a 44px touch target" : "30px tall"}`,
+      opened.railCards === ARCHIVED &&
+        opened.railCount === String(ARCHIVED) &&
+        opened.railKind === "archived" &&
+        opened.railOpacity.every((o) => o === "1") &&
+        opened.foldH >= (device === "phone" ? 44 : 30) &&
+        opened.inColumns === 0 &&
+        opened.railOpen !== null &&
+        opened.railOpen.left >= 0 &&
+        opened.railOpen.right <= opened.vw &&
+        opened.scrollW <= opened.vw &&
+        (opened.focused ?? "").includes("rail-close"),
+      JSON.stringify(opened)
+    );
+    await page.click(".rail-close");
+    await page.waitForSelector(".archive-rail");
+    await settle(page, 400);
+    const closed = await archiveState(page);
+    kit.check(
+      `${at}: Fold the archive closes the rail again, the columns back as they were`,
+      closed.railOpen === null &&
+        closed.rail !== null &&
+        closed.board !== null &&
+        folded.board !== null &&
+        Math.abs(closed.board.width - folded.board.width) <= 0.5 &&
+        closed.inColumns === 0 &&
+        (closed.focused ?? "").includes("archive-rail"),
+      JSON.stringify(closed)
+    );
+    await page.close();
+  }
 }
 
 const TASKS: { title: string; kind: string; archived?: boolean }[] = [

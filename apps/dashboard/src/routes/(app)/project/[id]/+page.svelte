@@ -103,7 +103,6 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
-    IconArchive,
     IconNeedsYou,
     IconPlus,
     IconSparkles,
@@ -172,9 +171,8 @@
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);
 
-  /** The archived tasks, and whether the strip's Archived shows them dimmed in their columns. */
+  /** The archived tasks, for the board's Archived rail. */
   let archived = $state<TaskSummary[]>([]);
-  let showArchived = $state(false);
   async function readArchived() {
     const id = projectId;
     try {
@@ -924,22 +922,6 @@
           <span class="num">{needsYou.length}</span>
         </button>
       {/if}
-      {#if archived.length > 0 && current === "board"}
-        <!-- The archived tasks, dimmed in their columns while on. -->
-        <Button
-          aria-pressed={showArchived}
-          class="archived-toggle pressable"
-          onclick={() => {
-            showArchived = !showArchived;
-          }}
-          size="sm"
-          variant={showArchived ? "secondary" : "ghost"}
-        >
-          <IconArchive />
-          <span>Archived</span>
-          <span class="num">{archived.length}</span>
-        </Button>
-      {/if}
       {#if strippedNewTask}
         <Button
           class="wide pressable"
@@ -1120,7 +1102,6 @@
       onmove={drop}
       onopen={openOne}
       refused={refusedMove}
-      {showArchived}
       stages={shownStages}
       tasks={shownTasks}
       bind:adding
