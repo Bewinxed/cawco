@@ -6,7 +6,7 @@
  *
  * - {@link BUNDLED_SKILLS} reach every session on every machine:
  *   `decision-page` (§5.8), the planning skills and the design skills,
- *   `design-explore` among them: every agent's design preview is built by it.
+ *   `design-explore` among them: every agent's design sheet is written by it.
  * - {@link TEMPLATE_SKILLS} are each project template's starter skills: bound
  *   to every project made from that template (`projects.template`) and
  *   placed at each of its checkouts and workspaces, as a project's own skills
