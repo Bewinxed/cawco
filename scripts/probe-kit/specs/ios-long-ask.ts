@@ -662,6 +662,20 @@ async function run(kit: Kit): Promise<void> {
                 }
                 await pause(2000);
                 const title = await sessionTitle();
+                if (await tap((label) => label.includes(title))) {
+                  return true;
+                }
+                // Its sessions stand under their machine, which opens first.
+                const machines = (await (
+                  await fetch(`${base}/api/agents`)
+                ).json()) as { hostname?: string }[];
+                const hosts = machines
+                  .map((machine) => machine.hostname)
+                  .filter((host): host is string => !!host);
+                if (!(await tap((label) => hosts.includes(label)))) {
+                  return false;
+                }
+                await pause(2000);
                 return await tap((label) => label.includes(title));
               },
             },
