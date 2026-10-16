@@ -35,6 +35,7 @@ import type {
   FsPayload,
   HarnessCapabilities,
   HarnessKind,
+  HarnessUnanswered,
   InstanceRow,
   LandsMode,
   LawBroken,
@@ -727,6 +728,8 @@ export interface SessionState {
  * paid for, with nothing ever mutating a row in place.
  */
 let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
+/** Per machine, a sentence for each harness its last listing said did not list in time ({@link harnessDidntAnswer}). */
+let catalogUnanswered = $state.raw<Record<string, string[]>>({});
 /** The machines whose stored sessions have been asked for and answered, or failed. */
 const catalogsTried = $state<Record<string, true>>({});
 
@@ -1054,7 +1057,8 @@ const state = $state({
 
 interface Waiter {
   reject: (error: Error) => void;
-  resolve: (result: unknown) => void;
+  /** The answer's `result`, and the harnesses a `listSessions` answer says did not list in time. */
+  resolve: (result: unknown, unanswered?: HarnessUnanswered[]) => void;
 }
 
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
@@ -3157,7 +3161,7 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "control_result") {
     const answered = settle(frame.requestId, (waiter) =>
       frame.ok
-        ? waiter.resolve(frame.result)
+        ? waiter.resolve(frame.result, frame.unanswered)
         : waiter.reject(
             new Error(
               frame.error ?? "The machine could not carry out that request."
@@ -6389,14 +6393,18 @@ export async function removeSession(instanceId: string): Promise<void> {
 function ask<T>(
   requestId: string,
   timeoutMs: number,
-  dispatch: () => void
+  dispatch: () => void,
+  readAnswer: (result: unknown, unanswered?: HarnessUnanswered[]) => T = (
+    result
+  ) => result as T
 ): Promise<Bounded<T>> {
   return readWithin(
     timeoutMs,
     (signal) =>
       new Promise<T>((resolve, reject) => {
         inflight.set(requestId, {
-          resolve: (result) => resolve(result as T),
+          resolve: (result, unanswered) =>
+            resolve(readAnswer(result, unanswered)),
           reject,
         });
         signal.addEventListener("abort", () => inflight.delete(requestId), {
@@ -6450,13 +6458,40 @@ export function answeredOr<T>(
   }
 }
 
-/** The machine's stored sessions, newest first. */
+/**
+ * What the person reads when one harness on `machineId` didn't list its
+ * stored sessions in time, in {@link didntAnswer}'s voice: its sessions are
+ * the ones it listed last.
+ */
+export function harnessDidntAnswer(
+  machineId: string,
+  { harness, after }: HarnessUnanswered
+): string {
+  return `${harness} on ${machineName(machineId)} didn't answer within ${Math.round(after / 1000)} s, so its stored sessions are the ones it listed last.`;
+}
+
+/**
+ * The machine's stored sessions, newest first. A harness that did not list
+ * in time keeps the sessions it listed last, and is kept on
+ * {@link catalogUnanswered} in {@link harnessDidntAnswer}'s words.
+ */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
-    const listed = await machineControl<NeutralSessionInfo[]>(
-      machineId,
-      "listSessions",
-      [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}]
+    await waitForOpen();
+    const requestId = newId();
+    const payload: ControlPayload = {
+      requestId,
+      method: "listSessions",
+      args: [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}],
+    };
+    const listed = await ask(
+      requestId,
+      CONTROL_TIMEOUT_MS,
+      () => send({ verb: "control", machineId, requestId, payload }),
+      (result, unanswered = []) => ({
+        sessions: result as NeutralSessionInfo[],
+        unanswered,
+      })
     );
     switch (listed.kind) {
       case "unanswered":
@@ -6465,9 +6500,24 @@ export async function loadCatalog(machineId: string): Promise<void> {
           `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed)}`
         );
         break;
-      case "answered":
-        catalog = { ...catalog, [machineId]: listed.value };
+      case "answered": {
+        const { sessions, unanswered } = listed.value;
+        const silent = new Set(unanswered.map((one) => one.harness));
+        const kept = (catalog[machineId] ?? []).filter((info) =>
+          silent.has(info.harness)
+        );
+        for (const one of unanswered) {
+          console.warn(`[cawco] ${harnessDidntAnswer(machineId, one)}`);
+        }
+        catalog = { ...catalog, [machineId]: [...sessions, ...kept] };
+        catalogUnanswered = {
+          ...catalogUnanswered,
+          [machineId]: unanswered.map((one) =>
+            harnessDidntAnswer(machineId, one)
+          ),
+        };
         break;
+      }
       default: {
         const unhandled: never = listed;
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -8154,6 +8204,9 @@ export const cawco = {
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
+  /** The harnesses on `machineId` whose last listing did not answer in time, each as a sentence; no view shows these yet. */
+  catalogUnansweredOf: (machineId: string): string[] =>
+    catalogUnanswered[machineId] ?? [],
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
   hasStored: (machineId: string): boolean =>
     (catalog[machineId] ?? []).some(listedInHistory),

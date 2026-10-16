@@ -329,9 +329,22 @@ async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
   while (Date.now() < end) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: a poll
-      const client = await SessiondClient.connect(endpoint);
-      client.close();
-      return;
+      const read = await SessiondClient.connect(endpoint);
+      switch (read.kind) {
+        case "answered":
+          read.value.close();
+          return;
+        case "unanswered":
+          last =
+            read.reason === "timeout"
+              ? `no welcome within ${read.after} ms`
+              : "its connection ended before its welcome";
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     } catch (error) {
       last = message(error);
     }

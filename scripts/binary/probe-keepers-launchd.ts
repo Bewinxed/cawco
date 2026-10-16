@@ -28,6 +28,7 @@ import {
   keeperEndpoints,
   publishKeeper,
 } from "../../packages/core/src/keepers";
+import { welcomed } from "../lib/keeper-dial";
 
 const VERSION = "0.0.0-probe.2";
 const LEGACY = "0.0.0-legacy";
@@ -86,8 +87,21 @@ const step = (name: string, ok: boolean, detail = ""): void => {
     `${name}${detail ? ` (${detail})` : ""}: ${ok ? "PASS" : "FAIL"}`
   );
 };
-const dial = (path: string): Promise<SessiondClient | undefined> =>
-  SessiondClient.connect(path).catch(() => undefined);
+/** A keeper's connection on `path`; undefined when it refused or gave no welcome in time (the step that asked says so). */
+const dial = async (path: string): Promise<SessiondClient | undefined> => {
+  const read = await SessiondClient.connect(path).catch(() => undefined);
+  switch (read?.kind) {
+    case undefined:
+    case "unanswered":
+      return;
+    case "answered":
+      return read.value;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 /** Whether anything is at `path`, a socket file included. */
 const present = (path: string): Promise<boolean> =>
   lstat(path).then(
@@ -166,7 +180,7 @@ try {
       `the legacy keeper never answered on ${machine} (${started.exitCode === null ? "still running" : `exited ${started.exitCode}`}): ${await tail(legacyLog)}`
     );
   }
-  const held = await SessiondClient.connect(machine);
+  const held = welcomed(machine, await SessiondClient.connect(machine));
   await held.spawnProc("held-1", { command: "sleep", args: ["300"] });
   const child = (await held.list()).procs.find(
     (p) => p.procId === "held-1" && p.alive

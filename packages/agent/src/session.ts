@@ -50,6 +50,7 @@ import {
   CLI_OUTDATED,
   CONTROL_CARRY_SESSIONS,
   CONTROL_GIT_CHANGES,
+  CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_QUERIES,
   CONTROL_RESTLESS,
@@ -67,6 +68,7 @@ import {
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
+  type HarnessUnanswered,
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
   LIMIT_REACHED,
@@ -4530,6 +4532,18 @@ export class SessionSupervisor {
       }
     }
     try {
+      if (method === CONTROL_LIST_SESSIONS) {
+        const { sessions, unanswered } = await this.#listSessions(args);
+        this.sink({
+          kind: "control_result",
+          instanceId,
+          requestId,
+          ok: true,
+          result: sessions,
+          ...(unanswered.length > 0 ? { unanswered } : {}),
+        });
+        return;
+      }
       const result = await this.#call(instanceId, kind, method, args);
       this.sink({
         kind: "control_result",
@@ -4562,8 +4576,12 @@ export class SessionSupervisor {
    * fails is, rather than holding every other harness's sessions past the
    * reader's own wait (the dashboard's 15s), which lost the whole catalog.
    */
-  async #listSessions(args: unknown[]): Promise<NeutralSessionInfo[]> {
+  async #listSessions(args: unknown[]): Promise<{
+    sessions: NeutralSessionInfo[];
+    unanswered: HarnessUnanswered[];
+  }> {
     const options = (args[0] ?? {}) as { limit?: number; dir?: string };
+    const unanswered: HarnessUnanswered[] = [];
     const listed = await Promise.all(
       harnesses().map(async (adapter) => {
         let read: Bounded<NeutralSessionInfo[]>;
@@ -4579,11 +4597,14 @@ export class SessionSupervisor {
           case "answered":
             return read.value;
           case "unanswered":
-            // Left out of this answer, not read as having none: the listing's
-            // wire shape cannot say "not answered" yet.
+            // Said beside the answer (`unanswered`), never read as having none.
             warn(
               `${adapter.kind} did not list its sessions within ${HARNESS_LISTING_MS / 1000} s; it is left out of this answer`
             );
+            unanswered.push({
+              harness: adapter.kind,
+              after: HARNESS_LISTING_MS,
+            });
             return [];
           default: {
             const unhandled: never = read;
@@ -4594,7 +4615,10 @@ export class SessionSupervisor {
     );
     const all = listed.flat();
     all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
-    return options.limit ? all.slice(0, options.limit) : all;
+    return {
+      sessions: options.limit ? all.slice(0, options.limit) : all,
+      unanswered,
+    };
   }
 
   readonly #mcpLauncherStates = new Map<
@@ -4915,9 +4939,6 @@ export class SessionSupervisor {
         return await this.#fleetHoldings();
       }
 
-      if (method === "listSessions") {
-        return await this.#listSessions(args);
-      }
       if (CATALOG_METHODS.has(method)) {
         const adapter = this.#adapter(kind);
         switch (method) {

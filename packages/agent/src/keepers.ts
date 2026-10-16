@@ -306,7 +306,7 @@ export class KeeperPool {
 
   #dial(endpoint: string): Promise<SessiondClient> {
     // Waits on the keeper's welcome or its end, as every reading here does.
-    const dialled = SessiondClient.connect(endpoint, null);
+    const dialled = SessiondClient.dial(endpoint);
     this.#clients.set(endpoint, dialled);
     dialled.catch(() => {
       if (this.#clients.get(endpoint) === dialled) {
@@ -330,7 +330,8 @@ export interface KeeperConnection {
  * A fresh connection to every keeper there, the current one first, for one
  * reading; each is closed once `use` has finished. An endpoint nothing answers
  * on is a keeper that is gone, and is left out; one that is there and gives
- * no welcome is an error, never a keeper read as holding nothing.
+ * no welcome in time, or ends before it, makes the reading unknown
+ * ({@link notKnown}), never a keeper read as holding nothing.
  */
 export async function withKeepers<T>(
   use: (keepers: KeeperConnection[]) => Promise<T>
@@ -339,12 +340,33 @@ export async function withKeepers<T>(
   const settled = await Promise.allSettled(
     found.map(async (one) => ({
       ...one,
-      client: await SessiondClient.connect(one.endpoint),
+      read: await SessiondClient.connect(one.endpoint),
     }))
   );
-  const keepers = settled.flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : []
-  );
+  const keepers: KeeperConnection[] = [];
+  const unanswered: string[] = [];
+  for (const result of settled) {
+    if (result.status === "rejected") {
+      continue;
+    }
+    const { read, ...one } = result.value;
+    switch (read.kind) {
+      case "answered":
+        keepers.push({ ...one, client: read.value });
+        break;
+      case "unanswered":
+        unanswered.push(
+          read.reason === "timeout"
+            ? `${one.endpoint}: no welcome within ${read.after} ms`
+            : `${one.endpoint}: its connection ended before its welcome`
+        );
+        break;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
   try {
     const failed = settled.find(
       (result): result is PromiseRejectedResult =>
@@ -352,6 +374,9 @@ export async function withKeepers<T>(
     );
     if (failed) {
       throw failed.reason;
+    }
+    if (unanswered.length > 0) {
+      throw notKnown("what the keepers hold", unanswered);
     }
     return await use(keepers);
   } finally {

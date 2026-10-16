@@ -491,45 +491,28 @@ export class SessiondClient {
   }
 
   /**
-   * A connection to the keeper at `endpoint`, once its welcome has come.
-   * `timeoutMs` bounds the wait, and a welcome that did not come within it
-   * throws its own sentence ("no welcome from … within …"), never a refused
-   * dial (an errno) nor the keeper's end ({@link Gone}). `null` waits on the
-   * keeper's own word: its welcome, or its connection's end ({@link Gone}),
-   * which a keeper that is wedged reaches once the watchdog ends it
-   * (keeper-watchdog.ts).
+   * A connection to the keeper at `endpoint`, its welcome given `timeoutMs`:
+   * answered with the connection; unanswered "timeout" when no welcome came
+   * in time, "dead" when the connection ended first ({@link Gone}). A
+   * refused dial (an errno) is thrown: an answered no. {@link dial} waits on
+   * the keeper's own word instead, which a wedged keeper reaches once the
+   * watchdog ends it (keeper-watchdog.ts).
    */
-  static async connect(
+  static connect(
     endpoint: string = sessiondEndpoint(),
-    timeoutMs: number | null = DIAL_TIMEOUT_MS
-  ): Promise<SessiondClient> {
-    if (timeoutMs === null) {
-      return SessiondClient.#dial(endpoint);
-    }
-    const dialled = await readWithin(timeoutMs, (signal) =>
-      SessiondClient.#dial(endpoint, signal)
+    timeoutMs: number = DIAL_TIMEOUT_MS
+  ): Promise<Bounded<SessiondClient>> {
+    return readWithin(timeoutMs, (signal) =>
+      SessiondClient.dial(endpoint, signal)
     );
-    switch (dialled.kind) {
-      case "answered":
-        return dialled.value;
-      case "unanswered":
-        throw dialled.reason === "dead"
-          ? keeperEnded("its welcome came")
-          : new Error(
-              `[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`
-            );
-      default: {
-        const unhandled: never = dialled;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
   }
 
-  /** One dial of the keeper at `endpoint`, until its welcome, its refusal, its end ({@link Gone}), or `signal`. */
-  static #dial(
-    endpoint: string,
-    signal?: AbortSignal
-  ): Promise<SessiondClient> {
+  /**
+   * One dial of the keeper at `endpoint`, waited on for the keeper's own
+   * word: its welcome, its refusal (a thrown errno or capability refusal),
+   * its connection's end ({@link Gone}), or `signal`.
+   */
+  static dial(endpoint: string, signal?: AbortSignal): Promise<SessiondClient> {
     return new Promise((resolve, reject) => {
       // Same ordering rule as {@link probeEndpoint}: listeners before dial.
       const socket = new Socket();

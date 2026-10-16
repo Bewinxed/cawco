@@ -410,6 +410,13 @@ export interface RecoveryUnavailableFrame {
   reason: string;
 }
 
+/** A harness whose `listSessions` did not answer within its bound: left out of the listing, not read as having none. */
+export interface HarnessUnanswered {
+  /** The milliseconds it was given. */
+  after: number;
+  harness: HarnessKind;
+}
+
 export interface ControlResultFrame {
   error?: string;
   instanceId?: string;
@@ -418,6 +425,8 @@ export interface ControlResultFrame {
   ok: boolean;
   requestId: string;
   result?: unknown;
+  /** `listSessions` only, and only when some harness did not list in time: those harnesses, whose sessions `result` leaves out. */
+  unanswered?: HarnessUnanswered[];
 }
 
 export interface ErrorFrame {

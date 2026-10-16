@@ -80,6 +80,7 @@ import type { Harness } from "./scratch-fleet";
 await ensureDeps();
 const { SessiondClient } =
   await import("../packages/agent/src/sessiond-client");
+const { welcomed } = await import("./lib/keeper-dial");
 const { ACCOUNT, HARNESSES, MACHINE, MODEL, scratchFleet, until } =
   await import("./scratch-fleet");
 
@@ -818,7 +819,10 @@ setInterval(() => undefined, 1 << 30);
   await lease.stop(true);
   const url = `http://127.0.0.1:${port}`;
   const procId = `opencode-server-${crypto.randomUUID()}`;
-  const client = await SessiondClient.connect(fleet.sessiondSocket);
+  const client = welcomed(
+    fleet.sessiondSocket,
+    await SessiondClient.connect(fleet.sessiondSocket)
+  );
   try {
     await client.spawnProc(procId, {
       command: process.execPath,
@@ -965,7 +969,10 @@ const stuckOpencodeCase = async (label: string) => {
     })),
   };
   // The stand-in goes, so later cases meet no stuck generation.
-  const client = await SessiondClient.connect(fleet.sessiondSocket);
+  const client = welcomed(
+    fleet.sessiondSocket,
+    await SessiondClient.connect(fleet.sessiondSocket)
+  );
   await client.signal(standIn.procId, "SIGKILL").catch(() => undefined);
   client.close();
   await rm(standIn.record, { force: true });

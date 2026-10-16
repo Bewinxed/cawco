@@ -18,6 +18,7 @@ import {
   writeProgram,
 } from "../../packages/core/src/workflow-sandbox";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
+import { welcomed } from "../lib/keeper-dial";
 
 const [, , verb] = Bun.argv;
 const home = process.env.HOME;
@@ -225,9 +226,8 @@ if (verb === "proof-stack") {
   console.log("stub child ready");
   await new Promise<void>((resolve) => process.stdin.on("end", resolve));
 } else if (verb === "proof-custody-start") {
-  const client = await SessiondClient.connect(
-    required("CAWCO_SESSIOND_ENDPOINT")
-  );
+  const endpoint = required("CAWCO_SESSIOND_ENDPOINT");
+  const client = welcomed(endpoint, await SessiondClient.connect(endpoint));
   await client.spawnProc("binary-stub", {
     command: process.execPath,
     args: ["proof-child"],
@@ -246,9 +246,8 @@ if (verb === "proof-stack") {
   client.close();
   console.log(`sessiond holds stub child ${proc.pid}`);
 } else if (verb === "proof-custody-check") {
-  const client = await SessiondClient.connect(
-    required("CAWCO_SESSIOND_ENDPOINT")
-  );
+  const endpoint = required("CAWCO_SESSIOND_ENDPOINT");
+  const client = welcomed(endpoint, await SessiondClient.connect(endpoint));
   const before = JSON.parse(readFileSync(join(home, "child.json"), "utf8"));
   const proc = (await client.list()).procs.find(
     (p) => p.procId === "binary-stub" && p.alive

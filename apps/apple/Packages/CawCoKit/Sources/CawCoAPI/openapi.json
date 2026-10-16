@@ -50576,12 +50576,36 @@
           "requestId": {
             "type": "string"
           },
-          "result": {}
+          "result": {},
+          "unanswered": {
+            "description": "`listSessions` only, and only when some harness did not list in time: those harnesses, whose sessions `result` leaves out.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessUnanswered"
+            }
+          }
         },
         "required": [
           "kind",
           "ok",
           "requestId"
+        ]
+      },
+      "HarnessUnanswered": {
+        "description": "A harness whose `listSessions` did not answer within its bound: left out of the listing, not read as having none.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "The milliseconds it was given.",
+            "type": "number"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          }
+        },
+        "required": [
+          "after",
+          "harness"
         ]
       },
       "ErrorFrame": {

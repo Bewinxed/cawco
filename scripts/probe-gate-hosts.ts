@@ -459,6 +459,7 @@ await Bun.write(secret, "not for the workspace\n");
 const { SessiondServer } = await import("../packages/sessiond/src/server");
 const { SessiondClient } =
   await import("../packages/agent/src/sessiond-client");
+const { welcomed } = await import("./lib/keeper-dial");
 const { BOUNDARY_RELAUNCH, mcpGatewayPort, CAWCO_ENV } =
   await import("../packages/core/src/index");
 const { gateForm } = await import("../packages/agent/src/gate-form");
@@ -475,7 +476,7 @@ type Session = import("../packages/agent/src/harness").HarnessSession;
 
 const sessiond = new SessiondServer();
 await sessiond.listen(endpoint);
-const keeper = await SessiondClient.connect(endpoint);
+const keeper = welcomed(endpoint, await SessiondClient.connect(endpoint));
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 const waiters = new Set<() => void>();
@@ -609,7 +610,10 @@ try {
     model: "mock/mock-model",
     permissionMode: "bypassPermissions" as const,
   };
-  const earlierAgent = await SessiondClient.connect(endpoint);
+  const earlierAgent = welcomed(
+    endpoint,
+    await SessiondClient.connect(endpoint)
+  );
   await earlierAgent.spawnProc(procIdFor("pi", PI), {
     command: process.execPath,
     args: [join(ROOT, "packages", "agent", "src", "harnesses", "pi-host.ts")],

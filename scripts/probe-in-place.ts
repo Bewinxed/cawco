@@ -587,8 +587,10 @@ if (role === "sessiond") {
   const { MESSAGES_READ } = await import("../packages/core/src/harness");
   const { processEnded } =
     await import("../packages/agent/src/harnesses/claude");
-  const client = await SessiondClient.connect(
-    process.env.CAWCO_SESSIOND_ENDPOINT
+  const { welcomed } = await import("./lib/keeper-dial");
+  const client = welcomed(
+    process.env.CAWCO_SESSIOND_ENDPOINT ?? "the default endpoint",
+    await SessiondClient.connect(process.env.CAWCO_SESSIOND_ENDPOINT)
   );
   const hubHttp = `http://127.0.0.1:${portText}`;
   const events = join(scratch, "events");
