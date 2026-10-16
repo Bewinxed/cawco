@@ -855,6 +855,12 @@ async function web(
 const spec: Spec = {
   name: "ios-task-review",
   async run(kit) {
+    // A checkout with no app built from its tree builds one: the host runs
+    // this spec in a checkout of its own, where only the compile check had
+    // built it, and a compile check passed earlier is not run again.
+    if (freshApp(ROOT).problem) {
+      await sh(`cd "${ROOT}" && bash apps/apple/scripts/build-both.sh ios`);
+    }
     const { path: app, problem } = freshApp(ROOT);
     if (
       !kit.check("the app is built from this tree", !problem, problem ?? app)
