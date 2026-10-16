@@ -127,6 +127,51 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
   }
 };
 
+const HANDOFF_DESCRIPTION =
+  "Send a message to another session on the fleet — to guide one of your delegates while " +
+  "its work item runs, or to brief a session that already owns the work. An idle target wakes " +
+  "and works on it immediately; a busy target reads it at its next step, a command it is " +
+  "running moved to the background and kept going. Write the message as a brief " +
+  "for another engineer who cannot see your conversation: what you found, where (file " +
+  "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
+  "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
+  "the message reopens its work item in the same session, on its cached transcript. " +
+  "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target other than your own parent is refused once with the cost considerations, and a repeat of the call is delivered.";
+
+/** `handoff`'s target and message, every session's. */
+const handoffShape = () => ({
+  target: z
+    .string()
+    .describe(
+      'The session to hand to: its id, or its directory name, e.g. "keeboard". A name reaches your own parent when it is theirs; a name that more than one session answers to is refused with their ids.'
+    ),
+  message: z
+    .string()
+    .describe(
+      "The brief. Include the finding, the paths involved, and the ask."
+    ),
+});
+
+/** `handoff`'s call: the message, with the inputs of a session that may delegate. */
+const handed =
+  (actions: ReturnType<typeof handoffActions>) =>
+  async ({
+    target,
+    message,
+    inputs,
+  }: {
+    inputs?: string[];
+    message: string;
+    target: string;
+  }) => ({
+    content: [
+      {
+        type: "text" as const,
+        text: await actions.handoff(target, message, inputs),
+      },
+    ],
+  });
+
 /** Only a workflow step session gets these; they need its step and run. */
 const STEP_TOOLS: ReadonlySet<string> = new Set([
   "submit_result",
@@ -416,44 +461,24 @@ export function handoffTools(deps: HandoffDeps) {
         content: [{ type: "text" as const, text: actions.listSessions() }],
       })
     ),
-    tool(
-      "handoff",
-      "Send a message to another session on the fleet — to guide one of your delegates while " +
-        "its work item runs, or to brief a session that already owns the work. An idle target wakes " +
-        "and works on it immediately; a busy target reads it at its next step, a command it is " +
-        "running moved to the background and kept going. Write the message as a brief " +
-        "for another engineer who cannot see your conversation: what you found, where (file " +
-        "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
-        "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
-        "the message reopens its work item in the same session, on its cached transcript. " +
-        "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target other than your own parent is refused once with the cost considerations, and a repeat of the call is delivered.",
-      {
-        target: z
-          .string()
-          .describe(
-            'The session to hand to: its id, or its directory name, e.g. "keeboard". A name reaches your own parent when it is theirs; a name that more than one session answers to is refused with their ids.'
-          ),
-        message: z
-          .string()
-          .describe(
-            "The brief. Include the finding, the paths involved, and the ask."
-          ),
-        inputs: z
-          .array(z.string())
-          .optional()
-          .describe(
-            "For your delegate: files on your machine, by absolute path, copied to its $TMPDIR/inputs/ first."
-          ),
-      },
-      async ({ target, message, inputs }) => ({
-        content: [
+    // A leaf has no delegate of its own to hand inputs to: only a session
+    // that may delegate is listed `inputs`.
+    deps.canDelegate === false
+      ? tool("handoff", HANDOFF_DESCRIPTION, handoffShape(), handed(actions))
+      : tool(
+          "handoff",
+          HANDOFF_DESCRIPTION,
           {
-            type: "text" as const,
-            text: await actions.handoff(target, message, inputs),
+            ...handoffShape(),
+            inputs: z
+              .array(z.string())
+              .optional()
+              .describe(
+                "For your delegate: files on your machine, by absolute path, copied to its $TMPDIR/inputs/ first."
+              ),
           },
-        ],
-      })
-    ),
+          handed(actions)
+        ),
     tool(
       "start_session",
       "Start a NEW session on the fleet and give it work. Unlike a subagent, this " +

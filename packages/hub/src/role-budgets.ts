@@ -92,7 +92,9 @@ import type { Tasks } from "./tasks";
  * `inputs` of delegate and handoff, so a probe whose scratch fleet delegates
  * runs outside the sandbox and a delegate gets the files its boundary cannot
  * read. They fit the same budgets: delegate's own words and its `cwd`,
- * `machine`, `workspace` and `fork` were cut to pay for them (MEASURED).
+ * `machine`, `workspace` and `fork` were cut to pay for them, and a leaf,
+ * with no delegate to hand inputs to, is not listed handoff's `inputs`
+ * (worker 24,374, delegate 6,573, lead 15,799 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 24_590,
