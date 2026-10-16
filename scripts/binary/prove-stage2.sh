@@ -595,10 +595,17 @@ check() {
   else
     VERDICT[$name]=FAIL
     RIG_STATUS=1
+    # The check's own words on why, in the verdict itself: its first failed assertion or wait and the lines it printed
+    # after it, without the trace. A host check's output folder is gone once the check ends, and with it the log the
+    # verdict names (the run of e6d8fb5b6 said only "FAIL after 1s (see …)").
+    local why
+    why=$(grep -vE '^(\++ |ERR: exit )' "$log" \
+      | awk '/^(ASSERTION FAILED|timed out after)/ { on = 1 } on && /^---- / { exit } on { print; if (++n == 9) exit }' \
+      | tr '\t\n' '  ' | cut -c1-800)
     if [[ $rc == 124 || $rc == 137 ]]; then
-      verdict="FAIL (timed out after ${limit}s, see $log)"
+      verdict="FAIL (timed out after ${limit}s${why:+: $why}, see $log)"
     else
-      verdict="FAIL after ${took}s (see $log)"
+      verdict="FAIL after ${took}s${why:+: $why} (see $log)"
     fi
     timeout --kill-after=10 300 bash -c diagnose >> "$log" 2>&1 < /dev/null || true
   fi
