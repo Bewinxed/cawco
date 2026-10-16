@@ -170,8 +170,11 @@ const spills = (page: Page) =>
           text.left >= box.left - 0.5 &&
           text.right <= box.right + 0.5 &&
           (!glyph || text.right <= glyph.left + 0.5);
+        // `clip` as well as `hidden`: DESIGN.md's Mark Line Rule (99e56fc00, "A run that truncates clips with `overflow: clip`, never `hidden`"), and every engine draws the ellipsis under it (WebKit 258265, fixed in 265445@main).
         const ellipsed =
-          !cut || (s.overflowX === "hidden" && s.textOverflow === "ellipsis");
+          !cut ||
+          ((s.overflowX === "hidden" || s.overflowX === "clip") &&
+            s.textOverflow === "ellipsis");
         if (!(inside && ellipsed)) {
           bad.push(
             `${chip.dataset.key} .${part.className.split(" ")[0]}: text ${Math.round(text.left)}–${Math.round(text.right)} in chip ${Math.round(box.left)}–${Math.round(box.right)}, glyph at ${glyph ? Math.round(glyph.left) : "-"}, cut ${cut} ellipsis ${ellipsed}`
