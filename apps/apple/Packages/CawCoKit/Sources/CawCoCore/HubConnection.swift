@@ -198,7 +198,7 @@ public final class HubConnection {
     @ObservationIgnored private var suspended = false
     /// Counts `start`s, so a replaced loop knows it was replaced.
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var waiters: [String: CheckedContinuation<OpenAPIValueContainer?, any Error>] = [:]
+    @ObservationIgnored private var waiters: [String: CheckedContinuation<Components.Schemas.ControlResultFrame, any Error>] = [:]
     private let log = Logger(subsystem: "dev.cawco.app", category: "Hub")
 
     /// The hub this app keeps, the one every window connects to.
@@ -1161,11 +1161,23 @@ public final class HubConnection {
         }
     }
 
-    /// Replaces a machine's stored-session catalog with its current answer.
-    /// Failure remains an error for pending menu actions to show.
+    /// Replaces a machine's stored-session catalog with its current answer. A
+    /// harness the listing left out (no answer in time, or its listing threw)
+    /// keeps the sessions the previous catalog held for it: not answering is
+    /// not having none. Failure of the whole call remains an error for pending
+    /// menu actions to show, and leaves the catalog as it was.
     public func reloadCatalog(_ machineId: String) async throws {
         defer { fleet.catalogsTried.insert(machineId) }
-        fleet.catalogs[machineId] = try await listSessions(machineId: machineId)
+        let listing = try await listSessions(machineId: machineId)
+        for left in listing.unanswered {
+            log.notice("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) did not answer within \(left.after, privacy: .public) ms; its sessions are kept")
+        }
+        for left in listing.failed {
+            log.error("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) failed: \(left.error, privacy: .public); its sessions are kept")
+        }
+        let kept = Set(listing.unanswered.map(\.harness) + listing.failed.map(\.harness))
+        let held = kept.isEmpty ? [] : (fleet.catalogs[machineId] ?? []).filter { kept.contains($0.harness) }
+        fleet.catalogs[machineId] = listing.sessions + held
     }
 
     /// The background path reports a failed read without throwing out of its task.
@@ -1182,9 +1194,16 @@ public final class HubConnection {
         }
     }
 
-    /// A machine-scoped control call, answered by its `control_result`.
+    /// A machine-scoped control call, answered by its `control_result`'s `result`.
     func control(_ machineId: String, instanceId: String? = nil, harness: Components.Schemas.ControlPayload.HarnessPayload? = nil,
                  method: String, args: [(any Sendable)?], timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
+        try await controlFrame(machineId, instanceId: instanceId, harness: harness, method: method, args: args, timeout: timeout).result
+    }
+
+    /// A machine-scoped control call, answered by its whole `control_result`
+    /// (`listSessions` reads the harnesses it left out beside `result`).
+    func controlFrame(_ machineId: String, instanceId: String? = nil, harness: Components.Schemas.ControlPayload.HarnessPayload? = nil,
+                      method: String, args: [(any Sendable)?], timeout: Duration = controlTimeout) async throws -> Components.Schemas.ControlResultFrame {
         let requestId = UUID().uuidString.lowercased()
         let payload = Components.Schemas.ControlPayload(
             args: try args.map { value in
@@ -1198,7 +1217,7 @@ public final class HubConnection {
 
     /// All correlated socket verbs share the same reply, disconnect and cancellation paths.
     func request(machineId: String, instanceId: String? = nil, verb: Components.Schemas.Verb,
-                 requestId: String, payload: some Encodable, timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
+                 requestId: String, payload: some Encodable, timeout: Duration = controlTimeout) async throws -> Components.Schemas.ControlResultFrame {
         guard socket == .connected, let live else {
             throw URLError(.notConnectedToInternet)
         }
@@ -1301,7 +1320,7 @@ public final class HubConnection {
                 return
             }
             if result.ok {
-                waiter.resume(returning: result.result)
+                waiter.resume(returning: result)
             } else {
                 waiter.resume(throwing: ControlError(message: result.error ?? "The machine could not carry out that request."))
             }
