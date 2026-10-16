@@ -151,10 +151,24 @@ if args[2:]:
     CLIPS = Path(args[2]).resolve()
 variants = json.loads((LOOPS_REPO / "takes.json").read_text())
 rests = json.loads((LOOPS_REPO / "rests.json").read_text())
+beats = json.loads((LOOPS_REPO / "beats.json").read_text())
+plays = json.loads((LOOPS_REPO / "plays.json").read_text())
+
+
+def still_loop(status: str) -> str:
+    """The loop a status's still is drawn in (scene.mjs): its rest's, its beat's, or its first
+    loop's."""
+    if status in rests:
+        return rests[status]["loop"]
+    if status in beats:
+        return beats[status]["loop"]
+    return plays[status][0]
+
+
 # Each status's still: the loop it is drawn in and the drawing's number there.
 first = {
-    status.replace("_", "-"): {"loop": rests.get(status, loops[0])["loop"], "drawing": rests.get(status, {}).get("drawing", 0)}
-    for status, loops in variants.items()
+    status.replace("_", "-"): {"loop": still_loop(status), "drawing": rests.get(status, {}).get("drawing", 0)}
+    for status in variants
 }
 for status, rest in rests.items():
     first.setdefault(status, rest)

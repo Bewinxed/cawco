@@ -12,6 +12,10 @@
     "drawing": 0,
     "inks": ["cream"]
   },
+  "idle": {
+    "loop": "idle-nod-off",
+    "drawing": 0
+  },
   "peek": {
     "clip": "peer-over",
     "drawing": 9,

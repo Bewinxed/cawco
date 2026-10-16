@@ -345,9 +345,12 @@ function liftStrokeKeys(spec) {
   return strokeKeys;
 }
 
-/** One status's file: its scene, built and completed with the view model and its bindings. */
-function build(status) {
-  const spec = statusScene(status);
+/**
+ * One status's file: its scene, built and completed with the view model and its bindings. `plan`
+ * is its choreography (scene.mjs planOf), given only to build a file other than the one on disk.
+ */
+export function build(status, plan) {
+  const spec = statusScene(status, plan);
   const strokeKeys = liftStrokeKeys(spec);
   const { objects, warnings } = buildScene(spec);
   const rims = drawStrokesUnder(
@@ -457,41 +460,48 @@ function completeTransition(object, at) {
   ];
 }
 
-// No file is written from drawings that lost eye white or vermilion against the art on main
-// (ink_gate.py): a re-trace once turned 519 eye whites into holes and every other check passed.
-const gate = spawnSync("uv", ["run", "-q", "ink_gate.py"], {
-  cwd: here("."),
-  stdio: "inherit",
-});
-if (gate.status !== 0) {
-  console.error(
-    "build.mjs: ink_gate.py failed; fix the trace, or list the change with its reason in ink_gate.json"
-  );
-  process.exit(1);
-}
-for (const { dir, files } of outDirs) {
-  mkdirSync(dir, { recursive: true });
-  const keep = new Set(files.map((s) => `${fileName(s)}.riv`));
-  for (const f of readdirSync(dir)) {
-    if (f.endsWith(".riv") && !keep.has(f)) {
-      rmSync(join(dir, f));
-    }
+/** Writes every file, run as a script (imported, build.mjs only lends `build`). */
+function main() {
+  // No file is written from drawings that lost eye white or vermilion against the art on main
+  // (ink_gate.py): a re-trace once turned 519 eye whites into holes and every other check passed.
+  const gate = spawnSync("uv", ["run", "-q", "ink_gate.py"], {
+    cwd: here("."),
+    stdio: "inherit",
+  });
+  if (gate.status !== 0) {
+    console.error(
+      "build.mjs: ink_gate.py failed; fix the trace, or list the change with its reason in ink_gate.json"
+    );
+    process.exit(1);
   }
-}
-for (const status of FILES) {
-  const { bytes, objects, inputs, warnings } = build(status);
   for (const { dir, files } of outDirs) {
-    if (files.includes(status)) {
-      writeFileSync(join(dir, `${fileName(status)}.riv`), bytes);
+    mkdirSync(dir, { recursive: true });
+    const keep = new Set(files.map((s) => `${fileName(s)}.riv`));
+    for (const f of readdirSync(dir)) {
+      if (f.endsWith(".riv") && !keep.has(f)) {
+        rmSync(join(dir, f));
+      }
     }
   }
-  console.log(
-    `${fileName(status)}.riv: ${bytes.length} bytes, ${objects} objects, inputs: ${inputs}`
-  );
-  for (const w of warnings) {
-    console.log(`  warning: ${w}`);
+  for (const status of FILES) {
+    const { bytes, objects, inputs, warnings } = build(status);
+    for (const { dir, files } of outDirs) {
+      if (files.includes(status)) {
+        writeFileSync(join(dir, `${fileName(status)}.riv`), bytes);
+      }
+    }
+    console.log(
+      `${fileName(status)}.riv: ${bytes.length} bytes, ${objects} objects, inputs: ${inputs}`
+    );
+    for (const w of warnings) {
+      console.log(`  warning: ${w}`);
+    }
+  }
+  for (const { dir, files } of outDirs) {
+    console.log(`wrote ${files.length} files to ${dir}`);
   }
 }
-for (const { dir, files } of outDirs) {
-  console.log(`wrote ${files.length} files to ${dir}`);
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
 }

@@ -1,8 +1,9 @@
 // Proves each of Caw's Rive files (assets/mascot/caw/<status>.riv and peek.riv) on Rive's official
 // runtime (@rive-app/canvas-advanced, WASM) in headless Chromium: its `Caw` view model drives its
 // state machine, his enter plays once and fires `entered` on his still, `dark` puts the cream rim
-// on, `pixel` sets that rim's width and nothing else, its variants take turns without repeating
-// one, every drawing stays on screen two frames or more, reduced motion holds its still, and it
+// on, `pixel` sets that rim's width and nothing else, a resting file holds its one drawing, a
+// beating file holds its still and plays its beat whole after one of its holds and never two in a
+// row, every drawing stays on screen two frames or more, reduced motion holds its still, and it
 // loads and instances within the 100 ms budget.
 //
 // The expected pictures come from the file itself: each loop's own animations (the loop, a scheme,
@@ -12,14 +13,22 @@
 //
 // Each run gets a fresh page and so a fresh WASM instance. Every page pins the runtime's sources of
 // randomness (its clocks and crypto.getRandomValues, see SEED_RANDOM) before the runtime loads, and
-// each file runs twice to show the random variant draws are pinned.
+// each file runs twice to show the random hold draws are pinned.
 //
 // usage: node prove-viewmodel.mjs [--dir ../caw]
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { enterOf, FILES, fileName, KIT_RIM, RESTS } from "./scene.mjs";
+import {
+  BEATS,
+  enterOf,
+  FILES,
+  fileName,
+  KIT_RIM,
+  PLAYS,
+  RESTS,
+} from "./scene.mjs";
 
 const ADVANCE_S = 0.5;
 const SIZE = 512;
@@ -28,8 +37,16 @@ const FPS = 24;
 const HOLD_S = 1;
 /** A watch starts past the 200 ms scheme fade, half a frame off the drawings' keys. */
 const SETTLE_S = 0.25 + 0.5 / FPS;
-/** Loops of the longest variant each file is watched for with motion. */
+/**
+ * A beating file is watched with motion for this many of its longest cycles (its longest hold and
+ * its beat), so the watch holds two beats begun and the interval between them whatever the phase
+ * it starts on.
+ */
+const WATCH_CYCLES = 3;
+/** Loops of the longest one a playing file is watched for with motion. */
 const WATCH_LOOPS = 5;
+/** How far a hold seen between two beats may be from one of the file's holds, in frames. */
+const HOLD_TOLERANCE = 2;
 /** Load plus instancing, steady state, per file. */
 const BUDGET_MS = 100;
 const TIMING_RUNS = 6;
@@ -43,7 +60,8 @@ const RIM_PIXELS = [0, KIT_RIM / 2, 512 / 36, 512 / 18];
 const CANVAS_PER_ARTBOARD = 512 / 592;
 /** How far the rim's measured reach may be from `pixel`, in canvas px: a pixel's half-width each side. */
 const RIM_TOLERANCE = 1;
-const LOOP_STATE = /^loop_(.+)$/;
+/** The Variant layer's states a random draw lands on: a hold, the beat, or a loop. */
+const DRAWN_STATE = /^(hold_\d+|beat|loop_.+)$/;
 
 const args = {};
 const argv = process.argv.slice(2);
@@ -54,12 +72,17 @@ for (let i = 0; i < argv.length; i += 1) {
 }
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const dir = args.dir ?? here("../caw");
-const takes = JSON.parse(readFileSync(here("../loops/takes.json"), "utf8"));
 /** What a resting file's one picture is called among the expected pictures. */
 const REST = "rest";
-/** A file's loops: none for one that rests on one drawing (loops/rests.json), the peek included. */
+/**
+ * A file's loops: its beat (loops/beats.json), with its holds in frames; the loops it plays
+ * (loops/plays.json); or none for one that rests on one drawing (loops/rests.json).
+ */
 const loopsOf = (status) =>
-  (RESTS[status] ? [] : takes[status]).map(({ loop: name }) => {
+  [
+    ...(BEATS[status] ? [BEATS[status]] : []),
+    ...(PLAYS[status] ?? []).map((loop) => ({ loop })),
+  ].map(({ loop: name, holds }) => {
     const timing = JSON.parse(
       readFileSync(here(`../loops/${name}/timing.json`), "utf8")
     );
@@ -68,6 +91,7 @@ const loopsOf = (status) =>
       animation: `loop_${name}`,
       frames: timing.frames,
       starts: timing.drawings.map((d) => d.start),
+      holds: holds?.map((s) => s * FPS),
     };
   });
 
@@ -457,9 +481,7 @@ async function run(bytes, loops, enterFrames) {
     settle: SETTLE_S,
     timingRuns: TIMING_RUNS,
     // A resting file is watched as long as reduced motion is.
-    watchFrames: loops.length
-      ? WATCH_LOOPS * Math.max(...loops.map((l) => l.frames))
-      : Math.round(HOLD_S * FPS),
+    watchFrames: watchFrames(loops),
     rest: REST,
     enterFrames,
     loops,
@@ -476,11 +498,25 @@ async function run(bytes, loops, enterFrames) {
 }
 
 /**
+ * How many frames a file is watched for with motion: a resting file as long as reduced motion; a
+ * beating file three of its longest cycles; a playing file five of its longest loop.
+ */
+function watchFrames(loops) {
+  if (loops.length === 0) {
+    return Math.round(HOLD_S * FPS);
+  }
+  if (loops[0].holds) {
+    return WATCH_CYCLES * (Math.max(...loops[0].holds) + loops[0].frames);
+  }
+  return WATCH_LOOPS * Math.max(...loops.map((l) => l.frames));
+}
+
+/**
  * A watch's frames as plays: each frame is matched to a slot of one of the file's loops
  * (preferring the loop already playing), and a new play starts whenever the loop changes or its
  * slot number goes back. Unmatched frames come back as null.
  */
-function plays(loops, pictures, frames) {
+function playsIn(loops, pictures, frames) {
   const out = [];
   let current = null;
   for (const f of frames) {
@@ -504,6 +540,144 @@ function plays(loops, pictures, frames) {
   return out;
 }
 
+/**
+ * A lone loop on repeat: the watch's pictures, run by run, must be the loop's own (its timeline's
+ * runs) over and over, from some run of it on. Its first and last drawing are one picture, so a
+ * seam cannot be told from a play by its pictures, and the loop's runs are taken as a cycle: its
+ * last run is its first. Returns how many seams the watch crosses, or null where a picture breaks
+ * the cycle.
+ */
+function repeatsIn(timeline, frames) {
+  const cycle = runsOf(timeline).map((r) => r.pic);
+  if (cycle.length > 1 && cycle[0] === cycle.at(-1)) {
+    cycle.pop();
+  }
+  const seen = runsOf(frames).map((r) => r.pic);
+  for (let phase = 0; phase < cycle.length; phase += 1) {
+    if (seen.every((p, k) => p === cycle[(k + phase) % cycle.length])) {
+      return seen.filter((_, k) => k > 0 && (k + phase) % cycle.length === 0)
+        .length;
+    }
+  }
+  return null;
+}
+
+/** A playing file's watch: its lone loop on repeat, or its loops taking turns, each whole. */
+function provePlays(loops, pictures, frames, timelines, name) {
+  if (loops.length === 1) {
+    const [loop] = loops;
+    const seams = repeatsIn(timelines[loop.name], frames);
+    if (seams === null) {
+      return {
+        fault: `${loop.name} breaks its repeat`,
+        line: "BREAKS its repeat",
+      };
+    }
+    const line = `${loop.name} on repeat, ${(loop.frames / FPS).toFixed(2)} s, ${seams} seams in ${(frames.length / FPS).toFixed(1)} s`;
+    return seams < WATCH_LOOPS - 1
+      ? { fault: `${seams} seams`, line }
+      : { line };
+  }
+  const seq = playsIn(loops, pictures, frames);
+  if (!seq) {
+    return {
+      fault: "a watched frame matches none of its loops' slots",
+      line: "UNMATCHED",
+    };
+  }
+  // Every play that starts on its first slot and runs to the next play shows all its slots.
+  const complete = seq.slice(0, -1).filter((p) => p.first === 0);
+  const slotsOf = (p) => loops.find((l) => l.name === p.loop).starts.length;
+  const order = seq.map((p) => p.loop);
+  const repeats = order.some((n, k) => k > 0 && n === order[k - 1]);
+  const line = `${order.map((n) => n.slice(name.length + 1)).join(" → ")} (${new Set(order).size} of ${loops.length}${repeats ? ", a REPEAT" : ", no repeats"})`;
+  if (
+    complete.length === 0 ||
+    !complete.every((p) => p.slots.size === slotsOf(p))
+  ) {
+    return {
+      fault: `plays ${seq.map((p) => `${p.loop}[${p.first}..${p.last}:${p.slots.size}]`).join(" ")}`,
+      line,
+    };
+  }
+  if (repeats || new Set(order).size < 2) {
+    return { fault: `rotation ${order.join(" → ")}`, line };
+  }
+  return { line };
+}
+
+/** Frames as runs of one picture: each run's picture, its first frame and its length. */
+function runsOf(frames) {
+  const runs = [];
+  for (const [k, f] of frames.entries()) {
+    if (runs.length && runs.at(-1).pic === f) {
+      runs.at(-1).n += 1;
+    } else {
+      runs.push({ pic: f, at: k, n: 1 });
+    }
+  }
+  return runs;
+}
+
+/**
+ * A beating file's watch read as holds and beats. The beat's own frames (its timeline) open and
+ * close on his still; between them lie its inner pictures. Every run of the watch must be his
+ * still or part of a beat, a beat's inner pictures met whole and in order, each followed by his
+ * still; a watch may open inside a beat and end inside one. Returns the frame each whole beat
+ * starts on (its inner pictures less the beat's own opening still), those found so far with a
+ * reason where it fails.
+ */
+function beatsIn(timeline, frames) {
+  const own = runsOf(timeline);
+  const still = own[0].pic;
+  const lead = own[0].n;
+  const inner = own.slice(1, -1).map((r) => r.pic);
+  const runs = runsOf(frames);
+  const starts = [];
+  let k = 0;
+  // A watch that opens inside a beat: its runs up to his still are the end of the beat's.
+  if (runs[0].pic !== still) {
+    const until = runs.findIndex((r) => r.pic === still);
+    const head = runs
+      .slice(0, until < 0 ? runs.length : until)
+      .map((r) => r.pic);
+    const tail = inner.slice(inner.length - head.length);
+    if (head.some((p, j) => p !== tail[j])) {
+      return {
+        fault: "the watch opens on frames that are not the end of a beat",
+        starts,
+      };
+    }
+    k = head.length;
+  }
+  while (k < runs.length) {
+    if (runs[k].pic === still) {
+      k += 1;
+      continue;
+    }
+    const n = Math.min(inner.length, runs.length - k);
+    for (let j = 0; j < n; j += 1) {
+      if (runs[k + j].pic !== inner[j]) {
+        return {
+          fault: `frame ${runs[k + j].at} is neither his still nor the beat's next drawing`,
+          starts,
+        };
+      }
+    }
+    if (n === inner.length) {
+      if (k + n < runs.length && runs[k + n].pic !== still) {
+        return {
+          fault: `the beat at frame ${runs[k].at} is not followed by his still`,
+          starts,
+        };
+      }
+      starts.push(runs[k].at - lead);
+    }
+    k += n;
+  }
+  return { starts };
+}
+
 const runtimeVersion = JSON.parse(
   readFileSync(join(runtimeDir, "package.json"), "utf8")
 ).version;
@@ -513,8 +687,10 @@ console.log(
 const totals = {
   files: 0,
   ok: 0,
-  looping: 0,
-  animate: 0,
+  beating: 0,
+  beats: 0,
+  playing: 0,
+  plays: 0,
   stills: 0,
   rested: 0,
   held: 0,
@@ -551,10 +727,10 @@ for (const status of FILES) {
   }
   const picks = (r) =>
     [...r.steps, ...r.watches]
-      .map((f) => f.states.filter((s) => LOOP_STATE.test(s)).join(","))
+      .map((f) => f.states.filter((s) => DRAWN_STATE.test(s)).join(","))
       .join("|");
   if (picks(now) !== picks(again)) {
-    fail("random variant draws differ between two runs");
+    fail("random hold draws differ between two runs");
   }
   const props = JSON.stringify(now.properties.map((p) => [p.name, p.type]));
   if (
@@ -656,12 +832,12 @@ for (const status of FILES) {
     }
   });
 
-  // With motion: every play that starts on its first slot and runs to the next play shows all
-  // its slots; with several loops, never the same one twice in a row.
+  // With motion: a resting file holds its drawing; a beating file holds its still, and every beat
+  // plays whole between two holds, each hold one of the file's; a playing file repeats its lone
+  // loop, or its loops take turns, each whole, never the same twice running.
   const [full, reduced] = now.watches;
   const beforeWatch = failures.length;
-  const seq = resting ? null : plays(loops, pictures, full.frames);
-  let rotation = "one loop";
+  let rotation = "";
   if (resting) {
     // A resting file holds its one drawing with motion on, as it does with motion reduced.
     const rested =
@@ -675,38 +851,44 @@ for (const status of FILES) {
     if (!rested) {
       fail(`at rest it shows ${new Set(full.frames).size} distinct frames`);
     }
-  } else if (seq) {
-    const complete = seq.slice(0, -1).filter((p) => p.first === 0);
-    const whole = complete.every(
-      (p) => p.slots.size === loops.find((l) => l.name === p.loop).starts.length
+  } else if (PLAYS[status]) {
+    const played = provePlays(
+      loops,
+      pictures,
+      full.frames,
+      now.timelines,
+      name
     );
-    if (complete.length === 0 || !whole) {
-      const missing = (p) => {
-        const n = loops.find((l) => l.name === p.loop).starts.length;
-        const gone = [...new Array(n).keys()].filter(
-          (s) => s >= p.first && s <= p.last && !p.slots.has(s)
-        );
-        return gone.length ? ` missing ${gone.join(",")}` : "";
-      };
+    rotation = played.line;
+    if (played.fault) {
+      fail(played.fault);
+    }
+    totals.playing += 1;
+    totals.plays += failures.length === beforeWatch ? 1 : 0;
+  } else {
+    const [beat] = loops;
+    const seen = beatsIn(now.timelines[beat.name], full.frames);
+    // Between two beats' starts: the beat itself, then the hold.
+    const holds = seen.starts
+      .slice(1)
+      .map((s, k) => s - seen.starts[k] - beat.frames);
+    const strays = holds.filter(
+      (h) => !beat.holds.some((want) => Math.abs(h - want) <= HOLD_TOLERANCE)
+    );
+    rotation = seen.fault
+      ? seen.fault
+      : `beat ${beat.name} ${(beat.frames / FPS).toFixed(2)} s at ${seen.starts.map((s) => (s / FPS).toFixed(2)).join(", ")} s, holds ${holds.map((h) => (h / FPS).toFixed(2)).join(", ")} s of ${beat.holds.map((h) => h / FPS).join("/")}`;
+    if (seen.fault) {
+      fail(seen.fault);
+    } else if (holds.length < 1) {
+      fail(`${seen.starts.length} whole beats in ${full.frames.length} frames`);
+    } else if (strays.length) {
       fail(
-        `plays ${seq.map((p) => `${p.loop}[${p.first}..${p.last}:${p.slots.size}${missing(p)}]`).join(" ")}`
+        `holds of ${strays.join(", ")} frames, none of ${beat.holds.join(", ")}`
       );
     }
-    const order = seq.map((p) => p.loop);
-    if (loops.length > 1) {
-      const repeats = order.some((n, k) => k > 0 && n === order[k - 1]);
-      rotation = `${order.map((n) => n.slice(name.length + 1)).join(" → ")} (${new Set(order).size} of ${loops.length}${repeats ? ", a REPEAT" : ", no repeats"})`;
-      if (repeats || new Set(order).size < 2) {
-        fail(`rotation ${order.join(" → ")}`);
-      }
-    }
-  } else {
-    fail("a watched frame matches none of its loops' slots");
-  }
-  // Every play showed all its drawings, and the loops took turns without repeating one.
-  if (!resting) {
-    totals.looping += 1;
-    totals.animate += failures.length === beforeWatch ? 1 : 0;
+    totals.beating += 1;
+    totals.beats += failures.length === beforeWatch ? 1 : 0;
   }
   // On twos, read from the file: each loop's frames at 1/24 s, as runs of the same picture.
   let twos = 0;
@@ -793,7 +975,12 @@ await browser.close();
 for (const f of failures) {
   console.log(`  FAIL ${f}`);
 }
-console.log(`loops animate: ${totals.animate}/${totals.looping}`);
+console.log(
+  `beats leave and land between holds: ${totals.beats}/${totals.beating}`
+);
+console.log(
+  `loops repeat or take turns, whole: ${totals.plays}/${totals.playing}`
+);
 console.log(`stills rest: ${totals.rested}/${totals.stills}`);
 console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
 console.log(`drawn enters play and land: ${totals.enter}/${totals.drawn}`);

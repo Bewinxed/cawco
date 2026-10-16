@@ -17,10 +17,23 @@ that is all they do with him.
   `idle`, `done`, `trying`, `loading`, `reconnecting`, `sleeping`, `compacted`. Each holds only
   its own status, so an app loads and instances a few MB for what is on screen instead of
   everything at once.
-- A status **waits** or **rests** (owner: "it shouldn't animate if there's nothing going on").
-  A wait is something going on, so a waiting status plays its loops. A rest is one drawing,
-  held, with no loop and no beats: `ready`, `sleeping` and `compacted`, named in
-  `assets/mascot/loops/rests.json`. A runtime that draws only on change draws a rest once.
+- A status **rests**, **beats** or **plays**: the owner's picks, from a review page of every
+  status's choices rendered on the runtime (2026-10-16), each one built from takes already shot.
+  - **Rests** (`assets/mascot/loops/rests.json`): one drawing, held, with no loop and no beats.
+    `ready`, `idle` (idle-nod-off's first drawing), `sleeping` and `compacted`. A runtime that
+    draws only on change draws a rest once.
+  - **Beats** (`assets/mascot/loops/beats.json`): `needs-you` holds its still and at long, uneven
+    intervals plays one beat, `needs-you-point-plead`, which leaves the still and lands back on
+    it. After his appearance and after every beat one hold is drawn at random from 8, 11, 14.5
+    and 18 s, so two beats never play in a row. Point-plead is the gentlest of the three
+    needs-you takes (mean ink off his pose 0.28 of his silhouette, against 0.29 for knock and
+    0.34 for hey, measured on the runtime); his still is its first drawing.
+  - **Plays** (`assets/mascot/loops/plays.json`): `working` plays its three loops in turns
+    (peck-flurry, idea, scratch-inspect), the next one drawn at random at each loop's end and
+    never the same twice in a row. `done` (`done-dust-off`), `trying` (`trying-headwind`),
+    `loading` (`loading-feather`) and `reconnecting` (`reconnecting-reach`) each play one loop on
+    repeat. His still is the first loop's first drawing, where `loading`'s and `reconnecting`'s
+    enters land.
 - `compacted` is the Caw beside "Compacted" in a transcript: his head alone, a folded note in
   his beak (the owner's pick, `assets/mascot/stills/light-compacted.png`). His head fills the
   512 box, so a place that gives him 18 px gets an 18 px head. He was never a loop, so his
@@ -49,10 +62,8 @@ that is all they do with him.
   (`assets/mascot/loops/idle-nod-off/body-11.svg`); anything that needs the sleeping Caw as a
   picture renders that SVG (its 512 × 512 box is the stills' box). With sessions
   merely working he is awake and still: `ready` (ready-attention's first drawing).
-- He moves only while something needs the operator (owner: "it shouldn't animate if there's
-  nothing the USER has to pay attention to"): `needs-you`, for a parked ask, a permission or a
-  failure. `loading` and `reconnecting` keep their loops too: they are the page saying it
-  cannot show its content yet. One exception: he smiles in reply to the operator's own pointer
+- `needs-you` is a parked ask, a permission or a failure. Outside the status files, he smiles in
+  reply to the operator's own pointer
   on his head in the top bar (owner, 2026-10-08: "show the smiling ^^ caw's face/animation on
   hover and on click").
 - His **head in the top bar** is his compacted head, and its moves are files of their own, not
@@ -74,7 +85,7 @@ that is all they do with him.
   his item's 36 px glass circle, in light and dark, at the bar's sizes and screen scales
   (`head_circle.py`).
 - His **still** is the drawing his enter lands on and Reduce Motion holds: a rest's drawing, or
-  the first drawing of a waiting status's first loop.
+  the first drawing of a beating status's beat or of a playing status's first loop.
 - `assets/mascot/caw/template-<name>.riv` (`code`, `launch`, `seo`, `brand`, `design`,
   `social`) are Caw's **template poses**, files that are not statuses: each New project
   template card shows its own, Caw with the template's prop (the owner's picks, Backlot film
@@ -163,8 +174,8 @@ apps/dashboard, which applies a loop's own animation at each frame through the r
 low-level API, as `prove-viewmodel.mjs` renders a loop, and writes them to
 `apps/dashboard/src/lib/assets/brand/`: a still for the two states that show him
 (`tab-icon-needs-you.png` from `needs-you.riv` and `tab-icon-sleeping.png` from `sleeping.riv`;
-while sessions work the icon is the plain app icon, not Caw) and `tab-icon-needs-you-wave.png`, frames 54 to 85 of `loop_needs-you-hey` side by side, seen
-through a box that holds his head and his right wing so the wing-beat reads as a wave. The
+while sessions work the icon is the plain app icon, not Caw) and `tab-icon-needs-you-wave.png`, frames 0 to 99 of `loop_needs-you-point-plead` (his needs-you beat's whole move, 50 drawings) side by side, seen
+through a box that holds his head as the still's box does and as much of the move as reads at 16 px. The
 icon moves in one state, while something needs the operator, by stepping through that strip; the
 page itself loads no Rive and draws nothing for its icon (drawn live, his head cost 4% of the
 main thread). Run `bun run tab-icon` again after `node build.mjs` changes either file,
@@ -260,14 +271,18 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   light and dark, by applying that loop's own animations directly, then drives the state machine
   only through the `Caw` view model:
   - every `dark` × `reducedMotion` step must render exactly a drawing of one of the file's loops
-    in the scheme `dark` selects, and the first loop's first drawing (its still) under
-    `reducedMotion`;
-  - watched over five loop lengths, every play must show all its loop's drawings, a loop never
-    follows itself, and nothing moves under `reducedMotion`;
+    (or its rest) in the scheme `dark` selects, and its still under `reducedMotion`;
+  - a beating file, watched for three of its longest cycles (its longest hold and its beat),
+    must show only his still and whole beats, each beat's drawings in order and followed by his
+    still, and between two beats' starts the beat plus one of its holds, within two frames; two
+    beats never run back to back;
+  - a playing file, watched over five lengths of its longest loop: a lone loop must show its own
+    pictures in order, cycle after cycle; several loops must each play whole, and a loop never
+    follows itself; nothing moves under `reducedMotion`;
   - every drawing stays on screen two frames or more (on twos), read back from the file;
   - load plus instancing (parse, artboard, state machine, bind, first frame) must take 100 ms or
     less, the median of five steady runs;
-  - a resting file (`ready`, `sleeping`, `compacted`, `peek`, each template pose and head file) must show its one drawing, in the
+  - a resting file (`ready`, `idle`, `sleeping`, `compacted`, `peek`, `climb`, each template pose and head file) must show its one drawing, in the
     scheme `dark` selects, and nothing else, with motion on or reduced;
   - `enters` reads on exactly in the files with a drawn enter;
   - `pixel` sets the dark rim's width and nothing else: light renders the same at every value;
@@ -281,9 +296,12 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
     settled still's or more): the scheme starts where the view model is, and fades only on a
     change.
 
-  The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
-  prints one line per file (the peek's names its ledge line), the totals (`loops animate: 7/7`,
-  `stills rest: 14/14`, `reducedMotion holds still: 21/21`, `drawn enters play and land: 9/9`,
+  The runtime's clocks and entropy are pinned so the random holds repeat across two runs (Rive
+  seeds its random draws from the clock, so on a live page each appearance draws its own). It
+  prints one line per file (the peek's names its ledge line; needs-you's its beats' starts and
+  the holds between them; a playing file its turns or its seams), the totals (`beats leave and
+  land between holds: 1/1`, `loops repeat or take turns, whole: 5/5`, `stills rest: 15/15`,
+  `reducedMotion holds still: 21/21`, `drawn enters play and land: 9/9`,
   `no drawn enter, simply there: 12/12`, `pixel sizes the dark rim: 21/21`, `rim whole at load:
   21/21`, `files proven: 21/21`)
   and, on success, `Caw view model drives the state machine in every file`.
@@ -322,18 +340,22 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 
 ## What the files hold today
 
-Caw is vector. A waiting status is a few loops that take turns: the takes the owner picked,
-traced into flat-ink shapes and held on twos (12 drawings a second, longer holds where the take
-holds). Each loop starts and ends on its own first drawing. A resting status is one drawing. The
-enters are traced and held the same way. Every loop is one Solo group switched by
-its keys, one group of ink shapes per drawing; a drawing the take comes back to is the same group,
-reused rather than traced again.
+Caw is vector. A resting status is one drawing. A beating status is its still and one loop, its
+beat; a playing status is its loops. Each loop is a take the owner picked, traced into flat-ink
+shapes and held on twos (12 drawings a second, longer holds where the take holds), starting and
+ending on its first drawing. The enters are traced and held the same way. A loop is one Solo
+group switched by its keys, one group of ink shapes per drawing; a drawing the take comes back
+to is the same group, reused rather than traced again. The takes in `loops/takes.json` that no
+status names stay traced on disk and no file carries them.
 
 - **Variant** layer: `start` (nothing drawn) is left in the first advance. A file with a drawn
-  enter plays `enter` and fires `entered` at its end, then a waiting status plays its first
-  loop; a waiting status with none starts on any one of its loops. At the end of each loop
-  comes one of the others (the loop states are flagged Random), so the same loop never plays
-  twice in a row; a resting status sits on `rest`.
+  enter plays `enter` and fires `entered` at its end. A resting status then sits on `rest`. A
+  beating status goes to one of its `hold_<ms>` states (his still for that long), then `beat`
+  (`loop_<take>`, played once), then a hold again; the states it leaves for a hold (`start`, or
+  `enter`, and `beat`) are flagged Random, each hold weighted 1. A playing status with one loop
+  plays it on repeat (`loop_<take>`); with several (`working`) it plays the first after his
+  enter, or any one with none, and at the end of each comes one of the others (the loop states
+  are flagged Random), so the same loop never plays twice in a row.
 - **Scheme** layer: `dark` fades in the thin cream rim the owner picked (Ivory #F4F0E6, the kit's
   dark-rim-cream recipe: 5.31 px at the stills' scale, or one device pixel where that is wider,
   by `pixel`) around every drawing over 200 ms when the scheme changes; a file starts in the

@@ -2,12 +2,16 @@
 // rive-mcp-server's scene-spec format. Apps load only the file for the status they show.
 //
 // Caw is vector: traced drawings (written by trace.py and trace_clip.py from takes shot with the
-// H3 keyframe sequence adapter), held on twos. A status either waits or rests:
-//   - a status that waits has its variant loops (assets/mascot/loops/takes.json). Each loop is a
-//     Solo group, `<loop>-body`, with one group of flat-ink shapes per drawing; a slot the take
-//     comes back to shows an earlier drawing again. Its still is its first loop's first drawing.
-//   - a status that rests (assets/mascot/loops/rests.json: `ready`, `sleeping`) is one traced
-//     drawing, its still, and never plays a loop: nothing is going on.
+// H3 keyframe sequence adapter), held on twos. Each status is one of three (the owner's picks,
+// PERSONALITY.md, When he moves):
+//   - it rests (assets/mascot/loops/rests.json): one traced drawing, its still, held.
+//   - it beats (assets/mascot/loops/beats.json: `needs_you`): it holds its still, and at long,
+//     uneven intervals plays one gentle beat, one traced loop that leaves the still and lands
+//     back on it.
+//   - it plays (assets/mascot/loops/plays.json): one loop on repeat, or several taking turns.
+// A loop is a Solo group, `<loop>-body`, with one group of flat-ink shapes per drawing; a slot the
+// take comes back to shows an earlier drawing again. A status's still is its rest, or the first
+// drawing of its beat or of its first loop; every loop starts and ends on its first drawing.
 // A status may also carry its enter, the clip that brings him from an empty page to his still
 // (assets/mascot/clips/<status>-enter, listed in clips/takes.json), drawn like a loop. A status
 // with no drawn enter is simply there, and the apps fade it in. There is no drawn way out: the
@@ -18,9 +22,11 @@
 // `pixel` its width (build.mjs binds it).
 //
 // Three state-machine layers, each driven by the `Caw` view model:
-//   Variant — plays his enter, firing `entered` at its end. Then a status that waits plays its
-//             loops, the first one after his enter and at each loop's end one of the others, so
-//             the same one never plays twice in a row; a status that rests holds its still.
+//   Variant — plays his enter, firing `entered` at its end. Then a status that rests holds its
+//             still; a status that beats holds its still for one of its holds, drawn at random,
+//             plays its beat once, and holds again: never two beats in a row; a status that
+//             plays loops its one loop, or at each loop's end plays one of the others, so the
+//             same one never plays twice in a row.
 //   Scheme  — `dark` fades every drawing's cream rim in (dark) or out (light) over 200 ms.
 //   Motion  — `reducedMotion` holds his still.
 //
@@ -88,7 +94,8 @@ export const fileName = (status) => status.replace("_", "-");
 /**
  * The files that rest: one drawing, held, with no loop. loops/rests.json names each one's
  * drawing among the traced loops (`ready` is ready-attention's first drawing, `sleeping` the
- * nod in idle-nod-off, eyes closed), the drawing trace_still.py traced from its still picture
+ * nod in idle-nod-off, eyes closed; `idle` idle-nod-off's first drawing, the still it had
+ * when it played its loops), the drawing trace_still.py traced from its still picture
  * (`compacted`, which was never a loop), a clip's drawing (`peek`, peer-over's landing), or a
  * template pose's end hold, which trace_pose.py traced (`template-<name>`).
  */
@@ -115,22 +122,40 @@ for (const name of LEDGES) {
   }
 }
 
-/** Each waiting status's variant loops, in order: the first one's first drawing is its still. */
-export const VARIANTS = (() => {
-  const takes = JSON.parse(readFileSync(`${LOOPS}takes.json`, "utf8"));
-  const out = {};
-  for (const status of FILES) {
-    if (RESTS[status]) {
-      out[status] = [];
-      continue;
-    }
-    if (!takes[status]?.length) {
-      throw new Error(`loops/takes.json has no loop for status '${status}'`);
-    }
-    out[status] = takes[status].map((v) => v.loop);
+/** The takes' frame rate; every drawing keeps the frame it starts on in its take. */
+const FPS = 24;
+/**
+ * The files that beat (loops/beats.json): each names its beat, one traced loop that starts and
+ * ends on its first drawing, and its holds, the seconds he stays on that drawing between two
+ * beats. After his enter, or at once, and after every beat, one hold is drawn at random, so the
+ * beats come at long, uneven intervals and never two in a row.
+ */
+export const BEATS = JSON.parse(readFileSync(`${LOOPS}beats.json`, "utf8"));
+/**
+ * The files that play (loops/plays.json): each names its loops, traced in loops/takes.json. One
+ * loops on repeat; several take turns. The first one's first drawing is the status's still.
+ */
+export const PLAYS = JSON.parse(readFileSync(`${LOOPS}plays.json`, "utf8"));
+
+/**
+ * A file's choreography: `{ rest }`, its one drawing (RESTS), `{ beat }`, its beat and holds
+ * (BEATS), or `{ plays }`, its loops (PLAYS). Every file is exactly one.
+ */
+export function planOf(name) {
+  const kinds = [RESTS, BEATS, PLAYS].filter((kind) => kind[name]);
+  if (kinds.length !== 1) {
+    throw new Error(
+      `${name} must be in exactly one of loops/rests.json, beats.json and plays.json`
+    );
   }
-  return out;
-})();
+  if (RESTS[name]) {
+    return { rest: RESTS[name] };
+  }
+  return BEATS[name] ? { beat: BEATS[name] } : { plays: PLAYS[name] };
+}
+for (const name of FILES) {
+  planOf(name);
+}
 
 /** The enters that have been shot and passed their gates (clips/takes.json, by trace_clip.py). */
 const SHOT = JSON.parse(readFileSync(`${CLIPS}takes.json`, "utf8"));
@@ -145,8 +170,6 @@ export function enterOf(status) {
 
 /** motion.dur-fade in design/tokens/cawco.tokens.json: "Fades that carry a state change in place." */
 const FADE_MS = 200;
-/** The takes' frame rate; every drawing keeps the frame it starts on in its take. */
-const FPS = 24;
 /**
  * The cream rim the owner picked for dark mode: the kit's dark-rim-cream recipe is a 14 px Ivory
  * (#F4F0E6) outline grown from the silhouette of the masters, which the stills scale by
@@ -199,6 +222,18 @@ const ORIGIN = { x: 43, y: 40 };
 const pad = (i) => String(i).padStart(2, "0");
 /** The one drawing a resting status shows, as a group of its own, and the state that holds it. */
 const REST = "rest";
+/** The state that plays a beating status's beat. */
+const BEAT = "beat";
+/** A hold's state and animation: his still, for that many seconds. */
+const holdName = (seconds) => `hold_${Math.round(seconds * 1000)}`;
+/** A hold's length in frames: whole drawings on twos, or the build fails. */
+function holdFrames(seconds) {
+  const frames = seconds * FPS;
+  if (!Number.isInteger(frames) || frames % 2 !== 0 || frames <= 0) {
+    throw new Error(`a hold of ${seconds} s is not a whole number of twos`);
+  }
+  return frames;
+}
 
 /** All of one fill's traced paths as one shape: one paint per ink per drawing. */
 function merge(id, parent, shapes, paint) {
@@ -293,12 +328,17 @@ function playTracks(name, timing) {
   ];
 }
 
-function animations(status, loops, enter, bases) {
-  const variants = VARIANTS[status];
+/**
+ * The file's animations. `beat` is a beating file's loop (its name, timing and holds), null
+ * otherwise; `plays` a playing file's loops (each name and timing), empty otherwise.
+ */
+function animations(beat, plays, enter, bases) {
+  /** The loop whose first drawing is his still, if he has loops. */
+  const first = beat ?? plays[0];
   /** Everything the Variant layer can show: one is opaque at a time. */
   const all = [
-    ...variants,
-    ...(RESTS[status] ? [REST] : []),
+    ...(beat ? [beat.name] : plays.map((p) => p.name)),
+    ...(first ? [] : [REST]),
     ...(enter ? [enter.name] : []),
   ];
   const opacity = (target, value) => ({
@@ -321,29 +361,48 @@ function animations(status, loops, enter, bases) {
       property: "strokeColor",
       keyframes: [{ frame: 0, color, easing: "hold" }],
     }));
-  // His still, where his enter lands: the rest drawing, or the first variant on its first
-  // drawing.
-  const still = RESTS[status]
-    ? only(REST)
-    : [
-        ...only(variants[0]),
+  // His still, where his enter lands: the rest drawing, or the first drawing of his beat (which
+  // it leaves from and lands back on) or of his first loop.
+  const still = first
+    ? [
+        ...only(first.name),
         {
-          target: `${variants[0]}-body`,
+          target: `${first.name}-body`,
           property: "soloActive",
-          keyframes: [{ frame: 0, ref: `${variants[0]}-d00`, easing: "hold" }],
+          keyframes: [
+            {
+              frame: 0,
+              ref: `${first.name}-d${pad(first.timing.drawings[0].drawing)}`,
+              easing: "hold",
+            },
+          ],
         },
-      ];
+      ]
+    : only(REST);
   return [
-    ...variants.map((name) =>
+    ...plays.map(({ name, timing }) =>
       anim(
         `loop_${name}`,
-        [...only(name), ...playTracks(name, loops[name])],
-        loops[name].frames,
-        // One play to its end, where the Variant layer draws the next variant; a lone variant
-        // simply loops.
-        variants.length > 1 ? "oneShot" : "loop"
+        [...only(name), ...playTracks(name, timing)],
+        timing.frames,
+        // One play to its end, where the Variant layer draws the next loop; a lone loop simply
+        // repeats.
+        plays.length > 1 ? "oneShot" : "loop"
       )
     ),
+    ...(beat
+      ? [
+          // One play to its end, where the Variant layer draws his next hold.
+          anim(
+            `loop_${beat.name}`,
+            [...only(beat.name), ...playTracks(beat.name, beat.timing)],
+            beat.timing.frames
+          ),
+          ...beat.holds.map((seconds) =>
+            anim(holdName(seconds), still, holdFrames(seconds))
+          ),
+        ]
+      : []),
     ...(enter
       ? [
           anim(
@@ -355,7 +414,9 @@ function animations(status, loops, enter, bases) {
       : []),
     // Nothing drawn: the instant before the Variant layer picks what he does first.
     anim("variant_hidden", only(null)),
-    anim("variant_still", still),
+    // A resting file's one state. A playing file carries it unused, as its files always have
+    // (working keeps main's bytes); a beating file holds its still in its holds instead.
+    ...(beat ? [] : [anim("variant_still", still)]),
     anim("scheme_light", rim(RIM_LIGHT.color)),
     anim("scheme_dark", rim(RIM_DARK_COLOR)),
     anim("motion_full", []),
@@ -364,10 +425,12 @@ function animations(status, loops, enter, bases) {
   ];
 }
 
-/** One status's scene: its loops or its rest, its enter, and the state machine that plays them. */
-export function statusScene(status) {
+/**
+ * One file's scene: its rest or its beat, its enter, and the state machine that plays them.
+ * `plan` is its choreography (planOf), given only to build a file other than the one on disk.
+ */
+export function statusScene(status, plan = planOf(status)) {
   const flag = (property, value) => ({ property, op: "==", value });
-  const variants = VARIANTS[status];
   const groups = [{ id: "caw", ...ORIGIN }];
   const shapes = [];
   const bases = [];
@@ -378,14 +441,28 @@ export function statusScene(status) {
     return drawn.timing;
   };
   const look = LOOK[status];
-  const loops = {};
-  for (const name of variants) {
-    loops[name] = add(art(name, `${LOOPS}${name}/`, look));
+  const beat = plan.beat
+    ? {
+        name: plan.beat.loop,
+        holds: plan.beat.holds,
+        timing: add(art(plan.beat.loop, `${LOOPS}${plan.beat.loop}/`, look)),
+      }
+    : null;
+  const plays = (plan.plays ?? []).map((name) => ({
+    name,
+    timing: add(art(name, `${LOOPS}${name}/`, look)),
+  }));
+  for (const loop of [...(beat ? [beat] : []), ...plays]) {
+    const first = loop.timing.drawings[0].drawing;
+    if (loop.timing.drawings.at(-1).drawing !== first) {
+      throw new Error(
+        `${status}'s loop ${loop.name} does not land on its first drawing, ${first}`
+      );
+    }
   }
-  const rest = RESTS[status];
-  if (rest) {
+  if (plan.rest) {
     groups.push({ id: REST, x: 0, y: 0, parent: "caw", opacity: 0 });
-    add(drawing(REST, restSvg(rest), look));
+    add(drawing(REST, restSvg(plan.rest), look));
   }
   const clip = enterOf(status);
   const enter = clip
@@ -442,64 +519,94 @@ export function statusScene(status) {
     artboard: { name: "Caw", width: ARTBOARD, height: ARTBOARD },
     groups,
     shapes,
-    animations: animations(status, loops, enter, bases),
+    animations: animations(beat, plays, enter, bases),
     stateMachine: {
       name: "CawStates",
       inputs: [],
-      layers: [variantLayer(status, loops, enter), scheme, motion],
+      layers: [variantLayer(beat, plays, enter), scheme, motion],
     },
   };
 }
 
-/** The Variant layer: his enter, then the loops or the rest. */
-function variantLayer(status, loops, enter) {
-  const variants = VARIANTS[status];
-  const rest = RESTS[status];
+/**
+ * The Variant layer: his enter, then his rest; or his still for a hold drawn at random, his beat,
+ * and a hold again; or his loops.
+ */
+function variantLayer(beat, plays, enter) {
   // Whole milliseconds, rounded down: a one-shot's time stops at its end, so an exit time past
   // it would never be reached.
-  const endMs = (timing) => Math.floor((timing.frames / FPS) * 1000);
-  const loopStates = variants.map((name) => `loop_${name}`);
+  const endMs = (frames) => Math.floor((frames / FPS) * 1000);
+  const holds = beat ? beat.holds.map(holdName) : [];
+  const loopStates = plays.map(({ name }) => `loop_${name}`);
+  /**
+   * Where he goes once he is there: his rest, any one of his holds, or his loops (his enter lands
+   * on the first one's first drawing; with none he is simply there on any one of them).
+   */
+  let settles = [REST];
+  if (beat) {
+    settles = holds;
+  } else if (plays.length) {
+    settles = enter ? loopStates.slice(0, 1) : loopStates;
+  }
   const states = [{ name: "start", animation: "variant_hidden" }];
   const transitions = [{ from: "entry", to: "start" }];
+  // Flagged Random by build.mjs: each of these states' outgoing transitions is a weighted draw.
+  const random = ["start"];
   if (enter) {
     states.push({ name: "enter", animation: "enter" });
     transitions.push(
       { from: "start", to: "enter" },
-      // His enter lands on his still, so his first loop (or his rest) follows it.
-      {
+      // His enter lands on his still, so his rest or one of his holds follows it.
+      ...settles.map((to) => ({
         from: "enter",
-        to: rest ? REST : loopStates[0],
-        exitTimeMs: endMs(enter.timing),
+        to,
+        exitTimeMs: endMs(enter.timing.frames),
         fire: "entered",
-      }
+      }))
     );
-  } else {
-    // No drawn enter: he is simply there, on his rest or on any one of his loops.
-    for (const to of rest ? [REST] : loopStates) {
-      transitions.push({ from: "start", to });
+    if (beat) {
+      random.push("enter");
     }
+  } else {
+    // No drawn enter: he is simply there, on his still.
+    transitions.push(...settles.map((to) => ({ from: "start", to })));
   }
-  if (rest) {
+  if (beat) {
+    beat.holds.forEach((seconds, k) => {
+      states.push({ name: holds[k], animation: holds[k] });
+      transitions.push({
+        from: holds[k],
+        to: BEAT,
+        exitTimeMs: endMs(holdFrames(seconds)),
+      });
+    });
+    states.push({ name: BEAT, animation: `loop_${beat.name}` });
+    // At the beat's end, back on his still for any one of the holds: never two beats running.
+    transitions.push(
+      ...holds.map((to) => ({
+        from: BEAT,
+        to,
+        exitTimeMs: endMs(beat.timing.frames),
+      }))
+    );
+    random.push(BEAT);
+  } else if (plays.length) {
+    plays.forEach(({ timing }, k) => {
+      states.push({ name: loopStates[k], animation: loopStates[k] });
+      // At a loop's end, any other: never the same one twice running. A lone loop repeats.
+      transitions.push(
+        ...loopStates
+          .filter((other) => other !== loopStates[k])
+          .map((to) => ({
+            from: loopStates[k],
+            to,
+            exitTimeMs: endMs(timing.frames),
+          }))
+      );
+    });
+    random.push(...loopStates);
+  } else {
     states.push({ name: REST, animation: "variant_still" });
   }
-  for (const name of variants) {
-    states.push({ name: `loop_${name}`, animation: `loop_${name}` });
-    // At a loop's end, any other variant: never the same one twice running.
-    transitions.push(
-      ...variants
-        .filter((other) => other !== name)
-        .map((other) => ({
-          from: `loop_${name}`,
-          to: `loop_${other}`,
-          exitTimeMs: endMs(loops[name]),
-        }))
-    );
-  }
-  return {
-    name: "Variant",
-    // Flagged Random by build.mjs: each of these states' outgoing transitions is a weighted draw.
-    random: ["start", ...loopStates],
-    states,
-    transitions,
-  };
+  return { name: "Variant", random, states, transitions };
 }

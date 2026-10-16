@@ -11,8 +11,10 @@ acting. Calm underneath: he is never hyperactive.
 
 ## When he moves
 
-- He moves only while something is going on, and loops only for live work and waits; a rest is one drawing, held.
-  The needs-you wave is never a hello (PRD §5.6).
+- The owner's picks, status by status: needs-you holds its pose and gives a gentle beat (point-plead) at long, uneven
+  intervals; working plays its loops in turns; done (dust-off), trying (headwind), loading (feather) and reconnecting
+  (reach) each play one loop on repeat; idle, ready, sleeping and compacted are one drawing, held. The needs-you wave
+  is never a hello (PRD §5.6).
 - One base loop per status that stays on its pose, plus an occasional gentle beat that leaves from and returns to that
   pose. Never random cycling between lively takes (owner: "using animations randomly, too hyperactive, and looping
   between them, very jarring").

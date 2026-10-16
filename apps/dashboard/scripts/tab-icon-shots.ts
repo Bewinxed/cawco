@@ -27,30 +27,29 @@ export interface Shot {
 const HEAD = 280;
 
 /**
- * Something needs the operator: Caw waving at them (owner: "caw 'waving' at
- * the user like hey pay attention"). It is the wing-beat of `needs-you-hey`,
- * drawings 21 to 36 (frames 54 to 85), seen through a box that holds his
- * head and his right wing and nothing else of him, so the beat reads as one
- * wing raised beside his head and dropped again, four times in the loop.
+ * Something needs the operator: Caw calling them over (owner: "caw 'waving'
+ * at the user like hey pay attention"). It is his needs-you beat, the one
+ * take needs-you.riv carries (`needs-you-point-plead`, the owner's pick for
+ * that status): its whole move, drawings 0 to 42 (frames 0 to 99), without
+ * the second of hold that ends the take. The take starts and ends on his
+ * still, so the strip loops without a jump.
  *
- * His head does not move in those drawings (his eyes' centre is the same
- * pixel of the tile in all 16), so the box needs no steadying. The run starts
- * and ends with the wing down, so the loop joins without a jump. Of his other
- * takes, `point-plead` raises a wing that barely moves (9 of a 16 px tile's
- * 256 pixels change a drawing, against 45 here) and `knock` keeps both wings
- * folded.
- *
- * The box is wider than a still's, for the wing: his head is a fifth smaller
- * here than asleep.
+ * The box holds his head as the still's box does (the 280-unit square at
+ * 318, 205) and as much of the move as reads at 16 px: of every box that
+ * holds that head, this one changes the most of a 16 px tile's 256 pixels a
+ * drawing, 39 on average (ink changing by a quarter or more from the drawing
+ * before), against 31 in the 350-unit box the hey wave was seen through and
+ * 42 for that wave itself.
  */
 export const NEEDS_YOU: Shot & { from: number; to: number } = {
   status: "needs-you",
-  animation: "loop_needs-you-hey",
-  box: { x: 318, y: 205, side: 350 },
-  from: 54,
-  to: 86,
-  // Drawing 27, his wing at its highest: the still under Reduced Motion.
-  frame: 66,
+  animation: "loop_needs-you-point-plead",
+  box: { x: 276, y: 252, side: 380 },
+  from: 0,
+  to: 100,
+  // Drawing 11, the one furthest from his still (111 of the tile's pixels):
+  // the still under Reduced Motion.
+  frame: 36,
 };
 
 /** Nothing going on: his `sleeping` rest, eyes closed and head dropped. */
