@@ -1,4 +1,5 @@
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
+import { holdReadsWhileLeaving } from "#lib/cawco/leaving.js";
 import { claimRegionDrop } from "#lib/cawco/region-held.js";
 import { version } from "$app/env";
 
@@ -74,6 +75,7 @@ function report(
 }
 
 export const init: ClientInit = () => {
+  holdReadsWhileLeaving();
   window.addEventListener("error", (event) => {
     report(
       event.error ?? event.message,
