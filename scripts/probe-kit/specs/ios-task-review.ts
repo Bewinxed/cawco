@@ -56,9 +56,10 @@
  *     (ToolGroup `.arg`; ToolLineView's DEBUG `tool chip`), where any is read.
  *
  * Each device writes the sheet and the sheet expanded, light and dark, to
- * the spec's folder; the same task on the built dashboard (WebKit, at the
- * simulators' viewports) writes its own pair beside them, for the
- * side-by-side review.
+ * the spec's folder; the same task's page on the built dashboard (WebKit, at
+ * the simulators' viewports; TaskPane and TaskReview, which
+ * web/task-review.ts proves) writes its review beside them, light and dark,
+ * for the side-by-side review.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-task-review
@@ -1183,48 +1184,26 @@ async function web(
   kit: Kit,
   dashboard: string,
   ids: { projectId: string; taskId: string },
-  which: (typeof DEVICES)[number],
-  expect: Expect
+  which: (typeof DEVICES)[number]
 ) {
-  const picture = expect.outputs.some((o) => o.drawn === "picture");
   for (const theme of THEMES) {
     const page = await kit.page(which.view, {
       engine: "webkit",
       scale: which.scale,
       theme,
     });
+    // The task's page (TaskPane), its review's first band the session's
+    // message (TaskReview `data-band=result`), as web/task-review.ts reads it.
+    const pane = `[data-task-pane="${ids.taskId}"]`;
     await open(
       page,
       `${dashboard}/project/${ids.projectId}?task=${ids.taskId}`,
-      () =>
-        Boolean(
-          document.querySelector(".task-sheet [data-task-report]") &&
-          document.querySelector(".task-sheet [data-task-transcript]") &&
-          // A picture handed in has drawn before the capture.
-          (document.querySelector(".task-sheet [data-result-kind='picture']")
-            ? document.querySelector(
-                ".task-sheet [data-result-kind='picture'] img"
-              )
-            : true)
-        ),
+      `${pane} [data-band=result]`,
       90_000
     );
-    if (picture) {
-      await page.waitForSelector(
-        ".task-sheet [data-result-kind='picture'] img"
-      );
-    }
-    await settle(page);
+    await settle(page, 400);
     await page.screenshot({
-      path: join(kit.out, `web-${which.tag}-sheet-${theme}.png`),
-    });
-    await page.click(".task-sheet [data-transcript-expand]");
-    await page.waitForSelector(
-      ".task-sheet [data-task-transcript][data-expanded='true']"
-    );
-    await settle(page);
-    await page.screenshot({
-      path: join(kit.out, `web-${which.tag}-expanded-${theme}.png`),
+      path: join(kit.out, `web-${which.tag}-review-${theme}.png`),
     });
     await page.close();
   }
@@ -1270,7 +1249,7 @@ const spec: Spec = {
       const relayed = await relay(dashboard);
       try {
         for (const which of devices) {
-          await web(kit, relayed.origin, ids, which, expect);
+          await web(kit, relayed.origin, ids, which);
         }
       } finally {
         relayed.stop();
@@ -1327,7 +1306,7 @@ const spec: Spec = {
     }
     const dashboard = await fleet.dashboard();
     for (const which of devices) {
-      await web(kit, dashboard, ids, which, expect);
+      await web(kit, dashboard, ids, which);
     }
     kit.note(
       `captures in ${kit.out}: <device>-sheet-<theme>.png, <device>-expanded-<theme>.png, web-<device>-…`
