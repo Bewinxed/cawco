@@ -435,6 +435,7 @@ import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import type { SendDelivery, SendHold } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
+import { createDesignOffers, designOfferRoutes } from "./design-offers";
 import { createDesignSystem, DESIGN_WRITE_FILES } from "./design-system";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
@@ -17379,6 +17380,18 @@ export const createServer = (
       }),
   });
   delegateSpawned.add(projectOffers.delegateSpawned);
+  // Caw asking once whether to build a design system, on the code signal: a
+  // design-shaped task entering an active stage in a project with none
+  // (design-offers.ts).
+  const designOffers = createDesignOffers({
+    db,
+    tasks,
+    run: runOnMachine,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    notice: (projectId, threadId, note) =>
+      caw.notice(projectId, threadId, note),
+  });
+  tasks.listen(designOffers.taskChanged);
   // Every session's plan (§5.2): its steps, its spec, an attempt's to-dos,
   // live to the session's followers (plans.ts).
   const plans = createPlans({
@@ -19730,6 +19743,7 @@ export const createServer = (
         faviconRoutes(),
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers, YOU_ACTOR),
+        designOfferRoutes(designOffers, YOU_ACTOR),
         planRoutes(plans),
         dispatchRoutes(dispatcher),
         cawRoutes(caw),

@@ -30,6 +30,7 @@
    * nor a tool call lands here.
    */
   import type { Message } from "../types";
+  import DesignOfferActions from "./DesignOfferActions.svelte";
   import RoutineMadeActions from "./RoutineMadeActions.svelte";
   import type { HarnessNote } from "./rows";
 
@@ -99,6 +100,10 @@
   /** A session made a routine: Keep, Turn off and Open under its line. */
   const routineMade = $derived(
     wokeCaw ? message?.metadata?.routineMade : undefined
+  );
+  /** Caw asking whether to build a design system: Build and Not now under its line. */
+  const designOffer = $derived(
+    wokeCaw ? message?.metadata?.designOffer : undefined
   );
   /** The pane's word under an event's line (a not-woken note's reason and Try again). */
   const voice = useVoice();
@@ -324,6 +329,9 @@
     {#if routineMade}
       <RoutineMadeActions routine={routineMade} />
     {/if}
+    {#if designOffer}
+      <DesignOfferActions offer={designOffer} />
+    {/if}
     {#if under}
       {@render under.snippet(under.id)}
     {/if}
@@ -343,6 +351,9 @@
     </span>
     {#if routineMade}
       <RoutineMadeActions routine={routineMade} />
+    {/if}
+    {#if designOffer}
+      <DesignOfferActions offer={designOffer} />
     {/if}
     {#if under}
       {@render under.snippet(under.id)}

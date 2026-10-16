@@ -6,8 +6,8 @@
  * is the settled QuestionCard. One shape for every surface that draws a
  * thread (ThreadPane, Caw's dock).
  */
-import type { ThreadMessage } from "@cawco/core";
-import { routineMadeOf } from "./thread-tabs";
+import type { EventThreadMessage, ThreadMessage } from "@cawco/core";
+import { designOfferOf, routineMadeOf } from "./thread-tabs";
 import { CAW_EVENT } from "./turn/voice";
 import type { Message } from "./types";
 
@@ -23,6 +23,25 @@ function carriedOn(message: ThreadMessage): Message["metadata"] {
         ...(attachments?.length ? { attachments } : {}),
       }
     : undefined;
+}
+
+/** An event's line as code, with what SystemLine draws under it: a made routine's or a design offer's actions. */
+function eventMetadata(message: EventThreadMessage): Message["metadata"] {
+  const made = routineMadeOf(message);
+  const offer = designOfferOf(message);
+  return {
+    noteTitle: message.noteTitle,
+    noteKind: CAW_EVENT,
+    ...(made
+      ? {
+          routineMade: {
+            expiresAt: made.expiresAt,
+            routineId: made.routineId,
+          },
+        }
+      : {}),
+    ...(offer ? { designOffer: { projectId: offer.projectId } } : {}),
+  };
 }
 
 export function threadBlockOf(message: ThreadMessage, viewId: string): Message {
@@ -44,23 +63,11 @@ export function threadBlockOf(message: ThreadMessage, viewId: string): Message {
     };
   }
   if (message.author === "event") {
-    const made = routineMadeOf(message);
     return {
       ...base,
       type: "ui.system_note",
       content: message.body ?? "",
-      metadata: {
-        noteTitle: message.noteTitle,
-        noteKind: CAW_EVENT,
-        ...(made
-          ? {
-              routineMade: {
-                expiresAt: made.expiresAt,
-                routineId: made.routineId,
-              },
-            }
-          : {}),
-      },
+      metadata: eventMetadata(message),
     };
   }
   if (message.question && message.answer) {

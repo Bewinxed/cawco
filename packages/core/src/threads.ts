@@ -285,7 +285,9 @@ export type ThreadEvent =
    * installable app needs that. Declared here so the apps built from now on
    * read it.
    */
-  | RoutineMadeThreadEvent;
+  | RoutineMadeThreadEvent
+  /** Held back from the wire as `routine-made` is: sent as `EventThreadMessage.designOffer`. */
+  | DesignOfferThreadEvent;
 
 /**
  * A session made a routine with `routine_create` (routines.ts `announce`):
@@ -310,6 +312,33 @@ export interface RoutineMadeEvent {
 /** {@link RoutineMadeEvent} as a ThreadEvent kind. */
 export interface RoutineMadeThreadEvent extends RoutineMadeEvent {
   kind: "routine-made";
+}
+
+/**
+ * Caw asking first, once per project, whether to build a design system
+ * (hub design-offers.ts): a design-shaped task entered an active stage in a
+ * project with none. Build and Not now act on the project through
+ * `/api/projects/:id/design-offer`.
+ */
+export interface DesignOfferEvent {
+  projectId: string;
+  /** What the build would read, in words: "the repository's styles and components", "the brand kit". */
+  sources: string[];
+  /** The task whose move raised it. */
+  taskId: string;
+}
+
+/** {@link DesignOfferEvent} as a ThreadEvent kind. */
+export interface DesignOfferThreadEvent extends DesignOfferEvent {
+  kind: "design-offer";
+}
+
+/** Where a project's design offer stands (`GET /api/projects/:id/design-offer`). */
+export interface DesignOfferState {
+  /** `open` while unanswered; `built`: Build filed the task; `dismissed`: Not now. */
+  answer: "open" | "built" | "dismissed";
+  /** The task Build filed. */
+  builtTaskId: string | null;
 }
 
 /**
@@ -352,6 +381,11 @@ export interface EventThreadMessage extends ThreadMessageBase {
   author: "event";
   /** What happened, opened like a fold; absent when the title says it all. */
   body?: string;
+  /**
+   * Caw asking whether to build a design system, with `event` null: the
+   * ThreadEvent kind `design-offer`, held back as `routine-made` is.
+   */
+  designOffer?: DesignOfferEvent;
   /**
    * What happened, as typed data; null on a note stored before events were
    * typed, and on one whose kind is held back from it ({@link routineMade}).

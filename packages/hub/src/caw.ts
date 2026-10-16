@@ -323,16 +323,21 @@ const wordsOf = (content: SendPayload["message"]["message"]["content"]) =>
 /**
  * A note's event as the wire carries it: as `event`, except a kind held
  * back from it while an installable app reads `event` closed and would
- * lose the note (core ThreadEvent `routine-made`), which rides beside a null
- * `event`. The bridge's one place (scripts/wire-compat.ts BRIDGES): once
- * the guard says no shipped reader needs it, this and `routineMade` go.
+ * lose the note (core ThreadEvent `routine-made`, `design-offer`), which
+ * rides beside a null `event`. The bridges' one place (scripts/
+ * wire-compat.ts BRIDGES): once the guard says no shipped reader needs
+ * them, this and `routineMade` and `designOffer` go.
  */
 const wireEvent = (
   event: ThreadEvent | null
-): Pick<EventThreadMessage, "event" | "routineMade"> => {
+): Pick<EventThreadMessage, "event" | "routineMade" | "designOffer"> => {
   if (event?.kind === "routine-made") {
     const { kind: _kind, ...made } = event;
     return { event: null, routineMade: made };
+  }
+  if (event?.kind === "design-offer") {
+    const { kind: _kind, ...offer } = event;
+    return { event: null, designOffer: offer };
   }
   return { event };
 };
@@ -506,6 +511,7 @@ const briefOf = (projectName: string): string =>
     "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
     "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
     "A view-request event is the person asking for a view of the project: it carries how to write one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
+    "When the person asks for a design system, look for design/ first (your folder's and the repository root's). With one there, answer: \"This project has one; say what to change.\" Without one, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has), then file one task, “Build the design system”, in the first to-do stage, its description naming the design-system skill, and say you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
   ].join("\n\n");
 

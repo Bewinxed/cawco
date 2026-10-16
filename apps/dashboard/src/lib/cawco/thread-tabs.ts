@@ -9,6 +9,7 @@
  * whose first message will make it, as `thread:new:<project id>`.
  */
 import type {
+  DesignOfferEvent,
   EventThreadMessage,
   InstanceRow,
   RoutineMadeEvent,
@@ -51,6 +52,14 @@ export const threadHref = (threadId: string): string =>
 export const routineMadeOf = (
   message: EventThreadMessage
 ): RoutineMadeEvent | undefined => message.routineMade;
+
+/**
+ * Caw's design-system offer a thread's note carries, read where the hub
+ * puts it: `designOffer` beside a null `event` while the bridge stands.
+ */
+export const designOfferOf = (
+  message: EventThreadMessage
+): DesignOfferEvent | undefined => message.designOffer;
 
 /**
  * Where a routine opens: open in its project's Routines tab

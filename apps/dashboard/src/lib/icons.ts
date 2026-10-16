@@ -189,6 +189,8 @@ export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
 export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
 /** Hooks: a lifecycle event branching into what runs. */
 export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
+/** A design system: the project's look, written down (StarterCards' `system`). */
+export { default as IconRulerPen } from "~icons/solar/ruler-cross-pen-bold-duotone";
 export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
 export { default as IconSettings } from "~icons/solar/settings-bold-duotone";

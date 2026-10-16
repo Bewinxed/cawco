@@ -1573,6 +1573,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DesignOfferStateAnswer`.
+    public enum DesignOfferStateAnswer: OpenEnum {
+        case built
+        case dismissed
+        case open
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "built": self = .built
+            case "dismissed": self = .dismissed
+            case "open": self = .open
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .built: "built"
+            case .dismissed: "dismissed"
+            case .open: "open"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.built, .dismissed, .open]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DeviceKind`.
     public enum DeviceKind: OpenEnum {
         case app
@@ -5296,6 +5337,7 @@ public enum OpenEnums {
         case search
         case site
         case stages
+        case system
         case tasks
         case triage
         case voice
@@ -5322,6 +5364,7 @@ public enum OpenEnums {
             case "search": self = .search
             case "site": self = .site
             case "stages": self = .stages
+            case "system": self = .system
             case "tasks": self = .tasks
             case "triage": self = .triage
             case "voice": self = .voice
@@ -5349,6 +5392,7 @@ public enum OpenEnums {
             case .search: "search"
             case .site: "site"
             case .stages: "stages"
+            case .system: "system"
             case .tasks: "tasks"
             case .triage: "triage"
             case .voice: "voice"
@@ -5360,7 +5404,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.brief, .bug, .calendar, .draft, .explore, .grill, .ideas, .mail, .palette, .people, .refresh, .reply, .rocket, .routine, .screen, .search, .site, .stages, .tasks, .triage, .voice]
+        public static let allCases: [Self] = [.brief, .bug, .calendar, .draft, .explore, .grill, .ideas, .mail, .palette, .people, .refresh, .reply, .rocket, .routine, .screen, .search, .site, .stages, .system, .tasks, .triage, .voice]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

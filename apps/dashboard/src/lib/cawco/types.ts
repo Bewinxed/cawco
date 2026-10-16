@@ -45,6 +45,11 @@ export type SendRowState =
 export interface MessageMetadata extends BlockMetadata {
   /** A folded command line's command (SystemLine). */
   command?: string;
+  /**
+   * Caw asking whether to build a design system (core ThreadEvent
+   * `design-offer`): SystemLine draws Build and Not now beside it.
+   */
+  designOffer?: { projectId: string };
   /** A project's Caw's turn: the project folder's files it wrote, drawn as chips under it. */
   files?: string[];
   /**

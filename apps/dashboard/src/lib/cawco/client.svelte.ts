@@ -26,6 +26,7 @@ import type {
   ContinuationJob,
   ControlPayload,
   DelegateEvent,
+  DesignOfferState,
   EffortLevel,
   Envelope,
   FleetFetchFrame,
@@ -5732,6 +5733,20 @@ const routinePath = (routineId: string): string =>
 /** A routine as it stands now. */
 export const readRoutine = (routineId: string): Promise<RoutineState> =>
   askHub(routinePath(routineId));
+
+const designOfferPath = (projectId: string): string =>
+  `${projectPath(projectId)}/design-offer`;
+
+/** Where a project's design-system offer stands (hub design-offers.ts). */
+export const readDesignOffer = (projectId: string): Promise<DesignOfferState> =>
+  askHub(designOfferPath(projectId));
+
+/** Answers it: Build files the task, Not now records it; the offer as it stands after. */
+export const answerDesignOffer = (
+  projectId: string,
+  answer: "build" | "dismiss"
+): Promise<DesignOfferState> =>
+  askHub(`${designOfferPath(projectId)}/${answer}`, json("POST", {}));
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (

@@ -124,6 +124,13 @@ export const BRIDGES: Bridge[] = [
     until:
       "the `routine-made` ThreadEvent kind (core threads.ts), sent as `routineMade` beside a null `event` (hub caw.ts `wireEvent`, dashboard thread-tabs.ts `routineMadeOf`) because TestFlight 20261015 reads `event` closed and would drop the note's thread read; it goes in the change that expires that build (bash apps/apple/scripts/testflight.sh --expire 20261015)",
   },
+  {
+    property: "designOffer",
+    beside: "event",
+    holds: "design-offer",
+    until:
+      "the `design-offer` ThreadEvent kind (core threads.ts), sent as `designOffer` beside a null `event` (hub caw.ts `wireEvent`, dashboard thread-tabs.ts `designOfferOf`) because shipped apps read `event` closed and would drop the note's thread read; it goes once no installable app does",
+  },
 ];
 
 /**

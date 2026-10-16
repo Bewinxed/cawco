@@ -3,9 +3,9 @@
  * fleet (real hub, agent and sessiond; Claude Code against the mock model)
  * in the built dashboard, read from the engine and the hub's answers:
  *
- * 1. An empty social project shows the social template's four starters (the
+ * 1. An empty social project shows the social template's five starters (the
  *    hub's, in its order) above the field, in the columns the recipe gives
- *    at the grid's width (one at 390; 3 + 1 at 680, where the board's
+ *    at the grid's width (one at 390; three at 680, where the board's
  *    column is narrower than four cards; four across at 768 and 1440),
  *    every card the same height and at least 56px.
  * 2. Pressing one puts its sentence in the field, focused with the caret at
@@ -34,6 +34,7 @@ const SOCIAL = [
   "Write ten post ideas into Idea",
   "Draft replies to this week's mentions",
   "Plan two weeks of posts on the calendar",
+  "Build a design system from our site and code",
 ];
 const CODE = [
   "Triage the repo's open issues into Ready",
@@ -146,7 +147,7 @@ const run = async (kit: Kit) => {
       )
     ).starters.map((each) => each.text);
   kit.check(
-    "the hub serves each template's own four starters",
+    "the hub serves each template's own starters",
     same(await served(social.id), SOCIAL) && same(await served(code.id), CODE),
     `${(await served(social.id)).join(" | ")} // ${(await served(code.id)).join(" | ")}`
   );

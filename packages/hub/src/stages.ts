@@ -728,6 +728,7 @@ export const STARTER_GLYPHS = [
   "search",
   "site",
   "stages",
+  "system",
   "tasks",
   "triage",
   "voice",
@@ -743,11 +744,18 @@ export interface Starter {
   text: string;
 }
 
+/** A design system built from the project's own material (design-system plan §1; caw.ts answers it). */
+const BUILD_SYSTEM: Starter = {
+  glyph: "system",
+  text: "Build a design system from our site and code",
+};
+
 /**
- * Each template's four starters, worded so Caw reaches the skill that does
- * the work: grill ("Grill me on"), to-tasks ("into tasks"), triage
- * ("Triage"), screen ("Design the … flow"), and the template's own starter
- * skill (bundled-skills.ts `TEMPLATE_SKILLS`).
+ * Each template's starters, worded so Caw reaches the skill that does the
+ * work: grill ("Grill me on"), to-tasks ("into tasks"), triage ("Triage"),
+ * screen ("Design the … flow"), the template's own starter skill
+ * (bundled-skills.ts `TEMPLATE_SKILLS`), and, for the templates whose work
+ * calls for one, {@link BUILD_SYSTEM}.
  */
 const TEMPLATE_STARTERS: Record<StagesTemplate, readonly Starter[]> = {
   code: [
@@ -764,12 +772,14 @@ const TEMPLATE_STARTERS: Record<StagesTemplate, readonly Starter[]> = {
     { glyph: "ideas", text: "Write ten post ideas into Idea" },
     { glyph: "reply", text: "Draft replies to this week's mentions" },
     { glyph: "calendar", text: "Plan two weeks of posts on the calendar" },
+    BUILD_SYSTEM,
   ],
   launch: [
     { glyph: "rocket", text: "Plan the launch as tasks on a timeline" },
     { glyph: "draft", text: "Draft the launch announcement" },
     { glyph: "mail", text: "Write the launch email to our list" },
     { glyph: "grill", text: "Grill me on the launch until it has a plan" },
+    BUILD_SYSTEM,
   ],
   seo: [
     { glyph: "search", text: "Find ten topics we could rank for" },
@@ -782,6 +792,10 @@ const TEMPLATE_STARTERS: Record<StagesTemplate, readonly Starter[]> = {
     { glyph: "voice", text: "Write a voice guide from our past posts" },
     { glyph: "palette", text: "Pull our colours, type and logo into the kit" },
     { glyph: "grill", text: "Grill me on the brand until its voice is clear" },
+    {
+      glyph: "system",
+      text: "Build a design system from our site and brand kit",
+    },
   ],
   design: [
     { glyph: "explore", text: "Explore three directions for the home screen" },
@@ -791,6 +805,7 @@ const TEMPLATE_STARTERS: Record<StagesTemplate, readonly Starter[]> = {
       text: "Grill me on the next screen until it has a brief",
     },
     { glyph: "tasks", text: "Turn my design notes into briefs" },
+    BUILD_SYSTEM,
   ],
   outreach: [
     { glyph: "people", text: "Find ten prospects who fit what we sell" },

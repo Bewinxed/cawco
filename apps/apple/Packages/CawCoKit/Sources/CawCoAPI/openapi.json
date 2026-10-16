@@ -6638,6 +6638,357 @@
         }
       }
     },
+    "/api/projects/{id}/design-offer": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDesignOffer",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDesignOffer 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdDesignOffer 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdDesignOffer 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDesignOffer 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdDesignOffer 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdDesignOffer 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdDesignOffer 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdDesignOffer 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdDesignOffer 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdDesignOffer 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/design-offer/dismiss": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdDesignOfferDismiss",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/design-offer/build": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdDesignOfferBuild",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdDesignOfferBuild 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdDesignOfferBuild 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdDesignOfferBuild 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdDesignOfferBuild 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdDesignOfferBuild 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdDesignOfferBuild 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdDesignOfferBuild 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdDesignOfferBuild 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdDesignOfferBuild 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdDesignOfferBuild 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/plan": {
       "get": {
         "parameters": [
@@ -31004,6 +31355,7 @@
           "search",
           "site",
           "stages",
+          "system",
           "tasks",
           "triage",
           "voice"
@@ -33009,6 +33361,27 @@
           "working"
         ]
       },
+      "DesignOfferState": {
+        "description": "Where a project's design offer stands (`GET /api/projects/:id/design-offer`).",
+        "type": "object",
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/DesignOfferStateAnswer",
+            "description": "`open` while unanswered; `built`: Build filed the task; `dismissed`: Not now."
+          },
+          "builtTaskId": {
+            "description": "The task Build filed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "answer",
+          "builtTaskId"
+        ]
+      },
       "SessionPlan": {
         "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
         "type": "object",
@@ -33919,6 +34292,10 @@
             "description": "What happened, opened like a fold; absent when the title says it all.",
             "type": "string"
           },
+          "designOffer": {
+            "$ref": "#/components/schemas/DesignOfferEvent",
+            "description": "Caw asking whether to build a design system, with `event` null: the\nThreadEvent kind `design-offer`, held back as `routine-made` is."
+          },
           "event": {
             "description": "What happened, as typed data; null on a note stored before events were\ntyped, and on one whose kind is held back from it ({@link routineMade}).",
             "anyOf": [
@@ -34327,6 +34704,9 @@
               },
               {
                 "$ref": "#/components/schemas/RoutineMadeThreadEvent"
+              },
+              {
+                "$ref": "#/components/schemas/DesignOfferThreadEvent"
               }
             ]
           },
@@ -34354,6 +34734,31 @@
           "id",
           "noteTitle",
           "threadId"
+        ]
+      },
+      "DesignOfferEvent": {
+        "description": "Caw asking first, once per project, whether to build a design system\n(hub design-offers.ts): a design-shaped task entered an active stage in a\nproject with none. Build and Not now act on the project through\n`/api/projects/:id/design-offer`.",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "sources": {
+            "description": "What the build would read, in words: \"the repository's styles and components\", \"the brand kit\".",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taskId": {
+            "description": "The task whose move raised it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "sources",
+          "taskId"
         ]
       },
       "RoutineSchedule": {
@@ -34480,6 +34885,38 @@
           "routineId",
           "schedule",
           "why"
+        ]
+      },
+      "DesignOfferThreadEvent": {
+        "description": "{@link DesignOfferEvent} as a ThreadEvent kind.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "design-offer"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sources": {
+            "description": "What the build would read, in words: \"the repository's styles and components\", \"the brand kit\".",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taskId": {
+            "description": "The task whose move raised it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "projectId",
+          "sources",
+          "taskId"
         ]
       },
       "RoutineMadeEvent": {
@@ -49822,6 +50259,14 @@
           "overseer",
           "web-facing",
           "worker"
+        ]
+      },
+      "DesignOfferStateAnswer": {
+        "type": "string",
+        "enum": [
+          "built",
+          "dismissed",
+          "open"
         ]
       },
       "DiscoveredSkillScope": {

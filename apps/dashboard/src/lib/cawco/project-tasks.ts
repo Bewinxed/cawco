@@ -75,6 +75,7 @@ export type StarterGlyph =
   | "search"
   | "site"
   | "stages"
+  | "system"
   | "tasks"
   | "triage"
   | "voice";

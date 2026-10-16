@@ -99,6 +99,7 @@ import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -683,6 +684,8 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
+  /** Caw's one design-system offer per project (design-offers.ts). */
+  readonly designOffers: DesignOffersDb;
   /** His turn is over: its row goes. */
   readonly dropLeadTurn: (instanceId: string) => void;
   /** A cancelled move's held row leaves the board, while no spawn has taken it on. True when it went. */
@@ -7829,6 +7832,7 @@ const make = async (path: string): Promise<DbShape> => {
     accounts: accountsDb(db),
     turnUsage: turnUsageDb(db),
     atLimit: atLimitDb(db),
+    designOffers: designOffersDb(db),
     routines: routinesDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),

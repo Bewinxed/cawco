@@ -2680,6 +2680,25 @@ export const projectOffers = sqliteTable("project_offers", {
 });
 
 /**
+ * Caw asking first to build a design system (design-offers.ts): one row per
+ * project, written when he asks, so he asks once. `answer` stays null while
+ * the card stands; `dismissed` (Not now) means he never asks again unless
+ * the person does.
+ */
+export const designOffers = sqliteTable("design_offers", {
+  projectId: text("project_id").primaryKey(),
+  /** The task whose move into an active stage raised it. */
+  taskId: text("task_id").notNull(),
+  /** The thread the card went to. */
+  threadId: text("thread_id").notNull(),
+  offeredAt: timestamp("offered_at").notNull(),
+  answer: text("answer").$type<"built" | "dismissed">(),
+  answeredAt: timestamp("answered_at"),
+  /** The "Build the design system" task Build filed. */
+  builtTaskId: text("built_task_id"),
+});
+
+/**
  * A session's own plan (Projects spec §5.2, `plan.ts`), as it last wrote it
  * through `todo_write`'s session scope: its steps (CawCo's list, read only
  * while its native to-do tools are denied) and its spec. Each is replaced
