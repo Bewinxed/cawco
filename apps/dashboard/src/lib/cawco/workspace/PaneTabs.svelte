@@ -2154,13 +2154,22 @@
      "the curve beteween the left of the tab's foot and the hover menu has
      a blur or alias"). The cast fades out over the flare above the foot
      instead, gone where the foot begins, so the corner shows only what
-     lies under it and the foot's curve is the one edge there. */
+     lies under it and the foot's curve is the one edge there.
+
+     That fade is a mask, and a mask draws nothing outside its own box, so
+     the shade's box is the box the tab's shape is drawn on (TabItem
+     `.fold`), one flare wider than the tab each side, with the casting
+     boxes set back in by the flare: room for the whole cast (its blur runs
+     6px past the edge; the flare is 8px or more), and no wider than the
+     shape already reaches, so a scrolling track's overflow is the same. On
+     the tab's box alone the mask erased every cast, which lies wholly
+     outside it. */
   .shade {
     position: absolute;
-    inset: 0;
+    inset-block: 0;
+    inset-inline: calc(-1 * var(--flare));
     z-index: 0;
     pointer-events: none;
-    clip-path: inset(0 -12px 0);
     mask-image: linear-gradient(
       to bottom,
       #000 calc(100% - 2 * var(--flare)),
@@ -2170,7 +2179,8 @@
     & > span {
       position: absolute;
       inset-block: 0;
-      inset-inline: var(--slope-start) var(--slope-end);
+      inset-inline: calc(var(--flare) + var(--slope-start))
+        calc(var(--flare) + var(--slope-end));
       border-radius: var(--radius) var(--radius) 0 0;
       background: var(--surface-recess-deep);
 
