@@ -1219,6 +1219,22 @@
     inherits: false;
     initial-value: 0;
   }
+  /* A tab's rank in the stack (`--z`, the script's; `--z-rest`, from the
+     order and the value until the track ranks it), read only on the box
+     that carries it (its `z-index`, below; a leaving tab's own). Not
+     inherited: a choice re-ranks most of the strip, and as plain custom
+     properties each new rank restyled everything its tab holds (its
+     sheet, rim, name, glyph and controls), 430 elements a choice. No
+     initial value (`*`), so a box the track has not ranked yet still falls
+     back to its rest rank. */
+  @property --z {
+    syntax: "*";
+    inherits: false;
+  }
+  @property --z-rest {
+    syntax: "*";
+    inherits: false;
+  }
 
   /* Each folder tab, or the host's box round it, steps back over its
      leading neighbour by the overlap, and is one stack at its rank (`--z`,
