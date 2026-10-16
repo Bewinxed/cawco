@@ -389,17 +389,39 @@ const census = (page: Page): Promise<string> =>
  * styles the page) and then the layout (a box read); the class put back.
  * `.pane-settling` reveals by `visibility`, which the pane's every element
  * inherits; `.pane-hidden` by `content-visibility`, which none does.
+ * `bare`: the rules that state `visibility: inherit` (the transcript's drawn
+ * rows, over virtua's hiding) are lifted for the reveal and put back: an
+ * inherited property a box states, even as `inherit`, takes it out of the
+ * engine's cheap hand-down of a parent's change, so this says what they
+ * cost the reveal.
  */
 const revealAlone = (
   page: Page,
   selector: string,
-  hides: string
+  hides: string,
+  bare = false
 ): Promise<string> =>
   page.evaluate(
-    ([find, name]) => {
+    ([find, name, lift]) => {
       const pane = document.querySelector<HTMLElement>(find);
       if (!pane) {
         return `no ${find}`;
+      }
+      // Into `@layer`, `@media` and nesting too: the app's sheets keep
+      // most of their rules in layers.
+      const within = (rules: CSSRuleList): CSSStyleRule[] =>
+        [...rules].flatMap((rule) => [
+          ...(rule instanceof CSSStyleRule &&
+          rule.style.getPropertyValue("visibility") === "inherit"
+            ? [rule]
+            : []),
+          ...("cssRules" in rule ? within(rule.cssRules as CSSRuleList) : []),
+        ]);
+      const inheriting = () =>
+        [...document.styleSheets].flatMap((sheet) => within(sheet.cssRules));
+      const lifted = lift ? inheriting() : [];
+      for (const rule of lifted) {
+        rule.style.removeProperty("visibility");
       }
       const inside = pane.getElementsByTagName("*").length;
       const last = pane.querySelector<HTMLElement>("*:last-child") ?? pane;
@@ -412,10 +434,13 @@ const revealAlone = (
       last.getBoundingClientRect();
       const laid = performance.now();
       pane.classList.add(name);
+      for (const rule of lifted) {
+        rule.style.setProperty("visibility", "inherit");
+      }
       document.body.getBoundingClientRect();
-      return `${inside} elements (${shown}): style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
+      return `${inside} elements (${shown})${lift ? `, ${lifted.length} inherit rules lifted` : ""}: style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
     },
-    [selector, hides] as const
+    [selector, hides, bare] as const
   );
 
 /**
@@ -1537,6 +1562,7 @@ async function measure(
   // pointer.
   const putAway: string[] = [];
   const warmed: string[] = [];
+  const warmedBare: string[] = [];
   const hidden: string[] = [];
   const composed: string[] = [];
   for (const id of order) {
@@ -1551,6 +1577,9 @@ async function measure(
     warmed.push(
       await revealAlone(page, ".pane.pane-settling", "pane-settling")
     );
+    warmedBare.push(
+      await revealAlone(page, ".pane.pane-settling", "pane-settling", true)
+    );
   }
   await page.mouse.move(0, 0);
   kit.note(
@@ -1558,6 +1587,9 @@ async function measure(
   );
   kit.note(
     `${mode} pane(s), a pane shown alone by \`visibility\` (\`.pane-settling\` taken off): ${warmed.join("; ")}`
+  );
+  kit.note(
+    `${mode} pane(s), the same with every \`visibility: inherit\` rule lifted: ${warmedBare.join("; ")}`
   );
   kit.note(
     `${mode} pane(s), the drawn pane put away alone (\`.pane-hidden\` put on): ${hidden.join("; ")}`
