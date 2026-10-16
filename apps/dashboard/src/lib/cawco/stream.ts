@@ -113,6 +113,12 @@ export interface CommandRecord {
   kind: CommandKind;
   outcome?: CommandAck["outcome"];
   reason?: string;
+  /**
+   * The hub's own `failed` ack: it took the command and refused it. Unlike a
+   * dropped socket or the ack timeout, this says what became of it (an answer
+   * refused because another device's won is the case that reads it).
+   */
+  refusedByHub?: boolean;
   sessionId: string;
   /** Copied from the submission: the stage this kind is finished at. See {@link SettleStage}. */
   settlesAt: SettleStage;
@@ -933,6 +939,10 @@ export function noteCommandAck(
   }
   if (ack.stage === "applied") {
     record.outcome = ack.outcome;
+  }
+  // Before the stage moves: the settling hooks read it.
+  if (ack.stage === "failed" && NEXT_STAGES[record.stage].has("failed")) {
+    record.refusedByHub = true;
   }
   return advanceStage(record, ack.stage, now, ack.reason, host);
 }

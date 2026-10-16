@@ -227,6 +227,9 @@ public final class HubConnection {
             guard let self else { return }
             fleet.adopt(threads: Array(threads.byId.values))
         }
+        needs.sayEnd = { [weak self] ask, line in
+            self?.sayAskEnd(ask.instanceId, ask, line)
+        }
         plans.post = { [weak self] data in
             guard let self, socket == .connected, let live else { return false }
             live.post(data)
@@ -1281,15 +1284,28 @@ public final class HubConnection {
             let question = ask?.isQuestion ?? (settled.toolName == Naming.askUserQuestion)
             line = AskEnd.withdrawn(question: question, reason: settled.reason)
         case .answered?:
-            guard let ask, let answer = settled.answer, needs.answerSent(for: ask).map({ $0.stage == .failed }) ?? true else { return }
-            line = AskEnd.answered(ask, answer, harness: AskEnd.harnessName(fleet.byId[settled.instanceId]?.harness))
+            guard let ask, let answer = settled.answer else { return }
+            let said = AskEnd.answered(ask, answer, harness: AskEnd.harnessName(fleet.byId[settled.instanceId]?.harness))
+            // With an answer of this device's still out, the winner may be that
+            // answer or another device's: the line waits for the hub's word on
+            // ours, said if it refused it (NeedsYouStore `holdAnswered`).
+            if let sent = needs.answerSent(for: ask), sent.stage != .failed {
+                needs.holdAnswered(ask, line: said)
+                return
+            }
+            line = said
         default:
             return
         }
+        sayAskEnd(settled.instanceId, ask, line)
+    }
+
+    /// An ask's quiet line: in its thread when it is a thread's, and in its session.
+    private func sayAskEnd(_ instanceId: String, _ ask: ParkedAsk?, _ line: String) {
         if let ask, ask.threadId != nil {
             threads.ended(ask, line: line)
         }
-        sessions.noteAskEnd(settled.instanceId, line)
+        sessions.noteAskEnd(instanceId, line)
     }
 
     private func apply(_ frame: Frame) {
