@@ -45,6 +45,8 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
     private var connected = true
     private var chips: [[OptionChip]] = []
     private var buttons: [Choice: UIButton] = [:]
+    /// A shell ask's chevron, which opens its whole command.
+    private weak var commandToggle: UIButton?
     private let wait = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     /// The card in full: everything but the minimized bar. Its head, then
     /// `scroll`, then `foot`.
@@ -615,6 +617,7 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         toggle.tintColor = Palette.inkMuted
         toggle.accessibilityLabel = "Show the whole command"
         toggle.accessibilityIdentifier = "prompt-command-toggle"
+        commandToggle = toggle
         NSLayoutConstraint.activate([
             toggle.widthAnchor.constraint(equalToConstant: 24),
             toggle.heightAnchor.constraint(equalToConstant: 24),
@@ -692,6 +695,13 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
     public var probeState: String {
         let on = { (choice: Choice) in self.buttons[choice].map { $0.isEnabled ? "on" : "off" } ?? "none" }
         return "approve \(on(.allow)) deny \(on(.deny)) said \(wait.isHidden ? "nothing" : wait.text ?? "")"
+    }
+
+    /// The command's chevron, as its tap opens the whole command; whether it was there to press.
+    public func probeOpenCommand() -> Bool {
+        guard let toggle = commandToggle, !toggle.isHidden else { return false }
+        toggle.sendActions(for: .touchUpInside)
+        return true
     }
     #endif
 

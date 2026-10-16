@@ -51,6 +51,9 @@
  *  p. The transcript head's Expand and Open session pack to its end.
  *  q. A phone's sheet lays its surface over the screen's foot, `max(12,
  *     safe area) - 7` tall (ScreenEdges.svelte `.edge-bottom`); an iPad's, none.
+ *  r. Each tool call in the transcript with a chip (`cawco`) ends its
+ *     items at its line's end, its argument the grower even empty
+ *     (ToolGroup `.arg`; ToolLineView's DEBUG `tool chip`), where any is read.
  *
  * Each device writes the sheet and the sheet expanded, light and dark, to
  * the spec's folder; the same task on the built dashboard (WebKit, at the
@@ -186,6 +189,8 @@ const DATA_COLUMN = 96;
 const TEXT_PARTS = ["task-text-description", "task-text-acceptance-criteria"];
 const FOOT = /foot=([\d.-]+) safe=([\d.-]+)/;
 const LOG_HEAD = /^.*\] /;
+const TOOL_END = /\bend=([\d.-]+)/;
+const TOOL_LINE = /\bline=([\d.-]+)/;
 const OFFSET = /offset=([\d.-]+)/;
 const HANDED_IN = /^Attempt \d+ finished .* and handed this in\.$/;
 const EXTENSION = /\.([a-z0-9]+)$/i;
@@ -518,6 +523,8 @@ async function device(
   const overflow: string[] = [];
   /** Inline code chips narrower than a line laid across two (ProseView's DEBUG `prose chip split`). */
   const splits: string[] = [];
+  /** Each tool call line with a chip, where its items end against its width (ToolLineView's DEBUG `tool chip`). */
+  const toolChips: string[] = [];
   try {
     sim = await macSim({ runtime: RUNTIME, device: which.type });
     const { udid } = sim;
@@ -528,7 +535,7 @@ async function device(
       [
         "bash",
         "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "TaskSheet" OR category == "Push" OR (category == "Prose" AND (eventMessage BEGINSWITH "prose overflow" OR eventMessage BEGINSWITH "prose chip split")))'`,
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "TaskSheet" OR category == "Push" OR (category == "Prose" AND (eventMessage BEGINSWITH "prose overflow" OR eventMessage BEGINSWITH "prose chip split" OR eventMessage BEGINSWITH "tool chip")))'`,
       ],
       { stdout: "pipe", stderr: "ignore" }
     );
@@ -556,6 +563,9 @@ async function device(
           }
           if (line.startsWith("prose chip split")) {
             splits.push(line);
+          }
+          if (line.startsWith("tool chip ")) {
+            toolChips.push(line);
           }
           const part = PART.exec(line);
           if (part) {
@@ -661,9 +671,21 @@ async function device(
       // on the transcript pane scrolls the transcript, not the body.
       const x = Math.round(body.x + SPACE_5 / 2);
       const top = Math.round(body.y + body.h * 0.25);
-      const bottom = Math.round(down ? body.y + body.h * 0.8 : top + reach);
+      // Slow: a 200pt drag over 1.5s, which with its fling moves the body
+      // less than a screen, so no row between two steps goes unmade (a
+      // 345pt drag carried it 1,030pt, past whole cards).
+      let bottom = top + reach;
+      let duration = 1.2;
+      if (down && slow) {
+        bottom = top + Math.min(200, body.h * 0.55);
+        duration = 1.5;
+      } else if (down) {
+        bottom = body.y + body.h * 0.8;
+        duration = 0.4;
+      }
+      bottom = Math.round(bottom);
       await sh(
-        `${AXE} swipe --start-x ${x} --start-y ${down ? bottom : top} --end-x ${x} --end-y ${down ? top : bottom} --duration ${down && !slow ? 0.4 : 1.2} --udid ${udid}`
+        `${AXE} swipe --start-x ${x} --start-y ${down ? bottom : top} --end-x ${x} --end-y ${down ? top : bottom} --duration ${duration} --udid ${udid}`
       );
       await pause(1600);
     };
@@ -723,8 +745,8 @@ async function device(
           `state=${o.drawn}`
         )
       );
-    for (let n = 0; n < 8 && !(loaded() && was("task-transcript")); n += 1) {
-      await scroll(true);
+    for (let n = 0; n < 24 && !(loaded() && was("task-transcript")); n += 1) {
+      await scroll(true, true);
     }
 
     // a. The facts, each under its name.
@@ -898,9 +920,10 @@ async function device(
       };
       /**
        * The body scrolled until `id` stands wholly on screen: aimed at the
-       * offset that centres it, a third of the way at a time (a swipe's
-       * fling carries the body about three times its drag: 345pt of drag
-       * moved it 1,030pt), so a card a screen tall can't be passed over.
+       * offset that centres it, dragged that far at a pace with no fling (a
+       * 200pt drag over 1.5s moved the body 190pt, where a faster one flung
+       * it three times its drag), so a card nearly a screen tall lands in
+       * its band.
        */
       const bring = async (id: string) => {
         for (let n = 0; n < 16 && !inView(id); n += 1) {
@@ -915,7 +938,7 @@ async function device(
           }
           const delta = p.y - (b.h - p.h) / 2 - offset();
           const drag = Math.round(
-            Math.min(b.h * 0.5, Math.max(24, Math.abs(delta) / 3))
+            Math.min(200, b.h * 0.5, Math.max(10, Math.abs(delta) / 0.95))
           );
           const x = Math.round(b.x + SPACE_5 / 2);
           const middle = Math.round(b.y + b.h / 2);
@@ -925,7 +948,7 @@ async function device(
               ? [middle + drag / 2, middle - drag / 2]
               : [middle - drag / 2, middle + drag / 2];
           await sh(
-            `${AXE} swipe --start-x ${x} --start-y ${from} --end-x ${x} --end-y ${to} --duration 1.0 --udid ${udid}`
+            `${AXE} swipe --start-x ${x} --start-y ${from} --end-x ${x} --end-y ${to} --duration 1.5 --udid ${udid}`
           );
           await pause(1600);
         }
@@ -1130,6 +1153,20 @@ async function device(
       splits.length === 0,
       splits.slice(0, 4).join(" | ") || "none"
     );
+    // r. A tool call with a chip ends its items at the line's end: its
+    // argument grows into the room, even empty (ToolGroup `.arg`).
+    if (toolChips.length > 0) {
+      const short = toolChips.filter((line) => {
+        const end = Number(TOOL_END.exec(line)?.[1] ?? Number.NaN);
+        const width = Number(TOOL_LINE.exec(line)?.[1] ?? Number.NaN);
+        return !near(end, width);
+      });
+      kit.check(
+        `${tag} r: each tool call with a chip ends at its line's end (${toolChips.length} read)`,
+        short.length === 0,
+        short.slice(0, 3).join(" | ") || toolChips.slice(0, 2).join(" | ")
+      );
+    }
   } finally {
     await writeFile(join(kit.out, `${tag}-log.txt`), lines.join("\n"));
     await writeFile(

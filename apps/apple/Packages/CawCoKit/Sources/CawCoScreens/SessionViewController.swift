@@ -1099,6 +1099,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.prompts = ordered
         #if DEBUG
         approveForProbe(standing.first)
+        openCommandForProbe(standing.first)
         #endif
     }
 
@@ -1110,6 +1111,21 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
     /// The asks already approved here.
     private var approved: Set<String> = []
+
+    /// `-open-ask-command`: the standing card's command opened whole, as its
+    /// chevron opens it, a second after it stands, for a simulator pass where
+    /// nothing can tap (probe-kit spec `ios-long-ask` on iOS 27).
+    private static let opensAskCommand = ProcessInfo.processInfo.arguments.contains("-open-ask-command")
+    private var commandOpened: Set<String> = []
+
+    private func openCommandForProbe(_ ask: ParkedAsk?) {
+        guard Self.opensAskCommand, let ask, !commandOpened.contains(ask.requestId) else { return }
+        commandOpened.insert(ask.requestId)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, let card = cards[ask.requestId] else { return }
+            Self.probeLog.notice("probe opened \(ask.requestId, privacy: .public) \(card.probeOpenCommand() ? "whole" : "no chevron", privacy: .public)")
+        }
+    }
 
     private func approveForProbe(_ ask: ParkedAsk?) {
         guard Self.approvesAsks, let ask, !ask.isQuestion, !approved.contains(ask.requestId) else { return }

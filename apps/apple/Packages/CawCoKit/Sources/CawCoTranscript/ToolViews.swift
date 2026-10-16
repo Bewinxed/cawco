@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// A rail row's frame: the 2px rail at the rail edge, its content from the
@@ -209,8 +210,32 @@ final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
         let inner = max(0, width - x)
         let top = lineHeight
         if !line.isHidden { line.frame = CGRect(x: x, y: 0, width: inner, height: top) }
+        #if DEBUG
+        reportChip()
+        #endif
         if body.superview === self { body.frame = CGRect(x: x, y: top, width: inner, height: bodyHeight(inner)) }
     }
+
+    #if DEBUG
+    /// The call and width a chip's line was last told for.
+    private var chipTold: (String, CGFloat)?
+    private static let chipLog = Logger(subsystem: "dev.cawco.app", category: "Prose")
+
+    /// Where a line with a chip ends its items, against its width, once it
+    /// has laid them out (scripts/probe-kit/specs/ios-task-review.ts): the
+    /// argument grows into the spare room (ToolGroup `.arg`), so the chip,
+    /// the fact and the chevron end at the line's end.
+    private func reportChip() {
+        guard !chip.isHidden, !line.isHidden, line.bounds.width > 0, chipTold.map({ $0 != (key, line.bounds.width) }) ?? true else { return }
+        chipTold = (key, line.bounds.width)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !chip.isHidden else { return }
+            line.layoutIfNeeded()
+            let end = [chip, fact, chevron, argument, verb].filter { !$0.isHidden }.map(\.frame.maxX).max() ?? 0
+            Self.chipLog.notice("tool chip end=\(Double(end), format: .fixed(precision: 1)) line=\(Double(self.line.bounds.width), format: .fixed(precision: 1)) chip=\(Double(self.chip.frame.minX), format: .fixed(precision: 1)) arg=\(Double(self.argument.frame.width), format: .fixed(precision: 1))")
+        }
+    }
+    #endif
 
     override func widthChanged() {
         if reveal.isOpen { fillBody(force: true) }
