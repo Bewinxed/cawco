@@ -129,8 +129,7 @@ EOF
   # ~/.local/share/claude (\$XDG_DATA_HOME/claude when set, which `su -` leaves unset), at the same paths, so the link
   # holds. Not the ~/.claude and ~/.claude.json it also writes: the machine's own Claude dir stays untouched.
   local claude_version
-  claude_version=$(cd "$here/../../packages/agent" && bun -e 'console.log(require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion)') &&
-    [[ $claude_version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "could not read the SDK's claudeCodeVersion (got '${claude_version:-}')" >&2; return 1; }
+  claude_version=$(sdk_claude_version) || return 1
   cat > "$out/images/machine.Containerfile" <<EOF
 FROM $BASE_LOCAL AS claude
 ENV DEBIAN_FRONTEND=noninteractive

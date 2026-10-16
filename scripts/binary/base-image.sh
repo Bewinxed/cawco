@@ -12,6 +12,16 @@ BASE_IMAGE_ID=69f919497cada9a8611f3de61df902d9f94bf20f84552ef5bd93125c38608ef9
 # The name it carries inside a proof's store (the stage-2 Containerfiles name it literally).
 BASE_LOCAL=localhost/cawco-proof-ubuntu:24.04
 
+# The Claude Code every proof machine has installed: the CLI the SDK in this tree is built against (its
+# package.json's claudeCodeVersion, read from packages/agent's installed dependencies), so an image's recipe names it.
+# CawCo ships none of its own; the agent runs the `claude` on its PATH.
+sdk_claude_version() {
+  local version
+  version=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../packages/agent" && bun -e 'console.log(require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion)') &&
+    [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "could not read the SDK's claudeCodeVersion (got '${version:-}'): run bun install --frozen-lockfile" >&2; return 1; }
+  echo "$version"
+}
+
 # The host's podman under the user's own configuration, not the proof's.
 host_podman() { env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u REGISTRY_AUTH_FILE podman "$@"; }
 

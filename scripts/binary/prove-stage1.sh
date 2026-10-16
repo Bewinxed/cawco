@@ -1,11 +1,22 @@
 #!/bin/bash
 # Usage: prove-stage1.sh /absolute/fresh/output /absolute/cawco-proof
+#        prove-stage1.sh --image-only [OUTPUT]
 # The proof build in two containers at once: a clean image with no network and a read-only root (isolation,
 # capabilities absent, signing, the relay, the stack), and a real-init image whose dashboard is socket-activated
 # (capabilities present, the stack under systemd). Both images come from the proof cache's store, built there once
 # per recipe; this run's podman is an instance of its own (scripts/binary/podman-instance.sh).
+# --image-only builds those two images alone, as a run does, prints their tags and exits 0, or with the build's error;
+# it needs podman and bun, and no binary. Its recipes go in OUTPUT (default: stage1-image-only in the proof cache).
 set -euo pipefail
-[[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "Usage: prove-stage1.sh /absolute/fresh/output /absolute/cawco-proof" >&2; exit 2; }
+image_only=
+if [[ ${1:-} == --image-only ]]; then
+  image_only=1
+  shift
+  (( $# <= 1 )) || { echo "Usage: prove-stage1.sh --image-only [output]" >&2; exit 2; }
+  set -- "${1:-${CAWCO_PROOF_CACHE:-$HOME/.cache/cawco-proof}/stage1-image-only}"
+else
+  [[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "Usage: prove-stage1.sh /absolute/fresh/output /absolute/cawco-proof" >&2; exit 2; }
+fi
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
 # shellcheck source=base-image.sh
 source "$here/base-image.sh"
@@ -51,33 +62,67 @@ trap 'trap "" INT TERM; exit 143' TERM
 run_step(){ step=$1; step_log=$2; shift 2; local t0=$SECONDS; "$@" > "$step_log" 2>&1; echo "step: $step ($((SECONDS - t0))s)"; }
 mkdir -p "$1"
 out=$(realpath "$1")
-bin=$(realpath "$2")
+bin=${2:+$(realpath "$2")}
 [[ "$out" != *" "* && "$bin" != *" "* ]] || { echo "the output and binary paths may not contain spaces" >&2; exit 2; }
-# The browser step's Chromium: the host's cached playwright browsers, and the bun that drives it.
+# The browser step's Chromium: the host's cached playwright browsers, and the bun that drives it (and that reads the
+# SDK's Claude Code version for the images).
 browsers="${PLAYWRIGHT_BROWSERS_PATH:-${XDG_CACHE_HOME:-$HOME/.cache}/ms-playwright}"
 bun=$(command -v bun) || { echo "prove-stage1: the browser step needs bun on PATH" >&2; exit 2; }
-nsenter=$(command -v nsenter) || { echo "prove-stage1: the browser step needs nsenter (util-linux)" >&2; exit 2; }
+[[ -n $image_only ]] || nsenter=$(command -v nsenter) || { echo "prove-stage1: the browser step needs nsenter (util-linux)" >&2; exit 2; }
 mkdir -p "$out/tmp" "$out/images"
 export TMPDIR="$out/tmp"
 
-# The clean image: what a machine with nothing on it has, and the certificates a TLS client needs.
-printf 'FROM %s\n' "$BASE_LOCAL" > "$out/images/stage1-clean.Containerfile"
+# Claude Code, in both images: the agent signs the stack's account in by that Claude Code's `auth status` reading the
+# account dir (proof-stack.ts), and CawCo ships none. Installed with its own installer
+# (https://code.claude.com/docs/en/setup: "curl -fsSL https://claude.ai/install.sh | bash"; "bash -s <version>" pins
+# one), pinned to the SDK's claudeCodeVersion (base-image.sh), in a stage of its own: the pinned base has neither curl
+# nor a CA bundle (nightly 835fce0df's stage 2: "curl: (77) error setting certificate file:
+# /etc/ssl/certs/ca-certificates.crt"). Each image takes the version's one executable, at /opt/claude/bin/claude: a
+# container's HOME is a bind mount set as it runs, so the installer's ~/.local cannot be baked in, and that folder is on
+# no default PATH, so each proof says where the machine's Claude Code is (the clean proof only for its stack, after the
+# capabilities it reports absent; the systemd proof for both its capabilities and its stack).
+claude_version=$(sdk_claude_version)
+claude_stage() {
+  cat <<EOF
+FROM $BASE_LOCAL AS claude
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \\
+ && curl -fsSL https://claude.ai/install.sh | bash -s $claude_version \\
+ && /root/.local/share/claude/versions/$claude_version --version | grep -F '$claude_version'
+
+FROM $BASE_LOCAL
+EOF
+}
+claude_copied() {
+  cat <<EOF
+COPY --from=claude /root/.local/share/claude/versions/$claude_version /opt/claude/bin/claude
+RUN HOME=/tmp/claude-check /opt/claude/bin/claude --version | grep -F '$claude_version' && rm -rf /tmp/claude-check
+EOF
+}
+
+# The clean image: what a machine with nothing on it has, the certificates a TLS client needs, and Claude Code off PATH.
+claude_stage > "$out/images/stage1-clean.Containerfile"
 cat >> "$out/images/stage1-clean.Containerfile" <<'EOF'
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 EOF
+claude_copied >> "$out/images/stage1-clean.Containerfile"
 # The real-init image (intentionally not the pristine no-tools proof), with the dashboard's held socket and its
 # service. No system service takes a kernel keyring of its own (KeyringMode=inherit for every service): a rootless
 # container's root is the host user, whose kernel.keys.maxkeys every machine's services share (prove-stage2.sh's
 # machine image says why). The service starts a second after the socket is asked, so the proof's connection is held by the socket
 # while the dashboard comes up (proof-stack.ts: "dashboard websocket is held open").
-printf 'FROM %s\n' "$BASE_LOCAL" > "$out/images/stage1-systemd.Containerfile"
+claude_stage > "$out/images/stage1-systemd.Containerfile"
 cat >> "$out/images/stage1-systemd.Containerfile" <<'EOF'
 RUN apt-get update && apt-get install -y --no-install-recommends systemd systemd-sysv dbus ca-certificates git && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /etc/systemd/system/service.d && printf '[Service]\nKeyringMode=inherit\n' > /etc/systemd/system/service.d/proof-keyring.conf
 RUN printf '%s\n' '[Unit]' 'Description=CawCo binary proof held socket' '[Socket]' 'ListenStream=127.0.0.1:43458' 'FileDescriptorName=dashboard' '[Install]' 'WantedBy=sockets.target' > /etc/systemd/system/cawco-binary-dashboard.socket \
  && printf '%s\n' '[Unit]' 'Description=CawCo binary proof dashboard' 'Requires=cawco-binary-dashboard.socket' 'After=cawco-binary-dashboard.socket' '[Service]' 'ExecStartPre=/bin/sleep 1' 'ExecStart=/cawco dashboard' 'Environment=HOME=/output/systemd-binary HOST=127.0.0.1 CAWCO_HUB_PORT=43456 CAWCO_HUB_URL=http://127.0.0.1:43456 CAWCO_MCP_PORT=43459 CAWCO_SESSIOND_ENDPOINT=/output/systemd-binary/sessiond.sock CAWCO_DB_PATH=/output/systemd-binary/hub.db' 'TimeoutStopSec=10' > /etc/systemd/system/cawco-binary-dashboard.service
 EOF
+claude_copied >> "$out/images/stage1-systemd.Containerfile"
 run_step "the images, from the proof cache's store" "$out/images.log" proof_images "$out/images" stage1-clean stage1-systemd
+if [[ -n $image_only ]]; then
+  grep -E '^stage1-(clean|systemd)=' "$out/images.log"
+  exit 0
+fi
 clean_image=$(sed -n 's/^stage1-clean=//p' "$out/images.log")
 systemd_image=$(sed -n 's/^stage1-systemd=//p' "$out/images.log")
 P=$(podman_instance "stage1-$$" "$out/storage" "$PROOF_STORE")
@@ -89,7 +134,7 @@ mounts=(--mount "type=bind,src=$out,dst=/output,rw" --mount "type=bind,src=$bin,
 # network. Run A of 2026-10-15 had both keepers on /output/sessiond.sock: the clean proof's stack stopped the keeper
 # the systemd proof's agent then found, and "Child did not survive agent restart".
 clean_started=$SECONDS
-$P run --name "$prefix-clean" --network none --read-only --tmpfs /tmp "${mounts[@]}" "${envs[@]}" "$clean_image" bash -c 'mkdir -p "$HOME"; /cawco proof-isolation && /cawco capabilities > /output/capabilities-absent.json && /cawco proof-signing && /cawco proof-relay && /cawco proof-stack' > "$out/clean-proof.log" 2>&1 &
+$P run --name "$prefix-clean" --network none --read-only --tmpfs /tmp "${mounts[@]}" "${envs[@]}" "$clean_image" bash -c 'mkdir -p "$HOME"; /cawco proof-isolation && /cawco capabilities > /output/capabilities-absent.json && /cawco proof-signing && /cawco proof-relay && PATH=/opt/claude/bin:$PATH /cawco proof-stack' > "$out/clean-proof.log" 2>&1 &
 clean=$!
 run_step "boot the systemd container" "$out/systemd-id.txt" $P run -d --name "$prefix-systemd" --systemd=always --network none "${mounts[@]}" "${envs[@]}" --env HOME=/output/systemd-binary --env CAWCO_DB_PATH=/output/systemd-binary/hub.db --env CAWCO_SESSIOND_ENDPOINT=/output/systemd-binary/sessiond.sock --env CAWCO_PROOF_SYSTEMD=1 "$systemd_image" /sbin/init
 step="inspect the systemd container"
@@ -101,7 +146,7 @@ $P inspect "$prefix-systemd" > "$out/systemd-config.json"
 # host's; only the namespace is entered (`$P unshare`: this instance's user namespace, which owns it).
 mkdir -p "$out/browser"
 systemd_started=$SECONDS
-$P exec --env CAWCO_PROOF_BROWSER_DONE=/output/browser/done "$prefix-systemd" bash -c 'mkdir -p "$HOME"; /cawco capabilities > /output/capabilities-present.json; /cawco proof-stack' > "$out/systemd-proof.log" 2>&1 &
+$P exec --env CAWCO_PROOF_BROWSER_DONE=/output/browser/done "$prefix-systemd" bash -c 'export PATH=/opt/claude/bin:$PATH; mkdir -p "$HOME"; /cawco capabilities > /output/capabilities-present.json; /cawco proof-stack' > "$out/systemd-proof.log" 2>&1 &
 stack=$!
 step="load the served dashboard in a browser"
 step_log="$out/browser.log"
