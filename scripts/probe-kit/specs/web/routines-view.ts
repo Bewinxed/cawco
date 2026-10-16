@@ -1014,15 +1014,21 @@ async function seedSources(fleet: Fleet, projectId: string) {
   ] as const;
   ROUTES.forEach(([id, source, kinds, label, routineId], index) => {
     fleet.write(
-      "INSERT INTO event_routes (id, project_id, source, kinds, label, routine_id, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 'owner', ?)",
+      "INSERT INTO event_routes (id, project_id, source, label, routine_id, enabled, created_by, created_at) VALUES (?, ?, ?, ?, ?, 1, 'owner', ?)",
       id,
       projectId,
       source,
-      JSON.stringify(kinds),
       label,
       routineId,
       now - (ROUTES.length - index) * MIN
     );
+    for (const kind of kinds) {
+      fleet.write(
+        "INSERT INTO event_route_kinds (route_id, kind) VALUES (?, ?)",
+        id,
+        kind
+      );
+    }
   });
   const POLLS = [
     [gmail, "list_messages", 900, null],

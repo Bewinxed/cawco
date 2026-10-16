@@ -566,10 +566,10 @@ const runsOf = (routineId: string) =>
     "SELECT state, outcome, reason FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC",
     routineId
   );
-/** A session's taint as the hub stored it (db `session_taints`). */
+/** A session's taint as the hub stored it (db `session_taints`), its open subagents (`session_subagents`) as one JSON list. */
 const taintOf = (instanceId: string) =>
   fleet.query<{ delivered: number; subagents: string; web: number }>(
-    "SELECT delivered, subagents, web FROM session_taints WHERE instance_id = ?",
+    "SELECT delivered, (SELECT json_group_array(json_object('task', s.task, 'call', s.call)) FROM session_subagents s WHERE s.instance_id = session_taints.instance_id) AS subagents, web FROM session_taints WHERE instance_id = ?",
     instanceId
   )[0];
 const settled = (run: RunRow | undefined) =>
