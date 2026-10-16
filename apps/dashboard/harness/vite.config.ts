@@ -77,6 +77,20 @@ export default defineConfig({
     alias: [
       { find: /^#lib$/, replacement: join(dashboard, "src/lib/index.js") },
       { find: /^#lib\/(.*)$/, replacement: join(dashboard, "src/lib/$1") },
+      // SvelteKit's modules, which only its plugin provides: the one page
+      // a harness is (harness/app/).
+      {
+        find: /^\$app\/env$/,
+        replacement: join(dashboard, "harness/app/env.ts"),
+      },
+      {
+        find: /^\$app\/navigation$/,
+        replacement: join(dashboard, "harness/app/navigation.ts"),
+      },
+      {
+        find: /^\$app\/state$/,
+        replacement: join(dashboard, "harness/app/state.svelte.ts"),
+      },
     ],
   },
   build: {

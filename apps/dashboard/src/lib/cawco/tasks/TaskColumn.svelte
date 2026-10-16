@@ -15,6 +15,7 @@
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -35,9 +36,18 @@
     moving,
     refused,
     archived = false,
+    picked,
+    onpick,
+    picking = false,
   }: {
     /** The board's Archived rail: its cards are archived tasks, and its kind line says so. */
     archived?: boolean;
+    /** Whether a card is picked for a bulk change; without it, no card is pickable. */
+    picked?: (id: string) => boolean;
+    /** Ticks or unticks a card; `range` with Shift, from the last one ticked. */
+    onpick?: (id: string, on: boolean, range: boolean) => void;
+    /** Any card on the board is picked: every card's tick stands. */
+    picking?: boolean;
     label: string;
     kind: StageKind | null;
     cards: TaskSummary[];
@@ -75,6 +85,7 @@
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
+  data-picking={picking ? "" : undefined}
   {@attach drop}
 >
   <header class="head">
@@ -90,11 +101,14 @@
   <ol class="cards" {@attach reflow()}>
     {#each cards as task (task.id)}
       {@const fault = refused?.(task.id) ?? null}
+      {@const on = picked?.(task.id) ?? false}
       <li
         aria-busy={moving?.(task.id) || undefined}
         data-archived={archived || undefined}
         data-flip
         data-moving={moving?.(task.id) || undefined}
+        data-pickable={onpick ? "" : undefined}
+        data-picked={on || undefined}
       >
         <TaskCard
           date={dateOf(task.id)}
@@ -103,6 +117,18 @@
           {onopen}
           {task}
         />
+        {#if onpick}
+          <!-- The tick stands beside the card, not in it: the card is a link. -->
+          <Checkbox
+            aria-label="Pick {task.id} {task.title}"
+            checked={on}
+            class="pick"
+            onclick={(event: MouseEvent) => {
+              event.preventDefault();
+              onpick(task.id, !on, event.shiftKey);
+            }}
+          />
+        {/if}
         {#if moving?.(task.id)}
           <span class="moving mark-line"
             ><Spinner aria-hidden="true" /><span>Moving…</span></span
@@ -134,6 +160,41 @@
       inline-size: 12px;
       block-size: 12px;
     }
+  }
+  /* A card that can be picked keeps its head's end clear for the tick,
+     which stands over it on the head's line. The tick shows under the
+     pointer, on focus, once any card is picked, and always on a finger. */
+  li[data-pickable] {
+    position: relative;
+  }
+  li[data-pickable] > :global(.task-card .head) {
+    padding-inline-end: calc(var(--space-4) + var(--space-2));
+  }
+  li > :global(.pick) {
+    position: absolute;
+    inset-block-start: calc(var(--space-2) + (var(--c-badge-h) - 1rem) / 2);
+    inset-inline-end: var(--space-3);
+    opacity: 0;
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  li:focus-within > :global(.pick),
+  li[data-picked] > :global(.pick),
+  .column[data-picking] li > :global(.pick) {
+    opacity: 1;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    li:hover > :global(.pick) {
+      opacity: 1;
+    }
+  }
+  @media (pointer: coarse) {
+    li > :global(.pick) {
+      opacity: 1;
+    }
+  }
+  /* A picked card takes the selected wash. */
+  li[data-picked] > :global(.task-card) {
+    background: var(--selected-bg);
   }
   li > :global(.row-fault) {
     --fault-indent: var(--space-2);

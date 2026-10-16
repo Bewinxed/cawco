@@ -24,14 +24,17 @@
    * screen), and the sheet widens to hold both.
    */
   import {
+    addComment,
     addTodo,
     changeTodo,
     flagsOf,
     linkTask,
+    readHistory,
     readTask,
     type StagesView,
     stageLabel,
     type TaskEdge,
+    type TaskHistoryEvent,
     type TaskSummary,
     type TaskView,
     updateTask,
@@ -47,7 +50,6 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconClock,
-    IconClose,
     IconError,
     IconLock,
     IconNeedsYou,
@@ -61,7 +63,11 @@
   import AttemptTranscript from "./AttemptTranscript.svelte";
   import ResultCard from "./ResultCard.svelte";
   import ResultView from "./ResultView.svelte";
+  import TaskActivity from "./TaskActivity.svelte";
   import TaskAttempts from "./TaskAttempts.svelte";
+  import TaskFields from "./TaskFields.svelte";
+  import TaskLabels from "./TaskLabels.svelte";
+  import TaskRelations from "./TaskRelations.svelte";
   import TextSection from "./TextSection.svelte";
   import TodoList from "./TodoList.svelte";
 
@@ -120,14 +126,36 @@
   const allowed = $derived(
     shown ? allowedFrom(shown.stage) : new Set<string>()
   );
-  const others = $derived(
-    tasks.filter(
-      (each) =>
-        each.id !== taskId &&
-        !shown?.after.includes(each.id) &&
-        each.id !== shown?.parent
+  /** Every label the project's tasks carry, offered when one is added. */
+  const known = $derived(
+    [...new Set(tasks.flatMap((each) => each.labels))].sort()
+  );
+  /** Its own fields; `decided` is said as its own line under the title. */
+  const fields = $derived(
+    Object.fromEntries(
+      Object.entries(shown?.extra ?? {}).filter(
+        ([key]) => key !== DECIDED_FIELD
+      )
     )
   );
+  /** Its file's commits, for the activity; null while they are read. */
+  let history = $state<TaskHistoryEvent[] | null>(null);
+  let historyProblem = $state<string | null>(null);
+  /** Where a comment goes past the file (TaskActivity `reaches`). */
+  const reaches = $derived.by(() => {
+    const attempts = shown?.attempts ?? [];
+    const live = attempts.findIndex(
+      (attempt) => attempt.state === "starting" || attempt.state === "running"
+    );
+    if (live >= 0) {
+      return {
+        kind: "live" as const,
+        attempt: `Attempt ${attempts.length - live}`,
+      };
+    }
+    const open = shown?.kind !== "done" && shown?.kind !== "dropped";
+    return attempts.length > 0 && open ? { kind: "resumes" as const } : null;
+  });
 
   let readFor = "";
   $effect(() => {
@@ -148,6 +176,8 @@
       titleProblem = null;
       chosenAttempt = null;
       expanded = false;
+      history = null;
+      historyProblem = null;
     }
   });
 
@@ -186,6 +216,9 @@
 
   async function read(id: string) {
     readProblem = null;
+    history = null;
+    // biome-ignore lint/complexity/noVoid: the history reads beside the task and sets its own state
+    void readActivity(id);
     try {
       const fresh = await readTask(projectId, id);
       if (taskId === id) {
@@ -198,10 +231,27 @@
     }
   }
 
-  /** Every write answers with the task as the hub wrote it. */
+  /** Its file's history; a refusal is said over the activity, in the hub's words. */
+  async function readActivity(id: string) {
+    historyProblem = null;
+    try {
+      const answered = await readHistory(projectId, id);
+      if (taskId === id) {
+        history = answered.events;
+      }
+    } catch (error) {
+      if (taskId === id) {
+        historyProblem = message(error);
+      }
+    }
+  }
+
+  /** Every write answers with the task as the hub wrote it, and is a commit in its history. */
   function took(next: TaskView) {
     task = next;
     onchanged(next);
+    // biome-ignore lint/complexity/noVoid: the history reads again and sets its own state
+    void readActivity(next.id);
   }
 
   async function saveTitle() {
@@ -291,58 +341,6 @@
     };
   });
 </script>
-
-{#snippet ref(id: string, remove?: () => void)}
-  <span class="ref">
-    <span class="ref-id">{id}</span>
-    {#if titleOf(id)}
-      <span class="ref-title">{titleOf(id)}</span>
-    {/if}
-    {#if remove}
-      <Button
-        aria-label="Remove {id}"
-        class="ml-auto"
-        onclick={remove}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <IconClose />
-      </Button>
-    {/if}
-  </span>
-{/snippet}
-
-{#snippet pick(label: string, edge: TaskEdge)}
-  {#if others.length > 0}
-    <Select.Root
-      onValueChange={(value) => {
-        if (value) {
-          link(edge, value);
-        }
-      }}
-      type="single"
-      value=""
-    >
-      <Select.Trigger
-        aria-label={label}
-        class="self-start text-muted-foreground"
-        size="sm"
-      >
-        {label}
-      </Select.Trigger>
-      <Select.Content>
-        {#each others as other (other.id)}
-          <Select.Item label="{other.id} {other.title}" value={other.id}>
-            <span class="font-mono text-muted-foreground">{other.id}</span>
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{other.title}</span
-            >
-          </Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
-  {/if}
-{/snippet}
 
 <Sheet.Root
   bind:open={
@@ -533,15 +531,19 @@
                 </dd>
               </div>
             {/if}
-            {#if (shown?.labels.length ?? 0) > 0}
+            {#if shown}
               <div class="fact">
                 <dt>Labels</dt>
-                <dd class="badges">
-                  {#each shown?.labels ?? [] as label (label)}
-                    <Badge data-label variant="secondary"
-                      ><span>{label}</span></Badge
-                    >
-                  {/each}
+                <dd>
+                  <TaskLabels
+                    {known}
+                    labels={shown.labels}
+                    onchange={async (labels) => {
+                      if (shown) {
+                        took(await updateTask(projectId, shown.id, { labels }));
+                      }
+                    }}
+                  />
                 </dd>
               </div>
             {/if}
@@ -549,7 +551,8 @@
           <RowFault reason={stageProblem} />
           <Sheet.Description class="sr-only">
             What the task's attempts handed in, its attempts and their
-            transcripts, its description, acceptance criteria, to-dos and edges.
+            transcripts, its description, acceptance criteria, to-dos, fields,
+            relations, and what was said and done about it.
           </Sheet.Description>
         </Sheet.Header>
 
@@ -691,46 +694,41 @@
               todos={shown.todos}
             />
 
-            <section class="part">
-              <h3 class="kit-section-head">Edges</h3>
+            <TaskFields
+              {fields}
+              onsave={async (change) => {
+                if (shown) {
+                  took(
+                    await updateTask(projectId, shown.id, { fields: change })
+                  );
+                }
+              }}
+            />
+
+            <div class="part">
+              <TaskRelations
+                onlink={link}
+                onopen={(id) => {
+                  taskId = id;
+                }}
+                task={shown}
+                {tasks}
+              />
               <RowFault reason={edgeProblem} />
-              <div class="edge">
-                <span class="edge-name">After</span>
-                <div class="edge-list">
-                  {#each shown.after as id (id)}
-                    {@render ref(id, () => link("after", id, true))}
-                  {/each}
-                  {@render pick(
-                    shown.after.length > 0
-                      ? "Add another"
-                      : "Add a task it waits on",
-                    "after"
-                  )}
-                </div>
-              </div>
-              <div class="edge">
-                <span class="edge-name">Parent</span>
-                <div class="edge-list">
-                  {#if shown.parent}
-                    {@render ref(shown.parent, () =>
-                      link("parent", shown?.parent ?? "", true)
-                    )}
-                  {:else}
-                    {@render pick("Set a parent", "parent")}
-                  {/if}
-                </div>
-              </div>
-              {#if shown.related.length > 0}
-                <div class="edge">
-                  <span class="edge-name">Related</span>
-                  <div class="edge-list">
-                    {#each shown.related as id (id)}
-                      {@render ref(id)}
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            </section>
+            </div>
+
+            <TaskActivity
+              comments={shown.comments}
+              {history}
+              {historyProblem}
+              oncomment={async (text) => {
+                if (shown) {
+                  took(await addComment(projectId, shown.id, text));
+                }
+              }}
+              {reaches}
+              rereadHistory={() => shown && readActivity(shown.id)}
+            />
           {/if}
         </div>
       </div>
@@ -875,48 +873,6 @@
     min-block-size: var(--c-btn-h-xs);
     margin: 0;
     padding-inline: 0;
-  }
-  .edge {
-    display: grid;
-    grid-template-columns: 4.5rem minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-2);
-  }
-  .edge-name {
-    padding-block-start: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .edge-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .ref {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-    min-inline-size: 0;
-    padding-inline: var(--space-2) var(--space-1);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .ref-id {
-    flex: none;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  .ref-title {
-    min-inline-size: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .part-head {
     min-inline-size: 0;

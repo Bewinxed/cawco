@@ -37,6 +37,8 @@ export const mockTask = (
     todos: { done: props.done ?? 0, total: props.total ?? 0 },
     after: [],
     blockedBy: [],
+    duplicateOf: null,
+    fields: {},
     foundIn: null,
     parent: null,
     path: `tasks/${id}.md`,

@@ -88,6 +88,8 @@ export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
 export { default as IconEyeClosed } from "~icons/solar/eye-closed-bold-duotone";
 export { default as IconDocument } from "~icons/solar/file-text-bold-duotone";
+/** What narrows a project's tasks (TaskFilterPopover). */
+export { default as IconFilter } from "~icons/solar/filter-bold-duotone";
 export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";

@@ -42,7 +42,13 @@
     moving,
     refused,
     archived = [],
+    picked,
+    onpick,
   }: {
+    /** Whether a task is picked for a bulk change (task-select). */
+    picked?: (id: string) => boolean;
+    /** Ticks or unticks one; `range`, with Shift: the board's cards in order. */
+    onpick?: (id: string, on: boolean, range?: string[]) => void;
     /** The project's archived tasks, for the Archived rail. */
     archived?: TaskSummary[];
     stages: Stage[];
@@ -90,6 +96,16 @@
     return columns;
   });
   const stray = $derived(byStage.get("") ?? []);
+  /** The cards in the board's reading order, column by column: a Shift range's span. */
+  const order = $derived([
+    ...stages.flatMap((stage) =>
+      (byStage.get(stage.name) ?? []).map((task) => task.id)
+    ),
+    ...stray.map((task) => task.id),
+  ]);
+  const picking = $derived(
+    picked ? tasks.some((task) => picked(task.id)) : false
+  );
   /** While a card is in the air: the stages it may go to from where it was. */
   const open = $derived(
     boardDrag.from === null ? null : allowedFrom(boardDrag.from)
@@ -113,8 +129,12 @@
     {kindOf}
     {label}
     {moving}
+    onpick={onpick &&
+      ((id, on, range) => onpick(id, on, range ? order : undefined))}
     {onopen}
     over={boardDrag.over === name && name !== boardDrag.from}
+    {picked}
+    {picking}
     {refused}
   />
 {/snippet}

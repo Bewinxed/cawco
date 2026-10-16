@@ -174,6 +174,10 @@ export interface AttemptStart {
 /** One task as a list shows it: the hub's index row. */
 export interface TaskSummary extends TaskFlags, TaskTimes {
   after: string[];
+  /** The task it repeats (`duplicate_of`); null when none. */
+  duplicateOf: string | null;
+  /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
+  fields: Record<string, string>;
   /** The task it was found in (`found_in`); null when none. */
   foundIn: string | null;
   id: string;
@@ -234,7 +238,11 @@ export interface TaskView extends TaskFlags, TaskTimes {
   acceptance: string;
   after: string[];
   checks: string[];
+  /** Its `## Comments`, oldest first: each written by the hub with who and when. */
+  comments: TaskComment[];
   description: string;
+  /** The task it repeats (`duplicate_of`); null when none. */
+  duplicateOf: string | null;
   /** Front matter fields the file carries that a task file does not know, with their values (a scalar or a list), as the hub reads them. */
   extra: Record<string, string | string[]>;
   foundIn: string | null;
@@ -263,15 +271,71 @@ export interface TaskView extends TaskFlags, TaskTimes {
   type: string | null;
 }
 
+/** Who wrote a comment or made a change (the hub's `TaskHistoryActor`). */
+export interface TaskActor {
+  /** The session's instance id, or the approved action's; null when none. */
+  id: string | null;
+  /** The mover it was checked as (`you`, `lead`, `session`, …); null for a hand edit. */
+  mover: string | null;
+  /** You, Caw, the session's title as it was, hub, approved action. */
+  name: string;
+}
+
+/** One entry of a task's `## Comments` (the hub's `TaskComment`). */
+export interface TaskComment {
+  at: number;
+  author: TaskActor;
+  /** Its markdown, as written. */
+  text: string;
+}
+
+/** What a commit did to a task's file (the hub's `TaskHistoryKind`). */
+export type TaskHistoryKind =
+  | "created"
+  | "moved"
+  | "changed"
+  | "commented"
+  | "edited"
+  | "archived"
+  | "unarchived"
+  | "renamed"
+  | "deleted";
+
+/** One commit to a task's file (the hub's `TaskHistoryEvent`). */
+export interface TaskHistoryEvent {
+  actor: TaskActor;
+  at: number;
+  commit: string;
+  kind: TaskHistoryKind;
+  path: string;
+  /** Why, when the change said: a close reason, the hub's cause. */
+  reason: string | null;
+  /** The stage it went from and to; null when the stage did not move. */
+  stage: { from: string | null; to: string } | null;
+  /** What changed, in the commit's words: `update title`, `tick td-2`. */
+  what: string;
+}
+
+/** A task's history: every commit to its file, oldest first (the hub's `TaskHistory`). */
+export interface TaskHistory {
+  events: TaskHistoryEvent[];
+  id: string;
+  path: string;
+  state: "live" | "archived" | "deleted";
+}
+
 export interface TaskPatch {
   acceptance?: string;
   description?: string;
+  /** Fields a task file does not know, each set, or taken out with "". */
+  fields?: Record<string, string | string[]>;
   labels?: string[];
   title?: string;
 }
 
-/** The two edges the drawer sets: what a task waits on, and its parent. */
-export type TaskEdge = "after" | "parent";
+/** The edges the hub sets between tasks (its links route). */
+export type TaskEdge =
+  "after" | "parent" | "related" | "found_in" | "duplicate_of";
 
 /** Elysia refuses with a bare string; JSON only when something else went wrong. */
 async function said(response: Response): Promise<string> {
@@ -339,12 +403,24 @@ export const updateTask = (
   patch: TaskPatch
 ): Promise<TaskView> => send(one(projectId, taskId), json("PATCH", patch));
 
+/** Moves a task; `reason`, a close reason, is kept in the move's commit and its history. */
 export const moveTask = (
   projectId: string,
   taskId: string,
-  stage: string
+  stage: string,
+  reason?: string
 ): Promise<TaskView> =>
-  send(`${one(projectId, taskId)}/stage`, json("POST", { stage }));
+  send(
+    `${one(projectId, taskId)}/stage`,
+    json("POST", reason ? { stage, reason } : { stage })
+  );
+
+/** Moves a task's file into tasks/archive/ in one commit; the hub refuses while an attempt at it is live. */
+export const archiveTask = (
+  projectId: string,
+  taskId: string
+): Promise<TaskView> =>
+  send(`${one(projectId, taskId)}/archive`, json("POST", {}));
 
 export const linkTask = (
   projectId: string,
@@ -352,6 +428,20 @@ export const linkTask = (
   link: { edge: TaskEdge; to: string; remove?: boolean }
 ): Promise<TaskView> =>
   send(`${one(projectId, taskId)}/links`, json("POST", link));
+
+/** Every commit to the task's file, oldest first. */
+export const readHistory = (
+  projectId: string,
+  taskId: string
+): Promise<TaskHistory> => send(`${one(projectId, taskId)}/history`);
+
+/** A comment, written by the hub into the task's `## Comments` as yours. */
+export const addComment = (
+  projectId: string,
+  taskId: string,
+  text: string
+): Promise<TaskView> =>
+  send(`${one(projectId, taskId)}/comments`, json("POST", { text }));
 
 export const addTodo = (
   projectId: string,

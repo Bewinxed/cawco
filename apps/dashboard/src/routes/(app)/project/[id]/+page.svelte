@@ -51,6 +51,7 @@
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import {
+    archiveTask,
     createTask,
     firstTodoStage,
     listArchived,
@@ -64,14 +65,30 @@
     type TaskList,
     type TaskSummary,
     type TaskView,
+    updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import SideSplit from "#lib/cawco/side/SideSplit.svelte";
+  import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
+  import TaskFilterPopover from "#lib/cawco/tasks/TaskFilterPopover.svelte";
   import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
+  import {
+    activeCount,
+    applyFilter,
+    filterOf,
+    type TaskFilter,
+    writeFilter,
+  } from "#lib/cawco/tasks/task-filter.js";
+  import {
+    clearPicks,
+    isPicked,
+    pickTask,
+    selection,
+  } from "#lib/cawco/tasks/task-select.svelte.js";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { toast } from "#lib/cawco/toasts.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
@@ -164,7 +181,12 @@
   const needsYou = $derived(tasks.filter((task) => task.kind === "you"));
   /** The filter holds only while something needs you. */
   const filtering = $derived(needsOnly && needsYou.length > 0);
-  const shownTasks = $derived(filtering ? needsYou : tasks);
+  /** What narrows every view of the tasks, kept in the URL (task-filter). */
+  let filter = $state<TaskFilter>(filterOf(page.url.searchParams));
+  const narrowed = $derived(activeCount(filter));
+  const shownTasks = $derived(
+    applyFilter(filtering ? needsYou : tasks, filter)
+  );
   const shownStages = $derived(
     filtering ? stageList.filter((stage) => stage.kind === "you") : stageList
   );
@@ -388,6 +410,7 @@
     if (id) {
       query.set("task", id);
     }
+    writeFilter(query, filter);
     const search = query.toString();
     const hash =
       as === "decisions" && at.page && at.card
@@ -533,6 +556,13 @@
       parent: task.parent,
       related: task.related,
       foundIn: task.foundIn,
+      duplicateOf: task.duplicateOf,
+      // The row's fields are the ones that hold one scalar (the hub's TaskSummary).
+      fields: Object.fromEntries(
+        Object.entries(task.extra).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string"
+        )
+      ),
       labels: task.labels,
       rank: task.rank,
       type: task.type,
@@ -584,12 +614,13 @@
   async function move(
     id: string,
     stage: string,
-    source?: HTMLElement
+    source?: HTMLElement,
+    reason?: string
   ): Promise<TaskView> {
     lift(id, source);
     moving = { ...moving, [id]: stage };
     try {
-      const task = await moveTask(projectId, id, stage);
+      const task = await moveTask(projectId, id, stage, reason);
       patch(task);
       return task;
     } catch (error) {
@@ -643,6 +674,118 @@
     const task = await createTask(projectId, { title, stage });
     changed(task);
   }
+
+  // --- the filter and a bulk change ------------------------------------------
+
+  function setFilter(next: TaskFilter) {
+    filter = next;
+    remember();
+  }
+  /** The phone's Filter, opened from the head's ⋯ (ProjectHead `onfilter`). */
+  let filterOpen = $state(false);
+  let filterAnchor = $state<HTMLElement | null>(null);
+
+  /** The picked tasks the board shows: a bulk change acts on what you see. */
+  const picked = $derived(shownTasks.filter((task) => isPicked(task.id)));
+  const dropTo = $derived(
+    stageList.find((stage) => stage.kind === "dropped")?.name ?? null
+  );
+  /** The bulk change in flight, or where the hub stopped it. */
+  let bulkRun = $state<BulkRun | null>(null);
+  /** Goes on from where a refused bulk change stopped. */
+  let bulkAgain: (() => void) | null = null;
+
+  /**
+   * A bulk change, one task at a time through each task's own route, in the
+   * order picked. Each task the hub confirms leaves the selection; a
+   * refusal stops the run there, says the task and the hub's words, and
+   * the tasks not yet changed stay picked for Try again.
+   */
+  async function bulk(
+    verb: string,
+    ids: string[],
+    act: (id: string) => Promise<unknown>,
+    total = ids.length,
+    before = 0
+  ) {
+    bulkRun = { verb, done: before, total, failed: null };
+    for (const [at, id] of ids.entries()) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one task at a time, so a refusal stops the rest
+        await act(id);
+      } catch (error) {
+        bulkRun = {
+          verb,
+          done: before + at,
+          total,
+          failed: { id, text: message(error) },
+        };
+        bulkAgain = () => bulk(verb, ids.slice(at), act, total, before + at);
+        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+        void refresh();
+        return;
+      }
+      selection.ids = selection.ids.filter((each) => each !== id);
+      bulkRun = { verb, done: before + at + 1, total, failed: null };
+    }
+    bulkRun = null;
+    bulkAgain = null;
+    clearPicks();
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void refresh();
+  }
+  const pickedIds = () => picked.map((task) => task.id);
+  const bulkMove = (stage: string) =>
+    bulk("Moving", pickedIds(), (id) => move(id, stage));
+  const bulkDrop = (reason: string) => {
+    if (dropTo) {
+      bulk("Dropping", pickedIds(), (id) =>
+        move(id, dropTo, undefined, reason)
+      );
+    }
+  };
+  const bulkLabel = (label: string) =>
+    bulk("Labelling", pickedIds(), async (id) => {
+      const row = tasks.find((task) => task.id === id);
+      patch(
+        await updateTask(projectId, id, {
+          labels: [...new Set([...(row?.labels ?? []), label])],
+        })
+      );
+    });
+  const bulkArchive = () =>
+    bulk("Archiving", pickedIds(), async (id) => {
+      await archiveTask(projectId, id);
+      if (list) {
+        list = { ...list, tasks: list.tasks.filter((task) => task.id !== id) };
+      }
+    });
+  function endBulk() {
+    clearPicks();
+    bulkRun = null;
+    bulkAgain = null;
+  }
+
+  // Another project, or a view other than the board: the picks go; the
+  // filter is the next project's own, from its URL.
+  let pickedFor = "";
+  $effect(() => {
+    const at = `${projectId}:${current}`;
+    if (pickedFor && pickedFor !== at && !bulkRun) {
+      untrack(endBulk);
+    }
+    pickedFor = at;
+  });
+  let filterFor = "";
+  $effect(() => {
+    const id = projectId;
+    if (filterFor && filterFor !== id) {
+      untrack(() => {
+        filter = filterOf(page.url.searchParams);
+      });
+    }
+    filterFor = id;
+  });
 
   // --- drafts --------------------------------------------------------------------
 
@@ -817,8 +960,19 @@
    * (an empty board while Caw can't start holds the form itself).
    */
   const strippedNewTask = $derived(list !== null && (!empty || canTalk));
+  /** The view on screen is one of the tasks, which the filter narrows. */
+  const filterHere = $derived(
+    list !== null &&
+      !empty &&
+      ["board", "table", "pipeline", "canvas", "calendar"].includes(current)
+  );
   /** Something stands after the tabs: the hairline marks where it starts. */
-  const trailing = $derived(needsYou.length > 0 || strippedNewTask || canTalk);
+  const trailing = $derived(
+    needsYou.length > 0 ||
+      strippedNewTask ||
+      canTalk ||
+      (filterHere && (hosted || narrowed > 0))
+  );
   /**
    * Caw stands over the empty board while he can start; elsewhere he sits
    * in the head, and the board is drawn — its columns and the new task's
@@ -906,6 +1060,17 @@
       ></span>
     {/if}
     <div class="trail">
+      <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
+           where the row has no room for it, its glyph and count stand while
+           a filter does, and the head's ⋯ opens it. -->
+      {#if filterHere && (inBar || narrowed > 0)}
+        <TaskFilterPopover
+          compact={!inBar}
+          {filter}
+          onchange={setFilter}
+          tasks={[...tasks, ...archived]}
+        />
+      {/if}
       {#if needsYou.length > 0}
         <button
           aria-pressed={filtering}
@@ -1092,7 +1257,7 @@
   {:else if value === "board"}
     <TaskBoard
       {allowedFrom}
-      {archived}
+      archived={applyFilter(archived, filter)}
       {dateOf}
       hrefOf={(id) => hrefOf(id)}
       {kindOf}
@@ -1101,11 +1266,33 @@
       oncreate={create}
       onmove={drop}
       onopen={openOne}
+      onpick={(id, on, range) => {
+        if (!bulkRun) {
+          pickTask(id, on, range);
+        }
+      }}
+      picked={isPicked}
       refused={refusedMove}
       stages={shownStages}
       tasks={shownTasks}
       bind:adding
     />
+    {#if picked.length > 0 || bulkRun}
+      <BulkBar
+        {allowedFrom}
+        {dropTo}
+        labels={[...new Set(tasks.flatMap((task) => task.labels))].sort()}
+        onarchive={bulkArchive}
+        onclear={endBulk}
+        ondrop={bulkDrop}
+        onlabel={bulkLabel}
+        onmove={bulkMove}
+        onretry={() => bulkAgain?.()}
+        {picked}
+        run={bulkRun}
+        stages={stageList}
+      />
+    {/if}
   {:else if value === "table"}
     <div class="table-wrap">
       {#if adding}
@@ -1173,6 +1360,10 @@
         {lead}
         {machine}
         onask={canTalk ? ask : null}
+        onfilter={(anchor) => {
+          filterAnchor = anchor;
+          filterOpen = true;
+        }}
         onnewtask={() => {
           choose("board");
           adding = true;
@@ -1285,6 +1476,16 @@
       />
     </Popover.Content>
   </Popover.Root>
+
+  {#if filterAnchor}
+    <TaskFilterPopover
+      anchor={filterAnchor}
+      {filter}
+      onchange={setFilter}
+      tasks={[...tasks, ...archived]}
+      bind:open={filterOpen}
+    />
+  {/if}
 
   <StagesControl
     anchor={stagesAnchor}

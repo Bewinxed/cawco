@@ -45,6 +45,7 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
     IconColumns,
+    IconFilter,
     IconMore,
     IconPlus,
     IconSettings,
@@ -64,8 +65,11 @@
     seated,
     onnewtask,
     onask,
+    onfilter,
     onstages,
   }: {
+    /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
+    onfilter: (anchor: HTMLElement) => void;
     project: ProjectRow;
     machine: Machine | null;
     lead: CawLead;
@@ -462,6 +466,16 @@
           <DropdownMenu.Item onSelect={onnewtask}>
             <IconPlus />
             <span>New task</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => {
+              if (more) {
+                onfilter(more);
+              }
+            }}
+          >
+            <IconFilter />
+            <span>Filter tasks…</span>
           </DropdownMenu.Item>
           {#if onask}
             <DropdownMenu.Item
