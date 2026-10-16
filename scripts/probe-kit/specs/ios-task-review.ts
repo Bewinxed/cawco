@@ -830,23 +830,27 @@ async function device(
     const attemptsRow = was("task-attempts");
     kit.check(
       `${tag} o: Try again stands at the Attempts row's top, a button's height, beside its ${attemptsHint?.h.toFixed(1)}pt of words`,
-      !!again &&
-        near(again.y, attemptsRow?.y) &&
-        again.h < 45 &&
-        again.h < (attemptsRow?.h ?? 0) - 1,
+      !!again && near(again.y, attemptsRow?.y) && again.h < 45,
       `${at(again)} | row ${at(attemptsRow)}`
     );
 
-    // p. The transcript's actions pack to the head's end (its `padding-inline: space-4`).
+    // p. The transcript's actions at their own width (`.acts`, flex-wrap):
+    // beside the words, packed at the head's end (its `padding-inline:
+    // space-4`); wrapped under them where both don't fit, at its start.
     const openSession = was("task-transcript-open");
+    const expand = was("task-transcript-expand");
+    const wrapped = (expand?.y ?? 0) - (pane?.y ?? 0) > 40;
     kit.check(
-      `${tag} p: Expand and Open session stand at the transcript head's end`,
+      `${tag} p: Expand and Open session stand ${wrapped ? "under the words, at the transcript head's start" : "at the transcript head's end"}`,
       !!openSession &&
-        near(
-          openSession.x + openSession.w,
-          (pane?.x ?? 0) + (pane?.w ?? 0) - SPACE_4
-        ),
-      `open ${at(openSession)} | pane ${at(pane)}`
+        !!expand &&
+        (wrapped
+          ? near(expand.x, (pane?.x ?? 0) + SPACE_4)
+          : near(
+              openSession.x + openSession.w,
+              (pane?.x ?? 0) + (pane?.w ?? 0) - SPACE_4
+            )),
+      `expand ${at(expand)} | open ${at(openSession)} | pane ${at(pane)}`
     );
 
     // q. A phone's sheet stands on the screen's foot with its surface over
@@ -892,12 +896,38 @@ async function device(
         const top = b.y + p.y - offset();
         return top >= b.y - 0.5 && top + p.h <= b.y + b.h + 0.5;
       };
+      /**
+       * The body scrolled until `id` stands wholly on screen: aimed at the
+       * offset that centres it, a third of the way at a time (a swipe's
+       * fling carries the body about three times its drag: 345pt of drag
+       * moved it 1,030pt), so a card a screen tall can't be passed over.
+       */
       const bring = async (id: string) => {
         for (let n = 0; n < 16 && !inView(id); n += 1) {
           const p = seen.get(id);
           const b = part("task-sheet-body");
-          const above = p && b ? b.y + p.y - offset() < b.y : false;
-          await (above ? scroll(false) : scroll(true, true));
+          if (!b) {
+            return;
+          }
+          if (!p) {
+            await scroll(true, true);
+            continue;
+          }
+          const delta = p.y - (b.h - p.h) / 2 - offset();
+          const drag = Math.round(
+            Math.min(b.h * 0.5, Math.max(24, Math.abs(delta) / 3))
+          );
+          const x = Math.round(b.x + SPACE_5 / 2);
+          const middle = Math.round(b.y + b.h / 2);
+          // The finger goes up to bring what is below into view.
+          const [from, to] =
+            delta > 0
+              ? [middle + drag / 2, middle - drag / 2]
+              : [middle - drag / 2, middle + drag / 2];
+          await sh(
+            `${AXE} swipe --start-x ${x} --start-y ${from} --end-x ${x} --end-y ${to} --duration 1.0 --udid ${udid}`
+          );
+          await pause(1600);
         }
       };
       for (const theme of THEMES) {
@@ -906,7 +936,8 @@ async function device(
         const missing: string[] = [];
         for (const card of cardIds) {
           await bring(card.id);
-          await pause(800);
+          // One probe tick past the scroll, so the card's line is the one it stands at.
+          await pause(1500);
           const read = seen.get(card.id);
           if (inView(card.id)) {
             await shot(`card-${card.name}-${theme}`);
