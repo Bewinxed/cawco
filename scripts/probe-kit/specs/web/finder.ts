@@ -298,11 +298,40 @@ async function missingMachine(kit: Kit, page: Page, frozen: string) {
         ?.textContent?.replace(/\s+/g, " ")
         .trim() ?? null
   );
+  // The engine names a machine by its hostname (a scratch fleet's second
+  // machine shares this host's): its coverage entry for the frozen one.
+  const missing = await page.evaluate(
+    (id) =>
+      (
+        window as unknown as {
+          __finder: {
+            finder: {
+              everywhereNow: {
+                coverage: {
+                  machines: {
+                    answered: boolean;
+                    machineId: string;
+                    name: string;
+                  }[];
+                };
+              } | null;
+            };
+          };
+        }
+      ).__finder.finder.everywhereNow?.coverage.machines.find(
+        (m) => m.machineId === id
+      ) ?? null,
+    frozen
+  );
   kit.check(
     "a machine that didn't answer is named at the section's head with Retry, and nothing claims to be empty",
-    [frozen, "didn't", "Retry"].every((w) => line?.includes(w) === true) &&
+    missing !== null &&
+      !missing.answered &&
+      [missing.name, "didn't", "Retry"].every(
+        (w) => line?.includes(w) === true
+      ) &&
       (await page.locator(".nothing").count()) === 0,
-    String(line)
+    JSON.stringify({ line, missing })
   );
   await page.keyboard.press("Escape");
 }
@@ -619,6 +648,14 @@ const spec: Spec = {
         ? { everyMs: 400, words: Array.from({ length: 600 }, () => "working") }
         : { everyMs: 5, words: ["Noted."] }
     );
+    fleet.launch("sessiond");
+    await fleet.sessiondUp();
+    fleet.launch("hub");
+    await fleet.hubUp();
+    fleet.fileAccount();
+    fleet.launch("agent");
+    await fleet.agentUp();
+    await fleet.accountSignedIn();
     const repliedTo = (text: string) =>
       until(
         `a reply to “${text}”`,
@@ -667,7 +704,7 @@ const spec: Spec = {
     await page.setViewportSize(DESK);
     await open(page, `${base}/dev/finder`, "[data-composer]");
 
-    await openFinder(page);
+    // narrowsBySliding opens the finder itself, and leaves it shut.
     await narrowsBySliding(kit, page, `conversation:${working}`);
     await openFinder(page);
     await ranksAndOpens(kit, page, { boundary });
