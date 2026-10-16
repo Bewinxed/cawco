@@ -295,6 +295,8 @@ export interface TaskFlags {
 export type TaskEvent =
   | {
       actor: TaskActor;
+      /** You passed it on out of a stage of kind `you` (its review, its result): its filer hears it (task-approval.ts). */
+      approved?: true;
       from: string;
       id: string;
       kind: "moved";
@@ -3036,7 +3038,10 @@ export const createTasks = (store: TaskStore) => {
      * Moves a task to another stage, checked against the moves for its mover;
      * the hub's own moves are not, as the stage exists. `reason` says why
      * (a close reason, most often); its commit carries it, and the task's
-     * history shows it. Listeners hear of a move that happened.
+     * history shows it. Listeners hear of a move that happened. Your move
+     * that passes a task on out of a stage of kind `you` is its approval:
+     * its commit's reason says `approved`, and its event says so, for the
+     * agent that filed it (task-approval.ts).
      */
     async move(
       projectId: string,
@@ -3047,6 +3052,7 @@ export const createTasks = (store: TaskStore) => {
     ): Promise<TaskView> {
       const why = reasonOf(reason);
       let moved: { from: string; to: string } | undefined;
+      let approved = false;
       const task = await change(projectId, ref, actor, async (doc, id) => {
         const stages = await usableStages(projectId, "check a stage change");
         const to = stageName(stage);
@@ -3054,14 +3060,29 @@ export const createTasks = (store: TaskStore) => {
         if (!moved) {
           return `stage ${to}`;
         }
+        approved =
+          actor.mover === "you" &&
+          kindIn(stages, moved.from) === "you" &&
+          passesReview(stages, moved.from, to);
+        const because = approved ? `approved${why ? `: ${why}` : ""}` : why;
         return {
           what: `stage ${moved.from || NO_STAGE} → ${to}`,
           stage: moved,
-          ...(why ? { reason: why } : {}),
+          ...(because ? { reason: because } : {}),
         };
       });
       return moved
-        ? told({ kind: "moved", projectId, id: task.id, actor, ...moved }, task)
+        ? told(
+            {
+              kind: "moved",
+              projectId,
+              id: task.id,
+              actor,
+              ...moved,
+              ...(approved ? { approved: true as const } : {}),
+            },
+            task
+          )
         : task;
     },
 

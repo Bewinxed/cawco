@@ -49,7 +49,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Push } from "./push";
 import { roleOf } from "./roles";
 import { stageNamed } from "./stages";
-import { actionActor, type Tasks } from "./tasks";
+import { actionActor, sessionActor, type Tasks } from "./tasks";
 
 /** The longest the scheduler sleeps between looks. Our choice. */
 const NAP_MS = 15_000;
@@ -168,7 +168,7 @@ export interface ActionDeps {
   /** Every action waiting on you, to every dashboard. */
   readonly publish: (waiting: ApprovedActionView[]) => void;
   readonly push: Pick<Push, "action">;
-  readonly tasks: Pick<Tasks, "get" | "move" | "stages">;
+  readonly tasks: Pick<Tasks, "comment" | "get" | "move" | "stages">;
 }
 
 export const createActions = ({
@@ -430,7 +430,36 @@ export const createActions = ({
     );
     told();
     pushFor(row);
+    await noteProposal(actor, row);
     return view(row);
+  };
+
+  /**
+   * A proposal for a task, in its activity as its proposer's comment: what
+   * the agent did with the task (task-approval.ts) shows there beside your
+   * approval. Nothing for a proposal for no task.
+   */
+  const noteProposal = async (
+    actor: InstanceRow,
+    row: ActionRow
+  ): Promise<void> => {
+    const { taskId } = row;
+    if (!taskId) {
+      return;
+    }
+    const when = row.runAt ? ` for ${row.runAt.toISOString()}` : "";
+    try {
+      await tasks.comment(
+        row.projectId,
+        taskId,
+        `Proposed ${row.connection}/${row.tool}${when}: ${row.reason} (approved action ${row.id})`,
+        sessionActor(actor)
+      );
+    } catch (error) {
+      console.warn(
+        `[actions] ${row.id}: its proposal is not in ${taskId}'s activity: ${wordsOf(error)}`
+      );
+    }
   };
 
   // --- deciding ------------------------------------------------------------------

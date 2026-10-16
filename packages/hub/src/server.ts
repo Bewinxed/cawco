@@ -603,6 +603,7 @@ import {
 } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
+import { createTaskApproval } from "./task-approval";
 import { TaskDoc } from "./task-file";
 import {
   BUDGET,
@@ -17267,6 +17268,40 @@ export const createServer = (
     projectIds: () => db.listProjects().map((project) => project.id),
   });
   tasks.listen(waits.taskChanged);
+  /** Your words about a task to a session, as the composer sends them. */
+  const sendYours = (row: InstanceRow, text: string): void => {
+    try {
+      deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: text },
+            parent_tool_use_id: null,
+            origin: { kind: "human" },
+          },
+        },
+      });
+    } catch (error) {
+      console.warn(
+        `[tasks] your words did not reach ${row.id}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+  // Your approval of a task, to the agent that filed it (task-approval.ts).
+  tasks.listen(
+    createTaskApproval({
+      caw,
+      db,
+      tasks,
+      sendYours,
+      refused: (row) => inputRefusal(row.id, { kind: "human" })?.reason,
+    }).taskChanged
+  );
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
   // as a task is filed; Attach or fresh as you comment on a task (a live
   // attempt reads your comment as any message of yours); phone requests.
@@ -17286,29 +17321,7 @@ export const createServer = (
         idle: !state.midTurn,
       };
     },
-    sendYours: (row, text) => {
-      try {
-        deliverSend({
-          verb: "send",
-          machineId: row.machineId,
-          instanceId: row.id,
-          payload: {
-            instanceId: row.id,
-            message: {
-              type: "user",
-              uuid: crypto.randomUUID(),
-              message: { role: "user", content: text },
-              parent_tool_use_id: null,
-              origin: { kind: "human" },
-            },
-          },
-        });
-      } catch (error) {
-        console.warn(
-          `[tasks] your words did not reach ${row.id}: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    },
+    sendYours,
   });
   tasks.listen(jevTasks.taskChanged);
   /**
