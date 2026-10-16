@@ -70,65 +70,57 @@ async function peekaboo(args: string[]): Promise<string> {
   return run.stdout.toString();
 }
 
-/** Every object under `value`, depth first. */
-function* objects(value: unknown): Generator<Record<string, unknown>> {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      yield* objects(item);
-    }
-  } else if (value && typeof value === "object") {
-    yield value as Record<string, unknown>;
-    for (const item of Object.values(value)) {
-      yield* objects(item);
-    }
-  }
+/** One of `see --json`'s `data.ui_elements`: its opaque id and the AX words it is found by (peekaboo.sh/commands/see.html). */
+interface SeenElement {
+  description?: string | null;
+  id: string;
+  identifier?: string | null;
+  label?: string | null;
+  title?: string | null;
 }
 
-/** Peekaboo `see` JSON's keys: an element's id, the snapshot's, the window's. */
-const ELEMENT_ID = /^id$|element_?id/i;
-const BARE_ID = /^id$/i;
-const NAMED_ELEMENT_ID = /element_?id/i;
-const SNAPSHOT_ID = /snapshot_?id/i;
-const WINDOW_ID = /window_?id/i;
-
-/** The first string or number value under `value` whose key `key` matches. */
-const firstValue = (value: unknown, key: RegExp): string | undefined => {
-  for (const one of objects(value)) {
-    for (const [name, found] of Object.entries(one)) {
-      if (
-        key.test(name) &&
-        (typeof found === "string" || typeof found === "number")
-      ) {
-        return String(found);
-      }
-    }
+/** The app's window, as `window list --json` names it (`window_id`, peekaboo.sh/quickstart.html). */
+async function windowOf(pid: number): Promise<string> {
+  const listed = JSON.parse(
+    await peekaboo(["window", "list", "--pid", String(pid), "--json"])
+  ) as { data?: { windows?: { window_id?: number | string }[] } };
+  const id = listed.data?.windows?.[0]?.window_id;
+  if (id === undefined) {
+    throw new Error(
+      `no window_id for pid ${pid}: ${JSON.stringify(listed).slice(0, 300)}`
+    );
   }
-  return undefined;
-};
+  return String(id);
+}
 
 /**
- * A fresh exact-window snapshot of the app's window (Peekaboo `see`): its
- * snapshot id, its CoreGraphics window id, and the element whose words name
- * `field`, so a background click and press land on it.
+ * A fresh exact-window snapshot of the app's window (`see --window-id …
+ * --json`): `data.snapshot_id`, the window, and the element of
+ * `data.ui_elements` whose AX words name `field` (the field's aria-label),
+ * so a background click lands on it and a background press has its
+ * exact-window receipt (peekaboo.sh/commands/press.html).
  */
 async function look(pid: number, field?: string) {
+  const window = await windowOf(pid);
   const seen = JSON.parse(
-    await peekaboo(["see", "--pid", String(pid), "--json"])
-  ) as unknown;
+    await peekaboo([
+      "see",
+      "--window-id",
+      window,
+      "--pid",
+      String(pid),
+      "--json",
+    ])
+  ) as { data?: { snapshot_id?: string | null; ui_elements?: SeenElement[] } };
   const element = field
-    ? [...objects(seen)].find(
-        (one) =>
-          Object.values(one).some(
-            (word) => typeof word === "string" && word === field
-          ) && Object.keys(one).some((name) => ELEMENT_ID.test(name))
+    ? seen.data?.ui_elements?.find((one) =>
+        [one.label, one.description, one.title, one.identifier].includes(field)
       )
     : undefined;
   return {
-    snapshot: firstValue(seen, SNAPSHOT_ID),
-    window: firstValue(seen, WINDOW_ID),
-    element: element
-      ? (firstValue(element, BARE_ID) ?? firstValue(element, NAMED_ELEMENT_ID))
-      : undefined,
+    snapshot: seen.data?.snapshot_id ?? undefined,
+    window,
+    element: element?.id,
   };
 }
 
@@ -224,18 +216,19 @@ const run = async (kit: Kit) => {
     /** ⌘K to the app's window, in the background, on a fresh exact-window snapshot. */
     const commandK = async () => {
       const at = await look(app.pid);
-      if (!at.window) {
+      if (!at.snapshot) {
         throw new Error(
-          `no window id in Peekaboo's snapshot (${JSON.stringify(at)})`
+          `no snapshot of window ${at.window} from Peekaboo (${JSON.stringify(at)})`
         );
       }
+      // An exact-window selector and its fresh snapshot: the receipt a background press needs.
       await peekaboo([
         "press",
         "cmd+k",
-        "--pid",
-        String(app.pid),
         "--window-id",
         at.window,
+        "--snapshot",
+        at.snapshot,
       ]);
       await Bun.sleep(1500);
     };
