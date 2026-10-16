@@ -656,7 +656,7 @@ user_exec() {
 # d0ca43009, handover: the sender started on 0.0.1-test.2 kept it after the hub's machine had moved on, and the wait
 # for its removal timed out.
 PROOF_RUNNER=/home/cawco/.cawco-proof/run
-proof_runner() { as_user "$1" sh -c 'mkdir -p "${2%/*}" && ln -f "$(readlink -f "$HOME/.local/bin/cawco")" "$2"' sh "$PROOF_RUNNER"; }
+proof_runner() { as_user "$1" sh -c 'mkdir -p "${1%/*}" && ln -f "$(readlink -f "$HOME/.local/bin/cawco")" "$1"' sh "$PROOF_RUNNER"; }
 run_script() { local c=$1; shift; as_user "$c" env BUN_BE_BUN=1 "$PROOF_RUNNER" "$@"; }
 need_hub() {
   as_user "$hubc" curl -fsS --max-time 10 http://127.0.0.1:3456/health > /dev/null 2>&1 || { echo "the hub is not answering"; return 1; }
