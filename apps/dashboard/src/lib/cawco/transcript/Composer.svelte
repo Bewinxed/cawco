@@ -39,6 +39,23 @@
     /** A thread's tab id: its row leads with Caw's face. */
     thread?: string;
   }
+
+  /**
+   * One conversation's row above the composer: the offer standing on it and
+   * its delegate tray. A composer keeps the row of every conversation it can
+   * be handed (`trayRows`) and draws the one it writes to (`showing`): handed the
+   * next, it shows that one's, already built and laid out, where building it
+   * in the switch put its offer, its tray and their chips into the page
+   * inside the click.
+   */
+  export interface TrayRow {
+    /** The session whose delegates its tray shows; empty for none. */
+    delegatesOf: string;
+    /** The conversation's id: what `showing` names. */
+    id: string;
+    /** What stands on the tray row: an offer, never an ask. */
+    prompts?: Snippet;
+  }
 </script>
 
 <script lang="ts">
@@ -70,12 +87,11 @@
     ease,
     easeDrawer,
     easeOut,
-    lifting as liftingOut,
     motionOk,
     popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
@@ -153,14 +169,14 @@
     oninterruptsend,
     onmenu,
     onstop,
-    prompts,
+    trayRows = [],
+    showing = "",
     ask = null,
     perch,
     planRing,
     onfoot,
     placeholder,
     suggest,
-    delegatesOf,
     recallOf,
     switchDir = 0,
     landing = { done: Promise.resolve(), ms: () => 0 },
@@ -221,8 +237,13 @@
     /** Fired when the `/` menu opens, so the session can be re-asked what it has. */
     onmenu?: () => void;
     onstop: () => void;
-    /** What stands on the tray row, above the composer: an offer, never an ask. */
-    prompts?: Snippet;
+    /**
+     * The row above the composer of each conversation it can be handed
+     * (`TrayRow`); none on surfaces with no session behind them.
+     */
+    trayRows?: TrayRow[];
+    /** Which of `trayRows` is drawn: the conversation being written to. */
+    showing?: string;
     /** The ask parked on this conversation, which the composer grows into; none with none. */
     ask?: ComposerAsk | null;
     /**
@@ -244,11 +265,6 @@
      * suggestion chips. Absent on surfaces with no session behind them.
      */
     suggest?: { candidates: SuggestCandidate[] };
-    /**
-     * The session whose delegates the tray above the composer shows; absent
-     * on surfaces with no session behind them.
-     */
-    delegatesOf?: string;
     /**
      * The conversation whose sent messages the composer recalls (↑, or a
      * held press on a touch screen), and whose queued
@@ -2985,18 +3001,23 @@
   let ringWidth = $state(0);
   let stack = $state(0);
 
-  /**
-   * One conversation's tray handing its place to the next: a crossfade, the
-   * two in the one cell of the slot's fixed row, so neither the slot nor
-   * anything standing on it moves.
+  /** The rows with an offer to stand on the tray row, and those with a tray. */
+  const offered = $derived(trayRows.filter((row) => row.prompts));
+  const trayed = $derived(trayRows.filter((row) => row.delegatesOf));
+  /** The box the offers stand in: a `reflow` container. */
+  let offers = $state<HTMLElement>();
+  /*
+   * Handed another conversation, the offer drawn changes between two built
+   * already: nothing arrived or left, so nothing to animate, and nothing for
+   * the offers' reflow to read inside the switch (`handOver`). Before the
+   * update writes it, so the change it hears is already its own.
    */
-  function trayFade(node: HTMLElement): TransitionConfig {
-    return liftingOut(node, () => ({ "grid-area": "1 / 1" }), {
-      duration: dur("--dur-exit"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    });
-  }
+  $effect.pre(() => {
+    const box = offers;
+    if (box && showing) {
+      untrack(() => handOver(box));
+    }
+  });
 
   /** How high the grown ask stands over the composer's foot; 0 with none up. */
   const askRise = $derived(askRaised && askBox ? askBox.base + askBox.ext : 0);
@@ -3031,9 +3052,22 @@
   class:drawing={canvasUp}
   class:minimized
 >
-  {#if prompts}
-    <div class="prompts" inert={askRaised} {@attach reflow()}>
-      <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
+  {#if offered.length > 0}
+    <div
+      class="prompts"
+      inert={askRaised}
+      bind:this={offers}
+      {@attach reflow()}
+    >
+      <!-- Each conversation's offer, built; the one written to is in the
+           column, the rest stand out of it, hidden. -->
+      <div class="stack" bind:clientHeight={stack}>
+        {#each offered as row (row.id)}
+          <div class="offer" class:away={row.id !== showing}>
+            {@render row.prompts?.()}
+          </div>
+        {/each}
+      </div>
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
@@ -3084,18 +3118,20 @@
         {@render planRing()}
       </div>
     {/if}
-    {#if delegatesOf}
+    {#if trayed.length > 0}
       <div
         class="tray-slot"
         style:padding-inline-end={planRing
           ? `calc(${ringWidth}px + var(--space-2))`
           : undefined}
       >
-        {#key delegatesOf}
-          <div in:trayFade out:trayFade>
-            <DelegateTray {held} parentId={delegatesOf} />
+        <!-- Each conversation's tray, built, in the slot's one cell: handed
+             the next, the one written to fades in over the last. -->
+        {#each trayed as row (row.id)}
+          <div class="tray" class:away={row.id !== showing}>
+            <DelegateTray {held} parentId={row.delegatesOf} />
           </div>
-        {/key}
+        {/each}
       </div>
     {/if}
   </div>
@@ -3588,16 +3624,43 @@
   /* What the column measures into the composer's height: the cards and
      the step under them, and nothing at all with no card parked. */
   .stack {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
 
-    &:has(> :global(*)) {
+    &:has(> .offer:not(.away) > :global(*)) {
       padding-bottom: var(--space-3);
     }
-    & > :global(*) {
+    & > .offer {
       pointer-events: auto;
     }
+  }
+  /* The offer of a conversation not being written to: built and laid out,
+     out of the column at its foot, unseen and out of reach (`visibility`
+     takes it out of the tab order and the accessibility tree). */
+  .offer.away {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    visibility: hidden;
+  }
+  /* Each conversation's tray in the slot's one cell: the one written to
+     fades in over the last as it fades out, so neither the slot nor
+     anything standing on it moves. Opacity only, so it runs with or without
+     motion; the one leaving is out of reach once it has faded. */
+  .tray {
+    grid-area: 1 / 1;
+    transition:
+      opacity var(--dur-exit) var(--ease-out),
+      visibility 0s;
+  }
+  .tray.away {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--dur-exit) var(--ease-out),
+      visibility 0s var(--dur-exit);
   }
 
   /* One shape, always. --radius-lg outside, --space-2 of inset, and the

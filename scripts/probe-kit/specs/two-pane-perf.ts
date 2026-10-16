@@ -535,6 +535,9 @@ async function measure(
             longest.invalidated
               .map(([what, n]) => `${what} ${n}x`)
               .join("; ") || "nothing traced"
+          }; laid out again for ${
+            longest.relaidOut.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+            "nothing traced"
           }`
         : "nothing",
     };

@@ -839,7 +839,6 @@
             ask={firstAsk}
             busy={thread?.status === "working"}
             commands={binding.commands}
-            delegatesOf={binding.delegatesOf}
             {draft}
             mentionsFrom={binding.mentionsFrom}
             onfoot={binding.onfoot}

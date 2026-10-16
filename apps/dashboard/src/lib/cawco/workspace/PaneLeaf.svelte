@@ -32,7 +32,7 @@
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
   import { isThreadTab } from "../thread-tabs";
-  import Composer from "../transcript/Composer.svelte";
+  import Composer, { type TrayRow } from "../transcript/Composer.svelte";
   import TranscriptSkeleton from "../transcript/TranscriptSkeleton.svelte";
   import { runIdOf } from "../workflow-runs";
   import {
@@ -74,6 +74,24 @@
       lent = bound;
     }
   });
+  /**
+   * The row above the composer of every tab here that can be written to,
+   * each kept built (Composer `TrayRow`): a switch shows the next one's.
+   */
+  const trayRows = $derived(
+    leaf.tabs.flatMap((id): TrayRow[] => {
+      const binding = composerBindings.get(id);
+      return binding
+        ? [
+            {
+              id,
+              prompts: binding.prompts,
+              delegatesOf: binding.delegatesOf,
+            },
+          ]
+        : [];
+    })
+  );
 
   /**
    * What a drop hovering this group would do, as the box it would fill:
@@ -462,7 +480,6 @@
           ask={lent.ask}
           busy={lent.busy}
           commands={lent.commands}
-          delegatesOf={lent.delegatesOf}
           draft={lent.draft}
           held={swipe.moving}
           {landing}
@@ -476,11 +493,12 @@
           perch={lent.perch}
           placeholder={lent.placeholder}
           planRing={lent.planRing}
-          prompts={lent.prompts}
           recallOf={lent.recallOf}
+          {trayRows}
           sendAgain={lent.sendAgain}
           sendError={lent.sendError}
           sending={lent.sending}
+          showing={viewId}
           suggest={lent.suggest}
           {switchDir}
         />

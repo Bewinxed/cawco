@@ -431,6 +431,12 @@ export interface MainTask {
    */
   passes: { at: string; elements: number; ms: number; name: string }[];
   /**
+   * What its layouts were asked for (`restyles` only): each layout
+   * invalidation's reason and the element it named, with how many times.
+   * A layout pass's `elements` are the layout objects it found dirty.
+   */
+  relaidOut: [string, number][];
+  /**
    * How many elements its style recalculations restyled, all of them
    * together (`UpdateLayoutTree`'s `elementCount`); read only when asked
    * for (`traceMain`'s `restyles`), 0 otherwise.
@@ -474,7 +480,12 @@ interface ProfileData {
 
 interface TraceEvent {
   args?: {
-    beginData?: { stackTrace?: StackFrame[] };
+    /** A Layout's: the layout objects it found dirty, of all there are. */
+    beginData?: {
+      dirtyObjects?: number;
+      stackTrace?: StackFrame[];
+      totalObjects?: number;
+    };
     data?: ProfileData & {
       nodeName?: string;
       reason?: string;
@@ -634,7 +645,10 @@ export async function traceMain(
       .filter((one) => one.ts >= from && one.ts < to)
       .reduce((sum, one) => sum + (one.dur ?? 0) / 1000, 0);
   const elementsOf = (one: TraceEvent) =>
-    one.args?.elementCount ?? one.args?.endData?.elementCount ?? 0;
+    one.args?.elementCount ??
+    one.args?.endData?.elementCount ??
+    one.args?.beginData?.dirtyObjects ??
+    0;
   const forcedBy = (one: TraceEvent) => {
     const [frame] =
       one.args?.beginData?.stackTrace ?? one.args?.data?.stackTrace ?? [];
@@ -642,14 +656,17 @@ export async function traceMain(
       ? `${frame.functionName || "(anonymous)"}@${frame.url.split("/").pop()}:${frame.lineNumber + 1}:${frame.columnNumber + 1}`
       : "the frame";
   };
-  const invalidations = events.filter(
-    (event) =>
-      event.name === "StyleRecalcInvalidationTracking" &&
-      event.pid === first.pid
-  );
-  const invalidatedIn = (from: number, to: number): [string, number][] => {
+  const trackedAs = (name: string) =>
+    events.filter((event) => event.name === name && event.pid === first.pid);
+  const restyleAsks = trackedAs("StyleRecalcInvalidationTracking");
+  const relayoutAsks = trackedAs("LayoutInvalidationTracking");
+  const askedIn = (
+    asks: TraceEvent[],
+    from: number,
+    to: number
+  ): [string, number][] => {
     const counted = new Map<string, number>();
-    for (const one of invalidations) {
+    for (const one of asks) {
       if (one.ts >= from && one.ts < to) {
         const node = (one.args?.data?.nodeName ?? "?")
           .replace(CLASS_ATTRIBUTE, ".$1")
@@ -698,7 +715,8 @@ export async function traceMain(
           styleMs: msIn(recalcs, event.ts, end),
           layoutMs: msIn(layouts, event.ts, end),
           passes: restyles ? passesIn(event.ts, end) : [],
-          invalidated: restyles ? invalidatedIn(event.ts, end) : [],
+          invalidated: restyles ? askedIn(restyleAsks, event.ts, end) : [],
+          relaidOut: restyles ? askedIn(relayoutAsks, event.ts, end) : [],
         };
       }),
   };

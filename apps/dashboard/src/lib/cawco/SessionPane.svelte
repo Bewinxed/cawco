@@ -1142,7 +1142,6 @@
             ask={firstAsk}
             busy={session.busy}
             {commands}
-            delegatesOf={viewId}
             {draft}
             mentionsFrom={viewId}
             {oninterruptsend}
@@ -1150,11 +1149,12 @@
             {onstop}
             {onsubmit}
             paneVisible={visible}
-            prompts={offer}
             recallOf={viewId}
             sendError={sendFailure}
             {sending}
+            showing={viewId}
             {suggest}
+            trayRows={[{ delegatesOf: viewId, id: viewId, prompts: offer }]}
           />
         {/if}
       </div>

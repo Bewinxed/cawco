@@ -1109,6 +1109,33 @@ class Reflow {
     return this.#skipped;
   }
 
+  /** Handed over (`handOver`) and not yet read again: nothing it hears is a change to animate. */
+  #resting = false;
+
+  get resting(): boolean {
+    return this.#resting;
+  }
+
+  /**
+   * Handed over: what changes from now to the frame after is no change to
+   * animate, and every place is read again behind that frame, from the
+   * layout it drew, rather than inside the update that made the change.
+   * With the page hidden there is no frame to wait for and nothing seen to
+   * keep still, and it goes on hearing as before.
+   */
+  rest() {
+    if (this.#skipped || this.#resting || document.hidden) {
+      return;
+    }
+    this.#resting = true;
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        this.#resting = false;
+        this.rendered(!this.#skipped);
+      })
+    );
+  }
+
   /**
    * Rendered again, or skipped (`watchRendered`). Rendered again, every
    * place and the scroll are read as they stand: whatever changed while it
@@ -1528,7 +1555,7 @@ export function reread(containers: HTMLElement[]): void {
  */
 const changed = new Map<Reflow, number>();
 function heard(state: Reflow, depth: number): void {
-  if (state.skipped) {
+  if (state.skipped || state.resting) {
     return;
   }
   if (changed.size === 0) {
@@ -1541,7 +1568,9 @@ function heard(state: Reflow, depth: number): void {
         settle();
       }
       for (const [each] of order) {
-        each.change();
+        if (!each.resting) {
+          each.change();
+        }
       }
     });
   }
@@ -1565,6 +1594,18 @@ export function beforeReflow(settle: () => void): void {
 
 /** Each `reflow` container's state, by its element (`skippedAt`). */
 const states = new WeakMap<HTMLElement, Reflow>();
+
+/**
+ * Tells a `reflow` container its contents are being handed over: what it
+ * holds is swapped for what it holds for someone else, both built already
+ * (a composer handed the next conversation shows that one's offer). Nothing
+ * arrived or left, so nothing it hears until the frame after is animated,
+ * and it reads its places again behind that frame: read in the switch, every
+ * place in it laid the page out mid-update, the pane coming in with it.
+ */
+export function handOver(container: HTMLElement): void {
+  states.get(container)?.rest();
+}
 
 /**
  * Whether the `reflow` container around `node` is not being rendered (an

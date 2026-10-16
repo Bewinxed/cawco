@@ -211,7 +211,6 @@
           ask={lent.ask}
           busy={lent.busy}
           commands={lent.commands}
-          delegatesOf={lent.delegatesOf}
           draft={lent.draft}
           mentionsFrom={lent.mentionsFrom}
           onfoot={lent.onfoot}
@@ -223,12 +222,15 @@
           perch={lent.perch}
           placeholder={lent.placeholder}
           planRing={lent.planRing}
-          prompts={lent.prompts}
           recallOf={lent.recallOf}
           sendAgain={lent.sendAgain}
           sendError={lent.sendError}
           sending={lent.sending}
+          showing={ID}
           suggest={lent.suggest}
+          trayRows={[
+            { delegatesOf: lent.delegatesOf, id: ID, prompts: lent.prompts },
+          ]}
         />
       </div>
     {/if}
