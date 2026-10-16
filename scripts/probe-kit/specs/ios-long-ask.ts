@@ -1130,15 +1130,17 @@ async function onSimulator(
       await pause(2000);
       // "Change hub" stands at the drawer's foot, under every project's
       // sessions: the drawer scrolled down to it.
-      for (let swipe = 0; swipe < 8; swipe += 1) {
+      // Flicked, as a hand does down a long list: on the owner's hub the
+      // drawer holds every project's sessions above it.
+      for (let swipe = 0; swipe < 20; swipe += 1) {
         // biome-ignore lint/performance/noAwaitInLoops: one swipe after another, until it shows
         if ((await labels()).some((node) => node.label === "Change hub")) {
           break;
         }
         await sh(
-          `${AXE} swipe --start-x 150 --start-y 700 --end-x 150 --end-y 250 --duration 0.5 --udid ${udid}`
+          `${AXE} swipe --start-x 150 --start-y 750 --end-x 150 --end-y 150 --duration 0.12 --udid ${udid}`
         );
-        await pause(1200);
+        await pause(900);
       }
       if (await tap((label) => label === "Change hub")) {
         await pause(2000);
