@@ -153,16 +153,25 @@ const standUp = async (kit: Kit) => {
   // checkout may stand on a detached HEAD (a host check's) that names none.
   const src = join(fleet.sandbox, "src");
   const origin = join(fleet.sandbox, "origin.git");
-  const asOwner = { ...process.env, HOME: home };
-  await Bun.$`git clone --quiet --local ${ROOT} ${src}`.env(asOwner).quiet();
-  await Bun.$`git -C ${src} checkout --quiet -B main`.env(asOwner).quiet();
-  await Bun.$`git clone --quiet --bare --local ${src} ${origin}`
-    .env(asOwner)
-    .quiet();
-  await Bun.$`git -C ${src} remote set-url origin ${origin}`
-    .env(asOwner)
-    .quiet();
-  await Bun.$`git -C ${src} fetch --quiet origin`.env(asOwner).quiet();
+  /** One git step as the owner; a failure throws with git's own words. */
+  const git = async (...args: string[]) => {
+    const run = await Bun.$`git ${args}`
+      .env({ ...process.env, HOME: home })
+      .quiet()
+      .nothrow();
+    if (run.exitCode !== 0) {
+      throw new Error(
+        `git ${args.join(" ")} exited ${run.exitCode}: ${run.stderr.toString().trim()}`
+      );
+    }
+  };
+  await git("clone", "--quiet", "--local", ROOT, src);
+  await git("-C", src, "checkout", "--quiet", "-B", "main");
+  await git("init", "--quiet", "--bare", origin);
+  await git("-C", origin, "symbolic-ref", "HEAD", "refs/heads/main");
+  await git("-C", src, "remote", "set-url", "origin", origin);
+  await git("-C", src, "push", "--quiet", "origin", "main");
+  await git("-C", src, "fetch", "--quiet", "origin");
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Live sheet",
     machineId: MACHINE,
