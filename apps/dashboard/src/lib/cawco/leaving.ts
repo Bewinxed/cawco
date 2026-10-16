@@ -9,15 +9,31 @@
  * answer. So once the page is leaving, a new fetch never starts, and an
  * in-flight one that fails, or whose body read fails, never settles.
  *
- * Three things close the gate: the page's own navigations away, which go
- * through {@link leaveThePage}; `beforeunload`, for the person's reload, back
- * or address bar; and `pagehide`, the only one of the two Safari on iOS fires
- * (MDN, Window: beforeunload event, "Safari on iOS – No support"). A page
- * brought back from the back/forward cache (`pageshow` with `persisted`)
- * opens it again. Nothing in the app cancels a leave (no `beforeNavigate`
- * cancels), so a closed gate means the document is going. A `keepalive` send
- * is made to outlive the page (the error reporter's, hooks.client.ts) and
- * always goes.
+ * What closes the gate, each the first word a browser gives that the page is
+ * going:
+ *
+ *  - the page's own navigations away, through {@link leaveThePage};
+ *  - `beforeunload`, for every navigation away, the person's reload and
+ *    address bar included, wherever it fires; Safari on iOS never fires it
+ *    (MDN, Window: beforeunload event, "Safari on iOS – No support");
+ *  - the Navigation API's cross-document `navigate`, which Safari on iOS
+ *    fires from 26.2 (MDN, Navigation: navigate event) for back and forward,
+ *    links, forms and `location`, but, by design, not for the reload button,
+ *    the address bar or a bookmark (the API's explainer, "Appendix: types of
+ *    navigations": "Browser UI (non-back/forward other) | Cross | No");
+ *  - `pagehide`, which every browser fires, last.
+ *
+ * On back and forward WebKit fails the reads in flight before it fires
+ * `beforeunload` or `navigate` (measured: the failures one task ahead of
+ * `navigate`, and still ahead after a deferred look), so there the gate holds
+ * only the reads the page would start after.
+ *
+ * A page brought back from the back/forward cache (`pageshow` with
+ * `persisted`) opens it again. Nothing in the app cancels a leave (no
+ * `beforeNavigate` cancels, no other `navigate` listener) and no same-window
+ * navigation ends in a download (the app's downloads are `<a download>`), so
+ * a closed gate means the document is going. A `keepalive` send is made to
+ * outlive the page (the error reporter's, hooks.client.ts) and always goes.
  *
  * SvelteKit's router listens for `beforeunload` already, so this listener
  * costs no back/forward cache entry in Firefox.
@@ -39,6 +55,13 @@ export function holdReadsWhileLeaving(): void {
   };
   addEventListener("beforeunload", leave);
   addEventListener("pagehide", leave);
+  // A browser without the Navigation API has no `navigation`; there this
+  // signal does not start.
+  globalThis.navigation?.addEventListener("navigate", (event) => {
+    if (!event.destination.sameDocument && event.downloadRequest === null) {
+      leave();
+    }
+  });
   addEventListener("pageshow", (event) => {
     if (event.persisted) {
       leaving = false;
