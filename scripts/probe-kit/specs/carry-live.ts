@@ -94,7 +94,11 @@ const CARRIED_LINE = /carried, \d+ entr/;
 /** The hub's and agent's lines about moves, for a failed case to show. */
 const MOVE_LINE = /\[at-limit\]|\[accounts\]|\[carry\]|\[rebalance\]/;
 /** The agent's lines about its accounts' logins. */
-const LOGIN_LINE = /login|sign|auth|credential|account/i;
+const LOGIN_LINE = /login|sign|auth|account/i;
+/** The hub's lines on a session or a dir signed in as someone else. */
+const MISMATCH_LINE = /someone else|mismatch|signed in as/i;
+/** The email a login's `.claude.json` names. */
+const EMAIL = /"emailAddress":"[^"]+"/;
 /** The agent's lines about taking its sessions over, and its own starts. */
 const CUSTODY_LINE = /\[custody\]|\[rebalance\]|agent started|restart/i;
 /** A move pending on its machine says it goes as that machine connects again. */
@@ -355,6 +359,35 @@ const run = async (kit: Kit) => {
    * The hub's and the agent's lines about `id`, each service's last 30 apart
    * and labelled: joined, the agent's alone filled any tail cut short.
    */
+  /**
+   * Why `account` does not read signed in: the hub's sign-in rows, who its
+   * login dir names, the hub's lines on a session signed in as someone else,
+   * and the agent's lines about logins.
+   */
+  const signinTrouble = async (account: string): Promise<string> => {
+    const dir = join(fleet.home, ".cawco", "accounts", account, "claude");
+    const read = (file: string) =>
+      readFile(join(dir, file), "utf8").then(
+        (text) => text,
+        () => ""
+      );
+    const login = await read(".credentials.json");
+    const named = await read(CLAUDE_JSON_NAME);
+    return [
+      `sign-in rows: ${JSON.stringify(fleet.query("SELECT account_id, machine_id, state FROM account_signins"))}`,
+      `${account}'s login file: ${login ? `access token ${login.includes("accessToken") ? "present" : "absent"}` : "missing"}; it names ${EMAIL.exec(named)?.[0] ?? "nobody"}`,
+      "--- hub ---",
+      ...(await fleet.logs("hub"))
+        .split("\n")
+        .filter((line) => MISMATCH_LINE.test(line))
+        .slice(-10),
+      "--- agent ---",
+      ...(await fleet.logs("agent"))
+        .split("\n")
+        .filter((line) => LOGIN_LINE.test(line))
+        .slice(-10),
+    ].join("\n");
+  };
   const linesAbout = async (id: string) => {
     const about = (log: string, kept: RegExp, last: number) =>
       log
@@ -775,27 +808,7 @@ const run = async (kit: Kit) => {
         (row) => row?.state === "signed-in",
         180_000
       ).catch(async (error: unknown) => {
-        // What says why it is not: the hub's sign-in rows, the login file
-        // Claude Code keeps for it, and the agent's lines about logins.
-        const login = join(
-          fleet.home,
-          ".cawco",
-          "accounts",
-          account,
-          "claude",
-          ".credentials.json"
-        );
-        const held = await readFile(login, "utf8").catch(() => "");
-        console.log(
-          [
-            `sign-in rows: ${JSON.stringify(fleet.query("SELECT account_id, machine_id, state FROM account_signins"))}`,
-            `${account}'s login file: ${held ? `${held.length} bytes, access token ${held.includes("accessToken") ? "present" : "absent"}` : "missing"}`,
-            ...(await fleet.logs("agent"))
-              .split("\n")
-              .filter((line) => LOGIN_LINE.test(line))
-              .slice(-20),
-          ].join("\n")
-        );
+        console.log(await signinTrouble(account));
         throw error;
       });
     }
