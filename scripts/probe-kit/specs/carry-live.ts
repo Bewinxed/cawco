@@ -33,6 +33,10 @@
  *    stood up for the place; and a person's OpenCode session in that folder
  *    (one OpenCode location for every session there) runs its `shell` on
  *    the host too.
+ * 6. At its limit, two accounts free: B in A's organization and C in
+ *    another, C ordered ahead of B. The at-limit controller carries the
+ *    session to B, whose prompt cache it shares, and it carries on on B's
+ *    token. C joins only for this case, after 2–4, which want B alone free.
  *
  *   bun scripts/probe-kit/run.ts carry-live
  *   CARRY_CASE=4 bun scripts/probe-kit/run.ts carry-live
@@ -48,10 +52,15 @@ import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const B = "acct-scratch-fleet-b";
+/** Case 6's account in another organization, placed ahead of B. */
+const C = "acct-scratch-fleet-c";
+/** The organization A and B share (scratch-fleet's own login's). */
+const ORGANIZATION = "Scratch Fleet";
 /** Each account's token, as its requests carry it. */
 const TOKEN: Record<string, string> = {
   [ACCOUNT]: "sk-ant-oat01-fake-scratch-fleet",
   [B]: "sk-ant-oat01-fake-scratch-fleet-b",
+  [C]: "sk-ant-oat01-fake-scratch-fleet-c",
 };
 
 const words = (text: string): Reply => ({ everyMs: 5, words: [text] });
@@ -182,8 +191,13 @@ const shellReply = (request: Seen): Reply | undefined => {
   return words("SHELL-READ");
 };
 
-/** A signed-in fake login for account `id` in `home`, with its own token. */
-const furnishAccount = async (home: string, id: string) => {
+/** A signed-in fake login for account `id` in `home`, with its own token, in `organization`. */
+const furnishAccount = async (
+  home: string,
+  id: string,
+  organization = ORGANIZATION
+) => {
+  const tag = id.slice(-1);
   const dir = join(home, ".cawco", "accounts", id, "claude");
   await mkdir(dir, { recursive: true });
   await writeFile(
@@ -203,10 +217,13 @@ const furnishAccount = async (home: string, id: string) => {
     JSON.stringify({
       hasCompletedOnboarding: true,
       oauthAccount: {
-        emailAddress: "probe-b@scratch-fleet.test",
-        organizationName: "Scratch Fleet",
-        accountUuid: "00000000-0000-4000-8000-00000000000b",
-        organizationUuid: "00000000-0000-4000-8000-000000000002",
+        emailAddress: `probe-${tag}@scratch-fleet.test`,
+        organizationName: organization,
+        accountUuid: `00000000-0000-4000-8000-00000000000${tag}`,
+        organizationUuid:
+          organization === ORGANIZATION
+            ? "00000000-0000-4000-8000-000000000002"
+            : "00000000-0000-4000-8000-000000000003",
       },
     })
   );
@@ -255,7 +272,7 @@ const run = async (kit: Kit) => {
     const from: string = await until(
       `${title}: placed on an account`,
       () => accountOf(id) ?? "",
-      (one) => one === ACCOUNT || one === B
+      (one) => one === ACCOUNT || one === B || one === C
     );
     if (on && from !== on) {
       await fleet.api<Moved>(`/api/instances/${id}/account`, { accountId: on });
@@ -663,6 +680,58 @@ const run = async (kit: Kit) => {
   }
 
   await limitCases();
+
+  // 6. At its limit with B (A's organization) and C (another) free, C first
+  // in order: the move stays in A's organization.
+  if (runs("6")) {
+    const name = "at its limit, two free";
+    await furnishAccount(fleet.home, C, "Other Organization");
+    fleet.write(
+      "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Probe C', 'red', 1, 0, ?)",
+      C,
+      Date.now()
+    );
+    fleet.write('UPDATE accounts SET "order" = 2 WHERE id = ?', B);
+    // The agent reads its accounts' logins as it starts.
+    await fleet.stop("agent");
+    fleet.launch("agent");
+    await fleet.agentUp();
+    const cIn = await until(
+      "account C signed in",
+      () =>
+        fleet.query<{ state: string }>(
+          "SELECT state FROM account_signins WHERE account_id = ?",
+          C
+        )[0],
+      (row) => row?.state === "signed-in",
+      120_000
+    ).catch(() => undefined);
+    kit.check(`${name}: C, in another organization, is signed in`, !!cIn);
+    const s = await start("Organization move", ACCOUNT);
+    limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
+    await fleet.send(s.id, "ORG-MARK go on");
+    const landed = await until(
+      `${name}: the at-limit controller moves it`,
+      () => accountOf(s.id) ?? undefined,
+      (one) => one === B || one === C,
+      180_000
+    ).catch(() => accountOf(s.id));
+    kit.check(
+      `${name}: the at-limit controller carries it to B, in A's organization, not C`,
+      landed === B,
+      `account ${landed}`
+    );
+    if (landed !== B) {
+      console.log((await linesAbout(s.id)).slice(-40).join("\n"));
+    }
+    const onB = await seenWhere(
+      (one) => one.all.includes("ORG-MARK") && accountOfAuth(one.auth) === B,
+      `${name}: it carries on on B`,
+      120_000
+    ).catch(() => undefined);
+    kit.check(`${name}: it carries on on B's token`, !!onB);
+    limited.delete(ACCOUNT);
+  }
 };
 
 export default { name: "carry-live", run } satisfies Spec;

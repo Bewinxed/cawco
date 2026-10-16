@@ -418,6 +418,21 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const readingOf = (accountId: string): AccountReading | undefined =>
     db.accounts.readings().find((one) => one.accountId === accountId);
 
+  /**
+   * Where `row` goes off `current`, for a limit or a refused credential
+   * alike: an account placement would carry it to in `current`'s
+   * organization first, whose prompt cache comes along ("Caches are isolated
+   * between organizations. Different organizations never share caches",
+   * platform.claude.com/docs/en/build-with-claude/prompt-caching), else any.
+   * Undefined when none can take it.
+   */
+  const targetFor = (row: LimitRow, current: Account): Account | undefined => {
+    const targetId =
+      ports.target(row, current.id, (one) => sameOrganization(one, current)) ??
+      ports.target(row, current.id);
+    return targetId ? db.accounts.get(targetId) : undefined;
+  };
+
   /** The policy for `row` on `accountId`, and what decides it. */
   const decide = (row: LimitRow, current: Account, now: number) => {
     const policy = db.accounts.routing(current.provider).atLimit;
@@ -429,13 +444,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       now
     );
     const forked = row.forkedFrom !== null;
-    const targetId =
-      policy.move && !forked ? ports.target(row, current.id) : null;
     return decideAtLimit({
       policy,
       forked,
       current,
-      target: targetId ? db.accounts.get(targetId) : undefined,
+      target: policy.move && !forked ? targetFor(row, current) : undefined,
       contextTokens: row.contextTokens,
       resetAt,
       now,
@@ -443,20 +456,15 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * Where `row` goes off `current`, whose credential Claude Code refused:
-   * an account placement would carry it to in `current`'s organization
-   * first, whose cache comes along, else any. Neither the limit's policy
-   * nor a fork's tie to its origin's cache keeps it on an account that
-   * cannot run it. Undefined when none can take it.
+   * Where `row` goes off `current`, whose credential Claude Code refused
+   * ({@link targetFor}). Neither the limit's policy nor a fork's tie to its
+   * origin's cache keeps it on an account that cannot run it.
    */
   const refusedTarget = (
     row: LimitRow,
     current: Account
   ): { target: Account; sameOrganization: boolean } | undefined => {
-    const targetId =
-      ports.target(row, current.id, (one) => sameOrganization(one, current)) ??
-      ports.target(row, current.id);
-    const target = targetId ? db.accounts.get(targetId) : undefined;
+    const target = targetFor(row, current);
     return target
       ? { target, sameOrganization: cacheCarries(current, target) }
       : undefined;
@@ -918,8 +926,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     ) {
       return;
     }
-    const targetId = ports.target(row, current.id);
-    const target = targetId ? db.accounts.get(targetId) : undefined;
+    const target = targetFor(row, current);
     if (target && cacheCarries(current, target)) {
       return;
     }
