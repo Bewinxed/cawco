@@ -1316,7 +1316,8 @@ const spec: Spec = {
         { says: "Finished in 1 min", how: null, workItemId: "wi-review-2" },
         {
           says: "Failed after 3 min",
-          how: `Attempt failed: ${FAILED_WHY}`,
+          // The hub's `endedHow`, beside the Failed badge: the reason alone.
+          how: FAILED_WHY,
           workItemId: "wi-review-1",
         },
       ],
