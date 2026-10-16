@@ -3278,7 +3278,17 @@ function handleFrame(frame: FramePayload): void {
       break;
     }
 
-    default:
+    case "asleep":
+    case "delegate_event":
+    case "frame":
+    case "held_send":
+    case "recovery_unavailable":
+    case "rejected":
+    case "scratch_worktree":
+    case "send":
+    case "session_address":
+    case "stopped":
+    case "user_message":
       // Every other FramePayload kind (instances, usage, delegate events,
       // fleet watch's notices, …) is handled above, before this switch is reached.
       break;

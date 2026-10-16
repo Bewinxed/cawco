@@ -1320,7 +1320,7 @@ export const accountMoveWords = (
         line: `${unmovedWords(move)}: ${move.reason}`,
         detail: unmovedNext(move),
       };
-    default:
+    case "continued":
       return continuedWords(move);
   }
 };
@@ -1348,14 +1348,15 @@ const endedWords = (by: EndedBy): { line: string; detail: string } => {
       return { line: `Stopped by ${by.name}`, detail: STOPPED_NEXT };
     case "hub":
       return { line: `Stopped: ${by.why}`, detail: STOPPED_NEXT };
-    default:
-      return {
-        line: `Ended from outside CawCo (${by.signal})`,
-        detail: by.resumes
-          ? "Something on its machine ended its process; the turn it was in is handed back, which starts it again"
-          : "Something on its machine ended its process; its next message starts it again",
-      };
+    case "outside":
+      break;
   }
+  return {
+    line: `Ended from outside CawCo (${by.signal})`,
+    detail: by.resumes
+      ? "Something on its machine ended its process; the turn it was in is handed back, which starts it again"
+      : "Something on its machine ended its process; its next message starts it again",
+  };
 };
 
 /** What happens next after a failed move or continuation: where it stays, and what carries it on. */

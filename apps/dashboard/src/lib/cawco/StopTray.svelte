@@ -652,9 +652,11 @@
         return "Try again";
       case "done":
         return words.ended;
-      default:
-        return words.armed(total);
+      case "ending":
+      case "stopping":
+        break;
     }
+    return words.armed(total);
   });
   // The count winds down as stops land, and holds at the last one while its
   // tile is still on its way: the ending word is next.

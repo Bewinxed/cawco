@@ -80,7 +80,7 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
               reason: outcome.reason,
             });
             break;
-          default:
+          case "none":
             break;
         }
       }

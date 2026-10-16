@@ -189,7 +189,9 @@ export function artifactName(artifact: ResultArtifact): string {
       }
     case "artifact":
       return artifact.artifactId;
-    default:
-      return artifact.path.split("/").at(-1) ?? artifact.path;
+    case "file":
+    case "post":
+      break;
   }
+  return artifact.path.split("/").at(-1) ?? artifact.path;
 }

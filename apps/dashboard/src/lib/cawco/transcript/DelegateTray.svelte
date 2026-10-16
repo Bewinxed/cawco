@@ -562,9 +562,14 @@
         return `needs you, ${questionWords(chip.questions)}`;
       case "asked":
         return "running, asked this session a question";
-      default:
-        return chip.tone;
+      case "cancelled":
+      case "done":
+      case "failed":
+      case "running":
+      case "starting":
+        break;
     }
+    return chip.tone;
   };
   const questionWords = (n: number) =>
     n === 1 ? "1 question" : `${n} questions`;

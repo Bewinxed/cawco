@@ -1782,7 +1782,7 @@ const unpushed = (
         gate,
         line: "Not pushed: this workspace's repository has no remote.",
       };
-    default:
+    case "refused":
       return {
         kind: "refused",
         gate,
@@ -5322,7 +5322,7 @@ export const createWorkItems = ({
             `your commits rebased onto origin/${base}, which your branch is now on top of`
           ),
         };
-      default:
+      case "refused":
         return {
           kind: "refused",
           gate,
@@ -5492,7 +5492,7 @@ export const createWorkItems = ({
       case "branch":
       case "pr":
         return landOnBranch(workspace, item, summary, earlier);
-      default:
+      case "main":
         return landOnBase(workspace, item, steps);
     }
   };

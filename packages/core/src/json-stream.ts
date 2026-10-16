@@ -349,7 +349,8 @@ export class JsonDecoder {
         }
         this.#string = { decoded: "", isKey: true, pending: 0, raw: "" };
         return at + 1;
-      default:
+      case "value":
+      case "value-or-end":
         return this.#valueStart(text, at, code, char);
     }
   }

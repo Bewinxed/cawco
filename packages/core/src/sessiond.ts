@@ -316,16 +316,24 @@ export const sessiondEndpoint = (): string => {
     }
     case "darwin":
       return join(sessiondLinkDir(), "sessiond.sock");
-    default: {
-      // linux, and every other platform Node reports: same derivation as
-      // linux's documented case, since XDG_RUNTIME_DIR is the same signal
-      // wherever it is set.
-      const runtimeDir = process.env.XDG_RUNTIME_DIR;
-      return runtimeDir
-        ? join(runtimeDir, "cawco", "sessiond.sock")
-        : join(homedir(), ".cawco", "sessiond.sock");
-    }
+    case "aix":
+    case "android":
+    case "cygwin":
+    case "freebsd":
+    case "haiku":
+    case "linux":
+    case "netbsd":
+    case "openbsd":
+    case "sunos":
+      break;
   }
+  // linux, and every other platform Node reports: same derivation as
+  // linux's documented case, since XDG_RUNTIME_DIR is the same signal
+  // wherever it is set.
+  const runtimeDir = process.env.XDG_RUNTIME_DIR;
+  return runtimeDir
+    ? join(runtimeDir, "cawco", "sessiond.sock")
+    : join(homedir(), ".cawco", "sessiond.sock");
 };
 
 /**

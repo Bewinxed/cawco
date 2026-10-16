@@ -352,7 +352,7 @@ const carryWords = (outcome: CarrySessionOutcome | undefined): string => {
       return `left running: ${outcome.why}`;
     case "failed":
       return `not carried: ${outcome.error}`;
-    default:
+    case undefined:
       return "not carried: no outcome was reached";
   }
 };
@@ -2295,9 +2295,15 @@ export class SessionSupervisor {
         return this.#control(envelope.payload as ControlPayload);
       case "fs":
         return this.#fs(envelope.payload as FsPayload);
-      default:
-        return Promise.resolve();
+      case "admission":
+      case "frames":
+      case "heartbeat":
+      case "launch":
+      case "register":
+      case "usage":
+        break;
     }
+    return Promise.resolve();
   }
 
   #adapter(kind: HarnessKind | undefined): Harness {
@@ -3717,7 +3723,7 @@ export class SessionSupervisor {
         instanceIds =
           this.#adapter("opencode").sessionsOn?.(message.procId) ?? [];
         break;
-      default:
+      case "judge":
         holder = "session";
         instanceIds = [];
     }

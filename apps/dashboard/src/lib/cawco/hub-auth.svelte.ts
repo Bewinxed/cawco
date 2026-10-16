@@ -145,7 +145,7 @@ export async function startPairing(): Promise<void> {
       case "slow_down":
         interval += 5000;
         break;
-      default:
+      case "authorization_pending":
         break;
     }
     polling = setTimeout(poll, interval);

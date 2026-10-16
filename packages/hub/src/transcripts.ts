@@ -103,9 +103,11 @@ const endsPartials = (payload: TranscriptPayload): boolean => {
       );
     case "system":
       return message.subtype === STREAM_SO_FAR;
-    default:
-      return false;
+    case "raw":
+    case "user":
+      break;
   }
+  return false;
 };
 
 interface Entry {

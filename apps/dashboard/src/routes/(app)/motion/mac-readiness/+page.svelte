@@ -46,9 +46,17 @@
           kind: "checking",
           since: Date.now() - dur("--dur-wait-grace"),
         };
-      default:
-        return { kind: id };
+      case "allow":
+      case "locked":
+      case "no-xcode":
+      case "not-mac":
+      case "offline":
+      case "ready":
+      case "said-no":
+      case "xcode-terms":
+        break;
     }
+    return { kind: id };
   }
 
   const hrefOf = (id: StateId) => {

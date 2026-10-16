@@ -500,9 +500,11 @@ export const scopeChars = (entries: SessionMessage[]): number =>
         return sum + JSON.stringify(block.input).length;
       case "tool_result":
         return sum + resultText(block.content).length;
-      default:
-        return sum;
+      case "image":
+      case "redacted_thinking":
+        break;
     }
+    return sum;
   }, 0);
 
 /** The session's own messages: a subagent's (opencode nests them in) are its business. */

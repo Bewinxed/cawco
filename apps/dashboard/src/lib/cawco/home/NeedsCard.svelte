@@ -125,9 +125,10 @@
         return item.action.state === "failed"
           ? `It failed. ${item.action.error ?? `${item.action.service} did not take it.`}`
           : item.action.reason;
-      default:
-        return capLine(item.cap);
+      case "cap":
+        break;
     }
+    return capLine(item.cap);
   });
 
   /** An action's call, laid out: when, through what, the tool, and its arguments as JSON. */
@@ -218,9 +219,13 @@
         return ["Machine", item.machine.platform, item.place]
           .filter(Boolean)
           .join(" · ");
-      default:
-        return "Budget";
+      case "action":
+      case "ask":
+      case "cap":
+      case "task":
+        break;
     }
+    return "Budget";
   });
 
   /** Your answer to a pairing or a waiting machine, on its way, and the hub's refusal of it. */

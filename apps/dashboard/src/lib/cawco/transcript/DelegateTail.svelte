@@ -148,9 +148,16 @@
               lead: "Hand-off from",
               name: meta.peerName ?? "",
             };
-      default:
-        return null;
+      case "result.error":
+      case "result.success":
+      case "send.ref":
+      case "tool.progress":
+      case "tool.result":
+      case "user.delegate_ask":
+      case "user":
+        break;
     }
+    return null;
   }
 
   const branch = $derived(cawco.session(instanceId));

@@ -33,7 +33,7 @@ function stateOf(id: string, failed: boolean): string {
       return "Needs you";
     case "working":
       return "Working";
-    default:
+    case "idle":
       return "Idle";
   }
 }

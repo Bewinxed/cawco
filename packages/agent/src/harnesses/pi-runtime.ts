@@ -621,7 +621,23 @@ class PiSession implements HarnessSession {
         });
         break;
       }
-      default:
+      case "agent_settled":
+      case "agent_start":
+      case "auto_retry_end":
+      case "auto_retry_start":
+      case "bash_execution_update":
+      case "compaction_start":
+      case "entry_appended":
+      case "queue_update":
+      case "session_info_changed":
+      case "summarization_retry_attempt_start":
+      case "summarization_retry_finished":
+      case "summarization_retry_scheduled":
+      case "thinking_level_changed":
+      case "tool_execution_start":
+      case "tool_execution_update":
+      case "turn_end":
+      case "turn_start":
         break;
     }
   }

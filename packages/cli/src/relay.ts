@@ -283,9 +283,10 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
     }
     case "set-secret":
       return await setSecret(args);
-    default:
-      throw new RelayError("relay needs on, off, list or set-secret");
+    case undefined:
+      break;
   }
+  throw new RelayError("relay needs on, off, list or set-secret");
 };
 
 /** Whether this terminal reaches the hub only through its workspace's tool door. */

@@ -149,9 +149,10 @@ function roleOf(c: FindConversation): string {
       return c.task ? `attempt at ${c.task.taskId}` : "attempt";
     case "spin-off":
       return c.parent ? `spin-off of ${c.parent.title}` : "spin-off";
-    default:
-      return "yours";
+    case "session":
+      break;
   }
+  return "yours";
 }
 
 const plain = (source: string, text: string): Excerpt => ({
@@ -432,9 +433,10 @@ function waitingGlyph(item: WaitingItem): Component {
       return item.why === "unread, failed" ? Failed : Report;
     case "task":
       return Task;
-    default:
-      return ARTIFACT[item.artifactKind ?? "preview"].glyph;
+    case "artifact":
+      break;
   }
+  return ARTIFACT[item.artifactKind ?? "preview"].glyph;
 }
 
 /** A thing waiting for him, on the same recipe. */

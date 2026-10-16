@@ -102,7 +102,7 @@ const rootEntryOwner = (
       return name.endsWith(entry.suffix) && name.length > entry.suffix.length
         ? name.slice(0, -entry.suffix.length)
         : undefined;
-    default: {
+    case "prefix": {
       const id = SESSION_ID.exec(name)?.[0];
       return id && name.slice(id.length).startsWith(entry.suffix)
         ? id

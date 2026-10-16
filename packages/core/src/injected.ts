@@ -94,7 +94,7 @@ const hubLandLine = (
       return outputs?.length
         ? `${opening} Nothing is pushed: after finish_item, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you. They need not be committed.${compare}`
         : `${opening} Nothing is pushed and nothing is collected: finish_item hands your report to your parent.${compare}`;
-    default:
+    case "main":
       return `${opening} Commit your work and do not push: after finish_item, the hub rebases your commits onto origin/${base}, runs ${GATE} on the result, and pushes to ${base}; a failing gate comes back to you with its output.${outputsSaid}${compare}`;
   }
 };

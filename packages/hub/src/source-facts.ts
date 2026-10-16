@@ -172,9 +172,10 @@ const factsOf = (origin: Origin): Promise<SourceFacts> => {
       return githubFacts(origin.owner, origin.repo);
     case "npm":
       return npmFacts(origin.pkg);
-    default:
-      return Promise.resolve({ at: origin.at, unknown: origin.why });
+    case "none":
+      break;
   }
+  return Promise.resolve({ at: origin.at, unknown: origin.why });
 };
 
 /**

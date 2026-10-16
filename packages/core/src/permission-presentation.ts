@@ -1194,9 +1194,10 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return change.appleGate
         ? "Land work that changes the iOS app only once it compiles on a Mac"
         : "Land work that changes the iOS app without compiling it on a Mac";
-    default:
-      return LANDS_WORDS[change.lands];
+    case "set_lands":
+      break;
   }
+  return LANDS_WORDS[change.lands];
 };
 
 const MB = 1024 * 1024;
