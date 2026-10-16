@@ -109,7 +109,9 @@ import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
   actions,
+  agentHarnesses,
   agents,
+  agentTools,
   artifacts,
   capabilityUsageDaily,
   cawTurns,
@@ -3148,21 +3150,94 @@ const make = async (path: string): Promise<DbShape> => {
     return { instanceId: survivorId, formers: gone, ending, owedAgain: again };
   };
 
-  const agentTools = (machineId: string): Record<string, ToolStatus> =>
-    db
-      .select({ tools: agents.tools })
-      .from(agents)
-      .where(eq(agents.machineId, machineId))
-      .get()?.tools ?? {};
+  /** A tool's row as the status the wire carries: what it does not say is left out. */
+  const toolStatusOf = (row: typeof agentTools.$inferSelect): ToolStatus => ({
+    id: row.toolId,
+    state: row.state,
+    at: row.at.getTime(),
+    ...(row.version === null ? {} : { version: row.version }),
+    ...(row.method === null ? {} : { method: row.method }),
+    ...(row.detail === null ? {} : { detail: row.detail }),
+  });
 
-  const writeAgentTools = (
-    machineId: string,
-    cells: Record<string, ToolStatus>
-  ): void => {
-    db.update(agents)
-      .set({ tools: cells })
-      .where(eq(agents.machineId, machineId))
-      .run();
+  /** Each machine's tool statuses by catalog id; one machine's with `machineId`. */
+  const toolsByMachine = (
+    machineId?: string
+  ): Map<string, Record<string, ToolStatus>> => {
+    const byMachine = new Map<string, Record<string, ToolStatus>>();
+    for (const row of db
+      .select()
+      .from(agentTools)
+      .where(
+        machineId === undefined
+          ? undefined
+          : eq(agentTools.machineId, machineId)
+      )
+      .all()) {
+      byMachine.set(row.machineId, {
+        ...byMachine.get(row.machineId),
+        [row.toolId]: toolStatusOf(row),
+      });
+    }
+    return byMachine;
+  };
+
+  const toolsOf = (machineId: string): Record<string, ToolStatus> =>
+    toolsByMachine(machineId).get(machineId) ?? {};
+
+  /** Each status over the machine's cell for its tool, the rest kept, in one transaction. */
+  const putToolCells = (machineId: string, statuses: ToolStatus[]): void => {
+    db.transaction((tx) => {
+      // A machine the hub keeps no row for has no cells to keep.
+      if (
+        !tx
+          .select({ machineId: agents.machineId })
+          .from(agents)
+          .where(eq(agents.machineId, machineId))
+          .get()
+      ) {
+        return;
+      }
+      for (const status of statuses) {
+        const cell = {
+          state: status.state,
+          version: status.version ?? null,
+          method: status.method ?? null,
+          detail: status.detail ?? null,
+          at: new Date(status.at),
+        };
+        tx.insert(agentTools)
+          .values({ machineId, toolId: status.id, ...cell })
+          .onConflictDoUpdate({
+            target: [agentTools.machineId, agentTools.toolId],
+            set: cell,
+          })
+          .run();
+      }
+    });
+  };
+
+  /** Each machine's harness reports, in the order they were last reported; one machine's with `machineId`. */
+  const harnessesByMachine = (
+    machineId?: string
+  ): Map<string, HarnessReport[]> => {
+    const byMachine = new Map<string, HarnessReport[]>();
+    for (const row of db
+      .select()
+      .from(agentHarnesses)
+      .where(
+        machineId === undefined
+          ? undefined
+          : eq(agentHarnesses.machineId, machineId)
+      )
+      .orderBy(sql`rowid`)
+      .all()) {
+      byMachine.set(row.machineId, [
+        ...(byMachine.get(row.machineId) ?? []),
+        row.report,
+      ]);
+    }
+    return byMachine;
   };
 
   /**
@@ -3733,12 +3808,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    agentHarnesses: (machineId) =>
-      db
-        .select({ harnesses: agents.harnesses })
-        .from(agents)
-        .where(eq(agents.machineId, machineId))
-        .get()?.harnesses ?? undefined,
+    agentHarnesses: (machineId) => harnessesByMachine(machineId).get(machineId),
     listBoardInstances: () =>
       db
         .select(boardColumns)
@@ -5199,37 +5269,55 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
       return policy;
     },
-    agentTools,
+    agentTools: toolsOf,
     // A report with nothing in it says nothing: a daemon that predates the tool
     // catalog must not read as a machine that has just lost every tool on it.
     mergeAgentTools: (machineId, statuses) => {
-      if (statuses.length === 0) {
-        return;
-      }
-      writeAgentTools(machineId, {
-        ...agentTools(machineId),
-        ...Object.fromEntries(statuses.map((status) => [status.id, status])),
-      });
+      putToolCells(machineId, statuses);
     },
+    // The harnesses reported replace their own rows, read after the ones this
+    // report did not name; every other harness stays as it was.
     mergeAgentHarnesses: (machineId, reports) => {
-      const named = new Set(reports.map((report) => report.harness));
-      const kept = (
-        db
-          .select({ harnesses: agents.harnesses })
-          .from(agents)
-          .where(eq(agents.machineId, machineId))
-          .get()?.harnesses ?? []
-      ).filter((report) => !named.has(report.harness));
-      db.update(agents)
-        .set({ harnesses: [...kept, ...reports] })
-        .where(eq(agents.machineId, machineId))
-        .run();
+      db.transaction((tx) => {
+        if (
+          !tx
+            .select({ machineId: agents.machineId })
+            .from(agents)
+            .where(eq(agents.machineId, machineId))
+            .get()
+        ) {
+          return;
+        }
+        const latest = [
+          ...new Map(
+            reports.map((report) => [report.harness, report])
+          ).values(),
+        ];
+        for (const report of latest) {
+          tx.delete(agentHarnesses)
+            .where(
+              and(
+                eq(agentHarnesses.machineId, machineId),
+                eq(agentHarnesses.harness, report.harness)
+              )
+            )
+            .run();
+        }
+        if (latest.length > 0) {
+          tx.insert(agentHarnesses)
+            .values(
+              latest.map((report) => ({
+                machineId,
+                harness: report.harness,
+                report,
+              }))
+            )
+            .run();
+        }
+      });
     },
     setAgentToolCell: (machineId, status) => {
-      writeAgentTools(machineId, {
-        ...agentTools(machineId),
-        [status.id]: status,
-      });
+      putToolCells(machineId, [status]);
     },
     fleetConfig: () => {
       return {
@@ -6047,8 +6135,10 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
       return true;
     },
-    listAgents: () =>
-      db
+    listAgents: () => {
+      const toolCells = toolsByMachine();
+      const reports = harnessesByMachine();
+      return db
         .select()
         .from(agents)
         .all()
@@ -6057,23 +6147,28 @@ const make = async (path: string): Promise<DbShape> => {
             addressContract: _addressContract,
             fleet,
             build,
-            harnesses,
             home,
             machineCapabilities,
             pausedUntil,
             pauseStopped,
             ...agent
-          }) => ({
-            ...agent,
-            pausedUntil: pausedUntil?.getTime() ?? null,
-            pauseStopped: (pauseStopped && stoppedWords(pauseStopped)) || null,
-            ...(fleet ? { fleet } : {}),
-            ...(build ? { build } : {}),
-            ...(harnesses ? { harnesses } : {}),
-            ...(home ? { home } : {}),
-            ...(machineCapabilities ? { machineCapabilities } : {}),
-          })
-        ),
+          }) => {
+            const harnesses = reports.get(agent.machineId);
+            return {
+              ...agent,
+              tools: toolCells.get(agent.machineId) ?? {},
+              pausedUntil: pausedUntil?.getTime() ?? null,
+              pauseStopped:
+                (pauseStopped && stoppedWords(pauseStopped)) || null,
+              ...(fleet ? { fleet } : {}),
+              ...(build ? { build } : {}),
+              ...(harnesses ? { harnesses } : {}),
+              ...(home ? { home } : {}),
+              ...(machineCapabilities ? { machineCapabilities } : {}),
+            };
+          }
+        );
+    },
     // A discarded spin-off is gone for good, and a row that has not moved in a
     // day is history no rail has a use for — a running one stays whatever its
     // age, and so does a sleeping one: it is a conversation the fleet can pick

@@ -297,15 +297,6 @@ export const agents = sqliteTable("agents", {
     .notNull()
     .default("unknown"),
   /**
-   * Last-known workflow-tool status by catalog id (NEW.md §10): what the daemon
-   * reported at register or after an install, plus the `installing` the hub
-   * writes itself while one is in flight.
-   */
-  tools: text("tools", { mode: "json" })
-    .$type<Record<string, ToolStatus>>()
-    .notNull()
-    .default({}),
-  /**
    * What the machine came to the last time it converged on the fleet's MCP
    * servers and plugins (NEW.md §11). Null until it has been asked once.
    */
@@ -315,8 +306,6 @@ export const agents = sqliteTable("agents", {
    * Null until a daemon that says so has registered once.
    */
   build: text("build", { mode: "json" }).$type<BuildInfo>(),
-  /** What each harness adapter on the machine can do, as reported at register. */
-  harnesses: text("harnesses", { mode: "json" }).$type<HarnessReport[]>(),
   /**
    * The owner paused the machine until this time (machine-pause.ts): the hub
    * starts nothing on it until then, its agent connected all the while. Null
@@ -336,6 +325,46 @@ export const agents = sqliteTable("agents", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * A machine's last-known workflow-tool status ({@link ToolStatus}), one row
+ * per catalog id (NEW.md §10): what the daemon reported at register or after
+ * an install, or the `installing` the hub writes itself while one is in
+ * flight.
+ */
+export const agentTools = sqliteTable(
+  "agent_tools",
+  {
+    machineId: text("machine_id")
+      .notNull()
+      .references(() => agents.machineId, { onDelete: "cascade" }),
+    toolId: text("tool_id").notNull(),
+    state: text("state").$type<ToolStatus["state"]>().notNull(),
+    version: text("version"),
+    method: text("method"),
+    detail: text("detail"),
+    /** When this was learnt. */
+    at: timestamp("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.toolId] })]
+);
+
+/**
+ * What one harness adapter on a machine can do, one row per harness, as its
+ * daemon last reported it: the report is the daemon's own, written and read
+ * whole. Read in the order they were last reported (rowid).
+ */
+export const agentHarnesses = sqliteTable(
+  "agent_harnesses",
+  {
+    machineId: text("machine_id")
+      .notNull()
+      .references(() => agents.machineId, { onDelete: "cascade" }),
+    harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
+    report: text("report", { mode: "json" }).$type<HarnessReport>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
+);
 
 /**
  * A project: one identity for work across machines and folders (WORDS.md).
