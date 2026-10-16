@@ -339,26 +339,37 @@ const delegate = async (
   return paths;
 };
 
+/** What leg `key` asked the mock, for a leg whose command's output never came: its tools, its requests, how the last one ended. */
+const unanswered = (fleet: Fleet, key: string): string => {
+  const step = steps.get(key);
+  const asked = fleet.seen.filter(
+    (one) => one.tools && TAG.exec(one.all)?.[1]?.toLowerCase() === key
+  );
+  const last = asked.at(-1);
+  return `ran: ${Boolean(step?.ran)}; offered: ${step?.offered?.join(", ") ?? "no request seen"}; ${asked.length} request(s), the last ${last?.afterTool ? "after a tool" : "not after a tool"}, ending: ${last?.body.slice(-600) ?? "none"}`;
+};
+
 /** (a) and (b) for each leg, from the request that carried its command's output. */
 const judge = async (kit: Kit, fleet: Fleet, among: readonly Leg[]) => {
   for (const leg of among) {
+    // Any request whose body holds the command's last line, spelled whole
+    // only in its output: the result need not be the request's last message
+    // (a harness may add words of its own after it).
     // biome-ignore lint/performance/noAwaitInLoops: each leg's answer read in turn, all running at once
     const carried = await until(
       `${leg.key}'s command output`,
       () =>
-        fleet.seen.find(
-          (one) =>
-            one.afterTool && one.body.includes(`FR|${leg.key}|end|end|done`)
+        fleet.seen.find((one) =>
+          one.body.includes(`FR|${leg.key}|end|end|done`)
         ),
       Boolean,
       600_000
     ).catch(() => undefined);
-    const step = steps.get(leg.key);
     if (!carried) {
       kit.check(
         `${leg.key}: the delegate's command ran in its workspace`,
         false,
-        `ran: ${Boolean(step?.ran)}; offered: ${step?.offered?.join(", ") ?? "no request seen"}`
+        unanswered(fleet, leg.key)
       );
       continue;
     }
