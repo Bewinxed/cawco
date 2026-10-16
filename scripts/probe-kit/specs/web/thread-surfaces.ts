@@ -337,8 +337,7 @@ async function inPlace(kit: Kit, base: string, projectId: string) {
     // leaves.
     const left = panel?.left ?? 0;
     const right = panel?.right ?? 0;
-    const x =
-      left > innerWidth - right ? left / 2 : (right + innerWidth) / 2;
+    const x = left > innerWidth - right ? left / 2 : (right + innerWidth) / 2;
     const y = innerHeight / 2;
     const hit = document.elementFromPoint(x, y);
     return {
