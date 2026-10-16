@@ -5,11 +5,14 @@
  *
  * One machine (the scratch fleet's), its signed-in Claude account, and:
  *  - "Fix tray chip overflow": a finished turn, a tool group (TodoWrite,
- *    Bash, Read, Write, Grep) and a reply with every markdown block the
- *    transcript draws (heading, list, code, table, quote, link);
+ *    Bash, Read, Write, Grep), a subagent it ran (Task), and a reply with
+ *    every markdown block the transcript draws (heading, list, code, table,
+ *    quote, link);
  *  - "Pick the chip's wrap": parked on an AskUserQuestion card;
  *  - "Approve the deploy push": parked on a Bash permission;
- *  - the project "cawco": tasks across its stages, a routine and Caw's thread.
+ *  - "Lay out the chip wraps": an artifact page it made;
+ *  - the project "cawco": tasks and a routine;
+ *  - a workflow and one finished run of it.
  * The mock model plays a script per message: the message carries
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
  * by the tool results the conversation holds since (artifacts.ts's shape).
@@ -17,10 +20,21 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Reply, Seen } from "../../scratch-fleet";
-import { MACHINE, until } from "../../scratch-fleet";
+import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet } from "../kit";
 
 const DAY = 24 * 60 * 60 * 1000;
+/** A workflow that sets one slot and returns: its run ends at once. */
+const WORKFLOW = `import { z } from "zod";
+
+export const inputs = z.object({});
+
+export default async function (w: Workflow<typeof inputs>) {
+  const count = w.state("count", z.number());
+  await count.set(3);
+  return { chips: await count.get() };
+}
+`;
 const STEP = /PROBE-STEP:([a-z-]+)/g;
 
 type Step = { tool: { input: object; name: string } } | { words: string };
@@ -110,8 +124,19 @@ const plans = (repo: string): Record<string, Step[]> => ({
         input: { pattern: "chip", path: repo, output_mode: "content" },
       },
     },
+    {
+      tool: {
+        name: SUBAGENT,
+        input: {
+          description: "Audit the chip row",
+          prompt: "Read the chip row and say what overflows. PROBE-STEP:sub",
+          subagent_type: "general-purpose",
+        },
+      },
+    },
     { words: REPLY },
   ],
+  sub: [{ words: "The label never shrinks, so the badge is cut first." }],
   wrap: [
     {
       tool: {
@@ -176,6 +201,9 @@ const plans = (repo: string): Record<string, Step[]> => ({
 });
 
 const ARTIFACT_CREATE = "mcp__cawco__artifact_create";
+/** Claude Code's subagent tool, by the name a plan writes it under; its other name is `Agent`. */
+const SUBAGENT = "Task";
+const SUBAGENT_NAMES = ["Task", "Agent"];
 const ARTIFACT_PAGE = `<!doctype html>
 <html lang="en">
   <head><meta charset="utf-8"><title>Chip wraps</title></head>
@@ -189,8 +217,34 @@ const ARTIFACT_PAGE = `<!doctype html>
   </body>
 </html>`;
 
-/** Each marker's plan as its first request found the tools: a ToolSearch step goes when the tool it looks for is offered already. */
+/** Each marker's plan as its first request found the tools (`settle`). */
 const settled = new Map<string, Step[]>();
+
+/**
+ * A plan as the tools its first request offers make it: the subagent step
+ * under the name Claude Code offers it by (`Task`, or `Agent`), and gone
+ * where neither is; a ToolSearch step gone when the tool it looks for is
+ * offered already.
+ */
+function settle(written: Step[], offered: string[]): Step[] {
+  const subagent = SUBAGENT_NAMES.find((n) => offered.includes(n));
+  const named = written.flatMap((one): Step[] => {
+    if (!("tool" in one && one.tool.name === SUBAGENT)) {
+      return [one];
+    }
+    return subagent ? [{ tool: { ...one.tool, name: subagent } }] : [];
+  });
+  return named.filter((one, i) => {
+    const next = named[i + 1];
+    return !(
+      "tool" in one &&
+      one.tool.name === "ToolSearch" &&
+      next !== undefined &&
+      "tool" in next &&
+      offered.includes(next.tool.name)
+    );
+  });
+}
 
 /** The mock's answer: the step the conversation's tool results have reached in its newest marker's plan. */
 export const scriptedReply =
@@ -208,21 +262,7 @@ export const scriptedReply =
     }
     let plan = settled.get(name);
     if (!plan) {
-      plan = written.filter(
-        (one, i) =>
-          !(
-            "tool" in one &&
-            one.tool.name === "ToolSearch" &&
-            (() => {
-              const next = written[i + 1];
-              return (
-                next !== undefined &&
-                "tool" in next &&
-                request.toolNames.includes(next.tool.name)
-              );
-            })()
-          )
-      );
+      plan = settle(written, request.toolNames);
       settled.set(name, plan);
     }
     // The tool results since the marker's message: the steps already taken.
@@ -237,13 +277,16 @@ export const scriptedReply =
 
 /** What the scene made, by name: the tape's `scene`, read by the surfaces' routes. */
 export interface Scene {
+  account: string;
   art: string;
   artifact: string;
   ask: string;
   chips: string;
   permission: string;
   project: string;
+  run: string;
   task: string;
+  workflow: string;
   [name: string]: string;
 }
 
@@ -317,6 +360,22 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
   );
   await mkdir(join(fleet.repo, "notes"), { recursive: true });
 
+  // A workflow, and one run of it that has finished.
+  const workflow = await fleet.api<{ id: string }>("/api/workflows", {
+    name: "Chip audit",
+    program: WORKFLOW,
+  });
+  const { runId } = await fleet.api<{ runId: string }>(
+    `/api/workflows/${workflow.id}/runs`,
+    { workspace: { path: fleet.repo, machineId: MACHINE } }
+  );
+  await until(
+    "the workflow's run done",
+    () => fleet.api<{ status: string }>(`/api/workflow-runs/${runId}`),
+    (run) => !["running", "waiting"].includes(run.status),
+    120_000
+  );
+
   // Every turn at rest: the chips and art sessions done, the other two parked on their asks.
   for (const [what, id] of [
     ["the chips session's turn done", chips],
@@ -364,5 +423,8 @@ export async function seedScene(kit: Kit, fleet: KitFleet): Promise<Scene> {
     artifact: artifact as string,
     project: project.id,
     task: tasks[0] as string,
+    workflow: workflow.id,
+    run: runId,
+    account: ACCOUNT,
   };
 }

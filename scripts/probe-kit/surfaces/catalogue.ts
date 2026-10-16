@@ -113,6 +113,35 @@ const CONFIG = [
   "updates",
 ];
 
+/** A config section's editors: each opens on `new` (its route's own word for a new one), and an account's own pages. */
+const EDITORS: Record<string, State[]> = {
+  ...Object.fromEntries(
+    ["rules", "hooks", "mcp", "subagents", "delegate-types"].map((section) => [
+      section,
+      [
+        {
+          name: "editor",
+          route: () => `/config/${section}/new`,
+          root: "body",
+        },
+      ],
+    ])
+  ),
+  accounts: [
+    { name: "new", route: () => "/config/accounts/new", root: "body" },
+    {
+      name: "account",
+      route: (s) => `/config/accounts/${s.account}`,
+      root: "body",
+    },
+    {
+      name: "routing",
+      route: () => "/config/accounts/anthropic/routing",
+      root: "body",
+    },
+  ],
+};
+
 export const SURFACES: Surface[] = [
   {
     name: "home",
@@ -283,7 +312,7 @@ export const SURFACES: Surface[] = [
     name: `config-${section}`,
     serve: "built",
     route: () => `/config/${section}`,
-    states: [{ name: "rest", root: "body" }],
+    states: [{ name: "rest", root: "body" }, ...(EDITORS[section] ?? [])],
   })),
   {
     name: "usage",
@@ -342,7 +371,19 @@ export const SURFACES: Surface[] = [
     name: "workflows",
     serve: "built",
     route: () => "/workflows",
-    states: [{ name: "rest", root: "body" }],
+    states: [
+      { name: "rest", root: "body" },
+      {
+        name: "editor",
+        route: (s) => `/workflows/${s.workflow}`,
+        root: "body",
+      },
+      {
+        name: "program",
+        route: (s) => `/workflows/${s.workflow}?tab=program`,
+        root: "body",
+      },
+    ],
   },
   {
     name: "artifact",
