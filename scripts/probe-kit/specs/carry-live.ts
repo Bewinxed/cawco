@@ -93,6 +93,8 @@ const STOPPED_LINE = /ended between turns in \d+ ms/;
 const CARRIED_LINE = /carried, \d+ entr/;
 /** The hub's and agent's lines about moves, for a failed case to show. */
 const MOVE_LINE = /\[at-limit\]|\[accounts\]|\[carry\]/;
+/** The agent's lines about taking its sessions over, and its own starts. */
+const CUSTODY_LINE = /\[custody\]|\[rebalance\]|agent started|restart/i;
 /** A move pending on its machine says it goes as that machine connects again. */
 const AS_IT_CONNECTS = /connected again/;
 /** How long case 4's background `sleep` runs: past the two minutes a move used to wait, and a look's slack. */
@@ -347,11 +349,26 @@ const run = async (kit: Kit) => {
   const runs = (one: string) =>
     !process.env.CARRY_CASE || process.env.CARRY_CASE === one;
   /** The hub's and agent's lines about `id`, for a failed case to show. */
-  const linesAbout = async (id: string) =>
-    [
-      ...(await fleet.logs("hub")).split("\n"),
-      ...(await fleet.logs("agent")).split("\n"),
-    ].filter((line) => line.includes(id) || MOVE_LINE.test(line));
+  /**
+   * The hub's and the agent's lines about `id`, each service's last 30 apart
+   * and labelled: joined, the agent's alone filled any tail cut short.
+   */
+  const linesAbout = async (id: string) => {
+    const about = (log: string) =>
+      log
+        .split("\n")
+        .filter(
+          (line) =>
+            line.includes(id) || MOVE_LINE.test(line) || CUSTODY_LINE.test(line)
+        )
+        .slice(-30);
+    return [
+      "--- hub ---",
+      ...about(await fleet.logs("hub")),
+      "--- agent ---",
+      ...about(await fleet.logs("agent")),
+    ];
+  };
 
   // 1. Large and waiting on a background command, then large and at rest.
   if (runs("1")) {
@@ -490,7 +507,7 @@ const run = async (kit: Kit) => {
         `account ${landed}`
       );
       if (landed !== B) {
-        console.log((await linesAbout(s.id)).slice(-60).join("\n"));
+        console.log((await linesAbout(s.id)).join("\n"));
       }
       const answered = await seenWhere(
         (one) =>
@@ -514,7 +531,7 @@ const run = async (kit: Kit) => {
           .join(",")}`
       );
       if (!answered) {
-        console.log((await linesAbout(s.id)).slice(-40).join("\n"));
+        console.log((await linesAbout(s.id)).join("\n"));
       }
       const hubLines = (await fleet.logs("hub"))
         .split("\n")
@@ -576,7 +593,7 @@ const run = async (kit: Kit) => {
       `account ${landed}, ${Math.round((Date.now() - sleepEnds) / 1000)} s after the sleep's end`
     );
     if (landed !== B) {
-      console.log((await linesAbout(s.id)).slice(-60).join("\n"));
+      console.log((await linesAbout(s.id)).join("\n"));
     }
     const read = await seenWhere(
       (one) =>
@@ -788,7 +805,7 @@ const run = async (kit: Kit) => {
     ).catch(() => undefined);
     kit.check(`${name}: it carries on on B's token`, !!onB);
     if (landed !== B || !onB) {
-      console.log((await linesAbout(s.id)).slice(-60).join("\n"));
+      console.log((await linesAbout(s.id)).join("\n"));
     }
     limited.delete(ACCOUNT);
   };
