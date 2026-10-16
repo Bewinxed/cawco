@@ -622,7 +622,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_result",
-      "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create (a page, or a preview of the running app) and hand that artifact's id in first, primary; files by folder path. Again replaces it.",
+      "Hand in your task's work before finish_item: what you did, what to check, what you made. Show it with artifact_create (a page, a component's sheet, or a preview of the running app) and hand that artifact's id in first, primary; files by folder path. Again replaces it.",
       {
         summary: z.string().trim().min(1),
         check: z.array(z.string()).optional(),

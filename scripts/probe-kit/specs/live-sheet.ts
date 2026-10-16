@@ -16,7 +16,9 @@
  * 1. The stage starts: the create answers the three stories at their
  *    exports, and the pane's page renders three frames (Agent, You,
  *    Grouped), each a real Who, in the dashboard's own tokens: the agent's
- *    mark is `--brand-solid`, the name `--ink-strong`, the body Figtree.
+ *    mark is `--brand-solid`, the name `--ink-strong`, the body Figtree;
+ *    and the name's computed `--ink-strong` is the token file's own DTCG
+ *    value for `color.ink-strong` (design/tokens, the frame's scheme).
  * 2. An edit to Who.svelte (in the workspace's clone) redraws both frames
  *    that show a name, with no reload of the page.
  * 3. A broken edit reaches the session by itself as
@@ -402,8 +404,58 @@ const framesAndTokens = (frame: Frame) =>
       role: role ? getComputedStyle(role).color : "",
       roleWanted: resolved("color", "var(--ink-strong)"),
       font: getComputedStyle(document.body).fontFamily,
+      // The scheme light-dark() draws in where the name stands.
+      scheme:
+        resolved("color", "light-dark(rgb(0, 0, 0), rgb(255, 255, 255))") ===
+        "rgb(0, 0, 0)"
+          ? "light"
+          : "dark",
     };
   });
+
+/** The token files the dashboard's tokens.css is built from (design/tokens/cawco.resolver.json). */
+const TOKENS_DIR = join(ROOT, "design/tokens");
+
+/**
+ * A colour token's DTCG `$value` under a scheme, aliases followed (the dark
+ * file's own value where it has one, else the base set's: the resolver's
+ * theme modifier), written as CSS for the frame to compute.
+ */
+const tokenColour = async (
+  path: string,
+  scheme: "light" | "dark"
+): Promise<string> => {
+  const base = await Bun.file(join(TOKENS_DIR, "cawco.tokens.json")).json();
+  const dark = await Bun.file(
+    join(TOKENS_DIR, "cawco.dark.tokens.json")
+  ).json();
+  const at = (tree: unknown, ref: string): { $value?: unknown } | undefined =>
+    ref
+      .split(".")
+      .reduce<unknown>(
+        (node, key) => (node as Record<string, unknown> | undefined)?.[key],
+        tree
+      ) as { $value?: unknown } | undefined;
+  let value: unknown =
+    (scheme === "dark" ? at(dark, path) : undefined)?.$value ??
+    at(base, path)?.$value;
+  for (let hops = 0; typeof value === "string" && hops < 8; hops += 1) {
+    const ref = value.slice(1, -1);
+    value =
+      (scheme === "dark" ? at(dark, ref) : undefined)?.$value ??
+      at(base, ref)?.$value;
+  }
+  const { colorSpace, components, alpha } = value as {
+    alpha?: number;
+    colorSpace: string;
+    components: number[];
+  };
+  const channels = components.join(" ");
+  const over = alpha === undefined || alpha === 1 ? "" : ` / ${alpha}`;
+  return ["oklch", "oklab", "lch", "lab"].includes(colorSpace)
+    ? `${colorSpace}(${channels}${over})`
+    : `color(${colorSpace} ${channels}${over})`;
+};
 
 /** 2: an edit to Who.svelte, both named frames redrawn in place; the page never reloads. */
 const hmrChecks = async (
@@ -1564,6 +1616,25 @@ const run = async (kit: Kit) => {
       read.role === read.roleWanted &&
       read.font.startsWith('"Figtree'),
     JSON.stringify(read)
+  );
+  // The role's computed value in the frame is the token file's own value
+  // for it: design/tokens' `color.ink-strong`, DTCG, under the frame's scheme.
+  const ink = await tokenColour(
+    "color.ink-strong",
+    read.scheme as "light" | "dark"
+  );
+  const tokenComputed = await frame.evaluate((css) => {
+    const probe = document.createElement("div");
+    probe.style.color = css;
+    document.body.append(probe);
+    const got = getComputedStyle(probe).color;
+    probe.remove();
+    return got;
+  }, ink);
+  kit.check(
+    "1: a frame's computed value of a role custom property (--ink-strong on the name) equals the token file's DTCG value for it",
+    !!read.role && read.role === tokenComputed,
+    `frame ${read.role} (${read.scheme}); token ${ink} computes to ${tokenComputed}`
   );
   await hmrChecks(kit, frame, clone, original);
   await errorChecks(kit, fleet, page, session, artifact, clone, original);

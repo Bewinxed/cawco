@@ -9,7 +9,7 @@ A **drift** is a value in the UI that the design system does not hold: a literal
 
 ## Steps
 
-1. **Read the system**: the token file (the project folder's `design/tokens.json`, or the repository's own) and DESIGN.md's named rules and recipes. Write down the allowed set for each kind: colours, spacing steps, radii, shadows, font sizes and weights, curves, durations. Done when every kind has its list.
+1. **Read the system**: the tokens (`design/tokens.json` and the themes `design/tokens.resolver.json` names, DTCG 2025.10, each token's custom property its last name segment; or the repository's own token file) and `design/DESIGN.md`'s named rules and recipes. Write down the allowed set for each kind: colours, spacing steps, radii, shadows, font sizes and weights, curves, durations. Done when every kind has its list.
 2. **Search the styles** in the UI's source (CSS, component files, inline styles, class lists), skipping the generated token output itself:
    - colours: `#[0-9a-fA-F]{3,8}\b`, `rgba?\(`, `hsla?\(`, `oklch\(`, named colours in style values, colour utilities with arbitrary values (`bg-[#…]`)
    - lengths: `px`, `rem` and `em` values on margin, padding, gap, inset, width and radius that are not on the scale; arbitrary-value utilities (`p-[13px]`)

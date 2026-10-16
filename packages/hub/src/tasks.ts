@@ -335,6 +335,15 @@ export interface TaskStore {
     to: string,
     actionId: string
   ) => boolean;
+  /**
+   * Why your approval of a task cannot go now, in a line you read where you
+   * pressed Approve; nothing when it can (design-system.ts: the attempt's
+   * design/ is not committed).
+   */
+  readonly approvalRefusal?: (
+    projectId: string,
+    taskId: string
+  ) => Promise<string | undefined>;
   /** Every work item at one of the project's tasks, newest first. */
   readonly attempts: (
     projectId: string
@@ -696,7 +705,7 @@ const artifactProblem = async (
   }
   if (artifact.kind === "artifact") {
     if (!artifact.artifactId.trim()) {
-      refuse(422, "Name the page artifact by its id.");
+      refuse(422, "Name the artifact by its id.");
     }
     return;
   }
@@ -1414,6 +1423,13 @@ const commitMessage = (
 const REASON_LIMIT = 500;
 
 export const createTasks = (store: TaskStore) => {
+  /** Refuses your approval, with its line, while the store says it cannot go. */
+  const approvable = async (projectId: string, id: string): Promise<void> => {
+    const held = await store.approvalRefusal?.(projectId, id);
+    if (held) {
+      refuse(409, held);
+    }
+  };
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
   /** Who hears about changes (dispatch.ts); told after the change has landed. */
@@ -3075,6 +3091,9 @@ export const createTasks = (store: TaskStore) => {
           actor.mover === "you" &&
           kindIn(stages, moved.from) === "you" &&
           passesReview(stages, moved.from, to);
+        if (approved) {
+          await approvable(projectId, id);
+        }
         const because = approved ? `approved${why ? `: ${why}` : ""}` : why;
         return {
           what: `stage ${moved.from || NO_STAGE} → ${to}`,

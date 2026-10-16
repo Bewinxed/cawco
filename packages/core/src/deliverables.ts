@@ -128,7 +128,7 @@ export const POST_OUTPUT_RULE =
 
 // --- an attempt's result ------------------------------------------------------
 
-/** What a result can hand in: a project folder file, a post, a link, or a page artifact. */
+/** What a result can hand in: a project folder file, a post, a link, or an artifact (a page, a sheet, a preview). */
 export const RESULT_ARTIFACT_KINDS = [
   "file",
   "post",

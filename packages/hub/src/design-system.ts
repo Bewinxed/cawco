@@ -30,8 +30,10 @@
  * deterministic step is generating tokens.css, a build, not a judgment.
  */
 import { createHash } from "node:crypto";
-import { posix } from "node:path";
+import { existsSync } from "node:fs";
+import { join, posix } from "node:path";
 import type { CommandResult, InstanceRow } from "@cawco/core";
+import type { DbShape } from "./db";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
 import { tokensIn } from "./dtcg-resolver";
 import { quote } from "./landing";
@@ -554,11 +556,93 @@ const folderStore = (
  * `design_write` for a session: its system at the root of the repository it
  * works in, or in its project's folder when that is where it works.
  */
+/** What `git status` says of design/ that is not committed, a path a line. */
+const UNCOMMITTED = `git status --porcelain --untracked-files=all -- ${DESIGN_DIR}`;
+/** How many uncommitted paths a refusal names. */
+const NAMED = 5;
+
+const uncommittedLine = (
+  where: string,
+  porcelain: string
+): string | undefined => {
+  const paths = porcelain
+    .split("\n")
+    .map((line) => line.slice(3).trim())
+    .filter(Boolean);
+  if (paths.length === 0) {
+    return;
+  }
+  const named = paths.slice(0, NAMED).join(", ");
+  const more = paths.length > NAMED ? ` and ${paths.length - NAMED} more` : "";
+  return `design/ isn't committed in ${where}: ${named}${more}. Send it back so the builder commits it, then approve.`;
+};
+
 export const createDesignSystem = (deps: {
   run: Run;
   ownMachineId: Promise<string>;
   folderChanged: (projectId: string) => void;
+  db: Pick<DbShape, "projectAttempts" | "workspacesNamed">;
+  online: (machineId: string) => boolean;
+  /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself). */
+  designTask: (projectId: string, taskId: string) => Promise<boolean>;
 }) => {
+  /**
+   * Why your approval of a design task waits: its newest attempt's
+   * workspace, while it stands, or the project's folder on the hub holds
+   * design/ changes no commit has. A workspace retired after landing has
+   * none (landing refuses uncommitted work).
+   */
+  const approvalRefusal = async (
+    projectId: string,
+    taskId: string
+  ): Promise<string | undefined> => {
+    if (!(await deps.designTask(projectId, taskId))) {
+      return;
+    }
+    const folder = projectRoot(projectId);
+    if (existsSync(join(folder, DESIGN_DIR))) {
+      const read = Bun.spawnSync([
+        "git",
+        "-C",
+        folder,
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        DESIGN_DIR,
+      ]);
+      const line = uncommittedLine(
+        "the project's folder",
+        read.stdout.toString()
+      );
+      if (line) {
+        return line;
+      }
+    }
+    const [attempt] = deps.db
+      .projectAttempts(projectId)
+      .filter((item) => item.taskId === taskId);
+    const [workspace] = attempt
+      ? deps.db.workspacesNamed(attempt.workspaceId)
+      : [];
+    if (!workspace || workspace.state === "archived") {
+      return;
+    }
+    if (!deps.online(workspace.machineId)) {
+      return `The builder's workspace is on ${workspace.machineId}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
+    }
+    const read = await deps.run(
+      workspace.machineId,
+      workspace.path,
+      UNCOMMITTED,
+      COMMAND_MS
+    );
+    if (read.exitCode !== 0) {
+      return `CawCo couldn't read the builder's workspace (${(read.stderr || read.stdout).trim().split("\n").at(-1)}), so whether its design/ is committed is unknown. Try Approve again.`;
+    }
+    return uncommittedLine("the builder's workspace", read.stdout);
+  };
+
   const storeFor = async (actor: InstanceRow): Promise<DesignStore> => {
     if (!actor.projectId) {
       throw new Error(
@@ -591,6 +675,7 @@ export const createDesignSystem = (deps: {
   };
 
   return {
+    approvalRefusal,
     write: async (
       actor: InstanceRow,
       files: DesignFile[]

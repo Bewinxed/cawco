@@ -442,7 +442,12 @@ import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import type { SendDelivery, SendHold } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
-import { createDesignOffers, designOfferRoutes } from "./design-offers";
+import {
+  BUILD_TITLE,
+  createDesignOffers,
+  designOfferRoutes,
+  designShaped,
+} from "./design-offers";
 import { createDesignSystem } from "./design-system";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
@@ -16957,9 +16962,13 @@ export const createServer = (
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
   let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
+  /** Set once the design system exists (below, design-system.ts `approvalRefusal`). */
+  let designApproval: NonNullable<TaskStore["approvalRefusal"]> = () =>
+    Promise.resolve(undefined);
   const tasks = createTasks({
     actionMove: (projectId, taskId, to, actionId) =>
       actionMoves(projectId, taskId, to, actionId),
+    approvalRefusal: (projectId, taskId) => designApproval(projectId, taskId),
     project: (id) => db.project(id),
     machines: () => db.listAgents(),
     projectIds: () => db.listProjects().map((project) => project.id),
@@ -17964,7 +17973,17 @@ export const createServer = (
     folderChanged: (projectId) => {
       tasks.touched(projectId);
     },
+    db,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    designTask: async (projectId, taskId) => {
+      const task = await tasks.get(projectId, taskId);
+      return (
+        task.title === BUILD_TITLE ||
+        designShaped(db.project(projectId)?.template ?? null, task)
+      );
+    },
   });
+  designApproval = designSystem.approvalRefusal;
   const hubTools = createHubTools({
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     designWrite: (actor, files) => designSystem.write(actor, files),
