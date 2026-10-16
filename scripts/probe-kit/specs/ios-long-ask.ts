@@ -225,8 +225,13 @@ const LATE_MS = 8000;
 const REST_S = 5;
 const REST_SHARE = 0.25;
 const AXE = "/opt/homebrew/bin/axe";
-/** Whether axe can tap this simulator: not iOS 27 from a workspace ("…remote-automation.uds: Operation not permitted"). */
-const taps = process.env.PROBE_IOS !== "27";
+/**
+ * Whether axe can tap iOS 27: not from a workspace ("…remote-automation.uds:
+ * Operation not permitted"); `PROBE_TAPS=1` where the spec runs outside one.
+ */
+const taps27 = process.env.PROBE_TAPS === "1";
+/** Whether axe can tap this run's simulator. */
+const taps = process.env.PROBE_IOS !== "27" || taps27;
 const THREAD_HEAD = /^\s{4}\d+ Thread_/;
 const LOG_HEAD = /^.*\] /;
 const SPACES = /\s+/;
@@ -1111,12 +1116,35 @@ async function onSimulator(
       true,
       await rest(id, "launch")
     );
-    if (which === "27") {
+    if (which === "27" && !taps27) {
+      kit.note(
+        `live ${tag} (Release): only from launch here; its taps need a shell outside a workspace (PROBE_TAPS=1)`
+      );
       return;
     }
-    // A first launch asks to send notifications: allowed, as the owner did.
-    await tap((label) => label === "Allow");
-    await pause(2000);
+    // Notifications turned on as the owner has them: the hub sheet's "Turn
+    // on notifications", then iOS's own Allow (a first launch asks for none,
+    // and `simctl privacy` grants every service but notifications).
+    let allowed = false;
+    if (await tap((label) => label === "Open navigation")) {
+      await pause(2000);
+      if (await tap((label) => label === "Change hub")) {
+        await pause(2000);
+        if (await tap((label) => label === "Turn on notifications")) {
+          await pause(2000);
+          allowed = await tap((label) => label === "Allow");
+        }
+      }
+    }
+    kit.check(
+      `live ${tag} (Release): notifications turned on, as the owner has them`,
+      allowed,
+      allowed
+        ? "allowed"
+        : `see release-${which}-screen-*.txt for where it stopped`
+    );
+    id = (await launch()) ?? id;
+    await pause(8000);
     // Needs you, the list that draws the ask's command on a line; then the probe's own row.
     const needs = await tap((label) => label.startsWith("Needs you"));
     await pause(3000);
@@ -1143,14 +1171,51 @@ async function onSimulator(
       drawer,
       await rest(id, "card-from-drawer")
     );
-    // The ask's notification is not reachable here: a Release simulator app
-    // takes no push until it is authorised, `simctl privacy` grants every
-    // service but notifications, and a first launch asks for none. Its route
-    // (`deliver`) is the one the Debug runs drive with `-push-route`.
-    kit.note(
-      `live ${tag} (Release): the ask's notification not tried: no push reaches an unauthorised simulator app (its route proven in Debug through -push-route)`
+    // The ask's notification, the app in the background: its banner tapped.
+    const ask = await ours();
+    await sh(`xcrun simctl launch ${udid} com.apple.Preferences >/dev/null`);
+    await pause(2000);
+    const payload = join(kit.out, `release-${which}-push.json`);
+    writeFileSync(
+      payload,
+      JSON.stringify({
+        aps: {
+          alert: { title: "Probe: long ask", body: INPUT.description },
+          sound: "default",
+        },
+        cawco: {
+          kind: "ask",
+          instanceId: ask?.instanceId,
+          requestId: ask?.requestId,
+        },
+      })
     );
-    // On the drawer's card: the whole command opened, then Deny.
+    await sh(`xcrun simctl push ${udid} dev.cawco.app "${payload}" >/dev/null`);
+    await pause(2500);
+    const banner =
+      allowed &&
+      (await tap(
+        (label) =>
+          label.includes(INPUT.description) || label.includes("Probe: long ask")
+      ));
+    await pause(5000);
+    id = (await pid()) ?? id;
+    report(
+      "the probe's card from its notification",
+      banner,
+      await rest(id, "card-from-notification")
+    );
+    if (!banner) {
+      // Back on the card the way Needs you reaches it, for the steps after.
+      id = (await launch()) ?? id;
+      await pause(8000);
+      if (await tap((label) => label.startsWith("Needs you"))) {
+        await pause(3000);
+        await tap((label) => label.includes(INPUT.description));
+      }
+      await pause(3000);
+    }
+    // On the card: the whole command opened, then Deny.
     const opened = await tap((label) => label === "Show the whole command");
     await pause(2000);
     report(
