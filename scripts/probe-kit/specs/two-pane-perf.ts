@@ -502,6 +502,199 @@ const hideAlone = (page: Page): Promise<string> =>
   });
 
 /**
+ * What the composer's half of a switch lays out alone, each part on its
+ * own and put back: the draft handed to the field (its text swapped), the
+ * offer stack's height, and the tray shown swapped for the next.
+ */
+const composerAlone = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const dock = document.querySelector<HTMLElement>(".leaf > .dock .dock");
+    if (!dock) {
+      return "no composer";
+    }
+    const timed = (change: () => void, undo: () => void) => {
+      document.body.getBoundingClientRect();
+      const at = performance.now();
+      change();
+      document.body.getBoundingClientRect();
+      const ms = performance.now() - at;
+      undo();
+      document.body.getBoundingClientRect();
+      return `${ms.toFixed(1)}ms`;
+    };
+    const field = dock.querySelector<HTMLTextAreaElement>("textarea");
+    const draft = field?.value ?? "";
+    const stack = dock.querySelector<HTMLElement>(".stack");
+    const height = stack?.style.blockSize ?? "";
+    const trays = [...dock.querySelectorAll<HTMLElement>(".tray")];
+    const swap = () => {
+      for (const tray of trays) {
+        tray.classList.toggle("away");
+      }
+    };
+    return [
+      `the draft: ${
+        field
+          ? timed(
+              () => {
+                field.value = draft
+                  ? ""
+                  : "A draft of two lines, as long as a reply asked for";
+              },
+              () => {
+                field.value = draft;
+              }
+            )
+          : "no field"
+      }`,
+      `the offer stack's height: ${
+        stack
+          ? timed(
+              () => {
+                stack.style.blockSize = `${stack.offsetHeight + 40}px`;
+              },
+              () => {
+                stack.style.blockSize = height;
+              }
+            )
+          : "no stack"
+      }`,
+      `the tray (${trays.length}): ${trays.length > 1 ? timed(swap, swap) : "one or none"}`,
+    ].join(", ");
+  });
+
+/**
+ * Each `setAttribute` the page makes from here on, timed: a style pass
+ * forced from inside one (a box's focusability read again) is named by the
+ * attribute and the box. Read and put back by `slowSetsOf`.
+ */
+const timeSets = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const slow: { at: string; ms: number }[] = [];
+    const set = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name: string, value: string) {
+      const from = performance.now();
+      set.call(this, name, value);
+      const ms = performance.now() - from;
+      if (ms >= 0.2) {
+        const kind = (this.getAttribute("class") ?? "").split(" ").slice(0, 2);
+        slow.push({
+          at: `${name} on ${this.tagName.toLowerCase()}.${kind.join(".")}`,
+          ms,
+        });
+      }
+    };
+    const w = window as unknown as {
+      __setAttribute: typeof set;
+      __slowSets: typeof slow;
+    };
+    w.__slowSets = slow;
+    w.__setAttribute = set;
+  });
+/**
+ * A switch's layout, part by part: the tab chosen (its link's click, the
+ * pane warmed first by the pointer resting on it), Svelte's flush let run,
+ * then one forced layout timed; the same again with one thing about the
+ * page changed (a rule laid on before the switch, its own layout forced
+ * first), so the difference is that thing's share. A reading, not the
+ * switch's frame: the frame callbacks' work is not in it.
+ */
+const LAYOUT_PARTS = [
+  ["nothing changed", ""],
+  ["the tab strip taken out", ".session-tabs { display: none !important; }"],
+  [
+    "the strip's edge fade off (its scroll timeline)",
+    ".session-tabs .kit-edge-fade { animation: none !important; mask-image: none !important; }",
+  ],
+  [
+    "the strip not scrolling",
+    ".session-tabs .ff-tabs-list { overflow: visible !important; }",
+  ],
+  [
+    "every tab's contents taken out, its box kept",
+    ".session-tabs .ff-tab > * { display: none !important; }",
+  ],
+] as const;
+async function switchLayoutParts(
+  page: Page,
+  tabs: [string, string],
+  reach: (id: string) => Promise<void>
+): Promise<string> {
+  const read: string[] = [];
+  for (const [name, selector] of LAYOUT_PARTS) {
+    const ms: string[] = [];
+    for (const id of [...tabs, ...tabs]) {
+      await reach(id);
+      ms.push(
+        await page.evaluate(
+          async ({ hide, tab }) => {
+            const drawn = () =>
+              [
+                ...document.querySelectorAll<HTMLElement>(
+                  ".pane:not(.pane-hidden, .pane-settling)"
+                ),
+              ]
+                .map((pane) => pane.dataset.pane)
+                .join();
+            const style = document.createElement("style");
+            if (hide) {
+              style.textContent = hide;
+              document.head.append(style);
+            }
+            document.body.getBoundingClientRect();
+            const was = drawn();
+            document
+              .querySelector<HTMLElement>(`[data-session-tab="${tab}"]`)
+              ?.click();
+            await Promise.resolve();
+            await Promise.resolve();
+            const flushed = performance.now();
+            document.body.getBoundingClientRect();
+            const laid = performance.now() - flushed;
+            // A switch that did not happen lays nothing out: said, not counted.
+            const switched = drawn() !== was;
+            style.remove();
+            return `${laid.toFixed(1)}${switched ? "" : " (no switch)"}`;
+          },
+          { hide: selector, tab: id }
+        )
+      );
+      await page.waitForTimeout(SETTLE_MS);
+    }
+    read.push(`${name}: ${ms.join(", ")}ms`);
+  }
+  return read.join("; ");
+}
+/** The slow `setAttribute` calls of the switches `press` makes, one tab at a time. */
+async function slowSetsIn(
+  page: Page,
+  tabs: string[],
+  press: (id: string) => Promise<void>
+): Promise<string> {
+  await timeSets(page);
+  for (const id of tabs) {
+    await press(id);
+  }
+  return slowSetsOf(page);
+}
+/** The ten slowest `setAttribute` calls since `timeSets`, the wrapper taken off. */
+const slowSetsOf = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      __setAttribute: typeof Element.prototype.setAttribute;
+      __slowSets: { at: string; ms: number }[];
+    };
+    Element.prototype.setAttribute = w.__setAttribute;
+    return (
+      w.__slowSets
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 10)
+        .map((one) => `${one.at} ${one.ms.toFixed(1)}ms`)
+        .join("; ") || "none over 0.2ms"
+    );
+  });
+
+/**
  * The script in each press's longest task (the one a switch is held to),
  * by self time across the presses, the most first.
  */
@@ -659,6 +852,9 @@ async function measure(
               .join("; ") || "nothing traced"
           }; laid out again for ${
             longest.relaidOut.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+            "nothing traced"
+          }; set off by ${
+            longest.scheduled.map(([what, n]) => `${what} ${n}x`).join("; ") ||
             "nothing traced"
           }; its other phases: ${
             longest.rendering
@@ -992,10 +1188,12 @@ async function measure(
   const putAway: string[] = [];
   const warmed: string[] = [];
   const hidden: string[] = [];
+  const composed: string[] = [];
   for (const id of order) {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(REST_MS);
     hidden.push(await hideAlone(page));
+    composed.push(await composerAlone(page));
     const pane = `.pane.pane-hidden[data-pane="${id}"]`;
     putAway.push(await revealAlone(page, pane, "pane-hidden"));
     await ways.point.reach(tabOf(id));
@@ -1013,6 +1211,31 @@ async function measure(
   );
   kit.note(
     `${mode} pane(s), the drawn pane put away alone (\`.pane-hidden\` put on): ${hidden.join("; ")}`
+  );
+  kit.note(
+    `${mode} pane(s), the composer's half of a switch laid out alone: ${composed.join("; ")}`
+  );
+  // Which attributes a press's switch sets slowly, past the timed switches
+  // (the wrapper is not free).
+  const slowSets = await slowSetsIn(page, order.slice(0, 2), async (id) => {
+    await ways.point.reach(tabOf(id));
+    await page.waitForTimeout(REACH_MS);
+    await ways.point.make(tabOf(id));
+    await page.waitForTimeout(SETTLE_MS);
+  });
+  kit.note(
+    `${mode} pane(s), point: the slow setAttribute calls in two switches: ${slowSets}`
+  );
+  const parts = await switchLayoutParts(
+    page,
+    [order[0], order[1]],
+    async (id) => {
+      await ways.point.reach(tabOf(id));
+      await page.waitForTimeout(REACH_MS);
+    }
+  );
+  kit.note(
+    `${mode} pane(s): a switch's layout forced after its flush, with a part of the page taken out: ${parts}`
   );
   // What the reader sees after each switch, frame by frame, apart from the
   // timed passes: once a catch-up has landed at the tail, nothing mounted

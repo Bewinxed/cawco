@@ -487,6 +487,13 @@ export interface MainTask {
    * for (`traceMain`'s `restyles`), 0 otherwise.
    */
   restyled: number;
+  /**
+   * The class and attribute changes that scheduled a style invalidation in
+   * it (`restyles` only), each on the element it changed on, with how many
+   * times: what set off a restyle of elements a rule ties to it ("Related
+   * style rule" on those elements).
+   */
+  scheduled: [string, number][];
   /** Its style recalculations' and layouts' wall time, ms; 0 unless `restyles`. */
   styleMs: number;
   /** The trace clock (`dur`), ms: wall time, other processes' turns included. */
@@ -771,6 +778,29 @@ export async function traceMain(
       scheduledBy.set(data.invalidationSet, change);
     }
   }
+  const schedules = trackedAs("ScheduleStyleInvalidationTracking");
+  /** The changes that scheduled invalidations between two points, on their elements. */
+  const scheduledIn = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    for (const one of schedules) {
+      const data = one.args?.data;
+      if (one.ts < from || one.ts >= to || !data) {
+        continue;
+      }
+      const change =
+        (data.changedClass && `.${data.changedClass}`) ||
+        (data.changedAttribute && `[${data.changedAttribute}]`) ||
+        (data.changedId && `#${data.changedId}`) ||
+        (data.changedPseudo && `:${data.changedPseudo}`) ||
+        "?";
+      const node = (data.nodeName ?? "?")
+        .replace(CLASS_ATTRIBUTE, ".$1")
+        .slice(0, 50);
+      const key = `${change} on ${node}`;
+      counted.set(key, (counted.get(key) ?? 0) + 1);
+    }
+    return [...counted].sort((a, b) => b[1] - a[1]).slice(0, 12);
+  };
   const changeOf = (one: TraceEvent): string => {
     const changes = [
       ...new Set(
@@ -785,7 +815,8 @@ export async function traceMain(
   const askedIn = (
     asks: TraceEvent[],
     from: number,
-    to: number
+    to: number,
+    most = 8
   ): [string, number][] => {
     const counted = new Map<string, number>();
     for (const one of asks) {
@@ -801,7 +832,7 @@ export async function traceMain(
     const whole = (key: string) => (SUBTREE.test(key) ? 1 : 0);
     return [...counted]
       .sort((a, b) => whole(b[0]) - whole(a[0]) || b[1] - a[1])
-      .slice(0, 8);
+      .slice(0, most);
   };
   /** How big the box a layout was laid out from is: the page's, or one inside it. */
   const sizeOf = (quad: number[] | undefined): string => {
@@ -854,6 +885,39 @@ export async function traceMain(
     }
     return [...counted].sort((a, b) => b[1] - a[1]);
   };
+  /** What a task opened with, said as `MainTask.ran`. */
+  const ranIn = (from: number, to: number): string => {
+    const opening = starts.find((one) => one.ts >= from && one.ts < to);
+    if (opening?.name === "EventDispatch") {
+      return `a ${opening.args?.data?.type ?? "?"} event`;
+    }
+    if (opening?.name === "TimerFire") {
+      return "a timer";
+    }
+    if (opening?.name === "FireAnimationFrame") {
+      return "a frame's callbacks";
+    }
+    return opening ? opening.name : "the frame's rendering";
+  };
+  /** Why a task restyled and laid out (`restyles`), or nothing said. */
+  const whyIn = (from: number, to: number) =>
+    restyles
+      ? {
+          rendering: renderingIn(from, to),
+          passes: passesIn(from, to),
+          invalidated: askedIn(restyleAsks, from, to),
+          // Every box laid out again, each of its own: one box can be a
+          // whole column's layout, and the most counted are a few spans.
+          relaidOut: askedIn(relayoutAsks, from, to, 24),
+          scheduled: scheduledIn(from, to),
+        }
+      : {
+          rendering: [],
+          passes: [],
+          invalidated: [],
+          relaidOut: [],
+          scheduled: [],
+        };
   return {
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
     selfTime,
@@ -861,23 +925,10 @@ export async function traceMain(
       .filter((event) => event.name === "RunTask")
       .map((event) => {
         const end = event.ts + (event.dur ?? 0);
-        const opening = starts.find(
-          (one) => one.ts >= event.ts && one.ts < end
-        );
-        let ran = "the frame's rendering";
-        if (opening?.name === "EventDispatch") {
-          ran = `a ${opening.args?.data?.type ?? "?"} event`;
-        } else if (opening?.name === "TimerFire") {
-          ran = "a timer";
-        } else if (opening?.name === "FireAnimationFrame") {
-          ran = "a frame's callbacks";
-        } else if (opening) {
-          ran = opening.name;
-        }
         return {
           at: event.ts,
           end,
-          ran,
+          ran: ranIn(event.ts, end),
           wall: (event.dur ?? 0) / 1000,
           cpu: (event.tdur ?? 0) / 1000,
           restyled: recalcs
@@ -885,10 +936,7 @@ export async function traceMain(
             .reduce((sum, recalc) => sum + elementsOf(recalc), 0),
           styleMs: msIn(recalcs, event.ts, end),
           layoutMs: msIn(layouts, event.ts, end),
-          rendering: restyles ? renderingIn(event.ts, end) : [],
-          passes: restyles ? passesIn(event.ts, end) : [],
-          invalidated: restyles ? askedIn(restyleAsks, event.ts, end) : [],
-          relaidOut: restyles ? askedIn(relayoutAsks, event.ts, end) : [],
+          ...whyIn(event.ts, end),
         };
       }),
   };
