@@ -106,7 +106,6 @@ const importCanvas = (deps: ImportDeps, canvas: LegacyCanvas): void => {
     source: place.kind === "page" ? { page: name } : place.source,
     revision: 1,
     seq: 0,
-    changes: {},
     deliveredSeq: 0,
     readSeq: 0,
     openedRevision: null,

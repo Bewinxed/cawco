@@ -20,8 +20,8 @@ import {
   type ThreadSummary,
 } from "@cawco/core";
 import type { ProjectRow } from "./db";
-import type { ArtifactRow } from "./db/artifacts";
 import type {
+  FindArtifactRow,
   FindInstanceRow,
   FindRoutineRow,
   FindWorkItemRow,
@@ -665,7 +665,7 @@ export const machineEntry = (machine: AgentRow, online: boolean): Entry => {
  * of its choices. `opened`: the revision the person last opened, if any.
  */
 export const artifactEntry = (
-  artifact: ArtifactRow,
+  artifact: FindArtifactRow,
   maker: FindInstanceRow,
   project: { id: string; name: string } | null
 ): Entry => {
@@ -696,11 +696,7 @@ export const artifactEntry = (
       seen:
         artifact.openedRevision !== null &&
         artifact.openedRevision >= artifact.revision,
-      picksToMake:
-        decision &&
-        !Object.values(artifact.changes).some(
-          (change) => change.by === "person"
-        ),
+      picksToMake: decision && !artifact.personChanged,
       lastActivity: artifact.updatedAt.getTime(),
       matched: [],
       score: 0,

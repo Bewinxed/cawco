@@ -833,11 +833,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const changed =
       since === undefined
         ? null
-        : new Set(
-            Object.entries(row.changes)
-              .filter(([, change]) => change.seq > since)
-              .map(([key]) => key)
-          );
+        : new Set(db.changes(row.id, { after: since }).map(({ key }) => key));
     const keys = Object.keys(state).filter(
       (key) => !changed || changed.has(key)
     );
@@ -1387,12 +1383,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     since: number,
     present: Set<string>
   ): string[] =>
-    Object.entries(row.changes)
-      .filter(
-        ([id, change]) =>
-          change.by === "person" && change.seq > since && present.has(id)
-      )
-      .map(([id]) => id);
+    db
+      .changes(row.id, { after: since, by: "person" })
+      .map(({ key }) => key)
+      .filter((id) => present.has(id));
 
   /** A canvas as the session reads it, which counts as its read. */
   const readCanvas = (
@@ -1479,7 +1473,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       source: { page: free },
       revision: 1,
       seq: 0,
-      changes: {},
       deliveredSeq: 0,
       readSeq: 0,
       openedRevision: null,
@@ -1531,7 +1524,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         source: { page: input.name },
         revision: 1,
         seq: 0,
-        changes: {},
         deliveredSeq: 0,
         readSeq: 0,
         openedRevision: null,
@@ -1732,7 +1724,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           source,
           revision: 1,
           seq: 0,
-          changes: {},
           deliveredSeq: 0,
           readSeq: 0,
           openedRevision: null,
@@ -1831,12 +1822,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
     const { sentAt } = metaOf(doc);
-    const byPerson = Object.entries(row.changes).filter(
-      ([, change]) => change.by === "person"
-    );
-    const unread = byPerson.filter(([, change]) => change.seq > row.readSeq);
+    const unread = db.changes(row.id, { after: row.readSeq, by: "person" });
     const picksAwaiting = unread.filter(
-      ([key, change]) => key in state && change.seq <= row.deliveredSeq
+      ({ key, seq }) => key in state && seq <= row.deliveredSeq
     ).length;
     const pins = Object.values(
       doc.getMap("pins").toJSON() as Record<string, Pin>
@@ -1972,7 +1960,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             source,
             revision: 1,
             seq: 0,
-            changes: {},
             deliveredSeq: 0,
             readSeq: 0,
             openedRevision: null,

@@ -1,6 +1,17 @@
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
+  artifactChanges,
   artifacts,
   instances,
   projectTasks,
@@ -11,6 +22,11 @@ import {
   workItems,
   workspaces,
 } from "./schema";
+
+/** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
+export type FindArtifactRow = typeof artifacts.$inferSelect & {
+  personChanged: boolean;
+};
 
 /**
  * A conversation as the find engine reads it (find.ts): what names it, what
@@ -77,8 +93,8 @@ export interface FindRoutineRow {
 }
 
 export interface FindDb {
-  /** Every artifact, newest first: what it is, whose, and the keys the person changed. */
-  readonly artifacts: () => (typeof artifacts.$inferSelect)[];
+  /** Every artifact: what it is, whose, and whether the person changed any of its keys. */
+  readonly artifacts: () => FindArtifactRow[];
   /** The ids of the sessions find holds whose id starts with `prefix` (hex and dashes only). */
   readonly idsByPrefix: (prefix: string) => string[];
   /** The conversations find reads ({@link findColumns}): every one, or these ids'. */
@@ -125,7 +141,17 @@ const findable = () =>
 const ID_PREFIX = /^[0-9a-f-]+$/;
 
 export const findDb = (db: BunSQLiteDatabase): FindDb => ({
-  artifacts: () => db.select().from(artifacts).all(),
+  artifacts: () =>
+    db
+      .select({
+        ...getTableColumns(artifacts),
+        personChanged:
+          sql<boolean>`exists (select 1 from ${artifactChanges} where ${artifactChanges.artifactId} = ${artifacts.id} and ${artifactChanges.by} = 'person')`.mapWith(
+            Boolean
+          ),
+      })
+      .from(artifacts)
+      .all(),
   idsByPrefix: (prefix) =>
     ID_PREFIX.test(prefix)
       ? db

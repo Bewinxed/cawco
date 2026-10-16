@@ -1,8 +1,20 @@
-import { and, asc, count, desc, eq, gte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { artifacts, artifactUpdates, shownPreviews } from "./schema";
+import {
+  artifactChanges,
+  artifacts,
+  artifactUpdates,
+  shownPreviews,
+} from "./schema";
 
 export type ArtifactRow = typeof artifacts.$inferSelect;
+
+/** One key's last change on an artifact: the seq it changed at, and who changed it. */
+export interface ArtifactChange {
+  by: "person" | "agent";
+  key: string;
+  seq: number;
+}
 
 /** What may change on an artifact after it is made: never its id, session, project, kind or birth. */
 export type ArtifactPatch = Partial<
@@ -44,6 +56,11 @@ export interface ArtifactsDb {
     kind: ArtifactRow["kind"],
     name: string
   ) => ArtifactRow | undefined;
+  /** An artifact's keys' last changes: those after seq `after`, by `by`, when named. */
+  readonly changes: (
+    id: string,
+    where?: { after?: number; by?: ArtifactChange["by"] }
+  ) => ArtifactChange[];
   /** Replaces the log with one snapshot, at the seq the log had reached. */
   readonly compact: (id: string, snapshot: Uint8Array) => void;
   readonly create: (row: ArtifactRow) => ArtifactRow;
@@ -96,16 +113,37 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       }
       const seq = row.seq + 1;
       tx.insert(artifactUpdates).values({ artifactId: id, seq, update }).run();
-      const changes = { ...row.changes };
       for (const [key, by] of Object.entries(changed)) {
-        changes[key] = { seq, by };
+        tx.insert(artifactChanges)
+          .values({ artifactId: id, key, seq, by })
+          .onConflictDoUpdate({
+            target: [artifactChanges.artifactId, artifactChanges.key],
+            set: { seq, by },
+          })
+          .run();
       }
       tx.update(artifacts)
-        .set({ seq, changes, updatedAt: new Date() })
+        .set({ seq, updatedAt: new Date() })
         .where(eq(artifacts.id, id))
         .run();
       return seq;
     }),
+  changes: (id, { after, by } = {}) =>
+    db
+      .select({
+        key: artifactChanges.key,
+        seq: artifactChanges.seq,
+        by: artifactChanges.by,
+      })
+      .from(artifactChanges)
+      .where(
+        and(
+          eq(artifactChanges.artifactId, id),
+          after === undefined ? undefined : gt(artifactChanges.seq, after),
+          by === undefined ? undefined : eq(artifactChanges.by, by)
+        )
+      )
+      .all(),
   byName: (instanceId, kind, name) =>
     db
       .select()

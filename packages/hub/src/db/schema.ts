@@ -2816,11 +2816,6 @@ export const artifacts = sqliteTable(
     revision: integer("revision").notNull().default(1),
     /** Moved by every update the doc takes, from anyone: `artifact_read`'s `since` cursor. */
     seq: integer("seq").notNull().default(0),
-    /** Each `state` key's last change: the seq it changed at and who changed it. */
-    changes: text("changes", { mode: "json" })
-      .$type<Record<string, { seq: number; by: "person" | "agent" }>>()
-      .notNull()
-      .default({}),
     /** The last seq the session was told of: the person's changes after it are owed to it. */
     deliveredSeq: integer("delivered_seq").notNull().default(0),
     /** The seq the session last read it at (`artifact_read`): the person's changes after it are unread (`artifact_list`). */
@@ -2838,6 +2833,27 @@ export const artifacts = sqliteTable(
       table.kind,
       table.name
     ),
+  ]
+);
+
+/**
+ * Each key's last change on an artifact (a page's `state` key, a canvas's
+ * element id): the seq it changed at and who changed it, one row per key.
+ * `artifact_read`'s `since` and the unread counts read them by seq.
+ */
+export const artifactChanges = sqliteTable(
+  "artifact_changes",
+  {
+    artifactId: text("artifact_id")
+      .notNull()
+      .references(() => artifacts.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    seq: integer("seq").notNull(),
+    by: text("by").$type<"person" | "agent">().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.artifactId, table.key] }),
+    index("artifact_changes_seq").on(table.artifactId, table.seq),
   ]
 );
 
