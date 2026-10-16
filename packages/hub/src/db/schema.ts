@@ -3417,14 +3417,31 @@ export const connectorPolls = sqliteTable(
     idPath: text("id_path").notNull(),
     versionPath: text("version_path").notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    /** What its last call saw, id to version; null until its first call, which only looks. */
-    seen: text("seen", { mode: "json" }).$type<Record<string, string>>(),
+    /**
+     * When a call last kept what it saw (`connector_poll_items`); null until
+     * its first call, and after an edit to what it lists or keys by, when
+     * the next call only looks.
+     */
+    seenAt: timestamp("seen_at"),
     reason: text("reason"),
     polledAt: timestamp("polled_at"),
     createdBy: text("created_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("connector_polls_project").on(table.projectId)]
+);
+
+/** What a connector poll's last call saw: each item's id and version. */
+export const connectorPollItems = sqliteTable(
+  "connector_poll_items",
+  {
+    pollId: text("poll_id")
+      .notNull()
+      .references(() => connectorPolls.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull(),
+    version: text("version").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.pollId, table.itemId] })]
 );
 
 /**

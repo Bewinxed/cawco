@@ -4,6 +4,7 @@ import {
   desc,
   eq,
   exists,
+  getTableColumns,
   inArray,
   isNotNull,
   isNull,
@@ -13,6 +14,7 @@ import {
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
+  connectorPollItems,
   connectorPolls,
   eventRouteKinds,
   eventRoutes,
@@ -32,7 +34,10 @@ export type EventRouteRow = typeof eventRoutes.$inferSelect & {
 export type GitHubPollerRow = typeof githubPollers.$inferSelect & {
   cursors: Partial<Record<GitHubResource, GitHubCursor>>;
 };
-export type ConnectorPollRow = typeof connectorPolls.$inferSelect;
+/** A connector poll with how many items its last call kept; null until it has looked. */
+export type ConnectorPollRow = typeof connectorPolls.$inferSelect & {
+  seen: number | null;
+};
 
 /** When a route last delivered an event. */
 export interface Delivery {
@@ -49,9 +54,13 @@ export interface IngressDb {
    */
   readonly claimInbox: (projectId: string, at: Date) => InboundEventRow[];
   readonly connectorPoll: (id: string) => ConnectorPollRow | undefined;
+  /** What a connector poll's last call saw, item id to version. */
+  readonly connectorPollItems: (id: string) => Map<string, string>;
   /** A project's connector polls, or every one, oldest first. */
   readonly connectorPolls: (projectId?: string) => ConnectorPollRow[];
-  readonly createConnectorPoll: (row: ConnectorPollRow) => ConnectorPollRow;
+  readonly createConnectorPoll: (
+    row: Omit<ConnectorPollRow, "seen">
+  ) => ConnectorPollRow;
   readonly createRoute: (row: EventRouteRow) => EventRouteRow;
   readonly deleteConnectorPoll: (id: string) => boolean;
   readonly deleteRoute: (id: string) => boolean;
@@ -67,6 +76,15 @@ export interface IngressDb {
    * already. Answers the row it inserted, or nothing when it was a repeat.
    */
   readonly insertEvent: (row: InboundEventRow) => InboundEventRow | undefined;
+  /**
+   * Keeps a call's outcome: what it saw replaces what the call before saw,
+   * in one transaction with its `seenAt` and `polledAt`.
+   */
+  readonly keepConnectorPollItems: (
+    id: string,
+    items: ReadonlyMap<string, string>,
+    polledAt: Date
+  ) => void;
   /** Gives claimed inbox lines back, when the wake that took them did not go out. */
   readonly releaseInbox: (ids: string[]) => void;
   readonly route: (id: string) => EventRouteRow | undefined;
@@ -84,9 +102,10 @@ export interface IngressDb {
     projectId: string,
     connection: string | null
   ) => void;
+  /** `seenAt: null` drops what it saw with it: its next call only looks. */
   readonly updateConnectorPoll: (
     id: string,
-    patch: Partial<Omit<ConnectorPollRow, "id" | "createdAt">>
+    patch: Partial<Omit<ConnectorPollRow, "id" | "createdAt" | "seen">>
   ) => ConnectorPollRow | undefined;
   /**
    * Keeps a poll's outcome: the row's fields named, and each cursor in
@@ -126,6 +145,19 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
     }
     return rows.map((row) => ({ ...row, kinds: kinds.get(row.id) ?? [] }));
   };
+  /** A connector poll's columns, and how many items its last call kept (null until it looked). */
+  const pollColumns = {
+    ...getTableColumns(connectorPolls),
+    seen: sql<
+      number | null
+    >`case when ${connectorPolls.seenAt} is null then null else (select count(*) from ${connectorPollItems} where ${connectorPollItems.pollId} = ${connectorPolls.id}) end`,
+  };
+  const pollOf = (id: string): ConnectorPollRow | undefined =>
+    db
+      .select(pollColumns)
+      .from(connectorPolls)
+      .where(eq(connectorPolls.id, id))
+      .get();
   /** Each poller with its resources' cursors. */
   const withCursors = (
     rows: (typeof githubPollers.$inferSelect)[]
@@ -350,27 +382,69 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         }
       });
     },
-    connectorPolls: (projectId) => {
-      const query = db.select().from(connectorPolls);
-      return (
-        projectId === undefined
-          ? query
-          : query.where(eq(connectorPolls.projectId, projectId))
-      )
-        .orderBy(asc(connectorPolls.createdAt))
-        .all();
-    },
-    connectorPoll: (id) =>
-      db.select().from(connectorPolls).where(eq(connectorPolls.id, id)).get(),
-    createConnectorPoll: (row) =>
-      db.insert(connectorPolls).values(row).returning().get(),
-    updateConnectorPoll: (id, patch) =>
+    connectorPolls: (projectId) =>
       db
-        .update(connectorPolls)
-        .set(patch)
-        .where(eq(connectorPolls.id, id))
-        .returning()
-        .get(),
+        .select(pollColumns)
+        .from(connectorPolls)
+        .where(
+          projectId === undefined
+            ? undefined
+            : eq(connectorPolls.projectId, projectId)
+        )
+        .orderBy(asc(connectorPolls.createdAt))
+        .all(),
+    connectorPoll: (id) => pollOf(id),
+    connectorPollItems: (id) =>
+      new Map(
+        db
+          .select({
+            itemId: connectorPollItems.itemId,
+            version: connectorPollItems.version,
+          })
+          .from(connectorPollItems)
+          .where(eq(connectorPollItems.pollId, id))
+          .all()
+          .map(({ itemId, version }) => [itemId, version])
+      ),
+    createConnectorPoll: (row) => {
+      db.insert(connectorPolls).values(row).run();
+      return { ...row, seen: null };
+    },
+    keepConnectorPollItems: (id, items, polledAt) => {
+      db.transaction((tx) => {
+        tx.delete(connectorPollItems)
+          .where(eq(connectorPollItems.pollId, id))
+          .run();
+        if (items.size > 0) {
+          tx.insert(connectorPollItems)
+            .values(
+              [...items].map(([itemId, version]) => ({
+                pollId: id,
+                itemId,
+                version,
+              }))
+            )
+            .run();
+        }
+        tx.update(connectorPolls)
+          .set({ seenAt: polledAt, reason: null, polledAt })
+          .where(eq(connectorPolls.id, id))
+          .run();
+      });
+    },
+    updateConnectorPoll: (id, patch) =>
+      db.transaction((tx) => {
+        if (patch.seenAt === null) {
+          tx.delete(connectorPollItems)
+            .where(eq(connectorPollItems.pollId, id))
+            .run();
+        }
+        tx.update(connectorPolls)
+          .set(patch)
+          .where(eq(connectorPolls.id, id))
+          .run();
+        return pollOf(id);
+      }),
     deleteConnectorPoll: (id) =>
       db
         .delete(connectorPolls)

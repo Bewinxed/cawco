@@ -1352,6 +1352,13 @@
       "when": 1792157242825,
       "tag": "0192_github_poll_cursors",
       "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "6",
+      "when": 1792157257765,
+      "tag": "0193_connector_poll_items",
+      "breakpoints": true
     }
   ]
 }

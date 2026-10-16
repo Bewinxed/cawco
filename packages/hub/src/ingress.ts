@@ -434,7 +434,7 @@ const pollView = (row: ConnectorPollRow): ConnectorPollView => ({
   idPath: row.idPath,
   versionPath: row.versionPath,
   enabled: row.enabled,
-  seen: row.seen ? Object.keys(row.seen).length : null,
+  seen: row.seen,
   reason: row.reason,
   polledAt: row.polledAt?.getTime() ?? null,
   createdBy: row.createdBy,
@@ -727,10 +727,14 @@ export const createIngress = ({
 
   /**
    * What a call saw, id to version, and the items that are new or changed
-   * since the call before; none on a first call, which only looks.
+   * since the call before (`before`); none on a first call, which only looks.
    */
-  const diffed = (poll: ConnectorPollRow, items: unknown[]) => {
-    const seen: Record<string, string> = {};
+  const diffed = (
+    poll: ConnectorPollRow,
+    items: unknown[],
+    before: ReadonlyMap<string, string> | null
+  ) => {
+    const seen = new Map<string, string>();
     const changed: { item: unknown; key: string }[] = [];
     for (const item of items) {
       const itemId = keyPart(at(item, poll.idPath));
@@ -738,8 +742,8 @@ export const createIngress = ({
       if (itemId === undefined || version === undefined) {
         continue;
       }
-      seen[itemId] = version;
-      if (poll.seen !== null && poll.seen[itemId] !== version) {
+      seen.set(itemId, version);
+      if (before !== null && before.get(itemId) !== version) {
         changed.push({ item, key: `${itemId}:${version}` });
       }
     }
@@ -795,7 +799,11 @@ export const createIngress = ({
       return;
     }
     try {
-      const { seen, changed } = diffed(poll, itemsIn(poll, result));
+      const { seen, changed } = diffed(
+        poll,
+        itemsIn(poll, result),
+        poll.seenAt === null ? null : store.connectorPollItems(id)
+      );
       const source = `conn:${poll.connection}:${poll.tool}`;
       const landed = changed.filter(({ item, key }) =>
         ingest(
@@ -816,7 +824,7 @@ export const createIngress = ({
           poll.projectId
         )
       ).length;
-      store.updateConnectorPoll(id, { seen, reason: null, polledAt });
+      store.keepConnectorPollItems(id, seen, polledAt);
       if (landed > 0) {
         console.log(`[ingress] ${source}: ${landed} new or changed`);
       }
@@ -1159,7 +1167,7 @@ export const createIngress = ({
       idPath: input.idPath.trim(),
       versionPath: input.versionPath.trim(),
       enabled: input.enabled ?? true,
-      seen: null,
+      seenAt: null,
       reason: null,
       polledAt: null,
       createdBy: by === "owner" ? "owner" : by.id,
@@ -1201,7 +1209,7 @@ export const createIngress = ({
     return pollView(
       store.updateConnectorPoll(id, {
         ...next,
-        ...(relook ? { seen: null } : {}),
+        ...(relook ? { seenAt: null } : {}),
       }) ?? row
     );
   };
