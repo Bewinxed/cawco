@@ -30,6 +30,7 @@ import addFormats from "ajv-formats";
 import type { DesignTokens } from "style-dictionary/types";
 import formatSchema from "../schemas/dtcg-2025.10/format.json" with { type: "json" };
 import resolverSchema from "../schemas/dtcg-2025.10/resolver.json" with { type: "json" };
+import { valueProblems } from "./dtcg-validate";
 import { TOKENS_EXTENSION } from "./dtcg-values";
 
 const VERSION = "2025.10";
@@ -198,6 +199,12 @@ export async function loadTokenSystem(
     await (item.type === "set"
       ? loader.set(item.body, where)
       : loader.modifier(item.name, item.body, where));
+  }
+  // Every value against its type before anything evaluates one: a string
+  // dimension once reached the serialiser as `undefined.toPrecision`.
+  const problems = valueProblems(files, resolverPath);
+  if (problems.length > 0) {
+    throw new Error(`not DTCG 2025.10:\n  ${problems.join("\n  ")}`);
   }
   return {
     base: loader.base as DesignTokens,
