@@ -304,8 +304,17 @@ const readChoiceRow = (selector: string) => {
 
 /** The project's ⋯ opened and its upstream row pressed: the submenu, read. */
 const openUpstream = async (page: Page, view: View) => {
+  // The page is drawn on the server: a press before it hydrates is lost,
+  // so one that opened nothing in 3 s is pressed again.
   await press(page, view, `[aria-label="More for ${NAME}"]`);
-  await page.waitForSelector(OPEN_MENU, { timeout: 10_000 });
+  const opened = await page
+    .waitForSelector(OPEN_MENU, { timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!opened) {
+    await press(page, view, `[aria-label="More for ${NAME}"]`);
+    await page.waitForSelector(OPEN_MENU, { timeout: 10_000 });
+  }
   await settle(page, 200);
   // The sub-trigger holding the upstream row's title, marked to be pressed.
   await page.evaluate(
@@ -765,6 +774,7 @@ const run = async (kit: Kit) => {
     `PUT ${turned.status}; exit ${exitOf("I")}; fake gh calls:\n${await logged()}`
   );
   await open(pages.desk, projectUrl, `[aria-label="More for ${NAME}"]`);
+  await settle(pages.desk, 400);
   const named = await openUpstream(pages.desk, "desk");
   await dismiss(pages.desk);
   const fleetsAllow = `${UPSTREAM_WORDS.inherit} · ${UPSTREAM_WORDS.allow}`;
