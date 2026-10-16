@@ -148,10 +148,21 @@ const standUp = async (kit: Kit) => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
   // The repository as this checkout's HEAD has it: the dashboard and the sheet.
+  // Its origin is one of its own whose HEAD is `main`: a workspace is cut
+  // from the branch origin names (agent clone.ts `remoteDefault`), and this
+  // checkout may stand on a detached HEAD (a host check's) that names none.
   const src = join(fleet.sandbox, "src");
-  await Bun.$`git clone --quiet --local ${ROOT} ${src}`
-    .env({ ...process.env, HOME: home })
+  const origin = join(fleet.sandbox, "origin.git");
+  const asOwner = { ...process.env, HOME: home };
+  await Bun.$`git clone --quiet --local ${ROOT} ${src}`.env(asOwner).quiet();
+  await Bun.$`git -C ${src} checkout --quiet -B main`.env(asOwner).quiet();
+  await Bun.$`git clone --quiet --bare --local ${src} ${origin}`
+    .env(asOwner)
     .quiet();
+  await Bun.$`git -C ${src} remote set-url origin ${origin}`
+    .env(asOwner)
+    .quiet();
+  await Bun.$`git -C ${src} fetch --quiet origin`.env(asOwner).quiet();
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Live sheet",
     machineId: MACHINE,
@@ -494,6 +505,108 @@ const ipadPageOf = (line: string): IpadPage | undefined => {
     : undefined;
 };
 
+/** The app's Probe lines on simulator `udid`, each pushed onto `lines` without its head as it comes. */
+const probeLines = (
+  udid: string,
+  lines: string[]
+): Subprocess<"ignore", "pipe", "ignore"> => {
+  const child = Bun.spawn(
+    [
+      "xcrun",
+      "simctl",
+      "spawn",
+      udid,
+      "log",
+      "stream",
+      "--style",
+      "compact",
+      "--predicate",
+      'subsystem == "dev.cawco.app" AND category == "Probe"',
+    ],
+    { stdout: "pipe", stderr: "ignore" }
+  );
+  (async () => {
+    const decoder = new TextDecoder();
+    const reader = child.stdout.getReader();
+    let rest = "";
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      rest += decoder.decode(value, { stream: true });
+      const split = rest.split("\n");
+      rest = split.pop() ?? "";
+      for (const line of split) {
+        if (LOG_HEAD.test(line)) {
+          lines.push(line.replace(LOG_HEAD, "").trim());
+        }
+      }
+    }
+  })().catch(() => undefined);
+  return child;
+};
+
+/** The newest report in `lines` after `from` that `test` passes, waited for up to `ms`. */
+const reportAfter = (
+  lines: string[],
+  from: number,
+  test: (page: IpadPage) => boolean,
+  ms: number
+) =>
+  until(
+    "the sheet's report in the app",
+    () =>
+      lines
+        .slice(from)
+        .map(ipadPageOf)
+        .findLast((page) => page !== undefined && test(page)),
+    Boolean,
+    ms
+  ).catch(() => undefined);
+
+/** What the app said of its preview's loads since `from`, for a failure's detail. */
+const PREVIEW_SAID =
+  /^preview (loads|answered|failed)|^preview (ready|document)$/;
+const previewStory = (lines: string[], from: number) =>
+  lines
+    .slice(from)
+    .filter((one) => PREVIEW_SAID.test(one))
+    .map((one) => one.slice(0, 200))
+    .join(" | ") || "nothing";
+
+/** 6: the iPad's pin, as the hub recorded it, against the icon's place in Who.svelte and the desk's pin. */
+const ipadPinVerdict = (
+  kit: Kit,
+  anchor: SheetAnchor | undefined,
+  tapped: { x: number; y: number } | undefined,
+  wanted: string,
+  desk: { anchor: SheetAnchor }
+) => {
+  const { source, chain, sheet } = anchor ?? {};
+  const said = source
+    ? `${source.file}:${source.line}:${source.column}`
+    : "no source";
+  kit.check(
+    `6: a tap-to-pin on the iPad gives the icon's source ${wanted}, as the desk's click did`,
+    said === wanted &&
+      JSON.stringify(source) === JSON.stringify(desk.anchor.source),
+    anchor
+      ? `iPad ${said}; desk ${JSON.stringify(desk.anchor.source)}`
+      : `no new pin on the hub after the tap at ${tapped ? `${tapped.x},${tapped.y}` : "no icon point"}`
+  );
+  kit.check(
+    "6: its chain is the desk's two levels: IconAgent where Who uses it, then the story Agent",
+    chain?.length === 2 &&
+      chain[0]?.component === "IconAgent" &&
+      chain[1]?.component === "Agent" &&
+      sheet?.story === "Agent" &&
+      JSON.stringify(chain) === JSON.stringify(desk.anchor.chain),
+    JSON.stringify({ chain, sheet })
+  );
+};
+
 /**
  * 6: the iPad. The app built from this tree, on the session, shows the sheet
  * in its panel through the same route and overlay as a preview: its three
@@ -512,11 +625,7 @@ const ipadChecks = async (
 ) => {
   const { path: app, problem } = freshApp(ROOT);
   if (
-    !kit.check(
-      "6: the app is built from this tree",
-      !problem,
-      problem ?? app
-    )
+    !kit.check("6: the app is built from this tree", !problem, problem ?? app)
   ) {
     return;
   }
@@ -528,7 +637,10 @@ const ipadChecks = async (
   const pinsOnHub = async () =>
     (
       await fleet.api<{
-        artifacts: { id: string; pins: { anchor: SheetAnchor; id: string }[] }[];
+        artifacts: {
+          id: string;
+          pins: { anchor: SheetAnchor; id: string }[];
+        }[];
       }>(
         `/api/instances/${session}/artifacts/comments?artifact=${artifact}&filter=all`
       )
@@ -537,75 +649,21 @@ const ipadChecks = async (
   let sim: MacSim | undefined;
   let finger: SimTouch | undefined;
   let stream: Subprocess | undefined;
-  const heard: string[] = [];
-  /** The newest report after `from` that `test` passes, waited for. */
-  const pageAfter = (from: number, test: (page: IpadPage) => boolean, ms: number) =>
-    until(
-      "the sheet's report in the app",
-      () =>
-        heard
-          .slice(from)
-          .map(ipadPageOf)
-          .findLast((page) => page !== undefined && test(page)),
-      Boolean,
-      ms
-    ).catch(() => undefined);
-  /** What the app said of the preview since `from`, for a failure's detail. */
-  const story = (from: number) =>
-    heard
-      .slice(from)
-      .filter(
-        (one) =>
-          one.startsWith("preview loads") ||
-          one.startsWith("preview answered") ||
-          one.startsWith("preview failed") ||
-          one === "preview ready" ||
-          one === "preview document"
-      )
-      .map((one) => one.slice(0, 200))
-      .join(" | ") || "nothing";
+  /** The app's Probe lines, in order. */
+  const lines: string[] = [];
+  const pageAfter = (
+    from: number,
+    test: (page: IpadPage) => boolean,
+    ms: number
+  ) => reportAfter(lines, from, test, ms);
+  const story = (from: number) => previewStory(lines, from);
   try {
     sim = await macSim(IPAD);
     const { udid } = sim;
     console.log(`  iPad simulator ${udid}`);
     await Bun.$`xcrun simctl bootstatus ${udid} -b`.quiet();
     await Bun.$`xcrun simctl install ${udid} ${app}`.quiet();
-    const child = Bun.spawn(
-      [
-        "xcrun",
-        "simctl",
-        "spawn",
-        udid,
-        "log",
-        "stream",
-        "--style",
-        "compact",
-        "--predicate",
-        'subsystem == "dev.cawco.app" AND category == "Probe"',
-      ],
-      { stdout: "pipe", stderr: "ignore" }
-    );
-    stream = child;
-    (async () => {
-      const decoder = new TextDecoder();
-      const reader = child.stdout.getReader();
-      let rest = "";
-      for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        rest += decoder.decode(value, { stream: true });
-        const split = rest.split("\n");
-        rest = split.pop() ?? "";
-        for (const line of split) {
-          if (LOG_HEAD.test(line)) {
-            heard.push(line.replace(LOG_HEAD, "").trim());
-          }
-        }
-      }
-    })().catch(() => undefined);
+    stream = probeLines(udid, lines);
     await Bun.sleep(1500);
     const report = Buffer.from(REPORT).toString("base64");
     await until(
@@ -632,7 +690,7 @@ const ipadChecks = async (
     }
 
     // 6b: an edit to Who.svelte, both named frames redrawn in the web view; no new document.
-    const mark = heard.length;
+    const mark = lines.length;
     const file = join(clone, COMPONENT);
     const t0 = Date.now();
     await writeFile(
@@ -641,7 +699,7 @@ const ipadChecks = async (
     );
     const redrawn = await pageAfter(mark, (page) => page.edited === 2, 20_000);
     const took = Date.now() - t0;
-    const documents = heard
+    const documents = lines
       .slice(mark)
       .filter((one) => one === "preview document").length;
     kit.check(
@@ -652,10 +710,10 @@ const ipadChecks = async (
         : `never redrawn in 20 s; the app said ${story(mark)}`
     );
     await writeFile(file, original);
-    await pageAfter(heard.length, (page) => page.edited === 0, 20_000);
+    await pageAfter(lines.length, (page) => page.edited === 0, 20_000);
 
     // 6c: Comment on (`-preview-comment`, at the first ready), a finger's tap on the agent's icon.
-    const commenting = heard.includes("preview comment on");
+    const commenting = lines.includes("preview comment on");
     finger = simTouch(udid);
     const front = await finger.front();
     if (
@@ -667,7 +725,7 @@ const ipadChecks = async (
     ) {
       return;
     }
-    const now = await pageAfter(heard.length, (page) => !!page.icon, 15_000);
+    const now = await pageAfter(lines.length, (page) => !!page.icon, 15_000);
     const before = new Set((await pinsOnHub()).map((one) => one.id));
     if (now?.icon) {
       console.log(`  tap the agent's icon at ${now.icon.x},${now.icon.y}`);
@@ -679,28 +737,7 @@ const ipadChecks = async (
       Boolean,
       15_000
     ).catch(() => undefined);
-    const { source, chain, sheet } = made?.anchor ?? {};
-    const said = source
-      ? `${source.file}:${source.line}:${source.column}`
-      : "no source";
-    const wanted = iconPlace(original);
-    kit.check(
-      `6: a tap-to-pin on the iPad gives the icon's source ${wanted}, as the desk's click did`,
-      said === wanted &&
-        JSON.stringify(source) === JSON.stringify(desk.anchor.source),
-      made
-        ? `iPad ${said}; desk ${JSON.stringify(desk.anchor.source)}`
-        : `no new pin on the hub after the tap at ${now?.icon ? `${now.icon.x},${now.icon.y}` : "no icon point"}`
-    );
-    kit.check(
-      "6: its chain is the desk's two levels: IconAgent where Who uses it, then the story Agent",
-      chain?.length === 2 &&
-        chain[0]?.component === "IconAgent" &&
-        chain[1]?.component === "Agent" &&
-        sheet?.story === "Agent" &&
-        JSON.stringify(chain) === JSON.stringify(desk.anchor.chain),
-      JSON.stringify({ chain, sheet })
-    );
+    ipadPinVerdict(kit, made?.anchor, now?.icon, iconPlace(original), desk);
   } finally {
     stream?.kill();
     await finger?.stop();

@@ -61,7 +61,7 @@ export function simTouch(udid: string, app = "dev.cawco.app") {
     port: 0,
     socket: { data: () => undefined },
   });
-  const port = free.port;
+  const { port } = free;
   free.stop(true);
   let started = false;
 
@@ -79,7 +79,9 @@ export function simTouch(udid: string, app = "dev.cawco.app") {
     const whole = JSON.parse(
       text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
     ) as { children?: { attributes?: Record<string, string> }[] };
-    return whole.children?.[0]?.attributes?.accessibilityText || "nothing named";
+    return (
+      whole.children?.[0]?.attributes?.accessibilityText || "nothing named"
+    );
   };
 
   /** One of the runner's routes, once it runs. */
