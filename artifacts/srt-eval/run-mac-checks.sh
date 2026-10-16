@@ -82,16 +82,18 @@ sys.exit(0 if kr == 0 else 1)'
 sessiond=$!
 for _ in $(seq 100); do [ -S "$CAWCO_SESSIOND_ENDPOINT" ] && break; sleep 0.1; done
 id=$(uuidgen | tr 'A-Z' 'a-z')
-# The rig stays up serving the workspace's doors; its JSON line says it is armed.
+# The rig stays up serving the workspace's doors; its JSON line (the one
+# line of its output that starts with `{`, among the agent's own log lines)
+# says it is armed.
 (cd "$checkout" && exec bun artifacts/srt-eval/rig-workspace.ts create "$source_repo" "$id") > "$scratch/rig.out" 2> "$scratch/rig.log" &
 rig=$!
-until [ "$(wc -l < "$scratch/rig.out")" -gt 0 ] || ! kill -0 "$rig" 2>/dev/null; do sleep 0.2; done
-created=$(head -1 "$scratch/rig.out")
-if [ -z "$created" ]; then
-  echo "the workspace did not start:"; sed 's/^/    /' "$scratch/rig.log"
+until grep -q '^{' "$scratch/rig.out" || ! kill -0 "$rig" 2>/dev/null; do sleep 0.2; done
+created=$(grep -m1 '^{' "$scratch/rig.out")
+clone=$(printf '%s' "$created" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
+if [ ! -d "$clone" ]; then
+  echo "the workspace did not start (no clone in the rig's JSON line):"; sed 's/^/    /' "$scratch/rig.out" "$scratch/rig.log"
   kill "$rig" 2>/dev/null; kill "$sessiond"; exit 1
 fi
-clone=$(printf '%s' "$created" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
 state=$HOME/.cawco/workspaces/$id
 echo "workspace $id: $clone (rig pid $rig)"
 r() { (cd "$clone" && "$state/exec" "$@"); }
@@ -99,9 +101,10 @@ connect() { r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF
 # The workspace's doors (paths.ts `workspaceDoorDir`), each connected to from inside.
 door_dir=/private/tmp/cawco-$(id -u)/$id
 doors_served() {
-  local door
+  local door rig_state=gone
+  kill -0 "$rig" 2>/dev/null && rig_state=up
   for door in git github tools; do
-    connect "$door_dir/$door.sock" && works "connect the $door door ($1)" PASS || works "connect the $door door ($1)" "FAIL (not served)"
+    connect "$door_dir/$door.sock" && works "connect the $door door ($1)" PASS || works "connect the $door door ($1)" "FAIL (not served; the rig is $rig_state, the socket $(test -S "$door_dir/$door.sock" && echo is there || echo is gone))"
   done
 }
 echo "its upstream rule: $(cat "$state/ro/upstream.json")"
@@ -471,7 +474,7 @@ step "archive"
 kill "$rig" 2>/dev/null; wait "$rig" 2>/dev/null
 (cd "$checkout" && bun artifacts/srt-eval/rig-workspace.ts archive "$id" "$clone")
 kill "$sessiond" 2>/dev/null
-if [ "$fail" -ne 0 ]; then echo "the rig's log (its last lines):"; tail -20 "$scratch/rig.log" | sed 's/^/    /'; fi
+if [ "$fail" -ne 0 ]; then echo "the rig's output (its last lines):"; cat "$scratch/rig.out" "$scratch/rig.log" | tail -30 | sed 's/^/    /'; fi
 rm -rf "$scratch"
 echo
 if [ "$open" -eq 0 ]; then echo "every escape row BLOCKED"; else echo "$open escape row(s) OPEN"; fi
