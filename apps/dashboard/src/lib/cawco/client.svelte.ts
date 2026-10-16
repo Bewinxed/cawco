@@ -37,6 +37,7 @@ import type {
   HarnessKind,
   InstanceRow,
   LandsMode,
+  LawBroken,
   McpServerStatus,
   ModelInfo,
   MoveJob,
@@ -1007,6 +1008,11 @@ const state = $state({
    * `fleet_watch.notices` frames.
    */
   watchNotices: [] as FleetWatchNotice[],
+  /**
+   * Every system law the hub caught broken since it started (core
+   * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
+   */
+  lawsBroken: [] as LawBroken[],
   /**
    * The fleet's upstream answer (`GET /api/fleet/choices` `upstream`):
    * whether agents may post to other people's repositories; null while
@@ -3045,6 +3051,11 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "fleet_watch.notices") {
     state.watchNotices = frame.notices;
+    return;
+  }
+
+  if (frame.kind === "laws.broken") {
+    state.lawsBroken = frame.broken;
     return;
   }
 
@@ -8003,6 +8014,10 @@ export const cawco = {
   /** Fleet watch's needs-you notices, oldest first. */
   get watchNotices(): FleetWatchNotice[] {
     return state.watchNotices;
+  },
+  /** Every system law the hub caught broken since it started. */
+  get lawsBroken(): LawBroken[] {
+    return state.lawsBroken;
   },
   /** The fleet's upstream answer; null while nobody has given it, undefined until read. */
   get fleetUpstream(): boolean | null | undefined {

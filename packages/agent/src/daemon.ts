@@ -59,6 +59,8 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
+  invariant,
+  lawPolicy,
   type TranscriptQuery,
   UPDATE_CAWCO,
   type WorkspaceRef,
@@ -146,6 +148,7 @@ import {
 import { placePush } from "./place-push";
 import { placeRepo } from "./place-repo";
 import { servingPreviews } from "./preview";
+import { probesStarted } from "./probe-count";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import {
   accountLent,
@@ -446,6 +449,36 @@ const readPart = async <T>(
 
 /** Whether this process has said what its first Claude report found ({@link noteClaudeAuth}). */
 let claudeAuthNoted = false;
+
+/** Whether this process has sent a register yet ({@link firstRegisterSpawnedNothing}). */
+let registeredOnce = false;
+
+/**
+ * Law `register-spawned-nothing` (core invariant.ts), at the register call
+ * site: this process's first register is sent before any harness probe has
+ * started (probe-count.ts), so a machine whose harness CLIs answer slowly
+ * still reads online at once (ea944761a). Later registers (a reconnect, a
+ * retry) follow the first connection's own probes, and are not its case.
+ *
+ * Born red, once: ea944761a^ (2d7526fae) with this check and the counter laid
+ * on it, `cawco up` to a scratch hub on loopback exited 70 with "[law] Law
+ * broken: register-spawned-nothing. An agent's first register is sent
+ * before any harness probe has started. 2 harness probes had started before
+ * this process's first register to ws://127.0.0.1:34561/ws." This tree, the
+ * same run: "registered with ws://127.0.0.1:34561/ws", no law.
+ */
+const firstRegisterSpawnedNothing = (url: string): void => {
+  if (registeredOnce) {
+    return;
+  }
+  invariant(
+    probesStarted() === 0,
+    "register-spawned-nothing",
+    () =>
+      `${probesStarted()} harness probes had started before this process's first register to ${url}.`
+  );
+  registeredOnce = true;
+};
 
 /**
  * The machine's word on Claude, said once per process, from the first Claude
@@ -1380,6 +1413,7 @@ const attach = (
       },
       { once: true }
     );
+    firstRegisterSpawnedNothing(url);
     send(socket, { verb: "register", machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
@@ -2926,6 +2960,9 @@ export const startDaemon = (rediscover = false) =>
 export const runDaemon = (rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
+  // A broken law crashes the agent (core invariant.ts): sessiond keeps the
+  // sessions' processes across its restart.
+  lawPolicy("crash");
   const daemon = Effect.runFork(
     // A daemon before this one that was killed or crashed left its logins
     // waiting; nothing else could ever end them. Ended before the daemon

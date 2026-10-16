@@ -215,6 +215,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
+  invariant,
   isEffortLevel,
   joinProviders,
   LIMIT_REACHED,
@@ -492,6 +493,7 @@ import {
   promptCacheExpiresAt,
 } from "./keep-alive";
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
+import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
@@ -2471,6 +2473,19 @@ export const createServer = (
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
   db.markAllAgentsOffline();
+
+  /**
+   * The system's laws, at the hub (laws.ts): a broken one fails its frame or
+   * request, is logged by name, and goes to every dashboard as a red notice.
+   */
+  const laws = createLaws({
+    broadcast: (broken) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "laws.broken", broken },
+      } satisfies Envelope<FramePayload>),
+  });
 
   /**
    * The work a serving hub starts off the boot path (resumes, catch-ups,
@@ -13116,9 +13131,23 @@ export const createServer = (
         listed.push(row);
       }
     }
-    return withKeepAlive(
+    const board = withKeepAlive(
       withDelegates(damagedRecords.overlay(withSessionPresence(listed)))
     );
+    // Law `running-session-machine-connected` (core invariant.ts), paired
+    // with the overlay above: checked on the rows as they leave for a reader,
+    // after every overlay laid on them, so no later one serves a stored
+    // `running` as now. A row that breaks it fails the board's frame or
+    // request (laws.ts).
+    for (const row of board) {
+      invariant(
+        row.status !== "running" || registry.agent(row.machineId),
+        "running-session-machine-connected",
+        () =>
+          `Session ${row.id} was about to be served running on machine ${row.machineId}, which holds no socket at the hub.`
+      );
+    }
+    return board;
   };
 
   /**
@@ -13470,12 +13499,15 @@ export const createServer = (
     protocol: WIRE_PROTOCOL,
   });
 
-  const instancesFrame = (machineId: string): Envelope => ({
+  const instancesFrame = (
+    machineId: string,
+    rows: ReturnType<typeof boardRows> = boardRows()
+  ): Envelope => ({
     verb: "frames",
     machineId,
     payload: {
       kind: "instances",
-      instances: boardRows(),
+      instances: rows,
       ...boardExtras(),
       // Fixed once the hub has folded what an older one split: once per connection.
       formerIds: db.formerIds(),
@@ -13512,10 +13544,12 @@ export const createServer = (
   // Seeded from the board as the hub boots: every dashboard connects after
   // this and is handed a snapshot at least this fresh, so the first publish
   // sends what moved rather than all of it.
-  for (const row of boardRows()) {
-    publishedRows.set(row.id, JSON.stringify(row));
-    publishedOverlays.set(row.id, overlayOf(row));
-  }
+  laws.hold(() => {
+    for (const row of boardRows()) {
+      publishedRows.set(row.id, JSON.stringify(row));
+      publishedOverlays.set(row.id, overlayOf(row));
+    }
+  });
   boardMoved = new Set();
   const publishedExtras = boardExtras();
   const publishedAgents = new Map(
@@ -13561,10 +13595,22 @@ export const createServer = (
   };
 
   const publishInstanceDelta = (machineId: string): void => {
-    const rows = boardRows();
+    // A law broken on the board fails this publish (laws.ts): what moved
+    // stays owed to the next one.
+    const rows = laws.hold(boardRows);
     // A row, a machine or a preview may have moved: an artifact's tab hears
     // what moved of its own session, before the board's own early return.
     artifactSessions.refresh();
+    if (rows) {
+      publishBoardDelta(machineId, rows);
+    }
+  };
+
+  /** The board's rows, `rows`, sent as what moved since the last publish. */
+  const publishBoardDelta = (
+    machineId: string,
+    rows: ReturnType<typeof boardRows>
+  ): void => {
     const moved = boardMoved;
     boardMoved = new Set();
     // A work item follows its session's life: of every row the database
@@ -13574,7 +13620,7 @@ export const createServer = (
     if (moved.size > 0) {
       workItems.followSessions(moved);
     }
-    const upserts: typeof rows = [];
+    const upserts: ReturnType<typeof boardRows> = [];
     const present = new Set<string>();
     for (const row of rows) {
       present.add(row.id);
@@ -13615,7 +13661,7 @@ export const createServer = (
       return;
     }
     registry.broadcastBoard({ verb: "frames", machineId, payload: delta }, () =>
-      instancesFrame(machineId)
+      instancesFrame(machineId, rows)
     );
   };
 
@@ -18132,7 +18178,7 @@ export const createServer = (
     // What `GET /api/instances` and `GET /api/agents` answer, without the
     // hub calling itself over HTTP for them.
     fleet: {
-      instances: () => boardRows(),
+      instances: () => laws.raise(boardRows),
       machines: () => withPresence(db.listAgents()),
     },
     formerIds: db.formerIds,
@@ -20716,7 +20762,7 @@ export const createServer = (
           return answer.result as import("@cawco/core").ConfigInspection;
         }
       )
-      .get("/api/instances", () => boardRows())
+      .get("/api/instances", () => laws.raise(boardRows))
       // Every session's pulse, the daemon's now-state, as the socket's first
       // `instances` frame seeds it: the dashboard's server load reads it so a
       // page's first paint draws a working session working.
@@ -26643,7 +26689,21 @@ export const createServer = (
           // The board, before it is asked for: the FIRST message every
           // dashboard receives, unconditionally, so the rail fills before the
           // REST snapshot lands.
-          sendFrame(ws, instancesFrame(""));
+          // A law broken on the board fails this snapshot (laws.ts), and the
+          // break goes to every dashboard, this one among them. A snapshot
+          // that went is followed by every law caught broken before it.
+          const board = laws.hold(() => instancesFrame(""));
+          const broken = laws.broken();
+          if (board) {
+            sendFrame(ws, board);
+            if (broken.length > 0) {
+              sendFrame(ws, {
+                verb: "frames",
+                machineId: "hub",
+                payload: { kind: "laws.broken", broken },
+              } satisfies Envelope<FramePayload>);
+            }
+          }
           // A reconnected dashboard earns the current sign-in state again.
           // The snapshot follows startup discovery on this socket.
           detach(

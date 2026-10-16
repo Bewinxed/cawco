@@ -8,6 +8,7 @@ import type {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 import { opencodeBinary } from "./harnesses/opencode-client";
+import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
 
 export function browserExecutable(): string | undefined {
@@ -125,6 +126,7 @@ async function readVersion(item: MachineCapability): Promise<void> {
 
 /** Presence is read fresh on registration and every explicit probe. */
 export async function probeCapabilities(): Promise<MachineCapabilities> {
+  probeStarted();
   const mac = platform() === "darwin";
   const git = resolveBin("git");
   const claude = resolveClaudeExecutable();

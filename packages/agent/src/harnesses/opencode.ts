@@ -98,6 +98,7 @@ import { KeeperPool } from "../keepers";
 import { isMachineAgent } from "../machine-agent";
 import { MCP_CONNECT_MS } from "../mcp-status";
 import { gaugeTables } from "../memory";
+import { probeStarted } from "../probe-count";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import {
   type OpencodeOwnCredential,
@@ -2545,6 +2546,7 @@ export class OpencodeHarness implements Harness {
   }
 
   async detect(): Promise<HarnessReport> {
+    probeStarted();
     const installed = (await opencodeBinary()) !== undefined;
     const version = installed
       ? await this.#installedVersion().catch(() => undefined)

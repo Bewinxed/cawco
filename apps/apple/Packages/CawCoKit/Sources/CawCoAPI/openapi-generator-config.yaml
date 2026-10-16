@@ -81,6 +81,7 @@ typeOverrides:
     KeepAliveState: OpenEnums.KeepAliveState
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
+    Law: OpenEnums.Law
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor

@@ -12,6 +12,7 @@
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
   import { hubAuth, mustPair, readAuth } from "#lib/cawco/hub-auth.svelte.js";
+  import LawsBroken from "#lib/cawco/LawsBroken.svelte";
   import { restWhenHidden } from "#lib/cawco/motion/rest.js";
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
@@ -146,4 +147,5 @@
 {:else}
   <Shell railWidth={data.railWidth}>{@render children()}</Shell>
   <CanvasStages />
+  <LawsBroken />
 {/if}

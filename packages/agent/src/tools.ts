@@ -20,6 +20,7 @@ import { TOOL_CATALOG, toolSpec } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { expandHome } from "./fs";
+import { probeStarted } from "./probe-count";
 
 /** Where {@link NATIVE_ROUTINES} put what they install. */
 const LOCAL_BIN = expandHome("~/.local/bin");
@@ -433,14 +434,16 @@ export const probeTool = async (
  * Every catalog tool, in catalog order — what `register` reports and what the
  * `listTools` control answers with.
  */
-export const probeTools = async (): Promise<ToolStatus[]> =>
-  await Promise.all(
+export const probeTools = async (): Promise<ToolStatus[]> => {
+  probeStarted();
+  return await Promise.all(
     TOOL_CATALOG.map(async (spec) => {
       const status = await probeTool(spec);
       const failure = failures.get(spec.id);
       return status.state === "missing" && failure ? failure : status;
     })
   );
+};
 
 /** Numeric segment by segment: `1.10.0` is above `1.9.9`, which strings get wrong. */
 const below = (found: string, floor: string): boolean => {

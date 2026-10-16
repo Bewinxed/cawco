@@ -186,6 +186,7 @@ import {
   moveHomeLogin,
   readHomeLogin,
 } from "../move-login";
+import { probeStarted } from "../probe-count";
 import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
@@ -3657,6 +3658,7 @@ export class ClaudeHarness implements Harness {
    * responses report and the hub keeps.
    */
   async detect(): Promise<MachineHarnessReport> {
+    probeStarted();
     const executable = resolveClaudeExecutable();
     const installed = executable !== undefined;
     // Side by side: each is bounded on its own (`auth status` 20 s, `--version` 5 s).

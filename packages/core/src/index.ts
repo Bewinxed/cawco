@@ -45,6 +45,8 @@ export * from "./harness";
 export * from "./hooks";
 export * from "./hub-auth";
 export * from "./injected";
+// The system's laws, named and checked in the running product: `invariant()`.
+export * from "./invariant";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
@@ -1437,6 +1439,8 @@ export type FramePayload =
   | import("./frames").DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */
   | import("./fleet-watch").FleetWatchNoticesFrame
+  /** Hub-originated: every law the hub caught broken, whole, on each break. */
+  | import("./invariant").LawsBrokenFrame
   /** Hub-originated: every project move, whole, on each change. */
   | import("./move").MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */

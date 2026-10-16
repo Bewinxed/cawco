@@ -38,6 +38,7 @@ import { claudeExecutableOptions, idle, resolveClaudeExecutable } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { hostGit } from "./clone";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
+import { probeStarted } from "./probe-count";
 
 /**
  * An account's Claude Code on this machine: its config dir, which holds its
@@ -272,6 +273,7 @@ const readAccount = async (
  * no sign-in is changing here and again when one changed while it was read.
  */
 export const accountReports = async (): Promise<AccountsRead> => {
+  probeStarted();
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: each read waits out the changes begun before it
     await Promise.allSettled([...signinChanges]);

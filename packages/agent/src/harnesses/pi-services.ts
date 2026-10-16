@@ -32,6 +32,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift, skillRecords } from "../fleet";
+import { probeStarted } from "../probe-count";
 import { resolveBin } from "../tools";
 import {
   hashText,
@@ -476,6 +477,7 @@ export class PiProfile {
   }
 
   async detect(): Promise<HarnessReport> {
+    probeStarted();
     const installed = resolveBin("pi") !== undefined;
     const models = installed
       ? await modelCatalog().catch((error: unknown) => {
