@@ -727,8 +727,12 @@ const run = async (kit: Kit) => {
 
   // 6. At its limit with B (A's organization) and C (another) free, C first
   // in order: the move stays in A's organization.
-  if (runs("6")) {
+  const orgLimitCase = async () => {
     const name = "at its limit, two free";
+    // A is free again: case 3 left the limit it read off A's refusal, which
+    // would place the session elsewhere and move it onto A by hand.
+    fleet.write("DELETE FROM account_bench WHERE account_id = ?", ACCOUNT);
+    fleet.write("DELETE FROM account_readings WHERE account_id = ?", ACCOUNT);
     await furnishAccount(fleet.home, C, "Other Organization");
     fleet.write(
       "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Probe C', 'red', 1, 0, ?)",
@@ -752,29 +756,41 @@ const run = async (kit: Kit) => {
     ).catch(() => undefined);
     kit.check(`${name}: C, in another organization, is signed in`, !!cIn);
     const s = await start("Organization move", ACCOUNT);
+    // Running at rest on A before its limit: the move it makes then is the
+    // at-limit controller's alone.
+    const atRest = await until(
+      `${name}: running at rest on A`,
+      () => fleet.instance(s.id),
+      (row) => row?.status === "running" && row.turn_open_at === null,
+      180_000
+    ).catch(() => fleet.instance(s.id));
     limited.set(ACCOUNT, Date.now() + 4 * 60 * 60_000);
     await fleet.send(s.id, "ORG-MARK go on");
+    // A held move is looked at again within 5 minutes (at-limit `unmoved`).
     const landed = await until(
       `${name}: the at-limit controller moves it`,
       () => accountOf(s.id) ?? undefined,
       (one) => one === B || one === C,
-      180_000
+      330_000
     ).catch(() => accountOf(s.id));
     kit.check(
       `${name}: the at-limit controller carries it to B, in A's organization, not C`,
       landed === B,
-      `account ${landed}`
+      `account ${landed}; before its limit ${atRest?.status}, turn ${atRest?.turn_open_at === null ? "at rest" : "open"}`
     );
-    if (landed !== B) {
-      console.log((await linesAbout(s.id)).slice(-40).join("\n"));
-    }
     const onB = await seenWhere(
       (one) => one.all.includes("ORG-MARK") && accountOfAuth(one.auth) === B,
       `${name}: it carries on on B`,
-      120_000
+      180_000
     ).catch(() => undefined);
     kit.check(`${name}: it carries on on B's token`, !!onB);
+    if (landed !== B || !onB) {
+      console.log((await linesAbout(s.id)).slice(-60).join("\n"));
+    }
     limited.delete(ACCOUNT);
+  };
+  if (runs("6")) {
+    await orgLimitCase();
   }
 };
 
