@@ -140,9 +140,9 @@
           aria-hidden="true"
           class="skeleton"
         >
-          <Skeleton class="h-3.5 w-full" />
-          <Skeleton class="h-3.5 w-11/12" />
-          <Skeleton class="h-3.5 w-3/5" />
+          <Skeleton class="h-space-4 w-full" />
+          <Skeleton class="h-space-4 w-11/12" />
+          <Skeleton class="h-space-4 w-3/5" />
         </div>
       {:else if post}
         <PostCard {compact} {post} {projectId} />

@@ -96,7 +96,7 @@
       {label}</span
     >
     {#if keys}
-      <kbd class="font-sans opacity-70">{keys}</kbd>
+      <kbd class="font-body opacity-70">{keys}</kbd>
     {/if}
   </Content>
 </Root>

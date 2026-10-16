@@ -342,7 +342,7 @@
     >
       {#each [240, 180, 280] as width (width)}
         <div data-slot="row" class="row">
-          <Skeleton class="h-3" style="inline-size: {width}px" />
+          <Skeleton class="h-icon-sm" style="inline-size: {width}px" />
         </div>
       {/each}
     </div>

@@ -43,15 +43,15 @@
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="h-auto px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
+            class="h-auto px-[var(--space-4)] py-[var(--space-3)] text-meta text-ink-muted"
             scope="col">Machine</Table.Head
           >
           <Table.Head
-            class="h-auto border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
+            class="h-auto border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-ink-muted"
             scope="col">Running</Table.Head
           >
           <Table.Head
-            class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
+            class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] text-meta text-ink-muted"
             scope="col">Update</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -71,21 +71,21 @@
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <span class="flex items-center gap-[var(--space-2)]">
                 <OsMark
-                  class="size-4 shrink-0 text-muted-foreground"
+                  class="size-icon-md shrink-0 text-ink-muted"
                   os={machine.os}
                 />
                 <span class="flex min-w-0 flex-col">
                   <span class="flex items-center gap-[var(--space-2)]">
-                    <span class="truncate text-label text-foreground"
+                    <span class="truncate text-label text-ink-strong"
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
                       class="size-2 shrink-0 rounded-full {online
-                        ? 'bg-success'
-                        : 'bg-muted-foreground/40'}"
+                        ? 'bg-success-9'
+                        : 'bg-ink-muted/40'}"
                     ></span>
                   </span>
-                  <span class="text-label text-muted-foreground"
+                  <span class="text-label text-ink-muted"
                     >{os.label}{online ? "" : " · offline"}</span
                   >
                 </span>
@@ -96,7 +96,7 @@
             >
               <span class="version mark-line">
                 {#if isCurrent(machine)}
-                  <IconCheck class="size-4 shrink-0 text-success" />
+                  <IconCheck class="size-icon-md shrink-0 text-success-9" />
                 {/if}
                 <code data-slot="num" class="num font-mono"
                   >{runningOf(machine)}</code

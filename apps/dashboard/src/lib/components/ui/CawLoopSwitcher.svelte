@@ -26,9 +26,10 @@
       size="icon-sm"
       variant="ghost"
     >
-      <span class="icon-swap size-4">
-        <span data-active={cawLoop.on}><IconPlay class="size-4" /></span>
-        <span data-active={!cawLoop.on}><IconPause class="size-4" /></span>
+      <span class="icon-swap size-icon-md">
+        <span data-active={cawLoop.on}><IconPlay class="size-icon-md" /></span>
+        <span data-active={!cawLoop.on}><IconPause class="size-icon-md" /></span
+        >
       </span>
     </Button>
   {/snippet}

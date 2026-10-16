@@ -132,7 +132,7 @@
             {:else}
               <IconChevronRight />
             {/if}
-            <OsMark class="size-4 shrink-0" os={machine.os} />
+            <OsMark class="size-icon-md shrink-0" os={machine.os} />
             <span data-slot="host" class="host"
               >{machineLabel(machine.hostname)}</span
             >
@@ -149,7 +149,7 @@
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
               <p data-slot="note" class="note busy mark-line" role="status">
-                <Spinner class="size-4 shrink-0" /><span
+                <Spinner class="size-icon-md shrink-0" /><span
                   >Asking this machine…</span
                 >
               </p>

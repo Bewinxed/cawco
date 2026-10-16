@@ -101,7 +101,7 @@
   {/if}
   <header class="mark-line">
     <span data-slot="glyph" class="glyph" class:filled={modelled} data-box
-      ><Glyph aria-hidden="true" class="size-4" /></span
+      ><Glyph aria-hidden="true" class="size-icon-md" /></span
     ><strong>{title}</strong>
   </header>
   <div data-slot="body" class="body">

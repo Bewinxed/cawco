@@ -619,7 +619,7 @@
     data-key="head:{group.machineId}"
     {style}
   >
-    <OsMark class="size-3.5" os={group.os} />
+    <OsMark class="size-space-4" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
       <!-- Everything this machine has finished, failures too, off the list

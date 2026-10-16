@@ -29,7 +29,7 @@
   data-slot="native-select-wrapper"
 >
   <select
-    class="rounded-md shadow-xs [transition:var(--transition-control)] h-9 data-[size=sm]:h-[30px] w-full min-w-0 appearance-none border border-[var(--border-control)] bg-[var(--surface-raised)] text-[var(--ink-strong)] pr-8 pl-3 text-body select-none selection:bg-action-solid selection:text-on-action placeholder:text-muted-foreground aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 disabled:pointer-events-none disabled:cursor-not-allowed"
+    class="rounded-md shadow-xs [transition:var(--transition-control)] h-9 data-[size=sm]:h-[30px] w-full min-w-0 appearance-none border border-[var(--border-control)] bg-[var(--surface-raised)] text-[var(--ink-strong)] pr-space-8 pl-3 text-body select-none selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted aria-invalid:border-error-9 dark:aria-invalid:border-error-9/50 disabled:pointer-events-none disabled:cursor-not-allowed"
     data-size={size}
     data-slot="native-select"
     bind:this={ref}
@@ -40,7 +40,7 @@
   </select>
   <IconUnfold
     aria-hidden="true"
-    class="top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none absolute select-none"
+    class="top-1/2 right-space-4 size-icon-md -translate-y-1/2 text-ink-muted pointer-events-none absolute select-none"
     data-slot="native-select-icon"
   />
 </div>

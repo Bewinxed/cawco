@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    base: "group/badge mark-line inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-1.5 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 [&>svg]:pointer-events-none [&>svg]:size-3!",
+    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-1.5 text-[var(--ink-strong)] text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm!",
     variants: {
       variant: {
         default: "",
@@ -15,7 +15,7 @@
         attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
         done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
         fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
-        link: "bg-transparent text-link underline-offset-4 hover:underline",
+        link: "bg-transparent text-link-ink underline-offset-4 hover:underline",
       },
     },
     defaultVariants: {

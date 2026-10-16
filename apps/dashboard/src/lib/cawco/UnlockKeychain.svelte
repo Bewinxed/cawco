@@ -192,7 +192,7 @@
           {:else}
             <div class="flex flex-col gap-[var(--space-1)]">
               <p data-slot="title" class="title mark-line" id="{id}-title">
-                <IconKey class="size-4 text-warning" />
+                <IconKey class="size-icon-md text-warning-9" />
                 <span>Unlock {machine.hostname}</span>
               </p>
               <p data-slot="body" class="body">

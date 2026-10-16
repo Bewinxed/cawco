@@ -23,7 +23,7 @@
 <TooltipPortal {...portalProps}>
   <TooltipPrimitive.Content
     class={cn(
-      "kit-tip z-50 inline-flex w-fit max-w-xs origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
+      "kit-tip z-50 inline-flex w-fit max-w-80 origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
       className
     )}
     data-slot="tooltip-content"

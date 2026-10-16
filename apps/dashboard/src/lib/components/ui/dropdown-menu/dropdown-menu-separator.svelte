@@ -10,7 +10,7 @@
 </script>
 
 <DropdownMenuPrimitive.Separator
-  class={cn("-mx-1 my-1 h-px bg-border/50", className)}
+  class={cn("-mx-space-1 my-space-1 h-px bg-border/50", className)}
   data-slot="dropdown-menu-separator"
   bind:ref
   {...restProps}

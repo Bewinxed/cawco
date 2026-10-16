@@ -15,7 +15,7 @@
 
 <SelectPrimitive.Item
   class={cn(
-    "kit-item relative flex w-full cursor-default select-none items-center gap-2.5 pr-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+    "kit-item relative flex w-full cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
     className
   )}
   data-slot="select-item"
@@ -25,7 +25,7 @@
 >
   {#snippet children({ selected, highlighted })}
     <span
-      class="absolute end-2 flex size-4 items-center justify-center"
+      class="absolute end-2 flex size-icon-md items-center justify-center"
       data-box
     >
       <IconTick class="kit-tick" data-on={selected} />

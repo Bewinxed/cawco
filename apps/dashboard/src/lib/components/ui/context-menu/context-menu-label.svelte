@@ -15,7 +15,7 @@
 
 <div
   class={cn(
-    "px-3 py-2.5 text-meta text-muted-foreground data-inset:pl-8 data-inset:pl-9.5",
+    "px-3 py-2.5 text-ink-muted text-meta data-inset:pl-9.5 data-inset:pl-space-8",
     className
   )}
   data-inset={inset}

@@ -81,7 +81,7 @@
         stroke-width={stroke}
       />
     </g>
-    <g class="text-success" data-shown={finished}>
+    <g class="text-success-9" data-shown={finished}>
       <polyline
         fill="none"
         points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box *

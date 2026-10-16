@@ -16,11 +16,11 @@
   class={cn(
     "cn-resizable-handle relative flex w-px items-center",
     "justify-center bg-border after:absolute after:inset-y-0",
-    "after:left-1/2 after:w-1 after:-translate-x-1/2",
+    "after:left-1/2 after:w-space-1 after:-translate-x-1/2",
     "data-[direction=vertical]:h-px",
     "data-[direction=vertical]:w-full",
     "data-[direction=vertical]:after:left-0",
-    "data-[direction=vertical]:after:h-1",
+    "data-[direction=vertical]:after:h-space-1",
     "data-[direction=vertical]:after:w-full",
     "data-[direction=vertical]:after:translate-x-0",
     "data-[direction=vertical]:after:-translate-y-1/2",
@@ -33,7 +33,7 @@
 >
   {#if withHandle}
     <div
-      class="h-6 w-1 rounded-[var(--radius-pill)] bg-border z-10 flex shrink-0"
+      class="h-6 w-space-1 rounded-[var(--radius-pill)] bg-border z-10 flex shrink-0"
     ></div>
   {/if}
 </PaneResizer>

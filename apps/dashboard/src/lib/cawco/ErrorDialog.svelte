@@ -33,11 +33,11 @@
 </script>
 
 <Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content class="sm:max-w-2xl">
+  <Dialog.Content class="phone:max-w-168">
     <div class="flex flex-col gap-6">
       <Dialog.Header>
         <Dialog.Title class="mark-line flex items-center gap-2">
-          <IconAlert class="size-4 shrink-0 text-destructive" />
+          <IconAlert class="size-icon-md shrink-0 text-error-9" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>

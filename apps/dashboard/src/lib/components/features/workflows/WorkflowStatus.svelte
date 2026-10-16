@@ -56,7 +56,7 @@
   style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
   ><span data-slot="glyph" aria-hidden="true" class="glyph" data-box
     >{#key tone}
-      <span transition:crossIn><Glyph class="size-3" /></span>
+      <span transition:crossIn><Glyph class="size-icon-sm" /></span>
     {/key}</span
   ><MorphText text={label} /></span
 >

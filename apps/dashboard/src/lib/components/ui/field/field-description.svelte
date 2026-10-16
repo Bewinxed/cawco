@@ -12,11 +12,11 @@
 
 <p
   class={cn(
-    "text-left text-meta text-muted-foreground leading-normal",
+    "text-left text-ink-muted text-meta leading-root",
     "group-data-[orientation=horizontal]/field:text-balance",
     "[[data-variant=legend]+&]:-mt-1.5",
-    "nth-last-2:-mt-1 last:mt-0",
-    "[&>a:hover]:text-link [&>a]:underline [&>a]:underline-offset-4",
+    "nth-last-2:-mt-space-1 last:mt-0",
+    "[&>a:hover]:text-link-ink [&>a]:underline [&>a]:underline-offset-4",
     className
   )}
   data-slot="field-description"

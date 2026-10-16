@@ -33,14 +33,14 @@
     "border border-[var(--border-control)] [--hit-edge:1px]",
     "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
     "text-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-destructive",
-    "data-placeholder:text-muted-foreground",
+    "disabled:opacity-50 aria-invalid:border-error-9",
+    "data-placeholder:text-ink-muted",
     "*:data-[slot=select-value]:line-clamp-1",
     "*:data-[slot=select-value]:flex",
     "*:data-[slot=select-value]:items-center",
     "*:data-[slot=select-value]:gap-1.5",
-    "dark:aria-invalid:border-destructive/50",
-    "[&_svg:not([class*='size-'])]:size-4",
+    "dark:aria-invalid:border-error-9/50",
+    "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
@@ -54,10 +54,10 @@
   <span class="mark-text">{@render children?.()}</span>
   {#if mark === "chevron"}
     <IconChevronDown
-      class="size-4 text-muted-foreground pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-(--ease-out) in-data-[state=open]:rotate-180"
+      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-(--ease-out) in-data-[state=open]:rotate-180"
       data-mark="chevron"
     />
   {:else}
-    <IconUnfold class="size-4 text-muted-foreground pointer-events-none" />
+    <IconUnfold class="size-icon-md text-ink-muted pointer-events-none" />
   {/if}
 </SelectPrimitive.Trigger>

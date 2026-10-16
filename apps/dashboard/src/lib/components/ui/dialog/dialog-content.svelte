@@ -43,7 +43,7 @@
        is open, and clears it at once (floating-presence). -->
   <DialogPrimitive.Content
     class={cn(
-      "kit-dialog fixed top-1/2 left-1/2 z-50 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none sm:max-w-md",
+      "kit-dialog fixed top-1/2 left-1/2 z-50 w-full max-w-[calc(100%-2rem)] phone:max-w-112 -translate-x-1/2 -translate-y-1/2 outline-none",
       className
     )}
     data-slot="dialog-content"
@@ -56,7 +56,7 @@
         <div
           data-slot="grid"
           class={cn(
-            "kit-dialog-body relative grid gap-6 text-body text-foreground",
+            "kit-dialog-body relative grid gap-6 text-body text-ink-strong",
             bodyClass
           )}
         >

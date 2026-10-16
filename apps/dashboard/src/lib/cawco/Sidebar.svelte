@@ -197,7 +197,7 @@
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
    *  24px of nothing between every section; the label already separates them. */
-  const GROUP = "px-2 py-1";
+  const GROUP = "px-2 py-space-1";
 
   /**
    * How far the fleet's first read has come: 1 workflow runs, 2 machines and
@@ -231,7 +231,7 @@
   /** A label carrying a control (the sort, the delegates toggle): on a coarse
    *  pointer it takes a 44px row, so the control's touch area stays inside
    *  it, clear of the session row below. */
-  const CONTROL_LABEL = "pr-1 pointer-coarse:h-11";
+  const CONTROL_LABEL = "pr-space-1 pointer-coarse:h-11";
   /** 2px, not 4: these are rows of one list, not six unrelated buttons. */
   const MENU = "gap-0.5";
   /**
@@ -255,7 +255,7 @@
    */
   const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
-  const SLOT_GLYPH = "size-4";
+  const SLOT_GLYPH = "size-icon-md";
 
   /* ---- projects ------------------------------------------------------- */
 
@@ -683,8 +683,8 @@
        height of the rows that replace them. Each stage has its own, gone when
        that stage's groups arrive, so nothing drawn is ever pushed down. -->
   <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
-    <div class="flex h-8 items-center {GROUP_LABEL}">
-      <Skeleton class="h-3 w-20" />
+    <div class="flex h-space-8 items-center {GROUP_LABEL}">
+      <Skeleton class="h-icon-sm w-20" />
     </div>
     <div class="flex flex-col gap-0.5">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
@@ -797,7 +797,7 @@
 {/snippet}
 
 <div
-  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-page text-ink-strong"
   bind:this={railEl}
   {@attach highlight({ rows: ROWS })}
 >
@@ -807,7 +807,7 @@
     <!-- The wordmark, and in the header's corner what is started from
          anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
          the conversations it jumps between. -->
-    <div class="brand-row flex items-center gap-1">
+    <div class="brand-row flex items-center gap-space-1">
       <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
@@ -829,7 +829,7 @@
                 <!-- The wordmark is the logotype, set as a lockup with the
                      icon in its own box (its face is Nunito, not a label's). -->
                 <span
-                  class="brand-wordmark min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-foreground"
+                  class="brand-wordmark min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
                   data-box>Caw&amp;Co</span
                 >
               </a>
@@ -859,11 +859,15 @@
        session starting, a count moving. Every group, row, count and status
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
-  <Sidebar.Content class="gap-0 py-1" {@attach reflow()} {@attach scroller}>
+  <Sidebar.Content
+    class="gap-0 py-space-1"
+    {@attach reflow()}
+    {@attach scroller}
+  >
     {#if sheet && onsearch}
       <!-- The phone's search: the Jump palette's field, which opens Jump
            hanging from the bar's glass. -->
-      <div class="px-2 pb-1">
+      <div class="px-2 pb-space-1">
         <button
           data-slot="search"
           aria-haspopup="dialog"
@@ -947,7 +951,7 @@
           <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
-          <div class="-mr-1 ml-auto flex items-center gap-0.5">
+          <div class="-mr-space-1 ml-auto flex items-center gap-0.5">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -991,7 +995,7 @@
                 <Button
                   {...tip}
                   aria-label="New project"
-                  class="-mr-1"
+                  class="-mr-space-1"
                   href="/project/new"
                   size="icon-sm"
                   variant="ghost"
@@ -1003,7 +1007,7 @@
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
-          <p class="px-2.5 text-meta text-muted-foreground" data-flip>
+          <p class="px-2.5 text-meta text-ink-muted" data-flip>
             {cawco.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}
@@ -1111,12 +1115,12 @@
                     {#if lists.older.length + lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
-                          class="{SUB_ROW} text-muted-foreground"
+                          class="{SUB_ROW} text-ink-muted"
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
                         >
                           <span class="{SLOT} row-lead" data-box
-                            ><IconPlus class="size-3" /></span
+                            ><IconPlus class="size-icon-sm" /></span
                           >
                           <span>No sessions — start one</span>
                         </Sidebar.MenuSubButton>
@@ -1160,7 +1164,7 @@
     <!-- One row at every rail width: the product holds no name for the
          reader (a single operator, called "you"), so the user chip is its
          avatar alone and says "You" in its tooltip. -->
-    <div class="flex items-center gap-1" data-flip>
+    <div class="flex items-center gap-space-1" data-flip>
       <Sidebar.Menu aria-label="User" class="w-auto">
         <Sidebar.MenuItem>
           <Tip label="You">
@@ -1184,7 +1188,7 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->
-      <div class="ms-auto flex items-center gap-1">
+      <div class="ms-auto flex items-center gap-space-1">
         <Tip label="Configure">
           {#snippet children(tip)}
             <Button
@@ -1196,7 +1200,7 @@
               size="icon-sm"
               variant="ghost"
             >
-              <IconSettings class="size-4" />
+              <IconSettings class="size-icon-md" />
             </Button>
           {/snippet}
         </Tip>

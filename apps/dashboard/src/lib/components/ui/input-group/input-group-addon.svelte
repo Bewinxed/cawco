@@ -2,13 +2,13 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
   export const inputGroupAddonVariants = tv({
-    base: "flex h-auto cursor-text select-none items-center justify-center gap-2 py-2 font-medium text-label text-muted-foreground group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-4",
+    base: "flex h-auto cursor-text select-none items-center justify-center gap-2 py-2 font-medium text-ink-muted text-label group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-icon-md",
     variants: {
       align: {
         "inline-start":
-          "order-first pl-3 has-[>button]:-ml-1 has-[>kbd]:ml-[-0.15rem]",
+          "order-first pl-3 has-[>button]:-ml-space-1 has-[>kbd]:ml-[-0.15rem]",
         "inline-end":
-          "order-last pr-3 has-[>button]:-mr-1 has-[>kbd]:mr-[-0.15rem]",
+          "order-last pr-3 has-[>button]:-mr-space-1 has-[>kbd]:mr-[-0.15rem]",
         "block-start":
           "order-first w-full justify-start px-3 pt-3 [.border-b]:pb-3",
         "block-end":

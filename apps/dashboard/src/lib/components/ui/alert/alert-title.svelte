@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-    "font-medium [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [svg~&]:col-start-2",
+    "font-medium [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-ink-strong [svg~&]:col-start-2",
     className
   )}
   data-slot="alert-title"

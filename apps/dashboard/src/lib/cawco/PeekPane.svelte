@@ -275,7 +275,7 @@
                  belongs to a project. -->
             {#if cwd}
               <IconFolder
-                class="identity-ink size-4 shrink-0"
+                class="identity-ink size-icon-md shrink-0"
                 style={identityVar(cwd)}
               />
             {/if}
@@ -283,10 +283,10 @@
               >{target.title}</span
             >
           </h2>
-          <p class="flex items-baseline gap-2 text-meta text-muted-foreground">
+          <p class="flex items-baseline gap-2 text-meta text-ink-muted">
             <span class="mark-line flex shrink-0 items-center gap-1.5">
               {#if machine}
-                <OsMark class="size-3.5" os={machine.os} />
+                <OsMark class="size-space-4" os={machine.os} />
               {/if}
               <span>{host}</span>
             </span>
@@ -353,12 +353,12 @@
     />
     <span
       class="shrink-0 {failed || activity === 'blocked'
-        ? 'font-medium text-error'
-        : 'text-muted-foreground'}">{stateLabel}</span
+        ? 'font-medium text-error-9'
+        : 'text-ink-muted'}">{stateLabel}</span
     >
     {#if activity === "working" && tool}
       <span
-        class="mark-line flex min-w-0 items-center gap-1.5 text-muted-foreground"
+        class="mark-line flex min-w-0 items-center gap-1.5 text-ink-muted"
         data-box
       >
         <span class="shrink-0">{tool.name}</span>
@@ -370,7 +370,7 @@
       </span>
     {/if}
     {#if running}
-      <span class="ml-auto flex shrink-0 items-center gap-1" data-box>
+      <span class="ml-auto flex shrink-0 items-center gap-space-1" data-box>
         <ContextMeter
           compaction={session?.lastCompaction ?? null}
           onrefresh={() => {
@@ -453,7 +453,7 @@
 
   {#if failed}
     <p
-      class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
+      class="border-t border-border/50 bg-error-9/10 px-4 py-3 text-meta text-error-9"
     >
       {row?.lastError || "Failed without saying why."}
     </p>
@@ -461,14 +461,12 @@
     <!-- A damaged record that does not stop the session (its wake-ups), or
          one whose process still runs: said where its failure would be. -->
     <p
-      class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
+      class="border-t border-border/50 bg-error-9/10 px-4 py-3 text-meta text-error-9"
     >
       {damagedWords(row.damaged)}
     </p>
   {:else if stale}
-    <p
-      class="border-t border-border/50 px-4 py-3 text-meta text-muted-foreground"
-    >
+    <p class="border-t border-border/50 px-4 py-3 text-meta text-ink-muted">
       {UNKNOWN_HINT}
     </p>
   {/if}
@@ -478,7 +476,7 @@
        its own section rather than pushing the tail off. -->
   {#if progress}
     <div class="flex flex-col border-t border-border/50 pb-2">
-      <p class="px-4 pt-3 pb-1 text-label">
+      <p class="px-4 pt-3 pb-space-1 text-label">
         Tasks · {progress.done} of {progress.total}
       </p>
       <div class="max-h-48 overflow-y-auto px-2">
@@ -499,7 +497,7 @@
         <p class="text-meta">Reading…</p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
-        <p class="text-meta text-error">
+        <p class="text-meta text-error-9">
           Couldn't read this session: {session.readFault.message}
         </p>
       {:else if tail.length === 0 && !session?.streaming}
@@ -507,9 +505,7 @@
       {:else}
         {#each tail as message, index (message.id ?? index)}
           {#if message.type === "tool.use" || message.type === "tool.handoff"}
-            <p
-              class="flex items-baseline gap-1.5 text-meta text-muted-foreground"
-            >
+            <p class="flex items-baseline gap-1.5 text-meta text-ink-muted">
               <span class="shrink-0"
                 >{message.metadata?.toolName ?? message.content}</span
               >
@@ -529,7 +525,7 @@
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 text-body break-words text-error">
+            <p class="line-clamp-3 text-body break-words text-error-9">
               {plainMarkdown(message.content)}
             </p>
           {:else}
@@ -543,7 +539,7 @@
           <p class="text-body break-words whitespace-pre-wrap">
             {streamed}
             <span
-              class="inline-block h-4 w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
+              class="inline-block h-icon-md w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
             ></span>
           </p>
         {/if}

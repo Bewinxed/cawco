@@ -32,7 +32,7 @@
 </script>
 
 <fieldset class="flex flex-col gap-1.5" {@attach reflow()}>
-  <legend class="mb-1 text-label text-muted-foreground">{legend}</legend>
+  <legend class="mb-space-1 text-label text-ink-muted">{legend}</legend>
   <!-- Keyed by the line itself, so removing one removes that line rather
        than shifting every value after it up a box. -->
   {#each rows as row, index (row)}
@@ -40,7 +40,7 @@
       <Input
         aria-label="{legend} name"
         autocomplete="off"
-        class="h-8 flex-1 font-mono text-meta md:text-meta"
+        class="h-space-8 flex-1 font-mono text-meta"
         oninput={settle}
         placeholder={keyPlaceholder}
         spellcheck="false"
@@ -49,7 +49,7 @@
       <Input
         aria-label="{legend} value"
         autocomplete="off"
-        class="h-8 flex-[2] font-mono text-meta md:text-meta"
+        class="h-space-8 flex-[2] font-mono text-meta"
         oninput={settle}
         placeholder={valuePlaceholder}
         spellcheck="false"
@@ -57,7 +57,7 @@
       />
       <Button
         aria-label="Remove {row.key || 'this line'}"
-        class="text-muted-foreground"
+        class="text-ink-muted"
         disabled={index === rows.length - 1}
         onclick={() => rows.splice(index, 1)}
         size="icon-sm"

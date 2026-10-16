@@ -13,7 +13,7 @@
 
 <CommandPrimitive.Item
   class={cn(
-    "group/command-item kit-item relative flex cursor-default select-none items-center gap-2 px-2.5 text-label outline-hidden data-[disabled=true]:pointer-events-none data-selected:text-foreground data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:*:[svg]:text-foreground",
+    "group/command-item kit-item relative flex cursor-default select-none items-center gap-2 px-2.5 text-label outline-hidden data-[disabled=true]:pointer-events-none data-selected:text-ink-strong data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:*:[svg]:text-ink-strong",
     className
   )}
   data-slot="command-item"

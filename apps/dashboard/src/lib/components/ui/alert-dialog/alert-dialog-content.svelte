@@ -38,7 +38,7 @@
   <AlertDialogOverlay {...overlayProps} />
   <AlertDialogPrimitive.Content
     class={cn(
-      "kit-dialog group/alert-dialog-content fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md",
+      "kit-dialog group/alert-dialog-content fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-80 data-[size=default]:phone:max-w-112 data-[size=sm]:max-w-80",
       className
     )}
     data-size={size}
@@ -55,7 +55,7 @@
              to it, never pushes past it. -->
         <div
           data-slot="grid"
-          class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-foreground"
+          class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-ink-strong"
           {@attach resize}
         >
           {@render children?.()}

@@ -101,9 +101,13 @@
           class:done={line.hue === "done"}
         >
           {#if Glyph}
-            <Glyph aria-hidden="true" class="duo size-4" />
+            <Glyph aria-hidden="true" class="duo size-icon-md" />
           {:else}
-            <Spinner aria-hidden="true" class="size-4" role="presentation" />
+            <Spinner
+              aria-hidden="true"
+              class="size-icon-md"
+              role="presentation"
+            />
           {/if}
         </span>
         <div data-slot="words" class="words">

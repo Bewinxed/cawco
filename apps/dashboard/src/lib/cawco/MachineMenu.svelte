@@ -174,7 +174,7 @@
     <ContextMenu.Sub>
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
       <ContextMenu.SubTrigger class="gap-2.5">
-        <IconPause class="size-4" />
+        <IconPause class="size-icon-md" />
         <span>Pause until…</span>
       </ContextMenu.SubTrigger>
       <!-- Each end says its clock beside it: no sums before choosing. -->

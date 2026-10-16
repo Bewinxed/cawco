@@ -106,7 +106,7 @@
       problem={mode === "port" ? refused : undefined}
     >
       <NativeSelect
-        class="w-full max-w-sm"
+        class="w-full max-w-96"
         id="preview-mode"
         onchange={(event) => {
           mode = (event.currentTarget as HTMLSelectElement).value as
@@ -130,7 +130,7 @@
       >
         <Input
           autocomplete="off"
-          class="w-full max-w-sm"
+          class="w-full max-w-96"
           id="preview-pattern"
           placeholder={"https://p-{port}.example.com"}
           spellcheck={false}

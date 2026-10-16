@@ -111,10 +111,10 @@
 </script>
 
 <div
-  class="rounded-[var(--radius-md)] overflow-hidden border border-border bg-muted"
+  class="rounded-[var(--radius-md)] overflow-hidden border border-border bg-neutral-2"
 >
   <div
-    class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-muted-foreground"
+    class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-ink-muted"
   >
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
@@ -127,7 +127,7 @@
       title="Expand diff (full view)"
       variant="ghost"
     >
-      <IconMaximize class="w-3.5 h-3.5" />
+      <IconMaximize class="w-space-4 h-space-4" />
     </Button>
   </div>
 
@@ -136,12 +136,12 @@
   <div data-slot="body" class="body" {@attach morph()}>
     {#if failure}
       <div
-        class="mark-line flex items-center justify-center gap-2 p-8 text-label text-error"
+        class="mark-line flex items-center justify-center gap-2 p-space-8 text-label text-error-9"
         role="alert"
         in:crossIn
         out:crossOut
       >
-        <IconAlert class="w-5 h-5 shrink-0" />
+        <IconAlert class="w-icon-lg h-icon-lg shrink-0" />
         <span>The diff did not draw: {failure}</span>
         <Button data-box onclick={retry} size="sm" variant="outline"
           >Retry</Button

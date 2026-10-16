@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-    "mb-2 inline-flex size-16 items-center justify-center rounded-[var(--radius-pill)] bg-muted sm:group-data-[size=default]/alert-dialog-content:row-span-2 *:[svg:not([class*='size-'])]:size-8",
+    "mb-2 inline-flex size-16 items-center justify-center rounded-[var(--radius-pill)] bg-neutral-2 phone:group-data-[size=default]/alert-dialog-content:row-span-2 *:[svg:not([class*='size-'])]:size-space-8",
     className
   )}
   data-slot="alert-dialog-media"

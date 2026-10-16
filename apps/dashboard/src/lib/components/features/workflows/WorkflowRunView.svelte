@@ -240,7 +240,7 @@
        "Workflow" and then widens into the real one. -->
   {#if !(run && (workflow || workflowState.loaded))}
     <div aria-label="Loading workflow run" class="loading" role="status">
-      <Skeleton class="h-4 w-56" />
+      <Skeleton class="h-icon-md w-56" />
       <Skeleton class="h-[26px] w-full" />
       <Skeleton class="h-[26px] w-full" />
     </div>

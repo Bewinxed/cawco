@@ -345,19 +345,19 @@
             {#each steps as step, index (index)}
               <li class="mark-line" class:current={index === steps.length - 1}>
                 {#if index === steps.length - 1}
-                  <Spinner class="size-4" />
+                  <Spinner class="size-icon-md" />
                 {:else}
                   <IconSuccess
                     data-add-machine-dialog-done
                     aria-hidden="true"
-                    class="size-4 done"
+                    class="size-icon-md done"
                   />
                 {/if}
                 <span>{step}</span>
               </li>
             {:else}
               <li class="current mark-line">
-                <Spinner class="size-4" /><span>Connecting over SSH</span>
+                <Spinner class="size-icon-md" /><span>Connecting over SSH</span>
               </li>
             {/each}
           </ol>
@@ -366,7 +366,7 @@
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="chev size-4"
+                class="chev size-icon-md"
               /><span>Output</span>
             </summary>
             <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
@@ -428,7 +428,7 @@
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="chev size-4"
+                class="chev size-icon-md"
               />
               <span>This hub's SSH key</span>
             </summary>
@@ -475,7 +475,7 @@
     <Button onclick={close} variant="outline">Cancel</Button>
     <Button disabled={!canStart} form="ssh-join" type="submit">
       {#if starting}
-        <Spinner class="size-4" />
+        <Spinner class="size-icon-md" />
       {/if}
       <span>{job?.state === "failed" ? "Retry" : "Add machine"}</span>
     </Button>
@@ -537,7 +537,7 @@
     }
   >
     <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
-    <Dialog.Content class="sm:max-w-lg" showCloseButton={!joined}>
+    <Dialog.Content class="phone:max-w-128" showCloseButton={!joined}>
       <Dialog.Header>
         <Dialog.Title>Connect a machine</Dialog.Title>
         {#if !joined}

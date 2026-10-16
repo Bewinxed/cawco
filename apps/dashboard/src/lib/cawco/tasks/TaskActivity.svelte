@@ -247,8 +247,8 @@
   {/if}
   {#if history === null && historyProblem === null && only === "all"}
     <div aria-hidden="true" class="reading">
-      <Skeleton class="h-3.5 w-2/3" />
-      <Skeleton class="h-3.5 w-1/2" />
+      <Skeleton class="h-space-4 w-2/3" />
+      <Skeleton class="h-space-4 w-1/2" />
     </div>
   {:else if pieces.length === 0}
     <p class="hint">

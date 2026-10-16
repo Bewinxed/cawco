@@ -246,7 +246,7 @@
 
 <div class="fault" class:hub={group.origin === "hub"}>
   <div data-slot="top" class="top mark-line">
-    <IconWarningTriangle class="size-4 shrink-0" />
+    <IconWarningTriangle class="size-icon-md shrink-0" />
     <span data-slot="title" class="title">{copy.title}</span>
     <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. -->
@@ -255,7 +255,7 @@
         <span data-slot="tag" class="tag">at the hub</span>
       {:else if machine}
         <span data-slot="tag" class="tag mark-line">
-          <OsMark class="size-4 shrink-0" os={machine.os} />
+          <OsMark class="size-icon-md shrink-0" os={machine.os} />
           <span
             >{machineLabel(machine.hostname)}
             {group.harness ? ` · ${group.harness}` : ""}
@@ -276,7 +276,7 @@
         }}
         type="button"
       >
-        <IconChevronRight class="fault-chevron size-4 shrink-0" />
+        <IconChevronRight class="fault-chevron size-icon-md shrink-0" />
         <span>{expanded ? "Hide" : "Details"}</span>
       </button>
     {/if}
@@ -346,7 +346,7 @@
             }}
             type="button"
           >
-            <IconChevronRight class="fault-chevron size-4 shrink-0" />
+            <IconChevronRight class="fault-chevron size-icon-md shrink-0" />
             <span>What it said</span>
           </button>
           <div

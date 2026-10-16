@@ -228,7 +228,7 @@
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
         <div class="ink busy mark-line">
-          <Spinner class="size-3.5 shrink-0 text-muted-foreground" />
+          <Spinner class="size-space-4 shrink-0 text-ink-muted" />
           <span>{line.text}</span>
         </div>
       {:else}
@@ -267,7 +267,7 @@
     {:else if notice}
       <h2 data-slot="title" class="title mark-line">
         {#if notice.failed}
-          <IconError aria-hidden="true" class="fail size-4 shrink-0" />
+          <IconError aria-hidden="true" class="fail size-icon-md shrink-0" />
         {/if}
         <span>{notice.title}</span>
       </h2>

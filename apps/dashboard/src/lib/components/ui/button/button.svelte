@@ -9,7 +9,7 @@
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-button-outline)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-button-outline)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (app.css, press feedback): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -34,16 +34,16 @@
            rest and under the pointer, so it is never made more inviting. */
         grant:
           "border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] text-[color:var(--status-attn-ink)] hover:bg-[var(--status-attn-bg)]",
-        link: "border-transparent bg-transparent text-link underline-offset-4 hover:bg-transparent hover:underline",
+        link: "border-transparent bg-transparent text-link-ink underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {
         default:
-          "h-9 gap-(--btn-gap) px-3.5 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         sm: "h-[30px] gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
-        "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3",
+        "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm": "size-[30px]",
         "icon-lg": "size-11",
       },

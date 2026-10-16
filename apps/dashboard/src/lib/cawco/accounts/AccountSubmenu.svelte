@@ -26,7 +26,7 @@
   <ContextMenu.Sub>
     <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
     <ContextMenu.SubTrigger class="gap-2.5">
-      <IconAccounts class="size-4" />
+      <IconAccounts class="size-icon-md" />
       <span>Account</span>
     </ContextMenu.SubTrigger>
     <ContextMenu.SubContent class="min-w-52">

@@ -137,7 +137,10 @@
     >
     <span class="unit">machines</span>
   </Popover.Trigger>
-  <Popover.Content align="end" class="w-[360px] max-w-[calc(100vw-2rem)] gap-1">
+  <Popover.Content
+    align="end"
+    class="w-[360px] max-w-[calc(100vw-2rem)] gap-space-1"
+  >
     {#if machines.length === 0}
       <p class="none">
         <AddMachineLink>No machines yet</AddMachineLink>

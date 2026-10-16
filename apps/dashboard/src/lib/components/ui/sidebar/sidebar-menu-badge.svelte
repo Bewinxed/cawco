@@ -13,15 +13,15 @@
 <div
   data-num
   class={cn(
-    "pointer-events-none absolute right-1 flex flex h-5 min-w-5",
+    "pointer-events-none absolute right-space-1 flex flex h-icon-lg min-w-5",
     "select-none items-center justify-center",
-    "rounded-[var(--radius-xs)] px-1",
-    "num text-meta text-sidebar-foreground",
-    "peer-hover/menu-button:text-foreground",
+    "rounded-[var(--radius-xs)] px-space-1",
+    "num text-ink-strong text-meta",
+    "peer-hover/menu-button:text-ink-strong",
     "group-data-[collapsible=icon]:hidden",
     "peer-data-[size=default]/menu-button:top-1.5",
     "peer-data-[size=lg]/menu-button:top-2.5",
-    "peer-data-[size=sm]/menu-button:top-1",
+    "peer-data-[size=sm]/menu-button:top-space-1",
     "peer-data-active/menu-button:text-selected-ink",
     className
   )}

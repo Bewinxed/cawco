@@ -77,8 +77,8 @@
         <AlertDescription>{problem}</AlertDescription>
       </Alert>
     {:else if content === null}
-      <Skeleton class="h-4 w-2/3" />
-      <Skeleton class="h-4 w-1/2" />
+      <Skeleton class="h-icon-md w-2/3" />
+      <Skeleton class="h-icon-md w-1/2" />
     {:else if markdown}
       <Markdown source={content} />
     {:else}

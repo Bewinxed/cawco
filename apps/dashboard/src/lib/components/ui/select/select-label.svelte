@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("px-3 py-2.5 text-meta text-muted-foreground", className)}
+  class={cn("px-3 py-2.5 text-ink-muted text-meta", className)}
   data-slot="select-label"
   bind:this={ref}
   {...restProps}

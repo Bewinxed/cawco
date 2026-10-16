@@ -521,10 +521,10 @@
     {:else if !shown}
       <div data-slot="task-pane-skeleton" aria-hidden="true" class="skeleton">
         <Skeleton class="h-24 w-full rounded-[var(--radius-md)]" />
-        <Skeleton class="mt-2 h-4 w-1/3" />
-        <Skeleton class="h-3.5 w-full" />
-        <Skeleton class="h-3.5 w-11/12" />
-        <Skeleton class="h-3.5 w-3/5" />
+        <Skeleton class="mt-2 h-icon-md w-1/3" />
+        <Skeleton class="h-space-4 w-full" />
+        <Skeleton class="h-space-4 w-11/12" />
+        <Skeleton class="h-space-4 w-3/5" />
       </div>
     {:else if view === "review"}
       <TaskReview

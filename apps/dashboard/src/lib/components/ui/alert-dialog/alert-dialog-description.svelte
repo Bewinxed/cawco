@@ -11,7 +11,7 @@
 
 <AlertDialogPrimitive.Description
   class={cn(
-    "text-balance text-label text-muted-foreground md:text-pretty *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+    "text-balance text-ink-muted text-label min-[48rem]:text-pretty *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-ink-strong",
     className
   )}
   data-slot="alert-dialog-description"

@@ -140,12 +140,15 @@
       <tbody aria-hidden="true">
         {#each [0, 1, 2] as index (index)}
           <tr class="workflow-row">
-            <td data-slot="name" class="name"><Skeleton class="h-4 w-40" /></td>
-            <td><Skeleton class="h-5 w-16" /></td>
-            <td class="age"><Skeleton class="h-4 w-20" /></td>
-            <td data-slot="count" class="count"><Skeleton class="h-4 w-6" /></td
+            <td data-slot="name" class="name"
+              ><Skeleton class="h-icon-md w-40" /></td
             >
-            <td><Skeleton class="h-8 w-14" /></td>
+            <td><Skeleton class="h-icon-lg w-16" /></td>
+            <td class="age"><Skeleton class="h-icon-md w-20" /></td>
+            <td data-slot="count" class="count"
+              ><Skeleton class="h-icon-md w-6" /></td
+            >
+            <td><Skeleton class="h-space-8 w-14" /></td>
           </tr>
         {/each}
       </tbody>

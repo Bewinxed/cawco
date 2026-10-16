@@ -109,17 +109,17 @@
 
   {#if shown === "installed"}
     <span class="flex items-center gap-[var(--space-1)]">
-      <Badge class="{CHIP} text-success" variant="ghost">
-        <IconCheck class="size-4 shrink-0" />
+      <Badge class="{CHIP} text-success-9" variant="ghost">
+        <IconCheck class="size-icon-md shrink-0" />
         <span data-slot="num" class="num font-mono"
           >{toolStatus?.version ?? "—"}</span
         >
       </Badge>
       <span
-        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 md:opacity-0"
+        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 min-[48rem]:opacity-0"
       >
         <Button
-          class="text-muted-foreground"
+          class="text-ink-muted"
           disabled={!online}
           {failed}
           label="Reinstall"
@@ -132,8 +132,8 @@
       </span>
     </span>
   {:else if shown === "installing"}
-    <Badge class="{CHIP} text-muted-foreground" variant="ghost">
-      <Spinner class="size-4 shrink-0" />
+    <Badge class="{CHIP} text-ink-muted" variant="ghost">
+      <Spinner class="size-icon-md shrink-0" />
       <span>Installing…</span>
     </Badge>
   {:else if shown === "missing"}
@@ -160,7 +160,7 @@
               class="{CHIP} cursor-pointer"
               variant="destructive"
             >
-              <span class="size-2 shrink-0 rounded-full bg-error" data-box
+              <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
               ></span>
               <span>Failed</span>
             </Badge>
@@ -173,13 +173,12 @@
           <header
             class="flex items-baseline gap-[var(--space-1)] border-b border-border px-[var(--space-3)] py-[var(--space-2)]"
           >
-            <span class="text-label text-foreground"
+            <span class="text-label text-ink-strong"
               >{spec.name}
               did not install</span
             >
             {#if toolStatus?.method}
-              <span
-                class="ml-auto shrink-0 font-mono text-label text-muted-foreground"
+              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
@@ -204,7 +203,7 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="text-muted-foreground"
+        class="text-ink-muted"
         disabled={!online}
         {failed}
         label="Retry"
@@ -224,7 +223,7 @@
             aria-label="Why {spec.name} cannot run on {machineLabel(
               machine.hostname
             )}"
-            class="{CHIP} cursor-pointer text-muted-foreground"
+            class="{CHIP} cursor-pointer text-ink-muted"
             variant="ghost"
           >
             <span>Unsupported</span>
@@ -255,7 +254,7 @@
         <Tooltip.Content>The daemon has not reported this tool</Tooltip.Content>
       </Tooltip.Root>
       <Button
-        class="text-muted-foreground"
+        class="text-ink-muted"
         disabled={!online}
         {failed}
         label="Install"
@@ -300,7 +299,7 @@
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"
+            class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-3)] text-meta text-ink-muted"
             scope="col">Machine</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -314,28 +313,26 @@
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <div class="flex flex-col items-start gap-[var(--space-2)]">
                 <span class="mark-line flex items-center gap-1.5">
-                  <span class="text-label text-foreground">{spec.name}</span>
+                  <span class="text-label text-ink-strong">{spec.name}</span>
                   <a
                     data-box
                     aria-label="{spec.name} homepage"
-                    class="pointer-hit pressable text-muted-foreground transition-colors hover:text-foreground"
+                    class="pointer-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
                     href={spec.homepage}
                     rel="noreferrer"
                     target="_blank"
                     title={spec.homepage}
                   >
-                    <IconExternal class="size-3" />
+                    <IconExternal class="size-icon-sm" />
                   </a>
                 </span>
-                <span
-                  data-slot="num"
-                  class="num text-meta text-muted-foreground"
+                <span data-slot="num" class="num text-meta text-ink-muted"
                   >{installedOn(spec)}/{machines.length}
                   installed</span
                 >
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch is a bits-ui button[role=switch], which the label-click passthrough this markup relies on already recognizes as labelable — swapping to a `for`/id pairing would drop nothing biome can see but would change nothing real either. -->
                 <label
-                  class="flex items-center gap-[var(--space-2)] text-label text-muted-foreground"
+                  class="flex items-center gap-[var(--space-2)] text-label text-ink-muted"
                 >
                   <Switch
                     checked={policy.required}
@@ -367,21 +364,21 @@
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <span class="flex items-center gap-[var(--space-2)]">
                 <OsMark
-                  class="size-4 shrink-0 text-muted-foreground"
+                  class="size-icon-md shrink-0 text-ink-muted"
                   os={machine.os}
                 />
                 <span class="flex min-w-0 flex-col">
                   <span class="flex items-center gap-[var(--space-2)]">
-                    <span class="truncate text-label text-foreground"
+                    <span class="truncate text-label text-ink-strong"
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
                       class="size-2 shrink-0 rounded-full {online
-                        ? 'bg-success'
-                        : 'bg-muted-foreground/40'}"
+                        ? 'bg-success-9'
+                        : 'bg-ink-muted/40'}"
                     ></span>
                   </span>
-                  <span class="text-label text-muted-foreground"
+                  <span class="text-label text-ink-muted"
                     >{os.label}{online ? "" : " · offline"}</span
                   >
                 </span>
