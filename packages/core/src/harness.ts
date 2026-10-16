@@ -1021,8 +1021,6 @@ export const usageByModel = (
 export interface NeutralResultMessage {
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
-  /** Claude's real turn began after every known prompt write had finished. */
-  cacheReusable?: boolean;
   /**
    * pi and OpenCode: the tokens the turn's last request sent (uncached input
    * plus cache reads and writes, as the harness reports that request's
@@ -1072,6 +1070,16 @@ export const promptCacheUsage = (result: NeutralResultMessage) => {
     write: cache.write,
   };
 };
+
+/**
+ * Whether a request read its prompt from the cache: nearly all of it, as a
+ * request whose prefix held does. Under this, it rewrote what it missed.
+ */
+export const cacheHit = ({
+  input,
+  read,
+}: ReturnType<typeof promptCacheUsage>): boolean =>
+  input > 0 && read >= input * 0.9;
 
 /**
  * A `system` frame. One loose interface rather than a subtype union: the folding

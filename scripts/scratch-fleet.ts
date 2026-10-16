@@ -123,6 +123,12 @@ export interface Seen {
  */
 export interface Reply {
   /**
+   * The prompt-cache tokens the request reports reading and writing (1h), as
+   * Anthropic's `message_start` usage carries them: a spec's own cache. None:
+   * the request reports no cache use.
+   */
+  cache?: { read: number; write: number };
+  /**
    * The request is refused with this HTTP status and the provider's words, as
    * a provider refuses a credential it does not take (`401`, chat completions
    * and Anthropic messages alike).
@@ -322,7 +328,11 @@ const sseStream = (events: string[], everyMs: number) => {
   );
 };
 
-const anthropicEvents = (words: string[], tool?: Reply["tool"]): string[] => {
+const anthropicEvents = (
+  words: string[],
+  tool?: Reply["tool"],
+  cache?: Reply["cache"]
+): string[] => {
   const ev = (type: string, data: object) =>
     `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
   const start = ev("message_start", {
@@ -334,7 +344,20 @@ const anthropicEvents = (words: string[], tool?: Reply["tool"]): string[] => {
       content: [],
       stop_reason: null,
       stop_sequence: null,
-      usage: { input_tokens: 10, output_tokens: 1 },
+      usage: {
+        input_tokens: 10,
+        output_tokens: 1,
+        ...(cache
+          ? {
+              cache_read_input_tokens: cache.read,
+              cache_creation_input_tokens: cache.write,
+              cache_creation: {
+                ephemeral_5m_input_tokens: 0,
+                ephemeral_1h_input_tokens: cache.write,
+              },
+            }
+          : {}),
+      },
     },
   });
   if (tool) {
@@ -991,7 +1014,7 @@ async function standUp(
       return sseStream(
         chat
           ? chatEvents(reply.words, reply.tool)
-          : anthropicEvents(reply.words, reply.tool),
+          : anthropicEvents(reply.words, reply.tool, reply.cache),
         reply.everyMs
       );
     },

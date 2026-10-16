@@ -27071,9 +27071,6 @@
             "$ref": "#/components/schemas/StageFrame"
           },
           {
-            "$ref": "#/components/schemas/CacheInvalidatedFrame"
-          },
-          {
             "$ref": "#/components/schemas/FleetMcpFrame"
           },
           {
@@ -27192,7 +27189,6 @@
           "propertyName": "kind",
           "mapping": {
             "stage": "#/components/schemas/StageFrame",
-            "cache_invalidated": "#/components/schemas/CacheInvalidatedFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
@@ -44854,10 +44850,6 @@
               "write"
             ]
           },
-          "cacheReusable": {
-            "description": "Claude's real turn began after every known prompt write had finished.",
-            "type": "boolean"
-          },
           "contextTokens": {
             "description": "pi and OpenCode: the tokens the turn's last request sent (uncached input\nplus cache reads and writes, as the harness reports that request's\nusage), which is the session's context as it stood. Claude's is read off\n{@link promptCacheUsage}.",
             "type": "number"
@@ -45922,32 +45914,6 @@
           "kind",
           "state",
           "workspace"
-        ]
-      },
-      "CacheInvalidatedFrame": {
-        "type": "object",
-        "properties": {
-          "at": {
-            "type": "number"
-          },
-          "folder": {
-            "description": "The folder whose Claude sessions read what was written: those running at\nor under it. Absent for the user layer, which every Claude session on the\nmachine reads.",
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "cache_invalidated"
-            ]
-          },
-          "reason": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "at",
-          "kind",
-          "reason"
         ]
       },
       "FleetMcpFrame": {

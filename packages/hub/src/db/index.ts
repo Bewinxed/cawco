@@ -870,17 +870,6 @@ export interface DbShape {
   readonly instanceIdOf: (id: string) => string;
   /** The MCP servers and tools a session's newest `init` announced. */
   readonly instanceTooling: (id: string) => SessionTooling | null | undefined;
-  /**
-   * A known prompt write invalidates the Claude caches on its machine that
-   * read it: every one for the user layer, those working at or under `folder`
-   * for a folder's own files.
-   */
-  readonly invalidateClaudeCaches: (
-    machineId: string,
-    reason: string,
-    at: number,
-    folder?: string
-  ) => void;
   /** The listed sessions whose keep-alive is on: the only ones it schedules. */
   readonly keepAliveInstances: () => PublicInstanceRow[];
   /** Keeps a pending send whole, as its machine was handed it. */
@@ -3344,20 +3333,6 @@ const make = async (path: string): Promise<DbShape> => {
           status: sql`CASE WHEN ${instances.status} = 'discarded' THEN 'discarded' ELSE 'stopping' END`,
         })
         .where(and(eq(instances.id, id), isNotNull(instances.endIntent)))
-        .run();
-    },
-    invalidateClaudeCaches: (machineId, reason, at, folder) => {
-      db.update(instances)
-        .set({ cacheCold: { reason, at } })
-        .where(
-          and(
-            eq(instances.machineId, machineId),
-            eq(instances.harness, "claude"),
-            folder === undefined
-              ? undefined
-              : sql`(${instances.cwd} = ${folder} OR substr(${instances.cwd}, 1, ${folder.length + 1}) = ${`${folder}/`})`
-          )
-        )
         .run();
     },
     agentAddressContract: (machineId) =>

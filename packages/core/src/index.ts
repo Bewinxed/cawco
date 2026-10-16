@@ -1361,7 +1361,6 @@ export const SERVER_STOPPED_MID_TURN =
  * event verbatim.
  */
 export type FramePayload =
-  | import("./frames").CacheInvalidatedFrame
   | import("./frames").FleetMcpFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame

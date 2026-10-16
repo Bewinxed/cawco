@@ -66,11 +66,6 @@ import {
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { placedMemoryDir } from "./placed-memory";
-import {
-  MACHINE_READERS,
-  type PromptReaders,
-  promptWrite,
-} from "./prompt-writes";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
 import {
@@ -169,7 +164,6 @@ const LOCAL_CLAUDE = userLayerPath("local", "claude");
 
 /** How long one `claude plugin …` gets: a first clone of a marketplace is slow. */
 const CLI_TIMEOUT_MS = 120_000;
-const MANUAL_ONLY_SKILL = /^disable-model-invocation:\s*true\s*$/m;
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
@@ -282,29 +276,17 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
  * ({@link writeStateFile}): never a half-written `path` that something else
  * reads mid-write. A hook's script is spawned with its execute bit, so a
  * half-written one is worse than a half-written JSON blob: it is a shell
- * prefix somebody's session is about to run. `reason` asks first.
+ * prefix somebody's session is about to run.
  */
-export const writeAtomic = async (
+export const writeAtomic = (
   path: string,
-  content: string | Buffer,
-  reason?: string,
-  readers: PromptReaders = MACHINE_READERS
-): Promise<void> => {
-  const write = () => writeStateFile(path, content);
-  if (reason) {
-    await promptWrite(reason, write, readers);
-  } else {
-    await write();
-  }
-};
+  content: string | Buffer
+): Promise<void> => writeStateFile(path, content);
 
 /** `~/.claude.json` is read by every Claude Code on this machine, and a
  * half-written one is a machine with no MCP servers and no history. */
-const writeJson = (
-  path: string,
-  value: unknown,
-  reason?: string
-): Promise<void> => writeAtomic(path, JSON.stringify(value, null, 2), reason);
+const writeJson = (path: string, value: unknown): Promise<void> =>
+  writeAtomic(path, JSON.stringify(value, null, 2));
 
 /**
  * The names cawco linked, out of a sidecar from before a marketplace had one
@@ -413,11 +395,7 @@ const mergeFleetMcp = async (
   }
   try {
     if (JSON.stringify(mcpServersOf(file.root)) !== JSON.stringify(servers)) {
-      await writeJson(
-        path,
-        { ...file.root, mcpServers: servers },
-        "MCP servers"
-      );
+      await writeJson(path, { ...file.root, mcpServers: servers });
     }
   } catch (error) {
     return `could not write ${path}: ${tail(said(error))}`;
@@ -507,7 +485,7 @@ const mergePlacedMcp = async (
     return undefined;
   }
   try {
-    await writeJson(path, { ...file.root, projects }, "project MCP servers");
+    await writeJson(path, { ...file.root, projects });
   } catch (error) {
     return `could not write ${path}: ${tail(said(error))}`;
   }
@@ -698,26 +676,25 @@ const runClaude = async (
   bin: string,
   args: string[],
   extraEnv?: Record<string, string>
-): Promise<Ran> =>
-  await promptWrite(`plugins ${args[1] ?? "update"}`, async () => {
-    const child = Bun.spawn([bin, ...args], {
-      // `$HOME/.claude`, the dir every path in this file names, whatever
-      // config dir the daemon itself was started in.
-      env: { ...claudeHomeEnv(), ...extraEnv },
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: CLI_TIMEOUT_MS,
-    });
-    const [stdout, stderr] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    const code = await child.exited;
-    if (child.signalCode) {
-      return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
-    }
-    return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
+): Promise<Ran> => {
+  const child = Bun.spawn([bin, ...args], {
+    // `$HOME/.claude`, the dir every path in this file names, whatever
+    // config dir the daemon itself was started in.
+    env: { ...claudeHomeEnv(), ...extraEnv },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: CLI_TIMEOUT_MS,
   });
+  const [stdout, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  const code = await child.exited;
+  if (child.signalCode) {
+    return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
+  }
+  return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
+};
 
 /**
  * A clone that fell back to ssh and had nothing to authenticate with.
@@ -1121,29 +1098,17 @@ const dirExists = async (path: string): Promise<boolean> => {
  * is how a skill drifts. What the fleet never carried (a script's
  * `__pycache__`, a note someone added) goes into the new version as it is.
  * Swapped in with one rename ({@link placeTree}), because a running session
- * reads it. `readers` are the Claude sessions whose prompt lists it: the
- * user layer's reach every one, a folder's only those working there, and
- * another harness's skills dir none.
+ * reads it.
  */
 export const writeSkill = async (
   skill: FleetSkillPayload,
-  root = SKILLS_DIR,
-  readers: PromptReaders | null = MACHINE_READERS
+  root = SKILLS_DIR
 ): Promise<void> => {
-  const dir = join(root, skill.name);
-  const write = () => placeTree(dir, skill.files ?? [], carriedPaths(skill));
-  // Workflow stubs since d15e919d are manual-only and absent from the model's
-  // skill catalog. Hiding a pre-cutover visible stub is still a prompt change.
-  const previous = Bun.file(join(dir, "SKILL.md"));
-  const hiddenWorkflow =
-    skill.workflowId &&
-    (!(await previous.exists()) ||
-      MANUAL_ONLY_SKILL.test(await previous.text()));
-  if (hiddenWorkflow || readers === null) {
-    await write();
-  } else {
-    await promptWrite(`skill ${skill.name}`, write, readers);
-  }
+  await placeTree(
+    join(root, skill.name),
+    skill.files ?? [],
+    carriedPaths(skill)
+  );
 };
 
 /** A name that is one path segment: a fleet marketplace's or a plugin's, from a manifest off the internet. */
@@ -1242,27 +1207,21 @@ const writeVendoredMarketplaces = async (
   plugins: readonly FleetPluginPayload[]
 ): Promise<void> => {
   const groups = byMarketplace(plugins);
-  await promptWrite("plugins marketplace files", async () => {
-    for (const [marketplace, group] of groups) {
-      if (!isSafeSegment(marketplace)) {
-        throw new Error(`unsafe marketplace name ${marketplace}`);
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: one marketplace's folder at a time, like its plugins'
-      await writeVendoredMarketplace(
-        marketplace,
-        group,
-        vendorDir(marketplace)
-      );
+  for (const [marketplace, group] of groups) {
+    if (!isSafeSegment(marketplace)) {
+      throw new Error(`unsafe marketplace name ${marketplace}`);
     }
-    for (const present of await readdir(VENDOR_ROOT).catch(
-      () => [] as string[]
-    )) {
-      if (!groups.has(present)) {
-        // biome-ignore lint/performance/noAwaitInLoops: removals are independent and few
-        await rm(vendorDir(present), { recursive: true, force: true });
-      }
+    // biome-ignore lint/performance/noAwaitInLoops: one marketplace's folder at a time, like its plugins'
+    await writeVendoredMarketplace(marketplace, group, vendorDir(marketplace));
+  }
+  for (const present of await readdir(VENDOR_ROOT).catch(
+    () => [] as string[]
+  )) {
+    if (!groups.has(present)) {
+      // biome-ignore lint/performance/noAwaitInLoops: removals are independent and few
+      await rm(vendorDir(present), { recursive: true, force: true });
     }
-  });
+  }
 };
 
 /** The paths of the files the fleet carries for a skill now, when this sync has them. */
@@ -1803,15 +1762,7 @@ const syncSkillFiles = async (
     try {
       // biome-ignore lint/performance/noAwaitInLoops: record each removal before advancing to the next managed skill.
       await guardWorkflowSkillRemoval(SKILLS_DIR, name);
-      const dir = join(SKILLS_DIR, name);
-      const manualOnly =
-        (await Bun.file(join(dir, ".cawco-workflow")).exists()) &&
-        MANUAL_ONLY_SKILL.test(await Bun.file(join(dir, "SKILL.md")).text());
-      if (manualOnly) {
-        await removeTree(dir);
-      } else {
-        await promptWrite(`skill ${name} removed`, () => removeTree(dir));
-      }
+      await removeTree(join(SKILLS_DIR, name));
       report[name] = { state: "removed" };
     } catch (error) {
       written[name] = managed[name];
@@ -1896,7 +1847,7 @@ const placeSkill = async (
     return recorded;
   }
   try {
-    await writeSkill(skill, root, { kind: "folder", path: cwd });
+    await writeSkill(skill, root);
     // The skill's link and the store of the trees behind it (tree-swap.ts).
     await excludeFromCheckout(dir);
     await excludeFromCheckout(dirname(treeStoreOf(root)));
@@ -2054,9 +2005,7 @@ const syncMemory = async (
 
   if (!desired) {
     if (plan === "remove") {
-      await promptWrite("user CLAUDE.md removed", () =>
-        rm(MEMORY_PATH, { force: true })
-      );
+      await rm(MEMORY_PATH, { force: true });
       report.memory = { state: "removed" };
     } else if (plan === "unmanage") {
       report.memory = {
@@ -2077,7 +2026,7 @@ const syncMemory = async (
   }
 
   try {
-    await writeAtomic(MEMORY_PATH, desired.content, "user CLAUDE.md");
+    await writeAtomic(MEMORY_PATH, desired.content);
     report.memory = { state: "applied" };
     return desired.hash;
   } catch (error) {
@@ -2237,9 +2186,7 @@ const syncMemoryDocs = async (
     if (!doc) {
       if (plan === "remove") {
         // biome-ignore lint/performance/noAwaitInLoops: `removed` gates a single pruneEmptyDirs() after the loop; concurrent removes would still need that to run after every one lands, which sequential awaiting already guarantees
-        await promptWrite(`memory doc ${path} removed`, () =>
-          rm(join(MEMORIES_DIR, path), { force: true })
-        );
+        await rm(join(MEMORIES_DIR, path), { force: true });
         report[path] = { state: "removed" };
         removed = true;
       } else {
@@ -2266,11 +2213,7 @@ const syncMemoryDocs = async (
     }
 
     try {
-      await writeAtomic(
-        join(MEMORIES_DIR, path),
-        doc.content,
-        `memory doc ${path}`
-      );
+      await writeAtomic(join(MEMORIES_DIR, path), doc.content);
       written[path] = doc.hash;
       report[path] = { state: "applied" };
     } catch (error) {
@@ -2351,10 +2294,7 @@ const placeMemoryDoc = async (
     return recorded;
   }
   try {
-    await writeAtomic(file, doc.content, `project memory ${doc.path}`, {
-      kind: "folder",
-      path: cwd,
-    });
+    await writeAtomic(file, doc.content);
     await excludeFromCheckout(placedMemoryDir(cwd));
     report[key] = { state: "applied" };
     return doc.hash;
@@ -2595,21 +2535,15 @@ const syncMemoryHook = async (
         .text()
         .catch(() => "")) !== MEMORY_HOOK
     ) {
-      await writeAtomic(MEMORY_HOOK_PATH, MEMORY_HOOK, "model memory hook");
+      await writeAtomic(MEMORY_HOOK_PATH, MEMORY_HOOK);
       // Claude Code spawns the command itself, so it has to be executable.
       await chmod(MEMORY_HOOK_PATH, 0o755);
     }
     if (JSON.stringify(settings) !== JSON.stringify(root)) {
-      await writeJson(
-        SETTINGS_PATH,
-        settings,
-        "model memory hook registration"
-      );
+      await writeJson(SETTINGS_PATH, settings);
     }
     if (!wanted) {
-      await promptWrite("model memory hook removed", () =>
-        rm(MEMORY_HOOK_PATH, { force: true })
-      );
+      await rm(MEMORY_HOOK_PATH, { force: true });
     }
   } catch (error) {
     report.memoryHook = { state: "failed", detail: tail(said(error)) };
@@ -2809,7 +2743,7 @@ const syncHooks = async (
     hashes.set(hook.id, scriptHash);
     if (plan === "write") {
       try {
-        await writeAtomic(path, hook.script, `hook ${hook.name}`);
+        await writeAtomic(path, hook.script);
         // Claude Code spawns it directly, so it has to carry its own execute bit.
         await chmod(path, 0o755);
       } catch (error) {
@@ -2905,7 +2839,7 @@ const syncHooks = async (
 
     if (JSON.stringify(settings) !== JSON.stringify(root)) {
       try {
-        await writeJson(path, settings, "hooks registration");
+        await writeJson(path, settings);
       } catch (error) {
         const detail = tail(said(error));
         for (const hook of hooks) {
@@ -2938,9 +2872,7 @@ const syncHooks = async (
     }
     if (record.command.startsWith(HOOKS_DIR)) {
       // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this mirrors the sequential style of the rest of this sync rather than fanning out filesystem writes
-      await promptWrite(`hook ${id} removed`, () =>
-        rm(record.command, { force: true })
-      );
+      await rm(record.command, { force: true });
     }
     report[id] = { state: "removed" };
   }

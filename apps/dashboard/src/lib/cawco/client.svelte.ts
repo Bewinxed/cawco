@@ -2853,11 +2853,6 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
-  if (frame.kind === "cache_invalidated") {
-    // Machine-to-hub bookkeeping is consumed there; it is never a UI event.
-    return;
-  }
-
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
     adoptUsageLimits(usageLimitReadings(frame.limits));

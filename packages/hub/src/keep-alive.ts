@@ -1,5 +1,6 @@
 import {
   type ClaudeLimits,
+  cacheHit,
   type Envelope,
   type KeepAlive,
   type NeutralResultMessage,
@@ -110,10 +111,11 @@ export const keepAliveResult = (
   const { cache = { read: 0, write: 0 } } = result;
   const usage = keepAliveUsage(result);
   const { input, read } = usage;
-  const hit = input > 0 && read >= input * 0.9;
   const at = Date.now();
+  // Cold is measured: a ping that missed its cache (a changed prefix) is
+  // cold, and a real turn, whose requests wrote whatever they missed, is warm.
   let cold = row.cacheCold;
-  if (ping && !hit) {
+  if (ping && !cacheHit(usage)) {
     cold = {
       reason:
         input > 0
@@ -123,7 +125,6 @@ export const keepAliveResult = (
     };
   } else if (
     !ping &&
-    result.cacheReusable === true &&
     result.cache &&
     result.lastRequestAt !== undefined &&
     input > 0

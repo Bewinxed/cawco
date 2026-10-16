@@ -11,7 +11,6 @@ import type { FsEntry, FsMedia, FsPayload } from "@cawco/core";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core";
 import { claudeHome } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
-import { promptWrite, promptWriteReason } from "./prompt-writes";
 
 /**
  * `~` is the shell's, not a path: anything handed a literal `~` — a spawn's
@@ -134,7 +133,7 @@ const media = async (path: string): Promise<FsMedia> => {
   };
 };
 
-/** Reconnect sync resends definitions; identical bytes neither write nor invalidate. */
+/** Reconnect sync resends definitions; identical bytes are not written again. */
 const write = async (
   path: string,
   content: string
@@ -147,14 +146,8 @@ const write = async (
   ) {
     return { bytes: next.byteLength };
   }
-  const prompt = promptWriteReason(path);
-  const mutate = async () => {
-    await writeStateFile(path, next);
-    return { bytes: next.byteLength };
-  };
-  return prompt
-    ? await promptWrite(prompt.reason, mutate, prompt.readers)
-    : await mutate();
+  await writeStateFile(path, next);
+  return { bytes: next.byteLength };
 };
 
 /** A path under the user layer, kept inside it. */
