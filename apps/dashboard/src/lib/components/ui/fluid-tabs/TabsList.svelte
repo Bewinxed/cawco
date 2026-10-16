@@ -151,21 +151,42 @@
         laid.style.setProperty("--z", z);
       }
     });
-    fold(items);
+    fold(items, laidOut);
     watchFolds(track);
   }
   /** Half a pixel: an edge as drawn, rounded. */
   const EDGE = 0.5;
+  /** A tab's span along the track, or nothing where it has none yet. */
+  type Span = (item: HTMLElement) => { left: number; right: number } | null;
   /**
-   * Folds each side whose foot a tab ranked above it covers where the two
-   * are drawn now (`list.folds`): the other's body reaches from that side's
-   * edge back over the tab. Its sheet then holds the foot whole (its own
-   * foot curving out at least as far), so the side changes out of sight.
+   * Where a tab is laid out, as the track measured it at its last frame
+   * (`rects`, read at the frame's own time): what a choice reads, in the
+   * task that makes it, so it lays nothing out there, where the stack it
+   * has just written would have the page laid out again on the spot.
    */
-  function fold(items: HTMLElement[]) {
+  const laidOut: Span = (item) => {
+    const r = rects.rects.get(item);
+    return r ? { left: r.left, right: r.left + r.width } : null;
+  };
+  /**
+   * Where a tab is drawn now, moves included (a lifted tab, a slide): read
+   * only in the fold watch's frames, while something moves the boxes.
+   */
+  const drawnNow: Span = (item) => {
+    const box = item.getBoundingClientRect();
+    return { left: box.left, right: box.right };
+  };
+  /**
+   * Folds each side whose foot a tab ranked above it covers (`list.folds`),
+   * where `span` puts them: the other's body reaches from that side's edge
+   * back over the tab. Its sheet then holds the foot whole (its own foot
+   * curving out at least as far), so the side changes out of sight.
+   */
+  function fold(items: HTMLElement[], span: Span) {
     for (const [item, [start, end]] of coverOf(
       items,
-      (one) => ranks.get(one) ?? 0
+      (one) => ranks.get(one) ?? 0,
+      span
     )) {
       const was = list.folds.get(item);
       if (!was || was[0] !== start || was[1] !== end) {
@@ -173,14 +194,15 @@
       }
     }
   }
-  /** Which sides of each tab a tab ranked above it (by `rank`) covers where the two are drawn now. */
+  /** Which sides of each tab a tab ranked above it (by `rank`) covers where `span` puts them; a tab with no span is left out. */
   function coverOf(
     items: HTMLElement[],
-    rank: (item: HTMLElement) => number
+    rank: (item: HTMLElement) => number,
+    span: Span
   ): Map<HTMLElement, readonly [boolean, boolean]> {
-    const drawn = items.map((item) => {
-      const box = item.getBoundingClientRect();
-      return { item, left: box.left, right: box.right, z: rank(item) };
+    const drawn = items.flatMap((item) => {
+      const box = span(item);
+      return box ? [{ item, ...box, z: rank(item) }] : [];
     });
     return new Map(
       drawn.map((t) => {
@@ -237,7 +259,7 @@
       return boxRuns.some(underWay);
     };
     const step = () => {
-      fold(rects.items);
+      fold(rects.items, drawnNow);
       still = moving() ? 0 : still + 1;
       watching = still > STILL_FRAMES ? 0 : requestAnimationFrame(step);
     };
@@ -278,14 +300,45 @@
     const n = Number.parseFloat(value) || 0;
     return value.endsWith("ms") ? n : n * 1000;
   };
-  /** The come-forward's measures, read off the track: its tokens. */
-  function measures(track: HTMLElement) {
+  /** The track's tokens a switch and the edge fades are drawn with. */
+  interface Measures {
+    duration: number;
+    easing: string;
+    flare: number;
+    overlap: number;
+  }
+  /**
+   * The tokens, as last read off the track: in a frame, each time the track
+   * is measured at a new size (a breakpoint can change them), so a choice
+   * reads them in the task that makes it without styling the page there.
+   */
+  let tokens: Measures | null = null;
+  const readTokens = (track: HTMLElement): Measures => {
     const style = getComputedStyle(track);
+    const px = (name: string) =>
+      Number.parseFloat(style.getPropertyValue(name)) || 0;
     return {
       duration: msOf(style, "--choose-dur"),
       easing: style.getPropertyValue("--choose-ease").trim() || "ease",
-      overlap: Number.parseFloat(style.getPropertyValue("--overlap")) || 0,
+      flare: px("--flare"),
+      overlap: px("--overlap"),
     };
+  };
+  $effect(() => {
+    const track = node;
+    const { width, height } = rects.viewport;
+    if (!(track && width + height > 0)) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      tokens = readTokens(track);
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  /** The come-forward's measures: the tokens as last read (read now only before the track's first frame). */
+  function measures(track: HTMLElement): Measures {
+    tokens ??= readTokens(track);
+    return tokens;
   }
   /** Where on the clock's progress the stack is ranked for the new choice. */
   const FLIP = 0.5;
@@ -394,8 +447,10 @@
     }
     const m = measures(track);
     const n = items.length;
-    const after = coverOf(items, (item) =>
-      restRank(n, to, items.indexOf(item))
+    const after = coverOf(
+      items,
+      (item) => restRank(n, to, items.indexOf(item)),
+      laidOut
     );
     const poseAt = sweep(items, start, after, m.overlap);
     stack(track, items, from);
@@ -476,8 +531,9 @@
     const { items } = rects;
     const chosen = list.optimisticIndex ?? -1;
     const { travel } = tabs;
-    // A hang drawn out of a tab, or put away, re-ranks the stack too.
-    const [lift] = [lifted, hung];
+    // A hang drawn out of a tab, or put away, re-ranks the stack too, and so
+    // does the track measuring its tabs anew (the folds read its boxes).
+    const [lift] = [lifted, hung, rects.rects];
     if (!track?.closest('[data-variant="folder"]')) {
       return;
     }
@@ -865,9 +921,7 @@
     }
     const at = track.scrollLeft;
     const { width } = rects.viewport;
-    const feet =
-      Number.parseFloat(getComputedStyle(track).getPropertyValue("--flare")) ||
-      0;
+    const feet = measures(track).flare;
     let start = Number.POSITIVE_INFINITY;
     let end = Number.POSITIVE_INFINITY;
     for (const i of [list.optimisticIndex, outgoing]) {
