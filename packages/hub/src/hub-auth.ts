@@ -105,6 +105,8 @@ const RULES: readonly [string, RegExp, Access][] = [
   // A machine's own row and busy count; the fleet's list stays the person's.
   ["GET", /^\/api\/agents\/[^/]+$/, "machine"],
   ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],
+  // A workspace's post held for the person (upstream-asks.ts), raised by its machine.
+  ["POST", /^\/api\/upstream\/asks$/, "machine"],
   ["POST", /^\/api\/session-identities\/install$/, "machine-proof"],
 ];
 

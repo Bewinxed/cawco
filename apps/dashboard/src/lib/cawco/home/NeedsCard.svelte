@@ -34,7 +34,12 @@
    * peers; it opens nothing, and leaves once the hub has the answer.
    */
   import { questionsOf } from "@cawco/core";
-  import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
+  import {
+    UPSTREAM_POSTS,
+    UPSTREAM_WORDS,
+    type UpstreamPosts,
+    upstreamPostsWords,
+  } from "@cawco/core/upstream-guard";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -306,9 +311,9 @@
   }
 
   /** The upstream choice's answer on its way, by the option pressed; the hub's refusal in its words. */
-  let choosing = $state<boolean | null>(null);
+  let choosing = $state<UpstreamPosts | null>(null);
   let choiceRefusal = $state<string | null>(null);
-  async function choose(posts: boolean): Promise<void> {
+  async function choose(posts: UpstreamPosts): Promise<void> {
     if (item.kind !== "choice" || stale || choosing !== null) {
       return;
     }
@@ -577,8 +582,9 @@
       />
     </div>
   {:else if item.kind === "choice"}
-    <!-- Its two options as the peers: same size, type and fill (The Peer
-         Rule); keeping agents off comes first, as the recommended one. -->
+    <!-- Its three options as the peers: same size, type and fill (The Peer
+         Rule); keeping agents off comes first, as the recommended one, then
+         asking first, then letting them post. -->
     <div data-slot="peers" class="peers">
       {#if choiceRefusal}
         <ErrorText
@@ -587,27 +593,19 @@
           title="The hub refused that answer"
         />
       {/if}
-      <Button
-        class="peer"
-        disabled={stale || choosing === true}
-        failed={choiceRefusal !== null}
-        label={UPSTREAM_WORDS.keepOff}
-        onclick={() => choose(false)}
-        pending={choosing === false}
-        pendingLabel="Saving…"
-        size="sm"
-        variant="secondary"
-      />
-      <Button
-        class="peer"
-        disabled={stale || choosing === false}
-        label={UPSTREAM_WORDS.allow}
-        onclick={() => choose(true)}
-        pending={choosing === true}
-        pendingLabel="Saving…"
-        size="sm"
-        variant="secondary"
-      />
+      {#each UPSTREAM_POSTS as answer (answer)}
+        <Button
+          class="peer"
+          disabled={stale || (choosing !== null && choosing !== answer)}
+          failed={answer === "off" && choiceRefusal !== null}
+          label={upstreamPostsWords(answer)}
+          onclick={() => choose(answer)}
+          pending={choosing === answer}
+          pendingLabel="Saving…"
+          size="sm"
+          variant="secondary"
+        />
+      {/each}
     </div>
   {:else if item.kind === "pairing" || item.kind === "admission"}
     {@const who =

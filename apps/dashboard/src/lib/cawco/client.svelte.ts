@@ -111,6 +111,8 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { UpstreamPosts } from "@cawco/core/upstream-guard";
+import { UPSTREAM_POST_TOOL } from "@cawco/core/upstream-post";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
@@ -312,7 +314,7 @@ export interface ProjectRow {
    * Whether its agents may post to other people's repositories (hub
    * upstream.ts); null: the fleet's answer ({@link cawco.fleetUpstream}).
    */
-  upstreamPosts: boolean | null;
+  upstreamPosts: UpstreamPosts | null;
 }
 
 /**
@@ -1029,7 +1031,7 @@ const state = $state({
    * nobody has answered, which is when Needs you asks it; undefined until
    * read.
    */
-  fleetUpstream: undefined as boolean | null | undefined,
+  fleetUpstream: undefined as UpstreamPosts | null | undefined,
   /**
    * Each machine's latest Claude limit reading, by machineId — folded in from
    * the `kind: 'usage'` frame so the pill updates live rather than polling
@@ -5499,7 +5501,7 @@ export async function editProject(
     lands?: LandsMode;
     name?: string;
     review?: boolean;
-    upstreamPosts?: boolean | null;
+    upstreamPosts?: UpstreamPosts | null;
   }
 ): Promise<ProjectRow> {
   const response = await fetch(`/api/projects/${projectId}`, {
@@ -5787,7 +5789,9 @@ async function readProjectOffers(): Promise<void> {
 
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
-  const read = await load<{ upstream: boolean | null }>("/api/fleet/choices");
+  const read = await load<{ upstream: UpstreamPosts | null }>(
+    "/api/fleet/choices"
+  );
   if (read) {
     state.fleetUpstream = read.upstream;
   }
@@ -5799,8 +5803,8 @@ async function readFleetUpstream(): Promise<void> {
  * nothing. Every machine's workspaces judge by it from their next beat.
  * Throws the refusal, in the hub's words.
  */
-export async function answerFleetUpstream(posts: boolean): Promise<void> {
-  const answered = await askHub<{ upstream: boolean | null }>(
+export async function answerFleetUpstream(posts: UpstreamPosts): Promise<void> {
+  const answered = await askHub<{ upstream: UpstreamPosts | null }>(
     "/api/fleet/choices",
     json("PUT", { upstream: posts })
   );
@@ -8040,7 +8044,7 @@ function blockedRequests(): BlockedRequest[] {
 
   const rows: BlockedRequest[] = [];
   for (const target of Object.values(state.sessions)) {
-    if (target.pending.length === 0 || ended.has(target.instanceId)) {
+    if (target.pending.length === 0) {
       continue;
     }
     const machine = state.machines.find(
@@ -8050,6 +8054,14 @@ function blockedRequests(): BlockedRequest[] {
       // A delegate's ask is the parent's to answer, not the user's: it stays on
       // the delegate's own transcript but never lands in this queue.
       if (routedToParent(request)) {
+        continue;
+      }
+      // A post to another person's repository held for you outlives its
+      // session (hub upstream-asks.ts): the hub makes it once you approve.
+      if (
+        ended.has(target.instanceId) &&
+        request.toolName !== UPSTREAM_POST_TOOL
+      ) {
         continue;
       }
       rows.push({
@@ -8425,7 +8437,7 @@ export const cawco = {
     return state.lawsBroken;
   },
   /** The fleet's upstream answer; null while nobody has given it, undefined until read. */
-  get fleetUpstream(): boolean | null | undefined {
+  get fleetUpstream(): UpstreamPosts | null | undefined {
     return state.fleetUpstream;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */

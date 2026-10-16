@@ -12,6 +12,34 @@ public typealias BuildInfo = Components.Schemas.BuildInfo
 
 extension Components.Schemas.InstanceRow: TreeRow {}
 
+/// The upstream choice's answer as this device holds it (core
+/// upstream-guard.ts `UpstreamPosts`, client.svelte.ts `fleetUpstream`).
+public enum UpstreamAnswer: Equatable, Sendable {
+    /// Not read from the hub yet.
+    case unread
+    /// Nobody has answered: Needs you asks it.
+    case unanswered
+    case answered(Components.Schemas.FleetChoicesUpstream)
+
+    init(_ read: Components.Schemas.FleetChoicesUpstream?) {
+        self = read.map { .answered($0) } ?? .unanswered
+    }
+}
+
+public extension Components.Schemas.FleetChoicesUpstream {
+    /// The three answers in the order every surface lists them (`UPSTREAM_POSTS`).
+    static let listed: [Self] = [.off, .ask, .on]
+
+    /// An answer's words (`upstreamPostsWords`); one this app does not know reads as allowed.
+    var words: String {
+        switch self {
+        case .off: Words.Upstream.keepOff
+        case .ask: Words.Upstream.ask
+        default: Words.Upstream.allow
+        }
+    }
+}
+
 public extension Components.Schemas.AgentRow {
     /// The one name a machine is shown by, on every surface: its hostname
     /// without a local suffix (`Naming.machineLabel`, the web's
@@ -298,6 +326,11 @@ public final class FleetStore {
     /// invariant.ts), whole on each `laws.broken` frame; none until one
     /// breaks (client.svelte.ts `lawsBroken`).
     public internal(set) var lawsBroken: [Components.Schemas.LawBroken] = []
+    /// The fleet's upstream answer (`GET /api/fleet/choices` `upstream`,
+    /// client.svelte.ts `fleetUpstream`): whether agents may post to other
+    /// people's repositories. Read on connect, then on each `fleet.upstream`
+    /// frame; Needs you asks it while nobody has answered.
+    public internal(set) var upstream: UpstreamAnswer = .unread
 
     /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
     func adopt(noticesSeen ids: [String]) {

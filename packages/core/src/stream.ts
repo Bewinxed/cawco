@@ -59,12 +59,16 @@ import type { CarrySessionRequest } from "./harness";
  *    "Changes saved to", "Fix tray handed you") in place of `artifactSaid`,
  *    one per notice kind (core `ARTIFACT_NOTICES`). A page built for 10 would
  *    draw every notice as "Responses on", so it reloads first.
+ * 12: the upstream choice has three answers, `off`, `ask` and `on`, where it
+ *    had a boolean: `GET`/`PUT /api/fleet/choices` `upstream`, a project's
+ *    `upstreamPosts`, the `fleet.upstream` frame. A page built for 11 sends
+ *    a boolean the hub refuses, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 11;
+export const WIRE_PROTOCOL = 12;
 
 /**
  * What a session's stream carries: the changes each frame made to its

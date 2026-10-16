@@ -346,8 +346,18 @@ import {
   type StageOpened,
   type StageState,
 } from "@cawco/core/stage";
-import type { UpstreamRules } from "@cawco/core/upstream-guard";
+import {
+  otherWrite,
+  type UpstreamRules,
+  writeRefusal,
+} from "@cawco/core/upstream-guard";
+import {
+  CONTROL_UPSTREAM_POST,
+  isUpstreamPost,
+  type PostMade,
+} from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
+import { isLeadPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
@@ -486,6 +496,7 @@ import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
   setFleetChoices,
+  UPSTREAM_POSTS_SCHEMA,
 } from "./fleet-choices";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
@@ -554,12 +565,14 @@ import {
   turnCollapseId,
 } from "./notifications";
 import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
-import type { AnswerFrom, PendingShape } from "./pending";
 import {
+  type AnswerFrom,
   answerPermission,
   answerWorkflow,
   onPermissionAnswer,
   onWorkflowAnswer,
+  outlivesSession,
+  type PendingShape,
   workflowRunOf,
 } from "./pending";
 import { createPlaceRepos } from "./place-repo";
@@ -680,7 +693,8 @@ import {
 } from "./transcripts";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
-import { upstreamRules } from "./upstream";
+import { upstreamRuleOf, upstreamRules } from "./upstream";
+import { createUpstreamAsks, heldPostOf } from "./upstream-asks";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
@@ -1028,6 +1042,8 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
+const UPSTREAM_POST_MS = 6 * 60_000;
 
 /**
  * Statuses a session's row holds once its process has ended, or once its end
@@ -2756,28 +2772,110 @@ export const createServer = (
         .join("\n")
         .trim();
     },
-    tell: (instanceId, text) => {
-      const [row] = db.getInstancesByIds([instanceId]);
-      if (!row) {
-        return;
-      }
-      deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: text },
-            parent_tool_use_id: null,
-            origin: { kind: "system", name: "admin" },
-          },
-        },
-      });
-    },
+    tell: (instanceId, text) => tellSession(instanceId, text, "admin"),
     // A project's Caw asks in his thread (caw.ts, made further down).
+    threadOf: (actor) => lead?.askThread(actor),
+  });
+  /** Says something to a session, as the hub (`origin` names who). */
+  const tellSession = (instanceId: string, text: string, name: string) => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content: text },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name },
+        },
+      },
+    });
+  };
+  /**
+   * The session a workspace's held post is its ask: a project's Caw for his
+   * place (caw.ts `leadPlaceRef`), else the session of the workspace's
+   * newest work item. On `machineId` alone when a machine raised it.
+   */
+  const upstreamAsker = (
+    workspaceId: string,
+    machineId: string | undefined
+  ): InstanceRow | undefined => {
+    const on = (row: InstanceRow) => !machineId || row.machineId === machineId;
+    if (isLeadPlace(workspaceId)) {
+      return db
+        .listInstances()
+        .find((row) => on(row) && leadPlaceRef(row)?.id === workspaceId);
+    }
+    const workspace = db
+      .workspacesNamed(workspaceId)
+      .find((one) => one.id === workspaceId);
+    if (!workspace || (machineId && workspace.machineId !== machineId)) {
+      return;
+    }
+    for (const item of db.workItemsIn(workspaceId)) {
+      const [row] = db.getInstancesByIds([item.instanceId]);
+      if (row) {
+        return row;
+      }
+    }
+  };
+  // Posts to other people's repositories held for the person under "Ask me
+  // first" (upstream-asks.ts): kept across a restart, and past the session's
+  // process, since the hub makes each one itself once approved.
+  const upstreamAsks = createUpstreamAsks({
+    park: (envelope) => parkForPerson(envelope, true),
+    parked: (requestId) => pending.get(requestId),
+    pending: () => pending.list(),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+    make: async (machineId, workspaceId, post) => {
+      const made = await callAgent(
+        machineId,
+        CONTROL_UPSTREAM_POST,
+        [workspaceId, post],
+        UPSTREAM_POST_MS
+      );
+      if (made.kind === "unanswered") {
+        return {
+          ok: false,
+          said:
+            made.reason === "dead"
+              ? `${machineName(machineId)} is not connected, so nothing was posted.`
+              : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
+        };
+      }
+      return made.value.ok
+        ? (made.value.result as PostMade)
+        : {
+            ok: false,
+            said: made.value.error ?? "The machine refused the post.",
+          };
+    },
+    callConnection: async (post, requestId) => {
+      const called = await connections.callOnce(
+        post.connection,
+        post.tool,
+        { ...post.args },
+        { "dev.cawco/idempotency-key": requestId, "idempotency-key": requestId }
+      );
+      if (called.kind !== "answered") {
+        return { ok: false, said: called.error };
+      }
+      const said = (called.result.content ?? [])
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("\n")
+        .trim();
+      return { ok: called.result.isError !== true, said };
+    },
+    tell: (instanceId, text) => tellSession(instanceId, text, "upstream"),
     threadOf: (actor) => lead?.askThread(actor),
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
@@ -2911,8 +3009,11 @@ export const createServer = (
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
     // A move's approval is kept on its `moving` row, which no process holds;
     // the move settles one no job waits on (moves.ts `resume`).
+    // A post held for the person stays whatever its session is doing
+    // (upstream-asks.ts): the hub makes it.
     if (!(
-      row && ["running", "starting", "unknown", "moving"].includes(row.status)
+      outlivesSession(parked) ||
+      (row && ["running", "starting", "unknown", "moving"].includes(row.status))
     )) {
       droppedAtStart.push(parked);
       pending.forget(parked.instanceId ?? "");
@@ -4096,7 +4197,11 @@ export const createServer = (
       // What it had asked the person is asked again if it runs again.
       if (keep === "all") {
         noteWithdrawn(
-          pending.list().filter((ask) => ask.instanceId === instanceId)
+          pending
+            .list()
+            .filter(
+              (ask) => ask.instanceId === instanceId && !outlivesSession(ask)
+            )
         );
       }
       pending.forget(instanceId);
@@ -15633,6 +15738,7 @@ export const createServer = (
       if (
         answerWorkflow(pending, requestId, result) ||
         adminAsks.answer(requestId, result) ||
+        upstreamAsks.answer(requestId, result) ||
         moves.answer(requestId, result)
       ) {
         if (receipt.outcome !== "answered") {
@@ -18748,6 +18854,49 @@ export const createServer = (
           )?.connections ?? [])
         : [],
     changed: () => toolsMayHaveChanged(),
+    // A GitHub connection's write tool (github-mcp-server marks each read
+    // `ReadOnlyHint: true`, pkg/github/issues.go) naming another person's
+    // `owner`/`repo`: refused under off, held for the person under ask.
+    upstream: (actor, connection, tool, args) => {
+      const { owner, repo } = args;
+      if (
+        connection.service.trim().toLowerCase() !== "github" ||
+        tool.annotations?.readOnlyHint === true ||
+        typeof owner !== "string" ||
+        typeof repo !== "string"
+      ) {
+        return;
+      }
+      const rule = upstreamRuleOf(db, actor.projectId);
+      const write = otherWrite(rule, {
+        what: `${connection.name} ${tool.name}`,
+        repo: `github.com/${owner}/${repo}`,
+      });
+      if (rule.posts === "on" || !write?.repo) {
+        return;
+      }
+      if (rule.posts === "off") {
+        return {
+          isError: true,
+          content: [{ type: "text", text: writeRefusal(rule, write) ?? "" }],
+        };
+      }
+      const text = upstreamAsks.ask(
+        actor,
+        {
+          post: {
+            via: "mcp",
+            connection: connection.name,
+            tool: tool.name,
+            args,
+          },
+          repo: write.repo,
+          what: write.what,
+        },
+        `${connection.account || connection.name} (connection ${connection.name})`
+      );
+      return { content: [{ type: "text", text }] };
+    },
   });
   // Ingress (ingress.ts): events from GitHub and polled connections, each
   // stored once and routed to a routine or the lead's next wake.
@@ -19111,6 +19260,12 @@ export const createServer = (
           throw new WorkItemRefusal(
             403,
             "That ask is a fleet-settings change waiting on the person; only they answer it."
+          );
+        }
+        if (heldPostOf(pending.get(answer.requestId))) {
+          throw new WorkItemRefusal(
+            403,
+            "That ask is a post to another person's repository waiting on the person (Ask me first); only they answer it."
           );
         }
         if (leadGate.owns(answer.requestId)) {
@@ -21153,6 +21308,54 @@ export const createServer = (
             );
           }
           return { ok: true };
+        }
+      )
+      // A post to another person's repository a workspace held under "Ask me
+      // first" (agent github-door.ts, hub-git.ts), raised by its machine as
+      // the person's ask (upstream-asks.ts); answers what the session reads.
+      .post(
+        "/api/upstream/asks",
+        {
+          ...hidden,
+          body: t.Object({
+            workspaceId: t.String({ minLength: 1 }),
+            post: t.Any(),
+            repo: t.String({ minLength: 1 }),
+            account: t.String(),
+            what: t.String(),
+          }),
+        },
+        ({ body, request, server, status }) => {
+          const caller = hubAuth.callerOf(request, addressOf(server, request));
+          const { post, repo, what, workspaceId } = body;
+          if (!isUpstreamPost(post) || post.via === "mcp") {
+            return status(
+              400,
+              `cawco: \`${what}\` did not run: its post is not one a workspace holds.`
+            );
+          }
+          const actor = upstreamAsker(
+            workspaceId,
+            caller.kind === "machine" ? caller.machineId : undefined
+          );
+          if (!actor) {
+            return status(
+              404,
+              `cawco: \`${what}\` did not run: the hub holds no session of this workspace, so the owner could not be asked. Nothing was posted.`
+            );
+          }
+          const rule = upstreamRuleOf(db, actor.projectId);
+          if (rule.posts !== "ask" || !otherWrite(rule, { what, repo })) {
+            return status(
+              409,
+              `cawco: \`${what}\` did not run: this project's choice changed since the call (${writeRefusal(rule, { what, repo }) ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
+            );
+          }
+          return upstreamAsks.ask(
+            actor,
+            { post, repo, what, workspaceId, machineId: actor.machineId },
+            body.account
+          );
         }
       )
       .post(
@@ -24087,7 +24290,9 @@ export const createServer = (
             appleGate: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
             // Null: the fleet's answer (upstream.ts).
-            upstreamPosts: t.Optional(t.Union([t.Boolean(), t.Null()])),
+            upstreamPosts: t.Optional(
+              t.Union([UPSTREAM_POSTS_SCHEMA, t.Null()])
+            ),
           }),
         },
         async ({ params, body, status }) => {

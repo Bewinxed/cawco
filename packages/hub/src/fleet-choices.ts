@@ -16,7 +16,8 @@
  *   so neither choice changes it.
  * - **upstream**: whether sessions may post to repositories that are not
  *   their project's (core upstream-guard.ts), where a project sets nothing
- *   (`upstream_settings`, upstream.ts). Asked once, on its own: never
+ *   (`upstream_settings`, upstream.ts): `off`, `ask` (each post waits for
+ *   the person, upstream-asks.ts) or `on`. Asked once, on its own: never
  *   answered (null) is today's behaviour, sessions may, and the dashboard
  *   asks on its next load.
  *
@@ -27,7 +28,15 @@
  * for each choice.
  */
 import { NATIVE_TOOLS } from "@cawco/core";
+import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import { Elysia, t } from "elysia";
+
+/** The upstream choice's three answers, as a route takes one. */
+export const UPSTREAM_POSTS_SCHEMA = t.Union([
+  t.Literal("off"),
+  t.Literal("ask"),
+  t.Literal("on"),
+]);
 
 /**
  * The baseline before anyone set it: the agent's compiled default
@@ -54,7 +63,7 @@ export interface FleetChoices {
   /** What each choice denies, per harness. */
   tools: Record<"delegates" | "todos", Record<string, readonly string[]>>;
   /** Sessions may post to other people's repositories; null while nobody has answered. */
-  upstream: boolean | null;
+  upstream: UpstreamPosts | null;
 }
 
 /** What the fleet's choices are stored as. */
@@ -66,7 +75,7 @@ export interface StoredChoices {
   /** The baseline; null before anyone set it. */
   deniedTools: string[] | null;
   /** The upstream answer; null while nobody has given it. */
-  upstreamPosts: boolean | null;
+  upstreamPosts: UpstreamPosts | null;
 }
 
 /**
@@ -115,7 +124,7 @@ export const readChoices = ({
 export interface FleetChoicesStore {
   read: () => StoredChoices;
   /** Keeps the upstream answer; every machine hears it with its next beat (upstream.ts). */
-  setUpstream: (posts: boolean) => void;
+  setUpstream: (posts: UpstreamPosts) => void;
   synced: () => void;
   /** Stores the choices named, the baseline's change with them, in one transaction. */
   write: (choices: {
@@ -135,7 +144,7 @@ export interface FleetChoicesStore {
  */
 export const setFleetChoices = (
   store: FleetChoicesStore,
-  choices: { delegates?: boolean; todos?: boolean; upstream?: boolean }
+  choices: { delegates?: boolean; todos?: boolean; upstream?: UpstreamPosts }
 ): FleetChoices => {
   if (choices.upstream !== undefined) {
     store.setUpstream(choices.upstream);
@@ -164,7 +173,7 @@ export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
         body: t.Object({
           delegates: t.Optional(t.Boolean()),
           todos: t.Optional(t.Boolean()),
-          upstream: t.Optional(t.Boolean()),
+          upstream: t.Optional(UPSTREAM_POSTS_SCHEMA),
         }),
       },
       ({ body }) => setFleetChoices(store, body)

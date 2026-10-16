@@ -75,6 +75,7 @@ import type {
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
+import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
 import type {
   AuthorizationServerMetadata,
   OAuthClientInformationFull,
@@ -597,11 +598,11 @@ export const projects = sqliteTable("projects", {
     .default(false),
   /**
    * Whether its sessions may post to repositories that are not its own
-   * (core upstream-guard.ts): off keeps them off, and a write to another
-   * repository does not run. Null: the fleet's answer
-   * ({@link upstreamSettings}).
+   * (core upstream-guard.ts `UpstreamPosts`): `off` keeps them off, `ask`
+   * holds each post for the person, `on` lets them. Null: the fleet's
+   * answer ({@link upstreamSettings}).
    */
-  upstreamPosts: integer("upstream_posts", { mode: "boolean" }),
+  upstreamPosts: text("upstream_posts", { enum: UPSTREAM_POSTS }),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2751,13 +2752,14 @@ export const fleetWatchSettings = sqliteTable("fleet_watch_settings", {
  * The fleet's upstream choice (core upstream-guard.ts), asked once in
  * onboarding — one row, keyed `'upstream'`, following the
  * {@link spendSettings} precedent: whether sessions may post to repositories
- * that are not their project's, where the project sets nothing. No row, or a
- * null `posts`, is never answered: sessions may, and the dashboard asks.
+ * that are not their project's, where the project sets nothing: `off`, `ask`
+ * or `on`. No row, or a null `posts`, is never answered: sessions may, and
+ * the dashboard asks.
  */
 export const upstreamSettings = sqliteTable("upstream_settings", {
   /** Always `'upstream'`. */
   id: text("id").primaryKey(),
-  posts: integer("posts", { mode: "boolean" }),
+  posts: text("posts", { enum: UPSTREAM_POSTS }),
   answeredAt: timestamp("answered_at"),
 });
 

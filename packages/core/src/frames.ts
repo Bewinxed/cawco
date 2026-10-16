@@ -584,8 +584,8 @@ export interface ProjectsChangedFrame {
 export interface FleetUpstreamFrame {
   instanceId?: undefined;
   kind: "fleet.upstream";
-  /** Whether agents may post to other people's repositories. */
-  upstream: boolean;
+  /** Whether agents may post to other people's repositories: off, ask the person first, or on. */
+  upstream: import("./upstream-guard").UpstreamPosts;
 }
 
 /**

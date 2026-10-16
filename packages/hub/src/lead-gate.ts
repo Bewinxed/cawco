@@ -925,6 +925,11 @@ export const upstreamDenial = (
   rule: UpstreamRule,
   env: Readonly<Record<string, string | undefined>> = {}
 ): string | undefined => {
+  // Ask me first: his place's shims hold the post for the person as it runs
+  // (agent upstream-shim.ts), so the line is no refusal here.
+  if (rule.posts === "ask") {
+    return;
+  }
   for (const argv of commandsOf(command).argvs) {
     const [program = "", ...args] = argv;
     if (!GUARDED_PROGRAMS.includes(baseName(program))) {

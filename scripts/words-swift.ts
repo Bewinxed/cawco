@@ -69,6 +69,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     swift: "Sidebar",
     members: [{ file: "words/sidebar.ts", export: "sidebarWords", as: "" }],
   },
+  {
+    // The upstream choice: its card in Needs you and a project's ⋯ menu.
+    swift: "Upstream",
+    members: [{ file: "upstream-guard.ts", export: "UPSTREAM_WORDS", as: "" }],
+  },
 ];
 
 /** The helpers a word may call, and their Swift twins. */

@@ -39,6 +39,7 @@
    * instead (picks.md), and his slot here closes.
    */
   import { machineLabel } from "@cawco/core";
+  import type { UpstreamPosts } from "@cawco/core/upstream-guard";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
@@ -251,7 +252,7 @@
   }
 
   /** The project's own upstream answer, or null for the fleet's (UpstreamMenu). */
-  async function setUpstream(posts: boolean | null): Promise<void> {
+  async function setUpstream(posts: UpstreamPosts | null): Promise<void> {
     try {
       await editProject(project.id, { upstreamPosts: posts });
     } catch (error) {

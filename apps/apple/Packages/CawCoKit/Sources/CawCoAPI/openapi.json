@@ -911,7 +911,12 @@
                     "type": "boolean"
                   },
                   "upstream": {
-                    "type": "boolean"
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "ask",
+                      "on"
+                    ]
                   }
                 }
               }
@@ -22165,8 +22170,13 @@
                   },
                   "upstreamPosts": {
                     "type": [
-                      "boolean",
+                      "string",
                       "null"
+                    ],
+                    "enum": [
+                      "off",
+                      "ask",
+                      "on"
                     ]
                   }
                 }
@@ -27731,10 +27741,7 @@
               "type": "boolean"
             },
             "upstreamPosts": {
-              "type": [
-                "null",
-                "boolean"
-              ]
+              "$ref": "#/components/schemas/FleetChoicesUpstream"
             },
             "createdAt": {
               "type": "string",
@@ -27768,8 +27775,7 @@
             "review",
             "reviewLimit",
             "runsOn",
-            "tracker",
-            "upstreamPosts"
+            "tracker"
           ]
         }
       },
@@ -27977,10 +27983,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28016,8 +28019,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "getApiProjectsByIdRunning200": {
@@ -28210,10 +28212,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28247,8 +28246,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "deleteApiProjectsById200": {
@@ -28463,10 +28461,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28502,8 +28497,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "putApiProjectsByIdAccounts200": {
@@ -28668,10 +28662,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28705,8 +28696,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "deleteApiProjectsByIdPlacesByPlaceId200": {
@@ -31506,11 +31496,8 @@
             "description": "What each choice denies, per harness."
           },
           "upstream": {
-            "description": "Sessions may post to other people's repositories; null while nobody has answered.",
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream",
+            "description": "Sessions may post to other people's repositories; null while nobody has answered."
           }
         },
         "required": [
@@ -31518,8 +31505,7 @@
           "deniedTools",
           "setAt",
           "todos",
-          "tools",
-          "upstream"
+          "tools"
         ]
       },
       "FolderListing": {
@@ -51241,8 +51227,8 @@
             ]
           },
           "upstream": {
-            "description": "Whether agents may post to other people's repositories.",
-            "type": "boolean"
+            "$ref": "#/components/schemas/FleetChoicesUpstream",
+            "description": "Whether agents may post to other people's repositories: off, ask the person first, or on."
           }
         },
         "required": [
@@ -52294,6 +52280,14 @@
           "delegate",
           "session",
           "spin-off"
+        ]
+      },
+      "FleetChoicesUpstream": {
+        "type": "string",
+        "enum": [
+          "ask",
+          "off",
+          "on"
         ]
       },
       "FleetItemStateState": {

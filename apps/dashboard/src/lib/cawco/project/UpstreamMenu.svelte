@@ -1,12 +1,18 @@
 <script lang="ts">
   /**
    * The project ⋯ menu's upstream choice (ProjectHead): Other people's
-   * repositories, opening onto its three answers. Same as the fleet names
+   * repositories, opening onto its four answers. Same as the fleet names
    * the fleet's answer under it (unanswered reads as allowed, as the gate
-   * judges it); the other two are the project's own. `onchange` gets the
-   * project's new answer, null for the fleet's.
+   * judges it); the other three are the project's own: keep off, ask me
+   * first (each post waits in Needs you), let them post. `onchange` gets
+   * the project's new answer, null for the fleet's.
    */
-  import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
+  import {
+    UPSTREAM_POSTS,
+    UPSTREAM_WORDS,
+    type UpstreamPosts,
+    upstreamPostsWords,
+  } from "@cawco/core/upstream-guard";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconShield } from "#lib/icons.js";
@@ -18,25 +24,20 @@
     open = $bindable(false),
   }: {
     /** The project's own answer; null while it takes the fleet's. */
-    posts: boolean | null;
+    posts: UpstreamPosts | null;
     /** The fleet's answer; null while nobody has answered it, undefined until the hub's is read. */
-    fleet: boolean | null | undefined;
-    onchange: (posts: boolean | null) => void;
+    fleet: UpstreamPosts | null | undefined;
+    onchange: (posts: UpstreamPosts | null) => void;
     open?: boolean;
   } = $props();
 
-  const value = $derived.by(() => {
-    if (posts === null) {
-      return "fleet";
-    }
-    return posts ? "on" : "off";
-  });
-  const fleetWords = $derived(
-    fleet === false ? UPSTREAM_WORDS.keepOff : UPSTREAM_WORDS.allow
-  );
+  const value = $derived(posts ?? "fleet");
+  const fleetWords = $derived(upstreamPostsWords(fleet ?? "on"));
 
   function choose(next: string): void {
-    const chosen = next === "fleet" ? null : next === "on";
+    const chosen = (UPSTREAM_POSTS as readonly string[]).includes(next)
+      ? (next as UpstreamPosts)
+      : null;
     if (chosen !== posts) {
       onchange(chosen);
     }
@@ -58,12 +59,11 @@
           <span class="answer">{fleetWords}</span>
         </span>
       </DropdownMenu.RadioItem>
-      <DropdownMenu.RadioItem value="off"
-        >{UPSTREAM_WORDS.keepOff}</DropdownMenu.RadioItem
-      >
-      <DropdownMenu.RadioItem value="on"
-        >{UPSTREAM_WORDS.allow}</DropdownMenu.RadioItem
-      >
+      {#each UPSTREAM_POSTS as answer (answer)}
+        <DropdownMenu.RadioItem value={answer}
+          >{upstreamPostsWords(answer)}</DropdownMenu.RadioItem
+        >
+      {/each}
     </DropdownMenu.RadioGroup>
   </DropdownMenu.SubContent>
 </DropdownMenu.Sub>

@@ -66,6 +66,7 @@ import {
 import { ownIdentity } from "@cawco/core/process-identity";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import {
   and,
   asc,
@@ -2059,7 +2060,7 @@ export interface DbShape {
   ) => boolean;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
-  readonly setUpstreamPosts: (posts: boolean) => void;
+  readonly setUpstreamPosts: (posts: UpstreamPosts) => void;
   /** Replaces the sessions an ending run waits on; one the hub keeps no row for is not waited on. */
   readonly setWorkflowPendingEnds: (
     runId: string,
@@ -2327,7 +2328,7 @@ export interface DbShape {
     home?: string;
   }) => void;
   /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
-  readonly upstreamPosts: () => boolean | null;
+  readonly upstreamPosts: () => UpstreamPosts | null;
   /**
    * One harness's recorded cost since each boundary and in all, in one SQL
    * pass. A bucket counts toward a boundary when it starts at or after it;

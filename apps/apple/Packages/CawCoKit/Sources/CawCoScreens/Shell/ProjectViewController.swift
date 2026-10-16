@@ -708,11 +708,46 @@ final class ProjectViewController: ObservedViewController {
         if store.stages?.source == .template {
             sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Pick stages…") { [weak self] _ in self?.pickStages() }]))
         }
+        if let upstream = upstreamMenu() {
+            sections.append(UIMenu(options: .displayInline, children: [upstream]))
+        }
         sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Forget project…", attributes: .destructive) { [weak self] _ in
             guard let self, let project else { return }
             context.forgetProject(project, more)
         }]))
         return sections
+    }
+
+    /// Other people's repositories (UpstreamMenu.svelte): Same as the fleet,
+    /// the fleet's answer under it (unanswered reads as allowed, as the gate
+    /// judges it), then the project's own three answers, the one it goes by
+    /// checked.
+    private func upstreamMenu() -> UIMenu? {
+        guard let project else { return nil }
+        let own = project.upstreamPosts
+        let fleetWords = if case let .answered(answer) = context.hub.fleet.upstream { answer.words } else { Words.Upstream.allow }
+        let same = UIAction(title: Words.Upstream.inherit) { [weak self] _ in self?.setUpstream(nil) }
+        same.subtitle = fleetWords
+        same.state = own == nil ? .on : .off
+        let answers = Components.Schemas.FleetChoicesUpstream.listed.map { answer in
+            let action = UIAction(title: answer.words) { [weak self] _ in self?.setUpstream(answer) }
+            action.state = own == answer ? .on : .off
+            return action
+        }
+        return UIMenu(title: Words.Upstream.title, image: Glyph.shield.image, children: [same] + answers)
+    }
+
+    /// The project's own upstream answer, nil for the fleet's; the hub's refusal said where it was asked.
+    private func setUpstream(_ answer: Components.Schemas.FleetChoicesUpstream?) {
+        guard let project, project.upstreamPosts != answer else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await context.hub.setProjectUpstream(id: project.id, answer)
+            } catch {
+                Toast.show(error.localizedDescription, in: view.window)
+            }
+        }
     }
 
     private func pickStages() {

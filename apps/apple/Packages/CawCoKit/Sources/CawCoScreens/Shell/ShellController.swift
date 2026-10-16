@@ -213,6 +213,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let self, home.live else { return }
             hub.needs.answer(ask, answer)
         }
+        // The fleet's upstream choice, answered on its Needs you row; the hub's refusal said there.
+        cawPanel.onUpstream = { [weak self] answer in
+            guard let self else { return }
+            try await hub.answerFleetUpstream(answer)
+        }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
         cawPanel.onAcknowledge = { [weak self] ids in self?.home.acknowledge(ids) }
         cawPanel.onAct = { [weak self] notice in
@@ -1348,6 +1353,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .ask(ask): openSession(ask.paneId)
         case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
+        // Answered on its row; it opens nothing.
+        case .choice: break
         }
     }
 

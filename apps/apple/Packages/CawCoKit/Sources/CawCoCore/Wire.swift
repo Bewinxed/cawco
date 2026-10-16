@@ -256,6 +256,8 @@ enum Frame {
     case watchNotices([Components.Schemas.FleetWatchNotice])
     /// Every system law the hub caught broken since it started, whole, on each break (core invariant.ts).
     case lawsBroken([Components.Schemas.LawBroken])
+    /// The fleet's upstream answer was given or changed, anywhere: Needs you stops asking.
+    case fleetUpstream(Components.Schemas.FleetChoicesUpstream)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -305,6 +307,8 @@ enum Frame {
             self = .watchNotices(frame.notices)
         case .laws_broken(let frame):
             self = .lawsBroken(frame.broken)
+        case .fleet_upstream(let frame):
+            self = .fleetUpstream(frame.upstream)
         default:
             self = .ignored
         }

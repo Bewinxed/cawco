@@ -738,6 +738,36 @@ public final class HubConnection {
         fleet.projects = try await api.projects.list().ok.body.json
     }
 
+    /// Answers the fleet's upstream choice (`PUT /api/fleet/choices`,
+    /// client.svelte.ts `answerFleetUpstream`): every machine's workspaces
+    /// go by it from their next beat, and every client hears it
+    /// (`fleet.upstream`). A refusal throws the hub's words.
+    public func answerFleetUpstream(_ answer: Components.Schemas.FleetChoicesUpstream) async throws {
+        try await sendJSON("api/fleet/choices", method: "PUT", ["upstream": answer.rawValue])
+        fleet.upstream = .answered(answer)
+    }
+
+    /// A project's own upstream answer, nil for the fleet's (`PATCH
+    /// /api/projects/:id` `upstreamPosts`). Written as the JSON itself: the
+    /// generated body leaves a null out, and null is what names the fleet's.
+    /// The projects are read again before it returns.
+    public func setProjectUpstream(id: String, _ answer: Components.Schemas.FleetChoicesUpstream?) async throws {
+        try await sendJSON("api/projects/\(id)", method: "PATCH", ["upstreamPosts": answer?.rawValue ?? NSNull()])
+        fleet.projects = try await api.projects.list().ok.body.json
+    }
+
+    /// One JSON write to the hub, its refusal thrown in the hub's words.
+    private func sendJSON(_ path: String, method: String, _ body: [String: Any]) async throws {
+        guard let address else { throw ControlError(message: "No hub is connected.") }
+        var request = URLRequest(url: address.appending(path: path))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ControlError(message: Wire.reason(data, status: status)) }
+    }
+
     /// `readAccounts`, awaited: a write to the accounts routes reads them again
     /// before it returns (client.svelte.ts `accountsWrite`), since only a
     /// sign-in makes the hub say they moved.
@@ -969,6 +999,8 @@ public final class HubConnection {
         async let moving = try? await client.getApiMoves().ok.body.json
         // Fleet watch's notices to you: frames keep them from here.
         async let watched = try? await client.getApiFleetWatchNotices().ok.body.json.notices
+        // The fleet's upstream answer: Needs you asks it while nobody has.
+        async let choices = try? await client.getApiFleetChoices().ok.body.json
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -977,6 +1009,7 @@ public final class HubConnection {
             await (machinesRead, rowsRead, projectsRead, pending, limits, spend, carried)
         let readMoves = await moving
         let readWatched = await watched
+        let readUpstream = await choices.map { UpstreamAnswer($0.upstream) }
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -1044,6 +1077,9 @@ public final class HubConnection {
             }
             if let readWatched {
                 hub.fleet.watchNotices = readWatched
+            }
+            if let readUpstream {
+                hub.fleet.upstream = readUpstream
             }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
@@ -1387,6 +1423,8 @@ public final class HubConnection {
             fleet.watchNotices = notices
         case let .lawsBroken(broken):
             fleet.lawsBroken = broken
+        case let .fleetUpstream(answer):
+            fleet.upstream = .answered(answer)
         case .ignored:
             break
         }

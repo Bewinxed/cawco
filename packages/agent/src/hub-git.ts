@@ -56,11 +56,19 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import {
+  askRefusal,
+  isGuarded,
+  normaliseRemote,
+  owns,
+} from "@cawco/core/upstream-guard";
+import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
 import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
+import { raiseUpstreamAsk } from "./upstream-posts";
 
 /** A workspace's git door. */
 export const gitDoorOf = (id: string): string =>
@@ -256,7 +264,16 @@ const protocolFeed = (
   ref: WorkspaceRef,
   socket: Socket,
   write: (bytes: Buffer | string) => void,
-  env: Record<string, string>
+  env: Record<string, string>,
+  /**
+   * `lfs`: the batch's large files go to the hub first (the origin's push).
+   * `hold`: the batch is held for the person instead (a push to another
+   * person's repository under `ask`), and answers what git reads per ref.
+   */
+  options: {
+    hold?: (lines: string[]) => Promise<string>;
+    lfs: boolean;
+  }
 ) => {
   let raw = false;
   let pending = Buffer.alloc(0);
@@ -264,11 +281,16 @@ const protocolFeed = (
   const endBatch = async (): Promise<void> => {
     const lines = batch;
     batch = [];
-    const refused = await pushLfs(
-      ref,
-      lines.map((line) => refspecOf(line).src).filter(Boolean),
-      env
-    );
+    let refused: string | undefined;
+    if (options.hold) {
+      refused = await options.hold(lines);
+    } else if (options.lfs) {
+      refused = await pushLfs(
+        ref,
+        lines.map((line) => refspecOf(line).src).filter(Boolean),
+        env
+      );
+    }
     if (refused) {
       socket.write(
         `${lines.map((line) => `error ${refspecOf(line).dst} ${refused}\n`).join("")}\n`
@@ -305,6 +327,76 @@ const protocolFeed = (
   };
 };
 
+/**
+ * A push batch to another person's repository under `ask`, held for the
+ * person: each ref's source resolved here to the commit it is at, so the
+ * push made once they approve sends exactly these commits, and raised as
+ * their ask. Answers what git shows beside each ref; nothing was pushed.
+ */
+const holdPush = async (
+  ref: WorkspaceRef,
+  url: string,
+  repo: string,
+  lines: string[]
+): Promise<string> => {
+  const what = `git push ${url}`;
+  const refs: PushedRef[] = [];
+  for (const line of lines) {
+    const { src, dst } = refspecOf(line);
+    if (!src) {
+      return oneLine(
+        askRefusal(
+          what,
+          `deleting ${dst} is not a post the owner can approve here`
+        )
+      );
+    }
+    const read = Bun.spawnSync(
+      safeGitArgv(["rev-parse", "--verify", "--quiet", `${src}^{commit}`]),
+      {
+        cwd: ref.path,
+        env: {
+          ...process.env,
+          ...SAFE_GIT_ENV,
+          GIT_DIR: join(ref.path, ".git"),
+        },
+      }
+    );
+    const sha = read.stdout.toString().trim();
+    if (read.exitCode !== 0 || !sha) {
+      return oneLine(askRefusal(what, `${src} is no commit of this clone`));
+    }
+    refs.push({ sha, dst, force: FORCED.test(line.slice("push ".length)) });
+  }
+  const post: GitPost = { via: "git", url, refs };
+  const raised = await raiseUpstreamAsk(ref.id, post, repo, what);
+  return oneLine(raised.text);
+};
+
+/** A reason on one line, as git's helper protocol carries it. */
+const oneLine = (text: string): string => text.replace(/\s*\n\s*/g, " ");
+
+/**
+ * Under `ask`, the git config (as `CAWCO_GIT_PARAMETERS` words) that sends
+ * every push to GitHub through the workspace's git door (`pushInsteadOf`,
+ * git-config(1): "Any URL that starts with this value will not be pushed
+ * to; instead, it will be rewritten"), https and ssh alike: one to the
+ * project's own repository goes on, one to another person's is held for
+ * the person (holdPush). Fetches still go straight out.
+ */
+export const askedPushParameters = (): string =>
+  [
+    ...["https://github.com/", "git@github.com:", "ssh://git@github.com/"].map(
+      (prefix) => ["url.cawco::https://github.com/.pushInsteadOf", prefix]
+    ),
+    ["protocol.cawco.allow", "always"],
+  ]
+    .map(
+      ([key, value]) =>
+        `${shellWord(key as string)}=${shellWord(value as string)}`
+    )
+    .join(" ");
+
 /** A GitHub origin the door takes for a guarded workspace: an https URL on github.com. */
 const isGithubHttps = (url: string): boolean => {
   try {
@@ -321,7 +413,7 @@ const isGithubHttps = (url: string): boolean => {
  * what came before, git-config(1) `credential.helper`), env-only as
  * {@link hubGitEnv} is.
  */
-const githubGitEnv = async (): Promise<Record<string, string>> => {
+export const hostGithubGitEnv = async (): Promise<Record<string, string>> => {
   const gh = await hostGh();
   if (!gh) {
     throw new Error(
@@ -338,6 +430,42 @@ const githubGitEnv = async (): Promise<Record<string, string>> => {
     [`GIT_CONFIG_VALUE_${first}`]: "",
     [`GIT_CONFIG_KEY_${first + 1}`]: key,
     [`GIT_CONFIG_VALUE_${first + 1}`]: `!${shellWord(gh)} auth git-credential`,
+  };
+};
+
+/**
+ * What a door connection for `url` reaches: the clone's own origin, the
+ * hub's or (guarded) GitHub's (`github`); or, under `ask`, where every push
+ * to GitHub comes (askedPushParameters), another GitHub repository
+ * (`asked`, `host/owner/repo`), its push held for the person (`held`)
+ * unless it is the project's own. Thrown when the door takes none of these.
+ */
+const doorTarget = (
+  ref: WorkspaceRef,
+  url: string
+): { asked: string | null; github: boolean; held: boolean } => {
+  const read = Bun.spawnSync(
+    safeGitArgv(["config", "--get", "remote.origin.url"]),
+    { cwd: ref.path, env: { ...process.env, ...SAFE_GIT_ENV } }
+  );
+  const origin = read.stdout.toString().trim();
+  const rule = upstreamRule(ref.id);
+  const github = isGithubHttps(origin) && rule !== undefined && isGuarded(rule);
+  const asked =
+    rule?.posts === "ask" && isGithubHttps(url) && url !== origin
+      ? normaliseRemote(url)
+      : null;
+  const own =
+    origin !== "" && origin === url && (isHubRemote(origin) || github);
+  if (!(asked !== null || own)) {
+    throw new Error(
+      `${url} is not this workspace's origin on the hub, nor its guarded GitHub origin, so the door does not take it`
+    );
+  }
+  return {
+    asked,
+    github,
+    held: asked !== null && !owns(rule?.remotes ?? [], asked),
   };
 };
 
@@ -374,22 +502,17 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     if (problem) {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
     }
-    const read = Bun.spawnSync(
-      safeGitArgv(["config", "--get", "remote.origin.url"]),
-      { cwd: ref.path, env: { ...process.env, ...SAFE_GIT_ENV } }
-    );
-    const origin = read.stdout.toString().trim();
-    const github = isGithubHttps(origin) && upstreamRule(ref.id)?.guarded;
-    if (!(origin && origin === url && (isHubRemote(origin) || github))) {
-      throw new Error(
-        `${url} is not this workspace's origin on the hub, nor its guarded GitHub origin, so the door does not take it`
-      );
-    }
-    const env = github ? await githubGitEnv() : hubGitEnv();
+    const { asked, github, held } = doorTarget(ref, url);
+    const env =
+      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv();
     const scheme = new URL(url).protocol === "https:" ? "https" : "http";
     const child = spawn(
       "git",
-      safeGitArgv([`remote-${scheme}`, "origin", url]).slice(1),
+      safeGitArgv([
+        `remote-${scheme}`,
+        asked === null ? "origin" : url,
+        url,
+      ]).slice(1),
       {
         cwd: ref.path,
         env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
@@ -431,7 +554,15 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       ref,
       socket,
       (bytes) => child.stdin.write(bytes),
-      env
+      env,
+      asked === null
+        ? { lfs: true }
+        : {
+            lfs: false,
+            ...(held
+              ? { hold: (lines: string[]) => holdPush(ref, url, asked, lines) }
+              : {}),
+          }
     );
     let chain = feed(rest);
     socket.on("data", (chunk: Buffer) => {

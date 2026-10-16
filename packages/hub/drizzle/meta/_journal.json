@@ -1583,6 +1583,13 @@
       "when": 1792216273579,
       "tag": "0225_rule_trash",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "6",
+      "when": 1792228152851,
+      "tag": "0226_upstream_ask",
+      "breakpoints": true
     }
   ]
 }
