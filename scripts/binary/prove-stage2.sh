@@ -526,10 +526,18 @@ diagnose() {
   fi
 }
 
-# Commands as the unprivileged user, inside a machine container's systemd user session.
-as_user() {
-  local c=$1; shift
-  $P exec -i --user cawco --workdir /home/cawco --env HOME=/home/cawco \
+# Commands as the unprivileged user, inside a machine container's systemd user session, with no standard input: a
+# `podman exec -i` reads its stdin as soon as it starts (podman #24370, "As soon as podman exec is launched it spawns
+# a goroutine that reads data from stdin"), so any command here took whatever its caller's stdin carried, a pipe or a
+# loop's list meant for something else (the across check's listener tree, rig 06ef5d1ac run 6; survived's list, run-4).
+as_user() { user_exec "" "$@"; }
+# An executable written as the unprivileged user: standard input, to the path $2 on machine $1. The one command handed
+# its caller's stdin.
+put_executable() { user_exec -i "$1" sh -c 'cat > "$1" && chmod 755 "$1"' sh "$2"; }
+user_exec() {
+  local stdin=$1 c=$2
+  shift 2
+  $P exec ${stdin:+"$stdin"} --user cawco --workdir /home/cawco --env HOME=/home/cawco \
     --env XDG_RUNTIME_DIR=/run/user/1000 --env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
     --env CAWCO_RELEASE_HOST="${FEED_OVERRIDE:-$feed}" "$c" "$@"
 }
@@ -645,8 +653,9 @@ start_before() {
 }
 # A session that ran before the update: the very same process still holds it, the machine's agent took it over
 # again (the hub lists it as running only when the agent reports it), and nothing else holds it.
-# Each of these loops reads its list on fd 3: as_user's `podman exec -i` reads stdin, and on the loop's own stdin it
-# swallowed the rest of the list, so only the first entry was ever checked (run-4: one of seven accepted starts).
+# Each of these loops reads its list on fd 3, out of reach of what its body runs: a command there that reads stdin
+# swallows the rest of the list, so only the first entry is checked (run-4: one of seven accepted starts, when
+# as_user's `podman exec -i` did).
 survived() {
   local container=$1 file=$2 id pid
   while read -r -u 3 id pid; do
@@ -739,7 +748,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # reads the new policy; one already under way says `installing` to the hub the moment it raises its fence
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-sessions)$ ]]; }
-export -f diagnose as_user need_hub hub_api api_on json jsonl machine_id build_version phase field retiring wait_until use_feed \
+export -f diagnose as_user put_executable user_exec need_hub hub_api api_on json jsonl machine_id build_version phase field retiring wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
@@ -1540,8 +1549,8 @@ echo "the proof's bun runs installs only" >&2
 exit 1
 EOF
   as_user "$hubc" sh -c 'mkdir -p ~/.bun/bin ~/.bun/install/global/node_modules/@opencode/cli/bin && echo "$1" > ~/opencode-version && echo "{}" > ~/.bun/install/global/bun.lock' sh "$OLD_PIN"
-  as_user "$hubc" sh -c 'cat > ~/.bun/install/global/node_modules/@opencode/cli/bin/opencode.exe && chmod 755 ~/.bun/install/global/node_modules/@opencode/cli/bin/opencode.exe' < "$stub"
-  as_user "$hubc" sh -c 'cat > ~/.bun/bin/bun && chmod 755 ~/.bun/bin/bun' < "$bun"
+  put_executable "$hubc" /home/cawco/.bun/install/global/node_modules/@opencode/cli/bin/opencode.exe < "$stub"
+  put_executable "$hubc" /home/cawco/.bun/bin/bun < "$bun"
   as_user "$hubc" ln -s ../install/global/node_modules/@opencode/cli/bin/opencode.exe /home/cawco/.bun/bin/opencode2
   [[ "$(as_user "$hubc" /home/cawco/.bun/bin/opencode2 --version)" == "opencode v$OLD_PIN" ]]
 }
@@ -1731,7 +1740,7 @@ done' sh "$1" 2>&1
 }
 # The listener $1 descends from the sandbox init $2 (ws_tree). The tree is read whole into a variable, with its own
 # exit status, before anything else runs: nothing reads it from a pipe. `ws_tree | grep -qx "$(ws_listener_pid …)"`
-# did, and the substitution ran in the pipe's reading end, so its as_user, a `podman exec -i`, took that pipe as its
+# did, and the substitution ran in the pipe's reading end, so its as_user, then a `podman exec -i`, took that pipe as its
 # stdin and read from it at once (podman #24370: "As soon as podman exec is launched it spawns a goroutine that reads
 # data from stdin"), leaving grep part of the tree or none, at times: rig ee79a01ea's "the listener 3971 does not
 # descend from the new sandbox's init 3560", and 06ef5d1ac run 6's "the listener 4126 does not descend from the new
