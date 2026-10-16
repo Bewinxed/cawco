@@ -22,6 +22,7 @@ import type { Caw } from "./caw";
 import type { Connections } from "./connections";
 import type {
   Fleet,
+  ForkOrigin,
   HandoffDeps,
   HandoffThreads,
   SendDelivery,
@@ -181,6 +182,8 @@ export function createDelegationMcp(options: {
   formerIds: () => Record<string, string>;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
+  /** The sessions `instanceId` was forked from, nearest first (server.ts `forkLineage`). */
+  forkOrigins?: (instanceId: string) => ForkOrigin[];
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   /** A session's start_session, held until the session is in place; answers its settled folder (delegation-actions `spawn`). */
   spawn: (
@@ -813,6 +816,7 @@ export function createDelegationMcp(options: {
       hasParent: !!actor.parentInstanceId,
       lands: landsOf(actor),
       ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
+      forkOrigins: () => options.forkOrigins?.(actor.id) ?? [],
       workItem: !!actor.workItemId,
       workflowStepId: actor.workflowStepId ?? undefined,
       workflowRunId: actor.workflowRunId ?? undefined,

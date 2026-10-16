@@ -710,6 +710,12 @@ export interface HandoffDeps {
   /** The board and the machines, read in the hub's own process. */
   readonly fleet: Fleet;
   /**
+   * The sessions this one was forked from, nearest first (server.ts
+   * `forkLineage`); empty for a session that is no fork. Their delegates are
+   * theirs: this session cannot hand off to, stop, interrupt or answer one.
+   */
+  readonly forkOrigins?: () => ForkOrigin[];
+  /**
    * Every former id, by the id its session has now: sessions whose
    * continuations at their account's limit the hub folded into one (db
    * `formerIds`). A target named by one reaches its session.
@@ -1019,15 +1025,42 @@ interface WorkItemView {
   workspaceId: string;
 }
 
+/** A session a fork branched from, as its refusals name it. */
+export interface ForkOrigin {
+  id: string;
+  title: string;
+}
+
+/**
+ * The session a fork's target belongs to: one of the sessions it was forked
+ * from, when the target is that one's delegate. Never the fork's own parent,
+ * nor one of its origins itself, which it may write to as to anyone.
+ */
+const forkOwner = (
+  origins: ForkOrigin[],
+  row: InstanceRow,
+  own: InstanceRow | undefined
+): ForkOrigin | undefined =>
+  row.id === own?.parentInstanceId ||
+  origins.some((origin) => origin.id === row.id)
+    ? undefined
+    : origins.find((origin) => origin.id === row.parentInstanceId);
+
+/** Why a fork may not act on its origin's delegate. */
+const forkOwnedWords = (peer: Peer, owner: ForkOrigin): string =>
+  `${peer.label} (“${peer.title}”) is a delegate of “${owner.title}” (${owner.id}), the session this one was forked from. It stays that session's: its reports and asks go there, and only that session hands it work, stops, interrupts or answers it. Nothing was done. Delegate the work yourself if this session needs it.`;
+
 /**
  * Resolves a target among the caller's own delegates, and the work items of
- * a project it leads (`ledBy`); anything else is refused.
+ * a project it leads (`ledBy`); anything else is refused, a delegate of a
+ * session the caller was forked from saying whose it is.
  */
 function resolveDelegate(
   peers: Peer[],
   target: string,
   instanceId: string,
-  ledBy?: (instanceId: string) => boolean
+  ledBy?: (instanceId: string) => boolean,
+  origins: ForkOrigin[] = []
 ): Peer {
   const mine = peers.filter(
     (peer) =>
@@ -1036,12 +1069,15 @@ function resolveDelegate(
   try {
     return resolve(mine, target);
   } catch (error) {
-    let outside = false;
+    let outside: Peer | undefined;
     try {
-      resolve(peers, target);
-      outside = true;
+      outside = resolve(peers, target);
     } catch {
-      outside = false;
+      outside = undefined;
+    }
+    const owner = outside && forkOwner(origins, outside.row, undefined);
+    if (outside && owner) {
+      throw new Error(forkOwnedWords(outside, owner), { cause: error });
     }
     if (outside) {
       throw new Error(
@@ -1322,6 +1358,7 @@ export const handoffActions = ({
   authorization,
   projectId,
   ledBy,
+  forkOrigins = () => [],
   delegateList,
   sendToUser,
   shownRefusal,
@@ -1670,6 +1707,11 @@ export const handoffActions = ({
       ...beyond.map((row) => toPeer(row, hosts)),
     ];
     const peer = resolveHandoff(peers, sleeping, addressed, own);
+    // A fork's copied history names its origin's delegates; they are not its.
+    const owner = forkOwner(forkOrigins(), peer.row, own);
+    if (owner) {
+      throw new Error(forkOwnedWords(peer, owner));
+    }
     if (peer.row.id !== own?.parentInstanceId) {
       await checkCold(peer.row.id, undefined, instanceId, message);
     }
@@ -1896,7 +1938,8 @@ export const handoffActions = ({
       peers,
       followed?.now ?? target,
       instanceId,
-      ledBy
+      ledBy,
+      forkOrigins()
     );
     const response = await fetch(`${hubHttpUrl()}/api/work-items/checks`, {
       method: "POST",
@@ -1953,7 +1996,8 @@ export const handoffActions = ({
       ended ? [toPeer(ended, new Map())] : peers,
       target,
       instanceId,
-      ledBy
+      ledBy,
+      forkOrigins()
     );
     emit({
       verb: "stop",
@@ -1987,7 +2031,8 @@ export const handoffActions = ({
       peers,
       followed?.now ?? target,
       instanceId,
-      ledBy
+      ledBy,
+      forkOrigins()
     );
     emit({
       verb: "control",
@@ -2057,7 +2102,8 @@ export const handoffActions = ({
       peers,
       followed?.now ?? target,
       instanceId,
-      ledBy
+      ledBy,
+      forkOrigins()
     );
     // The answers alone are all this side has: the delegate's tool call never
     // came here, only the question text and its options did. A question's

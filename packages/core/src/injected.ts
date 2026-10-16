@@ -359,6 +359,27 @@ export function parseFleetWatchNudge(
 }
 
 /**
+ * The hub's word to a fork, ahead of its first turn (packages/hub
+ * `forkNotice`): whose the delegates in the conversation it copied are. A
+ * transcript draws it as a note, never as the person's words.
+ */
+export const forkNotice = (line: string, body: string): string =>
+  `[Fork] ${line}\n\n${body}`;
+
+const FORK_NOTICE = /^\[Fork\] (.+)\n\n/;
+
+/** A fork's notice read back into its line and what it says. */
+export function parseForkNotice(
+  text: string
+): { line: string; body: string } | null {
+  const marker = FORK_NOTICE.exec(text);
+  if (!marker) {
+    return null;
+  }
+  return { line: marker[1], body: text.slice(marker[0].length).trim() };
+}
+
+/**
  * A workflow telling its supervising session what happened: a step passed or
  * failed, the run finished, a question or checkpoint came up.
  */

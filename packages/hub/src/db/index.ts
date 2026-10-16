@@ -1344,6 +1344,13 @@ export interface DbShape {
     /** The account placement chose; a row that has one keeps it. */
     accountId?: string;
     /**
+     * The session a fork branched from (its spawn resumed that one's
+     * conversation under `fork`); set once, as the fork's row opens, so
+     * everything that asks whose a session's delegates are reads it from its
+     * first send on.
+     */
+    forkedFrom?: string;
+    /**
      * A restore of the session's last launch: the turn that launch had open
      * ({@link instances.turnOpenAt}) stays, to be handed back. Every other
      * start is someone's own, and ends what was open.
@@ -1425,7 +1432,6 @@ export interface DbShape {
        * changes provider; null when its new model runs on no account.
        */
       accountId?: string | null;
-      forkedFrom?: string;
       threadId?: string;
       projectId?: string;
     }
@@ -4746,6 +4752,7 @@ const make = async (path: string): Promise<DbShape> => {
       delegateType,
       threadId,
       accountId,
+      forkedFrom,
       keepTurn = false,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
@@ -4822,6 +4829,7 @@ const make = async (path: string): Promise<DbShape> => {
           delegateTypeProject: delegateType?.projectId,
           threadId,
           accountId,
+          forkedFrom,
           // A fresh conversation has spent nothing; a resumed one's spend so
           // far is unknown until its first result says it.
           modelUsageSeen: cleanSessionId ? null : {},
@@ -4860,6 +4868,12 @@ const make = async (path: string): Promise<DbShape> => {
             ...(accountId
               ? {
                   accountId: sql`COALESCE(${instances.accountId}, ${accountId})`,
+                }
+              : {}),
+            // A fork stays the fork of the session it branched from.
+            ...(forkedFrom
+              ? {
+                  forkedFrom: sql`COALESCE(${instances.forkedFrom}, ${forkedFrom})`,
                 }
               : {}),
             // `updatedAt` deliberately absent: a restore or relaunch re-issues

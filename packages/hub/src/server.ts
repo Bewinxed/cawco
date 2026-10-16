@@ -206,6 +206,7 @@ import {
   FLEET_WATCH_LIMITS,
   FRAMES_LOST,
   FRESH_START,
+  forkNotice,
   GENERATE_IMAGE,
   HARNESSES,
   HOOK_TEMPLATES,
@@ -1461,6 +1462,9 @@ const renderDelegateAsk = (payload: unknown): string => {
         : JSON.stringify(input);
   return `${toolName ?? "a tool"}${summary ? ` — ${summary}` : ""}`;
 };
+
+/** Whose word a fork's notice is ({@link forkNotice}): the hub's. */
+const FORK_ORIGIN: NeutralOrigin = { kind: "system", name: "fork" };
 
 /**
  * The session a `spawn` resumes, so the instance row records what it re-opened.
@@ -5796,21 +5800,85 @@ export const createServer = (
       : {};
   };
   /**
-   * A fork reads its origin's cache: it never moves to another account on
-   * its own, so its row says it is one, from its first spawn.
+   * What a spawn's row records of the conversation it forks: the session it
+   * branches from, by that session's id where the hub holds its row. Read
+   * as the row opens, so a fork is one from before its first send: it reads
+   * its origin's cache and never moves account on its own (at-limit.ts),
+   * and none of its origin's delegates is its own ({@link forkLineage}).
    */
-  const noteFork = (
-    payload: SpawnPayload,
-    stored: { id: string; forkedFrom: string | null }
-  ): void => {
-    if (payload.resume?.fork && !stored.forkedFrom) {
-      db.patchInstance(stored.id, {
-        forkedFrom:
-          db.instanceBySessionId(payload.resume.sessionKey)?.id ??
-          payload.resume.sessionKey,
-      });
+  const forkedFromOf = (payload: SpawnPayload): { forkedFrom?: string } =>
+    payload.resume?.fork
+      ? {
+          forkedFrom:
+            db.instanceBySessionId(payload.resume.sessionKey)?.id ??
+            payload.resume.sessionKey,
+        }
+      : {};
+
+  /**
+   * The sessions `instanceId` was forked from, nearest first: the one it
+   * branched from, that one's origin, and so on. Empty for a session that
+   * is no fork. Every delegate started in the history a fork copied belongs
+   * to one of these, and stays theirs: its reports and asks go to it, and
+   * the fork cannot list, hand off to, stop, interrupt or answer it.
+   */
+  const forkLineage = (instanceId: string): PublicInstanceRow[] => {
+    const lineage: PublicInstanceRow[] = [];
+    const seen = new Set([instanceId]);
+    let [row] = db.getInstancesByIds([instanceId]);
+    while (row?.forkedFrom && !seen.has(row.forkedFrom)) {
+      seen.add(row.forkedFrom);
+      [row] = db.getInstancesByIds([row.forkedFrom]);
+      if (row) {
+        lineage.push(row);
+      }
     }
+    return lineage;
   };
+
+  /**
+   * What a fork is told ahead of its first turn, made from its origins'
+   * delegates as they stand now: whose they are, which still run, and that
+   * their reports go there. Undefined for a session that is no fork, or one
+   * whose origins never delegated anything, so its history holds none.
+   */
+  const forkNoticeFor = (instanceId: string): string | undefined => {
+    const lineage = forkLineage(instanceId);
+    const [origin] = lineage;
+    if (!origin) {
+      return;
+    }
+    const items = db
+      .workItemsOfParents(lineage.map((row) => row.id))
+      .filter((item) => item.instanceId !== instanceId);
+    if (items.length === 0) {
+      return;
+    }
+    const live = items.filter(
+      (item) => item.state === "starting" || item.state === "running"
+    );
+    const names = new Map(lineage.map((row) => [row.id, sessionName(row)]));
+    const running = live.length
+      ? [
+          "Running now, each with the session it reports to:",
+          ...[
+            ...new Map(live.map((item) => [item.instanceId, item])).values(),
+          ].map(
+            (item) =>
+              `- “${item.title}” (${item.instanceId}), ${item.state}: reports to “${names.get(item.parentInstanceId)}” (${item.parentInstanceId})`
+          ),
+        ].join("\n")
+      : "None of them is running now.";
+    return forkNotice(
+      `Forked from “${sessionName(origin)}”: its delegates stay its own.`,
+      [
+        `This session is a fork of “${sessionName(origin)}” (${origin.id}). It starts with no delegates of its own. Every delegate started in the conversation it copied belongs to the session that started it, and stays there: its reports and asks go to that session, never here, and this session cannot list, hand off to, stop, interrupt or answer it.`,
+        running,
+        "Work this session needs done, it delegates itself.",
+      ].join("\n\n")
+    );
+  };
+
   /**
    * The boundary a session's every spawn carries: its work item's workspace,
    * else, for a project's Caw, his place's (caw.ts `leadPlaceRef`); none for
@@ -5850,7 +5918,6 @@ export const createServer = (
       launchGoes(payload, stored);
     }
     const effort = launchEffort(payload, stored);
-    noteFork(payload, stored);
     // A process launched now runs where this launch says, whatever the one
     // before it ran from.
     if (!payload.reattachOnly) {
@@ -6917,9 +6984,58 @@ export const createServer = (
     ahead = false
   ): SentMessageRow | undefined => {
     const envelope = byIdNow(asked);
-    return toCawThread(envelope)
-      ? undefined
-      : deliverToSession(envelope, ahead);
+    if (toCawThread(envelope)) {
+      return;
+    }
+    tellForkFirst(envelope);
+    return deliverToSession(envelope, ahead);
+  };
+
+  /**
+   * A fork's first send goes behind the hub's word on whose the delegates in
+   * its copied history are ({@link forkNoticeFor}): a note its first turn
+   * folds in, whoever sends that turn — the person, or the parent's brief to
+   * a delegate started as a fork. Once: any send on record for the session
+   * means it was told, or had nothing to be told.
+   */
+  const tellForkFirst = ({ machineId, payload }: Envelope<SendPayload>) => {
+    const { instanceId, message } = payload;
+    if (
+      isKeepAlive(message) ||
+      !db.getInstancesByIds([instanceId])[0]?.forkedFrom ||
+      db.sendsIn(instanceId, [
+        "pending",
+        "read",
+        "failed",
+        "replaced",
+        "cancelled",
+      ]).length > 0
+    ) {
+      return;
+    }
+    const notice = forkNoticeFor(instanceId);
+    if (!notice) {
+      return;
+    }
+    deliverToSession(
+      {
+        verb: "send",
+        machineId,
+        instanceId,
+        payload: {
+          instanceId,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: notice },
+            parent_tool_use_id: null,
+            origin: FORK_ORIGIN,
+            shouldQuery: false,
+          },
+        },
+      },
+      false
+    );
   };
 
   /**
@@ -10787,6 +10903,7 @@ export const createServer = (
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       ...threadOfSpawn(peekParent(payload).parentInstanceId, workItemId),
       ...openedAccount(payload, placed),
+      ...forkedFromOf(payload),
     });
     sendSpawn(agent, machineId, {
       verb: "spawn",
@@ -10931,6 +11048,7 @@ export const createServer = (
       model: payload.model,
       ...peekParent(payload),
       ...openedAccount(payload, placed),
+      ...forkedFromOf(payload),
     });
     publishInstances(machineId);
     const reply = await awaitReply(
@@ -18320,6 +18438,8 @@ export const createServer = (
     },
     formerIds: db.formerIds,
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
+    forkOrigins: (id) =>
+      forkLineage(id).map((row) => ({ id: row.id, title: sessionName(row) })),
     credentialActor: (authorization) => {
       const identity = identities.resolve(authorization);
       return identity
@@ -19949,6 +20069,7 @@ export const createServer = (
       canDelegate: payload.canDelegate,
       ...peekParent(message.payload),
       ...openedAccount(payload, placed),
+      ...forkedFromOf(payload),
     });
     sendDashboardStart(ws, message, message.instanceId, payload);
     // A conversation that starts here: its first turn is its name.

@@ -43,6 +43,7 @@ import {
   parseArtifactResponses,
   parseDelegateAsk,
   parseFleetWatchNudge,
+  parseForkNotice,
   parseHandoffMarker,
   parseReportMarker,
   parseUndelivered,
@@ -1569,6 +1570,37 @@ export function turnStart(
 }
 
 /**
+ * A note the hub wrote into the session, drawn as one: fleet watch's nudge
+ * to this session, its lead (the same note the watched session's transcript
+ * draws), or the hub's word to a fork about the delegates in the history it
+ * copied. Null for any other text.
+ */
+function hubNoteBlock(text: string, base: BlockBase): TranscriptBlock | null {
+  const nudge = parseFleetWatchNudge(text);
+  if (nudge) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      content: nudge.body,
+      metadata: {
+        subtype: FLEET_WATCH,
+        noteKind: "Fleet watch",
+        noteTitle: nudge.line,
+      },
+    };
+  }
+  const fork = parseForkNotice(text);
+  return fork
+    ? {
+        ...base,
+        type: "ui.system_note",
+        content: fork.body,
+        metadata: { noteKind: "Fork", noteTitle: fork.line },
+      }
+    : null;
+}
+
+/**
  * A message cawco put into the session on someone else's behalf, read off
  * the marker line it opens with (`injected.ts` builds and parses every one).
  * This is the one classification the live stream, a mid-turn delivery and a
@@ -1614,20 +1646,9 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       },
     };
   }
-  // Fleet watch's nudge to this session, its lead: the same note the
-  // watched session's transcript draws.
-  const nudge = parseFleetWatchNudge(text);
-  if (nudge) {
-    return {
-      ...base,
-      type: "ui.system_note",
-      content: nudge.body,
-      metadata: {
-        subtype: FLEET_WATCH,
-        noteKind: "Fleet watch",
-        noteTitle: nudge.line,
-      },
-    };
+  const hubNote = hubNoteBlock(text, base);
+  if (hubNote) {
+    return hubNote;
   }
   const rule = parseRuleMarker(text);
   if (rule) {

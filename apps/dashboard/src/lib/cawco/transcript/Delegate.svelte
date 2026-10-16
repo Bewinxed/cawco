@@ -19,7 +19,7 @@
     unwatchDelegate,
     watchDelegate,
   } from "../client.svelte";
-  import { conversationHref } from "../links";
+  import { conversationHref, resolveSessionTitle } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
@@ -52,7 +52,31 @@
   const row = $derived(id ? cawco.instanceIndex.byId.get(id) : undefined);
   const branch = $derived(id ? cawco.session(id) : null);
 
-  const events = $derived(id ? cawco.delegateEventsOf(id) : []);
+  /**
+   * The session the delegate reports to, when that is not the one whose
+   * transcript draws this card: a fork's copied history, or a session whose
+   * continuation took its delegates on. Its asks, reports and live state are
+   * that session's, so the card draws the call as it was made and says
+   * where the delegate answers now.
+   */
+  const elsewhere = $derived(
+    row?.parentInstanceId && row.parentInstanceId !== message.instanceId
+      ? row.parentInstanceId
+      : null
+  );
+  const ownerName = $derived.by(() => {
+    if (!elsewhere) {
+      return "";
+    }
+    const owner = cawco.instanceIndex.byId.get(elsewhere);
+    return resolveSessionTitle({
+      title: owner?.title ?? owner?.derivedTitle,
+      cwd: owner?.cwd,
+      id: elsewhere,
+    });
+  });
+
+  const events = $derived(id && !elsewhere ? cawco.delegateEventsOf(id) : []);
   const askEvents = $derived(
     events.filter((e): e is DelegateAskEvent => e.kind === "ask")
   );
@@ -114,7 +138,7 @@
           at: new Date(last.createdAt).getTime(),
         };
       }
-      if (!id) {
+      if (!id || elsewhere) {
         return null;
       }
       const peers = (parent?.messages ?? []).filter(
@@ -149,7 +173,7 @@
       short: string;
       detail: string;
     }> => {
-      if (!id) {
+      if (!id || elsewhere) {
         return [];
       }
       if (askEvents.length > 0) {
@@ -221,8 +245,12 @@
     | "sleeping"
     | "stopping"
     | "stopped"
-    | "failed";
+    | "failed"
+    | "elsewhere";
   const phase = $derived.by((): Phase => {
+    if (elsewhere) {
+      return "elsewhere";
+    }
     if (spawnFailed || row?.status === "error") {
       return "failed";
     }
@@ -265,14 +293,16 @@
   const phaseWord = $derived(phase === "blocked" ? "needs an answer" : phase);
   /** What the pill says before its clock: the phase, and how many reports. */
   const pillWords = $derived(
-    [
-      phase === "reported" ? "" : phaseWord,
-      report?.count
-        ? `${report.count} report${report.count === 1 ? "" : "s"}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" · ")
+    elsewhere
+      ? `reports to ${ownerName}`
+      : [
+          phase === "reported" ? "" : phaseWord,
+          report?.count
+            ? `${report.count} report${report.count === 1 ? "" : "s"}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")
   );
 
   // Elapsed is a clock: while it runs the card re-reads it on its own, and once
@@ -386,7 +416,7 @@
         <span
           aria-hidden="true"
           class="mark rail-cell m{markHue(seed)}"
-          {@attach trayCard(() => id)}><Sprite /></span
+          {@attach trayCard(() => (elsewhere ? null : id))}><Sprite /></span
         >
         <span class="tk">{label}</span>
         <span aria-hidden="true" class="chev" data-box
