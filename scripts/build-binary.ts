@@ -328,7 +328,7 @@ export async function buildBinary(options: {
           build.onLoad(
             { filter: /apps\/dashboard\/build\/adapter-node\.js$/ },
             async ({ path }) => ({
-              contents: `import {materializeTree} from ${JSON.stringify(join(ROOT, "packages/core/src/runtime.ts"))};\n${(await Bun.file(path).text()).replace("export const dir = dirname(fileURLToPath(import.meta.url));", 'export const dir = materializeTree("dashboard");')}`,
+              contents: `import {runtimeTree} from ${JSON.stringify(join(ROOT, "packages/core/src/runtime.ts"))};\n${(await Bun.file(path).text()).replace("export const dir = dirname(fileURLToPath(import.meta.url));", 'export const dir = runtimeTree("dashboard");')}`,
               loader: "js",
               resolveDir: dirname(path),
             })

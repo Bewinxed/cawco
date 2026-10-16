@@ -62,7 +62,7 @@ import {
   machinePath,
 } from "@cawco/core/machine-path";
 import { ownIdentity } from "@cawco/core/process-identity";
-import { materializeTree, standalone } from "@cawco/core/runtime";
+import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import {
   and,
@@ -200,7 +200,7 @@ declare const __CAWCO_RELEASE__: boolean | undefined;
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
 const MIGRATIONS_DIR = standalone
-  ? materializeTree("drizzle")
+  ? runtimeTree("drizzle")
   : Bun.fileURLToPath(
       new URL(
         typeof __CAWCO_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",

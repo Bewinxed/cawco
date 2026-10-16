@@ -6,7 +6,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { materializeTree, standalone } from "./runtime";
+import { runtimeTree, standalone } from "./runtime";
 import { writeStateFileSync } from "./state-file";
 import type { Problem, WorkflowGraph, WorkflowInput } from "./workflow";
 import { compileWorkflow, inputsFromZodShape } from "./workflow-compile";
@@ -22,7 +22,7 @@ const ALLOWED_IMPORTS = new Set(["zod"]);
  */
 const programDir = (): string => {
   if (standalone) {
-    const dir = join(materializeTree("workflow"), "programs");
+    const dir = join(runtimeTree("workflow"), "programs");
     mkdirSync(dir, { recursive: true });
     return dir;
   }
@@ -42,7 +42,7 @@ const RELEASE = typeof __CAWCO_RELEASE__ === "boolean";
 
 /** The ambient declarations every program is typechecked against. */
 const AMBIENT = standalone
-  ? join(materializeTree("workflow"), "workflow-globals.d.ts")
+  ? join(runtimeTree("workflow"), "workflow-globals.d.ts")
   : new URL("./workflow-globals.d.ts", import.meta.url).pathname;
 
 /** Where the hub finds the sandbox worker module. */
@@ -108,7 +108,7 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   skipLibCheck: true,
   allowImportingTsExtensions: true,
   types: [],
-  ...(standalone ? { baseUrl: materializeTree("workflow") } : {}),
+  ...(standalone ? { baseUrl: runtimeTree("workflow") } : {}),
 };
 
 /**
@@ -133,7 +133,7 @@ export function typecheckProgram(program: string): Problem[] {
     ...(standalone
       ? {
           getDefaultLibFileName: () =>
-            join(materializeTree("workflow"), "lib", "lib.esnext.d.ts"),
+            join(runtimeTree("workflow"), "lib", "lib.esnext.d.ts"),
         }
       : {}),
     getSourceFile: (fileName, languageVersion, onError, shouldCreate) =>

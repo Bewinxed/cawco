@@ -1,9 +1,10 @@
 /** Server-only runtime layout. Never import through the browser-facing core barrel. */
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { binaryAssets } from "./binary-assets";
-import { writeStateFileSync } from "./state-file";
+import { bounded } from "./bounded";
+import { writeStateFile } from "./state-file";
 
 declare const __CAWCO_VERSION__: string | undefined;
 declare const __CAWCO_COMMIT__: string | undefined;
@@ -40,32 +41,91 @@ export function embeddedFile(name: string): string {
 }
 
 /**
- * A child process cannot open $bunfs; publish immutable resources atomically.
- * A file already published is left alone without touching its folder: inside
- * a workspace the runtime folder is read-only, and even a recursive mkdir of
- * a folder that exists fails there with EEXIST (`cawco tools` in a workspace).
+ * The embedded trees a process reads from disk ({@link runtimeTree}), by their
+ * first path segment. The rest of what the build embeds is read through
+ * {@link embeddedFile} and never published.
  */
-export function materializeTree(prefix: string): string {
-  const root = join(runtimeDataDir(), prefix);
-  const entries = Object.entries(binaryAssets).filter(([name]) =>
-    name.startsWith(`${prefix}/`)
+const RUNTIME_TREES = new Set([
+  "dashboard",
+  "drizzle",
+  "pi",
+  "skills",
+  "srt",
+  "workflow",
+]);
+
+/**
+ * How many files {@link publishRuntime} writes at once. Each write is flushed
+ * before its rename (state-file.ts), and flushes issued one after another
+ * each wait for their own journal commit: on a loaded machine the dashboard's
+ * 2651 client files took 21 to 33 s to publish that way, past the updater's
+ * 30 s verify, which rolled the release back (stage 2 of f2d2554e6). Issued
+ * together the disk commits them in shared batches: 3700 files in 0.83 s at
+ * load 83, against 19 s one at a time.
+ */
+const PUBLISH_CONCURRENCY = 64;
+
+/** Written once every runtime file is published and flushed; while it is there nothing is checked again. */
+const PUBLISHED_MARKER = ".published";
+
+/**
+ * A child process cannot open $bunfs, so every standalone process publishes
+ * this build's runtime trees before anything reads one (scripts/binary
+ * entry.ts): each missing file written whole and flushed (state-file.ts), all
+ * at once, then the marker. A file already published is left alone without
+ * touching its folder: inside a workspace the runtime folder is read-only,
+ * and even a recursive mkdir of a folder that exists fails there with EEXIST
+ * (`cawco tools` in a workspace). Processes that start together each write
+ * what they find missing; a rename lands the same bytes whichever wins.
+ */
+export async function publishRuntime(): Promise<void> {
+  const base = runtimeDataDir();
+  if (existsSync(join(base, PUBLISHED_MARKER))) {
+    return;
+  }
+  const missing = Object.entries(binaryAssets).filter(
+    ([name]) =>
+      RUNTIME_TREES.has(name.split("/")[0]) && !existsSync(join(base, name))
   );
-  if (!entries.length) {
-    throw new Error(`This CawCo build has no embedded tree: ${prefix}`);
+  if (!missing.length) {
+    return;
   }
-  for (const [name, source] of entries) {
-    const path = join(runtimeDataDir(), name);
-    if (existsSync(path)) {
-      continue;
-    }
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    writeStateFileSync(path, readFileSync(source), { mode: 0o600 });
+  for (const dir of new Set(
+    missing.map(([name]) => dirname(join(base, name)))
+  )) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  return root;
+  const limit = bounded(PUBLISH_CONCURRENCY);
+  await Promise.all(
+    missing.map(([name, source]) =>
+      limit(async () =>
+        writeStateFile(join(base, name), await Bun.file(source).bytes(), {
+          mode: 0o600,
+          inPlace: true,
+        })
+      )
+    )
+  );
+  await writeStateFile(join(base, PUBLISHED_MARKER), runtimeVersion, {
+    mode: 0o600,
+  });
 }
 
-export function materializeExecutable(name: string): string {
-  const root = materializeTree(dirname(name));
+/** Where an embedded tree {@link publishRuntime} published sits on disk. */
+export function runtimeTree(prefix: string): string {
+  if (!RUNTIME_TREES.has(prefix.split("/")[0])) {
+    throw new Error(`This CawCo build publishes no runtime tree: ${prefix}`);
+  }
+  if (
+    !Object.keys(binaryAssets).some((name) => name.startsWith(`${prefix}/`))
+  ) {
+    throw new Error(`This CawCo build has no embedded tree: ${prefix}`);
+  }
+  return join(runtimeDataDir(), prefix);
+}
+
+export function runtimeExecutable(name: string): string {
+  const root = runtimeTree(dirname(name));
   const path = join(root, name.slice(dirname(name).length + 1));
   chmodSync(path, 0o700);
   return path;

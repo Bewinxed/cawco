@@ -70,7 +70,7 @@ const { handler } = await import("./build/handler.js");
 // Captured once: version.json on disk changes during a build before this process restarts.
 const runningVersion = readFileSync(
   standalone
-    ? `${resources.materializeTree("dashboard/client")}/_app/version.json`
+    ? `${resources.runtimeTree("dashboard/client")}/_app/version.json`
     : new URL("./build/client/_app/version.json", import.meta.url),
   "utf8"
 );
@@ -128,7 +128,7 @@ const BROWSER_HEADERS = new Set([
  * committed and the response can only be cut off.
  */
 const CLIENT_DIR = standalone
-  ? resources.materializeTree("dashboard/client")
+  ? resources.runtimeTree("dashboard/client")
   : fileURLToPath(new URL("./build/client", import.meta.url));
 const IMMUTABLE_PREFIX = "/_app/immutable/";
 

@@ -8,7 +8,7 @@ import {
   signManifest,
   verifyManifest,
 } from "../../packages/core/src/release-manifest";
-import { materializeTree } from "../../packages/core/src/runtime";
+import { runtimeTree } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
 import {
   programInputs,
@@ -97,7 +97,7 @@ if (verb === "proof-stack") {
   }
   console.log(`no bun, node or git; standalone runtime ${Bun.version}`);
 } else if (verb === "proof-fixture") {
-  const dir = materializeTree("drizzle");
+  const dir = runtimeTree("drizzle");
   const journal = JSON.parse(
     readFileSync(join(dir, "meta/_journal.json"), "utf8")
   );

@@ -1,6 +1,7 @@
-import { materializeTree } from "../../packages/core/src/runtime";
+import { publishRuntime, runtimeTree } from "../../packages/core/src/runtime";
 
-process.env.PI_PACKAGE_DIR = materializeTree("pi");
+await publishRuntime();
+process.env.PI_PACKAGE_DIR = runtimeTree("pi");
 if (Bun.argv[2]?.startsWith("proof-")) {
   await import("./proof-runtime");
 } else {

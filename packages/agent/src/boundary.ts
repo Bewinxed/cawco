@@ -84,6 +84,7 @@ import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
+import { bounded } from "@cawco/core/bounded";
 import { isGitDir } from "@cawco/core/git-dir";
 import {
   currentEndpoint,
@@ -124,7 +125,7 @@ import {
 } from "@cawco/core/process-identity";
 import {
   embeddedFile,
-  materializeExecutable,
+  runtimeExecutable,
   runtimeVersion,
   standalone,
 } from "@cawco/core/runtime";
@@ -1212,29 +1213,6 @@ const rearmOne = async (id: string): Promise<boolean> => {
  */
 const REARM_CONCURRENCY = 16;
 
-/** Runs at most `limit` of the works handed to it at once, the rest in the order handed. */
-const bounded = (limit: number) => {
-  let active = 0;
-  const waiting: (() => void)[] = [];
-  return async <T>(work: () => Promise<T>): Promise<T> => {
-    if (active < limit) {
-      active += 1;
-    } else {
-      await new Promise<void>((resolve) => waiting.push(resolve));
-    }
-    try {
-      return await work();
-    } finally {
-      const next = waiting.shift();
-      if (next) {
-        next();
-      } else {
-        active -= 1;
-      }
-    }
-  };
-};
-
 /** Each workspace's rewrite in this build's form, once begun, by id ({@link hookArmed}). */
 const rearming = new Map<string, Promise<void>>();
 /** The workspaces with nothing running at start-up: each is armed when a session there first needs it. */
@@ -2109,12 +2087,12 @@ const BOUNDARY_MARKER = "CAWCO_BOUNDARY";
 
 /** The ripgrep srt scans a clone with: the one this build ships. */
 const ripgrep = (): string =>
-  standalone ? materializeExecutable("srt/rg") : rgPath;
+  standalone ? runtimeExecutable("srt/rg") : rgPath;
 
 /** The srt host script, as this build runs it: its embedded bundle, or the checkout's source. */
 const hostScript = (): string =>
   standalone
-    ? materializeExecutable("srt/host.js")
+    ? runtimeExecutable("srt/host.js")
     : join(import.meta.dir, "boundary-host.ts");
 
 /** What the host script holds, for the form: a change to it is a change of form. */

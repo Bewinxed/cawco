@@ -20,7 +20,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FleetSkillPayload, SkillFile } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
-import { materializeTree, standalone } from "@cawco/core/runtime";
+import { runtimeTree, standalone } from "@cawco/core/runtime";
 import type { StagesTemplate } from "./stages";
 
 export const BUNDLED_SKILLS = [
@@ -72,7 +72,7 @@ const skillNamed = (name: string): FleetSkillPayload => {
   let skill = loaded.get(name);
   if (!skill) {
     const root = standalone
-      ? materializeTree(`skills/${name}`)
+      ? runtimeTree(`skills/${name}`)
       : fileURLToPath(new URL(`../skills/${name}`, import.meta.url));
     const files = filesUnder(root);
     skill = { name, hash: hashFiles(files), files };
