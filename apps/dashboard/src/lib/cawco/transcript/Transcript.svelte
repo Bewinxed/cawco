@@ -558,14 +558,8 @@
     });
     requestAnimationFrame(() => {
       setTimeout(() => {
-        catchUpFirst();
         held = false;
         released += 1;
-        // The landing is the pin's, in the next frame, and its scroll the
-        // frame after; past both, the rest follows even if nothing moved.
-        requestAnimationFrame(() =>
-          setTimeout(() => requestAnimationFrame(() => setTimeout(catchUpRest)))
-        );
       }, 0);
     });
   }
@@ -1448,9 +1442,9 @@
    * few rows are kept mounted instead, whatever the range says.
    */
   const TAIL_MOUNTED = 8;
-  /** A catch-up landing: virtua mounts what is on screen alone (`catchUpFirst`). */
+  /** A far landing: virtua mounts what is on screen alone (`landFar`). */
   let narrow = $state(false);
-  /** The rows of the view a catch-up left, held mounted while it lands. */
+  /** The rows of the view a far landing left, held mounted while it lands. */
   let lingering = $state<number[]>([]);
   /**
    * The indexes virtua keeps mounted whatever its range: the last
@@ -1477,7 +1471,7 @@
         kept.push(index);
       }
     }
-    // The view a catch-up leaves, held while it lands (`catchUpFirst`).
+    // The view a far landing leaves, held while it lands (`landFar`).
     for (const index of lingering) {
       if (index < count) {
         kept.push(index);
@@ -1487,33 +1481,41 @@
   });
 
   /**
-   * A CATCH-UP LANDS ON WHAT IS ON SCREEN FIRST.
+   * A LANDING FAR DOWN DRAWS WHAT IS ON SCREEN FIRST.
    *
-   * A pane shown again after its session went on without it lets go of the
-   * rows it held (`hold`), and the follow takes the view to the new tail in
-   * the frame after (`pinBottom`). virtua re-cut its range there in one go:
-   * every row on screen at the tail and a screen more above it mounted, and
-   * every row of the view it left taken down, in one scroll event of 53ms.
-   * While it lands, it mounts only what the view shows (no `bufferSize`) and
-   * keeps the rows of the view it left (`lingering`, in `keepMounted`), out of
-   * sight above. Once that frame has painted, the screen above is mounted in
-   * a task of its own, and the rows left behind are let go in the next (web.dev,
-   * "Optimize long tasks": break a long task up and yield between the parts).
-   * What is on screen is drawn in the first and never moves after: the rows
-   * mounted later are above it, and virtua keeps the view where it stands as
-   * they are measured.
+   * A pane shown again after its session went on without it (a catch-up, a
+   * pane laid out while the pointer rested on its tab, `active` rising) is
+   * put on its new tail by the pin, a screen or more below where it stood
+   * (`pinBottom`). virtua re-cut its range there in one go: every row on
+   * screen at the tail and a screen more above it mounted, and every row of
+   * the view it left taken down, in one scroll event of 53ms. While it lands,
+   * it mounts only what the view shows (no `bufferSize`) and keeps the rows
+   * of the view it left (`lingering`, in `keepMounted`), out of sight above.
+   * Once that frame has painted, the screen above is mounted in a task of its
+   * own, and the rows left behind are let go in the next (web.dev, "Optimize
+   * long tasks": break a long task up and yield between the parts). What is
+   * on screen is drawn in the first and never moves after: the rows mounted
+   * later are above it, and virtua keeps the view where it stands as they
+   * are measured.
    */
   let unwinding = false;
-  function catchUpFirst(): void {
-    if (!(list && shown && atBottom && renderedRows.length > 0)) {
+  function landFar(was: number): void {
+    // Before the reveal nothing is painted: the first landing has no screen to keep.
+    if (!(list && shown && renderedRows.length > 0)) {
       return;
     }
-    // virtua's own range, read off its sizes: the view and a screen either side.
-    const from = list.findItemIndex(Math.max(0, lastTop - viewHeight));
-    const to = list.findItemIndex(lastTop + 2 * viewHeight);
+    // virtua's own range as it stands, read off its sizes: the view and a
+    // screen either side.
+    const from = list.findItemIndex(Math.max(0, was - viewHeight));
+    const to = list.findItemIndex(was + 2 * viewHeight);
     lingering = Array.from({ length: to - from + 1 }, (_, i) => from + i);
     narrow = true;
     unwinding = false;
+    // The landing's scroll comes in the next frame (`onscroll`); past it,
+    // the rest follows even if nothing scrolled.
+    requestAnimationFrame(() =>
+      setTimeout(() => requestAnimationFrame(() => setTimeout(catchUpRest)))
+    );
   }
   /** After the landing's frame has painted: the screen above, then the rows left behind. */
   function catchUpRest(): void {
@@ -2186,7 +2188,7 @@
       return;
     }
     lastTop = scroller.scrollTop;
-    // A catch-up's landing scroll: what it left and the screen above follow.
+    // A far landing's scroll: what it left and the screen above follow.
     if (narrow) {
       catchUpRest();
     }
@@ -2363,6 +2365,9 @@
     const bottom = scroller.scrollHeight - scroller.clientHeight;
     if (Math.abs(scroller.scrollTop - bottom) > 0.5) {
       const was = scroller.scrollTop;
+      if (bottom - was > scroller.clientHeight) {
+        landFar(was);
+      }
       scroller.scrollTop = bottom;
       lastWrite = scroller.scrollTop;
       // A send landing at the tail is carried through the pin. The pin runs

@@ -532,6 +532,15 @@ interface TraceEvent {
       totalObjects?: number;
     };
     data?: ProfileData & {
+      /** A scheduled invalidation's: what changed on its element. */
+      changedAttribute?: string;
+      changedClass?: string;
+      changedId?: string;
+      changedPseudo?: string;
+      /** A scheduled invalidation's: the set it scheduled, by Blink's id. */
+      invalidationSet?: string;
+      /** An invalidator's: the sets it ran, by Blink's id. */
+      invalidationList?: { id?: string }[];
       nodeName?: string;
       reason?: string;
       stackTrace?: StackFrame[];
@@ -747,6 +756,32 @@ export async function traceMain(
     ),
   ];
   const relayoutAsks = trackedAs("LayoutInvalidationTracking");
+  // What scheduled each invalidation set: the class, attribute, id or
+  // pseudo-class that changed, by the set's id. A whole subtree restyled is
+  // named by it: the change is what a selector keyed the subtree to.
+  const scheduledBy = new Map<string, string>();
+  for (const one of trackedAs("ScheduleStyleInvalidationTracking")) {
+    const data = one.args?.data;
+    const change =
+      (data?.changedClass && `.${data.changedClass}`) ||
+      (data?.changedAttribute && `[${data.changedAttribute}]`) ||
+      (data?.changedId && `#${data.changedId}`) ||
+      (data?.changedPseudo && `:${data.changedPseudo}`);
+    if (data?.invalidationSet && change) {
+      scheduledBy.set(data.invalidationSet, change);
+    }
+  }
+  const changeOf = (one: TraceEvent): string => {
+    const changes = [
+      ...new Set(
+        (one.args?.data?.invalidationList ?? []).flatMap((set) => {
+          const change = set.id ? scheduledBy.get(set.id) : undefined;
+          return change ? [change] : [];
+        })
+      ),
+    ];
+    return changes.length > 0 ? ` (by ${changes.join(", ")})` : "";
+  };
   const askedIn = (
     asks: TraceEvent[],
     from: number,
@@ -758,7 +793,7 @@ export async function traceMain(
         const node = (one.args?.data?.nodeName ?? "?")
           .replace(CLASS_ATTRIBUTE, ".$1")
           .slice(0, 60);
-        const key = `${one.args?.data?.reason ?? "?"} on ${node}`;
+        const key = `${one.args?.data?.reason ?? "?"} on ${node}${changeOf(one)}`;
         counted.set(key, (counted.get(key) ?? 0) + 1);
       }
     }

@@ -18,8 +18,11 @@ import { Clock } from "../../anim";
 import { type Kit, open, type Spec, settle } from "../../kit";
 
 const TABS_ROUTE = "/motion/folder-proof?at=1&work=working";
+/** The card's floating wrapper, read by its card; the card is the one floating box open. */
 const WRAPPER =
   "[data-bits-floating-content-wrapper]:has(> .session-details-popover)";
+/** Where its runs are caught: any floating box, the card's being the one open. */
+const CATCH = "[data-bits-floating-content-wrapper]";
 const PCTS = [0, 0.5, 1];
 
 async function move(kit: Kit): Promise<void> {
@@ -44,7 +47,7 @@ async function move(kit: Kit): Promise<void> {
         .locator(".session-tabs .tab:not([data-chosen]) [data-session-tab]")
         .first()
         .click(),
-    WRAPPER
+    CATCH
   );
   const glide =
     runs.find((one) => one.name === "transform") ??
