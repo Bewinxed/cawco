@@ -1822,6 +1822,25 @@
       );
     }
   }
+  /* The floating layer rewrites where the card may stand (bits-ui's
+     `--bits-floating-*` on its wrapper, copied onto the card as
+     `--bits-popover-*`) as the card opens and as it follows its tab, a few
+     times in a frame. As custom properties they were inherited by everything
+     the card holds, and each rewrite restyled all of it. Only the card reads
+     them (its `max-height`, above): they stop at its children, which hold
+     values of their own that no rewrite changes. */
+  :global(.kit-pop.session-details-popover > *) {
+    --bits-floating-transform-origin: initial;
+    --bits-floating-available-width: initial;
+    --bits-floating-available-height: initial;
+    --bits-floating-anchor-width: initial;
+    --bits-floating-anchor-height: initial;
+    --bits-popover-content-transform-origin: initial;
+    --bits-popover-content-available-width: initial;
+    --bits-popover-content-available-height: initial;
+    --bits-popover-anchor-width: initial;
+    --bits-popover-anchor-height: initial;
+  }
   .details-morph {
     width: 100%;
     max-height: inherit;
