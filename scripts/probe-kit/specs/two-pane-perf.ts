@@ -41,6 +41,7 @@
  * folder.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
+import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
@@ -603,12 +604,16 @@ const LAYOUT_PARTS = [
   ["nothing changed", ""],
   ["the tab strip taken out", ".session-tabs { display: none !important; }"],
   [
-    "the strip's edge fade off (its scroll timeline)",
-    ".session-tabs .kit-edge-fade { animation: none !important; mask-image: none !important; }",
+    "the strip's layout its own (contain: layout)",
+    ".session-tabs { contain: layout !important; }",
   ],
   [
-    "the strip not scrolling",
-    ".session-tabs .ff-tabs-list { overflow: visible !important; }",
+    "the track's layout its own (contain: layout)",
+    ".session-tabs .ff-tabs-list { contain: layout !important; }",
+  ],
+  [
+    "the panes' stack's layout its own (contain: layout)",
+    ".stack[data-drop-leaf] { contain: layout !important; }",
   ],
   [
     "every tab's contents taken out, its box kept",
@@ -665,6 +670,72 @@ async function switchLayoutParts(
   }
   return read.join("; ");
 }
+/**
+ * A leg is measured on a quiet host: the 1-minute load under this as it
+ * starts and at every reading while it runs (ios-scroll-up's way, at this
+ * box's own floor). The box is shared with other sessions' builds and
+ * probes; a leg they land on reads their CPU, not the switch's.
+ */
+const QUIET_LOAD = 8;
+/** How often the load is read while waiting for quiet: the 1-minute average moves slowly. */
+const QUIET_POLL_MS = 15_000;
+/** The longest a leg waits for quiet before it is measured as the host stands. */
+const QUIET_WAIT_MS = 20 * 60_000;
+/** How often the load is read while a leg runs. */
+const LEG_SAMPLE_MS = 1000;
+/** How many times a leg the host went loud on is measured again. */
+const LEG_TRIES = 3;
+
+const oneMinuteLoad = (): number =>
+  Number.parseFloat(readFileSync("/proc/loadavg", "utf8").split(" ")[0]);
+
+/** Waits for the 1-minute load to fall under `QUIET_LOAD`, bounded; how long it waited, from what. */
+async function quietHost(): Promise<string> {
+  const began = Date.now();
+  const first = oneMinuteLoad();
+  let load = first;
+  while (!(load < QUIET_LOAD) && Date.now() - began < QUIET_WAIT_MS) {
+    await Bun.sleep(QUIET_POLL_MS);
+    load = oneMinuteLoad();
+  }
+  return `waited ${((Date.now() - began) / 1000).toFixed(0)}s from load ${first}`;
+}
+
+/**
+ * Runs a leg once the host is quiet, reading the load each second while it
+ * runs, and again (up to `LEG_TRIES`) when a reading went over
+ * `QUIET_LOAD`: a loud leg is void. Says the leg's readings: the try kept,
+ * the range of the load through it, and whether it stayed quiet.
+ */
+async function quietLeg(
+  name: string,
+  run: () => Promise<void>
+): Promise<string> {
+  let said = "";
+  for (let attempt = 1; attempt <= LEG_TRIES; attempt += 1) {
+    const waited = await quietHost();
+    const loads: number[] = [oneMinuteLoad()];
+    const sampler = setInterval(
+      () => loads.push(oneMinuteLoad()),
+      LEG_SAMPLE_MS
+    );
+    try {
+      await run();
+    } finally {
+      clearInterval(sampler);
+    }
+    loads.push(oneMinuteLoad());
+    const top = Math.max(...loads);
+    const quiet = top < QUIET_LOAD;
+    said = `load ${Math.min(...loads)}–${top} over ${loads.length} readings, try ${attempt} (${waited})${quiet ? "" : `, NOT QUIET (over ${QUIET_LOAD})`}`;
+    console.log(`  ${name}: ${said}`);
+    if (quiet) {
+      break;
+    }
+  }
+  return said;
+}
+
 /** The slow `setAttribute` calls of the switches `press` makes, one tab at a time. */
 async function slowSetsIn(
   page: Page,
@@ -768,7 +839,7 @@ async function measure(
   // itself (its marks, `two-pane:reach:<n>` and `two-pane:switch:<n>`); and
   // what the longest task (the longest switch's, in a switch phase)
   // restyled and laid out, and why.
-  const phase = async (name: Phase, act: () => Promise<void>) => {
+  const measurePhase = async (name: Phase, act: () => Promise<void>) => {
     let from = 0;
     let to = 0;
     const main = await traceMain(
@@ -863,6 +934,14 @@ async function measure(
           }`
         : "nothing",
     };
+  };
+  // Each leg on a quiet host (`quietLeg`): measured again when the host's
+  // load went over `QUIET_LOAD` while it ran, its readings said with it.
+  const phase = async (name: Phase, act: () => Promise<void>) => {
+    const leg = await quietLeg(`${mode} pane(s), ${name}`, () =>
+      measurePhase(name, act)
+    );
+    spans[name].restyled = `${leg} | ${spans[name].restyled}`;
   };
   await phase("stream", () => page.waitForTimeout(20_000));
   await phase("type", async () => {
