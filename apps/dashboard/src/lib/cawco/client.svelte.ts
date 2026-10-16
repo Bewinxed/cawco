@@ -116,6 +116,7 @@ import {
 } from "#lib/config.js";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
+import { page as servedPage } from "$app/state";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
@@ -1511,7 +1512,7 @@ function noteRecord(target: SessionState, record: SendRecord): void {
     sendFailureNotices[target.instanceId] = record.reason
       ? `Message not sent: ${record.reason}`
       : "Message not sent.";
-    target.busy = state.pulses[target.instanceId]?.busy ?? false;
+    target.busy = pulseOf(target.instanceId)?.busy ?? false;
   }
 }
 
@@ -1703,8 +1704,8 @@ function adoptTranscriptPage(
   // of band, and its tail says `busy` as the frames show it, which trails
   // the pulse at a turn's start: written over it, a working session read
   // quiet until its next pulse (`wqw` on a reload). The tail stands only
-  // where no pulse has come: the server's render, before the socket's first.
-  const pulse = state.pulses[target.instanceId];
+  // where no pulse has come, neither the socket's nor the server load's.
+  const pulse = pulseOf(target.instanceId);
   if (pulse) {
     applyPulse(target, pulse);
   }
@@ -1756,6 +1757,26 @@ function prependTranscriptPage(
   place(target);
 }
 
+/**
+ * A session's pulse, the daemon's now-state: the store's, seeded by the
+ * socket's first `instances` frame and moved by each `pulse` frame after.
+ * Until that first frame, the hub's pulses as the layout's server load read
+ * them for this page (`/api/pulses`), so the server's HTML and the hydrated
+ * page draw a working session working from the first paint: without them a
+ * tab the browser follows no stream of read quiet until the socket answered
+ * (tab-strip's reload trace `--- wqq www`). Read during a render on the
+ * server, as `page` (`servedPage`) is: the store's own state is the
+ * client's alone.
+ */
+function pulseOf(instanceId: string): SessionPulse | undefined {
+  const held = state.pulses[instanceId];
+  if (held || state.liveRead) {
+    return held;
+  }
+  return (servedPage.data as { pulses?: Record<string, SessionPulse> })
+    .pulses?.[instanceId];
+}
+
 /** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
 function trackTurn(instanceId: string, pulse: SessionPulse): void {
   if (pulse.activity === "idle") {
@@ -1786,7 +1807,7 @@ function applyPulse(target: SessionState, pulse: SessionPulse): void {
 }
 
 function hydrate(target: SessionState): void {
-  const pulse = state.pulses[target.instanceId];
+  const pulse = pulseOf(target.instanceId);
   if (pulse) {
     applyPulse(target, pulse);
   }
@@ -7793,7 +7814,7 @@ export const cawco = {
     if (instanceIndex.byId.get(instanceId)?.status === "moving") {
       return "working";
     }
-    const pulse = state.pulses[instanceId];
+    const pulse = pulseOf(instanceId);
     if (
       pulse?.activity === "blocked" &&
       !(target && isSubscribed(instanceId))
@@ -7826,7 +7847,7 @@ export const cawco = {
     if (target && isSubscribed(instanceId)) {
       return target.busy;
     }
-    return state.pulses[instanceId]?.busy ?? false;
+    return pulseOf(instanceId)?.busy ?? false;
   },
   currentToolOf: (
     instanceId: string
@@ -7847,7 +7868,7 @@ export const cawco = {
     if (target && isSubscribed(instanceId)) {
       return target.currentTool;
     }
-    return state.pulses[instanceId]?.currentTool ?? null;
+    return pulseOf(instanceId)?.currentTool ?? null;
   },
   /**
    * When the daemon last pulsed a session, ms epoch — the freshest signal a
@@ -7864,7 +7885,7 @@ export const cawco = {
     if (thread) {
       return thread.lastAt;
     }
-    return state.pulses[instanceId]?.at;
+    return pulseOf(instanceId)?.at;
   },
   /** When the session's current turn began, ms epoch; `undefined` while it is idle. A run's turn is the run. */
   turnSince: (instanceId: string): number | undefined => {
@@ -7936,7 +7957,7 @@ export const cawco = {
     if (target && isSubscribed(instanceId)) {
       return runningSubagents(target.subagents);
     }
-    return state.pulses[instanceId]?.runningSubagents ?? 0;
+    return pulseOf(instanceId)?.runningSubagents ?? 0;
   },
   get blocked(): BlockedRequest[] {
     return blockedRequests();

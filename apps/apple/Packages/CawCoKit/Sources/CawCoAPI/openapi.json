@@ -16249,6 +16249,23 @@
         }
       }
     },
+    "/api/pulses": {
+      "get": {
+        "operationId": "getApiPulses",
+        "responses": {
+          "200": {
+            "description": "getApiPulses 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiPulses200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/account": {
       "post": {
         "parameters": [
@@ -24602,6 +24619,12 @@
               ]
             }
           ]
+        }
+      },
+      "getApiPulses200": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/T"
         }
       },
       "postApiInstancesByIdAccount200": {

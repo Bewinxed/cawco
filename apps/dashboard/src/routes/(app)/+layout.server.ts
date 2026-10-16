@@ -1,6 +1,7 @@
 import type {
   HubAuthState,
   InstanceRow,
+  SessionPulse,
   WorkflowListing,
   WorkflowRun,
 } from "@cawco/core";
@@ -231,17 +232,33 @@ export const load: LayoutServerLoad = async ({
   // Each open tab's name as the hub gave it, or why the hub could not: a tab
   // whose name read failed says so in the strip until the fleet names it.
   const names: Record<string, HubRead<string>> = {};
+  /** Each open tab's pulse as the hub held it for this request. */
+  const pulses: Record<string, SessionPulse> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names, foldBoxes, auth };
+    return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names, foldBoxes, auth };
+    return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
   }
 
-  // What the fleet calls these conversations.
-  const listing = await readHub<InstanceRow[]>(fetch, "/api/instances");
+  // What the fleet calls these conversations, and what each is doing as the
+  // hub's pulses say: the store draws these until the socket's first frame
+  // (client.svelte.ts `pulseOf`), so a working tab is drawn working from the
+  // first paint. A read that fails leaves the socket to say it, as before.
+  const [listing, pulseRead] = await Promise.all([
+    readHub<InstanceRow[]>(fetch, "/api/instances"),
+    readHub<Record<string, SessionPulse>>(fetch, "/api/pulses"),
+  ]);
+  if (pulseRead.ok) {
+    for (const id of open) {
+      const pulse = pulseRead.value[id];
+      if (pulse) {
+        pulses[id] = pulse;
+      }
+    }
+  }
   for (const id of open.filter((tab) => !runIdOf(tab))) {
     if (!listing.ok) {
       names[id] = listing;
@@ -327,5 +344,5 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names, foldBoxes, auth };
+  return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
 };

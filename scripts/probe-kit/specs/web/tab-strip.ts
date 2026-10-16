@@ -984,9 +984,10 @@ const readEdges = (page: Page, track: string): Promise<EdgeRead> =>
 
 /**
  * The project page's view strip (the kit's scrolling TabsList), at a
- * phone's 390 and a tablet's 768: wherever tabs lie past an edge, that edge
- * draws its fade, at rest with the first view chosen, with a later one
- * chosen, and scrolled to its end.
+ * tablet's 768: wherever tabs lie past an edge, that edge draws its fade, at
+ * rest with the first view chosen, with a later one chosen, and scrolled to
+ * its end. Under 640px a phone's views are the bar at its foot (ViewBar,
+ * 40243cd20) and no strip stands under the head.
  */
 async function projectStrip(kit: Kit, base: string, fleet: KitFleetLike) {
   const project = await fleet.api<{ id: string }>("/api/projects", {
@@ -996,7 +997,7 @@ async function projectStrip(kit: Kit, base: string, fleet: KitFleetLike) {
     caw: false,
   });
   // Kept views: each is a tab after the project's own (Board, Table,
-  // Pipeline), so the strip runs past a phone's and a tablet's width.
+  // Pipeline), so the strip runs past a tablet's width.
   for (const name of ["weekly-review", "release-notes", "on-call-rota"]) {
     const put = await fetch(
       `${fleet.base}/api/projects/${project.id}/folder/file`,
@@ -1014,29 +1015,40 @@ async function projectStrip(kit: Kit, base: string, fleet: KitFleetLike) {
       throw new Error(`views/${name}.oui: ${put.status} ${await put.text()}`);
     }
   }
-  for (const width of [390, 768]) {
-    for (const view of ["board", "pipeline"]) {
-      for (const [state, at] of await projectEdges(
+  for (const view of ["board", "pipeline"]) {
+    for (const [state, at] of await projectEdges(
+      kit,
+      `${base}/project/${project.id}${view === "board" ? "" : `?view=${view}`}`
+    )) {
+      edgeCheck(
         kit,
-        `${base}/project/${project.id}${view === "board" ? "" : `?view=${view}`}`,
-        width
-      )) {
-        edgeCheck(kit, `project strip ${width}: ${view} chosen${state}`, at);
-      }
+        `project strip ${STRIP_WIDTH}: ${view} chosen${state}`,
+        at
+      );
     }
   }
   await switchedBack(kit, `${base}/project/${project.id}`);
 }
 
+/** A tablet's width, where the project's view strip stands under its head. */
+const STRIP_WIDTH = 768;
+
+/** A desk page at the strip's width. */
+async function stripPage(kit: Kit): Promise<Page> {
+  const page = await kit.page("desk");
+  await page.setViewportSize({ width: STRIP_WIDTH, height: 1024 });
+  page.setDefaultTimeout(60_000);
+  return page;
+}
+
 /**
- * Board → Table → Board at a phone's 390: once the switches land, the end
- * fade is capped only by the chosen Board, never by Table, the tab the last
- * switch left. Board stands clear of the end edge, so the cap stands aside
- * and the fade draws whole (`--fade-end`).
+ * Board → Table → Board: once the switches land, the end fade is capped
+ * only by the chosen Board, never by Table, the tab the last switch left.
+ * Board stands clear of the end edge, so the cap stands aside and the fade
+ * draws whole (`--fade-end`).
  */
 async function switchedBack(kit: Kit, url: string) {
-  const page = await kit.page("phone");
-  page.setDefaultTimeout(60_000);
+  const page = await stripPage(kit);
   await open(page, url, `${PROJECT_TRACK} [role='tab']`);
   await page.waitForFunction(
     (sel) => document.querySelectorAll(`${sel} [role='tab']`).length >= 6,
@@ -1067,6 +1079,7 @@ async function switchedBack(kit: Kit, url: string) {
       .querySelector("[role='tab'][aria-selected='true']")
       ?.getBoundingClientRect();
     return {
+      fadeLen: px("--fade-len"),
       fadeEnd: px("--fade-end"),
       capEnd: px("--fade-cap-end"),
       chosenToEnd: board
@@ -1077,31 +1090,29 @@ async function switchedBack(kit: Kit, url: string) {
   }, PROJECT_TRACK);
   const drawn = Math.min(at.fadeEnd, at.capEnd);
   kit.check(
-    "project strip 390: Board → Table → Board, the end fade is capped by the chosen Board alone (cap = Board's room to the end edge)",
+    `project strip ${STRIP_WIDTH}: Board → Table → Board, the end fade is capped by the chosen Board alone (cap = Board's room to the end edge)`,
     near(at.capEnd, Math.max(0, at.chosenToEnd)),
     `--fade-cap-end ${at.capEnd}px; Board stands ${at.chosenToEnd.toFixed(1)}px from the end edge`
   );
   kit.check(
-    "project strip 390: Board → Table → Board, the end fade draws whole (16px, = --fade-end)",
-    at.hiddenEnd && at.fadeEnd === 16 && drawn === at.fadeEnd,
-    `--fade-end ${at.fadeEnd}px, --fade-cap-end ${at.capEnd}px, drawn ${drawn}px; tabs past the end: ${at.hiddenEnd}`
+    `project strip ${STRIP_WIDTH}: Board → Table → Board, the end fade draws whole (its --fade-len, = --fade-end)`,
+    at.hiddenEnd &&
+      at.fadeLen > 0 &&
+      at.fadeEnd === at.fadeLen &&
+      drawn === at.fadeEnd,
+    `--fade-len ${at.fadeLen}px, --fade-end ${at.fadeEnd}px, --fade-cap-end ${at.capEnd}px, drawn ${drawn}px; tabs past the end: ${at.hiddenEnd}`
   );
   await page.close();
 }
 
 const PROJECT_TRACK = ".strip .ff-tabs-list";
 
-/** The project strip's edges at `width`: as it opens, and scrolled to its end. */
+/** The project strip's edges: as it opens, and scrolled to its end. */
 async function projectEdges(
   kit: Kit,
-  url: string,
-  width: number
+  url: string
 ): Promise<[string, EdgeRead][]> {
-  const page = await kit.page(width === 390 ? "phone" : "desk");
-  if (width !== 390) {
-    await page.setViewportSize({ width, height: 1024 });
-  }
-  page.setDefaultTimeout(60_000);
+  const page = await stripPage(kit);
   await open(page, url, `${PROJECT_TRACK} [role='tab']`);
   await page.waitForFunction(
     (sel) => document.querySelectorAll(`${sel} [role='tab']`).length >= 6,
@@ -1352,7 +1363,10 @@ async function seamInk(
  * been working for a while. From the new document's first moment every
  * 250ms for 10s each one's tab status (`data-tone`) is read: once drawn,
  * every sample is `working`. Traced before the fix: `wqqqwwww…`, the first
- * read of the transcript dropping it.
+ * read of the transcript dropping it; then `--- wqq www`, the tabs the page
+ * follows no stream of drawn quiet until the socket's first frame brought
+ * the pulses, which the server's load now reads (`/api/pulses`). The
+ * server's HTML is read too, whole: its tabs all working.
  */
 async function reloadHolds(
   kit: Kit,
@@ -1406,6 +1420,29 @@ async function reloadHolds(
     "reload: Alpha, Foxtrot (its turn just begun) and Echo read working at every 250ms sample from the reloaded page's first paint for 10s",
     drawn.length >= 30 && drawn.every((s) => s === "www"),
     `${drawn.length} drawn of ${trace.length}: ${trace.join(" ")}`
+  );
+  // The first paint itself is the server's HTML, which a sample reads only
+  // when it lands before the bundle hydrates: read it whole, as the reload
+  // got it (the context's workspace cookie names the tabs).
+  const html = await (await page.request.get(page.url())).text();
+  const served = await page.evaluate(
+    ([source, tab, watched]) => {
+      const doc = new DOMParser().parseFromString(source, "text/html");
+      return (watched as readonly string[])
+        .map(
+          (id) =>
+            doc
+              .querySelector(`${tab}:has([data-session-tab="${id}"])`)
+              ?.getAttribute("data-tone") ?? "none"
+        )
+        .join(" ");
+    },
+    [html, TAB, working] as const
+  );
+  kit.check(
+    "reload: the server's HTML draws Alpha, Foxtrot and Echo working",
+    served === "working working working",
+    served
   );
   await page.close();
 }
