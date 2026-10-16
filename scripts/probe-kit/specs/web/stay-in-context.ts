@@ -462,32 +462,38 @@ async function rowQuestion(kit: Kit, page: Page, q: RowQuestion) {
   await ask.waitFor();
   // Read once it has unfolded: no finite animation is still running on it,
   // in the row it opens under, or on any box around it (its own `unfold`,
-  // the tree's fold, a list revealing the height it grew by).
+  // the tree's fold, a list revealing the height it grew by), and its box
+  // holds still, three frames in a row. One still frame is not enough: a
+  // list measures the height the question added and starts revealing it a
+  // frame later (Recent's clip, seen running under a read that one quiet
+  // frame had let through).
   await page.waitForFunction(
     (at) => {
+      const probe = window as unknown as {
+        askStill?: { at: string; box: string; frames: number };
+      };
       const opened = document.querySelector(`[data-ask="${CSS.escape(at)}"]`);
-      if (!opened) {
-        return false;
-      }
       const moving = (runs: Animation[]) =>
         runs.some(
           (run) =>
             run.playState === "running" &&
             run.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
         );
-      const branch = opened.closest("li") ?? opened;
-      if (moving(branch.getAnimations({ subtree: true }))) {
-        return false;
+      const branch = opened?.closest("li") ?? opened;
+      let quiet = !!branch && !moving(branch.getAnimations({ subtree: true }));
+      for (let up = branch?.parentElement; quiet && up; up = up.parentElement) {
+        quiet = !moving(up.getAnimations());
       }
-      for (let up = branch.parentElement; up; up = up.parentElement) {
-        if (moving(up.getAnimations())) {
-          return false;
-        }
-      }
-      return true;
+      const r = opened?.getBoundingClientRect();
+      const box = r ? `${r.x},${r.y},${r.width},${r.height}` : "";
+      const last = probe.askStill;
+      const frames =
+        quiet && last?.at === at && last.box === box ? last.frames + 1 : 0;
+      probe.askStill = { at, box, frames: quiet ? frames : 0 };
+      return quiet && frames >= 3;
     },
     q.at,
-    { timeout: 10_000 }
+    { polling: "raf", timeout: 10_000 }
   );
   const asked = await read();
   note(kit, `${q.what}, the question`, asked);
@@ -1639,6 +1645,14 @@ async function projectFlows(
         ),
       task.id
     );
+  // The board is server-rendered: the card is on screen before hydration
+  // registers it with Pragmatic (board-dnd `dragTask`), and a drag in that
+  // gap is the browser's own link drag, which no column takes (app.html
+  // leaves links to the browser until hydration). Pragmatic marks the card
+  // `draggable="true"` as it registers it: that is when it can be dragged.
+  await page
+    .locator(`[data-share="task:${task.id}"][draggable="true"]`)
+    .waitFor({ timeout: 15_000 });
   await page
     .locator(`[data-share="task:${task.id}"]`)
     .dragTo(page.locator("section.column").nth(fromIndex + 1));
