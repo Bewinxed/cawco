@@ -37,7 +37,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import { freshApp } from "../../lib/apple-app";
+import { freshApp, simulatorApp, staleApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import {
   MACHINE,
@@ -872,11 +872,11 @@ const PROBE_PROMPT = [
  * Release simulator build). A probe session of this spec's own, in default
  * mode in that project, asks for the long call; the app is measured with
  * that ask raised on iOS 27.0 (the owner's phone and OS: at rest from
- * launch, as nothing taps there from a workspace) and on iOS 18.5, reached
- * through Needs you and the drawer, then its whole command opened and its
- * Deny tapped (its notification is not reached: notifications are Pro's and
- * this simulator's app is unentitled; that route is the Debug runs'
- * `-push-route`). Only the probe's own ask is touched,
+ * launch, and with `PROBE_TAPS=1` from a shell outside a workspace, taps
+ * too) and on iOS 18.5. Where it taps, notifications are allowed through
+ * iOS's Allow, and the card is reached from its notification's banner, from
+ * Needs you and from the drawer, then its whole command opened and its
+ * Deny tapped. Only the probe's own ask is touched,
  * found by its ids; the probe is stopped and archived at the end.
  */
 async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
@@ -996,7 +996,7 @@ async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
   }
 }
 
-/** The Release app on one simulator against the live hub, the probe's ask raised; on iOS 18.5 reached each way, opened and denied. */
+/** The Release app on one simulator against the live hub, the probe's ask raised; where it taps, reached each way (its notification, Needs you, the drawer), opened and denied. */
 async function onSimulator(
   kit: Kit,
   app: string,
@@ -1019,7 +1019,6 @@ async function onSimulator(
   const { udid } = sim;
   try {
     await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
-    await sh(`xcrun simctl install ${udid} "${app}"`);
     const pid = async (): Promise<string | undefined> => {
       const listed = await sh(
         `xcrun simctl spawn ${udid} launchctl list | grep 'UIKitApplication:dev.cawco.app' || true`
@@ -1119,6 +1118,65 @@ async function onSimulator(
         reached && at.share < REST_SHARE,
         `${reached ? "" : "not reached; "}main thread busy ${(at.share * 100).toFixed(1)}%${at.frames ? `: ${at.frames}` : ""}`
       );
+    /** A node whose label passes `test` is on screen. */
+    const seen = async (test: (label: string) => boolean) =>
+      (await labels()).some((node) => test(node.label) && onScreen(node.frame));
+    /** The probe's card stands in front: its Deny on screen. */
+    const card = () => seen((label) => label === "Deny");
+    /**
+     * Taps what passes `test` until the card stands, three times at most: a
+     * tap read off a list still settling (a project just folded) lands on
+     * the row that was there, and the drawer stays open.
+     */
+    const toCard = async (test: (label: string) => boolean) => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one tap, then a look
+        if (!(await tap(test))) {
+          return false;
+        }
+        await pause(2500);
+        if (await card()) {
+          return true;
+        }
+      }
+      return false;
+    };
+    const tapping = which === "18" || taps27;
+    if (tapping) {
+      // Notifications allowed as the owner's phone has them: iOS's own Allow,
+      // answered once for the app's bundle id. The Release app asks only from
+      // the hub sheet's "Turn on notifications", which is Pro's (a TestFlight
+      // install opens it; a simulator's Release app is unentitled and gets
+      // the paywall), so the Debug build of the same bundle asks
+      // (`-push-probe-register`, no hub named, so nothing registers anywhere),
+      // Allow is tapped, and the Release build is installed over it, keeping
+      // iOS's answer.
+      const debug = simulatorApp(ROOT);
+      const stale = staleApp(ROOT, debug);
+      let allowed = false;
+      if (!stale) {
+        await sh(`xcrun simctl install ${udid} "${debug}"`);
+        await sh(
+          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -push-probe-register >/dev/null`
+        );
+        for (let look = 0; look < 15 && !allowed; look += 1) {
+          // biome-ignore lint/performance/noAwaitInLoops: one look for iOS's alert after another
+          await pause(2000);
+          allowed = await seen((label) => label === "Allow");
+        }
+        allowed = allowed && (await tap((label) => label === "Allow"));
+        await pause(2000);
+        await sh(
+          `xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true`
+        );
+      }
+      kit.check(
+        `live ${tag}: notifications allowed through iOS's Allow, as the owner allowed them`,
+        allowed,
+        stale ?? (allowed ? "Allow tapped" : "iOS's Allow never showed")
+      );
+    }
+    await sh(`xcrun simctl install ${udid} "${app}"`);
     let id = await launch();
     await pause(20_000);
     if (!id) {
@@ -1130,29 +1188,65 @@ async function onSimulator(
       true,
       await rest(id, "launch")
     );
-    if (which === "27" && !taps27) {
+    if (!tapping) {
       kit.note(
         `live ${tag} (Release): only from launch here; its taps need a shell outside a workspace (PROBE_TAPS=1)`
       );
       return;
     }
-    // The ask's notification is not reached here: a simulator app takes no
-    // push until it may notify, and this one's "Turn on notifications" (the
-    // hub sheet's) is Pro's, offered only when entitled
-    // (ConnectViewController); unentitled, Change hub opens the paywall
-    // ("Never leave an agent waiting. 7 days free, then pay once."). Its tap
-    // opens the card through the route the Debug runs drive with
-    // `-push-route` (AppDelegate `deliver`).
-    kit.note(
-      `live ${tag} (Release): the ask's notification not reached: notifications are Pro's, and this simulator's app is unentitled (Change hub opens the paywall)`
+    // The ask's notification, the app in the background: its banner tapped,
+    // which opens the card through the notification centre's delegate
+    // (AppDelegate `didReceive`, PushTaps `deliver`). The payload is the
+    // hub's ask push as the extension leaves it (push.ts `PushData`): a
+    // simulator never runs the extension for a `simctl push`.
+    const ask = await ours();
+    await sh(`xcrun simctl launch ${udid} com.apple.Preferences >/dev/null`);
+    await pause(2000);
+    const payload = join(kit.out, `release-${which}-push.json`);
+    writeFileSync(
+      payload,
+      JSON.stringify({
+        aps: {
+          alert: { title: "Probe: long ask", body: INPUT.description },
+          sound: "default",
+        },
+        cawco: {
+          kind: "ask",
+          instanceId: ask?.instanceId,
+          requestId: ask?.requestId,
+        },
+      })
+    );
+    const refused = await sh(
+      `xcrun simctl push ${udid} dev.cawco.app "${payload}" >/dev/null`
+    ).then(
+      () => "",
+      (error: unknown) => String(error)
+    );
+    await pause(2500);
+    const banner =
+      !refused &&
+      (await toCard(
+        (label) =>
+          label.includes(INPUT.description) || label.includes("Probe: long ask")
+      ));
+    await pause(2000);
+    id = (await pid()) ?? id;
+    const fromBanner = await rest(id, "card-from-notification");
+    report(
+      "the probe's card from its notification",
+      banner,
+      refused ? { ...fromBanner, frames: `simctl push refused: ${refused}` } : fromBanner
     );
     // Needs you, the list that draws the ask's command on a line; then the probe's own row.
+    id = (await launch()) ?? id;
+    await pause(8000);
     const needs = await tap((label) => label.startsWith("Needs you"));
     await pause(3000);
     report("Needs you lists the asks", needs, await rest(id, "needs-you"));
     const row =
-      needs && (await tap((label) => label.includes(INPUT.description)));
-    await pause(3000);
+      needs && (await toCard((label) => label.includes(INPUT.description)));
+    await pause(1000);
     report(
       "the probe's card from Needs you",
       row,
@@ -1172,8 +1266,8 @@ async function onSimulator(
       // drawer), so cockpit's rows rise into view.
       const probeRow = (label: string) =>
         label === "Needs you: Probe: long ask (ios-long-ask)";
-      drawer = await tap(probeRow);
-      for (let fold = 0; fold < 30 && !drawer; fold += 1) {
+      let shown = await seen(probeRow);
+      for (let fold = 0; fold < 30 && !shown; fold += 1) {
         // biome-ignore lint/performance/noAwaitInLoops: one project folded after another
         const folded = await tap(
           (label) =>
@@ -1184,11 +1278,13 @@ async function onSimulator(
         if (!folded) {
           break;
         }
-        await pause(800);
-        drawer = await tap(probeRow);
+        await pause(1500);
+        shown = await seen(probeRow);
       }
+      await pause(1000);
+      drawer = shown && (await toCard(probeRow));
     }
-    await pause(3000);
+    await pause(1000);
     report(
       "the probe's card from the drawer's session row",
       drawer,
