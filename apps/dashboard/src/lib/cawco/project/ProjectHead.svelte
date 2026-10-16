@@ -17,7 +17,6 @@
    * instead (picks.md), and his slot here closes.
    */
   import { machineLabel } from "@cawco/core";
-  import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
@@ -33,6 +32,7 @@
   import { handOver } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
+  import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
@@ -53,7 +53,6 @@
     IconMore,
     IconPlus,
     IconSettings,
-    IconShield,
     IconSparkles,
     IconTrash,
     IconUsage,
@@ -189,26 +188,8 @@
     }
   }
 
-  /**
-   * The upstream choice as the menu reads it: the project's own, or `fleet`
-   * while it takes the fleet's answer, which the fleet's row names.
-   */
-  const upstream = $derived.by(() => {
-    if (project.upstreamPosts === null) {
-      return "fleet";
-    }
-    return project.upstreamPosts ? "on" : "off";
-  });
-  const fleetUpstreamWords = $derived(
-    cawco.fleetUpstream === false
-      ? UPSTREAM_WORDS.keepOff
-      : UPSTREAM_WORDS.allow
-  );
-  async function setUpstream(value: string): Promise<void> {
-    const posts = value === "fleet" ? null : value === "on";
-    if (posts === project.upstreamPosts) {
-      return;
-    }
+  /** The project's own upstream answer, or null for the fleet's (UpstreamMenu). */
+  async function setUpstream(posts: boolean | null): Promise<void> {
     try {
       await editProject(project.id, { upstreamPosts: posts });
     } catch (error) {
@@ -552,28 +533,11 @@
         </DropdownMenu.Item>
         <!-- The upstream choice: the fleet's answer until the project picks
              its own; every workspace of it judges by it from its next beat. -->
-        <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger>
-            <IconShield />
-            <span>{UPSTREAM_WORDS.title}</span>
-          </DropdownMenu.SubTrigger>
-          <DropdownMenu.SubContent class="w-72">
-            <DropdownMenu.RadioGroup
-              onValueChange={setUpstream}
-              value={upstream}
-            >
-              <DropdownMenu.RadioItem value="fleet"
-                >{UPSTREAM_WORDS.inherit} · {fleetUpstreamWords}</DropdownMenu.RadioItem
-              >
-              <DropdownMenu.RadioItem value="off"
-                >{UPSTREAM_WORDS.keepOff}</DropdownMenu.RadioItem
-              >
-              <DropdownMenu.RadioItem value="on"
-                >{UPSTREAM_WORDS.allow}</DropdownMenu.RadioItem
-              >
-            </DropdownMenu.RadioGroup>
-          </DropdownMenu.SubContent>
-        </DropdownMenu.Sub>
+        <UpstreamMenu
+          fleet={cawco.fleetUpstream}
+          onchange={setUpstream}
+          posts={project.upstreamPosts}
+        />
         <!-- The one destructive row, as every menu draws one: the house's
              destructive item, set apart at the end. -->
         <DropdownMenu.Separator />
