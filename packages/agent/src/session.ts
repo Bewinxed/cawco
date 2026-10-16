@@ -47,6 +47,7 @@ import {
   alreadyIngested,
   BOUNDARY_RELAUNCH,
   CAWCO_SCRATCH_TAG,
+  CLI_OUTDATED,
   CONTROL_CARRY_SESSIONS,
   CONTROL_GIT_CHANGES,
   CONTROL_MCP_FLEET_HEAL,
@@ -1690,15 +1691,21 @@ export class SessionSupervisor {
    * came before and the ones after find it asleep. A send the hub sent before
    * it heard finds no process and goes back to the hub ({@link #send}), which
    * owes it to the process its wake starts.
+   *
+   * `retire`: its process runs an old version ({@link #retire}), so the
+   * hub's keep-alive is left out, as {@link CONTROL_RESTLESS} leaves it: a
+   * ping is no work of the session's, and the cache it keeps warm is the old
+   * binary's.
    */
   async sleep(
-    instanceId: string
+    instanceId: string,
+    retire = false
   ): Promise<{ asleep: boolean; awake?: string }> {
     const session = this.#sessions.get(instanceId);
     if (!session) {
       return { asleep: this.#asleep.has(instanceId) };
     }
-    const awake = await this.#awake(instanceId, session);
+    const awake = await this.#awake(instanceId, session, undefined, retire);
     if (awake) {
       return { asleep: false, awake: awake.why };
     }
@@ -1713,10 +1720,66 @@ export class SessionSupervisor {
     this.#gone(instanceId, processGeneration);
     Effect.runFork(
       Effect.logInfo(
-        `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped`
+        `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped${retire ? ", for they ran an old version and its next start runs this machine's" : ""}`
       )
     );
     return { asleep: true };
+  }
+
+  /** The {@link CLI_OUTDATED} lines said, by their uuid: each once. */
+  readonly #outdatedSaid = new Set<string>();
+
+  /**
+   * RETIRES A PROCESS ON AN OLD VERSION ({@link HarnessSession.outdated}):
+   * put to sleep the moment it is at rest ({@link sleep} with `retire`),
+   * never mid-turn, whatever its idle time; its next message wakes it on the
+   * machine's version. Not at rest, it is tried again on the next sweep, and
+   * its row is told once ({@link CLI_OUTDATED}). On the session's own queue,
+   * as the idle sleep is.
+   */
+  #retire(
+    instanceId: string,
+    session: HarnessSession,
+    outdated: { uuid: string; words: string }
+  ): void {
+    const queue = (this.#queues.get(instanceId) ?? Promise.resolve())
+      .then(async () => {
+        const slept = await this.sleep(instanceId, true);
+        // Asleep now, or no longer carried here: nothing runs the old one.
+        if (!slept.awake || this.#outdatedSaid.has(outdated.uuid)) {
+          return;
+        }
+        this.#outdatedSaid.add(outdated.uuid);
+        Effect.runFork(
+          Effect.logInfo(
+            `${instanceId}: ${outdated.words} Not yet: ${slept.awake}.`
+          )
+        );
+        this.#sayGone({
+          kind: "frame",
+          instanceId,
+          harness: session.harness,
+          message: {
+            type: "system",
+            subtype: CLI_OUTDATED,
+            uuid: outdated.uuid,
+            session_id: session.sessionId ?? "",
+            content: outdated.words,
+          } as unknown as NeutralMessage,
+        });
+      })
+      .catch((error: unknown) =>
+        warn(
+          `putting ${instanceId} to sleep for its old version failed: ${error}`
+        )
+      );
+    this.#queues.set(instanceId, queue);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup, as in dispatch
+    void queue.then(() => {
+      if (this.#queues.get(instanceId) === queue) {
+        this.#queues.delete(instanceId);
+      }
+    });
   }
 
   /**
@@ -2047,7 +2110,11 @@ export class SessionSupervisor {
     };
   }
 
-  /** Every carried session at rest for {@link IDLE_SLEEP_MS} is put to sleep. */
+  /**
+   * Every carried session at rest for {@link IDLE_SLEEP_MS} is put to sleep,
+   * and every one whose process runs an old version as soon as it is at rest
+   * ({@link #retire}).
+   */
   async #sweepIdle(): Promise<void> {
     const carried = [...this.#sessions];
     if (carried.length === 0) {
@@ -2057,7 +2124,12 @@ export class SessionSupervisor {
       (await this.#adapter("opencode").busyInstances?.()) ?? [];
     const now = Date.now();
     for (const [instanceId, session] of carried) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time; only opencode's read is awaited, and it was taken above
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time; each read is the machine's version, read once per binary
+      const outdated = await session.outdated?.();
+      if (outdated) {
+        this.#retire(instanceId, session, outdated);
+        continue;
+      }
       const awake = await this.#awake(instanceId, session, serverBusy);
       if (awake) {
         if (!awake.unsure) {

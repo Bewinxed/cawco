@@ -2831,13 +2831,18 @@ export const continuations = sqliteTable("continuations", {
  * What kind of line the hub keeps in a session's transcript:
  * - `limit`: a limit its keeper held it to (core `LIMIT_REACHED`), the line
  *   its machine said;
+ * - `outdated`: its process runs a Claude Code other than its machine's
+ *   (core `CLI_OUTDATED`), the line its machine said;
  * - `watch`: what fleet watch did about it, or for it as the lead (core
  *   `FLEET_WATCH`), the line with the triage's reason under it;
  * - `moved`: it started on a machine its project was moved to for it (core
  *   `MOVED_HERE`), the move's ready line: what moved and what stayed. Its
  *   transcript opens on it; one per session.
  */
-export type SessionLineKind = "limit" | "watch" | "moved";
+export type SessionLineKind = "limit" | "outdated" | "watch" | "moved";
+
+/** The lines a session's machine says about it, which the hub keeps as said. */
+export type MachineLineKind = Extract<SessionLineKind, "limit" | "outdated">;
 
 /**
  * Lines the hub writes into a session's transcript, each where it happened,

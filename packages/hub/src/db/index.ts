@@ -154,6 +154,7 @@ import {
   limitEvents,
   limitHolds,
   limitSummaries,
+  type MachineLineKind,
   marketplaces,
   mcpServers,
   mcpToolListings,
@@ -278,13 +279,16 @@ export type PublicInstanceRow = Omit<
   | "freshStartAt"
   | "turnOpenAt"
 >;
-/** A limit line kept for a session ({@link DbShape.noteLimit}). */
+/** A line its machine said about a session, kept on its row ({@link DbShape.noteMachineLine}). */
 export interface LimitNote {
   at: number;
   content: string;
   id: string;
 }
-/** How many of a session's limit lines are kept. */
+/** A machine's line as its row keeps it, with which kind it is. */
+export type MachineLine = LimitNote & { kind: MachineLineKind };
+export type { MachineLineKind } from "./schema";
+/** How many of a session's machine lines of each kind are kept. */
 export const LIMIT_NOTES_KEPT = 20;
 /** A fleet-watch line kept for a session ({@link DbShape.noteWatchLine}). */
 export type WatchLine = LimitNote;
@@ -1007,8 +1011,6 @@ export interface DbShape {
   readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
   readonly leadTurns: () => LeadTurnRow[];
-  /** The limit lines kept on the session's row, oldest first. */
-  readonly limitNotesOf: (id: string) => LimitNote[];
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -1127,6 +1129,8 @@ export interface DbShape {
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
   /** The ids of a machine's workspaces with a live work item (starting or running). */
   readonly liveWorkspacesOn: (machineId: string) => string[];
+  /** The lines its machine said, kept on the session's row, each kind oldest first. */
+  readonly machineLinesOf: (id: string) => MachineLine[];
   /**
    * `raw` as a path on `machineId` ({@link machinePath}), against the home
    * that machine's daemon reported. Every path a person or a session names
@@ -1262,8 +1266,12 @@ export interface DbShape {
     harness?: string,
     tooling?: SessionTooling
   ) => void;
-  /** Keeps a limit line on the session's row, the last {@link LIMIT_NOTES_KEPT}; false when one under its id is already kept. */
-  readonly noteLimit: (id: string, note: LimitNote) => boolean;
+  /** Keeps a line its machine said on the session's row, the last {@link LIMIT_NOTES_KEPT} of its kind; false when one under its id is already kept. */
+  readonly noteMachineLine: (
+    id: string,
+    kind: MachineLineKind,
+    note: LimitNote
+  ) => boolean;
   /** Records that a session started where its project was moved to for it: the move's ready line. */
   readonly noteMovedHere: (id: string, line: MovedHere) => void;
   /**
@@ -8500,13 +8508,17 @@ const make = async (path: string): Promise<DbShape> => {
         at,
         content,
       })),
-    noteLimit: (id, note) => keepLine(id, "limit", note, LIMIT_NOTES_KEPT),
-    limitNotesOf: (id) =>
-      linesOf(id, "limit").map(({ id: lineId, at, content }) => ({
-        id: lineId,
-        at,
-        content,
-      })),
+    noteMachineLine: (id, kind, note) =>
+      keepLine(id, kind, note, LIMIT_NOTES_KEPT),
+    machineLinesOf: (id) =>
+      (["limit", "outdated"] as const).flatMap((kind) =>
+        linesOf(id, kind).map(({ id: lineId, at, content }) => ({
+          kind,
+          id: lineId,
+          at,
+          content,
+        }))
+      ),
     takeOwedSend: (uuid) => {
       const owed = db
         .select({ owed: sentMessages.owed })

@@ -132,6 +132,7 @@ import {
   type ChoiceEntry,
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
+  CLI_OUTDATED,
   CONFIGURE_BINARY_UPDATES,
   CONTINUATION_ORIGIN,
   CONTROL_ACCOUNT_LENT,
@@ -428,6 +429,8 @@ import type {
   ContinuationRow,
   DbShape,
   InstanceKind,
+  MachineLine,
+  MachineLineKind,
   PlaceRow,
   ProjectRow,
   PublicInstanceRow,
@@ -1758,17 +1761,30 @@ const custodyLine = (
   content: reason,
 });
 
+/** The subtype each line its machine says about a session is drawn as. */
+const MACHINE_LINE_SUBTYPE: Record<MachineLineKind, string> = {
+  limit: LIMIT_REACHED,
+  outdated: CLI_OUTDATED,
+};
+
+/** Which line its machine said, by the frame's subtype; none for any other frame. */
+const machineLineKind = (subtype: string): MachineLineKind | undefined =>
+  (Object.keys(MACHINE_LINE_SUBTYPE) as MachineLineKind[]).find(
+    (kind) => MACHINE_LINE_SUBTYPE[kind] === subtype
+  );
+
 /**
- * A limit its keeper held a session to (core `LIMIT_REACHED`), as the row
- * keeps it: the same on the live stream and a later transcript read, titled
- * by its first sentence.
+ * A line its machine said about a session, as the row keeps it: a limit its
+ * keeper held it to (core `LIMIT_REACHED`), or its process on a Claude Code
+ * other than the machine's (core `CLI_OUTDATED`). The same on the live
+ * stream and a later transcript read, titled by its first sentence.
  */
-const limitReachedLine = (
+const machineLine = (
   row: { sessionId: string | null },
-  note: { at: number; id: string; content: string }
+  note: MachineLine
 ): NeutralSystemMessage => ({
   type: "system",
-  subtype: LIMIT_REACHED,
+  subtype: MACHINE_LINE_SUBTYPE[note.kind],
   uuid: note.id,
   session_id: row.sessionId ?? "",
   content: note.content,
@@ -16231,12 +16247,12 @@ export const createServer = (
     placeMovedHere(row, transcript);
   };
 
-  /** The limits its keeper held the session to ({@link noteLimitReached}), and fleet watch's lines, each where it happened. */
+  /** The lines its machine said about the session ({@link noteMachineLine}), and fleet watch's lines, each where it happened. */
   const placeLimitNotes = (
     row: InstanceRow,
     transcript: SessionMessage[]
   ): void => {
-    for (const note of db.limitNotesOf(row.id)) {
+    for (const note of db.machineLinesOf(row.id)) {
       const at = transcript.findIndex(
         (entry) =>
           entry.timestamp !== undefined && Date.parse(entry.timestamp) > note.at
@@ -16247,7 +16263,7 @@ export const createServer = (
         session_id: row.sessionId ?? "",
         parent_tool_use_id: null,
         parent_agent_id: null,
-        message: limitReachedLine(row, note),
+        message: machineLine(row, note),
         timestamp: new Date(note.at).toISOString(),
       });
     }
@@ -19091,15 +19107,17 @@ export const createServer = (
    * Once: a Start retried after the line was written says nothing new.
    */
   /**
-   * A session's keeper held it at a limit (core `LIMIT_REACHED`): its
-   * machine's line, kept on its row once under its id and folded into what
-   * its screens show now. One from a machine that does not run the session
-   * is nobody's.
+   * A line its machine said about a session: its keeper held it at a limit
+   * (core `LIMIT_REACHED`), or its process runs a Claude Code other than the
+   * machine's (core `CLI_OUTDATED`). Kept on its row once under its id and
+   * folded into what its screens show now. One from a machine that does not
+   * run the session is nobody's.
    */
-  const noteLimitReached = (
+  const noteMachineLine = (
     machineId: string,
     instanceId: string,
     harness: HarnessKind,
+    kind: MachineLineKind,
     said: unknown
   ): void => {
     const { uuid, content } = said as { uuid?: unknown; content?: unknown };
@@ -19112,8 +19130,8 @@ export const createServer = (
     ) {
       return;
     }
-    const note = { at: Date.now(), id: uuid, content };
-    if (!db.noteLimit(row.id, note)) {
+    const note = { kind, at: Date.now(), id: uuid, content };
+    if (!db.noteMachineLine(row.id, kind, note)) {
       return;
     }
     console.warn(`[hub] ${row.id}: ${content}`);
@@ -19121,7 +19139,7 @@ export const createServer = (
       kind: "frame",
       instanceId: row.id,
       harness,
-      message: limitReachedLine(row, note),
+      message: machineLine(row, note),
     });
   };
 
@@ -25354,17 +25372,20 @@ export const createServer = (
                   );
                   break;
                 }
-                // A limit its keeper held the session to: kept on its row and
-                // said in its transcript, before the ingest ledger, which it
-                // has no ring line in.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === LIMIT_REACHED
-                ) {
-                  noteLimitReached(
+                // A line its machine said about the session (a limit its
+                // keeper held it to, its process on an old Claude Code): kept
+                // on its row and said in its transcript, before the ingest
+                // ledger, which it has no ring line in.
+                const machineSaid =
+                  frame.message.type === "system"
+                    ? machineLineKind(frame.message.subtype)
+                    : undefined;
+                if (machineSaid) {
+                  noteMachineLine(
                     message.machineId,
                     message.instanceId,
                     frame.harness,
+                    machineSaid,
                     frame.message
                   );
                   break;

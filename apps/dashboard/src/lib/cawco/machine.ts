@@ -29,15 +29,20 @@ export function machineOs(os: string) {
  * its existing login does not reach its agent. pi's and OpenCode's are their
  * reports' own words (`authReason`): pi's sign-in, OpenCode's server refusing
  * to start; then OpenCode's own sign-ins their providers refused, each with
- * its fix (`signInFaults`, core `opencodeSignInFaultWords`). Undefined when
- * there is nothing to say.
+ * its fix (`signInFaults`, core `opencodeSignInFaultWords`). Claude's report
+ * says its own words when it is installed and too old to start a session on
+ * (the agent's version floor), ahead of its sign-in. Undefined when there is
+ * nothing to say.
  */
 export function signInWarning(
   machine: AgentRow,
   harness: "claude" | "pi" | "opencode" = "claude"
 ): string | undefined {
+  const report = machine.harnesses?.find((one) => one.harness === harness);
+  if (harness === "claude" && report?.installed && report.authReason) {
+    return report.authReason;
+  }
   if (harness !== "claude") {
-    const report = machine.harnesses?.find((one) => one.harness === harness);
     const said = [
       report?.authReason,
       ...(report?.signInFaults ?? []).map((fault) => fault.words),

@@ -233,6 +233,17 @@ export interface HarnessSession {
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
   noteStopped?(words: string): Promise<void>;
+  /**
+   * This process runs a version of its harness other than the machine's
+   * (Claude: its initialize reply's `claude_code_version` against the
+   * machine's `claude --version`): `words` say so once on its row, under
+   * `uuid`, and the supervisor puts it to sleep as soon as it is at rest, so
+   * its next start runs the machine's. Nothing while it runs the machine's,
+   * while either version is not read yet, or while the machine's is below the
+   * floor no session starts on (a sleep would leave it nothing to wake on).
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  outdated?(): Promise<{ uuid: string; words: string } | undefined>;
   /** Settle a parked permission by its `requestId`. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   resolvePermission(requestId: string, result: PermissionResult): void;

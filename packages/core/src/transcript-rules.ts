@@ -23,6 +23,7 @@ import type {
 import {
   ACCOUNT_MOVE,
   ARTIFACT_RESPONSES,
+  CLI_OUTDATED,
   CONTINUATION_ORIGIN,
   CUSTODY_HELD,
   FLEET_WATCH,
@@ -988,6 +989,20 @@ export function mapFrame(
             systemLine(base, "ui.system_note", rest, {
               subtype: LIMIT_REACHED,
               noteKind: "Limit",
+              noteTitle: title,
+            })
+          );
+          break;
+        }
+        // Its process runs a Claude Code other than its machine's: titled by
+        // the two versions, when it sleeps and what it wakes on under it
+        // (core `CLI_OUTDATED`).
+        case CLI_OUTDATED: {
+          const [title, rest] = firstSentence(sdk.content ?? "");
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", rest, {
+              subtype: CLI_OUTDATED,
+              noteKind: "Claude Code",
               noteTitle: title,
             })
           );

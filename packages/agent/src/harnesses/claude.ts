@@ -143,7 +143,6 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary";
-import { toolVersion } from "../capabilities";
 import {
   mcpConfigOffArgv,
   removeMcpConfig,
@@ -151,6 +150,12 @@ import {
   sweepMcpConfigs,
 } from "../claude-mcp-config";
 import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
+import {
+  claudeHostVersion,
+  claudeVersionRefusal,
+  INITIALIZE_SAYS_VERSION_FROM,
+  versionRefusal,
+} from "../claude-version";
 import { reportDamaged } from "../damaged-records";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
@@ -2004,14 +2009,39 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
+   * The Claude Code version this session's process runs, as its own
+   * initialize reply says it (`claude_code_version`, the same on a spawn and
+   * an attach: the CLI answers a repeated initialize itself). `null`: the
+   * reply carries no version, so the CLI predates the field
+   * ({@link INITIALIZE_SAYS_VERSION_FROM}). Undefined until it has answered.
+   */
+  #runs: string | null | undefined;
+
+  async outdated(): Promise<{ uuid: string; words: string } | undefined> {
+    const runs = this.#runs;
+    if (runs === undefined) {
+      return;
+    }
+    const host = await claudeHostVersion();
+    if (!host || versionRefusal(host) || runs === host) {
+      return;
+    }
+    return {
+      uuid: `cli-outdated-${this.instanceId}-${runs ?? "unreported"}-${host}`,
+      words: `This session runs Claude Code ${runs ?? `older than ${INITIALIZE_SAYS_VERSION_FROM}`}, and this machine's is ${host} now. It goes to sleep as soon as nothing it runs would be cut off, and its next message wakes it on ${host}.`,
+    };
+  }
+
+  /**
    * Says what the session's Claude Code answered at initialize
    * ({@link ACCOUNT_READ}): who its account is, its plan, and the models it
    * offers. The hub keeps it as the account's catalog, so a picker has it
-   * with nothing running.
+   * with nothing running. Its version is kept ({@link #runs}).
    */
   async #readAccount(): Promise<void> {
     try {
       const init = await this.#handle.initializationResult();
+      this.#runs = init.claude_code_version ?? null;
       const identity = identityOf(init.account);
       this.#ctx.frame({
         type: "system",
@@ -3655,26 +3685,29 @@ export class ClaudeHarness implements Harness {
    * this one, which updates itself), and every account dir's sign-in, which
    * is also the machine's word on Claude (signed in when any account is). No
    * model catalog: that is each account's, which its sessions' initialize
-   * responses report and the hub keeps.
+   * responses report and the hub keeps. A version below the floor is the
+   * machine's sentence on why no session starts ({@link versionRefusal}).
+   * Read on every report and each minute's re-read, which is where a
+   * `claude update` is seen ({@link claudeHostVersion}).
    */
   async detect(): Promise<MachineHarnessReport> {
     probeStarted();
-    const executable = resolveClaudeExecutable();
-    const installed = executable !== undefined;
+    const installed = resolveClaudeExecutable() !== undefined;
     // Side by side: each is bounded on its own (`auth status` 20 s, `--version` 5 s).
     const [read, version] = await Promise.all([
       accountReports(),
-      executable ? toolVersion(executable) : undefined,
+      installed ? claudeHostVersion() : undefined,
     ]);
     const signins = await claudeSignins(read);
     // Dirs that gave no answer leave the machine's word as it was.
     this.auth = signins.auth ?? this.auth;
+    const refused = installed ? versionRefusal(version) : CLAUDE_NOT_INSTALLED;
     return {
       harness: "claude",
       installed,
       ...(version ? { version } : {}),
       ...signins,
-      ...(installed ? {} : { authReason: CLAUDE_NOT_INSTALLED }),
+      ...(refused ? { authReason: refused } : {}),
       capabilities: CLAUDE_CAPABILITIES,
     };
   }
@@ -3732,6 +3765,12 @@ export class ClaudeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
+    // THE VERSION FLOOR: no Claude Code below it starts a session here, on
+    // a start, a wake or a relaunch alike (all of them come through here).
+    const refused = await claudeVersionRefusal();
+    if (refused) {
+      throw new Error(refused);
+    }
     // The child is spawned under sessiond, unconditionally — no flag, no
     // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
     // across agent restarts, which is what lets the returning agent match a

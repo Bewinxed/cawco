@@ -36,6 +36,11 @@ import {
 } from "@cawco/core/paths";
 import { claudeExecutableOptions, idle, resolveClaudeExecutable } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
+import {
+  CLAUDE_VERSION_FLOOR,
+  claudeHostVersion,
+  olderThan,
+} from "./claude-version";
 import { hostGit } from "./clone";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 import { probeStarted } from "./probe-count";
@@ -75,7 +80,16 @@ const envFor = (account: string): Record<string, string | undefined> => ({
   ...accountEnv(account),
 });
 
-/** How long one `claude auth status` may take to answer. */
+/**
+ * How long one `claude auth status` may take to answer. Our choice, because:
+ * every account dir is read this way each minute and on every report, and a
+ * CLI that never answers would hold all of them; a timeout reads as unread,
+ * never as signed out ({@link AuthStatusUnanswered}). Ending it can cut a
+ * token refresh short, which signed accounts out before Claude Code 2.1.301
+ * ("Fixed sign-in refresh timeouts and unexpected sign-outs after a short
+ * command such as `claude auth status` … exited in the middle of a token
+ * refresh"), so it runs on nothing older ({@link CLAUDE_VERSION_FLOOR}).
+ */
 const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
 /**
@@ -136,6 +150,14 @@ export const authStatusIn = async (
   const executable = resolveClaudeExecutable();
   if (!executable) {
     throw new AuthStatusUnanswered(dir, 0, "Claude Code is not installed");
+  }
+  const version = await claudeHostVersion();
+  if (!version || olderThan(version, CLAUDE_VERSION_FLOOR)) {
+    throw new AuthStatusUnanswered(
+      dir,
+      0,
+      `it was not run, because CawCo runs no Claude Code older than ${CLAUDE_VERSION_FLOOR} and this machine's ${version ? `is ${version}` : "didn't say its version"}`
+    );
   }
   const child = Bun.spawn([executable, "auth", "status", "--json"], {
     env,

@@ -234,6 +234,16 @@ export const CUSTODY_HELD = "custody_held";
 export const LIMIT_REACHED = "limit_reached";
 
 /**
+ * A Claude session's process runs a Claude Code other than its machine's
+ * (one launched before a `claude update`), and is not at rest yet: the
+ * agent's frame to the hub, once per process and machine version (`content`
+ * says both, and that it sleeps once at rest and wakes on the machine's),
+ * and the hub's line in the session's transcript, kept on its row. Drawn as
+ * a note titled by its first sentence, the rest under it.
+ */
+export const CLI_OUTDATED = "cli_outdated";
+
+/**
  * CawCo stopped a session's process, and says why in `content`, in the
  * error formula (WORDS.md: what happened, why, what starts it again): the
  * agent's frame, a line of the session's transcript. Drawn as an error
