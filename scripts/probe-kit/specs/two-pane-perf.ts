@@ -360,6 +360,33 @@ const census = (page: Page): Promise<string> =>
   );
 
 /**
+ * What showing the warm pane costs alone, the page's clock: its class taken
+ * off with the page otherwise settled, the style that asks for (a computed
+ * style read, which styles the page) and then the layout (a box read), and
+ * the class put back. Whether a switch's restyle is the reveal's own.
+ */
+const revealAlone = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(".pane.pane-settling");
+    if (!pane) {
+      return "no warm pane";
+    }
+    const inside = pane.getElementsByTagName("*").length;
+    const last = pane.querySelector<HTMLElement>("*:last-child") ?? pane;
+    document.body.getBoundingClientRect();
+    const at = performance.now();
+    pane.classList.remove("pane-settling");
+    const shown = getComputedStyle(last).visibility;
+    const styled = performance.now();
+    pane.getBoundingClientRect();
+    last.getBoundingClientRect();
+    const laid = performance.now();
+    pane.classList.add("pane-settling");
+    document.body.getBoundingClientRect();
+    return `${inside} elements (${shown}): style ${(styled - at).toFixed(1)}ms, layout ${(laid - styled).toFixed(1)}ms`;
+  });
+
+/**
  * The script in each press's longest task (the one a switch is held to),
  * by self time across the presses, the most first.
  */
@@ -708,6 +735,16 @@ async function measure(
   }
   kit.note(
     `${mode} pane(s), point: the script in its ${presses.length} switches' longest tasks, by self time, all told: ${scriptOf(sampled, presses)}`
+  );
+  const reveals: string[] = [];
+  for (const id of order) {
+    await ways.point.reach(tabOf(id));
+    await page.waitForTimeout(REACH_MS);
+    reveals.push(await revealAlone(page));
+  }
+  await page.mouse.move(0, 0);
+  kit.note(
+    `${mode} pane(s), a warm pane shown alone (its \`.pane-settling\` taken off, nothing else): ${reveals.join("; ")}`
   );
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
