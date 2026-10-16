@@ -98,6 +98,12 @@ interface Step {
   result?: string;
   /** A `delegate` turn: Claude Code's ToolSearch went out first. */
   searched?: boolean;
+  /**
+   * A compaction's turn: every request until it ends is the summarizing one
+   * (Claude Code sends it with tools, OpenCode and pi without), answered
+   * with these words, which then stand for the history it replaced.
+   */
+  summary?: string;
   /** The delegate type a `delegate` turn asks for. */
   type?: string;
 }
@@ -168,6 +174,10 @@ const spec: Spec = {
     };
     const respond = (request: Seen): Reply => {
       const now = step;
+      if (now?.summary) {
+        now.done = true;
+        return say(now.summary);
+      }
       if (!request.tools) {
         return say("Probe title");
       }
@@ -228,9 +238,13 @@ const spec: Spec = {
       ).catch(() => undefined);
       return first;
     };
-    /** A `/compact`, answered with the mock's summary, and its end. */
-    const compact = async (session: string, delegate: boolean) => {
-      const next: Step = { kind: "say", delegate };
+    /** A `/compact`, answered with a summary of its own, and its end: the summary's words. */
+    const compact = async (
+      session: string,
+      delegate: boolean
+    ): Promise<string> => {
+      const summary = `DOCSCOPE-SUMMARY-${crypto.randomUUID().slice(0, 8)}`;
+      const next: Step = { kind: "say", delegate, summary };
       step = next;
       const from = fleet.seen.length;
       await fleet.send(session, "/compact");
@@ -247,15 +261,25 @@ const spec: Spec = {
         180_000
       ).catch(() => undefined);
       await Bun.sleep(1500);
+      step = undefined;
+      return summary;
     };
+    /**
+     * The request carries exactly `wanted` of the scoped documents; `kept`
+     * may also be there, handed to the session in a turn its harness kept
+     * through a compaction (OpenCode keeps its latest turns as they were).
+     */
     const exactly = (
       label: string,
       request: Seen | undefined,
-      wanted: readonly Doc[]
+      wanted: readonly Doc[],
+      kept: readonly Doc[] = []
     ) => {
       const got = DOCS.filter((doc) => request?.body.includes(MARK[doc]));
       const missing = wanted.filter((doc) => !got.includes(doc));
-      const extra = got.filter((doc) => !wanted.includes(doc));
+      const extra = got.filter(
+        (doc) => !(wanted.includes(doc) || kept.includes(doc))
+      );
       kit.check(
         `${label}: carries ${wanted.join(", ")} and no other scoped document`,
         request !== undefined && missing.length === 0 && extra.length === 0,
@@ -314,23 +338,25 @@ const spec: Spec = {
       );
 
       // 3. After a compaction: the orchestrator.
-      const before = `DOCSCOPE-BEFORE-${harness}-${RUN}`;
-      await turn(orchestrator, before, { kind: "say" });
-      await compact(orchestrator, false);
+      await turn(orchestrator, `DOCSCOPE-BEFORE-${harness}-${RUN}`, {
+        kind: "say",
+      });
+      const summary = await compact(orchestrator, false);
       const after = await turn(
         orchestrator,
         `DOCSCOPE-AFTER-${harness}-${RUN}`,
         { kind: "say" }
       );
       kit.check(
-        `3: ${harness}, orchestrator: the compaction replaced its history (an earlier turn's words are gone)`,
-        after !== undefined && !after.all.includes(before),
+        `3: ${harness}, orchestrator: it compacted (its next request carries the compaction's summary)`,
+        after?.body.includes(summary) === true,
         after ? `history ${after.all.length} chars` : "no request"
       );
       exactly(
         `3: ${harness}, orchestrator after a compaction`,
         after,
-        loads(harness, OWN.orchestrator)
+        loads(harness, OWN.orchestrator),
+        ["briefer"]
       );
       const handed = fleet.query<{ n: number }>(
         "SELECT count(*) AS n FROM memory_briefings WHERE instance_id = ?",
@@ -349,17 +375,19 @@ const spec: Spec = {
         orchestrator
       )[0]?.id;
       if (high) {
-        const leafBefore = `DOCSCOPE-LEAF-BEFORE-${harness}-${RUN}`;
-        await turn(high, leafBefore, { kind: "say", delegate: true });
-        await compact(high, true);
+        await turn(high, `DOCSCOPE-LEAF-BEFORE-${harness}-${RUN}`, {
+          kind: "say",
+          delegate: true,
+        });
+        const leafSummary = await compact(high, true);
         const leafAfter = await turn(
           high,
           `DOCSCOPE-LEAF-AFTER-${harness}-${RUN}`,
           { kind: "say", delegate: true }
         );
         kit.check(
-          `3: ${harness}, high delegate: the compaction replaced its history`,
-          leafAfter !== undefined && !leafAfter.all.includes(leafBefore),
+          `3: ${harness}, high delegate: it compacted (its next request carries the compaction's summary)`,
+          leafAfter?.body.includes(leafSummary) === true,
           leafAfter ? `history ${leafAfter.all.length} chars` : "no request"
         );
         exactly(
