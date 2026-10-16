@@ -93,8 +93,10 @@
       </p>
     {/if}
     {#if card.note}
-      <p class="note">
-        <span aria-hidden="true" class="mark"><IconUser /></span>
+      <p class="note mark-line">
+        <span aria-hidden="true" class="mark-cell"
+          ><span class="mark" data-box><IconUser /></span></span
+        >
         <span class="words">{card.note}</span>
       </p>
     {/if}
@@ -135,7 +137,7 @@
           size="xs"
           variant="ghost"
         >
-          {foldWords}
+          <span>{foldWords}</span>
           <IconChevronDown
             aria-hidden="true"
             class="chev"
@@ -239,8 +241,9 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
+  /* A dial's value in the reading face, as the tiles' figures are: mono
+     spread "3 days" wide. */
   .figure {
-    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
   }
@@ -259,9 +262,6 @@
     justify-content: center;
     inline-size: var(--row-mark);
     block-size: var(--row-mark);
-    margin-block-start: calc(
-      (var(--text-body) * var(--leading-body) - var(--row-mark)) / 2
-    );
     border-radius: var(--row-mark-r);
     background: var(--action-surface);
     color: var(--on-action);
@@ -293,7 +293,7 @@
   }
   .title {
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
   }
   /* The fold's toggle hangs into the card's leading inset, as the notice's

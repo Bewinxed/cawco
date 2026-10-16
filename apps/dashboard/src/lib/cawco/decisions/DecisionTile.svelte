@@ -77,7 +77,7 @@
   </span>
   <span class="line">
     <span
-      class="progress"
+      class="progress mark-line"
       data-share="dpage:{page.name}:progress"
       {@attach land(() => `dpage:${page.name}:progress`)}
     >
@@ -92,7 +92,7 @@
     {/if}
   </span>
   {#if page.writer}
-    <span class="line meta">
+    <span class="line meta mark-line">
       <SessionMark
         id={page.writer.instanceId}
         place={row?.cwd || row?.machineId || page.writer.instanceId}
@@ -156,11 +156,17 @@
   }
   .who {
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .age {
     flex: none;
+  }
+  /* `· 1 note` and `· now` go on the run before them: their dot stands a
+     word space from it, as from the words after, not the row's gap. */
+  .more,
+  .age {
+    margin-inline-start: calc(0.25em - var(--space-2));
   }
 </style>

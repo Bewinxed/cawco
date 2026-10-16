@@ -19188,32 +19188,34 @@ export const createServer = (
       )
       // Every route's large JSON answer is written as it is sent.
       .mapResponse("global", streamLargeJson)
-      .use(websocket())
-      .use(dashboardErrorsRoutes())
-      .use(delegateTypesRoutes(delegateTypes))
-      .use(
+      // The route plugins, in one `.use` of a list: each chained `.use` nests
+      // the app's type one level deeper, and a chain of all of them runs past
+      // TypeScript's instantiation depth (TS2589). A list is folded by
+      // Elysia's tail-recursive MergeElysiaInstances, which TypeScript lets
+      // run far deeper. Elysia uses them one by one, in this order, as it
+      // would chained (elysiajs.com/patterns/typescript).
+      .use([
+        websocket(),
+        dashboardErrorsRoutes(),
+        delegateTypesRoutes(delegateTypes),
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)
-        )
-      )
-      .use(fleetChoicesRoutes(fleetChoices))
-      .use(
+        ),
+        fleetChoicesRoutes(fleetChoices),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
             tasks.touched(id);
             decisionsChanged(id);
           }
-        )
-      )
-      .use(taskRoutes(tasks))
-      .use(artifactRoutes(artifacts))
-      .use(decisionRoutes(decisions))
-      .use(pushRoutes(db, push))
-      .use(notificationRoutes(db, notifications))
-      // The hub as a git remote and LFS server, for fleet machines and
-      // sessions only (git-remote.ts).
-      .use(
+        ),
+        taskRoutes(tasks),
+        artifactRoutes(artifacts),
+        decisionRoutes(decisions),
+        pushRoutes(db, push),
+        notificationRoutes(db, notifications),
+        // The hub as a git remote and LFS server, for fleet machines and
+        // sessions only (git-remote.ts).
         gitRemoteRoutes({
           root: GIT_ROOT,
           lfsRoot: LFS_ROOT,
@@ -19225,33 +19227,29 @@ export const createServer = (
               (credential) =>
                 identities.resolve(`Bearer ${credential}`)?.instanceId
             ),
-        })
-      )
-      .use(faviconRoutes())
-      .use(appleDiagnosticsRoutes())
-      .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
-      .use(planRoutes(plans))
-      .use(dispatchRoutes(dispatcher))
-      .use(cawRoutes(caw))
-      .use(phoneRequestRoutes(jevTasks))
-      .use(memoryRoutes(projectMemory))
-      .use(routineRoutes(routines))
-      .use(connectionRoutes(connections))
-      .use(ingressRoutes(ingress))
-      .use(relayRoutes(relays))
-      .use(actionRoutes(actions))
-      .use(caps.routes())
-      .use(sessionLimitRoutes(db))
-      .use(viewRoutes(views))
-      .use(mockupRoutes((id) => db.project(id) !== undefined))
-      .use(noticesSeen.routes)
-      .use(
+        }),
+        faviconRoutes(),
+        appleDiagnosticsRoutes(),
+        projectOfferRoutes(projectOffers, YOU_ACTOR),
+        planRoutes(plans),
+        dispatchRoutes(dispatcher),
+        cawRoutes(caw),
+        phoneRequestRoutes(jevTasks),
+        memoryRoutes(projectMemory),
+        routineRoutes(routines),
+        connectionRoutes(connections),
+        ingressRoutes(ingress),
+        relayRoutes(relays),
+        actionRoutes(actions),
+        caps.routes(),
+        sessionLimitRoutes(db),
+        viewRoutes(views),
+        mockupRoutes((id) => db.project(id) !== undefined),
+        noticesSeen.routes,
         joinRoutes({
           lifetime,
           online: (machineId) => Boolean(registry.agent(machineId)),
-        })
-      )
-      .use(
+        }),
         createBinaryUpdates({
           dbPath: DB_PATH,
           states: () => binaryUpdateStates,
@@ -19278,9 +19276,7 @@ export const createServer = (
             callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
           configure: (machineId, policy: BinaryUpdatePolicy) =>
             callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
-        }).routes
-      )
-      .use(
+        }).routes,
         workflowRoutes(
           db,
           workflowRuntime,
@@ -19353,8 +19349,8 @@ export const createServer = (
               );
             },
           }
-        )
-      )
+        ),
+      ])
       .all("/mcp/cawco", hidden, ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
         server?.timeout(request, 0);

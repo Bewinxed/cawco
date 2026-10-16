@@ -215,7 +215,7 @@
       <div class="head-row">
         <Button class="back" onclick={onback} size="sm" variant="ghost">
           <IconChevronLeft />
-          Decisions
+          <span>Decisions</span>
         </Button>
         <div class="what">
           <span
@@ -226,7 +226,7 @@
           >
           {#if shown}
             <span
-              class="progress"
+              class="progress mark-line"
               data-share="dpage:{name}:progress"
               {@attach land(() => `dpage:${name}:progress`)}
             >
@@ -237,15 +237,17 @@
               <span class="num">{figure}</span>
             </span>
           {/if}
+          {#if pill}
+            <span class="pill-end" data-box>
+              <StatePill
+                tone={pill.tone}
+                title={pill.title}
+                who={pill.who}
+                word={pill.word}
+              />
+            </span>
+          {/if}
         </div>
-        {#if pill}
-          <StatePill
-            tone={pill.tone}
-            title={pill.title}
-            who={pill.who}
-            word={pill.word}
-          />
-        {/if}
       </div>
     </div>
 
@@ -402,6 +404,13 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
+  }
+  /* The pill ends the title's group: at the row's end on a desk, and on a
+     phone, where the group wraps, beside the figure or under the title,
+     never alone under the back button. */
+  .pill-end {
+    display: flex;
+    margin-inline-start: auto;
   }
   /* The record on the page's own grid: two across on a desk, one under; the
      cards stretch to their row, their content at its top. */

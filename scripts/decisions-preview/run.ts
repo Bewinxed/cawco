@@ -54,7 +54,7 @@ await run.spec(
       await stopped;
     },
   },
-  false
+  null
 );
 await run.close();
 process.exit(run.failures > 0 ? 1 : 0);

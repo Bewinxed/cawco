@@ -19,6 +19,7 @@
  *   four picked cards ringed.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time, as a hand makes them
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import {
   LANDING,
@@ -37,6 +38,24 @@ const IDS = [
     ])
   ),
 ];
+
+/** A capture for the critique, taken after the engine's checks: `<view>-<surface>.png` in the run's out. */
+const shot = async (kit: Kit, page: Page, view: View, surface: string) => {
+  // Once every entrance on the page's clock has ended. A loop (a spinner)
+  // never ends, and a scroll-driven run (an edge fade) is on its
+  // scroller's timeline, not the clock: neither is waited for.
+  await page.waitForFunction(() =>
+    window
+      .kitRuns()
+      .every(
+        (run) =>
+          run.playState !== "running" ||
+          run.timeline !== document.timeline ||
+          run.effect?.getComputedTiming().endTime === Number.POSITIVE_INFINITY
+      )
+  );
+  await page.screenshot({ path: join(kit.out, `${view}-${surface}.png`) });
+};
 
 /** Each tile as the tab draws it: its title, its figure, its notes and its pill. */
 const tiles = (page: Page) =>
@@ -129,6 +148,7 @@ async function listed(kit: Kit, page: Page, view: View) {
     shown.length === 0,
     shown.join("; ")
   );
+  await shot(kit, page, view, "list");
 }
 
 async function picking(kit: Kit, page: Page, view: View, url: string) {
@@ -152,8 +172,12 @@ async function picking(kit: Kit, page: Page, view: View, url: string) {
     `src ${src}, picks shown ${picked}`
   );
   const dock = await page.evaluate(() => ({
+    // The words the button shows: its label keeps its pending words beside
+    // them, hidden, to hold its width (button pending-content.svelte).
     primary:
-      document.querySelector(".dock .primary")?.textContent?.trim() ?? null,
+      document
+        .querySelector(".dock .primary .kit-words > :not([aria-hidden])")
+        ?.textContent?.trim() ?? null,
     placeholder:
       document.querySelector<HTMLTextAreaElement>(
         ".dock textarea:not([aria-hidden])"
@@ -168,6 +192,7 @@ async function picking(kit: Kit, page: Page, view: View, url: string) {
       dock.figure === "5 of 12 picked",
     JSON.stringify(dock)
   );
+  await shot(kit, page, view, "picking");
 }
 
 async function decided(kit: Kit, page: Page, view: View, url: string) {
@@ -233,6 +258,31 @@ async function decided(kit: Kit, page: Page, view: View, url: string) {
     shown.length === 0,
     shown.join("; ")
   );
+  // The Mark Line Rule (DESIGN.md): the note's mark stands on its first
+  // line's x-height middle, which the recipe puts half a line from the top
+  // of the trimmed words.
+  const markLine = await page.evaluate(() => {
+    const note = document.querySelector(".record .note");
+    const mark = note?.querySelector(".mark")?.getBoundingClientRect();
+    const words = note?.querySelector<HTMLElement>(".words");
+    if (!(mark && words)) {
+      return null;
+    }
+    const line = Number.parseFloat(getComputedStyle(words).lineHeight);
+    const { top } = words.getBoundingClientRect();
+    return {
+      off:
+        Math.round((mark.top + mark.height / 2 - (top + line / 2)) * 100) / 100,
+      trim: getComputedStyle(words).getPropertyValue("text-box").trim(),
+    };
+  });
+  kit.check(
+    `${view}: a note's mark stands on its words' first x-height middle`,
+    markLine !== null &&
+      Math.abs(markLine.off) <= 0.5 &&
+      markLine.trim.includes("ex"),
+    JSON.stringify(markLine)
+  );
 
   // The fold: the trial's turned-down option wears the writer's Recommended mark.
   const trial = page.locator(".record", { hasText: "How long is the trial?" });
@@ -274,6 +324,7 @@ async function decided(kit: Kit, page: Page, view: View, url: string) {
       fold.why === "A fleet takes a week to set up properly.",
     JSON.stringify({ before, ...fold })
   );
+  await shot(kit, page, view, "decided");
 
   // A task chip opens the task's sheet in place, which names its decision.
   await page.locator(".record .tasks a").first().click();
@@ -326,6 +377,7 @@ async function graph(kit: Kit, page: Page, view: View, url: string) {
       drawn.segment === "Graph",
     JSON.stringify(drawn)
   );
+  await shot(kit, page, view, "graph");
 }
 
 const spec: Spec = {
