@@ -649,7 +649,7 @@ export function adminTools() {
       "the fleet's rules: standing instructions the hub enforces on every session's " +
         "output stream. A rule watches for a phrase or regex in what sessions say (or think) " +
         "and replies with a fixed message or an LLM evaluation. 'list' answers them with " +
-        "stats, 'templates' starter recipes.",
+        "stats, 'templates' starter recipes; one scoped to a removed machine carries `orphaned`.",
       ["list", "templates"],
       ["create", "update", "remove"],
       {
@@ -777,6 +777,7 @@ export function adminTools() {
           id: _id,
           createdAt: _createdAt,
           stats: _stats,
+          orphaned: _orphaned,
           ...current
         } = stored;
         return ok(

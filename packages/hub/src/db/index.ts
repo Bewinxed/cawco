@@ -180,6 +180,7 @@ import {
   queuedWorkItemGlobs,
   queuedWorkItems,
   relays,
+  removedMachines,
   routines,
   ruleState,
   rules,
@@ -753,7 +754,9 @@ export interface DbShape {
    * confirmed by that machine. Spend and limit history stay, because they
    * happened. A project whose primary checkout was there moves it to its
    * next checkout, or has none yet; every project keeps its folder on the
-   * hub, so none goes. Answers which sessions went, for the confirm's receipt.
+   * hub, so none goes. Its name and the time are kept in `removed_machines`:
+   * what reads of the rows that still name it say it was. Answers which
+   * sessions went, for the confirm's receipt.
    */
   readonly deleteMachine: (machineId: string) => {
     instanceIds: string[];
@@ -1792,8 +1795,20 @@ export interface DbShape {
   readonly recordSend: (
     send: typeof sentMessages.$inferInsert
   ) => SentMessageRow;
+  /**
+   * A machine that re-joined under a new id (its id follows its hostname,
+   * core machine-id.ts) is the machine it was: every row that named `from`
+   * names `to`, in one transaction. Its machine row moves whole unless `to`
+   * has one already (then `to`'s stands); a row keyed by machine that `to`
+   * already holds (its key, a place, a sign-in, a usage bucket) stays `to`'s,
+   * and `from`'s goes. A check that named `from` by id names `to`. Answers
+   * how many rows moved, by table.
+   */
+  readonly rekeyMachine: (from: string, to: string) => Record<string, number>;
   /** Relays: a project's public webhook paths through Funnel (relay.ts). */
   readonly relays: RelaysDb;
+  /** The machines the person removed ({@link deleteMachine}), by id. */
+  readonly removedMachines: () => (typeof removedMachines.$inferSelect)[];
   /**
    * Removes one of a project's places. Its primary checkout and its hub
    * folder are never removed here: forgetting the project is.
@@ -2269,6 +2284,7 @@ export interface DbShape {
       >
     >
   ) => WorkspaceRow | undefined;
+  /** A machine registered: its row, and off the removed list if it was on it. */
   readonly upsertAgent: (agent: {
     machineId: string;
     hostname: string;
@@ -3165,6 +3181,123 @@ const make = async (path: string): Promise<DbShape> => {
     "rule_state",
     "moved_from_sessions",
   ];
+  /**
+   * Every column that names a machine with no foreign key to it, by table:
+   * what a machine re-joining under a new id moves ({@link rekeyMachine}).
+   * `keyed`: the machine is part of the row's key, so a row the new id holds
+   * already keeps its place and the old one goes.
+   */
+  const MACHINE_MOVED: readonly (readonly [string, string, "keyed"?])[] = [
+    ["instances", "machine_id"],
+    ["workspaces", "machine_id"],
+    ["workspace_creates", "machine_id"],
+    ["workflow_runs", "machine_id"],
+    ["artifacts", "machine_id"],
+    ["parked_asks", "machine_id"],
+    ["moved_from_sessions", "machine_id"],
+    ["fleet_watch_notices", "machine_id"],
+    ["moves", "source_machine_id"],
+    ["moves", "target_machine_id"],
+    ["rules", "scope_machine_id"],
+    ["project_places", "machine_id", "keyed"],
+    ["project_repositories", "machine_id", "keyed"],
+    ["account_signins", "machine_id", "keyed"],
+    ["login_moves", "machine_id", "keyed"],
+    ["usage_limits", "machine_id", "keyed"],
+    ["machine_keys", "machine_id", "keyed"],
+  ];
+  /** How many rows moved, by what they are: what a re-key answers. */
+  type Moved = (what: string, count: number) => void;
+  /**
+   * Rows of `table` whose `column` names `from`. Through `all`: bun-sqlite's
+   * `get` of raw SQL answers the row as an array of values.
+   */
+  const naming = (tx: Tx, table: string, column: string, from: string) =>
+    tx.all<{ n: number }>(
+      sql`SELECT count(*) AS n FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${from}`
+    )[0]?.n ?? 0;
+  /**
+   * The machine's row, with what its daemon last reported, onto `to`, unless
+   * `to` registered already: then that row is the current one, and `from`'s
+   * goes with its reports.
+   */
+  const moveMachineRow = (tx: Tx, from: string, to: string, note: Moved) => {
+    const row = tx
+      .select()
+      .from(agents)
+      .where(eq(agents.machineId, from))
+      .get();
+    const current = tx
+      .select({ machineId: agents.machineId })
+      .from(agents)
+      .where(eq(agents.machineId, to))
+      .get();
+    if (row && !current) {
+      tx.insert(agents)
+        .values({ ...row, machineId: to })
+        .run();
+      note("agents", 1);
+      note("agent_tools", naming(tx, "agent_tools", "machine_id", from));
+      tx.update(agentTools)
+        .set({ machineId: to })
+        .where(eq(agentTools.machineId, from))
+        .run();
+      note(
+        "agent_harnesses",
+        naming(tx, "agent_harnesses", "machine_id", from)
+      );
+      tx.update(agentHarnesses)
+        .set({ machineId: to })
+        .where(eq(agentHarnesses.machineId, from))
+        .run();
+    }
+    tx.delete(agentTools).where(eq(agentTools.machineId, from)).run();
+    tx.delete(agentHarnesses).where(eq(agentHarnesses.machineId, from)).run();
+    tx.delete(agents).where(eq(agents.machineId, from)).run();
+  };
+  /** A check that ran on `from` by its id runs on `to`; null when none did. */
+  const checksOn = <T extends { machine?: string }>(
+    checks: readonly T[],
+    from: string,
+    to: string
+  ): T[] | null =>
+    checks.some((check) => check.machine?.trim() === from)
+      ? checks.map((check) =>
+          check.machine?.trim() === from ? { ...check, machine: to } : check
+        )
+      : null;
+  /** Every work item's checks, filed or queued, that ran on `from` by its id, on `to`. */
+  const moveChecks = (tx: Tx, from: string, to: string, note: Moved) => {
+    for (const item of tx
+      .select({ id: workItems.id, checks: workItems.checks })
+      .from(workItems)
+      .where(like(workItems.checks, `%${from}%`))
+      .all()) {
+      const checks = checksOn(item.checks ?? [], from, to);
+      if (checks) {
+        tx.update(workItems)
+          .set({ checks })
+          .where(eq(workItems.id, item.id))
+          .run();
+        note("work_items.checks", 1);
+      }
+    }
+    for (const queued of tx
+      .select({ id: queuedWorkItems.id, request: queuedWorkItems.request })
+      .from(queuedWorkItems)
+      .where(like(queuedWorkItems.request, `%${from}%`))
+      .all()) {
+      const request = queued.request as { checks?: { machine?: string }[] };
+      const checks = checksOn(request.checks ?? [], from, to);
+      if (checks) {
+        tx.update(queuedWorkItems)
+          .set({ request: { ...request, checks } })
+          .where(eq(queuedWorkItems.id, queued.id))
+          .run();
+        note("queued_work_items.checks", 1);
+      }
+    }
+  };
   const idList = (ids: readonly string[]) =>
     sql.join(
       ids.map((id) => sql`${id}`),
@@ -4530,6 +4663,10 @@ const make = async (path: string): Promise<DbShape> => {
             ...(machineCapabilities ? { machineCapabilities } : {}),
           },
         })
+        .run();
+      // A removed machine whose agent starts again is on the fleet again.
+      db.delete(removedMachines)
+        .where(eq(removedMachines.machineId, machineId))
         .run();
     },
     resolveHomePaths: (machineId) => {
@@ -7778,6 +7915,26 @@ const make = async (path: string): Promise<DbShape> => {
           .set({ machineRemoved: true })
           .where(eq(instances.machineId, machineId))
           .run();
+        // What it was called and when it went, for the rows that keep its id.
+        const named = tx
+          .select({ hostname: agents.hostname })
+          .from(agents)
+          .where(eq(agents.machineId, machineId))
+          .get();
+        if (named) {
+          const removed = {
+            machineId,
+            hostname: named.hostname,
+            removedAt: new Date(),
+          };
+          tx.insert(removedMachines)
+            .values(removed)
+            .onConflictDoUpdate({
+              target: removedMachines.machineId,
+              set: removed,
+            })
+            .run();
+        }
         // A project whose primary checkout was on the machine moves it to
         // its next checkout, the oldest; with none left it has no checkout
         // yet, and its folder on the hub stays where every project's is.
@@ -7826,6 +7983,41 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();
         return { instanceIds: ids };
       }),
+    rekeyMachine: (from, to) =>
+      db.transaction((tx) => {
+        const moved: Record<string, number> = {};
+        const note: Moved = (what, count) => {
+          if (count > 0) {
+            moved[what] = (moved[what] ?? 0) + count;
+          }
+        };
+        moveMachineRow(tx, from, to, note);
+        for (const [table, column, keyed] of MACHINE_MOVED) {
+          const name = sql.identifier(table);
+          const by = sql.identifier(column);
+          const before = naming(tx, table, column, from);
+          tx.run(
+            sql`UPDATE OR IGNORE ${name} SET ${by} = ${to} WHERE ${by} = ${from}`
+          );
+          if (keyed) {
+            tx.run(sql`DELETE FROM ${name} WHERE ${by} = ${from}`);
+          }
+          note(table, before);
+        }
+        // A bucket's id leads with its machine's (`putUsageBuckets`), so a
+        // re-report from the new id lands on the bucket it moved to.
+        note("usage_buckets", naming(tx, "usage_buckets", "machine_id", from));
+        tx.run(
+          sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to}, id = ${to} || substr(id, ${from.length + 1}) WHERE machine_id = ${from} AND substr(id, 1, ${from.length + 1}) = ${`${from}:`}`
+        );
+        tx.run(
+          sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to} WHERE machine_id = ${from}`
+        );
+        tx.run(sql`DELETE FROM usage_buckets WHERE machine_id = ${from}`);
+        moveChecks(tx, from, to, note);
+        return moved;
+      }),
+    removedMachines: () => db.select().from(removedMachines).all(),
     deleteProject: (id) => {
       db.transaction((tx) => {
         // Its places, tasks, threads, Caw turns and the rules scoped to it go

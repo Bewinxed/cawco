@@ -3068,7 +3068,9 @@ export const createServer = (
       if (!launch) {
         continue;
       }
-      sendFrame(agent, { ...asked, payload: launch });
+      // To the id the machine has now: it may have re-joined under a new one
+      // since the start was owed (`takeFormerId`).
+      sendFrame(agent, { ...asked, machineId, payload: launch });
       // What it was sent while its start was held goes right behind it.
       releaseOwed({ instanceId: owed.id });
     }
@@ -13112,6 +13114,61 @@ export const createServer = (
     } satisfies Envelope<AdmissionPayload>);
   };
 
+  /**
+   * A register that names the id its machine last registered as with this
+   * hub (agent `registeredAs`): its id follows its hostname (core
+   * machine-id.ts), so a renamed machine re-joins under a new one. When the
+   * hub can tell it is that machine, every row that named the old id names
+   * this one ({@link DbShape.rekeyMachine}), its key among them, before the
+   * register is proven. It can tell when the old machine is on the fleet and
+   * not connected, and the register proves it: in pairing mode with the old
+   * id's key, or as the hub's own machine with the key the hub wrote it; a
+   * hub that trusts its network takes the register's word, as it takes its id.
+   * Synchronous: a register's socket is bound before its next frame is read.
+   */
+  const takeFormerId = (ws: AuthSocket, message: Envelope): void => {
+    const former = peek(message.payload, "formerMachineId");
+    if (!former || former === message.machineId) {
+      return;
+    }
+    const known = db.listAgents().find((agent) => agent.machineId === former);
+    if (!known || registry.agent(former)) {
+      return;
+    }
+    if (hubAuth.mode() === "pairing") {
+      const nonce = machineNonces.get(ws.id) ?? "";
+      const proof = peek(message.payload, "proof");
+      const proven =
+        hubAuth.provesFormer(former, message.machineId, nonce, proof) ||
+        (hubAuth.proveSocket(message.machineId, nonce, proof) === "proven" &&
+          message.machineId === ownMachineIdRead);
+      if (!proven) {
+        console.warn(
+          `[hub-auth] machine ${message.machineId} says it was ${known.hostname} (${former}) and did not prove it with that machine's key: it registers as itself`
+        );
+        return;
+      }
+    }
+    const moved = db.rekeyMachine(former, message.machineId);
+    // What the hub held for the old id in memory goes with it: its agent is
+    // gone, and this register says the rest again.
+    machineCredentials.forget(former);
+    binaryUpdateStates.delete(former);
+    agentProtocols.delete(former);
+    machineCustody.delete(former);
+    homeStamps.delete(former);
+    addressProtocolMachines.delete(former);
+    ruleEngine.reload();
+    ruleEngine.forgetFacts();
+    console.info(
+      `[hub] machine ${known.hostname} (${former}) re-joined as ${message.machineId}; moved: ${
+        Object.entries(moved)
+          .map(([table, count]) => `${table} ${count}`)
+          .join(", ") || "nothing"
+      }`
+    );
+  };
+
   /** Writes this hub's own machine's key where its agent reads it, and keeps it: no click for the hub's own machine. */
   const keyOwnMachine = async (): Promise<string> => {
     const own = await hostMachineId();
@@ -13767,6 +13824,18 @@ export const createServer = (
   const ownMachineId = hostMachineId();
   const isHubMachine = async (id: string): Promise<boolean> =>
     id === (await ownMachineId);
+  /**
+   * {@link ownMachineId} once read, for a check that cannot wait on it: a
+   * register's, before its socket is bound ({@link takeFormerId}). Read as
+   * the hub starts, before any machine can register.
+   */
+  let ownMachineIdRead: string | undefined;
+  detach(
+    ownMachineId.then((id) => {
+      ownMachineIdRead = id;
+    }),
+    "own machine id"
+  );
 
   /** The fleet content a machine holds on its disk now; nothing when it cannot say. */
   const readHoldings = async (machineId: string): Promise<FleetHoldings> => {
@@ -21289,6 +21358,32 @@ export const createServer = (
        */
       .get("/api/rules", () => {
         const stats = new Map(db.ruleStats().map((row) => [row.ruleId, row]));
+        const fleet = new Set(db.listAgents().map((agent) => agent.machineId));
+        const removed = new Map(
+          db.removedMachines().map((row) => [row.machineId, row])
+        );
+        /**
+         * A rule scoped to a machine the fleet no longer has matches nothing:
+         * it says so, with what the machine was called and when the person
+         * removed it (null for a machine this hub has no record of). Its
+         * scope stands as it was written.
+         */
+        const orphanOf = (
+          rule: Rule
+        ):
+          | { machineId: string; name: string | null; removedAt: number | null }
+          | undefined => {
+          const { machineId } = rule.scope;
+          if (!machineId || fleet.has(machineId)) {
+            return undefined;
+          }
+          const gone = removed.get(machineId);
+          return {
+            machineId,
+            name: gone?.hostname ?? null,
+            removedAt: gone?.removedAt.getTime() ?? null,
+          };
+        };
         return {
           rules: db.listRules().map((rule) => ({
             ...rule,
@@ -21298,6 +21393,7 @@ export const createServer = (
               totalFires: 0,
               lastFiredAt: null,
             },
+            orphaned: orphanOf(rule),
           })),
           templates: RULE_TEMPLATES,
         };
@@ -23943,6 +24039,9 @@ export const createServer = (
 
           switch (message.verb) {
             case "register": {
+              // A machine that re-joins under a new id takes its rows, its
+              // key among them, before it proves itself (`takeFormerId`).
+              takeFormerId(ws, message);
               // Its key's proof first: an unproven register never evicts a
               // machine's connection, nor hears anything meant for it.
               if (!registerProven(ws, message)) {

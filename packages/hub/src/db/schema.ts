@@ -455,6 +455,18 @@ export const agentHarnesses = sqliteTable(
 );
 
 /**
+ * A machine the person removed from the fleet (Remove machine), with the
+ * name it last had and when it went. Rows that name it keep its id (a
+ * session's `machineRemoved`, a rule's scope), and this is what reads of
+ * them say it was. A register under its id takes it back off the list.
+ */
+export const removedMachines = sqliteTable("removed_machines", {
+  machineId: text("machine_id").primaryKey(),
+  hostname: text("hostname").notNull(),
+  removedAt: timestamp("removed_at").notNull(),
+});
+
+/**
  * A project: one identity for work across machines and folders (WORDS.md).
  * Where its files are is its places (`project_places`); `machineId` and `cwd`
  * are its primary place, the one it was made from, and every client that
@@ -2453,7 +2465,12 @@ export const rules = sqliteTable("rules", {
    * fires once per session and goes quiet.
    */
   repeat: integer("repeat", { mode: "boolean" }).notNull().default(true),
-  /** Optional narrowing ({@link RuleScope}), each null for everywhere: the machine it fires on. */
+  /**
+   * Optional narrowing ({@link RuleScope}), each null for everywhere: the
+   * machine it fires on. Not a foreign key: a machine that re-joins under a
+   * new id takes its rules along (db `rekeyMachine`), and one removed for good
+   * keeps them, read as orphaned (`removed_machines`).
+   */
   scopeMachineId: text("scope_machine_id"),
   /**
    * The project it fires in. The rule goes with its project, never widened

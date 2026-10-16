@@ -25811,6 +25811,31 @@
                 "stats": {
                   "$ref": "#/components/schemas/RuleStats"
                 },
+                "orphaned": {
+                  "type": "object",
+                  "properties": {
+                    "machineId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "removedAt": {
+                      "type": [
+                        "null",
+                        "number"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "machineId",
+                    "name",
+                    "removedAt"
+                  ]
+                },
                 "caseSensitive": {
                   "type": "boolean"
                 },

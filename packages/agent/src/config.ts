@@ -12,6 +12,14 @@ export interface CliConfig {
    */
   hubId?: string;
   hubUrl: string;
+  /**
+   * The hub this machine last registered with, by its challenge's id, and
+   * the machine id it registered as, written once the hub acknowledged it.
+   * The id follows the hostname (core machine-id.ts): a register under
+   * another names this one to the same hub (`formerMachineId`), which moves
+   * what it held for it.
+   */
+  registeredAs?: { hubId: string; machineId: string };
   /** Transcript cache budget in megabytes (default 256). */
   transcriptCacheMb?: number;
   updatedAt: string;
@@ -39,11 +47,23 @@ export const readConfig = async (
     return undefined;
   }
   const tcm = config.transcriptCacheMb;
+  const registered = config.registeredAs;
   return {
     ...(typeof config.hubId === "string" && config.hubId
       ? { hubId: config.hubId }
       : {}),
     hubUrl: typeof config.hubUrl === "string" ? config.hubUrl : "",
+    ...(typeof registered?.hubId === "string" &&
+    typeof registered.machineId === "string" &&
+    registered.hubId &&
+    registered.machineId
+      ? {
+          registeredAs: {
+            hubId: registered.hubId,
+            machineId: registered.machineId,
+          },
+        }
+      : {}),
     transcriptCacheMb:
       typeof tcm === "number" && Number.isFinite(tcm) && tcm > 0
         ? tcm

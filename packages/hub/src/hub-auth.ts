@@ -634,6 +634,25 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
       : "wrong";
   };
 
+  /**
+   * Whether a register as `machineId` answers this socket's nonce with the
+   * key `former` was admitted with: the machine `former` was, re-joining
+   * under a new id (its id follows its hostname) with the key it kept.
+   */
+  const provesFormer = (
+    former: string,
+    machineId: string,
+    nonce: string,
+    proof: string | undefined
+  ): boolean => {
+    const key = db.machineKey(former);
+    return Boolean(
+      key &&
+      proof &&
+      sameMac(socketProof(key, nonce, hubId(), machineId), proof)
+    );
+  };
+
   /** A connection that proved no key, held until the person admits or refuses its machine. */
   const hold = (entry: Waiting) => {
     const before = waiting.get(entry.machineId);
@@ -883,6 +902,7 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
     hold,
     mintMachineKey,
     mode,
+    provesFormer,
     proveSocket,
     released,
     routes,

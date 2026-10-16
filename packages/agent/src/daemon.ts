@@ -101,7 +101,7 @@ import {
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
-import { readConfig } from "./config";
+import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import type { Harness } from "./harness";
@@ -578,6 +578,13 @@ export interface RegisterPayload extends MachineIdentity {
   build?: BuildInfo;
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
+  /**
+   * The id this machine last registered as with this hub, when its id has
+   * moved since (it follows the hostname, core machine-id.ts): the hub moves
+   * what it held for that id to this one once the register proves it is
+   * that machine (hub server.ts `takeFormerId`). Absent when it has not moved.
+   */
+  formerMachineId?: string;
   instances: string[];
   machineCapabilities: Awaited<ReturnType<typeof probeCapabilities>>;
   /**
@@ -1230,11 +1237,21 @@ const attach = (
     const capabilities = () => probeCapabilities();
     let machineCapabilities = yield* Effect.promise(capabilities);
     const machineAgent = yield* Effect.promise(isMachineAgent);
+    // The id this machine registered as with this hub last, when it was
+    // another: the hub moves what it held for it to this one.
+    const registeredAs = (yield* Effect.promise(() => readConfig()))
+      ?.registeredAs;
+    const formerMachineId =
+      registeredAs?.hubId === challenge.hubId &&
+      registeredAs.machineId !== identity.machineId
+        ? registeredAs.machineId
+        : undefined;
     const registerPayload = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
       ...identity,
       ...keyProof(challenge, identity.machineId),
+      ...(formerMachineId ? { formerMachineId } : {}),
       ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
       sessionAddresses: supervisor.sessionAddresses,
       machineCapabilities,
@@ -2118,6 +2135,26 @@ const attach = (
       );
     };
 
+    /**
+     * The hub took this machine as `identity.machineId`: kept as the id a
+     * later register under another names as its former one.
+     */
+    const recordRegistered = (): void => {
+      if (
+        registeredAs?.hubId === challenge.hubId &&
+        registeredAs.machineId === identity.machineId
+      ) {
+        return;
+      }
+      writeConfig({
+        registeredAs: { hubId: challenge.hubId, machineId: identity.machineId },
+      }).catch((error: unknown) =>
+        console.warn(
+          `[agent] could not record the id this machine registered as: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    };
+
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
     const beforeAck = (envelope: Envelope): boolean => {
       if (envelope.verb === "register") {
@@ -2126,6 +2163,7 @@ const attach = (
             .addressContract === true
         );
         awaitingRegisterAck = false;
+        recordRegistered();
         // What each session is owed goes first, ahead of anything this ack
         // sets off: every frame the hub has not taken, then each running
         // reply so far (outbox.ts).

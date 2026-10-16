@@ -1209,8 +1209,16 @@ async function standUp(
       bootEnded(role);
     }
   };
-  /** Starts `role`, under `wrap` when given ({@link serviceSpawn}): a boot, heavy until it answers. */
-  const launch = (role: Role, wrap: string[] = []) => {
+  /**
+   * Starts `role`, under `wrap` when given ({@link serviceSpawn}), with
+   * `overrides` laid over the fleet's environment: a boot, heavy until it
+   * answers.
+   */
+  const launch = (
+    role: Role,
+    wrap: string[] = [],
+    overrides: Record<string, string> = {}
+  ) => {
     if (!booting.has(role)) {
       booting.set(role, heavy.open());
     }
@@ -1224,7 +1232,7 @@ async function standUp(
         // writes `.opencode/` in its own directory: in the sandbox, never the
         // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
         cwd: role === "sessiond" ? sandbox : root,
-        env: { ...env, TMPDIR: tmpFor(role) },
+        env: { ...env, ...overrides, TMPDIR: tmpFor(role) },
         stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
         stderr: Bun.file(err),
       },
@@ -1589,6 +1597,25 @@ async function standUp(
     // The fleet serves.
     setUp();
   };
+  /**
+   * The first machine's agent started again under machine id `machineId`,
+   * its HOME (the `config.json` that says what it registered as) and its
+   * sessiond as they were: a renamed machine, whose id follows its hostname,
+   * coming back. Answers once the hub holds it online with custody.
+   */
+  const rejoinAs = async (machineId: string) => {
+    await stop("agent");
+    launch("agent", [], { CAWCO_MACHINE_ID: machineId });
+    await booted("agent", () =>
+      answering(
+        "agent",
+        `the agent online with custody as ${machineId}`,
+        () => online(machineId),
+        Boolean,
+        120_000
+      )
+    );
+  };
 
   /** What {@link launchMachine} started, agents first, for `close`. Its folders are the fleet's (`dirs`). */
   const machineProcs: ReturnType<typeof Bun.spawn>[] = [];
@@ -1904,6 +1931,7 @@ async function standUp(
     write,
     hubUp,
     agentUp,
+    rejoinAs,
     sessiondUp,
     launchMachine,
     fileAccount,
