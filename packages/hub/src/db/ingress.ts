@@ -3,21 +3,28 @@ import {
   asc,
   desc,
   eq,
+  exists,
   inArray,
   isNotNull,
   isNull,
+  notExists,
+  or,
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   connectorPolls,
+  eventRouteKinds,
   eventRoutes,
   githubPollers,
   inboundEvents,
 } from "./schema";
 
 export type InboundEventRow = typeof inboundEvents.$inferSelect;
-export type EventRouteRow = typeof eventRoutes.$inferSelect;
+/** A route with the kinds it takes (`event_route_kinds`); none takes any. */
+export type EventRouteRow = typeof eventRoutes.$inferSelect & {
+  kinds: string[];
+};
 export type GitHubPollerRow = typeof githubPollers.$inferSelect;
 export type ConnectorPollRow = typeof connectorPolls.$inferSelect;
 
@@ -57,8 +64,11 @@ export interface IngressDb {
   /** Gives claimed inbox lines back, when the wake that took them did not go out. */
   readonly releaseInbox: (ids: string[]) => void;
   readonly route: (id: string) => EventRouteRow | undefined;
-  /** A project's routes, oldest first: the order they are tried in. */
-  readonly routes: (projectId: string) => EventRouteRow[];
+  /**
+   * A project's routes, oldest first: the order they are tried in. With
+   * `kind`, only those that take it: a route naming no kinds takes any.
+   */
+  readonly routes: (projectId: string, kind?: string) => EventRouteRow[];
   readonly setEvent: (
     id: string,
     patch: Pick<Partial<InboundEventRow>, "routedTo" | "routeId" | "handledAt">
@@ -82,134 +92,214 @@ export interface IngressDb {
   ) => EventRouteRow | undefined;
 }
 
-export const ingressDb = (db: BunSQLiteDatabase): IngressDb => ({
-  insertEvent: (row) =>
-    db
-      .insert(inboundEvents)
-      .values(row)
-      .onConflictDoNothing()
-      .returning()
-      .get(),
-  event: (id) =>
-    db.select().from(inboundEvents).where(eq(inboundEvents.id, id)).get(),
-  deliveries: (projectId) =>
-    db
-      .select({
-        routeId: sql<string>`${inboundEvents.routeId}`,
-        receivedAt: sql<number>`max(${inboundEvents.receivedAt})`,
-      })
-      .from(inboundEvents)
-      .where(
-        and(
-          eq(inboundEvents.projectId, projectId),
-          isNotNull(inboundEvents.routeId)
+export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
+  /** Each route with its kinds, in the order they were written. */
+  const withKinds = (
+    rows: (typeof eventRoutes.$inferSelect)[]
+  ): EventRouteRow[] => {
+    const kinds = new Map<string, string[]>();
+    if (rows.length > 0) {
+      for (const { routeId, kind } of db
+        .select()
+        .from(eventRouteKinds)
+        .where(
+          inArray(
+            eventRouteKinds.routeId,
+            rows.map((row) => row.id)
+          )
         )
-      )
-      .groupBy(inboundEvents.routeId)
-      .all(),
-  events: (projectId, limit) =>
-    db
-      .select()
-      .from(inboundEvents)
-      .where(eq(inboundEvents.projectId, projectId))
-      .orderBy(desc(inboundEvents.receivedAt))
-      .limit(limit)
-      .all(),
-  setEvent: (id, patch) => {
-    db.update(inboundEvents).set(patch).where(eq(inboundEvents.id, id)).run();
-  },
-  claimInbox: (projectId, at) =>
-    db
-      .update(inboundEvents)
-      .set({ handledAt: at })
-      .where(
-        and(
-          eq(inboundEvents.projectId, projectId),
-          eq(inboundEvents.routedTo, "lead"),
-          isNull(inboundEvents.handledAt)
-        )
-      )
-      .returning()
-      .all()
-      .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime()),
-  releaseInbox: (ids) => {
-    if (ids.length > 0) {
-      db.update(inboundEvents)
-        .set({ handledAt: null })
-        .where(inArray(inboundEvents.id, ids))
+        .orderBy(sql`rowid`)
+        .all()) {
+        kinds.set(routeId, [...(kinds.get(routeId) ?? []), kind]);
+      }
+    }
+    return rows.map((row) => ({ ...row, kinds: kinds.get(row.id) ?? [] }));
+  };
+  /** A route's kinds replaced by `kinds`, in the transaction `tx`. */
+  const putKinds = (
+    tx: Pick<BunSQLiteDatabase, "delete" | "insert">,
+    routeId: string,
+    kinds: readonly string[]
+  ) => {
+    tx.delete(eventRouteKinds)
+      .where(eq(eventRouteKinds.routeId, routeId))
+      .run();
+    const distinct = [...new Set(kinds)];
+    if (distinct.length > 0) {
+      tx.insert(eventRouteKinds)
+        .values(distinct.map((kind) => ({ routeId, kind })))
         .run();
     }
-  },
-  routes: (projectId) =>
-    db
-      .select()
-      .from(eventRoutes)
-      .where(eq(eventRoutes.projectId, projectId))
-      .orderBy(asc(eventRoutes.createdAt))
-      .all(),
-  route: (id) =>
-    db.select().from(eventRoutes).where(eq(eventRoutes.id, id)).get(),
-  createRoute: (row) => db.insert(eventRoutes).values(row).returning().get(),
-  updateRoute: (id, patch) =>
-    db
-      .update(eventRoutes)
-      .set(patch)
-      .where(eq(eventRoutes.id, id))
-      .returning()
-      .get(),
-  deleteRoute: (id) =>
-    db.delete(eventRoutes).where(eq(eventRoutes.id, id)).returning().all()
-      .length > 0,
-  githubPoller: (projectId) =>
-    db
-      .select()
-      .from(githubPollers)
-      .where(eq(githubPollers.projectId, projectId))
-      .get(),
-  githubPollers: () => db.select().from(githubPollers).all(),
-  setGitHubConnection: (projectId, connection) => {
-    if (connection === null) {
-      db.delete(githubPollers)
+  };
+  return {
+    insertEvent: (row) =>
+      db
+        .insert(inboundEvents)
+        .values(row)
+        .onConflictDoNothing()
+        .returning()
+        .get(),
+    event: (id) =>
+      db.select().from(inboundEvents).where(eq(inboundEvents.id, id)).get(),
+    deliveries: (projectId) =>
+      db
+        .select({
+          routeId: sql<string>`${inboundEvents.routeId}`,
+          receivedAt: sql<number>`max(${inboundEvents.receivedAt})`,
+        })
+        .from(inboundEvents)
+        .where(
+          and(
+            eq(inboundEvents.projectId, projectId),
+            isNotNull(inboundEvents.routeId)
+          )
+        )
+        .groupBy(inboundEvents.routeId)
+        .all(),
+    events: (projectId, limit) =>
+      db
+        .select()
+        .from(inboundEvents)
+        .where(eq(inboundEvents.projectId, projectId))
+        .orderBy(desc(inboundEvents.receivedAt))
+        .limit(limit)
+        .all(),
+    setEvent: (id, patch) => {
+      db.update(inboundEvents).set(patch).where(eq(inboundEvents.id, id)).run();
+    },
+    claimInbox: (projectId, at) =>
+      db
+        .update(inboundEvents)
+        .set({ handledAt: at })
+        .where(
+          and(
+            eq(inboundEvents.projectId, projectId),
+            eq(inboundEvents.routedTo, "lead"),
+            isNull(inboundEvents.handledAt)
+          )
+        )
+        .returning()
+        .all()
+        .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime()),
+    releaseInbox: (ids) => {
+      if (ids.length > 0) {
+        db.update(inboundEvents)
+          .set({ handledAt: null })
+          .where(inArray(inboundEvents.id, ids))
+          .run();
+      }
+    },
+    routes: (projectId, kind) => {
+      const ofRoute = eq(eventRouteKinds.routeId, eventRoutes.id);
+      return withKinds(
+        db
+          .select()
+          .from(eventRoutes)
+          .where(
+            and(
+              eq(eventRoutes.projectId, projectId),
+              kind === undefined
+                ? undefined
+                : or(
+                    notExists(
+                      db
+                        .select({ one: sql`1` })
+                        .from(eventRouteKinds)
+                        .where(ofRoute)
+                    ),
+                    exists(
+                      db
+                        .select({ one: sql`1` })
+                        .from(eventRouteKinds)
+                        .where(and(ofRoute, eq(eventRouteKinds.kind, kind)))
+                    )
+                  )
+            )
+          )
+          .orderBy(asc(eventRoutes.createdAt))
+          .all()
+      );
+    },
+    route: (id) =>
+      withKinds(
+        db.select().from(eventRoutes).where(eq(eventRoutes.id, id)).all()
+      )[0],
+    createRoute: ({ kinds, ...row }) =>
+      db.transaction((tx) => {
+        const created = tx.insert(eventRoutes).values(row).returning().get();
+        putKinds(tx, created.id, kinds);
+        return { ...created, kinds: [...new Set(kinds)] };
+      }),
+    updateRoute: (id, { kinds, ...patch }) =>
+      db.transaction((tx) => {
+        const updated = tx
+          .update(eventRoutes)
+          .set(patch)
+          .where(eq(eventRoutes.id, id))
+          .returning()
+          .get();
+        if (updated && kinds !== undefined) {
+          putKinds(tx, id, kinds);
+        }
+        return updated && withKinds([updated])[0];
+      }),
+    deleteRoute: (id) =>
+      db.delete(eventRoutes).where(eq(eventRoutes.id, id)).returning().all()
+        .length > 0,
+    githubPoller: (projectId) =>
+      db
+        .select()
+        .from(githubPollers)
+        .where(eq(githubPollers.projectId, projectId))
+        .get(),
+    githubPollers: () => db.select().from(githubPollers).all(),
+    setGitHubConnection: (projectId, connection) => {
+      if (connection === null) {
+        db.delete(githubPollers)
+          .where(eq(githubPollers.projectId, projectId))
+          .run();
+        return;
+      }
+      db.insert(githubPollers)
+        .values({ projectId, connection, repo: null, cursors: {} })
+        .onConflictDoUpdate({
+          target: githubPollers.projectId,
+          set: { connection, reason: null, resumeAt: null },
+        })
+        .run();
+    },
+    updateGitHubPoller: (projectId, patch) => {
+      db.update(githubPollers)
+        .set(patch)
         .where(eq(githubPollers.projectId, projectId))
         .run();
-      return;
-    }
-    db.insert(githubPollers)
-      .values({ projectId, connection, repo: null, cursors: {} })
-      .onConflictDoUpdate({
-        target: githubPollers.projectId,
-        set: { connection, reason: null, resumeAt: null },
-      })
-      .run();
-  },
-  updateGitHubPoller: (projectId, patch) => {
-    db.update(githubPollers)
-      .set(patch)
-      .where(eq(githubPollers.projectId, projectId))
-      .run();
-  },
-  connectorPolls: (projectId) => {
-    const query = db.select().from(connectorPolls);
-    return (
-      projectId === undefined
-        ? query
-        : query.where(eq(connectorPolls.projectId, projectId))
-    )
-      .orderBy(asc(connectorPolls.createdAt))
-      .all();
-  },
-  connectorPoll: (id) =>
-    db.select().from(connectorPolls).where(eq(connectorPolls.id, id)).get(),
-  createConnectorPoll: (row) =>
-    db.insert(connectorPolls).values(row).returning().get(),
-  updateConnectorPoll: (id, patch) =>
-    db
-      .update(connectorPolls)
-      .set(patch)
-      .where(eq(connectorPolls.id, id))
-      .returning()
-      .get(),
-  deleteConnectorPoll: (id) =>
-    db.delete(connectorPolls).where(eq(connectorPolls.id, id)).returning().all()
-      .length > 0,
-});
+    },
+    connectorPolls: (projectId) => {
+      const query = db.select().from(connectorPolls);
+      return (
+        projectId === undefined
+          ? query
+          : query.where(eq(connectorPolls.projectId, projectId))
+      )
+        .orderBy(asc(connectorPolls.createdAt))
+        .all();
+    },
+    connectorPoll: (id) =>
+      db.select().from(connectorPolls).where(eq(connectorPolls.id, id)).get(),
+    createConnectorPoll: (row) =>
+      db.insert(connectorPolls).values(row).returning().get(),
+    updateConnectorPoll: (id, patch) =>
+      db
+        .update(connectorPolls)
+        .set(patch)
+        .where(eq(connectorPolls.id, id))
+        .returning()
+        .get(),
+    deleteConnectorPoll: (id) =>
+      db
+        .delete(connectorPolls)
+        .where(eq(connectorPolls.id, id))
+        .returning()
+        .all().length > 0,
+  };
+};

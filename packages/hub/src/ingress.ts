@@ -259,12 +259,9 @@ const regexProblem = (regex: string): string | undefined => {
   }
 };
 
-/** Whether every condition `route` sets holds for `event`. */
+/** Whether every condition `route` sets holds for `event`, its kinds aside: the routes are read for the event's kind. */
 const matches = (route: EventRouteRow, event: InboundEvent): boolean => {
   if (!globMatches(route.source, event.source)) {
-    return false;
-  }
-  if (route.kinds.length > 0 && !route.kinds.includes(event.kind)) {
     return false;
   }
   if (route.author !== null && !same(route.author, event.actor)) {
@@ -498,7 +495,7 @@ export const createIngress = ({
 
   /** The routes whose every condition holds for `event`, oldest first: the matcher's filter. */
   const matching = (projectId: string, event: InboundEvent) =>
-    store.routes(projectId).filter((each) => {
+    store.routes(projectId, event.kind).filter((each) => {
       if (!(each.enabled && db.routines.get(each.routineId)?.enabled)) {
         return false;
       }

@@ -3311,8 +3311,6 @@ export const eventRoutes = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** A source, `*` matching any run of characters: `github:*`, `conn:linear:*`. */
     source: text("source").notNull(),
-    /** Kinds it takes; empty takes any. */
-    kinds: text("kinds", { mode: "json" }).$type<string[]>().notNull(),
     /** The event's author, any case. */
     author: text("author"),
     /** A label the event carries, any case. */
@@ -3330,6 +3328,18 @@ export const eventRoutes = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("event_routes_project").on(table.projectId)]
+);
+
+/** The kinds an event route takes, one row each; a route with none takes any. */
+export const eventRouteKinds = sqliteTable(
+  "event_route_kinds",
+  {
+    routeId: text("route_id")
+      .notNull()
+      .references(() => eventRoutes.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.routeId, table.kind] })]
 );
 
 /** Where one GitHub resource's poll stands: its ETag, its high-water mark, and its counts. */
