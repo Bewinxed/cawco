@@ -17,9 +17,14 @@
    * at the top of the view, by key, and how many pixels of it were scrolled
    * past. A row keeps its key whatever arrives before or after it, so the
    * place survives a conversation that grew while it was away. Kept per
-   * session in sessionStorage, so a reload returns there too.
+   * session in sessionStorage, so a reload returns there too. Or at a record
+   * the conversation was opened at (`?at=`, open-at.svelte.ts), centred:
+   * never kept, it is the address's.
    */
-  type Landing = { tail: true } | { tail: false; key: string; into: number };
+  type Landing =
+    | { tail: true }
+    | { tail: false; key: string; into: number }
+    | { tail: false; at: string };
   const LANDING = "cawco:landing:";
 </script>
 
@@ -44,9 +49,10 @@
     readTranscript,
     type SessionState,
   } from "../client.svelte";
-  import { crossIn, dur, ease, motionOk } from "../motion/curves.svelte";
+  import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
+  import { isThreadTab } from "../thread-tabs";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import {
@@ -65,6 +71,7 @@
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
+  import { openAt, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import RunBlock from "./RunBlock.svelte";
@@ -1730,8 +1737,26 @@
     if (!resume || resume.tail) {
       return -1;
     }
+    if ("at" in resume) {
+      return rowHolding(renderedRows, resume.at);
+    }
     const { key } = resume;
     return renderedRows.findIndex((row) => placeOf(row) === key);
+  }
+
+  /**
+   * How far into the row at `index` the view's top stands to centre it in
+   * the room the reader sees, above the foot the composer stands over: a
+   * negative distance, the room above the row. A row taller than that room
+   * starts at the view's top, so its first line is read first.
+   */
+  function centred(index: number): number {
+    if (!(list && scroller)) {
+      return 0;
+    }
+    const room = scroller.clientHeight - rooms.foot;
+    const size = list.getItemSize(index);
+    return size < room ? -(room - size) / 2 : 0;
   }
 
   /**
@@ -1753,10 +1778,11 @@
       listing.getBoundingClientRect().top -
       scroller.getBoundingClientRect().top +
       scroller.scrollTop;
+    const into = "at" in resume ? centred(index) : resume.into;
     // Within what the scroller can reach: a place past its end — rows below
     // it that are shorter now than when it was left — is its end.
     const target = Math.min(
-      Math.max(0, start + list.getItemOffset(index) + resume.into),
+      Math.max(0, start + list.getItemOffset(index) + into),
       scroller.scrollHeight - scroller.clientHeight
     );
     if (Math.abs(scroller.scrollTop - target) <= 0.5) {
@@ -1766,6 +1792,166 @@
     lastWrite = scroller.scrollTop;
     return true;
   }
+
+  // ── Opened at a record ────────────────────────────────────────────────
+  /**
+   * THE RECORD ASKED FOR IS READ BACK TO, CENTRED AND MARKED.
+   *
+   * `?at=` names a record of this conversation (open-at.svelte.ts). It is a
+   * landing like a kept place (`resume`), centred rather than at the view's
+   * top: before the list is drawn, the reveal reads the pages before the
+   * rows held, one at a time, until one holds it, and draws the list there;
+   * once drawn, `seeking` does the same in place. Either way the view then
+   * stands off the tail, so nothing that arrives there moves it, until the
+   * reader scrolls. A record the whole conversation does not hold opens at
+   * the latest row, and the dock says so.
+   */
+  /** Bumped by each ask: what re-runs a reveal under way to read back to it. */
+  let asked = $state(0);
+  /** The record sought in a list already drawn. */
+  let seeking = $state<string | null>(null);
+  /** The row opened at, by key: `on` until the reader moves on, then fading. */
+  let marked = $state<{ key: string; state: "on" | "off" } | null>(null);
+  /** The record asked for is not here (`gone`), or the pages before could not be read (`unread`). */
+  let unfound = $state<"gone" | "unread" | null>(null);
+  /** The most frames a seek re-centres for while rows around it measure: our own call. */
+  const SEEK_FRAMES = 30;
+
+  function seek(docId: string): void {
+    marked = null;
+    unfound = null;
+    resume = { tail: false, at: docId };
+    if (shown) {
+      seeking = docId;
+    } else {
+      asked += 1;
+    }
+  }
+
+  /** The ask this transcript is seeking, until it has arrived. */
+  let taking: string | null = null;
+  // An ask is the view's until a transcript of it has arrived at it: one
+  // unmounted mid-seek (its pane's state changing under it while the newest
+  // page is read) leaves it to the next.
+  $effect(() => {
+    const docId = openAt.get(session.instanceId);
+    if (docId === undefined || docId === taking) {
+      return;
+    }
+    taking = docId;
+    untrack(() => seek(docId));
+  });
+
+  /** The seek is over: the record is in view and marked, or it is said not to be. */
+  function arrived(docId: string): void {
+    taking = null;
+    if (openAt.get(session.instanceId) === docId) {
+      openAt.delete(session.instanceId);
+    }
+    const index = rowHolding(renderedRows, docId);
+    if (index < 0) {
+      marked = null;
+      unfound = paged()?.olderFault ? "unread" : "gone";
+      return;
+    }
+    marked = { key: renderedRows[index].key, state: "on" };
+    if (scroller) {
+      const distance =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      farFromLatest = distance > FAR_FROM_LATEST * scroller.clientHeight;
+    }
+  }
+
+  // In a list already drawn: the pages before are read until one holds the
+  // record, then the view is centred on it over the frames the rows around
+  // it take to measure (`restore`, as the reveal does).
+  $effect(() => {
+    const docId = seeking;
+    if (!(docId && shown && visible)) {
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: a page landing changes the rows the record is looked for in
+    void rowCount;
+    const own = paged();
+    if (session.loading || own?.loading) {
+      return;
+    }
+    if (untrack(anchorIndex) < 0) {
+      if (own?.cursor && !own.olderFault) {
+        if (!own.hydrating && untrack(printOf) === builtPrint) {
+          // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this seek
+          void untrack(() => readOlderPage(own.instanceId));
+        }
+        return;
+      }
+      // The conversation's start is in hand, or a page would not read: the
+      // latest row, and why not the one asked for.
+      untrack(() => {
+        resume = null;
+        seeking = null;
+        atBottom = true;
+        farFromLatest = false;
+        pinBottom();
+        arrived(docId);
+      });
+      return;
+    }
+    let frame: number | null = null;
+    let frames = 0;
+    const step = (): void => {
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        if (restore() && frames < SEEK_FRAMES) {
+          frames += 1;
+          step();
+          return;
+        }
+        resume = null;
+        seeking = null;
+        arrived(docId);
+      });
+    };
+    untrack(() => {
+      stopFollow();
+      tickets.clear();
+      step();
+    });
+    return () => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  });
+
+  /** The reader has moved on: the mark fades where it stands, and the note goes. */
+  function letGo(): void {
+    unfound = null;
+    if (marked?.state !== "on") {
+      return;
+    }
+    const { key } = marked;
+    marked = { key, state: "off" };
+    setTimeout(() => {
+      if (marked?.key === key && marked.state === "off") {
+        marked = null;
+      }
+    }, dur("--dur-panel"));
+  }
+
+  // A press or a key in the transcript is the reader's, as their scroll is
+  // (`onscroll`).
+  $effect(() => {
+    const node = scroller;
+    if (!(node && (marked?.state === "on" || unfound))) {
+      return;
+    }
+    node.addEventListener("pointerdown", letGo);
+    node.addEventListener("keydown", letGo);
+    return () => {
+      node.removeEventListener("pointerdown", letGo);
+      node.removeEventListener("keydown", letGo);
+    };
+  });
 
   // ── Older pages ─────────────────────────────────────────────────────────
   /**
@@ -1975,6 +2161,9 @@
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
     tickets.clear();
+    if (marked?.state === "on" || unfound) {
+      letGo();
+    }
     // The reader's scroll has the screen until it comes to rest: nothing
     // writes the scroll offset under a finger, its momentum or its bounce,
     // however near the tail it moves. The tail is taken back at rest, and
@@ -2223,6 +2412,8 @@
 
     const reading =
       session.loading || (store !== null && store !== session && store.loading);
+    // biome-ignore lint/complexity/noVoid: a record asked for before the list is drawn is read back to (`seek`).
+    void asked;
 
     if (shown || reading || !(landed && node && container)) {
       return;
@@ -2311,8 +2502,12 @@
           });
           return;
         }
+        const sought = resume && "at" in resume ? resume.at : null;
         resume = null;
         shown = true;
+        if (sought !== null) {
+          arrived(sought);
+        }
       });
     };
     const changes = new MutationObserver(wait);
@@ -3083,6 +3278,7 @@
           handoff={presentation.handed.get(row.key)}
           id={row.kind === "tools" ? undefined : row.key}
           leaving={presentation.leaving.has(row.key)}
+          marked={marked?.key === row.key ? marked.state : undefined}
           motion={motionOf(row)}
           onleft={leaver(row.key)}
           rowKey={row.key}
@@ -3180,6 +3376,26 @@
         floating
         onretry={() => readTranscript(session.instanceId, "retry")}
       />
+    {/if}
+    <!-- The record this was opened at is not here: said where the reader
+         landed instead, until they move on. -->
+    {#if unfound}
+      <p
+        class="unfound"
+        data-open-at={unfound}
+        role="status"
+        in:rise={"--dur-panel"}
+        out:rise={"--dur-exit"}
+      >
+        {#if unfound === "gone"}
+          That moment isn't in this {isThreadTab(session.instanceId)
+            ? "thread"
+            : "session"} any more.
+        {:else}
+          That moment couldn't be reached: the turns before these couldn't be
+          read.
+        {/if}
+      </p>
     {/if}
     {#if catching || showLatest}
       <div class="pills">
@@ -3334,6 +3550,20 @@
     & :global(button) {
       pointer-events: auto;
     }
+  }
+  /* The dock's raised line, as the not-caught-up line floats (Behind). */
+  .unfound {
+    max-inline-size: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+    text-align: center;
+    text-wrap: balance;
   }
   .pills {
     display: flex;

@@ -59,6 +59,7 @@
     leaving = false,
     handoff,
     onleft,
+    marked,
     children,
   }: {
     /**
@@ -79,6 +80,11 @@
     /** The place this row took in the update that drew it. */
     handoff?: Handoff;
     onleft?: () => void;
+    /**
+     * The record the conversation was opened at (open-at.svelte.ts): `on`
+     * while it is held, `off` as it fades once the reader has moved on.
+     */
+    marked?: "on" | "off";
     children: Snippet<[Ticket | null]>;
   } = $props();
 
@@ -442,6 +448,7 @@
 <div
   class={["row", { continues }]}
   data-drawn={drawn || undefined}
+  data-marked={marked}
   data-row={rowKey}
   bind:this={node}
 >
@@ -460,6 +467,35 @@
     &.continues {
       --rail-head: var(--rail-body);
       --rail-gap: 0px;
+    }
+  }
+  /* The record a conversation was opened at: the selection tint laid over
+     the whole row, a well's step past its edges and on its radius, so a
+     message in the reader's well and a line on the rail read the same. It
+     fades in where it stands and out once the reader has moved on; with less
+     motion it is simply there, then gone. */
+  .row[data-marked] {
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline: calc(-1 * var(--space-2));
+      border-radius: var(--radius-well);
+      background: var(--selection);
+      pointer-events: none;
+      transition: opacity var(--dur-panel) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+    &[data-marked="off"]::before {
+      opacity: 0;
     }
   }
 </style>

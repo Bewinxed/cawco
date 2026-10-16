@@ -22,6 +22,7 @@ import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref } from "../links";
 import { keepPrefs } from "../prefs";
+import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
 
@@ -622,6 +623,12 @@ export const workspace = {
       return;
     }
     const urlId = parts[1] ?? null;
+    // A record to open at (`?at=`), asked of the conversation whether or not
+    // it is already in front: its transcript seeks there either way.
+    const at = url.searchParams.get("at");
+    if (urlId && at) {
+      askOpenAt(urlId, at);
+    }
     if (urlId === this.activeSessionId) {
       return;
     }
@@ -655,6 +662,7 @@ export const workspace = {
     if (!leaf) {
       return;
     }
+    carryOpenAt(from, to);
     const at = leaf.tabs.indexOf(from);
     if (leaf.tabs.includes(to)) {
       leaf.tabs.splice(at, 1);
