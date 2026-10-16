@@ -313,6 +313,7 @@ import {
   waitedOut,
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
@@ -471,12 +472,7 @@ import { createDesignSystem } from "./design-system";
 import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
-import {
-  answerFind,
-  createFind,
-  FIND_QUERY,
-  TRANSCRIPT_ANSWER_MS,
-} from "./find";
+import { answerFind, createFind, FIND_QUERY } from "./find";
 import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
@@ -698,6 +694,16 @@ import { createWorkspaceRetire } from "./workspace-retire";
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
 
+/** A machine ask that got no answer: not connected ("dead") or silent past its deadline ("timeout"). */
+type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
+
+/**
+ * The `default` of a `switch` over a read's kinds: takes only `never`, so a
+ * kind left unhandled fails the build.
+ */
+const unreachable = (value: never): Error =>
+  new Error(`unhandled read: ${JSON.stringify(value)}`);
+
 /**
  * What a delegate's report carries beside its body: the turn it closes, that
  * it is a hub notice rather than a turn's end, and the delegate's
@@ -710,14 +716,17 @@ interface ReportTold {
 }
 
 /** Why a machine's transcripts gave no answer to a find, as the clause after "couldn't search:". */
-function searchMiss(answer: ControlResult | "offline" | "timeout"): string {
-  if (answer === "offline") {
-    return "it went offline";
+function searchMiss(answer: Bounded<ControlResult>): string {
+  switch (answer.kind) {
+    case "answered":
+      return answer.value.error ?? "it gave no reason";
+    case "unanswered":
+      return answer.reason === "dead"
+        ? "it went offline"
+        : `it didn't answer within ${Math.round(answer.after / 1000)} s`;
+    default:
+      throw unreachable(answer);
   }
-  if (answer === "timeout") {
-    return `it didn't answer within ${TRANSCRIPT_ANSWER_MS / 1000} s`;
-  }
-  return answer.error ?? "it gave no reason";
 }
 
 /**
@@ -1126,6 +1135,15 @@ interface SessionLocation {
   machineId: string;
   sessionId: string;
 }
+
+/**
+ * What locating a conversation came to: found, on no machine (every machine
+ * asked answered so), or not known because `machines` did not answer.
+ */
+type Located =
+  | { kind: "found"; at: SessionLocation }
+  | { kind: "nowhere" }
+  | { kind: "unanswered"; machines: string[] };
 
 /**
  * How many conversations one naming request may ask about. A reader's open tabs
@@ -3249,6 +3267,22 @@ export const createServer = (
       ? machineFaultWords(namedAmong(machine, agents), fault)
       : machineFaultWords(undefined, "unknown");
   };
+  /** {@link machineFault} for an ask the machine did not answer: not connected, or silent. */
+  const unansweredFault = (machineId: string, answer: Unanswered): string =>
+    machineFault(machineId, answer.reason === "dead" ? "offline" : "silent");
+  /** An ask the machine left unanswered as an HTTP answer: 404 not connected, 504 silent. */
+  const unansweredStatus = (
+    machineId: string,
+    answer: Unanswered
+  ): { code: 404 | 504; said: string } =>
+    answer.reason === "dead"
+      ? { code: 404, said: machineFault(machineId, "offline") }
+      : { code: 504, said: machineFault(machineId, "silent") };
+  /** "<machine> did not answer within N s" (or is not connected), for an ask it left unanswered. */
+  const silentWords = (machineId: string, answer: Unanswered): string =>
+    answer.reason === "dead"
+      ? `${machineName(machineId)} is not connected`
+      : `${machineName(machineId)} did not answer within ${Math.round(answer.after / 1000)} s`;
   /** A session as a sentence names it. */
   const sessionName = (row: {
     derivedTitle?: string | null;
@@ -3395,16 +3429,26 @@ export const createServer = (
       READ_TIMEOUT_MS,
       "pi"
     );
-    if (answer === "offline") {
-      return payload;
+    switch (answer.kind) {
+      case "unanswered":
+        if (answer.reason === "dead") {
+          return payload;
+        }
+        return {
+          refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${Math.round(answer.after / 1000)} s. Nothing was started.`,
+        };
+      case "answered": {
+        if (!answer.value.ok) {
+          return {
+            refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer.value.error ?? "it gave no reason"}. Nothing was started.`,
+          };
+        }
+        const model = answer.value.result as string | null;
+        return model ? { ...payload, model } : payload;
+      }
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout" || !answer.ok) {
-      return {
-        refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer === "timeout" ? "it did not answer" : (answer.error ?? "it gave no reason")}. Nothing was started.`,
-      };
-    }
-    const model = answer.result as string | null;
-    return model ? { ...payload, model } : payload;
   };
   /**
    * Why `machineId`'s OpenCode would not run `model`, naming the models it
@@ -3805,13 +3849,25 @@ export const createServer = (
       SIGNIN_TIMEOUT_MS,
       "claude"
     );
-    if (answer === "offline" || answer === "timeout" || !answer.ok) {
-      console.warn(
-        `[hub] account probe on ${machineName(machineId)} (${account}) failed: ${typeof answer === "string" ? answer : answer.error}`
-      );
-      return;
+    // Unanswered or refused, the account keeps what the hub last knew of it
+    // (accounts.ts `catalogFor` writes nothing and tries again).
+    switch (answer.kind) {
+      case "unanswered":
+        console.warn(
+          `[hub] account probe on ${machineName(machineId)} (${account}) was not answered: ${unansweredFault(machineId, answer)} (after ${answer.after} ms); the account keeps its last known state`
+        );
+        return;
+      case "answered":
+        if (!answer.value.ok) {
+          console.warn(
+            `[hub] account probe on ${machineName(machineId)} (${account}) was refused: ${answer.value.error ?? "it gave no reason"}`
+          );
+          return;
+        }
+        return answer.value.result as AccountProbe;
+      default:
+        throw unreachable(answer);
     }
-    return answer.result as AccountProbe;
   };
 
   /**
@@ -4632,12 +4688,12 @@ export const createServer = (
    * Which sends a session's stored transcript holds, and whether its harness
    * has taken each up: by send uuid, true for read, false for written down
    * and still waiting ({@link SessionMessage.queued}). Linked the way a history
-   * read links them ({@link linkEntries}). `undefined` when the machine could
-   * not be asked: it has said nothing either way.
+   * read links them ({@link linkEntries}). `unread`, why in words, when the
+   * machine did not answer or could not read it: it has said nothing either way.
    */
   const storedIn = async (
     instanceId: string
-  ): Promise<Map<string, boolean> | undefined> => {
+  ): Promise<Map<string, boolean> | { unread: string }> => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row?.sessionId) {
       return new Map();
@@ -4649,14 +4705,24 @@ export const createServer = (
       READ_TIMEOUT_MS,
       (row.harness || undefined) as HarnessKind | undefined
     );
-    if (typeof answer === "string" || !answer.ok) {
-      return undefined;
+    switch (answer.kind) {
+      case "unanswered":
+        return { unread: silentWords(row.machineId, answer) };
+      case "answered":
+        if (!answer.value.ok) {
+          return {
+            unread: `${machineName(row.machineId)} could not read its transcript: ${answer.value.error ?? "it gave no reason"}`,
+          };
+        }
+        break;
+      default:
+        throw unreachable(answer);
     }
     // Read as the newest history page is: linked, a send it took up read,
     // and the session's anchor seeded when the hub has heard nothing of it
     // since it started — so a send this fails goes after what the session
     // last said, not at the conversation's start.
-    const entries = answer.result as SessionMessage[];
+    const entries = answer.value.result as SessionMessage[];
     const { last } = linkEntries(instanceId, entries);
     if (last && !anchors.has(instanceId)) {
       anchors.set(instanceId, last);
@@ -4735,17 +4801,15 @@ export const createServer = (
     detach(
       storedIn(instanceId)
         .then((answer) => {
-          if (!answer) {
-            console.warn(
-              `[hub] ${instanceId}: its transcript could not be read to settle ${sends.length} send(s) it never said it read`
-            );
-          }
-          if (!answer && unstored === "unheld") {
+          const read = readOrUnread(instanceId, answer, sends.length, why);
+          // `unheld` is decided only on a read the machine answered: asked
+          // again at its next heartbeat.
+          if (read.unread && unstored === "unheld") {
             return;
           }
           let owed = false;
           for (const send of sends) {
-            owed = settleSend(send, answer ?? new Map(), unstored, why) || owed;
+            owed = settleSend(send, read.stored, unstored, read.said) || owed;
           }
           if (whole) {
             decided();
@@ -4763,6 +4827,31 @@ export const createServer = (
         }),
       "pending sends"
     );
+  };
+
+  /**
+   * What {@link settlePending} settles `count` sends against: the transcript
+   * read, or (unread) none, said in the log, a failed send's reason saying
+   * its read is not known (`fail`: never runs again; `owe`: owed to the next
+   * process, as one that took none).
+   */
+  const readOrUnread = (
+    instanceId: string,
+    answer: Map<string, boolean> | { unread: string },
+    count: number,
+    why: string
+  ): { said: string; stored: Map<string, boolean>; unread: boolean } => {
+    if (!("unread" in answer)) {
+      return { said: why, stored: answer, unread: false };
+    }
+    console.warn(
+      `[hub] ${instanceId}: its transcript could not be read to settle ${count} send(s) it never said it read: ${answer.unread}`
+    );
+    return {
+      said: `${why} Whether it read it is not known: ${answer.unread}.`,
+      stored: new Map(),
+      unread: true,
+    };
   };
 
   /**
@@ -4858,14 +4947,16 @@ export const createServer = (
   const holdBack = (
     instanceId: string,
     one: Envelope<SendPayload>,
-    stored: Map<string, boolean> | undefined
+    stored: Map<string, boolean> | { unread: string }
   ): number => {
     const { uuid } = one.payload.message;
     if (!currentHandOff(instanceId, one.payload)) {
       return Number.POSITIVE_INFINITY;
     }
     const now = db.sendRecord(uuid);
-    if (now && stored?.get(uuid)) {
+    // Unread: the machine handed it back whole, its own word that no
+    // process took it, so it is owed as one the transcript does not hold.
+    if (now && !("unread" in stored) && stored.get(uuid)) {
       readSend(now, false);
       return Number.POSITIVE_INFINITY;
     }
@@ -4980,6 +5071,11 @@ export const createServer = (
    * harness holds is withdrawn there, and the harness's atomic answer decides
    * the race with its read. "started" when the session took it first.
    */
+  /** A withdrawal its machine left unanswered, in a sentence. */
+  const withdrawalUnanswered = (machineId: string, reply: Unanswered) =>
+    reply.reason === "dead"
+      ? commandAwayWords(machineId)
+      : `Withdrawal got no answer: ${silentWords(machineId, reply)}.`;
   const withdrawPending = async (
     row: SentMessageRow,
     machineId: string
@@ -4996,20 +5092,22 @@ export const createServer = (
       undefined,
       row.instanceId
     );
-    if (reply === "offline") {
-      throw new Error(commandAwayWords(machineId));
-    }
-    if (typeof reply === "string") {
-      throw new Error(`Withdrawal ${reply}.`);
-    }
-    if (!reply.ok) {
-      throw new Error(reply.error ?? "Withdrawal failed.");
+    switch (reply.kind) {
+      case "unanswered":
+        throw new Error(withdrawalUnanswered(machineId, reply));
+      case "answered":
+        if (!reply.value.ok) {
+          throw new Error(reply.value.error ?? "Withdrawal failed.");
+        }
+        break;
+      default:
+        throw unreachable(reply);
     }
     const now = db.sendRecord(row.uuid);
     if (now?.state === "cancelled") {
       return "withdrawn";
     }
-    if (reply.result === "withdrawn") {
+    if (reply.value.result === "withdrawn") {
       if (now?.state === "pending") {
         changeSend(now, { state: "cancelled" });
       }
@@ -6458,17 +6556,27 @@ export const createServer = (
       storeProvider: move.storeProvider,
     };
     const what = `${machine}'s own ${store} ${store === "claude" ? "login" : move.storeProvider}`;
-    if (answer === "offline" || answer === "timeout" || !answer.ok) {
-      const error =
-        typeof answer === "string"
-          ? `${machine} is ${answer === "offline" ? "not connected" : "not answering"}; nothing was moved there.`
-          : (answer.error ?? "The move did not finish.");
-      moveResults.set(key, { ...done, error });
-      db.accounts.removeMove(move);
-      console.warn(`[hub] moving ${what} failed: ${error}`);
-      return;
+    switch (answer.kind) {
+      case "unanswered":
+        // Not known to have moved or not: the move stays pending and the
+        // next tick asks again; the machine answers a move it already made.
+        console.warn(
+          `[hub] moving ${what}: ${answer.reason === "dead" ? "a machine it needs is not connected" : `no answer within ${Math.round(answer.after / 1000)} s`}; asked again at the next tick`
+        );
+        return;
+      case "answered":
+        if (!answer.value.ok) {
+          const error = answer.value.error ?? "The move did not finish.";
+          moveResults.set(key, { ...done, error });
+          db.accounts.removeMove(move);
+          console.warn(`[hub] moving ${what} failed: ${error}`);
+          return;
+        }
+        break;
+      default:
+        throw unreachable(answer);
     }
-    const kept = (answer.result as HomeLoginMoved).store;
+    const kept = (answer.value.result as HomeLoginMoved).store;
     const repinned = store === "claude" ? ranOnHomeLogin(move) : [];
     db.accounts.putSignin({
       accountId: move.accountId,
@@ -6532,6 +6640,7 @@ export const createServer = (
   }> => {
     const lenders = lendersOf(move.accountId, move.machineId);
     const failures: string[] = [];
+    let silent: Unanswered | undefined;
     for (const lender of lenders) {
       if (!registry.agent(lender)) {
         failures.push(lenderAway(move.accountId, lender));
@@ -6544,11 +6653,23 @@ export const createServer = (
         [move.accountId],
         LEND_TIMEOUT_MS
       );
-      if (typeof lent === "string" || !lent.ok) {
-        failures.push(
-          `${machineName(lender)} did not lend it: ${typeof lent === "string" ? lent : (lent.error ?? "no answer")}`
-        );
-        continue;
+      switch (lent.kind) {
+        case "unanswered":
+          console.warn(
+            `[hub] ${machineName(lender)} did not lend ${accountWords(move.accountId)}: ${silentWords(lender, lent)}`
+          );
+          silent ??= lent;
+          continue;
+        case "answered":
+          if (!lent.value.ok) {
+            failures.push(
+              `${machineName(lender)} did not lend it: ${lent.value.error ?? "it gave no reason"}`
+            );
+            continue;
+          }
+          break;
+        default:
+          throw unreachable(lent);
       }
       const answer = await callAgent(
         move.machineId,
@@ -6556,7 +6677,7 @@ export const createServer = (
         [
           move.accountId,
           lender,
-          lent.result,
+          lent.value.result,
           move.store,
           move.storeProvider,
           move.identity,
@@ -6565,15 +6686,22 @@ export const createServer = (
       );
       return { answer, lender };
     }
+    // A lender that did not answer may yet lend: the move stays pending.
+    if (silent) {
+      return { answer: silent };
+    }
     const error = [`The account did not answer: ${expired}.`, ...failures].join(
       " "
     );
     return {
       answer: {
-        kind: "control_result",
-        ok: false,
-        requestId: "",
-        error,
+        kind: "answered",
+        value: {
+          kind: "control_result",
+          ok: false,
+          requestId: "",
+          error,
+        },
       },
     };
   };
@@ -6620,16 +6748,24 @@ export const createServer = (
       [accountId],
       LEND_TIMEOUT_MS
     );
-    if (lent === "offline") {
-      return { error: lenderAway(accountId, lender) };
+    const account = db.accounts.get(accountId);
+    const refused = (why: string) => ({
+      error: `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
+    });
+    switch (lent.kind) {
+      case "unanswered":
+        return lent.reason === "dead"
+          ? { error: lenderAway(accountId, lender) }
+          : refused(
+              `it did not answer within ${Math.round(lent.after / 1000)} s`
+            );
+      case "answered":
+        return lent.value.ok
+          ? lent.value.result
+          : refused(lent.value.error ?? "it gave no reason");
+      default:
+        throw unreachable(lent);
     }
-    if (typeof lent === "string" || !lent.ok) {
-      const account = db.accounts.get(accountId);
-      return {
-        error: `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${typeof lent === "string" ? "it did not answer" : (lent.error ?? "no answer")}.`,
-      };
-    }
-    return lent.result;
   };
 
   /**
@@ -6877,14 +7013,23 @@ export const createServer = (
         [ranFrom],
         RESTLESS_TIMEOUT_MS
       );
-      if (
-        typeof restless === "string" ||
-        !restless.ok ||
-        Object.keys(restless.result as Record<string, string>).length > 0 ||
-        liveFrom(move).some((id) => !ranFrom.includes(id))
-      ) {
-        // Asked again at the next tick.
-        return;
+      switch (restless.kind) {
+        case "unanswered":
+          // Asked again at the next tick.
+          return;
+        case "answered":
+          if (
+            !restless.value.ok ||
+            Object.keys(restless.value.result as Record<string, string>)
+              .length > 0 ||
+            liveFrom(move).some((id) => !ranFrom.includes(id))
+          ) {
+            // Asked again at the next tick.
+            return;
+          }
+          break;
+        default:
+          throw unreachable(restless);
       }
     }
     const answer =
@@ -6903,8 +7048,8 @@ export const createServer = (
             MOVE_TIMEOUT_MS
           );
     const expired =
-      typeof answer === "object" && answer.ok
-        ? (answer.result as HomeLoginMoved).expired
+      answer.kind === "answered" && answer.value.ok
+        ? (answer.value.result as HomeLoginMoved).expired
         : undefined;
     if (expired === undefined) {
       await settleMove(move, answer, ranFrom);
@@ -7806,8 +7951,10 @@ export const createServer = (
   /**
    * Asks a machine something and waits for the frame that answers it. A machine
    * that is not connected and one that will not answer are told apart on
-   * purpose: the first is the fleet's own state, the second is a machine that
-   * has something wrong with it.
+   * purpose: the first is the fleet's own state (unanswered, reason "dead",
+   * nothing sent), the second is a machine that has something wrong with it
+   * (unanswered, reason "timeout"). An answered frame with `ok: false` is the
+   * machine's refusal.
    */
   const callAgent = (
     machineId: string,
@@ -7816,10 +7963,10 @@ export const createServer = (
     timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
-  ): Promise<ControlResult | "offline" | "timeout"> => {
+  ): Promise<Bounded<ControlResult>> => {
     const agent = registry.agent(machineId);
     if (!agent) {
-      return Promise.resolve("offline");
+      return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
     }
 
     const requestId = crypto.randomUUID();
@@ -7830,27 +7977,46 @@ export const createServer = (
       ...(harness && { harness }),
       ...(instanceId && { instanceId }),
     };
-    return new Promise((resolve) => {
-      const timer = lifetime.after(timeoutMs, () => {
-        waiting.delete(requestId);
-        waitingMachines.delete(requestId);
-        resolve("timeout");
-      });
-      waitOn(requestId, machineId);
-      waiting.set(requestId, (frame) => {
-        lifetime.cancel(timer);
-        waiting.delete(requestId);
-        waitingMachines.delete(requestId);
-        resolve(frame);
-      });
+    return awaitReply(machineId, requestId, timeoutMs, () =>
       sendFrame(agent, {
         verb: "control",
         machineId,
         ...(instanceId && { instanceId }),
         payload,
-      } satisfies Envelope<ControlPayload>);
-    });
+      } satisfies Envelope<ControlPayload>)
+    );
   };
+
+  /** Sends something a machine answers under `requestId`, and waits for that answer. */
+  const awaitReply = (
+    machineId: string,
+    requestId: string,
+    timeoutMs: number,
+    send: () => void
+  ): Promise<Bounded<ControlResult>> =>
+    readWithin(
+      timeoutMs,
+      (signal) =>
+        new Promise<ControlResult>((resolve) => {
+          const forget = () => {
+            waiting.delete(requestId);
+            waitingMachines.delete(requestId);
+          };
+          signal.addEventListener("abort", forget, { once: true });
+          waitOn(requestId, machineId);
+          waiting.set(requestId, (frame) => {
+            forget();
+            resolve(frame);
+          });
+          try {
+            send();
+          } catch (error) {
+            // Refused before it went: nothing will answer, so nothing waits.
+            forget();
+            throw error;
+          }
+        })
+    );
 
   /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */
   const CARRY_TIMEOUT_MS = 120_000;
@@ -8116,21 +8282,32 @@ export const createServer = (
       [requests],
       CARRY_TIMEOUT_MS
     );
-    if (answer === "offline" || answer === "timeout" || !answer.ok) {
-      const error =
-        typeof answer === "string"
-          ? awayWords(machineId, answer)
-          : (answer.error ?? `${machineName(machineId)} gave no reason`);
-      return new Map(
+    // Unanswered or refused, every row stays where it is (moveRowsToAccount
+    // `kept`), with why in the outcome's words.
+    const none = (error: string) =>
+      new Map(
         requests.map((one) => [
           one.instanceId,
           { state: "failed", error } as const,
         ])
       );
+    switch (answer.kind) {
+      case "unanswered":
+        return none(awayWords(machineId, answer));
+      case "answered":
+        if (!answer.value.ok) {
+          return none(
+            answer.value.error ?? `${machineName(machineId)} gave no reason`
+          );
+        }
+        return new Map(
+          Object.entries(
+            answer.value.result as Record<string, CarrySessionOutcome>
+          )
+        );
+      default:
+        throw unreachable(answer);
     }
-    return new Map(
-      Object.entries(answer.result as Record<string, CarrySessionOutcome>)
-    );
   };
 
   /**
@@ -8177,15 +8354,19 @@ export const createServer = (
       READ_TIMEOUT_MS,
       harness
     );
-    if (typeof response === "string") {
-      throw new Error(
-        `The plan could not be read: ${machineFault(machineId, response === "offline" ? "offline" : "silent")}`
-      );
+    switch (response.kind) {
+      case "unanswered":
+        throw new Error(
+          `The plan could not be read: ${unansweredFault(machineId, response)}`
+        );
+      case "answered":
+        if (response.value.error) {
+          throw new Error(String(response.value.error));
+        }
+        return response.value.result;
+      default:
+        throw unreachable(response);
     }
-    if (response.error) {
-      throw new Error(String(response.error));
-    }
-    return response.result;
   };
 
   /**
@@ -8208,10 +8389,21 @@ export const createServer = (
             READ_TIMEOUT_MS,
             (row.harness as HarnessKind | null) ?? "claude"
           );
-          if (answer === "offline" || answer === "timeout" || !answer.ok) {
-            return;
+          // Unanswered or refused: the launch dir stays unread (nothing is
+          // written), and the machine is asked again at its next register.
+          switch (answer.kind) {
+            case "unanswered":
+              return;
+            case "answered":
+              if (!answer.value.ok) {
+                return;
+              }
+              break;
+            default:
+              throw unreachable(answer);
           }
-          const info = answer.result as { cwd?: string } | null | undefined;
+          const info = answer.value.result as
+            { cwd?: string } | null | undefined;
           db.settleLaunchDir(
             row.id,
             info?.cwd ? reportedMachinePath(machineId, info.cwd) : undefined
@@ -8253,6 +8445,42 @@ export const createServer = (
           [account.id],
           SIGNIN_TIMEOUT_MS
         );
+
+  /**
+   * {@link forgetOn} on each of `machineIds`, one at a time: the machines
+   * that refused (`failed`), the ones that did not answer in time, in words
+   * (`silent`), and those not connected, which forget it when they next
+   * connect (`later`).
+   */
+  const signOutEverywhere = async (
+    account: Account,
+    machineIds: string[]
+  ): Promise<{ failed: string[]; later: string[]; silent: string[] }> => {
+    const failed: string[] = [];
+    const silent: string[] = [];
+    const later: string[] = [];
+    for (const machineId of machineIds) {
+      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each told and answered before the next
+      const answer = await forgetOn(account, machineId);
+      switch (answer.kind) {
+        case "unanswered":
+          if (answer.reason === "dead") {
+            later.push(machineName(machineId));
+          } else {
+            silent.push(silentWords(machineId, answer));
+          }
+          break;
+        case "answered":
+          if (!answer.value.ok) {
+            failed.push(machineName(machineId));
+          }
+          break;
+        default:
+          throw unreachable(answer);
+      }
+    }
+    return { failed, silent, later };
+  };
 
   /**
    * The rows on an account that is gone (from every machine, or from
@@ -8358,7 +8586,7 @@ export const createServer = (
     | { error: string; status: 409 | 422 | 503 }
   > => {
     const machine = machineName(machineId);
-    const read =
+    const asked =
       store === "claude"
         ? await callAgent(
             machineId,
@@ -8373,9 +8601,15 @@ export const createServer = (
             [],
             SIGNIN_TIMEOUT_MS
           );
-    if (read === "offline" || read === "timeout") {
-      return { status: 503, error: awayWords(machineId, read) };
+    switch (asked.kind) {
+      case "unanswered":
+        return { status: 503, error: awayWords(machineId, asked) };
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
     }
+    const read = asked.value;
     if (!read.ok) {
       return {
         status: 422,
@@ -8413,8 +8647,8 @@ export const createServer = (
   };
 
   /** A machine that did not answer a sign-in step, in a sentence. */
-  const awayWords = (machineId: string, answer: "offline" | "timeout") =>
-    `${machineName(machineId)} is ${answer === "offline" ? "not connected" : "not answering"}.`;
+  const awayWords = (machineId: string, answer: Unanswered) =>
+    `${silentWords(machineId, answer)}.`;
 
   /**
    * Starts moving one credential out of a machine's own store into the
@@ -8524,13 +8758,24 @@ export const createServer = (
       [],
       SIGNIN_TIMEOUT_MS
     );
-    if (typeof read === "string" || !read.ok) {
-      console.warn(
-        `[hub] ${machineName(machineId)} did not say what its own pi and OpenCode stores hold: ${typeof read === "string" ? read : (read.error ?? "no answer")}`
-      );
-      return;
+    switch (read.kind) {
+      case "unanswered":
+        console.warn(
+          `[hub] ${machineName(machineId)} did not say what its own pi and OpenCode stores hold: ${silentWords(machineId, read)}`
+        );
+        return;
+      case "answered":
+        if (!read.value.ok) {
+          console.warn(
+            `[hub] ${machineName(machineId)} did not say what its own pi and OpenCode stores hold: ${read.value.error ?? "it gave no reason"}`
+          );
+          return;
+        }
+        break;
+      default:
+        throw unreachable(read);
     }
-    for (const found of read.result as HomeCredential[]) {
+    for (const found of read.value.result as HomeCredential[]) {
       // biome-ignore lint/performance/noAwaitInLoops: one move at a time per machine, as each may wait on its sessions
       const started = await startMove(machineId, found.store, found);
       if ("error" in started) {
@@ -8608,7 +8853,7 @@ export const createServer = (
     machineId: string,
     identity: AccountIdentity
   ): Promise<AccountJoined | { error: string }> => {
-    const answer =
+    const asked =
       existing.provider === CLAUDE_PROVIDER
         ? await callAgent(
             machineId,
@@ -8623,9 +8868,15 @@ export const createServer = (
             [fromId, existing.id, identity],
             SIGNIN_TIMEOUT_MS
           );
-    if (answer === "offline" || answer === "timeout") {
-      return { error: awayWords(machineId, answer) };
+    switch (asked.kind) {
+      case "unanswered":
+        return { error: awayWords(machineId, asked) };
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
     }
+    const answer = asked.value;
     if (!answer.ok) {
       return {
         error: `${machineName(machineId)} signed in as ${identity.email}, already ${accountName(existing)}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
@@ -8838,7 +9089,7 @@ export const createServer = (
     if (unfit) {
       return { code: 400, error: unfit };
     }
-    const answer = await callAgent(
+    const asked = await callAgent(
       row.machineId,
       CONTROL_SET_PERMISSION_MODE,
       [mode],
@@ -8846,12 +9097,20 @@ export const createServer = (
       undefined,
       row.id
     );
-    if (answer === "offline") {
-      return { code: 503, error: "Machine is not connected" };
+    switch (asked.kind) {
+      case "unanswered":
+        return asked.reason === "dead"
+          ? { code: 503, error: "Machine is not connected" }
+          : {
+              code: 504,
+              error: `Machine did not answer within ${Math.round(asked.after / 1000)} s; whether it applied the permission mode is not known`,
+            };
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
     }
-    if (answer === "timeout") {
-      return { code: 504, error: "Machine did not apply the permission mode" };
-    }
+    const answer = asked.value;
     if (!answer.ok) {
       return {
         code: 500,
@@ -8953,16 +9212,22 @@ export const createServer = (
       [{ instanceId }],
       BUSY_TIMEOUT_MS
     );
-    if (answer === "offline") {
-      return { ok: false, code: 503, error: "Machine is not connected" };
+    switch (answer.kind) {
+      case "unanswered":
+        return answer.reason === "dead"
+          ? { ok: false, code: 503, error: "Machine is not connected" }
+          : {
+              ok: false,
+              code: 504,
+              error: `Machine did not answer within ${Math.round(answer.after / 1000)} s`,
+            };
+      case "answered":
+        return answer.value.ok
+          ? closed
+          : { ok: false, code: 500, error: answer.value.error ?? "" };
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout") {
-      return { ok: false, code: 504, error: "Machine did not answer" };
-    }
-    if (!answer.ok) {
-      return { ok: false, code: 500, error: answer.error ?? "" };
-    }
-    return closed;
   };
 
   /** A session ended: its preview closes, and its preview origin's port is free again. */
@@ -9018,31 +9283,37 @@ export const createServer = (
         "late preview stop"
       );
     };
-    const answer = await callAgent(
+    const asked = await callAgent(
       machineId,
       PREVIEW_START,
       [{ instanceId, ...source, token }],
       BUSY_TIMEOUT_MS
     );
-    if (answer === "offline") {
-      return {
-        ok: false,
-        code: 503,
-        down: "machine",
-        error: "Machine is not connected",
-      };
+    switch (asked.kind) {
+      case "unanswered":
+        if (asked.reason === "dead") {
+          return {
+            ok: false,
+            code: 503,
+            down: "machine",
+            error: "Machine is not connected",
+          };
+        }
+        // The daemon may still finish the start after this gave up; the
+        // listener it would open has no target here, so it is told to go.
+        stopLate();
+        return {
+          ok: false,
+          code: 504,
+          down: "machine",
+          error: `Machine did not answer within ${Math.round(asked.after / 1000)} s`,
+        };
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
     }
-    if (answer === "timeout") {
-      // The daemon may still finish the start after this gave up; the
-      // listener it would open has no target here, so it is told to go.
-      stopLate();
-      return {
-        ok: false,
-        code: 504,
-        down: "machine",
-        error: "Machine did not answer",
-      };
-    }
+    const answer = asked.value;
     if (!answer.ok) {
       const error = answer.error ?? "Preview failed";
       return {
@@ -9333,10 +9604,14 @@ export const createServer = (
     }
     const readText = async (path: string) => {
       const read = await callFs(origin.machineId, agent, { op: "read", path });
-      if (read === "timeout") {
-        throw new Error("Machine did not answer");
+      switch (read.kind) {
+        case "unanswered":
+          throw new Error("Machine did not answer");
+        case "answered":
+          return read.value.ok ? (read.value.result as string) : undefined;
+        default:
+          throw unreachable(read);
       }
-      return read.ok ? (read.result as string) : undefined;
     };
     const file = posix.join(origin.dir, "page.html");
     const source = await readText(file).catch(() => null);
@@ -9359,9 +9634,11 @@ export const createServer = (
             origin.machineId,
             posix.join(origin.dir, path)
           );
-          return typeof read === "string" || "refused" in read
-            ? undefined
-            : read;
+          // Not there is the machine's refusal; no answer is not "not there".
+          if (typeof read === "string") {
+            throw new Error("Machine did not answer");
+          }
+          return "refused" in read ? undefined : read;
         },
       },
     };
@@ -9938,24 +10215,29 @@ export const createServer = (
         `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`
       );
     }
-    const answer = await callAgent(
+    const asked = await callAgent(
       machineId,
       method,
       [workspace, arg],
       STAGE_READY_MS + 15_000
     );
-    if (answer === "offline") {
-      throw new ArtifactRefusal(
-        503,
-        "The workspace's machine isn't connected to the hub, so its stage can't be reached."
-      );
+    switch (asked.kind) {
+      case "unanswered":
+        throw asked.reason === "dead"
+          ? new ArtifactRefusal(
+              503,
+              "The workspace's machine isn't connected to the hub, so its stage can't be reached."
+            )
+          : new ArtifactRefusal(
+              504,
+              `The workspace's machine didn't answer within ${Math.round(asked.after / 1000)}s, so the stage's state is unknown.`
+            );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
     }
-    if (answer === "timeout") {
-      throw new ArtifactRefusal(
-        504,
-        `The workspace's machine didn't answer within ${(STAGE_READY_MS + 15_000) / 1000}s, so the stage's state is unknown.`
-      );
-    }
+    const answer = asked.value;
     if (!answer.ok) {
       throw new ArtifactRefusal(422, answer.error ?? "The stage said no.");
     }
@@ -10075,24 +10357,29 @@ export const createServer = (
       },
     // A workspace preview's server, run and kept up on the workspace's machine.
     serve: async (machineId, workspace, serve) => {
-      const answer = await callAgent(
+      const asked = await callAgent(
         machineId,
         STAGE_SERVE,
         [workspace, serve],
         STAGE_READY_MS + 15_000
       );
-      if (answer === "offline") {
-        throw new ArtifactRefusal(
-          503,
-          "The workspace's machine isn't connected to the hub, so its server can't start."
-        );
+      switch (asked.kind) {
+        case "unanswered":
+          throw asked.reason === "dead"
+            ? new ArtifactRefusal(
+                503,
+                "The workspace's machine isn't connected to the hub, so its server can't start."
+              )
+            : new ArtifactRefusal(
+                504,
+                `The workspace's machine didn't answer within ${Math.round(asked.after / 1000)}s, so the server's state is unknown.`
+              );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
       }
-      if (answer === "timeout") {
-        throw new ArtifactRefusal(
-          504,
-          `The workspace's machine didn't answer within ${(STAGE_READY_MS + 15_000) / 1000}s, so the server's state is unknown.`
-        );
-      }
+      const answer = asked.value;
       if (!answer.ok) {
         throw new ArtifactRefusal(
           422,
@@ -10271,13 +10558,13 @@ export const createServer = (
    * no longer does would be worse than the question being asked twice.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a session's location from the cache, the stored row, or a live ask across every machine and harness in one place; splitting it would scatter the fallback order this depends on.
-  const locateSession = async (id: string): Promise<SessionLocation | null> => {
+  const locateSession = async (id: string): Promise<Located> => {
     if (db.hiddenSession(id)) {
-      return null;
+      return { kind: "nowhere" };
     }
     const known = locations.get(id);
     if (known !== undefined) {
-      return known;
+      return known ? { kind: "found", at: known } : { kind: "nowhere" };
     }
 
     const [row] = db.getInstancesByIds([id]);
@@ -10287,7 +10574,7 @@ export const createServer = (
       // a guessed one. Not cached, so the key it reports later is found.
       // Rows are written before their harness address is known.
       if (!row.sessionId) {
-        return null;
+        return { kind: "nowhere" };
       }
       const found: SessionLocation = {
         id,
@@ -10297,11 +10584,14 @@ export const createServer = (
         harness: (row.harness as HarnessKind | undefined) ?? "claude",
       };
       locations.set(id, found);
-      return found;
+      return { kind: "found", at: found };
     }
 
     // Nobody spawned it here, so it is a transcript somebody left on a disk.
     // Ask the machines that are actually reachable, newest contact first.
+    // A machine that did not answer is not one without it: the locate is
+    // a miss only when every machine asked answered.
+    const silent: string[] = [];
     for (const agent of db.listAgents()) {
       if (!registry.agent(agent.machineId)) {
         continue;
@@ -10323,20 +10613,34 @@ export const createServer = (
             READ_TIMEOUT_MS,
             harness
           );
-          if (answer === "offline" || answer === "timeout" || !answer.ok) {
-            return null;
+          switch (answer.kind) {
+            case "unanswered":
+              return "unanswered" as const;
+            case "answered": {
+              if (!answer.value.ok) {
+                return null;
+              }
+              const info = answer.value.result as
+                | { sessionId?: string; cwd?: string; harness?: string }
+                | undefined
+                | null;
+              return info?.sessionId
+                ? { harness, sessionId: info.sessionId, info }
+                : null;
+            }
+            default:
+              throw unreachable(answer);
           }
-          const info = answer.result as
-            | { sessionId?: string; cwd?: string; harness?: string }
-            | undefined
-            | null;
-          return info?.sessionId
-            ? { harness, sessionId: info.sessionId, info }
-            : null;
         })
       );
-      const hit = answers.find((answer) => answer !== null);
+      const hit = answers.find(
+        (answer): answer is Exclude<typeof answer, null | "unanswered"> =>
+          answer !== null && answer !== "unanswered"
+      );
       if (!hit) {
+        if (answers.includes("unanswered")) {
+          silent.push(agent.machineId);
+        }
         continue;
       }
       const found: SessionLocation = {
@@ -10347,13 +10651,20 @@ export const createServer = (
         harness: (hit.info.harness as HarnessKind | undefined) ?? hit.harness,
       };
       locations.set(id, found);
-      return found;
+      return { kind: "found", at: found };
     }
 
+    // Not known: nothing is cached, and the caller says who did not answer.
+    if (silent.length > 0) {
+      console.warn(
+        `[hub] locating ${id}: ${silent.map(machineName).join(", ")} did not answer; not remembered as nowhere`
+      );
+      return { kind: "unanswered", machines: silent };
+    }
     // Remembered as unknown too, so a bad id cannot make every render sweep
     // the fleet. A machine coming online clears this (see `locations`).
     locations.set(id, null);
-    return null;
+    return { kind: "nowhere" };
   };
 
   /**
@@ -10382,37 +10693,6 @@ export const createServer = (
       .filter((row) => row.kind === "summariser")
       .map((row) => row.id)
   );
-
-  /** Sends something a machine answers under `requestId`, and waits for that answer. */
-  const awaitReply = (
-    machineId: string,
-    requestId: string,
-    timeoutMs: number,
-    send: () => void
-  ): Promise<ControlResult | "timeout"> =>
-    new Promise((resolve, reject) => {
-      const timer = lifetime.after(timeoutMs, () => {
-        waiting.delete(requestId);
-        waitingMachines.delete(requestId);
-        resolve("timeout");
-      });
-      waitOn(requestId, machineId);
-      waiting.set(requestId, (frame) => {
-        lifetime.cancel(timer);
-        waiting.delete(requestId);
-        waitingMachines.delete(requestId);
-        resolve(frame);
-      });
-      try {
-        send();
-      } catch (error) {
-        // Refused before it went: nothing will answer, so nothing waits.
-        lifetime.cancel(timer);
-        waiting.delete(requestId);
-        waitingMachines.delete(requestId);
-        reject(error);
-      }
-    });
 
   /** Who hears that a session started a delegate (project-offers.ts). */
   const delegateSpawned = new Set<(parentInstanceId: string) => void>();
@@ -10978,17 +11258,22 @@ export const createServer = (
       SPAWN_START_TIMEOUT_MS,
       () => issueSpawn(machineId, payload, undefined, fallbackMode)
     );
-    if (reply === "timeout") {
-      return {
-        code: 504,
-        message: `the session on ${machineName(machineId)} did not start within ${SPAWN_START_TIMEOUT_MS / 1000} s`,
-      };
-    }
-    if (!reply.ok) {
-      return {
-        code: 422,
-        message: reply.error ?? "the session failed to start",
-      };
+    switch (reply.kind) {
+      case "unanswered":
+        return {
+          code: 504,
+          message: `the session on ${machineName(machineId)} did not start within ${Math.round(reply.after / 1000)} s`,
+        };
+      case "answered":
+        if (!reply.value.ok) {
+          return {
+            code: 422,
+            message: reply.value.error ?? "the session failed to start",
+          };
+        }
+        return;
+      default:
+        throw unreachable(reply);
     }
   };
 
@@ -11092,15 +11377,20 @@ export const createServer = (
           payload: { ...bounded(payload), requestId },
         } satisfies Envelope<SpawnPayload>)
     );
-    if (reply === "timeout") {
-      throw new Error(
-        `the ${payload.harness} session on ${machineName(machineId)} did not start within ${SPAWN_START_TIMEOUT_MS / 1000}s`
-      );
-    }
-    if (!reply.ok) {
-      throw reply.error === MACHINE_DISCONNECTED
-        ? new MachineAway(machineFault(machineId, "offline"))
-        : new Error(reply.error ?? "the session failed to start");
+    switch (reply.kind) {
+      case "unanswered":
+        throw new Error(
+          `the ${payload.harness} session on ${machineName(machineId)} did not start within ${Math.round(reply.after / 1000)}s`
+        );
+      case "answered":
+        if (!reply.value.ok) {
+          throw reply.value.error === MACHINE_DISCONNECTED
+            ? new MachineAway(machineFault(machineId, "offline"))
+            : new Error(reply.value.error ?? "the session failed to start");
+        }
+        return;
+      default:
+        throw unreachable(reply);
     }
   };
 
@@ -11316,6 +11606,37 @@ export const createServer = (
       `[hub] stop session=${sent.instanceId} request=${sent.requestId ?? "none"} machine=${sent.machineId} outcome=${outcome} elapsedMs=${Date.now() - sent.at}`
     );
   };
+  /** A session's stored transcript, as its machine looks it up. */
+  const lookupTranscript = (row: {
+    cwd: string;
+    harness?: string | null;
+    machineId: string;
+    sessionId?: string | null;
+  }) =>
+    callAgent(
+      row.machineId,
+      CONTROL_GET_SESSION_INFO,
+      [row.sessionId, row.cwd],
+      READ_TIMEOUT_MS,
+      row.harness as HarnessKind | undefined
+    );
+  /**
+   * Whether a transcript whose deletion did not say it went is gone after
+   * all: only a lookup the machine answered "none" says so.
+   */
+  const transcriptGone = async (
+    row: Parameters<typeof lookupTranscript>[0]
+  ): Promise<boolean> => {
+    const after = await lookupTranscript(row);
+    switch (after.kind) {
+      case "unanswered":
+        return false;
+      case "answered":
+        return after.value.ok && !after.value.result;
+      default:
+        throw unreachable(after);
+    }
+  };
   const lifecycle = createSessionLifecycle({
     db,
     machineName: (machineId) => {
@@ -11376,10 +11697,22 @@ export const createServer = (
             if (registry.agent(machineId) !== connection) {
               return;
             }
-            if (typeof answer === "string" || !answer.ok) {
-              return;
+            // Unanswered or refused: custody stays unknown, asked again later.
+            switch (answer.kind) {
+              case "unanswered":
+                console.warn(
+                  `[hub] removed-machine custody remains unknown: ${silentWords(machineId, answer)}`
+                );
+                return;
+              case "answered":
+                if (!answer.value.ok) {
+                  return;
+                }
+                break;
+              default:
+                throw unreachable(answer);
             }
-            for (const result of answer.result as {
+            for (const result of answer.value.result as {
               id: string;
               present: boolean | null;
             }[]) {
@@ -11452,21 +11785,21 @@ export const createServer = (
       if (!row.sessionId) {
         return true;
       }
-      const info = await callAgent(
-        row.machineId,
-        CONTROL_GET_SESSION_INFO,
-        [row.sessionId, row.cwd],
-        READ_TIMEOUT_MS,
-        row.harness as HarnessKind | undefined
-      );
-      if (typeof info === "string" || !info.ok) {
-        throw new Error(
-          typeof info === "string"
-            ? info
-            : (info.error ?? "Transcript lookup failed.")
-        );
+      const info = await lookupTranscript(row);
+      switch (info.kind) {
+        case "unanswered":
+          throw new Error(
+            `Transcript lookup got no answer: ${silentWords(row.machineId, info)}.`
+          );
+        case "answered":
+          if (!info.value.ok) {
+            throw new Error(info.value.error ?? "Transcript lookup failed.");
+          }
+          break;
+        default:
+          throw unreachable(info);
       }
-      if (!info.result) {
+      if (!info.value.result) {
         return true;
       }
       const result = await callAgent(
@@ -11476,24 +11809,24 @@ export const createServer = (
         READ_TIMEOUT_MS,
         row.harness as HarnessKind | undefined
       );
-      if (typeof result !== "string" && result.ok) {
+      let failed: string;
+      switch (result.kind) {
+        case "unanswered":
+          failed = `Transcript deletion got no answer: ${silentWords(row.machineId, result)}.`;
+          break;
+        case "answered":
+          if (result.value.ok) {
+            return true;
+          }
+          failed = result.value.error ?? "Transcript deletion failed.";
+          break;
+        default:
+          throw unreachable(result);
+      }
+      if (await transcriptGone(row)) {
         return true;
       }
-      const after = await callAgent(
-        row.machineId,
-        CONTROL_GET_SESSION_INFO,
-        [row.sessionId, row.cwd],
-        READ_TIMEOUT_MS,
-        row.harness as HarnessKind | undefined
-      );
-      if (typeof after !== "string" && after.ok && !after.result) {
-        return true;
-      }
-      throw new Error(
-        typeof result === "string"
-          ? result
-          : (result.error ?? "Transcript deletion failed.")
-      );
+      throw new Error(failed);
     },
     refresh: (machineId) => {
       if (
@@ -11507,12 +11840,24 @@ export const createServer = (
       detach(
         callAgent(machineId, "sessionCustody", [], READ_TIMEOUT_MS)
           .then((answer) => {
-            if (typeof answer !== "string" && answer.ok && answer.result) {
-              const snapshot = answer.result as {
-                custody: SessionCustody;
-                attached: string[];
-              };
-              lifecycle.reconcile(machineId, snapshot);
+            // Unanswered: custody keeps what the hub last knew.
+            switch (answer.kind) {
+              case "unanswered":
+                console.warn(
+                  `[hub] custody refresh: ${silentWords(machineId, answer)}; custody kept as last known`
+                );
+                return;
+              case "answered":
+                if (answer.value.ok && answer.value.result) {
+                  const snapshot = answer.value.result as {
+                    custody: SessionCustody;
+                    attached: string[];
+                  };
+                  lifecycle.reconcile(machineId, snapshot);
+                }
+                return;
+              default:
+                throw unreachable(answer);
             }
           })
           .finally(() => refreshingCustody.delete(machineId)),
@@ -11628,8 +11973,9 @@ export const createServer = (
     const discard = peekDiscard(message.payload);
     const at = Date.now();
     const reply = (frame: ControlResult, outcome = "failed"): void => {
-      lifetime.cancel(timer);
       waiting.delete(requestId);
+      // Not ok, answered or not: the stop is delivered again at the next
+      // reconcile (session-lifecycle `answered`).
       lifecycle.answered(requestId, frame.ok);
       if (!frame.ok) {
         if (stopDispatches.has(requestId)) {
@@ -11647,19 +11993,48 @@ export const createServer = (
         payload: frame,
       });
     };
-    const timer = lifetime.after(discard ? 30_000 : READ_TIMEOUT_MS, () =>
-      reply(
-        {
-          kind: "control_result",
-          requestId,
-          ok: false,
-          error:
-            "Stop got no answer in time. The machine may be offline. Check the machine, then retry.",
-        },
-        "timed-out"
-      )
+    // The receipt: the machine's frame, or the hub's own word on the stop
+    // (confirmed already, machine away, refused here), within the bound.
+    let settle: (receipt: {
+      frame: ControlResult;
+      outcome?: string;
+    }) => void = () => undefined;
+    const receipt = readWithin(
+      discard ? 30_000 : READ_TIMEOUT_MS,
+      (signal) =>
+        new Promise<{ frame: ControlResult; outcome?: string }>((resolve) => {
+          settle = resolve;
+          signal.addEventListener("abort", () => waiting.delete(requestId), {
+            once: true,
+          });
+        })
     );
-    waiting.set(requestId, reply);
+    detach(
+      receipt.then((settled) => {
+        switch (settled.kind) {
+          case "answered":
+            reply(settled.value.frame, settled.value.outcome);
+            return;
+          case "unanswered":
+            // The wire's receipt keeps its shape: a not-ok frame in words
+            // that say no answer came, never that the stop was refused.
+            reply(
+              {
+                kind: "control_result",
+                requestId,
+                ok: false,
+                error: `Stop got no answer within ${Math.round(settled.after / 1000)} s. The machine may be offline. Check the machine, then retry.`,
+              },
+              "timed-out"
+            );
+            return;
+          default:
+            throw unreachable(settled);
+        }
+      }),
+      "stop receipt"
+    );
+    waiting.set(requestId, (frame) => settle({ frame }));
     try {
       endSession(
         instanceId,
@@ -11668,29 +12043,29 @@ export const createServer = (
         requestId
       );
       if (db.ownedInstance(instanceId)?.endConfirmedAt) {
-        reply({ kind: "control_result", requestId, ok: true });
+        settle({ frame: { kind: "control_result", requestId, ok: true } });
       } else if (!registry.agent(message.machineId)) {
-        reply(
-          {
+        settle({
+          frame: {
             kind: "control_result",
             requestId,
             ok: false,
             error:
               "Stop is recorded, but the machine is offline. Check the machine, then retry.",
           },
-          "offline"
-        );
+          outcome: "offline",
+        });
       }
     } catch (error) {
-      reply(
-        {
+      settle({
+        frame: {
           kind: "control_result",
           requestId,
           ok: false,
           error: error instanceof Error ? error.message : String(error),
         },
-        "refused"
-      );
+        outcome: "refused",
+      });
     }
   };
 
@@ -11782,11 +12157,22 @@ export const createServer = (
     id: string,
     ended: boolean
   ): Promise<string | undefined> => {
-    const where = await locateSession(id);
-    return where
-      ? finishedAnswer(await readMessages(where, false), ended)
-      : undefined;
+    const located = await locateSession(id);
+    switch (located.kind) {
+      case "found":
+        return finishedAnswer(await readMessages(located.at, false), ended);
+      case "nowhere":
+        return undefined;
+      case "unanswered":
+        throw new Error(unlocatedWords(id, located.machines));
+      default:
+        throw unreachable(located);
+    }
   };
+
+  /** A conversation not located because `machines` did not answer, in a sentence. */
+  const unlocatedWords = (id: string, machines: string[]): string =>
+    `${machines.map((one) => machineName(one)).join(", ")} did not answer whether ${machines.length === 1 ? "it holds" : "they hold"} session ${id}, so where it is is not known yet`;
 
   /**
    * A model's context window as the fleet knows it: claude's from the turns
@@ -11813,21 +12199,26 @@ export const createServer = (
     if (!model) {
       return undefined;
     }
-    const answer = await callAgent(
+    const asked = await callAgent(
       machineId,
       CONTROL_MODEL_CATALOG,
       [],
       READ_TIMEOUT_MS,
       harness
     );
-    if (answer === "offline") {
-      throw new Error(machineFault(machineId, "offline"));
+    switch (asked.kind) {
+      case "unanswered":
+        throw new Error(
+          asked.reason === "dead"
+            ? machineFault(machineId, "offline")
+            : `${machineName(machineId)} didn't list its ${harness} models within ${Math.round(asked.after / 1000)} s. Try again in a moment.`
+        );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
     }
-    if (answer === "timeout") {
-      throw new Error(
-        `${machineName(machineId)} didn't list its ${harness} models in time. Try again in a moment.`
-      );
-    }
+    const answer = asked.value;
     if (!answer.ok) {
       throw new Error(answer.error ?? `${harness} could not list its models`);
     }
@@ -11843,7 +12234,9 @@ export const createServer = (
    */
   const reportedContextOf = async (
     row: KeepAliveRow
-  ): Promise<{ tokens: number; readAt: number } | { reason: string }> => {
+  ): Promise<
+    { tokens: number; readAt: number } | { reason: string } | Unanswered
+  > => {
     if (row.contextTokens !== null) {
       return {
         tokens: row.contextTokens,
@@ -11860,13 +12253,18 @@ export const createServer = (
       2000,
       "claude"
     );
-    if (answer === "offline" || answer === "timeout") {
-      return { reason: answer };
+    switch (answer.kind) {
+      case "unanswered":
+        return answer;
+      case "answered":
+        break;
+      default:
+        throw unreachable(answer);
     }
-    if (!answer.ok) {
-      return { reason: answer.error ?? "transcript read failed" };
+    if (!answer.value.ok) {
+      return { reason: answer.value.error ?? "transcript read failed" };
     }
-    const reading = answer.result as
+    const reading = answer.value.result as
       { tokens: number; readAt: number } | { reason: string } | undefined;
     if (!reading) {
       return { reason: "agent has no context reader" };
@@ -11908,6 +12306,11 @@ export const createServer = (
       return await liveContextTokensOf(row);
     }
     const reported = await reportedContextOf(row);
+    if ("kind" in reported) {
+      throw new Error(
+        `${sessionName(row)}'s context could not be read: ${silentWords(row.machineId, reported)}`
+      );
+    }
     return "tokens" in reported
       ? reported.tokens
       : estimateTokens(scopeChars(scope));
@@ -11938,13 +12341,21 @@ export const createServer = (
         }
       }
     );
-    if (answer === "timeout") {
-      throw new Error(`session ${row.id} did not report its context in time`);
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `session ${row.id} did not report its context within ${Math.round(answer.after / 1000)} s`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          throw new Error(
+            answer.value.error ?? "the session could not read its context"
+          );
+        }
+        return (answer.value.result as { totalTokens: number }).totalTokens;
+      default:
+        throw unreachable(answer);
     }
-    if (!answer.ok) {
-      throw new Error(answer.error ?? "the session could not read its context");
-    }
-    return (answer.result as { totalTokens: number }).totalTokens;
   };
 
   /** When the session started, as its own harness records it. */
@@ -11956,16 +12367,23 @@ export const createServer = (
       READ_TIMEOUT_MS,
       where.harness
     );
-    if (answer === "offline" || answer === "timeout" || !answer.ok) {
-      throw new Error(
-        `${machineName(where.machineId)} could not say when session ${where.sessionId} started: ${
-          answer === "offline" || answer === "timeout"
-            ? answer
-            : (answer.error ?? "no answer")
-        }`
-      );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `${machineName(where.machineId)} could not say when session ${where.sessionId} started: ${silentWords(where.machineId, answer)}`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          throw new Error(
+            `${machineName(where.machineId)} could not say when session ${where.sessionId} started: ${answer.value.error ?? "it gave no reason"}`
+          );
+        }
+        break;
+      default:
+        throw unreachable(answer);
     }
-    const created = (answer.result as NeutralSessionInfo | null)?.createdAt;
+    const created = (answer.value.result as NeutralSessionInfo | null)
+      ?.createdAt;
     if (!created) {
       throw new Error(
         `${where.harness} does not report when session ${where.sessionId} started`
@@ -11985,16 +12403,21 @@ export const createServer = (
       [where.cwd, since],
       READ_TIMEOUT_MS
     );
-    if (answer === "offline" || answer === "timeout" || !answer.ok) {
-      throw new Error(
-        `${machineName(where.machineId)} could not read git in ${where.cwd}: ${
-          answer === "offline" || answer === "timeout"
-            ? answer
-            : (answer.error ?? "no answer")
-        }`
-      );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `${machineName(where.machineId)} could not read git in ${where.cwd}: ${silentWords(where.machineId, answer)}`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          throw new Error(
+            `${machineName(where.machineId)} could not read git in ${where.cwd}: ${answer.value.error ?? "it gave no reason"}`
+          );
+        }
+        return answer.value.result as GitChanges;
+      default:
+        throw unreachable(answer);
     }
-    return answer.result as GitChanges;
   };
 
   /** One read of a session's stored messages through its own machine. */
@@ -12012,20 +12435,25 @@ export const createServer = (
       READ_TIMEOUT_MS,
       where.harness
     );
-    if (answer === "offline") {
-      throw new MachineAway(machineFault(where.machineId, "offline"));
+    switch (answer.kind) {
+      case "unanswered":
+        throw answer.reason === "dead"
+          ? new MachineAway(machineFault(where.machineId, "offline"))
+          : new Error(machineFault(where.machineId, "silent"));
+      case "answered":
+        if (!answer.value.ok) {
+          throw answer.value.error === MACHINE_DISCONNECTED
+            ? new MachineAway(machineFault(where.machineId, "offline"))
+            : new Error(
+                answer.value.error ?? "the transcript could not be read"
+              );
+        }
+        return (
+          Array.isArray(answer.value.result) ? answer.value.result : []
+        ) as SessionMessage[];
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout") {
-      throw new Error(machineFault(where.machineId, "silent"));
-    }
-    if (!answer.ok) {
-      throw answer.error === MACHINE_DISCONNECTED
-        ? new MachineAway(machineFault(where.machineId, "offline"))
-        : new Error(answer.error ?? "the transcript could not be read");
-    }
-    return (
-      Array.isArray(answer.result) ? answer.result : []
-    ) as SessionMessage[];
   };
 
   /**
@@ -12041,14 +12469,22 @@ export const createServer = (
     asksOnly = false
   ): Promise<PreparedContinuation> => {
     const [row] = db.getInstancesByIds([sourceId]);
-    const where = await locateSession(sourceId);
-    if (!where) {
-      throw new Error(
-        row
-          ? `session ${sourceId} has no transcript yet`
-          : `no session ${sourceId}`
-      );
+    const located = await locateSession(sourceId);
+    switch (located.kind) {
+      case "nowhere":
+        throw new Error(
+          row
+            ? `session ${sourceId} has no transcript yet`
+            : `no session ${sourceId}`
+        );
+      case "unanswered":
+        throw new Error(unlocatedWords(sourceId, located.machines));
+      case "found":
+        break;
+      default:
+        throw unreachable(located);
     }
+    const where = located.at;
     const since = await sessionStartOf(where);
     const [live, whole, git] = await Promise.all([
       readMessages(where, false),
@@ -13719,13 +14155,18 @@ export const createServer = (
     lifetime,
     gitRoot: GIT_ROOT,
     call: async (machineId, method, args, timeoutMs) => {
-      const answer = await callAgent(machineId, method, args, timeoutMs);
-      if (answer === "offline") {
-        throw new MoveAway(machineId);
+      const asked = await callAgent(machineId, method, args, timeoutMs);
+      switch (asked.kind) {
+        case "unanswered":
+          throw asked.reason === "dead"
+            ? new MoveAway(machineId)
+            : new Error(`${silentWords(machineId, asked)}.`);
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
       }
-      if (answer === "timeout") {
-        throw new Error(`${machineName(machineId)} did not answer in time.`);
-      }
+      const answer = asked.value;
       if (!answer.ok) {
         throw answer.error === MACHINE_DISCONNECTED ||
           answer.error === AGENT_RESTARTING
@@ -14115,11 +14556,17 @@ export const createServer = (
       [{}],
       READ_TIMEOUT_MS
     );
-    if (answer === "offline" || answer === "timeout" || !answer.ok) {
-      return;
-    }
-    if (!Array.isArray(answer.result)) {
-      return;
+    // Unanswered or refused: the rows stay unnamed, named at the next ask.
+    switch (answer.kind) {
+      case "unanswered":
+        return;
+      case "answered":
+        if (!(answer.value.ok && Array.isArray(answer.value.result))) {
+          return;
+        }
+        break;
+      default:
+        throw unreachable(answer);
     }
 
     // Name from whatever the catalog carries, in the SAME precedence the
@@ -14130,7 +14577,7 @@ export const createServer = (
     // The row's stored title wins in `resolveSessionTitle` either way, so naming
     // from the given title is not a mismatch with what the client would show.
     const names = new Map<string, string>();
-    for (const info of answer.result as NeutralSessionInfo[]) {
+    for (const info of answer.value.result as NeutralSessionInfo[]) {
       // biome-ignore lint/suspicious/noUnnecessaryConditions: `answer.result` is an untrusted control reply cast to this type, not a value TS actually proved shaped — a malformed entry can still be null at runtime.
       if (typeof info?.sessionId !== "string") {
         continue;
@@ -14332,15 +14779,22 @@ export const createServer = (
       [],
       READ_TIMEOUT_MS
     );
-    if (
-      typeof answer === "object" &&
-      answer.ok &&
-      typeof answer.result === "object" &&
-      answer.result !== null
-    ) {
-      return answer.result as FleetHoldings;
+    // Not what it holds: every byte is sent (fanOutFleet), heavier, never wrong.
+    switch (answer.kind) {
+      case "unanswered":
+        console.warn(
+          `[hub] fleet holdings: ${silentWords(machineId, answer)}; every byte is sent`
+        );
+        return {};
+      case "answered":
+        return answer.value.ok &&
+          typeof answer.value.result === "object" &&
+          answer.value.result !== null
+          ? (answer.value.result as FleetHoldings)
+          : {};
+      default:
+        throw unreachable(answer);
     }
-    return {};
   };
 
   /**
@@ -14606,28 +15060,21 @@ export const createServer = (
       [],
       READ_TIMEOUT_MS
     );
-    if (answer === "offline") {
-      return {
-        ok: false,
-        code: 404,
-        said: machineFault(machineId, "offline"),
-      };
+    switch (answer.kind) {
+      case "unanswered":
+        return { ok: false, ...unansweredStatus(machineId, answer) };
+      case "answered":
+        return answer.value.ok
+          ? { ok: true, copy: peekMemoryFile(answer.value.result) }
+          : {
+              ok: false,
+              code: 500,
+              said:
+                answer.value.error ?? "the machine could not read its memory",
+            };
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout") {
-      return {
-        ok: false,
-        code: 504,
-        said: machineFault(machineId, "silent"),
-      };
-    }
-    if (!answer.ok) {
-      return {
-        ok: false,
-        code: 500,
-        said: answer.error ?? "the machine could not read its memory",
-      };
-    }
-    return { ok: true, copy: peekMemoryFile(answer.result) };
   };
 
   /**
@@ -14647,28 +15094,25 @@ export const createServer = (
       [id],
       READ_TIMEOUT_MS
     );
-    if (answer === "offline") {
-      return {
-        ok: false,
-        code: 404,
-        said: machineFault(machineId, "offline"),
-      };
+    switch (answer.kind) {
+      case "unanswered":
+        return { ok: false, ...unansweredStatus(machineId, answer) };
+      case "answered":
+        return answer.value.ok
+          ? {
+              ok: true,
+              copy: answer.value.result as MachineHookScript | null,
+            }
+          : {
+              ok: false,
+              code: 500,
+              said:
+                answer.value.error ??
+                "the machine could not read the hook's script",
+            };
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout") {
-      return {
-        ok: false,
-        code: 504,
-        said: machineFault(machineId, "silent"),
-      };
-    }
-    if (!answer.ok) {
-      return {
-        ok: false,
-        code: 500,
-        said: answer.error ?? "the machine could not read the hook's script",
-      };
-    }
-    return { ok: true, copy: answer.result as MachineHookScript | null };
   };
 
   /** The version about to be replaced, kept — a save is not a way to lose one. */
@@ -14749,7 +15193,7 @@ export const createServer = (
     machineId: string,
     agent: HubSocket,
     op: Omit<FsPayload, "requestId">
-  ): Promise<ControlResult | "timeout"> => {
+  ): Promise<Bounded<ControlResult>> => {
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
     return awaitReply(machineId, requestId, READ_TIMEOUT_MS, () =>
@@ -14775,13 +15219,21 @@ export const createServer = (
       return "offline";
     }
     const answer = await callFs(machineId, agent, { op: "media", path });
-    if (answer === "timeout") {
-      return "timeout";
+    // MediaReader's own words for no answer (telegram.ts): "offline", "timeout".
+    switch (answer.kind) {
+      case "unanswered":
+        return answer.reason === "dead" ? "offline" : "timeout";
+      case "answered":
+        if (!answer.value.ok) {
+          return {
+            refused: answer.value.error ?? `${path} could not be read`,
+          };
+        }
+        break;
+      default:
+        throw unreachable(answer);
     }
-    if (!answer.ok) {
-      return { refused: answer.error ?? `${path} could not be read` };
-    }
-    const { base64, mediaType } = answer.result as FsMedia;
+    const { base64, mediaType } = answer.value.result as FsMedia;
     // Copied into a fresh ArrayBuffer-backed view: a Buffer's `ArrayBufferLike`
     // backing is not what `Response` and `Blob` accept as a body.
     const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
@@ -14818,14 +15270,24 @@ export const createServer = (
         path: `agents/${file.name}.md`,
         content: file.content,
       });
-      if (answer === "timeout" || !answer.ok) {
-        unpushable.set(
-          machineId,
-          answer === "timeout"
-            ? "the machine did not answer the write"
-            : (answer.error ?? "the machine refused the write")
-        );
-        return;
+      switch (answer.kind) {
+        case "unanswered":
+          unpushable.set(
+            machineId,
+            `the machine did not answer the write within ${Math.round(answer.after / 1000)} s`
+          );
+          return;
+        case "answered":
+          if (!answer.value.ok) {
+            unpushable.set(
+              machineId,
+              answer.value.error ?? "the machine refused the write"
+            );
+            return;
+          }
+          break;
+        default:
+          throw unreachable(answer);
       }
     }
     unpushable.delete(machineId);
@@ -15409,14 +15871,22 @@ export const createServer = (
         undefined,
         instanceId
       );
-      if (delivered === "offline") {
-        throw new Error(machineFault(parked.machineId, "offline"));
-      }
-      if (delivered === "timeout") {
-        throw new Error("Permission answer timeout.");
-      }
-      if (!delivered.ok) {
-        throw new Error(delivered.error ?? "The session refused the answer.");
+      switch (delivered.kind) {
+        case "unanswered":
+          throw new Error(
+            delivered.reason === "dead"
+              ? machineFault(parked.machineId, "offline")
+              : `Permission answer got no reply: ${silentWords(parked.machineId, delivered)}.`
+          );
+        case "answered":
+          if (!delivered.value.ok) {
+            throw new Error(
+              delivered.value.error ?? "The session refused the answer."
+            );
+          }
+          break;
+        default:
+          throw unreachable(delivered);
       }
       if (receipt.outcome === "cancelled" || !ownsPermission(parked)) {
         pending.resolve(requestId, "cancelled");
@@ -15455,12 +15925,17 @@ export const createServer = (
       ask.instanceId
     );
     let said: string;
-    if (typeof withdrawn === "string") {
-      said = withdrawn;
-    } else if (withdrawn.ok) {
-      said = "the session was told and goes on";
-    } else {
-      said = withdrawn.error ?? "the machine refused it";
+    switch (withdrawn.kind) {
+      case "unanswered":
+        said = silentWords(ask.machineId, withdrawn);
+        break;
+      case "answered":
+        said = withdrawn.value.ok
+          ? "the session was told and goes on"
+          : (withdrawn.value.error ?? "the machine refused it");
+        break;
+      default:
+        throw unreachable(withdrawn);
     }
     console.log(
       `[hub] ask withdrawn session=${ask.instanceId ?? "none"} request=${requestId}: ${said}`
@@ -16225,17 +16700,26 @@ export const createServer = (
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
       const located = await locateSession(instanceId);
-      if (!located) {
-        return { fault: "missing", message: `no session ${instanceId}` };
+      switch (located.kind) {
+        case "nowhere":
+          return { fault: "missing", message: `no session ${instanceId}` };
+        case "unanswered":
+          return {
+            fault: "timeout",
+            message: unlocatedWords(instanceId, located.machines),
+          };
+        case "found":
+          return {
+            where: {
+              machineId: located.at.machineId,
+              sessionKey: located.at.sessionId,
+              cwd: located.at.cwd || "",
+              harness: located.at.harness,
+            },
+          };
+        default:
+          throw unreachable(located);
       }
-      return {
-        where: {
-          machineId: located.machineId,
-          sessionKey: located.sessionId,
-          cwd: located.cwd || "",
-          harness: located.harness,
-        },
-      };
     }
     const fork = row.sessionId ? undefined : forkSeeds.get(row.id);
     const where = {
@@ -16275,32 +16759,36 @@ export const createServer = (
       READ_TIMEOUT_MS,
       where.harness as HarnessKind
     );
-    if (answer === "offline") {
-      return {
-        fault: "offline",
-        machineId,
-        message: machineFault(machineId, "offline"),
-      };
+    // The history fault's own words for no answer (transcripts.ts): "offline", "timeout".
+    switch (answer.kind) {
+      case "unanswered":
+        return answer.reason === "dead"
+          ? {
+              fault: "offline",
+              machineId,
+              message: machineFault(machineId, "offline"),
+            }
+          : {
+              fault: "timeout",
+              message: machineFault(machineId, "silent"),
+            };
+      case "answered":
+        if (!answer.value.ok) {
+          return {
+            fault: "failed",
+            message: answer.value.error ?? "the transcript could not be read",
+          };
+        }
+        // A session the machine has never stored answers with nothing: an
+        // empty transcript, the same shape a brand new session has.
+        return {
+          entries: (Array.isArray(answer.value.result)
+            ? answer.value.result
+            : []) as SessionMessage[],
+        };
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout") {
-      return {
-        fault: "timeout",
-        message: machineFault(machineId, "silent"),
-      };
-    }
-    if (!answer.ok) {
-      return {
-        fault: "failed",
-        message: answer.error ?? "the transcript could not be read",
-      };
-    }
-    // A session the machine has never stored answers with nothing: an empty
-    // transcript, the same shape a brand new session has.
-    return {
-      entries: (Array.isArray(answer.result)
-        ? answer.result
-        : []) as SessionMessage[],
-    };
   };
 
   const includesRewindAnchor = (
@@ -16783,13 +17271,29 @@ export const createServer = (
         ).catch((error: unknown) =>
           error instanceof Error ? error.message : String(error)
         );
-        if (typeof answer === "string" || answer.error) {
+        if (typeof answer === "string") {
           console.warn(
-            `[pause] ${machineId}: could not cancel ${run.what} ${runId}: ${typeof answer === "string" ? answer : String(answer.error)}`
+            `[pause] ${machineId}: could not cancel ${run.what} ${runId}: ${answer}`
           );
           return;
         }
-        return answer.result === true ? run.what : undefined;
+        switch (answer.kind) {
+          case "unanswered":
+            console.warn(
+              `[pause] ${machineId}: whether ${run.what} ${runId} was cancelled is not known: ${silentWords(machineId, answer)}`
+            );
+            return;
+          case "answered":
+            if (answer.value.error) {
+              console.warn(
+                `[pause] ${machineId}: could not cancel ${run.what} ${runId}: ${String(answer.value.error)}`
+              );
+              return;
+            }
+            return answer.value.result === true ? run.what : undefined;
+          default:
+            throw unreachable(answer);
+        }
       })
     );
     const stopped: StoppedCommands = {};
@@ -16829,10 +17333,16 @@ export const createServer = (
         waited = queueWords(queue);
         callAgent(machineId, CONTROL_CANCEL_COMMAND, [run.id], 15_000)
           .then((answer) => {
-            if (typeof answer === "string" || answer.error) {
-              throw new Error(
-                typeof answer === "string" ? answer : String(answer.error)
-              );
+            switch (answer.kind) {
+              case "unanswered":
+                throw new Error(silentWords(machineId, answer));
+              case "answered":
+                if (answer.value.error) {
+                  throw new Error(String(answer.value.error));
+                }
+                return;
+              default:
+                throw unreachable(answer);
             }
           })
           .catch((error: unknown) =>
@@ -16850,15 +17360,22 @@ export const createServer = (
         [cwd, cmd, timeoutMs, workspace, run],
         (timeoutMs ?? 300_000) + run.queueMaxMs + 10_000
       );
-      if (typeof response === "string") {
-        throw new Error(
-          `Command refused: ${machineFault(machineId, response === "offline" ? "offline" : "silent")}`
-        );
+      // A command that ran out its own limit is an answer (exit 124, in
+      // `result`); only a reply that never came is unanswered.
+      switch (response.kind) {
+        case "unanswered":
+          throw new Error(
+            `Command got no answer: ${unansweredFault(machineId, response)}`
+          );
+        case "answered":
+          if (response.value.error) {
+            throw new Error(String(response.value.error));
+          }
+          break;
+        default:
+          throw unreachable(response);
       }
-      if (response.error) {
-        throw new Error(String(response.error));
-      }
-      const result = response.result as CommandResult;
+      const result = response.value.result as CommandResult;
       if (waited !== undefined && result.cancelled) {
         throw new WouldWait(waited);
       }
@@ -17143,20 +17660,24 @@ export const createServer = (
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
     const answer = await callAgent(machineId, method, args, timeout);
-    if (answer === "offline") {
-      throw new Error(machineFault(machineId, "offline"));
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          answer.reason === "dead"
+            ? machineFault(machineId, "offline")
+            : `${machineName(machineId)} didn't answer ${method} within ${Math.round(answer.after / 1000)} s. Try again in a moment.`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          throw new Error(
+            answer.value.error ??
+              `${method} failed on ${machineName(machineId)}`
+          );
+        }
+        return answer.value.result;
+      default:
+        throw unreachable(answer);
     }
-    if (answer === "timeout") {
-      throw new Error(
-        `${machineName(machineId)} didn't answer ${method} within ${timeout / 1000} s. Try again in a moment.`
-      );
-    }
-    if (!answer.ok) {
-      throw new Error(
-        answer.error ?? `${method} failed on ${machineName(machineId)}`
-      );
-    }
-    return answer.result;
   };
   /** Who stops a work item's session once the item is over or its workspace closed: the hub. */
   const ITEM_OVER: EndedBy = {
@@ -17772,10 +18293,16 @@ export const createServer = (
         [{}],
         STORED_LISTING_MS
       );
-      if (answer === "offline" || answer === "timeout" || !answer.ok) {
-        return { error: searchMiss(answer) };
+      switch (answer.kind) {
+        case "unanswered":
+          return { error: searchMiss(answer) };
+        case "answered":
+          return answer.value.ok
+            ? (answer.value.result as NeutralSessionInfo[])
+            : { error: searchMiss(answer) };
+        default:
+          throw unreachable(answer);
       }
-      return answer.result as NeutralSessionInfo[];
     },
     askMachine: async (machineId, query, options, timeoutMs) => {
       const answer = await callAgent(
@@ -17784,12 +18311,20 @@ export const createServer = (
         [query, options],
         timeoutMs
       );
-      if (answer === "offline" || answer === "timeout" || !answer.ok) {
-        return { error: searchMiss(answer) };
+      switch (answer.kind) {
+        case "unanswered":
+          return { error: searchMiss(answer) };
+        case "answered":
+          if (!answer.value.ok) {
+            return { error: searchMiss(answer) };
+          }
+          break;
+        default:
+          throw unreachable(answer);
       }
       // A machine on a build from before find answers a list of lines: named
       // as one that did not answer, never read as one that found nothing.
-      const result = answer.result as Partial<TranscriptAnswer> | null;
+      const result = answer.value.result as Partial<TranscriptAnswer> | null;
       if (!(result && Array.isArray(result.conversations))) {
         return {
           error:
@@ -18621,10 +19156,21 @@ export const createServer = (
             },
           } satisfies Envelope<ControlPayload>)
         ).then((reply) => {
-          if (reply === "timeout" || !reply.ok) {
-            console.warn(
-              `[delegation-mcp] ${row.id} (pi) did not refresh its tools: ${reply === "timeout" ? "no answer" : (reply.error ?? "refused")}`
-            );
+          switch (reply.kind) {
+            case "unanswered":
+              console.warn(
+                `[delegation-mcp] ${row.id} (pi) did not answer its tools refresh within ${Math.round(reply.after / 1000)} s`
+              );
+              return;
+            case "answered":
+              if (!reply.value.ok) {
+                console.warn(
+                  `[delegation-mcp] ${row.id} (pi) did not refresh its tools: ${reply.value.error ?? "refused"}`
+                );
+              }
+              return;
+            default:
+              throw unreachable(reply);
           }
         }),
         "pi tool refresh"
@@ -18785,13 +19331,20 @@ export const createServer = (
       [workspace],
       30_000
     );
-    if (typeof masked === "string") {
-      throw new Error(masked);
-    }
-    if (!masked.ok) {
-      throw new Error(
-        masked.error ?? "Workspace secret masking is still waiting"
-      );
+    switch (masked.kind) {
+      case "unanswered":
+        throw new Error(
+          `Workspace secret masking got no answer: ${silentWords(row.machineId, masked)}`
+        );
+      case "answered":
+        if (!masked.value.ok) {
+          throw new Error(
+            masked.value.error ?? "Workspace secret masking is still waiting"
+          );
+        }
+        return;
+      default:
+        throw unreachable(masked);
     }
   };
 
@@ -18851,16 +19404,26 @@ export const createServer = (
           },
         } satisfies Envelope<ControlPayload>)
       );
-      if (reply === "timeout") {
-        throw new Error("Credential installation is still waiting");
-      }
-      if (!reply.ok) {
-        throw new Error(reply.error ?? "Credential installation failed");
+      switch (reply.kind) {
+        case "unanswered":
+          throw new Error(
+            `Credential installation is still waiting: no answer within ${Math.round(reply.after / 1000)} s`
+          );
+        case "answered":
+          if (!reply.value.ok) {
+            throw new Error(
+              reply.value.error ?? "Credential installation failed"
+            );
+          }
+          break;
+        default:
+          throw unreachable(reply);
       }
       if (db.sessionIdentity(instanceId)?.pendingHash) {
         throw new Error("Harness returned without an installation ACK");
       }
-      const installed = reply.result as SessionCredentialInstall | undefined;
+      const installed = reply.value.result as
+        SessionCredentialInstall | undefined;
       return {
         instanceId,
         installed: true,
@@ -18892,10 +19455,20 @@ export const createServer = (
       [],
       BUSY_TIMEOUT_MS
     );
-    if (typeof answer === "string" || !answer.ok) {
-      return false;
+    // Not idle on its machine's word: nothing is put in now, and its caller
+    // asks again at its next turn (R/WAIT).
+    switch (answer.kind) {
+      case "unanswered":
+        return false;
+      case "answered":
+        if (!answer.value.ok) {
+          return false;
+        }
+        break;
+      default:
+        throw unreachable(answer);
     }
-    const reading = answer.result as AgentBusyReport | undefined;
+    const reading = answer.value.result as AgentBusyReport | undefined;
     return (
       reading?.ready === true &&
       Array.isArray(reading.instances) &&
@@ -19879,7 +20452,7 @@ export const createServer = (
         return {
           running: false,
           why: row.sessionId
-            ? awayWords(row.machineId, "offline")
+            ? `${machineName(row.machineId)} is not connected.`
             : "it has no conversation to copy yet",
         };
       }
@@ -19901,7 +20474,10 @@ export const createServer = (
       const agent = registry.agent(row.machineId);
       const [now] = db.getInstancesByIds([row.id]);
       if (!(agent && now?.sessionId)) {
-        return { running: false, why: awayWords(row.machineId, "offline") };
+        return {
+          running: false,
+          why: `${machineName(row.machineId)} is not connected.`,
+        };
       }
       console.log(
         `[hub] ${sessionName(now)} relaunches on ${accountWords(now.accountId)}, its conversation resumed${stopped ? " and told to carry on past what stopped it" : ""}.`
@@ -20390,19 +20966,24 @@ export const createServer = (
                     [],
                     READ_TIMEOUT_MS
                   );
-                  if (answer === "offline" || answer === "timeout") {
-                    throw new Error(
-                      `Cannot check workflow skill ${name}: ${machineFault(machineId, answer === "offline" ? "offline" : "silent")}`
-                    );
+                  switch (answer.kind) {
+                    case "unanswered":
+                      throw new Error(
+                        `Cannot check workflow skill ${name}: ${unansweredFault(machineId, answer)}`
+                      );
+                    case "answered":
+                      if (!answer.value.ok) {
+                        throw new Error(
+                          answer.value.error ??
+                            `Cannot inspect skills on ${machineName(machineId)}.`
+                        );
+                      }
+                      break;
+                    default:
+                      throw unreachable(answer);
                   }
-                  if (!answer.ok) {
-                    throw new Error(
-                      answer.error ??
-                        `Cannot inspect skills on ${machineName(machineId)}.`
-                    );
-                  }
-                  const inspection =
-                    answer.result as import("@cawco/core").ConfigInspection;
+                  const inspection = answer.value
+                    .result as import("@cawco/core").ConfigInspection;
                   const matches = inspection.skills.filter(
                     (skill) => skill.name === name
                   );
@@ -20425,12 +21006,22 @@ export const createServer = (
                     [name],
                     READ_TIMEOUT_MS
                   );
-                  if (files === "offline" || files === "timeout" || !files.ok) {
-                    throw new Error(
-                      `Cannot verify workflow skill ${name} ownership on ${machineName(machineId)}.`
-                    );
+                  switch (files.kind) {
+                    case "unanswered":
+                      throw new Error(
+                        `Cannot verify workflow skill ${name} ownership: ${unansweredFault(machineId, files)}`
+                      );
+                    case "answered":
+                      if (!files.value.ok) {
+                        throw new Error(
+                          `Cannot verify workflow skill ${name} ownership on ${machineName(machineId)}.`
+                        );
+                      }
+                      break;
+                    default:
+                      throw unreachable(files);
                   }
-                  const markdown = (files.result as SkillFile[]).find(
+                  const markdown = (files.value.result as SkillFile[]).find(
                     (file) => file.path === "SKILL.md"
                   );
                   if (!(
@@ -20681,22 +21272,24 @@ export const createServer = (
             [row.id, row.cwd, body],
             IMAGE_GENERATION_TIMEOUT_MS + 30_000
           );
-          if (answer === "offline") {
-            return status(
-              503,
-              "The session's machine is offline; image generation was not started."
-            );
+          switch (answer.kind) {
+            case "unanswered":
+              return answer.reason === "dead"
+                ? status(
+                    503,
+                    "The session's machine is offline; image generation was not started."
+                  )
+                : status(
+                    504,
+                    `Image generation did not finish within ${Math.round(answer.after / 1000)} s. Check the output path before retrying; do not submit a duplicate automatically.`
+                  );
+            case "answered":
+              return answer.value.ok
+                ? (answer.value.result as GeneratedImage)
+                : status(422, answer.value.error ?? "Image generation failed.");
+            default:
+              throw unreachable(answer);
           }
-          if (answer === "timeout") {
-            return status(
-              504,
-              "Image generation did not finish in time. Check the output path before retrying; do not submit a duplicate automatically."
-            );
-          }
-          if (!answer.ok) {
-            return status(422, answer.error ?? "Image generation failed.");
-          }
-          return answer.result as GeneratedImage;
         }
       )
       // Claude models' context windows as their turns last reported them; the
@@ -21016,19 +21609,24 @@ export const createServer = (
             READ_TIMEOUT_MS,
             (row.harness || undefined) as HarnessKind | undefined
           );
-          if (stored === "offline" || stored === "timeout") {
-            return status(
-              409,
-              "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back."
-            );
+          switch (stored.kind) {
+            case "unanswered":
+              return status(
+                409,
+                "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back."
+              );
+            case "answered":
+              if (!stored.value.ok) {
+                return status(
+                  502,
+                  `The machine could not check this session's transcript: ${stored.value.error ?? "no reason given"}`
+                );
+              }
+              break;
+            default:
+              throw unreachable(stored);
           }
-          if (!stored.ok) {
-            return status(
-              502,
-              `The machine could not check this session's transcript: ${stored.error ?? "no reason given"}`
-            );
-          }
-          if (stored.result) {
+          if (stored.value.result) {
             return status(
               409,
               "This session has a transcript. Delete the transcript instead."
@@ -21091,16 +21689,18 @@ export const createServer = (
           [],
           BUSY_TIMEOUT_MS
         );
-        if (answer === "offline") {
-          return status(404, machineFault(params.machineId, "offline"));
+        switch (answer.kind) {
+          case "unanswered": {
+            const away = unansweredStatus(params.machineId, answer);
+            return status(away.code, away.said);
+          }
+          case "answered":
+            return answer.value.ok
+              ? (answer.value.result as { busy: number; instances: string[] })
+              : status(500, answer.value.error ?? "the busy probe failed");
+          default:
+            throw unreachable(answer);
         }
-        if (answer === "timeout") {
-          return status(504, machineFault(params.machineId, "silent"));
-        }
-        if (!answer.ok) {
-          return status(500, answer.error ?? "the busy probe failed");
-        }
-        return answer.result as { busy: number; instances: string[] };
       })
       // And the update itself: the machine pulls, installs, rebuilds and restarts
       // what it serves, then says what it actually did.
@@ -21123,22 +21723,24 @@ export const createServer = (
             [body],
             UPDATE_TIMEOUT_MS
           );
-          if (answer === "offline") {
-            return status(404, machineFault(params.machineId, "offline"));
+          switch (answer.kind) {
+            case "unanswered":
+              // A machine that restarts the hub as part of its update answers
+              // into a socket that no longer exists, so this is not proof that
+              // nothing happened — only that the hub stopped hearing about it.
+              return answer.reason === "dead"
+                ? status(404, machineFault(params.machineId, "offline"))
+                : status(
+                    504,
+                    `${machineName(params.machineId)} didn't finish the update within ${Math.round(answer.after / 1000)} s. Check it once it's back.`
+                  );
+            case "answered":
+              return answer.value.ok
+                ? (answer.value.result as UpdateReport)
+                : status(500, answer.value.error ?? "the update failed");
+            default:
+              throw unreachable(answer);
           }
-          // A machine that restarts the hub as part of its update answers into a
-          // socket that no longer exists, so this is not proof that nothing
-          // happened — only that the hub stopped being able to hear about it.
-          if (answer === "timeout") {
-            return status(
-              504,
-              `${machineName(params.machineId)} didn't finish the update in time. Check it once it's back.`
-            );
-          }
-          if (!answer.ok) {
-            return status(500, answer.error ?? "the update failed");
-          }
-          return answer.result as UpdateReport;
         }
       )
       // What a machine really has, fleet or not (NEW.md §11) — and what a session
@@ -21154,19 +21756,23 @@ export const createServer = (
             [body.cwd],
             READ_TIMEOUT_MS
           );
-          if (answer === "offline") {
-            return status(404, machineFault(params.machineId, "offline"));
+          switch (answer.kind) {
+            case "unanswered": {
+              const away = unansweredStatus(params.machineId, answer);
+              return status(away.code, away.said);
+            }
+            case "answered":
+              return answer.value.ok
+                ? (answer.value
+                    .result as import("@cawco/core").ConfigInspection)
+                : status(
+                    500,
+                    answer.value.error ??
+                      "the machine could not read its config"
+                  );
+            default:
+              throw unreachable(answer);
           }
-          if (answer === "timeout") {
-            return status(504, machineFault(params.machineId, "silent"));
-          }
-          if (!answer.ok) {
-            return status(
-              500,
-              answer.error ?? "the machine could not read its config"
-            );
-          }
-          return answer.result as import("@cawco/core").ConfigInspection;
         }
       )
       .get("/api/instances", () => laws.raise(boardRows))
@@ -21265,7 +21871,11 @@ export const createServer = (
           if (!row) {
             return status(404, "Session not found");
           }
-          return await reportedContextOf(row);
+          const reported = await reportedContextOf(row);
+          // The answer's own words for a machine that did not answer.
+          return "kind" in reported
+            ? { reason: reported.reason === "dead" ? "offline" : "timeout" }
+            : reported;
         }
       )
       // What these conversations are called — *whether or not the board still
@@ -21379,11 +21989,21 @@ export const createServer = (
                 READ_TIMEOUT_MS,
                 harness
               );
-              if (answer === "offline" || answer === "timeout" || !answer.ok) {
-                return { id: ask.id, title: null };
+              // Unanswered or refused: no title now and nothing written, so
+              // the next render asks again.
+              switch (answer.kind) {
+                case "unanswered":
+                  return { id: ask.id, title: null };
+                case "answered":
+                  if (!answer.value.ok) {
+                    return { id: ask.id, title: null };
+                  }
+                  break;
+                default:
+                  throw unreachable(answer);
               }
               const first = firstTurnOf(
-                Array.isArray(answer.result) ? answer.result : []
+                Array.isArray(answer.value.result) ? answer.value.result : []
               );
               if (!first) {
                 return { id: ask.id, title: null };
@@ -22375,18 +22995,23 @@ export const createServer = (
           }
 
           if (body.fromMachine) {
-            const answer = await callAgent(
+            const asked = await callAgent(
               body.fromMachine,
               READ_SKILL_FILES,
               [params.name, body.cwd],
               READ_TIMEOUT_MS
             );
-            if (answer === "offline") {
-              return status(404, machineFault(body.fromMachine, "offline"));
+            switch (asked.kind) {
+              case "unanswered": {
+                const away = unansweredStatus(body.fromMachine, asked);
+                return status(away.code, away.said);
+              }
+              case "answered":
+                break;
+              default:
+                throw unreachable(asked);
             }
-            if (answer === "timeout") {
-              return status(504, machineFault(body.fromMachine, "silent"));
-            }
+            const answer = asked.value;
             if (!answer.ok) {
               return status(
                 400,
@@ -22471,18 +23096,23 @@ export const createServer = (
         // "the same source, again" reads from.
         if (stored.source.startsWith("machine:")) {
           const machineId = stored.source.slice("machine:".length);
-          const answer = await callAgent(
+          const asked = await callAgent(
             machineId,
             READ_SKILL_FILES,
             [stored.name],
             READ_TIMEOUT_MS
           );
-          if (answer === "offline") {
-            return status(404, machineFault(machineId, "offline"));
+          switch (asked.kind) {
+            case "unanswered": {
+              const away = unansweredStatus(machineId, asked);
+              return status(away.code, away.said);
+            }
+            case "answered":
+              break;
+            default:
+              throw unreachable(asked);
           }
-          if (answer === "timeout") {
-            return status(504, machineFault(machineId, "silent"));
-          }
+          const answer = asked.value;
           if (!answer.ok) {
             return status(
               400,
@@ -22581,18 +23211,23 @@ export const createServer = (
             return status(404, `the fleet carries no skill ${params.name}`);
           }
 
-          const answer = await callAgent(
+          const asked = await callAgent(
             body.machineId,
             READ_SKILL_FILES,
             [params.name],
             READ_TIMEOUT_MS
           );
-          if (answer === "offline") {
-            return status(404, machineFault(body.machineId, "offline"));
+          switch (asked.kind) {
+            case "unanswered": {
+              const away = unansweredStatus(body.machineId, asked);
+              return status(away.code, away.said);
+            }
+            case "answered":
+              break;
+            default:
+              throw unreachable(asked);
           }
-          if (answer === "timeout") {
-            return status(504, machineFault(body.machineId, "silent"));
-          }
+          const answer = asked.value;
           // No copy on the machine is nothing to keep; any other refusal
           // stops the push, because the copy it would destroy was not read.
           if (!(answer.ok || answer.error?.startsWith("no skill "))) {
@@ -24027,21 +24662,24 @@ export const createServer = (
         // its stores, and this hub answers the ones it removed, by the record
         // `remove` keeps (`unknownAccountsOf`). One that is online and fails
         // says why.
-        const failed: string[] = [];
-        const later: string[] = [];
-        for (const signin of signins) {
-          // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each told and answered before the next
-          const answer = await forgetOn(account, signin.machineId);
-          if (answer === "offline") {
-            later.push(machineName(signin.machineId));
-          } else if (answer === "timeout" || !answer.ok) {
-            failed.push(machineName(signin.machineId));
-          }
-        }
-        if (failed.length > 0) {
+        const { failed, silent, later } = await signOutEverywhere(
+          account,
+          signins.map((signin) => signin.machineId)
+        );
+        if (failed.length > 0 || silent.length > 0) {
           return status(
             409,
-            `${failed.join(", ")} did not sign ${accountName(account)} out; try again.`
+            [
+              failed.length > 0
+                ? `${failed.join(", ")} did not sign ${accountName(account)} out.`
+                : "",
+              silent.length > 0
+                ? `${silent.join("; ")}, so whether ${accountName(account)} was signed out there is not known.`
+                : "",
+              "Try again.",
+            ]
+              .filter(Boolean)
+              .join(" ")
           );
         }
         db.accounts.remove(account.id, "removed");
@@ -24090,17 +24728,27 @@ export const createServer = (
             );
           }
           const answer = await forgetOn(account, params.machineId);
-          if (answer === "offline") {
-            return status(
-              409,
-              `${machine} is offline, so ${accountName(account)} was not signed out there; try again when it is online.`
-            );
-          }
-          if (answer === "timeout" || !answer.ok) {
-            return status(
-              409,
-              `${machine} did not sign ${accountName(account)} out${answer === "timeout" ? "; it did not answer in time" : `: ${answer.error ?? "it gave no reason"}`}. Try again.`
-            );
+          switch (answer.kind) {
+            case "unanswered":
+              return answer.reason === "dead"
+                ? status(
+                    409,
+                    `${machine} is offline, so ${accountName(account)} was not signed out there; try again when it is online.`
+                  )
+                : status(
+                    409,
+                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${accountName(account)} was signed out there is not known. Try again.`
+                  );
+            case "answered":
+              if (!answer.value.ok) {
+                return status(
+                  409,
+                  `${machine} did not sign ${accountName(account)} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
+                );
+              }
+              break;
+            default:
+              throw unreachable(answer);
           }
           db.accounts.removeSignin(account.id, params.machineId);
           rowsLeave(account.id, null, params.machineId);
@@ -24319,7 +24967,12 @@ export const createServer = (
                 [account.id, account.provider],
                 SIGNIN_TIMEOUT_MS
               );
-          if (answer !== "offline" && !db.accounts.get(account.id)) {
+          // Sent, whether or not it answered: only a machine not connected was
+          // never asked.
+          const sent = !(
+            answer.kind === "unanswered" && answer.reason === "dead"
+          );
+          if (sent && !db.accounts.get(account.id)) {
             return status(
               404,
               await undoRemovedSignin(account, params.machineId)
@@ -24330,7 +24983,7 @@ export const createServer = (
           // that store signed out, as its next register would report, so
           // removing the account forgets it there.
           if (
-            answer !== "offline" &&
+            sent &&
             !db.accounts
               .signins()
               .some(
@@ -24346,13 +24999,20 @@ export const createServer = (
             });
             publishUsage(params.machineId);
           }
-          if (answer === "offline" || answer === "timeout") {
-            return status(503, awayWords(params.machineId, answer));
+          switch (answer.kind) {
+            case "unanswered":
+              return status(503, awayWords(params.machineId, answer));
+            case "answered":
+              return answer.value.ok
+                ? (answer.value.result as
+                    { url: string } | ProviderSigninChallenge)
+                : status(
+                    422,
+                    answer.value.error ?? "The sign-in did not start."
+                  );
+            default:
+              throw unreachable(answer);
           }
-          if (!answer.ok) {
-            return status(422, answer.error ?? "The sign-in did not start.");
-          }
-          return answer.result as { url: string } | ProviderSigninChallenge;
         }
       )
       // Claude: types the pasted code into the waiting `claude auth login`.
@@ -24376,15 +25036,21 @@ export const createServer = (
           if (claude && !body.code) {
             return status(400, "Paste the code from the authorisation page.");
           }
-          const answer = await completeOn(
+          const asked = await completeOn(
             account,
             params.id,
             params.machineId,
             body.code
           );
-          if (answer === "offline" || answer === "timeout") {
-            return status(503, awayWords(params.machineId, answer));
+          switch (asked.kind) {
+            case "unanswered":
+              return status(503, awayWords(params.machineId, asked));
+            case "answered":
+              break;
+            default:
+              throw unreachable(asked);
           }
+          const answer = asked.value;
           const now = into();
           if (!now) {
             return status(
@@ -24434,16 +25100,21 @@ export const createServer = (
                 [account.id, account.provider, body.key, account.identity],
                 SIGNIN_TIMEOUT_MS
               );
-              if (answer === "offline" || answer === "timeout") {
-                return { machineId, error: awayWords(machineId, answer) };
+              switch (answer.kind) {
+                case "unanswered":
+                  return { machineId, error: awayWords(machineId, answer) };
+                case "answered":
+                  if (!answer.value.ok) {
+                    return {
+                      machineId,
+                      error: answer.value.error ?? "The key was not written.",
+                    };
+                  }
+                  break;
+                default:
+                  throw unreachable(answer);
               }
-              if (!answer.ok) {
-                return {
-                  machineId,
-                  error: answer.error ?? "The key was not written.",
-                };
-              }
-              const result = answer.result as ProviderSigninResult;
+              const result = answer.value.result as ProviderSigninResult;
               // Another machine's write already joined the key into the
               // account it already was: this one joins it there too.
               const joinedTo = db.accounts.get(account.id)
@@ -24494,18 +25165,37 @@ export const createServer = (
               SIGNIN_TIMEOUT_MS
             ),
           ]);
-          if (others === "offline" || others === "timeout") {
-            return status(503, awayWords(query.machineId, others));
+          switch (others.kind) {
+            case "unanswered":
+              return status(503, awayWords(query.machineId, others));
+            case "answered":
+              if (!others.value.ok) {
+                return status(
+                  422,
+                  others.value.error ?? "The machine gave no reason."
+                );
+              }
+              break;
+            default:
+              throw unreachable(others);
           }
-          if (!others.ok) {
-            return status(422, others.error ?? "The machine did not answer.");
+          // `null` is Claude Code's answer that it holds no login to read; a
+          // read it did not answer is said, never shown as no login.
+          let home: HomeLogin | null;
+          switch (claude.kind) {
+            case "unanswered":
+              return status(503, awayWords(query.machineId, claude));
+            case "answered":
+              home = claude.value.ok
+                ? (claude.value.result as HomeLogin)
+                : null;
+              break;
+            default:
+              throw unreachable(claude);
           }
           return {
-            claude:
-              typeof claude !== "string" && claude.ok
-                ? (claude.result as HomeLogin)
-                : null,
-            credentials: others.result as HomeCredential[],
+            claude: home,
+            credentials: others.value.result as HomeCredential[],
           };
         }
       )
