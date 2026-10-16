@@ -835,7 +835,11 @@ const checkWaiting = async (
   await shown();
   const opened = await listed(artifactId);
   // No view is joined to its doc, so nothing had the new HTML on screen.
-  await call(UPDATE, { id: artifactId, html: "<h1>Second</h1>" });
+  // A field in it, as the nightly's live check had (step h types in it).
+  await call(UPDATE, {
+    id: artifactId,
+    html: '<h1>Second</h1><input id="probe-field" aria-label="Probe field">',
+  });
   const revised = await listed(artifactId);
   await shown();
   const reopened = await listed(artifactId);
@@ -948,9 +952,71 @@ const checkScreens = async (
   const hub = await find(
     `q=${encodeURIComponent(words)}&transcripts=0&kinds=project,thread,machine,conversation`
   );
-  // ⌘K with the keyboard in the panel's page (the agent's page from step e),
-  // which leaves it alone: Jump opens, its field focused.
-  const pageFrame = await frameOf(page, "Preview", "h1");
+  // The panel's page (the agent's page from step e), served from the agent's
+  // preview port, an origin other than the dashboard's, as deployed. With the
+  // keyboard in its field, which leaves the combos alone: ⌘K gives Jump and
+  // ⌘⇧N the New Session dialog.
+  const pageFrame = await frameOf(page, "Preview", "#probe-field");
+  const origins = {
+    dashboard: new URL(page.url()).origin,
+    page: new URL(pageFrame.url()).origin,
+  };
+  const pressInField = async <T>(
+    combo: string,
+    label: string,
+    read: () => Promise<T>,
+    done: (value: T) => boolean
+  ) => {
+    // Clicked until the field holds the keyboard: a page still settling
+    // from its morph can drop the first click's focus.
+    const focused = await until(
+      "the page's field focused",
+      async () => {
+        await pageFrame.click("#probe-field");
+        return (
+          (await page.evaluate(
+            () => document.activeElement?.tagName === "IFRAME"
+          )) &&
+          (await pageFrame.evaluate(
+            () => document.activeElement?.id === "probe-field"
+          ))
+        );
+      },
+      Boolean,
+      10_000
+    ).catch(() => false);
+    await page.keyboard.press(combo);
+    const after = await until(label, read, done, 10_000).catch(read);
+    await page.keyboard.press("Escape");
+    await until("the card shut", read, (value) => !done(value), 10_000).catch(
+      read
+    );
+    return { focused, after };
+  };
+  const fieldK = await pressInField(
+    "Control+k",
+    "Jump from the field's ⌘K",
+    () => page.evaluate(SHELL_STATE),
+    (state) => state.jump
+  );
+  const NEW_SESSION = "[role='dialog'][aria-label='New Session']";
+  const fieldN = await pressInField(
+    "Control+Shift+N",
+    "New Session from the field's ⌘⇧N",
+    () => page.evaluate((s) => document.querySelector(s) !== null, NEW_SESSION),
+    Boolean
+  );
+  kit.check(
+    "h. in a field of an agent's page artifact on another origin, ⌘K opens Jump and ⌘⇧N New Session",
+    origins.page !== origins.dashboard &&
+      fieldK.focused &&
+      fieldK.after.jump &&
+      fieldN.focused &&
+      fieldN.after,
+    JSON.stringify({ origins, fieldK, fieldN })
+  );
+  // ⌘K with the keyboard on the page outside its field: Jump opens, its
+  // field focused.
   await pageFrame.click("h1");
   const inPage = await page.evaluate(
     () => document.activeElement?.tagName === "IFRAME"

@@ -1359,10 +1359,20 @@ window.addEventListener(
  * the page") does not run beside Jump, and tells the host. A page that
  * handles the combo keeps it: one that prevents its default, stops its
  * propagation (`leftToShell` never runs), or adds a bubbling listener of
- * its own on the window in this same dispatch. Never from a field: the
- * shell's own handler leaves a text field its keys (Shell.svelte `shortcut`).
+ * its own on the window in this same dispatch. A text field in the page is
+ * no exception: what the page does with the combo decides, as anywhere in
+ * it. The one exception is a ⌃ combo in a field on Apple's systems, which
+ * is the text system's own key there (⌃K deletes to the line's end, with
+ * no listener to prevent it); ⌘ is the shell's in that field.
  */
 let shortcutPress: KeyboardEvent | null = null;
+
+/** Apple's systems, where ⌃ letters in a field are text keys and ⌘ is the command key. */
+const APPLE = /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** Whether `event` is a field's own text key rather than a shell combo. */
+const fieldKeeps = (event: KeyboardEvent): boolean =>
+  APPLE && event.ctrlKey && !event.metaKey && typing(event.target);
 
 function leftToShell(event: KeyboardEvent) {
   window.removeEventListener("keydown", leftToShell);
@@ -1383,7 +1393,7 @@ window.addEventListener(
   (event) => {
     window.removeEventListener("keydown", leftToShell);
     shortcutPress = null;
-    if (!shellShortcutOf(event) || typing(event.target)) {
+    if (!shellShortcutOf(event) || fieldKeeps(event)) {
       return;
     }
     shortcutPress = event;
