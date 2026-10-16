@@ -22453,11 +22453,11 @@
                 "args": {
                   "type": "object"
                 },
-                "failure": {
-                  "$ref": "#/components/schemas/WorkflowFailure"
-                },
                 "runId": {
                   "type": "string"
+                },
+                "failure": {
+                  "$ref": "#/components/schemas/WorkflowFailure"
                 },
                 "seq": {
                   "type": "number"
@@ -32799,6 +32799,13 @@
               "string"
             ]
           },
+          "lastDeliveryAt": {
+            "description": "When an event it fits (its source and kinds) last went to its routine;\nnull when none has. Its author, label, branch and regex are not read\nback from the stored event.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "projectId": {
             "type": "string"
           },
@@ -32824,6 +32831,7 @@
           "id",
           "kinds",
           "label",
+          "lastDeliveryAt",
           "projectId",
           "regex",
           "routineId",
@@ -33067,11 +33075,25 @@
               "string"
             ]
           },
+          "routineId": {
+            "description": "The routine whose run proposed it (that run's session, or one it started); null outside any routine.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "runAt": {
             "description": "When it runs, at the earliest; null: as soon as it is approved.",
             "type": [
               "null",
               "number"
+            ]
+          },
+          "runId": {
+            "description": "That routine's run; null outside any routine.",
+            "type": [
+              "null",
+              "string"
             ]
           },
           "service": {
@@ -33133,7 +33155,9 @@
           "proposerTitle",
           "reason",
           "result",
+          "routineId",
           "runAt",
+          "runId",
           "service",
           "stageResult",
           "startedAt",

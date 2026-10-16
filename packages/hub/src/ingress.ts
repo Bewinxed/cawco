@@ -46,6 +46,7 @@ import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type {
   ConnectorPollRow,
+  Delivery,
   EventRouteRow,
   InboundEventRow,
 } from "./db/ingress";
@@ -328,6 +329,12 @@ export interface EventRouteView {
   id: string;
   kinds: string[];
   label: string | null;
+  /**
+   * When an event it fits (its source and kinds) last went to its routine;
+   * null when none has. Its author, label, branch and regex are not read
+   * back from the stored event.
+   */
+  lastDeliveryAt: number | null;
   projectId: string;
   regex: string | null;
   routineId: string;
@@ -400,7 +407,30 @@ export interface IngressDeps {
   readonly routines: Pick<Routines, "runForEvent">;
 }
 
-const routeView = (row: EventRouteRow): EventRouteView => ({
+/** The newest of the project's deliveries `row` fits: to its routine, from its source, of its kinds. */
+const lastDeliveryOf = (
+  row: EventRouteRow,
+  deliveries: Delivery[]
+): number | null => {
+  let last: number | null = null;
+  for (const each of deliveries) {
+    if (
+      each.routedTo === row.routineId &&
+      (row.kinds.length === 0 || row.kinds.includes(each.kind)) &&
+      globMatches(row.source, each.source) &&
+      (last === null || each.receivedAt > last)
+    ) {
+      last = each.receivedAt;
+    }
+  }
+  return last;
+};
+
+const routeView = (
+  row: EventRouteRow,
+  deliveries: Delivery[]
+): EventRouteView => ({
+  lastDeliveryAt: lastDeliveryOf(row, deliveries),
   id: row.id,
   projectId: row.projectId,
   source: row.source,
@@ -926,12 +956,15 @@ export const createIngress = ({
     };
   };
 
-  const view = (projectId: string): IngressView => ({
-    github: githubOf(projectId),
-    routes: store.routes(projectId).map(routeView),
-    connectorPolls: store.connectorPolls(projectId).map(pollView),
-    events: store.events(projectId, EVENTS_SHOWN).map(eventView),
-  });
+  const view = (projectId: string): IngressView => {
+    const deliveries = store.deliveries(projectId);
+    return {
+      github: githubOf(projectId),
+      routes: store.routes(projectId).map((row) => routeView(row, deliveries)),
+      connectorPolls: store.connectorPolls(projectId).map(pollView),
+      events: store.events(projectId, EVENTS_SHOWN).map(eventView),
+    };
+  };
 
   /** Names the `github` connection a project's repository is polled with; null stops it. */
   const setGitHubConnection = (
@@ -1031,7 +1064,7 @@ export const createIngress = ({
     console.log(
       `[ingress] route ${row.id} (${row.source}) → routine ${row.routineId}, by ${row.createdBy}`
     );
-    return routeView(row);
+    return routeView(row, store.deliveries(row.projectId));
   };
 
   const updateRoute = (
@@ -1055,7 +1088,10 @@ export const createIngress = ({
       enabled: patch.enabled ?? row.enabled,
     };
     checkedRoute(row.projectId, next);
-    return routeView(store.updateRoute(id, next) ?? row);
+    return routeView(
+      store.updateRoute(id, next) ?? row,
+      store.deliveries(row.projectId)
+    );
   };
 
   const deleteRoute = (id: string, by: IngressActor) => {

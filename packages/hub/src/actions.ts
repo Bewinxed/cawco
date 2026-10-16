@@ -65,6 +65,8 @@ const AHEAD_MAX_MS = 366 * 24 * 60 * 60 * 1000;
 const PAST_GRACE_MS = 60_000;
 const REASON_MAX = 300;
 const LISTED = 50;
+/** How far up a proposer's parents its routine run is looked for. */
+const ROUTINE_DEPTH = 8;
 
 /** The roles that propose: a session you started, and a project's Caw. */
 const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker", "lead"]);
@@ -158,7 +160,10 @@ export interface ActionDeps {
     Connections,
     "callOnce" | "get" | "proposable" | "toolNamed"
   >;
-  readonly db: Pick<DbShape, "actions" | "getInstancesByIds" | "project">;
+  readonly db: Pick<
+    DbShape,
+    "actions" | "getInstancesByIds" | "project" | "routines"
+  >;
   readonly lifetime: HubLifetimeShape;
   /** Every action waiting on you, to every dashboard. */
   readonly publish: (waiting: ApprovedActionView[]) => void;
@@ -202,6 +207,8 @@ export const createActions = ({
       runAt: ms(row.runAt),
       reason: row.reason,
       proposedBy: row.proposedBy,
+      routineId: row.routineId,
+      runId: row.runId,
       proposerTitle:
         proposer?.title?.trim() || proposer?.derivedTitle?.trim() || null,
       state: row.state,
@@ -309,6 +316,32 @@ export const createActions = ({
     return { taskId: found.id, thenStage };
   };
 
+  /**
+   * The routine run a proposing session works for: a delegate run's own
+   * session (its work item is the run's), a lead run's Caw while that run
+   * goes, or a session one of them started, found up its parents. Null
+   * outside any routine.
+   */
+  const routineRunOf = (
+    actor: InstanceRow
+  ): { routineId: string; runId: string } | null => {
+    const live = db.routines.liveRuns();
+    let session: InstanceRow | undefined = actor;
+    for (let depth = 0; session && depth < ROUTINE_DEPTH; depth += 1) {
+      const { id, workItemId, parentInstanceId }: InstanceRow = session;
+      const run =
+        (workItemId ? db.routines.runOfItem(workItemId) : undefined) ??
+        live.find((each) => each.leadInstanceId === id);
+      if (run) {
+        return { routineId: run.routineId, runId: run.id };
+      }
+      [session] = parentInstanceId
+        ? db.getInstancesByIds([parentInstanceId])
+        : [];
+    }
+    return null;
+  };
+
   const propose = async (
     actor: InstanceRow,
     input: ActionProposal
@@ -363,6 +396,7 @@ export const createActions = ({
     }
     const linked = await taskOf(projectId, input.task, input.thenStage);
     const signedIn = connections.get(input.connection);
+    const routine = routineRunOf(actor);
     const row = store.insert({
       id: crypto.randomUUID(),
       projectId,
@@ -376,6 +410,8 @@ export const createActions = ({
       runAt,
       reason,
       proposedBy: actor.id,
+      routineId: routine?.routineId ?? null,
+      runId: routine?.runId ?? null,
       state: "proposed",
       idempotencyKey: `cawco-action-${crypto.randomUUID()}`,
       approvedBy: null,

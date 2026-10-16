@@ -3305,6 +3305,14 @@ export const actions = sqliteTable(
     reason: text("reason").notNull(),
     /** The session that proposed it. */
     proposedBy: text("proposed_by").notNull(),
+    /** The routine whose run proposed it (that run's session, or one it started); null outside any routine. */
+    routineId: text("routine_id").references(() => routines.id, {
+      onDelete: "set null",
+    }),
+    /** That routine's run. */
+    runId: text("run_id").references(() => routineRuns.id, {
+      onDelete: "set null",
+    }),
     state: text("state").$type<ActionState>().notNull(),
     /** Minted at proposal, sent in the call's `_meta`. */
     idempotencyKey: text("idempotency_key").notNull().unique(),

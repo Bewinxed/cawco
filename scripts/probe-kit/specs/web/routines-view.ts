@@ -46,6 +46,8 @@
  * their columns, the first brought into the board's view.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one width at a time
+import { randomBytes } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { type Fleet, MACHINE, type Seen } from "../../../scratch-fleet";
@@ -283,13 +285,13 @@ async function bento(kit: Kit, base: string, busyId: string) {
       panel.head?.match(TITLED)?.slice(1, 3)
     );
     kit.check(
-      `${at}: Fleet ops is a bento of Routines ${BUSY}, Event sources 5 and Approved actions 5, each head with its needs-you mark (failing routines, a failing source, actions waiting)`,
+      `${at}: Fleet ops is a bento of Routines ${BUSY}, Event sources 5 and Approved actions 6, each head with its needs-you mark (failing routines, a failing source, actions waiting)`,
       b.layout === "bento" &&
         JSON.stringify(heads) ===
           JSON.stringify([
             ["Routines", String(BUSY)],
             ["Event sources", "5"],
-            ["Approved actions", "5"],
+            ["Approved actions", "6"],
           ]) &&
         b.panels.every((panel) => panel.needs),
       JSON.stringify(
@@ -374,6 +376,40 @@ async function bento(kit: Kit, base: string, busyId: string) {
     "bento 1920: an open routine's detail lists the actions its runs proposed, without its own name",
     after.actions === 1 && !after.from,
     JSON.stringify(after)
+  );
+
+  // What the hub records, read back: an action's routine, a route's last delivery.
+  const read = await page.evaluate(() => ({
+    actions: [
+      ...document.querySelectorAll(".panel[data-part='actions'] tr.action"),
+    ].map((row) => ({
+      what: row.querySelector(".what")?.textContent?.trim() ?? "",
+      from: row.querySelector(".from")?.textContent?.trim() ?? null,
+    })),
+    routes: [
+      ...document.querySelectorAll(".panel[data-part='sources'] tr.row"),
+    ].map((row) => ({
+      name: row.querySelector(".name")?.textContent?.trim() ?? "",
+      last:
+        (
+          row.querySelector("[data-cell='last']") as HTMLElement | null
+        )?.innerText
+          .replace(/\s+/g, " ")
+          .trim() ?? "",
+    })),
+  }));
+  const fromRun = read.actions.find((row) => row.what === PROPOSED);
+  kit.check(
+    "bento 1920: the action busy-4's delegate run proposed says it came from that routine",
+    fromRun?.from === "From Check the relay's health",
+    JSON.stringify(read.actions)
+  );
+  const merged = read.routes.find((row) => row.name === "Smoke tests on merge");
+  const quiet = read.routes.find((row) => row.name === "Triage new issues");
+  kit.check(
+    "bento 1920: the route whose event went to its routine two hours ago says so in Last read; one with none says No events yet",
+    merged?.last === "Delivered, 2h ago" && quiet?.last === "No events yet",
+    JSON.stringify(read.routes)
   );
   await page.close();
 }
@@ -690,12 +726,18 @@ const PLACEHOLDER_CRON = "0 0 1 1 *";
 interface SeedRun {
   /** How long ago it started, in days. */
   ago: number;
-  /** Its Caw session, for a lead run: an action it proposed is the routine's. */
-  lead?: string;
   outcome: "delivered" | "silent" | "failed";
   output?: string;
   reason?: string;
+  /** A delegate run's work item: its session's proposals are the routine's. */
+  workItem?: string;
 }
+
+/** The busy project's delegate run whose session proposes an action through the hub. */
+const PROPOSING_ROUTINE = "busy-4";
+const PROPOSING_ITEM = "wi-busy-4";
+const PROPOSING_SESSION = "probe-run-session";
+const PROPOSED = "Move 2 issues to Ready";
 interface SeedRoutine {
   createdBy?: string;
   cron: string;
@@ -805,7 +847,7 @@ const busyRoutines = (): SeedRoutine[] =>
           : `${name} (${Math.floor(index / BUSY_KINDS.length) + 1})`,
       cron,
       zone,
-      target: "lead",
+      target: `busy-${index}` === PROPOSING_ROUTINE ? "delegate" : "lead",
       createdBy: "caw",
       enabled: index % 11 !== 5,
       ...(index % 13 === 7 ? { expiresIn: 3 } : {}),
@@ -816,7 +858,9 @@ const busyRoutines = (): SeedRoutine[] =>
           : [
               {
                 ago: (index + 1) / 30,
-                lead: `lead-busy-${index}`,
+                ...(`busy-${index}` === PROPOSING_ROUTINE
+                  ? { workItem: PROPOSING_ITEM }
+                  : {}),
                 outcome: failed ? "failed" : "delivered",
                 ...(failed
                   ? { reason: "the GitHub token was refused" }
@@ -871,14 +915,14 @@ async function seedRoutines(
     routine.runs.forEach((run, index) => {
       const startedAt = now - run.ago * DAY;
       fleet.write(
-        "INSERT INTO routine_runs (id, routine_id, slot, attempt, state, outcome, output, reason, lead_instance_id, started_at, ended_at) VALUES (?, ?, ?, 1, 'ended', ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO routine_runs (id, routine_id, slot, attempt, state, outcome, output, reason, work_item_id, started_at, ended_at) VALUES (?, ?, ?, 1, 'ended', ?, ?, ?, ?, ?, ?)",
         `${routine.id}-run-${index}`,
         routine.id,
         new Date(startedAt).toISOString(),
         run.outcome,
         run.output ?? null,
         run.reason ?? null,
-        run.lead ?? null,
+        run.workItem ?? null,
         startedAt,
         startedAt + 4 * MIN
       );
@@ -894,23 +938,23 @@ async function seedRoutines(
  */
 async function seedSources(fleet: Fleet, projectId: string) {
   const now = Date.now();
-  const connection = async (name: string, service: string) =>
-    (
-      await fleet.api<{ id: string }>("/api/connections", {
-        name,
-        service,
-        account: "@cawco",
-        transport: "http",
-        url: "http://127.0.0.1:9/mcp",
-        auth: "none",
-      })
-    ).id;
+  const connection = async (name: string, service: string) => {
+    await fleet.api("/api/connections", {
+      name,
+      service,
+      account: "@cawco",
+      transport: "http",
+      url: "http://127.0.0.1:9/mcp",
+      auth: "none",
+    });
+    return name;
+  };
   const gmail = await connection("support-mail", "gmail");
   const github = await connection("repo-stats", "github");
   const ROUTES = [
-    ["github", ["pull_request.closed"], "main", "busy-1"],
-    ["linear", ["issue.created"], null, "busy-0"],
-    ["slack", ["message.posted"], null, "busy-7"],
+    ["github:*", ["pr.merged"], "main", "busy-1"],
+    ["conn:linear-issues:*", ["item"], null, "busy-0"],
+    ["conn:slack-releases:*", ["item"], null, "busy-7"],
   ] as const;
   ROUTES.forEach(([source, kinds, branch, routineId], index) => {
     fleet.write(
@@ -924,6 +968,13 @@ async function seedSources(fleet: Fleet, projectId: string) {
       now
     );
   });
+  // A merged pull request the github route sent to its routine two hours ago.
+  fleet.write(
+    "INSERT INTO inbound_events (id, source, delivery_key, kind, project_id, payload, received_at, via, routed_to, handled_at) VALUES ('event-merged', 'github:cawco/fleet-ops', 'pr:12:merged', 'pr.merged', ?, '{}', ?, 'webhook', 'busy-1', ?)",
+    projectId,
+    now - DELIVERED_AGO,
+    now - DELIVERED_AGO
+  );
   const POLLS = [
     [gmail, "list_messages", 900, null],
     [github, "list_stargazers", 3600, "rate limited"],
@@ -941,30 +992,25 @@ async function seedSources(fleet: Fleet, projectId: string) {
       now
     );
   });
+  // As the hub keeps them: each names the routine whose run proposed it.
   const ACTIONS = [
-    ["github", "Close 3 duplicate issues", "proposed", "lead-busy-6", null],
+    ["github", "Close 3 duplicate issues", "proposed", "busy-6", null],
     [
       "slack",
       "Post the release notes in #releases",
       "proposed",
-      "lead-busy-7",
+      "busy-7",
       null,
     ],
-    [
-      "github",
-      "Open the dependency bump pull request",
-      "done",
-      "lead-busy-2",
-      null,
-    ],
-    ["gmail", "Reply to a support thread", "denied", "lead-busy-5", null],
-    ["linear", "Move 4 issues to Ready", "failed", "lead-busy-0", now - DAY],
+    ["github", "Open the dependency bump pull request", "done", "busy-2", null],
+    ["gmail", "Reply to a support thread", "denied", "busy-5", null],
+    ["linear", "Move 4 issues to Ready", "failed", "busy-0", now - DAY],
   ] as const;
-  ACTIONS.forEach(([service, reason, state, proposedBy, checkedAt], index) => {
+  ACTIONS.forEach(([service, reason, state, routineId, checkedAt], index) => {
     const args = JSON.stringify({ index });
     const at = now - (index + 1) * DAY;
     fleet.write(
-      "INSERT INTO actions (id, project_id, task_id, connection, service, account, tool, args, args_hash, run_at, reason, proposed_by, state, idempotency_key, approved_at, started_at, ended_at, error, checked_at, created_at) VALUES (?, ?, NULL, ?, ?, '@cawco', 'call', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO actions (id, project_id, task_id, connection, service, account, tool, args, args_hash, run_at, reason, proposed_by, routine_id, run_id, state, idempotency_key, approved_at, started_at, ended_at, error, checked_at, created_at) VALUES (?, ?, NULL, ?, ?, '@cawco', 'call', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       `action-${index}`,
       projectId,
       service === "gmail" ? gmail : github,
@@ -972,7 +1018,9 @@ async function seedSources(fleet: Fleet, projectId: string) {
       args,
       new Bun.CryptoHasher("sha256").update(args).digest("hex"),
       reason,
-      proposedBy,
+      `session-of-${routineId}`,
+      routineId,
+      `${routineId}-run-0`,
       state,
       `cawco-action-${index}`,
       state === "done" || state === "failed" ? at : null,
@@ -983,6 +1031,106 @@ async function seedSources(fleet: Fleet, projectId: string) {
       at
     );
   });
+}
+
+/** How long ago the github route's event went to its routine. */
+const DELIVERED_AGO = 2 * 60 * MIN;
+
+/** A stdio MCP stub with one tool an action may call. */
+const TRACKER_STUB = `
+let buffer = "";
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  for (let at = buffer.indexOf("\\n"); at >= 0; at = buffer.indexOf("\\n")) {
+    const line = buffer.slice(0, at);
+    buffer = buffer.slice(at + 1);
+    if (!line.trim()) continue;
+    const m = JSON.parse(line);
+    if (m.method === "initialize") {
+      send({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "tracker-stub", version: "1" } } });
+    } else if (m.method === "tools/list") {
+      send({ jsonrpc: "2.0", id: m.id, result: { tools: [{ name: "move_issues", description: "Moves issues to a state.", inputSchema: { type: "object", properties: { state: { type: "string" } } } }] } });
+    } else if (m.id !== undefined) {
+      send({ jsonrpc: "2.0", id: m.id, result: {} });
+    }
+  }
+});
+`;
+
+/**
+ * A routine's delegate run proposes an action through the hub's own
+ * `action_propose`, as its session would: a worker session whose work item
+ * is busy-4's run, holding its session credential, on a connection the
+ * project lists. Answers what the hub recorded.
+ */
+async function proposeFromRun(
+  fleet: Fleet,
+  projectId: string
+): Promise<{ routineId: string | null; runId: string | null }> {
+  const stub = join(fleet.sandbox, "tracker-stub.cjs");
+  await writeFile(stub, TRACKER_STUB);
+  await fleet.api("/api/connections", {
+    name: "ops-tracker",
+    service: "linear",
+    account: "@cawco",
+    transport: "stdio",
+    command: process.execPath,
+    args: [stub],
+    auth: "none",
+    projects: [projectId],
+  });
+  fleet.write(
+    "INSERT INTO instances (id, machine_id, cwd, project_id, work_item_id, role, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'worker', 'Check the relay', ?, ?)",
+    PROPOSING_SESSION,
+    MACHINE,
+    fleet.repo,
+    projectId,
+    PROPOSING_ITEM,
+    Date.now(),
+    Date.now()
+  );
+  const credential = randomBytes(32).toString("base64url");
+  fleet.write(
+    "INSERT INTO session_identities (instance_id, credential_hash, installed_at) VALUES (?, ?, ?)",
+    PROPOSING_SESSION,
+    new Bun.CryptoHasher("sha256").update(credential).digest("hex"),
+    Date.now()
+  );
+  const response = await fetch(
+    `${fleet.base}/api/delegation/call/${PROPOSING_SESSION}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "action_propose",
+        arguments: {
+          connection: "ops-tracker",
+          tool: "move_issues",
+          args: { state: "Ready" },
+          reason: PROPOSED,
+        },
+      }),
+    }
+  );
+  const said = await response.text();
+  if (!response.ok) {
+    throw new Error(`action_propose: ${response.status} ${said}`);
+  }
+  const [action] = fleet.query<{
+    routine_id: string | null;
+    run_id: string | null;
+  }>(
+    "SELECT routine_id, run_id FROM actions WHERE proposed_by = ?",
+    PROPOSING_SESSION
+  );
+  return {
+    routineId: action?.routine_id ?? null,
+    runId: action?.run_id ?? null,
+  };
 }
 
 const spec: Spec = {
@@ -1045,6 +1193,13 @@ const spec: Spec = {
     await seedRoutines(fleet, project.id, OWN);
     await seedRoutines(fleet, busy.id, busyRoutines());
     await seedSources(fleet, busy.id);
+    const proposed = await proposeFromRun(fleet, busy.id);
+    kit.check(
+      "hub: an action a routine's delegate run proposes through action_propose records that routine and run",
+      proposed.routineId === PROPOSING_ROUTINE &&
+        proposed.runId === `${PROPOSING_ROUTINE}-run-0`,
+      JSON.stringify(proposed)
+    );
     const base = await fleet.dashboard();
     await tabs(kit, base, project.id);
     await bento(kit, base, busy.id);

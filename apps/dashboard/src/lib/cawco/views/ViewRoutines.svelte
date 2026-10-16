@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { ApprovedActionView } from "@cawco/core";
   import { untrack } from "svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
@@ -541,26 +540,13 @@
   /** New routine: the composer over the ledger. */
   let asking = $state(false);
 
-  /** Each routine by the Caw sessions its lead runs woke: an action one of them proposed is the routine's. */
-  const routineBySession = $derived(
-    new Map(
-      routines.flatMap((routine) =>
-        routine.runs.flatMap((run) =>
-          run.leadInstanceId ? [[run.leadInstanceId, routine] as const] : []
-        )
-      )
-    )
+  /** Each routine's name by its id: the routine an action's run proposed it in. */
+  const routineNames = $derived(
+    new Map(routines.map((routine) => [routine.id, routine.name]))
   );
   /** A routine's own proposed actions, for its detail. */
   const actionsOf = (routine: Routine) =>
-    actions.filter(
-      (action) => routineBySession.get(action.proposedBy)?.id === routine.id
-    );
-  /** Where an action came from: its routine, else the session that proposed it. */
-  const fromOf = (action: ApprovedActionView): string | null =>
-    routineBySession.get(action.proposedBy)?.name ??
-    action.proposerTitle ??
-    null;
+    actions.filter((action) => action.routineId === routine.id);
 
   /** How often a poll reads, in words. */
   function everyOf(poll: Poll): string {
@@ -864,7 +850,7 @@
             <Table.Row class="row">
               <Table.Cell class="col-state"
                 ><span class="lead"
-                  ><ProviderLogo provider={route.source.toLowerCase()} /></span
+                  ><ProviderLogo provider={route.service} /></span
                 ></Table.Cell
               >
               <Table.Cell class="col-name">
@@ -874,7 +860,18 @@
                 >
                 <span class="sub code">{eventOf(route)}</span>
               </Table.Cell>
-              <Table.Cell class="col-last" data-cell="last"></Table.Cell>
+              <Table.Cell class="col-last" data-cell="last">
+                {#if route.lastDeliveryAt === null}
+                  <RunStatus status="neutral" text="No events yet" />
+                {:else}
+                  <RunStatus
+                    said="Delivered"
+                    status="done"
+                    text={since(route.lastDeliveryAt)}
+                    title={exactOf(route.lastDeliveryAt)}
+                  />
+                {/if}
+              </Table.Cell>
             </Table.Row>
           {/each}
           {#each polls as poll (poll.id)}
@@ -926,7 +923,7 @@
     </p>
   {:else}
     <div class="ledger">
-      <ActionsTable {actions} {fromOf} label="Approved actions" />
+      <ActionsTable {actions} label="Approved actions" {routineNames} />
     </div>
   {/if}
 {/snippet}

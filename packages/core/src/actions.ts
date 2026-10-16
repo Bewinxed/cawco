@@ -45,8 +45,12 @@ export interface ApprovedActionView {
   reason: string;
   /** What the service answered, JSON, cut at 16 KB. */
   result: string | null;
+  /** The routine whose run proposed it (that run's session, or one it started); null outside any routine. */
+  routineId: string | null;
   /** When it runs, at the earliest; null: as soon as it is approved. */
   runAt: number | null;
+  /** That routine's run; null outside any routine. */
+  runId: string | null;
   service: string;
   /** What its stage move came to, once it tried. */
   stageResult: string | null;

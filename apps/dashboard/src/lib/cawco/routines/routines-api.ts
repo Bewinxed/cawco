@@ -24,8 +24,6 @@ export interface RoutineRun {
   attempt: number;
   endedAt: number | null;
   id: string;
-  /** A lead run's Caw session; null for a delegate run. */
-  leadInstanceId: string | null;
   outcome: RoutineOutcome | null;
   output: string | null;
   reason: string | null;
@@ -66,8 +64,12 @@ export interface EventRoute {
   id: string;
   kinds: string[];
   label: string | null;
+  /** When an event it fits last went to its routine; null when none has. */
+  lastDeliveryAt: number | null;
   regex: string | null;
   routineId: string;
+  /** The service its source is, as a provider mark names it (lower case). */
+  service: string;
   source: string;
 }
 
@@ -113,7 +115,7 @@ interface IngressRead {
     repo: string | null;
     state: string;
   };
-  routes: EventRoute[];
+  routes: Omit<EventRoute, "service">[];
 }
 
 const project = (projectId: string) =>
@@ -133,8 +135,9 @@ export async function readRoutinesPage(
     send<{ actions: ApprovedActionView[] }>(`/api/actions?projectId=${id}`),
     send<{ connections: ConnectionView[] }>("/api/connections"),
   ]);
+  /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(
-    connections.connections.map((each) => [each.id, each])
+    connections.connections.map((each) => [each.name, each])
   );
   const polls: Poll[] = ingress.connectorPolls
     .filter((poll) => poll.enabled)
@@ -147,6 +150,13 @@ export async function readRoutinesPage(
       polledAt: poll.polledAt,
       failure: poll.reason,
     }));
+  /** A route's source (`github:<repo>`, `conn:<connection>:<tool>`) as its service. */
+  const serviceOfSource = (source: string): string => {
+    const [kind = "", name = ""] = source.split(":");
+    return (
+      kind === "conn" ? (connectionOf.get(name)?.service ?? name) : kind
+    ).toLowerCase();
+  };
   const { github } = ingress;
   if (github.connection !== null) {
     polls.unshift({
@@ -161,7 +171,9 @@ export async function readRoutinesPage(
   }
   return {
     routines,
-    routes: ingress.routes.filter((route) => route.enabled),
+    routes: ingress.routes
+      .filter((route) => route.enabled)
+      .map((route) => ({ ...route, service: serviceOfSource(route.source) })),
     polls,
     relays,
     actions: actions.actions,

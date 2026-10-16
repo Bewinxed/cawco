@@ -56,14 +56,23 @@
   let {
     actions,
     label,
-    fromOf = null,
+    routineNames = null,
   }: {
     actions: ApprovedActionView[];
     /** The table's name, read out. */
     label: string;
-    /** Where each came from: its routine, or the session that proposed it (left out in a routine's own detail). */
-    fromOf?: ((action: ApprovedActionView) => string | null) | null;
+    /**
+     * The project's routines' names by id: each action says where it came
+     * from, its routine or else the session that proposed it. Left out in a
+     * routine's own detail, where the routine is the row's.
+     */
+    routineNames?: Map<string, string> | null;
   } = $props();
+
+  /** Where an action came from: the routine its run proposed it in, else its proposer. */
+  const fromOf = (action: ApprovedActionView): string | null =>
+    (action.routineId && routineNames?.get(action.routineId)) ||
+    action.proposerTitle;
 </script>
 
 <div class="actions-ledger">
@@ -85,7 +94,7 @@
     <Table.Body>
       {#each actions as action (action.id)}
         {@const said = actionOf(action)}
-        {@const from = fromOf?.(action) ?? null}
+        {@const from = routineNames ? fromOf(action) : null}
         <Table.Row class="action" data-status={said.status}>
           <Table.Cell class="col-mark"
             ><span class="mark"
