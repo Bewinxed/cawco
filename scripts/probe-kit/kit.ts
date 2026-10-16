@@ -10,7 +10,9 @@
  * Compositing is in software (`--disable-gpu`), so a host with a GPU and
  * one without draw the same frame.
  */
+import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type Browser,
@@ -59,6 +61,38 @@ export interface PageOptions {
   /** Device pixels per css px, when a spec reads another device (an iPhone's 3). */
   scale?: number;
   theme?: Theme;
+  /**
+   * The WebKit build a WebKit page runs on, by its Playwright revision,
+   * where a spec reads a bug a phone's Safari still has and a newer build
+   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
+   * expects, or the one `PROBE_WEBKIT` names.
+   */
+  webkit?: string;
+}
+
+/**
+ * WebKit 2359 (playwright-core 1.63.0's) hangs its web process on a blur
+ * transitioning in the page, as the owner's iPhone Safari does; 2370
+ * (1.64.1's) does not. The specs that guard against that hang run on it.
+ */
+export const PINNED_WEBKIT = "2359";
+
+/**
+ * A WebKit build in Playwright's browser cache, by its revision: its
+ * `pw_run.sh`. Missing, the spec cannot read what it is for, and says how
+ * to install it.
+ */
+function pinnedWebkit(revision: string): string {
+  const cache =
+    process.env.PLAYWRIGHT_BROWSERS_PATH ??
+    join(homedir(), ".cache", "ms-playwright");
+  const run = join(cache, `webkit-${revision}`, "pw_run.sh");
+  if (!existsSync(run)) {
+    throw new Error(
+      `WebKit ${revision} is not installed at ${run}: install it with \`bunx playwright-core@1.63.0 install webkit\``
+    );
+  }
+  return run;
 }
 
 /** A spec: one surface, a short list of assertions on the kit's helpers. */
@@ -319,8 +353,9 @@ export class Run {
     return this.built;
   }
 
-  browser(engine: "chromium" | "webkit"): Promise<Browser> {
-    const known = this.browsers.get(engine);
+  browser(engine: "chromium" | "webkit", revision?: string): Promise<Browser> {
+    const key = revision ? `${engine}-${revision}` : engine;
+    const known = this.browsers.get(key);
     if (known) {
       return known;
     }
@@ -329,16 +364,22 @@ export class Run {
         ? { ...process.env, FONTCONFIG_FILE: FONTS_CONF }
         : process.env;
     // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
-    // one this playwright-core expects is not installed.
+    // one this playwright-core expects is not installed; a page's own
+    // `webkit` revision names one in Playwright's browser cache.
     const launched =
       engine === "webkit"
-        ? webkit.launch({ env, executablePath: process.env.PROBE_WEBKIT })
+        ? webkit.launch({
+            env,
+            executablePath: revision
+              ? pinnedWebkit(revision)
+              : process.env.PROBE_WEBKIT,
+          })
         : chromium.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-gpu"],
             env,
           });
-    this.browsers.set(engine, launched);
+    this.browsers.set(key, launched);
     return launched;
   }
 
@@ -445,7 +486,10 @@ export class Run {
       },
       page: async (view, options = {}) => {
         const v = VIEWS[view];
-        const browser = await this.browser(options.engine ?? "chromium");
+        const browser = await this.browser(
+          options.engine ?? "chromium",
+          options.engine === "webkit" ? options.webkit : undefined
+        );
         const context = await browser.newContext({
           viewport: { width: v.width, height: v.height },
           deviceScaleFactor: options.scale ?? SCALE,

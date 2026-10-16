@@ -15,6 +15,17 @@ Each assertion prints `PASS <spec>: …` or `FAIL <spec>: …`; the run ends wit
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
 
+## A pinned WebKit
+
+WebKit pages run on the build this playwright-core expects, or the one
+`PROBE_WEBKIT` names (its `pw_run.sh`). A spec that reads a bug a phone's
+Safari still has and a newer build has fixed names that build instead:
+`kit.page(view, { engine: "webkit", webkit: PINNED_WEBKIT })`. That is
+WebKit 2359, which hangs its web process on a transitioned blur as the
+owner's iPhone Safari does (`safari-long-ask`, `safari-blurs`); it is
+read from Playwright's browser cache, installed with
+`bunx playwright-core@1.63.0 install webkit`.
+
 ## Approving a baseline
 
 Only after the owner has approved what it shows. `--approve <spec>` writes

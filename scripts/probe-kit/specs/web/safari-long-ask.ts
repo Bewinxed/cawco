@@ -9,7 +9,9 @@
  *
  * It hung there (Playwright WebKit 2359): the composer grew into the card,
  * its parts came up out of a transitioning blur (Prompt `.part`), and the
- * web process stopped answering until it was killed some 20s later.
+ * web process stopped answering until it was killed some 20s later. WebKit
+ * 2370 has the bug fixed and the owner's Safari does not, so this runs on
+ * 2359 (kit `PINNED_WEBKIT`).
  *
  * Read twice: once as WebKit hands the page its storage, once with the
  * storage refused (`localStorage` and `sessionStorage` answering null, as
@@ -25,9 +27,15 @@
  *  - Approve settles it: the hub holds no ask and the card folds;
  *  - nothing reaches the page's error or unhandled-rejection reporters.
  */
-import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../../kit";
+import { answering, settled } from "../../answering";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  PINNED_WEBKIT,
+  type Spec,
+} from "../../kit";
 
 const ASK = "PROBE-LONG-ASK";
 const DESCRIPTION = "Slim the exports to text and file lists";
@@ -112,51 +120,6 @@ const cardState = () => {
   };
 };
 
-/**
- * Asks the page a question every 250ms while `work` runs: the longest it
- * took to answer. A page that never answers again (its web process gone)
- * counts as 10s.
- */
-async function responsive<T>(page: Page, work: () => Promise<T>) {
-  let longest = 0;
-  let going = true;
-  const watch = (async () => {
-    while (going) {
-      const started = performance.now();
-      // biome-ignore lint/performance/noAwaitInLoops: one question at a time, timed
-      const answered = await Promise.race([
-        page
-          .evaluate(() => 1)
-          .then(
-            () => true,
-            () => false
-          ),
-        Bun.sleep(10_000).then(() => false),
-      ]);
-      longest = Math.max(
-        longest,
-        answered ? performance.now() - started : 10_000
-      );
-      if (!answered) {
-        return;
-      }
-      await Bun.sleep(250);
-    }
-  })();
-  try {
-    return { result: await work(), longest: () => longest };
-  } finally {
-    going = false;
-    await watch;
-  }
-}
-
-const settled = <T>(promise: Promise<T>): Promise<boolean> =>
-  promise.then(
-    () => true,
-    () => false
-  );
-
 async function leg(
   kit: Kit,
   fleet: KitFleet,
@@ -172,6 +135,7 @@ async function leg(
   );
   const page = await kit.page("iphone15Pro", {
     engine: "webkit",
+    webkit: PINNED_WEBKIT,
     scale: 3,
     init: storage ? [hearErrors] : [hearErrors, refuseStorage],
   });
@@ -182,7 +146,7 @@ async function leg(
   });
   await open(page, `${base}/session/${id}`, "textarea", 90_000);
 
-  const words = await responsive(page, async () => {
+  const words = await answering(page, async () => {
     await fleet.send(id, "hello");
     await until(
       "the first turn ended",
@@ -193,11 +157,11 @@ async function leg(
   });
   kit.check(
     `${label}: the page answers within a second through a turn of words`,
-    words.longest() < 1000,
-    `longest ${Math.round(words.longest())}ms`
+    words.longest < 1000,
+    `longest ${Math.round(words.longest)}ms`
   );
 
-  const shown = await responsive(page, async () => {
+  const shown = await answering(page, async () => {
     await fleet.send(id, `${ASK} slim the exports`);
     return settled(
       page
@@ -207,8 +171,8 @@ async function leg(
   });
   kit.check(
     `${label}: the page answers within a second while the ask arrives`,
-    shown.longest() < 1000,
-    `longest ${Math.round(shown.longest())}ms`
+    shown.longest < 1000,
+    `longest ${Math.round(shown.longest)}ms`
   );
   // The parts come up one after the other once the shape stands.
   await page.waitForTimeout(1000);
@@ -224,7 +188,7 @@ async function leg(
     JSON.stringify(card)
   );
 
-  const opened = await responsive(page, async () => {
+  const opened = await answering(page, async () => {
     await page.locator(".ask .cmd-toggle").tap();
     await page.waitForTimeout(600);
     return page.evaluate(
@@ -233,11 +197,11 @@ async function leg(
   });
   kit.check(
     `${label}: the whole command opens, the page answering within a second`,
-    opened.result === COMMAND.length && opened.longest() < 1000,
-    `${opened.result} of ${COMMAND.length} characters, longest ${Math.round(opened.longest())}ms`
+    opened.result === COMMAND.length && opened.longest < 1000,
+    `${opened.result} of ${COMMAND.length} characters, longest ${Math.round(opened.longest)}ms`
   );
 
-  const approved = await responsive(page, async () => {
+  const approved = await answering(page, async () => {
     await page.locator(".ask button", { hasText: "Approve" }).tap();
     const answered = await settled(
       until(
@@ -262,8 +226,8 @@ async function leg(
     `${label}: Approve settles it: the hub holds no ask, the card folds, the page answering within a second`,
     approved.result.answered &&
       approved.result.folded &&
-      approved.longest() < 1000,
-    `${JSON.stringify(approved.result)}, longest ${Math.round(approved.longest())}ms`
+      approved.longest < 1000,
+    `${JSON.stringify(approved.result)}, longest ${Math.round(approved.longest)}ms`
   );
   const heard = await page
     .evaluate(() => (window as unknown as { __heard: string[] }).__heard)

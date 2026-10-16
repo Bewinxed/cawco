@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@rive-app/canvas-advanced": "2.44.0",
-    "playwright-core": "1.63.0",
+    "playwright-core": "1.64.1",
     "rive-mcp-server": "0.6.1"
   }
 }

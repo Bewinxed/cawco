@@ -4250,23 +4250,22 @@
     color: var(--ink-muted);
     pointer-events: none;
   }
-  /* The label and the hints come up with the shape, out of a slight blur,
-     one after the other, and sink back as it folds. */
+  /* The label and the hints come up with the shape one after the other, by
+     opacity and translate alone, and sink back as it folds. No filter: a
+     blur transitioning here hung WebKit's web process for good as the row
+     came up (Playwright WebKit 2359 at an iPhone's size, probe-kit
+     safari-blurs), as the ask card's parts did on the owner's iPhone. */
   .what,
   .hint,
   .edit-row :global(.keep) {
     opacity: 0;
-    filter: blur(4px);
-    transition:
-      opacity var(--dur-fade) var(--ease-out),
-      filter var(--dur-fade) var(--ease-out);
+    transition: opacity var(--dur-fade) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
       translate: 0 var(--pop-rise);
       transition:
         opacity var(--dur-fade) var(--ease-out),
-        translate var(--dur-panel) var(--ease-drawer),
-        filter var(--dur-fade) var(--ease-out);
+        translate var(--dur-panel) var(--ease-drawer);
     }
   }
   .what {
@@ -4297,7 +4296,6 @@
   .shown :global(.keep) {
     opacity: 1;
     translate: none;
-    filter: none;
   }
   .shown .hint,
   .shown :global(.keep) {
