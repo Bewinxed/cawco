@@ -274,10 +274,21 @@
         ff ? getComputedStyle(ff).getPropertyValue("--hang-rim").trim() : ""
       );
     };
+    // A placement can land before this hears the card's new width (a face
+    // of another width, a morph): its neck was measured from the old one,
+    // so a card standing flush read as not, and its cut ran a flare past
+    // its side. Drawn again from where it stands, with the width it has.
     const sized = new ResizeObserver(([entry]) => {
-      width = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
+      const next = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
+      const resized = next !== width;
+      width = next;
       if (layer) {
         regrow(node);
+      }
+      const neck =
+        resized && placedAt !== null ? neckAt(node, placedAt, flared) : null;
+      if (neck) {
+        draw(node, neck);
       }
     });
     sized.observe(node);

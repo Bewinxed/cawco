@@ -419,6 +419,29 @@ async function atRest(kit: Kit, page: Page, card: Card, name: string) {
       at.card.right <= at.viewport + 0.5,
     `gap ${r2(gap)}px, card ${r2(at.card.left)}–${r2(at.card.right)} of ${at.viewport}`
   );
+  // The cut across the neck (app.css `.kit-hang::before`) runs from the
+  // anchor's start less its flare to its end plus its flare, inside the
+  // card; a side where the anchor's edge meets the card's (within a pixel,
+  // HangCard `neckAt`) has no flare. Measured from a width the card no
+  // longer had, a flush side read as not and its cut ran the 12px flare
+  // past the card's side (HangCard's `sized` draws it again).
+  const [nStart, nEnd, fStart, fEnd] = at.neck as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const cardW = at.card.right - at.card.left;
+  const meetsStart = Math.abs(at.card.left - at.anchor.left) <= 1;
+  const meetsEnd = Math.abs(at.card.right - at.anchor.right) <= 1;
+  kit.check(
+    `${name}: its cut stands within it, with no flare on a side its anchor's edge meets`,
+    nStart - fStart >= -0.5 &&
+      nEnd + fEnd <= cardW + 0.5 &&
+      (!meetsStart || fStart === 0) &&
+      (!meetsEnd || fEnd === 0),
+    `cut ${r2(nStart - fStart)}–${r2(nEnd + fEnd)} of ${r2(cardW)}, flares ${fStart}/${fEnd}, flush ${at.flush ?? "none"}`
+  );
   const m = await meeting(page, at);
   kit.check(
     `${name}: no seam across the neck, no break down a flush side, its top never a double line`,

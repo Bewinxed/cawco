@@ -532,6 +532,116 @@ async function phoneHeights(kit: Kit, phone: Page) {
   );
 }
 
+/**
+ * The shell's Jump card (GlassCard's HangCard) and every box in it that
+ * scrolls sideways (scrollWidth > clientWidth), named; and the elements
+ * whose box reaches past the card's padding box (a screen reader's text,
+ * cut to a pixel, aside).
+ */
+const JUMP_CARD = ".kit-pop.jump-pop";
+const cardFit = (page: Page) =>
+  page.evaluate((sel) => {
+    const card = document.querySelector<HTMLElement>(sel);
+    if (!card) {
+      return null;
+    }
+    const name = (el: Element) =>
+      `${el.tagName.toLowerCase()}.${[...el.classList].filter((c) => !c.startsWith("svelte-")).join(".")}`;
+    const box = card.getBoundingClientRect();
+    const left = box.left + card.clientLeft;
+    const right = left + card.clientWidth;
+    const all = [...card.querySelectorAll<HTMLElement>("*")];
+    // The card, and the boxes in it a person can scroll (a cut title's
+    // ellipsis is narrower than its words by design).
+    const scrolls = (el: HTMLElement) =>
+      el === card ||
+      ["auto", "scroll"].includes(getComputedStyle(el).overflowX);
+    const wide = [card, ...all]
+      .filter(
+        (el) =>
+          scrolls(el) && el.scrollWidth > el.clientWidth && el.clientWidth > 0
+      )
+      .map((el) => `${name(el)} ${el.scrollWidth}>${el.clientWidth}`);
+    const past = all
+      .filter((el) => !el.classList.contains("sr-only"))
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(
+        ({ r }) => r.width > 0 && (r.right > right + 0.5 || r.left < left - 0.5)
+      )
+      .slice(0, 6)
+      .map(
+        ({ el, r }) =>
+          `${name(el)} ${Math.round(r.left - left)}…${Math.round(r.right - right)}`
+      );
+    // The cut across its top edge (app.css `.kit-hang::before`), the anchor's
+    // span and its flares: within the card, as nothing else in it may stand
+    // outside it.
+    const cut = getComputedStyle(card, "::before");
+    const from = Number.parseFloat(cut.left);
+    const neck = {
+      flush: card.dataset.flush ?? null,
+      from,
+      to: from + Number.parseFloat(cut.width),
+    };
+    return { width: card.clientWidth, wide, past, neck };
+  }, JUMP_CARD);
+const fits = (fit: Awaited<ReturnType<typeof cardFit>>) =>
+  fit !== null &&
+  fit.wide.length === 0 &&
+  fit.neck.from >= -0.5 &&
+  fit.neck.to <= fit.width + 0.5;
+
+/**
+ * The shell's own Jump card, desk and phone, open, with results for words
+ * from every source, and with a row peeked: nothing in it is wider than
+ * the box it stands in, so nothing scrolls sideways.
+ */
+async function shellCardFits(kit: Kit, page: Page, phone: Page, at: string) {
+  const states = async (p: Page) => {
+    await p.waitForSelector(`${JUMP_CARD} input`);
+    await settle(p);
+    const opened = await cardFit(p);
+    await p.fill(`${JUMP_CARD} input`, "orchestrate fleet");
+    await p.waitForFunction(
+      (sel) =>
+        document.querySelector(`${sel} .slot`) !== null &&
+        document.querySelector(`${sel} .searching`) === null,
+      JUMP_CARD,
+      { timeout: 20_000 }
+    );
+    await settle(p);
+    const results = await cardFit(p);
+    await p.keyboard.press("ArrowRight");
+    await settle(p);
+    const peeked = await cardFit(p);
+    return { opened, results, peeked };
+  };
+  await open(page, at, "header.top");
+  await page.click("[data-share='jump']");
+  const desk = await states(page);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  // From the machines' card to Jump's: the card's width morphs, 320 to 520.
+  await page.click("[data-bar-group] .bar-item.machines");
+  await page.waitForSelector(".kit-pop.machines-pop[data-shown]");
+  await settle(page);
+  await page.click("[data-share='jump']");
+  await page.waitForSelector(`${JUMP_CARD}[data-shown] input`);
+  await settle(page);
+  const swapped = await cardFit(page);
+  await page.keyboard.press("Escape");
+  await open(phone, at, "header.top");
+  await phone.click("button[aria-label='Open navigation']");
+  await phone.click(".rail-sheet button.search");
+  const small = await states(phone);
+  const all = [...Object.values(desk), swapped, ...Object.values(small)];
+  kit.check(
+    "shell's Jump card, desk 1055×567 and phone 390×844, open, with results, peeked and come from the machines' card: scrollWidth ≤ clientWidth in it and in everything it holds, its cut within it",
+    all.every(fits),
+    JSON.stringify({ desk: { ...desk, swapped }, phone: small })
+  );
+}
+
 async function narrowsBySliding(kit: Kit, page: Page, orchKey: string) {
   await openFinder(page);
   const before = await page.evaluate(
@@ -757,6 +867,8 @@ const spec: Spec = {
     } finally {
       process.kill(other.agent.pid, "SIGCONT");
     }
+
+    await shellCardFits(kit, page, phone, `${base}/session/${working}`);
   },
 };
 
