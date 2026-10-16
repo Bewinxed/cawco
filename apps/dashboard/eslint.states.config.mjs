@@ -7,8 +7,8 @@
 // `.svelte` as an extra extension (svelte-eslint-parser's README).
 //
 // Its own config, apart from eslint.config.mjs (the design system's rules,
-// which every lane runs on its files): run from the repository's root as
-//   apps/dashboard/node_modules/.bin/eslint -c apps/dashboard/eslint.states.config.mjs apps/dashboard/src packages
+// which every lane runs on its files), run from the repository's root by
+// scripts/states-lint.ts (`bun run lint`), which reads the files in batches.
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 import { defineConfig } from "eslint/config";
@@ -32,10 +32,27 @@ export default defineConfig([
     ],
   },
   {
-    files: ["apps/dashboard/src/**/*.ts", "packages/*/src/**/*.ts"],
+    files: ["apps/dashboard/src/**/*.ts", "packages/*/src/**/*.{ts,tsx}"],
     languageOptions: { parser: tsParser, parserOptions: typed },
     plugins,
     rules,
+  },
+  // The agent's browser code (the canvas host, the preview overlay) is its
+  // own project, tsconfig.browser.json (the DOM's lib, React's JSX), which
+  // the project service, finding only tsconfig.json, never reads.
+  {
+    files: [
+      "packages/agent/src/canvas-host/**/*.{ts,tsx}",
+      "packages/agent/src/preview-overlay/**/*.{ts,tsx}",
+    ],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        projectService: false,
+        project: ["../../packages/agent/tsconfig.browser.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
   },
   {
     files: ["apps/dashboard/src/**/*.svelte"],
