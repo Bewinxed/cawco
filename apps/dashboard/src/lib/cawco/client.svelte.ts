@@ -5648,7 +5648,8 @@ export interface RoutineState {
   enabled: boolean;
   id: string;
   keep: boolean;
-  threadId: string | null;
+  /** Null for a fleet routine. */
+  projectId: string | null;
 }
 
 const routinePath = (routineId: string): string =>

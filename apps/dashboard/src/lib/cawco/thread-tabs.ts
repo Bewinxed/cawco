@@ -53,13 +53,17 @@ export const routineMadeOf = (
 ): RoutineMadeEvent | undefined => message.routineMade;
 
 /**
- * Where a routine opens: its own thread, where its runs are noted; null
- * while it has none. The one place that says it, for the routines view to
- * take over.
+ * Where a routine opens: open in its project's Routines tab
+ * (ViewRoutines reads `routine`); null for a fleet routine, which has no
+ * project page.
  */
 export const routineHref = (routine: {
-  threadId: string | null;
-}): string | null => (routine.threadId ? threadHref(routine.threadId) : null);
+  id: string;
+  projectId: string | null;
+}): string | null =>
+  routine.projectId
+    ? `/project/${encodeURIComponent(routine.projectId)}?${new URLSearchParams({ view: "routines", routine: routine.id })}`
+    : null;
 
 /**
  * A thread as a session row, under its project: running while Caw works on

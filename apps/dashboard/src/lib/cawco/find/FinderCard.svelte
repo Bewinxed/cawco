@@ -18,9 +18,9 @@
    *   a moment, `?at=<docId>` with the engine's own record id (a transcript
    *   record's uuid, an opencode message id, a thread message's id), which
    *   the transcript scrolls to and marks.
-   * - A task: its project with its sheet open (`?task=`); a routine: the
-   *   thread its runs are noted in (none before its first note: its row
-   *   says so and ↵ stays); a project: its page.
+   * - A task: its project with its sheet open (`?task=`); a routine: open
+   *   in its project's Routines tab (a fleet routine has none, and ↵
+   *   stays); a project: its page.
    * - A machine: "Start a session here" opens the new-session dialog on it;
    *   "See what runs here" asks the finder for its name, which every session
    *   on it answers to.
@@ -79,7 +79,10 @@
           ? taskHref(result.project.id, result.taskId)
           : null;
       case "routine":
-        return routineHref(result);
+        return routineHref({
+          id: result.id,
+          projectId: result.project?.id ?? null,
+        });
       case "project":
         return `/project/${encodeURIComponent(result.id)}`;
       case "artifact":

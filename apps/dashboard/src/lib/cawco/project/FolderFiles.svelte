@@ -1,57 +1,31 @@
 <script lang="ts">
   /**
    * The project folder's files a Caw reply names (`thread_reply` `files`):
-   * one chip each, its path, which opens the file in a sheet as it reads in
-   * the project's folder on the hub (markdown drawn, anything else as text).
+   * one chip each, its path. A chip opens its file in the page (FolderFile,
+   * placed by ThreadPane); the chip of the file on show reads pressed.
    */
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  import Markdown from "#lib/components/ui/markdown/markdown.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Sheet from "#lib/components/ui/sheet/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconDocument } from "#lib/icons.js";
 
-  let { projectId, files }: { projectId: string; files: string[] } = $props();
-
-  let open = $state<string | null>(null);
-  let content = $state<string | null>(null);
-  let problem = $state<string | null>(null);
-
-  async function read(path: string) {
-    open = path;
-    content = null;
-    problem = null;
-    try {
-      const response = await fetch(
-        `/api/projects/${encodeURIComponent(projectId)}/folder/file?${new URLSearchParams({ path })}`
-      );
-      if (!response.ok) {
-        throw new Error(
-          (await response.text()) ||
-            `The hub answered ${response.status}, so ${path} could not be read.`
-        );
-      }
-      const { content: text } = (await response.json()) as { content: string };
-      if (open === path) {
-        content = text;
-      }
-    } catch (error) {
-      if (open === path) {
-        problem = failureWords(error);
-      }
-    }
-  }
-
-  const markdown = $derived(open?.endsWith(".md") ?? false);
+  let {
+    files,
+    shown,
+    onopen,
+  }: {
+    files: string[];
+    /** The file open now, wherever ThreadPane shows it; null when none is. */
+    shown: string | null;
+    onopen: (path: string) => void;
+  } = $props();
 </script>
 
 <ul class="files">
   {#each files as path (path)}
     <li>
       <button
+        aria-pressed={shown === path}
         class="file mark-line press-tint"
-        onclick={() => read(path)}
+        data-folder-chip={path}
+        onclick={() => onopen(path)}
         type="button"
       >
         <IconDocument class="icon" />
@@ -60,43 +34,6 @@
     </li>
   {/each}
 </ul>
-
-<Sheet.Root
-  bind:open={
-    () => open !== null,
-    (next) => {
-      if (!next) {
-        open = null;
-      }
-    }
-  }
->
-  <Sheet.Content
-    class="gap-0 p-0 data-[side=right]:w-full max-sm:data-[side=right]:border-l-0 data-[side=right]:sm:max-w-xl"
-    side="right"
-  >
-    <Sheet.Header class="file-head">
-      <Sheet.Title class="file-title"><bdi>{open}</bdi></Sheet.Title>
-      <Sheet.Description class="sr-only">
-        A file of the project's folder on the hub.
-      </Sheet.Description>
-    </Sheet.Header>
-    <div class="file-body">
-      {#if problem}
-        <Alert variant="destructive">
-          <AlertDescription>{problem}</AlertDescription>
-        </Alert>
-      {:else if content === null}
-        <Skeleton class="h-4 w-2/3" />
-        <Skeleton class="h-4 w-1/2" />
-      {:else if markdown}
-        <Markdown source={content} />
-      {:else}
-        <pre class="text">{content}</pre>
-      {/if}
-    </div>
-  </Sheet.Content>
-</Sheet.Root>
 
 <style>
   .files {
@@ -120,6 +57,10 @@
     color: var(--ink-strong);
     font: var(--type-label);
     cursor: pointer;
+    transition: background-color var(--dur-control) var(--ease-out);
+  }
+  .file[aria-pressed="true"] {
+    background: var(--surface-fill);
   }
   .file :global(.icon) {
     flex: none;
@@ -138,32 +79,5 @@
   .file:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: 2px;
-  }
-  /* As tall as the kit's close button and its inset (top-4, 30px), the
-     name centred on it and kept clear of it. */
-  :global(.file-head) {
-    justify-content: center;
-    min-block-size: calc(2rem + 30px);
-    border-block-end: 1px solid var(--border-hairline);
-    padding: 0 calc(2rem + 30px) 0 var(--space-5);
-  }
-  :global(.file-title) {
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-  }
-  .file-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    overflow-y: auto;
-    padding: var(--space-5);
-  }
-  .text {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    color: var(--ink-strong);
   }
 </style>

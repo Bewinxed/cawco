@@ -56,10 +56,8 @@
     );
     return `Off in ${days} day${days === 1 ? "" : "s"} unless you keep it`;
   });
-  /** Its own thread, when this notice stands somewhere else. */
-  const href = $derived(
-    now && now.threadId !== routine.threadId ? routineHref(now) : null
-  );
+  /** The routine open in its project's Routines tab. */
+  const href = $derived(now ? routineHref(now) : null);
 
   async function act(what: "keep" | "off") {
     if (acting) {

@@ -38,7 +38,13 @@
     onopen,
     date = null,
     movable = true,
+    titleFirst = false,
   }: {
+    /**
+     * Its title over its id: where the card stands outside its column (a
+     * thread), the title says what it is and the id is its handle.
+     */
+    titleFirst?: boolean;
     task: TaskSummary;
     href: string;
     /** The date the task's file sets it for, said short ("Thu 09:30"). */
@@ -106,6 +112,9 @@
     : undefined}
   {@attach land(() => key, { uniform: true })}
 >
+  {#if titleFirst}
+    <span class="title">{task.title}</span>
+  {/if}
   <span class="head">
     <span class="id">{task.id}</span>
     {#if task.problem}
@@ -121,7 +130,9 @@
       </Badge>
     {/if}
   </span>
-  <span class="title">{task.title}</span>
+  {#if !titleFirst}
+    <span class="title">{task.title}</span>
+  {/if}
   {#if flags.live || task.kind === "you" || asks || approves || date}
     <span class="live-foot mark-line">
       {#if asks || approves}

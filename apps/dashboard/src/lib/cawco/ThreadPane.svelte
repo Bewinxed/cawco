@@ -30,6 +30,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import {
@@ -39,6 +40,7 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { barGlass } from "./bar-glass.svelte";
@@ -70,6 +72,7 @@
   import CawFace from "./home/CawFace.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
+  import FolderFile from "./project/FolderFile.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,
@@ -79,6 +82,7 @@
     type StageKind,
     type StagesView,
     type Starter,
+    stageLabel,
     type TaskSummary,
     type TaskView,
   } from "./project-tasks";
@@ -417,6 +421,31 @@
   });
   const kindOf = (id: string): StageKind | null | undefined =>
     tasks.find((task) => task.id === id)?.kind;
+  /**
+   * The head over a reply's cards: how many he filed and the stage they
+   * stand in ("Filed 6 tasks · Draft"), or each stage's count where they
+   * differ ("Filed 6 tasks · 4 Draft · 2 Ready"), in the board's order.
+   */
+  function filedWords(filed: TaskSummary[]): string {
+    const count = `Filed ${filed.length} ${filed.length === 1 ? "task" : "tasks"}`;
+    const order = stages?.stages.map((stage) => stage.name) ?? [];
+    const rank = (name: string) => {
+      const at = order.indexOf(name);
+      return at < 0 ? order.length : at;
+    };
+    const by = new Map<string, number>();
+    for (const task of filed) {
+      by.set(task.stage, (by.get(task.stage) ?? 0) + 1);
+    }
+    const counted = [...by].toSorted(([a], [b]) => rank(a) - rank(b));
+    if (counted.length === 1) {
+      return `${count} · ${stageLabel(counted[0][0])}`;
+    }
+    return [
+      count,
+      ...counted.map(([stage, many]) => `${many} ${stageLabel(stage)}`),
+    ].join(" · ");
+  }
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
   /**
@@ -488,17 +517,33 @@
 
   setVoice({ event: eventUnder, face, tasks: taskCards, files: folderFiles });
 
+  // --- a file his reply names ------------------------------------------------------
+
+  /**
+   * The project folder's file open from its chip, in the page (The Open
+   * Page Rule): beside the thread in its split (SideSplit, on the phone's
+   * sheet over the composer), or, where the thread has no split (docked),
+   * in the thread's own place over its transcript, which keeps its scroll
+   * under it for Close to come back to.
+   */
+  let openFile = $state<string | null>(null);
+  const closeFile = () => {
+    openFile = null;
+  };
+
   /**
    * The Setup thread's newest reply that names files is where setup ends:
-   * "Open the board" stands under it, to the project's landing page.
+   * "Open the board" stands under it, to the project's landing page, unless
+   * the reply's task cards already stand on it with theirs.
    */
-  const boardAfter = $derived(
-    thread?.setup
+  const boardAfter = $derived.by(() => {
+    const last = thread?.setup
       ? (messages ?? []).findLast(
           (message) => message.author === "caw" && message.files?.length
-        )?.id
-      : undefined
-  );
+        )
+      : undefined;
+    return last?.author === "caw" && last.tasks?.length ? undefined : last?.id;
+  });
 
   // --- the composer -------------------------------------------------------------
 
@@ -713,31 +758,61 @@
 {/snippet}
 
 {#snippet taskCards(ids: string[])}
-  <ul class="thread-tasks">
-    {#each ids as id (id)}
-      {@const task = tasks.find((each) => each.id === id)}
-      {#if task}
-        <li class="thread-task">
-          <TaskCard href={taskHref(id)} {kindOf} onopen={openTaskOf} {task} />
-          {#if stages && waitsOnYou(projectId, task)}
-            <TaskNeedsFor
-              onchanged={changedIn}
-              onmove={moveIn}
+  <!-- What the cards are, the cards at one height (title over id), what
+       each waits on you for under it, and the way to the board they are on.
+       The box tweens as cards arrive and the head's words change (a stage
+       moves under it). -->
+  {@const filed = ids.flatMap((id) => tasks.filter((task) => task.id === id))}
+  <div class="thread-tasks" data-thread-tasks {@attach morph()}>
+    {#if filed.length > 0}
+      <p class="tasks-head" data-tasks-head>
+        <MorphText text={filedWords(filed)} />
+      </p>
+      <ul class="tasks-grid">
+        {#each filed as task (task.id)}
+          <li class="thread-task">
+            <TaskCard
+              href={taskHref(task.id)}
+              {kindOf}
               onopen={openTaskOf}
-              {projectId}
-              {stages}
-              summary={task}
-              {tasks}
+              {task}
+              titleFirst
             />
-          {/if}
-        </li>
-      {/if}
-    {/each}
-  </ul>
+            {#if stages && waitsOnYou(projectId, task)}
+              <TaskNeedsFor
+                onchanged={changedIn}
+                onmove={moveIn}
+                onopen={openTaskOf}
+                {projectId}
+                {stages}
+                summary={task}
+                {tasks}
+              />
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      <div class="board-link">
+        <Button
+          class="pressable"
+          href="/project/{encodeURIComponent(projectId)}"
+          label="Open the board"
+          size="sm"
+          variant="outline"
+        />
+      </div>
+    {/if}
+  </div>
 {/snippet}
 
 {#snippet folderFiles(files: string[], messageId: string)}
-  <FolderFiles {files} {projectId} />
+  <FolderFiles
+    {files}
+    onopen={(path) => {
+      openFile = path;
+    }}
+    shown={openFile}
+  />
   {#if messageId === boardAfter}
     <div class="board-link">
       <Button
@@ -850,10 +925,14 @@
     style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
   >
     {#if docked}
-      {@render slide()}
+      <div class="under-file" inert={openFile !== null}>
+        {@render slide()}
+      </div>
     {:else}
       <SideSplit
         {active}
+        file={fileSurface}
+        fileOpen={openFile !== null}
         {phone}
         planOf={lead}
         previewOf={lead}
@@ -896,6 +975,15 @@
         </RegionBoundary>
       </div>
     {/if}
+    {#if docked && openFile}
+      <!-- No split to stand in: the file takes the thread's place, over
+           its transcript and composer, until Close gives it back. -->
+      <div class="file-in-place" data-file-in-place in:crossIn out:crossOut>
+        <RegionBoundary region="file">
+          {@render fileSurface(undefined)}
+        </RegionBoundary>
+      </div>
+    {/if}
     {#if view?.problem}
       <!-- No composer: Caw cannot start to read it. What is true, and the
            one thing that changes it. -->
@@ -925,6 +1013,14 @@
     {/if}
   </div>
 </div>
+
+{#snippet fileSurface(switcher: Snippet | undefined)}
+  {#if openFile && projectId}
+    {#key openFile}
+      <FolderFile onclose={closeFile} path={openFile} {projectId} {switcher} />
+    {/key}
+  {/if}
+{/snippet}
 
 {#snippet taskSurface(switcher: Snippet | undefined)}
   {#if stages && openTask}
@@ -1066,22 +1162,64 @@
     z-index: 1;
     pointer-events: none;
   }
-  .thread-tasks {
+  /* The transcript under a file in its place: laid out as it was, so its
+     scroll is where Close finds it. */
+  .under-file {
+    display: contents;
+  }
+  /* A file in the thread's own place, over its transcript and composer. The
+     pane is already a card (the dock's), so the file's card draws no frame
+     of its own inside it: no second shadow, corner or ground. */
+  .file-in-place {
+    position: absolute;
+    inset: 0;
+    z-index: 21;
+    display: flex;
+    background: var(--surface-raised);
+  }
+  .file-in-place :global(.side-card) {
+    flex: 1 1 auto;
+    padding-inline: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .thread-tasks:has(.tasks-head) {
+    padding-block-start: var(--space-3);
+  }
+  /* What the cards are, in the kit's meta line over them. */
+  .tasks-head {
+    margin: 0 0 var(--space-2);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  /* Each task is two tracks, its card's and what it needs of you, and the
+     card tracks are all one `1fr`: every card as tall as the tallest in the
+     block, whatever it has to say; a task's needs take only their own track
+     (`auto`, empty for a task that needs nothing). */
+  .tasks-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-    gap: var(--space-2);
-    margin: var(--space-3) 0 0;
+    grid-auto-rows: 1fr auto;
+    column-gap: var(--space-2);
+    row-gap: 0;
+    margin: 0;
     padding: 0;
     list-style: none;
   }
-  /* A task that needs you takes the row: its card, then what it needs and
-     the way to act, collapsed to the deliverable's first lines. */
   .thread-task {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
     min-inline-size: 0;
   }
+  .thread-task > :global(.task-card) {
+    margin-block-end: var(--space-2);
+  }
+  .thread-task > :global(.needs-for) {
+    margin-block-end: var(--space-2);
+  }
+  /* A task that needs you takes the row: its card, then what it needs and
+     the way to act, collapsed to the deliverable's first lines. */
   .thread-task:has(:global(.needs-stack)) {
     grid-column: 1 / -1;
     max-inline-size: 74ch;

@@ -57,7 +57,6 @@ export function threadBlockOf(message: ThreadMessage, viewId: string): Message {
               routineMade: {
                 expiresAt: made.expiresAt,
                 routineId: made.routineId,
-                threadId: message.threadId,
               },
             }
           : {}),

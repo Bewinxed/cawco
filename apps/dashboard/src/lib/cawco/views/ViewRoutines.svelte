@@ -292,8 +292,48 @@
 
   // --- a routine's row ----------------------------------------------------------
 
-  /** The one routine open: opening another folds it. */
+  /**
+   * The one routine open: opening another folds it. It is in the URL
+   * (`routine`, thread-tabs `routineHref`), so a link opens it: a routine
+   * notice's Open lands here, on the Routines view with its row open and
+   * scrolled into view once the page has read it.
+   */
   let open = $state<string | null>(null);
+  function openRoutine(next: string | null) {
+    open = next;
+    const url = new URL(here.url.href);
+    if (next) {
+      url.searchParams.set("routine", next);
+    } else {
+      url.searchParams.delete("routine");
+    }
+    replaceState(url, here.state);
+  }
+  const linked = $derived(here.url.searchParams.get("routine"));
+  /** The routine a link named and not yet brought into view. */
+  let bring = $state<string | null>(null);
+  $effect(() => {
+    const id = linked;
+    untrack(() => {
+      if (id && id !== open) {
+        open = id;
+        bring = id;
+        choose("routines");
+      }
+    });
+  });
+  $effect(() => {
+    const id = bring;
+    if (!(id && place && routines.some((routine) => routine.id === id))) {
+      return;
+    }
+    untrack(() => {
+      place
+        ?.querySelector(`[data-routine="${CSS.escape(id)}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+      bring = null;
+    });
+  });
   let deleting = $state<string | null>(null);
   let deletePending = $state(false);
 
@@ -635,9 +675,9 @@
       () => open === routine.id,
       (next) => {
         if (next) {
-          open = routine.id;
+          openRoutine(routine.id);
         } else if (open === routine.id) {
-          open = null;
+          openRoutine(null);
         }
       }
     }

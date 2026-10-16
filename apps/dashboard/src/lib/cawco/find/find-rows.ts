@@ -326,12 +326,7 @@ function routineRow(r: FindRoutine): Drawn {
       word,
       tone: r.lastOutcome && WENT_WRONG.test(r.lastOutcome) ? "fail" : "quiet",
     },
-    // It opens into the thread its runs are noted in; before its first note it has none to open.
-    meta: words(
-      r.project?.name,
-      r.enabled ? `next ${next}` : null,
-      r.threadId ? null : "no thread yet"
-    ),
+    meta: words(r.project?.name, r.enabled ? `next ${next}` : null),
     reason: null,
   };
 }

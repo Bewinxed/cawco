@@ -49,13 +49,11 @@ export interface MessageMetadata extends BlockMetadata {
   files?: string[];
   /**
    * A thread's notice that a session made a routine (core ThreadEvent
-   * `routine-made`), and the thread it stands in: SystemLine draws Keep,
-   * Turn off and Open beside it.
+   * `routine-made`): SystemLine draws Keep, Turn off and Open beside it.
    */
   routineMade?: {
     expiresAt: number | null;
     routineId: string;
-    threadId: string;
   };
   /** A project's Caw's turn: the tasks it is about (`tsk-12`), drawn as cards under it. */
   tasks?: string[];
