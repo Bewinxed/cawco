@@ -9,8 +9,8 @@
  * the desk. Its attempts cut workspaces, so it runs where a boundary can
  * start (a `host` check), not inside another one.
  *
- * Project "Harbour" (the design template, Caw off) on the fleet's checkout,
- * whose origin is a bare repository, with stages ready → working → review
+ * Project "Harbour" (the design template, Caw off) on a repository with no
+ * outside remote, so the hub's own is its origin, with stages ready → working → review
  * (you) → approved → done. A "Filer" session files each task with
  * `task_create` and starts it with `task_start`; the attempt, played by the
  * mock model, writes design/ with `design_write`.
@@ -29,8 +29,8 @@
  *
  *   bun scripts/probe-kit/run.ts design-approve
  */
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { Frame } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
@@ -351,7 +351,16 @@ const run = async (kit: Kit) => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
 
-  const { repo } = fleet;
+  // A repository of its own with no outside remote: the first workspace cut
+  // gives it the hub's (a project with none gets the hub as its remote), the
+  // one a workspace's boundary pushes to. The scratch fleet's own checkout
+  // has a bare origin on this disk, which no boundary may write.
+  const repo = join(fleet.sandbox, "harbour");
+  await mkdir(repo, { recursive: true });
+  await Bun.$`git init -q -b main && echo harbour > README.md && git add -A && git commit -qm 'Harbour'`
+    .cwd(repo)
+    .env({ ...process.env, HOME: fleet.env.HOME as string })
+    .quiet();
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Harbour",
     machineId: MACHINE,
@@ -548,16 +557,29 @@ const run = async (kit: Kit) => {
   const t2 = await reviewed("T2", T2, "main");
   const approved = await approve(t2);
   const after = await read(t2);
-  await Bun.$`git fetch -q origin`.cwd(repo).quiet();
+  // The place's origin is the hub's remote of the project; its `main` is
+  // read in the hub's own store (git-remote.ts: `<root>/<projectId>.git`),
+  // as the spec holds no credential its HTTP asks for.
+  const origin = (await Bun.$`git remote get-url origin`.cwd(repo).quiet())
+    .text()
+    .trim();
+  const store = join(
+    dirname(fleet.env.CAWCO_DB_PATH ?? ""),
+    "git",
+    `${project.id}.git`
+  );
   const newest = (
-    await Bun.$`git log origin/main -1 --format=%s`.cwd(repo).quiet()
+    await Bun.$`git --git-dir ${store} log main -1 --format=%s`.quiet()
   )
     .text()
     .trim();
   kit.check(
     "3: Approve on the review goes, the task reads approved, and git log origin/main -1 names the builder's commit",
-    approved.ok && after.stage === "approved" && newest === COMMIT,
-    `${approved.status}; stage ${after.stage}; origin/main -1 “${newest}”`
+    approved.ok &&
+      after.stage === "approved" &&
+      origin === `${fleet.base}/git/${project.id}.git` &&
+      newest === COMMIT,
+    `${approved.status}; stage ${after.stage}; origin ${origin}; origin/main -1 “${newest}”`
   );
 };
 
