@@ -18,6 +18,7 @@ import {
   type Browser,
   type BrowserContext,
   chromium,
+  firefox,
   type Page,
   webkit,
 } from "playwright-core";
@@ -38,6 +39,8 @@ const FONTS_CONF = join(import.meta.dir, "fonts.conf");
 export const VIEWS = {
   desk: { width: 1440, height: 900, touch: false },
   tablet: { width: 1024, height: 1366, touch: true },
+  /** An iPad mini's portrait: the journeys' tablet. */
+  tabletPortrait: { width: 768, height: 1024, touch: true },
   phone: { width: 390, height: 844, touch: true },
   /** The widest phone, a Pro Max's 430pt. */
   phoneWide: { width: 430, height: 932, touch: true },
@@ -63,9 +66,12 @@ export const COMPOSER_FIELD = '[role="combobox"][contenteditable="true"]';
 /** A composer's field in its pill. */
 export const COMPOSER = `form.cin ${COMPOSER_FIELD}`;
 
+/** The browser engines a page runs on. */
+export type Engine = "chromium" | "webkit" | "firefox";
+
 export interface PageOptions {
-  /** WebKit for a spec that reads Safari's engine; Chromium otherwise. */
-  engine?: "chromium" | "webkit";
+  /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
+  engine?: Engine;
   /** Scripts installed before the page's own, in order. */
   init?: (() => void)[];
   /** Device pixels per css px, when a spec reads another device (an iPhone's 3). */
@@ -364,7 +370,7 @@ export class Run {
     return serve(how, hub);
   }
 
-  browser(engine: "chromium" | "webkit", revision?: string): Promise<Browser> {
+  browser(engine: Engine, revision?: string): Promise<Browser> {
     const key = revision ? `${engine}-${revision}` : engine;
     const known = this.browsers.get(key);
     if (known) {
@@ -377,20 +383,23 @@ export class Run {
     // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
     // one this playwright-core expects is not installed; a page's own
     // `webkit` revision names one in Playwright's browser cache.
-    const launched = this.heavy().then(() =>
-      engine === "webkit"
-        ? webkit.launch({
-            env,
-            executablePath: revision
-              ? pinnedWebkit(revision)
-              : process.env.PROBE_WEBKIT,
-          })
-        : chromium.launch({
-            headless: true,
-            args: ["--no-sandbox", "--disable-gpu"],
-            env,
-          })
-    );
+    const launch = {
+      webkit: () =>
+        webkit.launch({
+          env,
+          executablePath: revision
+            ? pinnedWebkit(revision)
+            : process.env.PROBE_WEBKIT,
+        }),
+      firefox: () => firefox.launch({ env }),
+      chromium: () =>
+        chromium.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-gpu"],
+          env,
+        }),
+    } satisfies Record<Engine, () => Promise<Browser>>;
+    const launched = this.heavy().then(() => launch[engine]());
     this.browsers.set(key, launched);
     return launched;
   }
@@ -510,7 +519,9 @@ export class Run {
           viewport: { width: v.width, height: v.height },
           deviceScaleFactor: options.scale ?? SCALE,
           hasTouch: v.touch,
-          isMobile: v.touch,
+          // Gecko has no mobile viewport mode in Playwright ("isMobile is
+          // not supported in Firefox"): a touch screen at the size alone.
+          isMobile: v.touch && options.engine !== "firefox",
           colorScheme: options.theme ?? "light",
         });
         contexts.push(context);

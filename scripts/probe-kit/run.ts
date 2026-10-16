@@ -4,6 +4,11 @@
  *
  *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]
  *   bun scripts/probe-kit/run.ts <spec>
+ *   bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
+ *
+ * The third form runs the user journeys (journeys/suite.ts): each a flow
+ * the person does, on every engine and size, with normal and stretched
+ * data, one line per leg.
  *
  * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
  * web specs: a feature's probe (`artifacts`), on the same kit. A name found
@@ -46,6 +51,11 @@ const { sweepDeadFleets } = await import("../scratch-fleet");
 const { Run } = await import("./kit");
 
 const args = process.argv.slice(2);
+// The user journeys (journeys/suite.ts): every engine, every size, both data sets.
+if (args[0] === "journeys") {
+  const { runJourneys } = await import("./journeys/run");
+  process.exit(await runJourneys(args.slice(1)));
+}
 // A web spec named on its own (`run.ts menus-fit`) runs as
 // `run.ts web menus-fit`.
 if (

@@ -15,6 +15,37 @@ Each assertion prints `PASS <spec>: …` or `FAIL <spec>: …`; the run ends wit
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
 
+## User journeys
+
+```sh
+bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
+```
+
+One suite of user journeys (`journeys/`) proves the product works for the
+person: each a flow from JOURNEY.md done start to finish on a scratch fleet,
+asserting the outcome the flow promises on the hub or the machine and on what
+the page says, never that a control exists. Every journey runs on Chromium,
+WebKit and Firefox at 390×844 and 768×1024 (touch) and 1440×900, with normal
+data and stretched (titles three times longer, twice as many items), the same
+steps everywhere. After every step the page is held to two rules
+(`journeys/scan.ts`: nothing spills, no control covers text) and to no
+console error. Locators are roles, labels and the person's words only.
+
+It prints one line per journey × engine × size × data, `PASS`, or `FAIL` with
+the first failing step and what it measured; a failed step leaves the page's
+accessibility tree in `$TMPDIR/probe-kit/<journey>/<leg>/`. It runs once per
+nightly release, not per change.
+
+| Journey | Flow | Asserts |
+| --- | --- | --- |
+| `j1-check-in` | 1, check-in and wind-down | needs-you reads one and leads to the ask; zero once answered; never a zero while the hub is down |
+| `j2-triage` | 2 and 3, triage | approve runs the command and the turn goes on; deny runs nothing; an answer from another device shows on the open page |
+| `j3-spawn` | 4, spawn | the dialog starts a session in the project, streaming; Full Send from its card relaunches the machine's process in that mode |
+
+Planned, by name (`suite.ts` `PLANNED`): Caw ask and answer, task review
+(a task needing a Mac waits, never fails), decisions, previews and comments,
+routines, Jump, rules, and a plugin update reaching a running machine.
+
 ## A pinned WebKit
 
 WebKit pages run on the build this playwright-core expects, or the one
