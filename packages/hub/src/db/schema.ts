@@ -2121,10 +2121,21 @@ export const movedFromSessions = sqliteTable("moved_from_sessions", {
 /** Each provider's routing (core `ProviderRouting`); a provider with no row uses the defaults. */
 export const accountRouting = sqliteTable("account_routing", {
   provider: text("provider").$type<AccountProvider>().primaryKey(),
-  yours: text("yours", { mode: "json" }).$type<StrategyChoice>().notNull(),
-  delegates: text("delegates", { mode: "json" })
-    .$type<StrategyChoice>()
+  /** How the person's own sessions are placed ({@link StrategyChoice}). */
+  yoursStrategy: text("yours_strategy")
+    .$type<StrategyChoice["strategy"]>()
     .notNull(),
+  /** The account `pinned` names for them; null once it is removed, when the first by order stands in. */
+  yoursPinned: text("yours_pinned").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  /** How delegates are placed. */
+  delegatesStrategy: text("delegates_strategy")
+    .$type<StrategyChoice["strategy"]>()
+    .notNull(),
+  delegatesPinned: text("delegates_pinned").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
   atLimit: text("at_limit", { mode: "json" }).$type<AtLimit>().notNull(),
 });
 

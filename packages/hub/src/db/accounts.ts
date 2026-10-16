@@ -422,12 +422,37 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .from(accountRouting)
         .where(eq(accountRouting.provider, provider))
         .get();
-      return row ?? defaultRouting(provider);
+      return row
+        ? {
+            provider: row.provider,
+            yours: {
+              strategy: row.yoursStrategy,
+              ...(row.yoursPinned ? { pinnedAccountId: row.yoursPinned } : {}),
+            },
+            delegates: {
+              strategy: row.delegatesStrategy,
+              ...(row.delegatesPinned
+                ? { pinnedAccountId: row.delegatesPinned }
+                : {}),
+            },
+            atLimit: row.atLimit,
+          }
+        : defaultRouting(provider);
     },
+    // A pin names an account the hub keeps, or none: a strategy other than
+    // `pinned` may carry one the routes never checked.
     setRouting: (routing) => {
+      const kept = (id: string | undefined) => (id && get(id) ? id : null);
+      const values = {
+        yoursStrategy: routing.yours.strategy,
+        yoursPinned: kept(routing.yours.pinnedAccountId),
+        delegatesStrategy: routing.delegates.strategy,
+        delegatesPinned: kept(routing.delegates.pinnedAccountId),
+        atLimit: routing.atLimit,
+      };
       db.insert(accountRouting)
-        .values(routing)
-        .onConflictDoUpdate({ target: accountRouting.provider, set: routing })
+        .values({ provider: routing.provider, ...values })
+        .onConflictDoUpdate({ target: accountRouting.provider, set: values })
         .run();
     },
     readings: () => {
