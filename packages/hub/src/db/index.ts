@@ -7015,20 +7015,49 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(leadTurnWaiting)
           .where(eq(leadTurnWaiting.instanceId, instanceId))
           .run();
-        const read = [...new Set(reading)];
+        // The working copy may still name a thread or a send that has gone
+        // since (its project, its session): a gone thread is none, a gone
+        // send a wake nobody will read.
+        const named = [
+          ...new Set([...reading, ...Object.values(waiting)].filter(Boolean)),
+        ];
+        const threads = new Set(
+          named.length === 0
+            ? []
+            : tx
+                .select({ id: projectThreads.id })
+                .from(projectThreads)
+                .where(inArray(projectThreads.id, named))
+                .all()
+                .map(({ id }) => id)
+        );
+        const uuids = Object.keys(waiting);
+        const sends = new Set(
+          uuids.length === 0
+            ? []
+            : tx
+                .select({ uuid: sentMessages.uuid })
+                .from(sentMessages)
+                .where(inArray(sentMessages.uuid, uuids))
+                .all()
+                .map(({ uuid }) => uuid)
+        );
+        const read = [...new Set(reading)].filter((id) => threads.has(id));
         if (read.length > 0) {
           tx.insert(leadTurnReading)
             .values(read.map((threadId) => ({ instanceId, threadId })))
             .run();
         }
-        const unread = Object.entries(waiting);
+        const unread = Object.entries(waiting).filter(([uuid]) =>
+          sends.has(uuid)
+        );
         if (unread.length > 0) {
           tx.insert(leadTurnWaiting)
             .values(
               unread.map(([sendUuid, threadId]) => ({
                 instanceId,
                 sendUuid,
-                threadId: threadId || null,
+                threadId: threads.has(threadId) ? threadId : null,
               }))
             )
             .run();

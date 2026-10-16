@@ -3286,7 +3286,10 @@ export const leadTurnWaiting = sqliteTable(
     instanceId: text("instance_id")
       .notNull()
       .references(() => leadTurns.instanceId, { onDelete: "cascade" }),
-    sendUuid: text("send_uuid").notNull(),
+    /** The wake's send: a send that goes is never read, and its wake goes with it. */
+    sendUuid: text("send_uuid")
+      .notNull()
+      .references(() => sentMessages.uuid, { onDelete: "cascade" }),
     threadId: text("thread_id").references(() => projectThreads.id, {
       onDelete: "set null",
     }),
