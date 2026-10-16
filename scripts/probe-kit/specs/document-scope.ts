@@ -105,9 +105,8 @@ interface Step {
   /** A `delegate` turn: Claude Code's ToolSearch went out first. */
   searched?: boolean;
   /**
-   * A compaction's turn: every request until it ends is the summarizing one
-   * (Claude Code sends it with tools, OpenCode and pi without), answered
-   * with these words, which then stand for the history it replaced.
+   * A compaction's turn: its summarizing request ({@link SUMMARIZING}) is
+   * answered with these words, which then stand for the history it replaced.
    */
   summary?: string;
   /** The delegate type a `delegate` turn asks for. */
@@ -127,6 +126,18 @@ const messageBack = (body: string, back = 1): string => {
   return JSON.stringify(parsed.messages?.at(-back) ?? null);
 };
 const lastMessage = (body: string): string => messageBack(body);
+
+/**
+ * Each harness's instruction to summarize a conversation, which only its
+ * summarizing request carries: Claude Code's (its bundled CLI, SDK
+ * 0.3.296), OpenCode's (its binary) and pi's (`SUMMARIZATION_SYSTEM_PROMPT`,
+ * pi-coding-agent 1.0.1 compaction/utils.js).
+ */
+const SUMMARIZING = [
+  "Your task is to create a detailed summary of the conversation so far",
+  "You MUST summarize the conversation above into a structured summary",
+  "You are a context summarization assistant",
+];
 
 /**
  * What the hub tells a work item's session whose turn ended without
@@ -240,31 +251,25 @@ const spec: Spec = {
     };
     const respond = (request: Seen): Reply => {
       const now = step;
-      // The hub's quiet-turn word to a delegate is answered with its wait,
-      // once a compaction's summary has been given: three quiet turns in a
-      // row fail its item (work-items.ts `QUIET_TURNS`), and the mock
-      // answers in milliseconds. Before that, the summarizing request comes
-      // first: OpenCode's carries the kept history, whose last word can be
-      // the hub's.
-      if (
-        request.tools &&
-        request.last.startsWith(STILL_OPEN) &&
-        !(now?.summary && !now.done)
-      ) {
-        return delegateTurn(
-          request,
-          now?.delegate && !now.summary ? now : undefined
-        );
-      }
-      if (now?.summary) {
-        now.done = true;
-        return say(now.summary);
+      // A harness's summarizing request, known by its own instruction: it
+      // gets the compaction's summary, and nothing else does.
+      if (SUMMARIZING.some((words) => request.body.includes(words))) {
+        if (now?.summary) {
+          now.done = true;
+        }
+        return say(now?.summary ?? "DOCSCOPE-SUMMARY-unasked");
       }
       if (!request.tools) {
         return say("Probe title");
       }
+      // A delegate's turn, the hub's quiet-turn word to it included, is
+      // answered with its wait: three quiet turns in a row fail its item
+      // (work-items.ts `QUIET_TURNS`), and the mock answers in milliseconds.
       if (delegates(request, now)) {
-        return delegateTurn(request, now?.delegate ? now : undefined);
+        return delegateTurn(
+          request,
+          now?.delegate && !now.summary ? now : undefined
+        );
       }
       return orchestratorTurn(request, now);
     };
