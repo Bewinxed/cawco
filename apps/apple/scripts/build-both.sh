@@ -309,9 +309,14 @@ build() { # <destination> <label> [signed]
 # launch ends however it ends, deletes.
 ios() {
   local LABEL=${1:-iOS}
-  # Compiling needs no simulator: the generic destination builds for any.
+  # Compiling needs no simulator: the generic destination builds for any, so
+  # its one build is the floor's (iOS 18.5) as well, and builds once.
   if [[ $COMPILE_ONLY == --compile-only ]]; then
-    build "generic/platform=iOS Simulator" "$LABEL"
+    if [[ $LABEL == 'iOS 18.5' ]]; then
+      echo "BUILT $LABEL"
+    else
+      build "generic/platform=iOS Simulator" "$LABEL"
+    fi
     return
   fi
   if [[ $LABEL == 'iOS 18.5' ]]; then
