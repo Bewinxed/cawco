@@ -5,6 +5,7 @@
    * offering the project's other labels. Enter adds, Escape puts it away.
    */
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { labelOf } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
@@ -36,7 +37,7 @@
     }
   }
   async function add() {
-    const label = draft.trim().toLowerCase();
+    const label = labelOf(draft);
     draft = "";
     adding = false;
     if (label && !labels.includes(label)) {

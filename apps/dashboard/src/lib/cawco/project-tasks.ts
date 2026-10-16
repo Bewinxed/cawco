@@ -384,6 +384,22 @@ export const listTasks = (projectId: string): Promise<TaskList> =>
 export const listArchived = (projectId: string): Promise<TaskList> =>
   send(`${base(projectId)}/tasks?archived=1`);
 
+/**
+ * The tasks whose id, title or description hold `words`, as the hub's list
+ * finds them (tasks.ts `q`): the board's, or with `archived` the archive's.
+ */
+export const findTasks = (
+  projectId: string,
+  words: string,
+  archived = false
+): Promise<TaskList> =>
+  send(
+    `${base(projectId)}/tasks?${new URLSearchParams({
+      q: words,
+      ...(archived ? { archived: "1" } : {}),
+    })}`
+  );
+
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
 
@@ -485,6 +501,13 @@ export const applyTemplate = (
   template: StagesTemplate
 ): Promise<StagesView & { stranded: string[] }> =>
   send(`${base(projectId)}/stages/template`, json("POST", { template }));
+
+/**
+ * A label as typed, as every editor writes it (the sheet's and the bulk
+ * bar's): trimmed and lower case, so `Launch` and `launch` are one label.
+ * Empty: nothing to add.
+ */
+export const labelOf = (typed: string): string => typed.trim().toLowerCase();
 
 // --- what the views say -------------------------------------------------------
 

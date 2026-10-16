@@ -1,31 +1,39 @@
 <script lang="ts">
   /**
-   * Filter ▾: words in a task's id or title, a label, a delegate type, and
-   * any number of field = value pairs, from what the project's tasks carry.
-   * Every change applies at once and lands in the URL (task-filter.ts), and
-   * the button says how many stand.
+   * Filter ▾: words the hub finds in a task's id, title or description
+   * (task-find.svelte.ts), a label, a delegate type, and any number of
+   * field = value pairs, from what the project's tasks carry. Every change
+   * lands in the URL (task-filter.ts) and the button says how many stand.
+   * The words narrow once the hub answers: while it is asked, Find says so;
+   * a refusal is said under it, in the hub's words, with Try again, and the
+   * trigger carries the warning glyph until the words read.
    *
    * The strip draws the trigger: whole on a desk, its glyph and count alone
    * on a phone (`compact`). With `anchor` there is no trigger: the popover
    * opens from where it was asked (the head's ⋯ on a phone).
    */
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconChevronDown,
     IconClose,
     IconFilter,
     IconPlus,
+    IconWarningTriangle,
   } from "#lib/icons.js";
   import { activeCount, NO_FILTER, type TaskFilter } from "./task-filter.js";
+  import type { TaskFind } from "./task-find.svelte.js";
 
   let {
     filter,
+    find,
     tasks,
     onchange,
     open = $bindable(false),
@@ -33,6 +41,8 @@
     compact = false,
   }: {
     filter: TaskFilter;
+    /** What the hub found for the words: whether it is asked, and why it refused. */
+    find: TaskFind;
     /** Every task, live and archived, for the labels, types and fields there are to pick. */
     tasks: TaskSummary[];
     onchange: (next: TaskFilter) => void;
@@ -88,9 +98,14 @@
           aria-label={compact ? compactName : undefined}
           class="filter-trigger pressable"
           size={compact ? "icon-sm" : "sm"}
+          title={find.problem ?? undefined}
           variant={active > 0 ? "secondary" : "ghost"}
         >
-          <IconFilter />
+          {#if find.problem}
+            <IconWarningTriangle data-find-problem="" />
+          {:else}
+            <IconFilter />
+          {/if}
           {#if !compact}
             <span>Filter</span>
           {/if}
@@ -111,9 +126,15 @@
         autocomplete="off"
         oninput={(event) =>
           onchange({ ...filter, q: event.currentTarget.value })}
-        placeholder="Find by id or title…"
+        placeholder="Find in ids, titles and descriptions…"
         value={filter.q}
       />
+      {#if find.finding}
+        <span class="finding mark-line" role="status"
+          ><Spinner aria-hidden="true" /><span>Finding…</span></span
+        >
+      {/if}
+      <RowFault again={() => find.again()} reason={find.problem} />
       <div class="row">
         <span class="name">Label</span>
         <Select.Root
@@ -243,6 +264,17 @@
     inline-size: 3.5rem;
     font: var(--type-label);
     color: var(--ink-muted);
+  }
+  .finding {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
   }
   .eq {
     flex: none;

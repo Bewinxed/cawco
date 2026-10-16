@@ -10,6 +10,11 @@
    * markup is the ledger's. The header is the ledger's band; a row is the
    * task's link, and opens its drawer in place. Under 640px each row becomes
    * the board's two-line card: the title, then id · stage · to-dos · updated.
+   *
+   * With `onpick`, each row leads with its tick for a bulk change, Shift
+   * ticking the rows between it and the last one ticked, in the order the
+   * ledger shows them; the head's tick picks every row shown, or none. The
+   * tick stands over the row's link, so a press on it never opens the task.
    */
   import {
     createSortedRowModel,
@@ -25,6 +30,7 @@
   } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
   import { IconChevronDown, IconChevronUp, IconNeedsYou } from "#lib/icons.js";
@@ -35,11 +41,20 @@
     tasks,
     hrefOf,
     onopen,
+    picked,
+    onpick,
+    onpickall,
   }: {
     stages: Stage[];
     tasks: TaskSummary[];
     hrefOf: (id: string) => string;
     onopen: (id: string) => void;
+    /** Whether a task is picked for a bulk change (task-select). */
+    picked?: (id: string) => boolean;
+    /** Ticks or unticks one; `range`, with Shift: the rows in the ledger's order. */
+    onpick?: (id: string, on: boolean, range?: string[]) => void;
+    /** Picks every row shown, or none. */
+    onpickall?: (ids: string[], on: boolean) => void;
   } = $props();
 
   const order = $derived(
@@ -74,6 +89,16 @@
   } as const;
   /** The ledger's columns, by id; each cell is drawn below by its id. */
   const columns = $derived([
+    ...(onpick
+      ? [
+          {
+            id: "pick",
+            header: "",
+            accessorFn: (task: TaskSummary) => task.id,
+            ...fixed,
+          },
+        ]
+      : []),
     {
       id: "id",
       header: "Id",
@@ -136,6 +161,10 @@
     },
   });
 
+  /** The rows' ids in the order the ledger shows them (sorted or not): a Shift range's span. */
+  const shownIds = (): string[] =>
+    table.getRowModel().rows.map((row) => row.id);
+
   /** A sorted column's `aria-sort`; the rest say nothing. */
   const ariaSort = (sorted: false | "asc" | "desc") => {
     if (sorted === "asc") {
@@ -168,7 +197,7 @@
   }
 </script>
 
-<div class="ledger">
+<div class="ledger" data-pickable={onpick ? "" : undefined}>
   <Table.Root class="tasks table-fixed" ghostRows="tbody tr">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
@@ -179,7 +208,22 @@
             {@const sort = ariaSort(sorted)}
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head aria-sort={sort} class="col-{column.id}" scope="col">
-              {#if column.getCanSort()}
+              {#if column.id === "pick"}
+                {@const ids = shownIds()}
+                {@const count = ids.filter((id) => picked?.(id)).length}
+                <Checkbox
+                  aria-label={count === ids.length && count > 0
+                    ? "Untick every task shown"
+                    : "Pick every task shown"}
+                  checked={count > 0 && count === ids.length}
+                  class="pick"
+                  indeterminate={count > 0 && count < ids.length}
+                  onclick={(event: MouseEvent) => {
+                    event.preventDefault();
+                    onpickall?.(ids, count < ids.length);
+                  }}
+                />
+              {:else if column.getCanSort()}
                 <button
                   class="sort mark-line press-tint focus-inset"
                   onclick={column.getToggleSortingHandler()}
@@ -203,10 +247,29 @@
     <Table.Body>
       {#each table.getRowModel().rows as row (row.id)}
         {@const task = row.original}
-        <Table.Row class="row" data-task={task.id}>
+        {@const on = picked?.(task.id) ?? false}
+        <Table.Row
+          class="row"
+          data-picked={on || undefined}
+          data-task={task.id}
+        >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell class="col-{cell.column.id}">
-              {#if cell.column.id === "id"}
+              {#if cell.column.id === "pick"}
+                <Checkbox
+                  aria-label="Pick {task.id} {task.title}"
+                  checked={on}
+                  class="pick"
+                  onclick={(event: MouseEvent) => {
+                    event.preventDefault();
+                    onpick?.(
+                      task.id,
+                      !on,
+                      event.shiftKey ? shownIds() : undefined
+                    );
+                  }}
+                />
+              {:else if cell.column.id === "id"}
                 <span class="id">{task.id}</span>
               {:else if cell.column.id === "title"}
                 <a
@@ -298,6 +361,20 @@
   }
   .ledger :global(tr.row:last-child td) {
     border-block-end: 0;
+  }
+  /* The tick's column: the tick and the cell's inset either side. */
+  .ledger :global(.col-pick) {
+    inline-size: calc(1rem + 2 * var(--space-3));
+  }
+  /* Over the row's link (the title's box spans the row), so a press on the
+     tick ticks it. */
+  .ledger :global(.pick) {
+    position: relative;
+    z-index: 1;
+  }
+  /* A picked row takes the selected wash, as a picked card does. */
+  .ledger :global(tr.row[data-picked] td) {
+    background: var(--selected-bg);
   }
   .ledger :global(.col-id) {
     inline-size: 6.5rem;
@@ -436,6 +513,27 @@
     }
     .ledger :global(tr.row td.col-updated) {
       grid-column: 4;
+    }
+    /* Pickable, the row's tick leads both its lines: the title beside it,
+       id · stage · to-dos · updated under the title. */
+    .ledger[data-pickable] :global(tr.row) {
+      grid-template-columns: auto auto auto 1fr auto;
+    }
+    .ledger[data-pickable] :global(tr.row td.col-pick) {
+      grid-row: 1 / span 2;
+      grid-column: 1;
+    }
+    .ledger[data-pickable] :global(tr.row td.col-title) {
+      grid-column: 2 / -1;
+    }
+    .ledger[data-pickable] :global(tr.row td.col-updated) {
+      grid-column: 5;
+    }
+    .ledger[data-pickable] :global(tr.row[data-picked]) {
+      background: var(--selected-bg);
+    }
+    .ledger[data-pickable] :global(tr.row[data-picked] td) {
+      background: none;
     }
   }
 </style>

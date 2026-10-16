@@ -1,8 +1,9 @@
 import { error } from "@sveltejs/kit";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-import { type HubFailure, readHub } from "#lib/cawco/hub-read.js";
+import { type HubFailure, type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
 import { checkoutOf } from "#lib/cawco/projects.js";
+import { type FindSeed, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
 import type { PageLoad } from "./$types";
 
 /** The error page's line for a read the page cannot stand without. */
@@ -11,6 +12,37 @@ const refused = (what: string, failure: HubFailure): never =>
     failure.status,
     `Reading ${what} failed: ${failure.detail} (${failure.status}). Reload the page to try again.`
   );
+
+/** What the hub found for the URL's words, or why it could not say, for TaskFind. */
+function findSeed(
+  words: string,
+  live: HubRead<TaskList> | null,
+  archived: HubRead<TaskList> | null
+): FindSeed {
+  if (!(words && live && archived)) {
+    return { words, found: null, problem: null };
+  }
+  if (!live.ok) {
+    return { words, found: null, problem: `${live.detail} (${live.status}).` };
+  }
+  if (!archived.ok) {
+    return {
+      words,
+      found: null,
+      problem: `${archived.detail} (${archived.status}).`,
+    };
+  }
+  return {
+    words,
+    found: {
+      words,
+      ids: new Set(
+        [...live.value.tasks, ...archived.value.tasks].map((task) => task.id)
+      ),
+    },
+    problem: null,
+  };
+}
 
 /**
  * The project's views: the project and its machine, its tasks and stages,
@@ -24,12 +56,23 @@ const refused = (what: string, failure: HubFailure): never =>
  */
 export const load: PageLoad = async ({ fetch, params, url }) => {
   const base = `/api/projects/${encodeURIComponent(params.id)}`;
-  const [projects, machines, tasks, stages] = await Promise.all([
-    readHub<ProjectRow[]>(fetch, "/api/projects"),
-    readHub<Machine[]>(fetch, "/api/agents"),
-    readHub<TaskList>(fetch, `${base}/tasks`),
-    readHub<StagesView>(fetch, `${base}/stages`),
-  ]);
+  // The filter's words are the hub's to match (task-find.svelte.ts): a link
+  // that carries them opens on what the hub found, live and archived.
+  const words = wordsOf(url.searchParams.get("q") ?? "");
+  const finding = (archived: boolean) =>
+    readHub<TaskList>(
+      fetch,
+      `${base}/tasks?${new URLSearchParams({ q: words, ...(archived ? { archived: "1" } : {}) })}`
+    );
+  const [projects, machines, tasks, stages, found, foundArchived] =
+    await Promise.all([
+      readHub<ProjectRow[]>(fetch, "/api/projects"),
+      readHub<Machine[]>(fetch, "/api/agents"),
+      readHub<TaskList>(fetch, `${base}/tasks`),
+      readHub<StagesView>(fetch, `${base}/stages`),
+      words ? finding(false) : null,
+      words ? finding(true) : null,
+    ]);
   if (!projects.ok) {
     return refused("the projects", projects);
   }
@@ -49,6 +92,7 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
     machine,
     tasks,
     stages,
+    find: findSeed(words, found, foundArchived),
     view: url.searchParams.get("view") ?? "board",
     task: url.searchParams.get("task"),
     decisionPage: url.searchParams.get("page"),

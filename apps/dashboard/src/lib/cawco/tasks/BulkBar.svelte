@@ -28,10 +28,13 @@
    *   hub's words, the tasks not yet changed stay picked, and Try again goes
    *   on from there.
    *
-   * Move offers only the stages every picked task may enter; Archive stands
-   * enabled only when every picked task is done or dropped.
+   * Move offers only the stages every picked task may enter; Label takes a
+   * label typed (written as the sheet writes one, `labelOf`) or one the
+   * project's tasks carry; Archive stands enabled only when every picked
+   * task is done or dropped.
    */
   import {
+    labelOf,
     type Stage,
     stageLabel,
     type TaskSummary,
@@ -102,6 +105,20 @@
   const running = $derived(picked.filter((task) => task.liveAttempt));
   let reason = $state("");
   let dropOpen = $state(false);
+
+  let labelOpen = $state(false);
+  /** The label typed in Label's field. */
+  let typed = $state("");
+  const labelList = `bulk-labels-${Math.random().toString(36).slice(2, 8)}`;
+  /** Puts `text` on every picked task, as the sheet writes a label (`labelOf`). */
+  function label(text: string) {
+    const next = labelOf(text);
+    if (next) {
+      labelOpen = false;
+      typed = "";
+      onlabel(next);
+    }
+  }
 </script>
 
 <div aria-label="Selected tasks" class="bulk floating" role="toolbar">
@@ -153,22 +170,55 @@
         {/each}
       </DropdownMenu.Content>
     </DropdownMenu.Root>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
+    <Popover.Root bind:open={labelOpen}>
+      <Popover.Trigger>
         {#snippet child({ props })}
           <Button {...props} disabled={busy} size="sm" variant="ghost"
             ><span>Label</span><IconChevronDown /></Button
           >
         {/snippet}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" class="w-auto min-w-40">
-        {#each labels as label (label)}
-          <DropdownMenu.Item onSelect={() => onlabel(label)}
-            >{label}</DropdownMenu.Item
+      </Popover.Trigger>
+      <Popover.Content align="start" class="w-64" side="top">
+        <!-- A label typed, as the sheet's label editor takes one, or one the
+             project's tasks already carry. -->
+        <form
+          class="label-pick"
+          onsubmit={(event) => {
+            event.preventDefault();
+            label(typed);
+          }}
+        >
+          <Input
+            aria-label="Label to add"
+            autocomplete="off"
+            list={labelList}
+            placeholder="label"
+            bind:value={typed}
+          />
+          <datalist id={labelList}>
+            {#each labels as each (each)}
+              <option value={each}></option>
+            {/each}
+          </datalist>
+          <Button disabled={!labelOf(typed)} size="sm" type="submit"
+            >Label {picked.length}</Button
           >
-        {/each}
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+        </form>
+        {#if labels.length > 0}
+          <ul class="known" aria-label="The project's labels">
+            {#each labels as each (each)}
+              <li>
+                <button
+                  class="kit-item known-label"
+                  onclick={() => label(each)}
+                  type="button"><span>{each}</span></button
+                >
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </Popover.Content>
+    </Popover.Root>
     <Button
       disabled={busy || !closedAll}
       onclick={onarchive}
@@ -296,6 +346,24 @@
   }
   .failed {
     color: var(--status-fail-ink);
+  }
+  .label-pick {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-1);
+  }
+  .known {
+    display: flex;
+    flex-direction: column;
+    max-block-size: 14rem;
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+  }
+  .known-label {
+    inline-size: 100%;
+    text-align: start;
   }
   .drop {
     display: flex;

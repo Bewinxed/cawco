@@ -20,6 +20,12 @@
  *     picked in the bulk bar, and the hub's read of each carries the label;
  *     the bar stands within the width (one row on a desk, two at most on a
  *     phone, where its controls wrap).
+ *  f. Find is the hub's search: a word only one task's description holds
+ *     leaves only that task, kept in the URL (`q=`), and a link carrying
+ *     the word opens on the hub's answer.
+ *  g. Table rows take ticks: two rows ticked are the bulk bar's two.
+ *  h. A new label typed in the bulk bar (`Harbour-desk`, spaces around it)
+ *     lands on both rows' tasks as the sheet writes one, `harbour-desk`.
  *
  *   bun scripts/probe-kit/run.ts web task-tracker
  */
@@ -56,6 +62,9 @@ const SEEDS = [
     labels: ["web", "data"],
     type: "coder",
     fields: { priority: "medium" },
+    // A word no id, title, label or field holds: only the hub's search,
+    // which reads the description, finds this task by it.
+    description: "Send plan clicks to the harbourmaster dashboard.",
   },
   {
     title: "Record the demo video",
@@ -241,12 +250,7 @@ async function filter(
 ) {
   await open(page, url, ".board [data-task]");
   await settle(page);
-  if (view === "desk") {
-    await page.click(".strip .filter-trigger");
-  } else {
-    await page.click('button[aria-label^="More for"]');
-    await page.getByRole("menuitem", { name: "Filter tasks…" }).click();
-  }
+  await openFilter(page, view);
   await page
     .locator('[data-slot="popover-content"] [data-slot="select-trigger"]', {
       hasText: "Any label",
@@ -297,7 +301,10 @@ async function bulk(
       : null;
   });
   await page.locator(".bulk").getByRole("button", { name: "Label" }).click();
-  await page.getByRole("menuitem", { name: label, exact: true }).click();
+  await page
+    .locator('[data-slot="popover-content"] .known')
+    .getByRole("button", { name: label, exact: true })
+    .click();
   await page.waitForSelector(".bulk", { state: "detached" });
   const read = await Promise.all(
     picks.map((id) =>
@@ -321,6 +328,123 @@ async function bulk(
       bar.right <= viewport.width &&
       bar.height <= rows * 40,
     JSON.stringify(bar)
+  );
+}
+
+/** The phone opens Filter from the head's ⋯; the desk from the strip. */
+async function openFilter(page: Page, view: string) {
+  if (view === "desk") {
+    await page.click(".strip .filter-trigger");
+  } else {
+    await page.click('button[aria-label^="More for"]');
+    await page.getByRole("menuitem", { name: "Filter tasks…" }).click();
+  }
+}
+
+/** f: a word only a description holds finds its task, typed and from a link. */
+async function find(
+  kit: Kit,
+  page: Page,
+  url: string,
+  view: string,
+  found: string
+) {
+  const word = "harbourmaster";
+  await open(page, url, ".board [data-task]");
+  await settle(page);
+  await openFilter(page, view);
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("textbox", { name: "Find a task" })
+    .fill(word);
+  await page.waitForFunction(
+    () => document.querySelectorAll(".board [data-task]").length === 1
+  );
+  const typed = await cards(page);
+  const where = new URL(page.url()).searchParams.get("q");
+  kit.check(
+    `f. ${view}: a word only in a description finds its task, kept in the URL`,
+    typed.join(",") === found && where === word,
+    `${typed.join(",")} · q=${where}`
+  );
+  await page.keyboard.press("Escape");
+
+  // A link that carries the words opens on the hub's answer: its first
+  // drawn board already holds only what they found.
+  await page.goto(`${url}?q=${word}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".board [data-task]");
+  const opened = await cards(page);
+  kit.check(
+    `f. ${view}: a link with the words opens on what the hub found`,
+    opened.join(",") === found,
+    opened.join(",")
+  );
+}
+
+/** g, h: two table rows ticked take a label typed new in the bulk bar. */
+async function table(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  url: string,
+  view: string,
+  picks: string[]
+) {
+  const [, project] = url.split("/project/");
+  const label = `harbour-${view}`;
+  await open(page, `${url}?view=table`, ".ledger tr.row");
+  await settle(page);
+  for (const id of picks) {
+    await page.click(`tr.row[data-task="${id}"] [data-slot="checkbox"]`);
+  }
+  await page.waitForSelector(".bulk");
+  const ticked = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".ledger tr.row[data-picked]")]
+      .map((row) => row.dataset.task ?? "")
+      .sort()
+  );
+  kit.check(
+    `g. ${view}: two table rows ticked are the bulk bar's`,
+    ticked.join(",") === [...picks].sort().join(",") &&
+      (await page.locator(".bulk .count").innerText()).startsWith("2"),
+    ticked.join(",")
+  );
+  const laid = await page.evaluate((id) => {
+    const ledger = document.querySelector<HTMLElement>(".ledger");
+    const row = document.querySelector(`.ledger tr.row[data-task="${id}"]`);
+    const tick = row?.querySelector('[data-slot="checkbox"]');
+    const title = row?.querySelector(".title");
+    const box = (el: Element | null | undefined) => el?.getBoundingClientRect();
+    const [r, k, t] = [box(row), box(tick), box(title)];
+    return {
+      overflow: ledger ? ledger.scrollWidth - ledger.clientWidth : -1,
+      leads: Boolean(k && t && k.right <= t.left),
+      inside: Boolean(r && k && k.left >= r.left && k.right <= r.right),
+    };
+  }, picks[0]);
+  kit.check(
+    `g. ${view}: a row's tick leads it, inside it, the ledger within its width`,
+    laid.overflow <= 1 && laid.leads && laid.inside,
+    JSON.stringify(laid)
+  );
+  await page.locator(".bulk").getByRole("button", { name: "Label" }).click();
+  // Typed as a person types it: the bar writes it as the sheet does, lower case.
+  await page
+    // A field with a list of offers is a combobox to the engine.
+    .locator('[data-slot="popover-content"]')
+    .getByRole("combobox", { name: "Label to add" })
+    .fill(` Harbour-${view} `);
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".bulk", { state: "detached" });
+  const read = await Promise.all(
+    picks.map((id) =>
+      hub<Task>(fleet, "GET", `/api/projects/${project}/tasks/${id}`)
+    )
+  );
+  kit.check(
+    `h. ${view}: a new label typed in the bulk bar lands on both`,
+    read.every((task) => task.labels.includes(label)),
+    read.map((task) => `${task.id}: ${task.labels.join(",")}`).join(" · ")
   );
 }
 
@@ -363,7 +487,9 @@ const spec: Spec = {
       page.setDefaultTimeout(60_000);
       await sheet(kit, fleet, page, url, view, task);
       await filter(kit, page, url, view, [pricing, analytics]);
+      await find(kit, page, url, view, analytics);
       await bulk(kit, fleet, page, url, view, [...picks], label);
+      await table(kit, fleet, page, url, view, [pricing, video]);
       await page.close();
     }
   },

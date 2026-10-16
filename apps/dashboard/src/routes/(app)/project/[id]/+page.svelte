@@ -83,9 +83,11 @@
     type TaskFilter,
     writeFilter,
   } from "#lib/cawco/tasks/task-filter.js";
+  import { TaskFind, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
   import {
     clearPicks,
     isPicked,
+    pickAll,
     pickTask,
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
@@ -184,8 +186,13 @@
   /** What narrows every view of the tasks, kept in the URL (task-filter). */
   let filter = $state<TaskFilter>(filterOf(page.url.searchParams));
   const narrowed = $derived(activeCount(filter));
+  /** What the hub found for the filter's words, first from the load (task-find). */
+  const find = new TaskFind(
+    () => projectId,
+    untrack(() => data.find)
+  );
   const shownTasks = $derived(
-    applyFilter(filtering ? needsYou : tasks, filter)
+    applyFilter(filtering ? needsYou : tasks, filter, find.ids)
   );
   const shownStages = $derived(
     filtering ? stageList.filter((stage) => stage.kind === "you") : stageList
@@ -532,6 +539,9 @@
     void readDated();
     // biome-ignore lint/complexity/noVoid: the re-read sets its own state
     void readArchived();
+    // What the words find moves with the tasks (a description changed).
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void find.again();
   }
 
   /** A task the hub just wrote, put into the list until the list is read again. */
@@ -685,8 +695,14 @@
   let filterOpen = $state(false);
   let filterAnchor = $state<HTMLElement | null>(null);
 
-  /** The picked tasks the board shows: a bulk change acts on what you see. */
+  /** The picked tasks the view shows: a bulk change acts on what you see. */
   const picked = $derived(shownTasks.filter((task) => isPicked(task.id)));
+  /** A card's or a row's tick; held still while a bulk change runs. */
+  function pick(id: string, on: boolean, range?: string[]) {
+    if (!bulkRun) {
+      pickTask(id, on, range);
+    }
+  }
   const dropTo = $derived(
     stageList.find((stage) => stage.kind === "dropped")?.name ?? null
   );
@@ -766,8 +782,9 @@
     bulkAgain = null;
   }
 
-  // Another project, or a view other than the board: the picks go; the
-  // filter is the next project's own, from its URL.
+  // Another project, or another view: the picks go (a card picked on the
+  // board is not a row picked in the table); the filter is the next
+  // project's own, from its URL.
   let pickedFor = "";
   $effect(() => {
     const at = `${projectId}:${current}`;
@@ -779,12 +796,39 @@
   let filterFor = "";
   $effect(() => {
     const id = projectId;
+    const seed = data.find;
     if (filterFor && filterFor !== id) {
       untrack(() => {
         filter = filterOf(page.url.searchParams);
+        find.reset(seed);
+        askedWords = wordsOf(filter.q);
       });
     }
     filterFor = id;
+  });
+
+  /**
+   * The filter's words go to the hub once typing rests, each change of them
+   * once: the field writes them at every key, and a read per key would only
+   * be dropped for the next. Taken out, they unnarrow at once.
+   */
+  const FIND_REST_MS = 250;
+  let askedWords = wordsOf(untrack(() => filter.q));
+  $effect(() => {
+    const words = wordsOf(filter.q);
+    if (words === askedWords) {
+      return;
+    }
+    if (!words) {
+      askedWords = words;
+      untrack(() => find.find(words));
+      return;
+    }
+    const resting = setTimeout(() => {
+      askedWords = words;
+      find.find(words);
+    }, FIND_REST_MS);
+    return () => clearTimeout(resting);
   });
 
   // --- drafts --------------------------------------------------------------------
@@ -1067,6 +1111,7 @@
         <TaskFilterPopover
           compact={!inBar}
           {filter}
+          {find}
           onchange={setFilter}
           tasks={[...tasks, ...archived]}
         />
@@ -1116,6 +1161,26 @@
       {/if}
     </div>
   </div>
+{/snippet}
+
+<!-- What acts on the picked tasks, the board's cards or the table's rows. -->
+{#snippet bulkBar()}
+  {#if picked.length > 0 || bulkRun}
+    <BulkBar
+      {allowedFrom}
+      {dropTo}
+      labels={[...new Set(tasks.flatMap((task) => task.labels))].sort()}
+      onarchive={bulkArchive}
+      onclear={endBulk}
+      ondrop={bulkDrop}
+      onlabel={bulkLabel}
+      onmove={bulkMove}
+      onretry={() => bulkAgain?.()}
+      {picked}
+      run={bulkRun}
+      stages={stageList}
+    />
+  {/if}
 {/snippet}
 
 {#snippet inBar()}
@@ -1257,7 +1322,7 @@
   {:else if value === "board"}
     <TaskBoard
       {allowedFrom}
-      archived={applyFilter(archived, filter)}
+      archived={applyFilter(archived, filter, find.ids)}
       {dateOf}
       hrefOf={(id) => hrefOf(id)}
       {kindOf}
@@ -1266,33 +1331,14 @@
       oncreate={create}
       onmove={drop}
       onopen={openOne}
-      onpick={(id, on, range) => {
-        if (!bulkRun) {
-          pickTask(id, on, range);
-        }
-      }}
+      onpick={pick}
       picked={isPicked}
       refused={refusedMove}
       stages={shownStages}
       tasks={shownTasks}
       bind:adding
     />
-    {#if picked.length > 0 || bulkRun}
-      <BulkBar
-        {allowedFrom}
-        {dropTo}
-        labels={[...new Set(tasks.flatMap((task) => task.labels))].sort()}
-        onarchive={bulkArchive}
-        onclear={endBulk}
-        ondrop={bulkDrop}
-        onlabel={bulkLabel}
-        onmove={bulkMove}
-        onretry={() => bulkAgain?.()}
-        {picked}
-        run={bulkRun}
-        stages={stageList}
-      />
-    {/if}
+    {@render bulkBar()}
   {:else if value === "table"}
     <div class="table-wrap">
       {#if adding}
@@ -1308,10 +1354,18 @@
       <TaskTable
         hrefOf={(id) => hrefOf(id)}
         onopen={openOne}
+        onpick={pick}
+        onpickall={(ids, on) => {
+          if (!bulkRun) {
+            pickAll(ids, on);
+          }
+        }}
+        picked={isPicked}
         stages={stageList}
         tasks={shownTasks}
       />
     </div>
+    {@render bulkBar()}
   {:else if value === "pipeline"}
     <ViewPipeline stages={stageList} tasks={shownTasks} />
   {:else if value === "canvas"}
@@ -1481,6 +1535,7 @@
     <TaskFilterPopover
       anchor={filterAnchor}
       {filter}
+      {find}
       onchange={setFilter}
       tasks={[...tasks, ...archived]}
       bind:open={filterOpen}

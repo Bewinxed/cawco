@@ -1,9 +1,11 @@
 /**
  * What narrows a project's tasks, kept in the URL so a link opens the same:
- * `?q=` words in the id or title, `label=`, `type=`, `field.<key>=` a
- * field's value (any number of them), the hub's own list query names
- * (tasks.ts `/api/projects/:id/tasks`). It is applied to the rows the hub
- * listed, which carry each of these, so every view narrows at once: the
+ * `?q=` words, `label=`, `type=`, `field.<key>=` a field's value (any number
+ * of them), the hub's own list query names (tasks.ts
+ * `/api/projects/:id/tasks`). The words are the hub's to match, in a task's
+ * id, title or description (the rows carry no description): the page asks
+ * it, and its answer's ids are `found`. The rest is matched on the rows the
+ * hub listed, which carry each of them. Every view narrows at once: the
  * board, the table, the pipeline, the canvas and the calendar, and the
  * board's Archived rail.
  */
@@ -66,11 +68,18 @@ export const activeCount = (filter: TaskFilter): number =>
   (filter.type ? 1 : 0) +
   filter.fields.filter(([key, value]) => key && value).length;
 
-/** Whether the filter keeps `task`. */
-function keeps(task: TaskSummary, filter: TaskFilter): boolean {
-  const words = filter.q.trim().toLowerCase();
+/**
+ * Whether the filter keeps `task`. `found`: the ids the hub's search answered
+ * for the filter's words; null while they are not answered yet, when the
+ * words narrow nothing.
+ */
+function keeps(
+  task: TaskSummary,
+  filter: TaskFilter,
+  found: ReadonlySet<string> | null
+): boolean {
   return (
-    (!words || `${task.id} ${task.title}`.toLowerCase().includes(words)) &&
+    (!(filter.q.trim() && found) || found.has(task.id)) &&
     (!filter.label || task.labels.includes(filter.label)) &&
     (!filter.type || task.type === filter.type) &&
     filter.fields.every(
@@ -82,8 +91,9 @@ function keeps(task: TaskSummary, filter: TaskFilter): boolean {
 /** The tasks the filter keeps, live or archived alike. */
 export const applyFilter = (
   tasks: TaskSummary[],
-  filter: TaskFilter
+  filter: TaskFilter,
+  found: ReadonlySet<string> | null
 ): TaskSummary[] =>
   activeCount(filter) === 0
     ? tasks
-    : tasks.filter((task) => keeps(task, filter));
+    : tasks.filter((task) => keeps(task, filter, found));
