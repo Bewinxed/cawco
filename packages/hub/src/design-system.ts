@@ -58,7 +58,9 @@ import {
   type InstanceRow,
   machineCalled,
   type PermissionResult,
+  type WorkspaceRef,
 } from "@cawco/core";
+import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { DesignProposalFile } from "./db/schema";
@@ -539,12 +541,37 @@ export const previewDesign = async (
     .filter((file) => file.before !== file.after);
 };
 
-type Run = (
+/**
+ * Runs a command on a machine in `cwd`: inside `workspace`'s boundary when
+ * one is named (the hub's `runOnMachine`).
+ */
+export type Run = (
   machineId: string,
   cwd: string,
   cmd: string,
-  timeoutMs: number
+  timeoutMs: number,
+  workspace?: WorkspaceRef
 ) => Promise<CommandResult>;
+
+/**
+ * A repository a system is in: its root on a machine, and, when the root is
+ * a live workspace's clone, that workspace. Every command in a live clone
+ * runs inside its boundary (core safe-git.ts: "A git call in a live
+ * workspace's clone also runs inside the workspace's boundary"): one on the
+ * host would write the clone under the boundary's read-only binds, and its
+ * guard stops the boundary, the session in it with it.
+ */
+export interface RepositoryAt {
+  machineId: string;
+  root: string;
+  workspace?: WorkspaceRef;
+}
+
+/** A command in a repository, where it must run ({@link RepositoryAt}). */
+export const runIn =
+  (run: Run, at: RepositoryAt) =>
+  (cmd: string, timeoutMs = COMMAND_MS): Promise<CommandResult> =>
+    run(at.machineId, at.root, cmd, timeoutMs, at.workspace);
 
 const COMMAND_MS = 60_000;
 /** Base64 per command, well under one shell argument's 128 KiB. */
@@ -557,9 +584,7 @@ const failed = (what: string, result: CommandResult): Error =>
 
 /** One file's bytes at `<target>.cawco-<index>`, in base64 chunks one shell command each. */
 const writeTemporary = async (
-  run: Run,
-  machineId: string,
-  root: string,
+  sh: ReturnType<typeof runIn>,
   file: { path: string; bytes: Uint8Array },
   index: number
 ): Promise<void> => {
@@ -571,11 +596,8 @@ const writeTemporary = async (
     const head =
       part === 0 ? `mkdir -p ${quote(posix.dirname(target))} && ` : "";
     // biome-ignore lint/performance/noAwaitInLoops: one chunk after another, in order
-    const result = await run(
-      machineId,
-      root,
-      `${head}printf %s '${chunk}' | base64 -d ${part === 0 ? ">" : ">>"} ${quote(`${target}.cawco-${index}`)}`,
-      COMMAND_MS
+    const result = await sh(
+      `${head}printf %s '${chunk}' | base64 -d ${part === 0 ? ">" : ">>"} ${quote(`${target}.cawco-${index}`)}`
     );
     if (result.exitCode !== 0) {
       throw failed(`${target} could not be written`, result);
@@ -585,86 +607,78 @@ const writeTemporary = async (
 
 /**
  * A system at a repository's root on a machine, read and written with its
- * shell. `base` is the commit a system must be on to be the project's: a
- * workspace's base branch on origin, else the checkout's HEAD.
+ * shell, inside its workspace's boundary when it is one, git run the safe
+ * way (core `SAFE_GIT_SHELL`). `base` is the commit a system must be on to
+ * be the project's: a workspace's base branch on origin, else the
+ * checkout's HEAD.
  */
 const repositoryStore = (
   run: Run,
-  machineId: string,
-  root: string,
+  at: RepositoryAt,
   base = "HEAD"
-): DesignStore => ({
-  where: `${root}/${DESIGN_DIR}`,
-  theirs: async () => {
-    const result = await run(
-      machineId,
-      root,
-      `git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${DESIGN_DIR}/${MANIFEST}`)} 2>/dev/null; then echo yes; else echo no; fi`,
-      COMMAND_MS
-    );
-    if (result.exitCode !== 0) {
-      throw failed("design/'s history could not be read", result);
-    }
-    return result.stdout.trim() === "yes";
-  },
-  commit: async (message) => {
-    const result = await run(
-      machineId,
-      root,
-      `git add -A -- ${DESIGN_DIR} && { git diff --cached --quiet -- ${DESIGN_DIR} || git commit -q -m ${quote(message)} -- ${DESIGN_DIR}; } && git rev-parse HEAD`,
-      COMMAND_MS
-    );
-    if (result.exitCode !== 0) {
-      throw failed("design/ could not be committed", result);
-    }
-    return result.stdout.trim().split("\n").at(-1) ?? "";
-  },
-  read: async (paths) => {
-    const result = await run(
-      machineId,
-      root,
-      `for p in ${paths.map((path) => quote(`${DESIGN_DIR}/${path}`)).join(" ")}; do if [ -f "$p" ]; then printf 'F\\t%s\\t' "$p"; base64 < "$p" | tr -d '\\n'; echo; fi; done`,
-      COMMAND_MS
-    );
-    if (result.exitCode !== 0) {
-      throw failed("design/ could not be read", result);
-    }
-    const found = new Map<string, Uint8Array | null>(
-      paths.map((path) => [path, null])
-    );
-    for (const line of result.stdout.split("\n")) {
-      const [mark, path, body] = line.split("\t");
-      if (mark === "F" && path) {
-        found.set(
-          path.slice(DESIGN_DIR.length + 1),
-          new Uint8Array(Buffer.from(body ?? "", "base64"))
-        );
+): DesignStore => {
+  const sh = runIn(run, at);
+  return {
+    where: `${at.root}/${DESIGN_DIR}`,
+    theirs: async () => {
+      const result = await sh(
+        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${DESIGN_DIR}/${MANIFEST}`)} 2>/dev/null; then echo yes; else echo no; fi`
+      );
+      if (result.exitCode !== 0) {
+        throw failed("design/'s history could not be read", result);
       }
-    }
-    return found;
-  },
-  write: async (files) => {
-    // Each file to a temporary name first, then all moved into place.
-    for (const [index, file] of files.entries()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one file after another
-      await writeTemporary(run, machineId, root, file, index);
-    }
-    const moved = await run(
-      machineId,
-      root,
-      files
-        .map(
-          (file, index) =>
-            `mv -f ${quote(`${DESIGN_DIR}/${file.path}.cawco-${index}`)} ${quote(`${DESIGN_DIR}/${file.path}`)}`
-        )
-        .join(" && "),
-      COMMAND_MS
-    );
-    if (moved.exitCode !== 0) {
-      throw failed("design/ could not be written", moved);
-    }
-  },
-});
+      return result.stdout.trim() === "yes";
+    },
+    commit: async (message) => {
+      const result = await sh(
+        `${SAFE_GIT_SHELL}git add -A -- ${DESIGN_DIR} && { git diff --cached --quiet -- ${DESIGN_DIR} || git commit -q -m ${quote(message)} -- ${DESIGN_DIR}; } && git rev-parse HEAD`
+      );
+      if (result.exitCode !== 0) {
+        throw failed("design/ could not be committed", result);
+      }
+      return result.stdout.trim().split("\n").at(-1) ?? "";
+    },
+    read: async (paths) => {
+      const result = await sh(
+        `for p in ${paths.map((path) => quote(`${DESIGN_DIR}/${path}`)).join(" ")}; do if [ -f "$p" ]; then printf 'F\\t%s\\t' "$p"; base64 < "$p" | tr -d '\\n'; echo; fi; done`
+      );
+      if (result.exitCode !== 0) {
+        throw failed("design/ could not be read", result);
+      }
+      const found = new Map<string, Uint8Array | null>(
+        paths.map((path) => [path, null])
+      );
+      for (const line of result.stdout.split("\n")) {
+        const [mark, path, body] = line.split("\t");
+        if (mark === "F" && path) {
+          found.set(
+            path.slice(DESIGN_DIR.length + 1),
+            new Uint8Array(Buffer.from(body ?? "", "base64"))
+          );
+        }
+      }
+      return found;
+    },
+    write: async (files) => {
+      // Each file to a temporary name first, then all moved into place.
+      for (const [index, file] of files.entries()) {
+        // biome-ignore lint/performance/noAwaitInLoops: one file after another
+        await writeTemporary(sh, file, index);
+      }
+      const moved = await sh(
+        files
+          .map(
+            (file, index) =>
+              `mv -f ${quote(`${DESIGN_DIR}/${file.path}.cawco-${index}`)} ${quote(`${DESIGN_DIR}/${file.path}`)}`
+          )
+          .join(" && ")
+      );
+      if (moved.exitCode !== 0) {
+        throw failed("design/ could not be written", moved);
+      }
+    },
+  };
+};
 
 /** The trailer naming the session whose write a folder commit of design/ is. */
 const SESSION_TRAILER = "Session";
@@ -783,24 +797,29 @@ export const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
  */
 export const designOnBase = (
   run: Run,
-  machineId: string,
-  root: string,
-  base: string
+  workspace: { base: string; id: string; machineId: string; path: string }
 ): Promise<boolean> =>
-  repositoryStore(run, machineId, root, baseRef(base)).theirs();
+  repositoryStore(
+    run,
+    {
+      machineId: workspace.machineId,
+      root: workspace.path,
+      workspace: { id: workspace.id, path: workspace.path },
+    },
+    baseRef(workspace.base)
+  ).theirs();
 
 /** The longest a proposal's reason runs: its commit's subject carries it. */
 const WHY_LIMIT = 500;
 
 /**
- * Where a session's design/ is: a repository's root on a machine, with the
+ * Where a session's design/ is: a repository ({@link RepositoryAt}), with the
  * commit a system must be on to be the project's (`base`), or the project's
- * folder (both null). A proposal goes back here on Approve.
+ * folder (`repo` null). A proposal goes back here on Approve.
  */
 interface ProposalPlace {
   base?: string;
-  machineId: string | null;
-  root: string | null;
+  repo: RepositoryAt | null;
 }
 
 export const createDesignSystem = (deps: {
@@ -810,6 +829,7 @@ export const createDesignSystem = (deps: {
   db: Pick<
     DbShape,
     | "designChecks"
+    | "getInstancesByIds"
     | "listAgents"
     | "project"
     | "projectAttempts"
@@ -873,11 +893,13 @@ export const createDesignSystem = (deps: {
     if (!deps.online(workspace.machineId)) {
       return `The builder's workspace is on ${machineCalled(workspace.machineId, deps.db.listAgents())}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
     }
+    // A live clone is read inside its boundary (core safe-git.ts).
     const read = await deps.run(
       workspace.machineId,
       workspace.path,
-      UNCOMMITTED,
-      COMMAND_MS
+      `${SAFE_GIT_SHELL}${UNCOMMITTED}`,
+      COMMAND_MS,
+      { id: workspace.id, path: workspace.path }
     );
     if (read.exitCode !== 0) {
       return `CawCo couldn't read the builder's workspace (${(read.stderr || read.stdout).trim().split("\n").at(-1)}), so whether its design/ is committed is unknown. Try Approve again.`;
@@ -897,13 +919,18 @@ export const createDesignSystem = (deps: {
       actor.machineId === (await deps.ownMachineId) &&
       (actor.cwd === folder || actor.cwd.startsWith(`${folder}/`))
     ) {
-      return { machineId: null, root: null };
+      return { repo: null };
     }
+    // A work item's session works in its workspace's clone, read inside its
+    // boundary; the project's system there is what its base branch holds on
+    // origin, never its own commits.
+    const workspace = workspaceOfSession(actor.id);
     const top = await deps.run(
       actor.machineId,
       actor.cwd,
-      "git rev-parse --show-toplevel",
-      COMMAND_MS
+      `${SAFE_GIT_SHELL}git rev-parse --show-toplevel`,
+      COMMAND_MS,
+      workspace && { id: workspace.id, path: workspace.path }
     );
     const root = top.stdout.trim();
     if (top.exitCode !== 0 || !root) {
@@ -911,17 +938,25 @@ export const createDesignSystem = (deps: {
         `${actor.cwd} is not inside a repository, so design/ has no root to go at. Work from the project's repository or its folder.`
       );
     }
-    // Its own workspace's clone: the project's system is what its base
-    // branch holds on origin, never its own commits.
-    const item = actor.workItemId
-      ? deps.db.workItem(actor.workItemId)
-      : undefined;
-    const [workspace] = item ? deps.db.workspacesNamed(item.workspaceId) : [];
+    const inClone = workspace?.path === root ? workspace : undefined;
     return {
-      machineId: actor.machineId,
-      root,
-      ...(workspace?.path === root ? { base: baseRef(workspace.base) } : {}),
+      repo: {
+        machineId: actor.machineId,
+        root,
+        ...(inClone
+          ? { workspace: { id: inClone.id, path: inClone.path } }
+          : {}),
+      },
+      ...(inClone ? { base: baseRef(inClone.base) } : {}),
     };
+  };
+
+  /** The workspace a session's work item runs in (archived or not); none for a session that runs no item. */
+  const workspaceOfSession = (instanceId: string) => {
+    const [row] = deps.db.getInstancesByIds([instanceId]);
+    const item = row?.workItemId ? deps.db.workItem(row.workItemId) : undefined;
+    const [workspace] = item ? deps.db.workspacesNamed(item.workspaceId) : [];
+    return workspace;
   };
 
   /**
@@ -935,8 +970,8 @@ export const createDesignSystem = (deps: {
     author: string,
     message?: string
   ): DesignStore =>
-    place.machineId && place.root
-      ? repositoryStore(deps.run, place.machineId, place.root, place.base)
+    place.repo
+      ? repositoryStore(deps.run, place.repo, place.base)
       : folderStore(projectId, author, deps.folderChanged, session, message);
 
   /** The proposal as the person's ask: drawn as its diff, answered by Approve or Deny, where it was made too. */
@@ -1007,8 +1042,8 @@ export const createDesignSystem = (deps: {
       id: `dp-${crypto.randomUUID()}`,
       projectId,
       instanceId: actor.id,
-      machineId: place.machineId,
-      root: place.root,
+      machineId: place.repo?.machineId ?? null,
+      root: place.repo?.root ?? null,
       why,
       files,
       preview,
@@ -1028,27 +1063,42 @@ export const createDesignSystem = (deps: {
     };
   };
 
+  /**
+   * Where an approved proposal is written: its repository, inside its
+   * proposing session's workspace's boundary when that clone is the
+   * repository, or the project's folder. Refused, saying so, when that
+   * workspace was retired or its machine is offline.
+   */
+  const placeOfProposal = (row: DesignProposalRow): ProposalPlace => {
+    if (!(row.machineId && row.root)) {
+      return { repo: null };
+    }
+    if (!deps.online(row.machineId)) {
+      throw new Error(
+        `The proposal's repository is on ${machineCalled(row.machineId, deps.db.listAgents())}, which is offline. Approve once it is back.`
+      );
+    }
+    const workspace = workspaceOfSession(row.instanceId);
+    if (workspace?.path !== row.root) {
+      return { repo: { machineId: row.machineId, root: row.root } };
+    }
+    if (workspace.state === "archived") {
+      throw new Error(
+        `${row.root}, where this was proposed, is gone (its workspace was retired), so there is nowhere to commit it. Deny it; the change can be proposed again.`
+      );
+    }
+    return {
+      repo: {
+        machineId: row.machineId,
+        root: row.root,
+        workspace: { id: workspace.id, path: workspace.path },
+      },
+    };
+  };
+
   /** Approve: written through design_write where it was proposed, and committed. Answers the commit. */
   const apply = async (row: DesignProposalRow): Promise<string> => {
-    const place = { machineId: row.machineId, root: row.root };
-    if (place.machineId && !deps.online(place.machineId)) {
-      throw new Error(
-        `The proposal's repository is on ${machineCalled(place.machineId, deps.db.listAgents())}, which is offline. Approve once it is back.`
-      );
-    }
-    if (place.machineId && place.root) {
-      const there = await deps.run(
-        place.machineId,
-        "/",
-        `test -d ${quote(place.root)}`,
-        COMMAND_MS
-      );
-      if (there.exitCode !== 0) {
-        throw new Error(
-          `${place.root}, where this was proposed, is gone (its workspace was retired), so there is nowhere to commit it. Deny it; the change can be proposed again.`
-        );
-      }
-    }
+    const place = placeOfProposal(row);
     const message = `design: ${row.why}\n\nProposal: ${row.id}`;
     const store = storeAt(
       row.projectId,
@@ -1098,7 +1148,17 @@ export const createDesignSystem = (deps: {
       if (row) {
         const files = row.preview.map((file) => file.path).join(", ");
         if (result.behavior === "allow") {
-          const sha = await apply(row);
+          // A write that fails leaves the ask parked; its reason is said here
+          // and to the person's answer.
+          const sha = await apply(row).catch((error: unknown) => {
+            console.warn(
+              `[design] ${row.projectId}: ${row.id} was approved and not written: ${error instanceof Error ? error.message : String(error)}`
+            );
+            throw error;
+          });
+          console.log(
+            `[design] ${row.projectId}: ${row.id} approved, committed as ${sha.slice(0, 9)}`
+          );
           deps.tell(
             row.instanceId,
             `The person approved your design proposal ${row.id} (${files}): it is written and committed as ${sha.slice(0, 9)} in ${row.root ?? "the project's folder"}.`

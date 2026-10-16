@@ -889,7 +889,9 @@ const run = async (kit: Kit) => {
       ),
     (heard) => heard.length > 0,
     60_000
-  );
+  ).catch(async (error: unknown) => {
+    throw await t3Stalled(error, t3, t3Answers());
+  });
   const afterDeny = await inkLightness();
   kit.check(
     "4b: Deny leaves design/ as it was and tells the builder",
@@ -908,7 +910,10 @@ const run = async (kit: Kit) => {
       ),
     (heard) => heard.length > 0,
     60_000
-  );
+  ).catch(async (error: unknown) => {
+    // Its hub lines say why an approve was not written ([design] …).
+    throw await t3Stalled(error, t3, t3Answers());
+  });
   const afterAllow = await inkLightness();
   const subject = (
     await Bun.$`git log -1 --format=%s -- design/tokens.json`.cwd(tree).quiet()

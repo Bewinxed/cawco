@@ -18999,8 +18999,9 @@ export const createServer = (
   // The hub's own session tools (hub-tools.ts): what sessions once did on
   // the person's routes.
   const designSystem = createDesignSystem({
-    run: (machineId, cwd, cmd, timeoutMs) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
+    // Inside a live workspace's boundary when one is named (core safe-git.ts).
+    run: (machineId, cwd, cmd, timeoutMs, workspace) =>
+      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
         what: "command",
       }),
     ownMachineId,
@@ -19045,8 +19046,9 @@ export const createServer = (
       }
       return { kind: row.kind, name: row.name, html };
     },
-    run: (machineId, cwd, cmd, timeoutMs) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, undefined, {
+    // Inside the builder's workspace's boundary (core safe-git.ts).
+    run: (machineId, cwd, cmd, timeoutMs, workspace) =>
+      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
         what: "command",
       }),
     tasks,

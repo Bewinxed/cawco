@@ -41,7 +41,8 @@
  *   ends while checked stops its verifier. A hub that restarts keeps every
  *   round (the rows), and its chips say so again.
  */
-import type { CommandResult, InstanceRow, ResultArtifact } from "@cawco/core";
+import type { InstanceRow, ResultArtifact } from "@cawco/core";
+import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
 import type {
@@ -50,7 +51,7 @@ import type {
   WorkItemSubmission,
 } from "./db/schema";
 import { designShaped } from "./design-offers";
-import { designOnBase } from "./design-system";
+import { designOnBase, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
 import { quote } from "./landing";
 import { hubActor, type Tasks } from "./tasks";
@@ -76,10 +77,14 @@ const COMMAND_MS = 120_000;
  * The builder's working tree, read without touching its index: the commit
  * it sits on, its whole tree (tracked and untracked, .gitignore kept) as a
  * temporary index writes it, and, when that tree is not the commit's, a
- * binary patch of the difference in a new temporary folder. Three lines:
- * head, tree, the patch's path or nothing.
+ * binary patch of the difference in a new folder under the clone's
+ * `TMPDIR` (its scratch dir, the same path on the host, where the
+ * verifier's inputs are read from). Run inside the clone's boundary, git
+ * the safe way (core safe-git.ts). Three lines: head, tree, the patch's
+ * path or nothing.
  */
 const SNAPSHOT = [
+  SAFE_GIT_SHELL,
   "set -e",
   "idx=$(mktemp); trap 'rm -f \"$idx\"' EXIT",
   'cp "$(git rev-parse --git-path index)" "$idx"',
@@ -100,12 +105,8 @@ export interface DesignVerifyDeps {
     DbShape,
     "designChecks" | "project" | "workItem" | "workspacesNamed"
   >;
-  readonly run: (
-    machineId: string,
-    cwd: string,
-    cmd: string,
-    timeoutMs: number
-  ) => Promise<CommandResult>;
+  /** Runs a command, inside the named workspace's boundary (design-system.ts `Run`). */
+  readonly run: Run;
   readonly tasks: Pick<Tasks, "comment" | "get">;
   readonly workItems: {
     finishItem: (
@@ -181,12 +182,18 @@ interface Snapshot {
 export const createDesignVerify = (deps: DesignVerifyDeps) => {
   const { db, workItems } = deps;
 
+  /** A command in the builder's live clone, inside its boundary (core safe-git.ts). */
   const command = async (
-    machineId: string,
-    cwd: string,
+    workspace: { id: string; machineId: string; path: string },
     cmd: string
   ): Promise<string> => {
-    const result = await deps.run(machineId, cwd, cmd, COMMAND_MS);
+    const result = await deps.run(
+      workspace.machineId,
+      workspace.path,
+      cmd,
+      COMMAND_MS,
+      { id: workspace.id, path: workspace.path }
+    );
     if (result.exitCode !== 0) {
       throw new Error(
         (
@@ -203,11 +210,12 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   };
 
   const snapshot = async (workspace: {
+    id: string;
     machineId: string;
     path: string;
   }): Promise<Snapshot> => {
     const [head = "", tree = "", patch = ""] = (
-      await command(workspace.machineId, workspace.path, SNAPSHOT)
+      await command(workspace, SNAPSHOT)
     ).split("\n");
     return {
       head: head.trim(),
@@ -254,7 +262,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   const startRound = async (
     item: WorkItemRow & { projectId: string; taskId: string },
     submission: WorkItemSubmission,
-    workspace: { base: string; machineId: string; path: string },
+    workspace: { base: string; id: string; machineId: string; path: string },
     at: Snapshot
   ): Promise<string> => {
     const project = db.project(item.projectId);
@@ -311,14 +319,14 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     } finally {
       // Copied into the verifier's inputs as it started, or not needed.
       if (at.patch) {
-        await deps
-          .run(
-            workspace.machineId,
-            workspace.path,
-            `rm -rf ${quote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`,
-            COMMAND_MS
+        await command(
+          workspace,
+          `rm -rf ${quote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`
+        ).catch((error: unknown) =>
+          console.warn(
+            `[design-verify] ${item.taskId}: ${at.patch} was not removed: ${error instanceof Error ? error.message : String(error)}`
           )
-          .catch(() => undefined);
+        );
       }
     }
     workItems.holdWords(item.id, CHECKING);
@@ -356,12 +364,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     if (!(workspace && designShaped(project.template ?? null, task))) {
       return;
     }
-    const onBase = await designOnBase(
-      deps.run,
-      workspace.machineId,
-      workspace.path,
-      workspace.base
-    );
+    const onBase = await designOnBase(deps.run, workspace);
     return onBase ? { projectId, taskId, workspace } : undefined;
   };
 
