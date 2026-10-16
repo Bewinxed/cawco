@@ -647,6 +647,12 @@ need_hub() {
 }
 hub_api() { as_user "$hubc" curl -fsS "http://127.0.0.1:3456$1" "${@:2}"; }
 api_on() { local c=$1; shift; as_user "$c" curl -fsS "http://127.0.0.1:3456$1" "${@:2}"; }
+# The host's clock in epoch ms, from bash itself: EPOCHREALTIME is `<seconds>.<microseconds>` (bash(1): "with
+# microsecond granularity"). Not `date +%s%3N`: the host's date may be uutils', which ignores the width and prints all
+# nine digits (uutils coreutils 0.8.0: `date +%s%3N` gave 1792174810928789424), and a 19-digit time compared with the
+# machines' 13-digit stamps read every one of them as before it (nightly 90bdbf7b9: "no late read of the machine's
+# account ended after its update began", "0 calls went through the hook … after the update was installed").
+now_ms() { local t=${EPOCHREALTIME/[.,]/}; echo $(( 10#$t / 1000 )); }
 json() { bun -e "const t = await Bun.stdin.text(); if (!t.trim()) process.exit(0); const d = JSON.parse(t); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
 jsonl() { bun -e "const t = await Bun.stdin.text(); const d = t.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
 machine_id() { hub_api /api/agents | json "d => d.find(a => a.hostname === '$1')?.machineId"; }
@@ -849,7 +855,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # reads the new policy; one already under way says `installing` to the hub the moment it raises its fence
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-sessions)$ ]]; }
-export -f diagnose as_user put_executable user_exec need_hub hub_api api_on json jsonl machine_id build_version phase field retiring wait_until use_feed \
+export -f diagnose as_user put_executable user_exec need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
@@ -997,7 +1003,7 @@ signin_sampler() {
   aid=$(cat "$rigdir/account-id")
   while [[ ! -e $stop ]]; do
     state=$(signin_state "$aid" "$machine" 2> /dev/null) || state=hub-away
-    echo "$(date +%s%3N) ${state:-none}" >> "$file"
+    echo "$(now_ms) ${state:-none}" >> "$file"
     sleep 1
   done
 }
@@ -1025,15 +1031,18 @@ update_outcomes_start() {
   [[ -n $c && -n $machine && -n $session ]]
   echo "$session $(child_pids "$c" "$session")" > "$rigdir/outcomes-session.txt"
   [[ "$(cut -d' ' -f2 "$rigdir/outcomes-session.txt")" =~ ^[0-9]+$ ]] || { echo "the session $session holds no one process: $(cat "$rigdir/outcomes-session.txt")"; return 1; }
-  echo "$c $machine $session $(date +%s%3N) $sends" > "$rigdir/outcomes-of"
+  echo "$c $machine $session $(now_ms) $sends" > "$rigdir/outcomes-of"
   claude_late "$c" "$CLAUDE_LATE_S"
   rm -f "$rigdir/outcomes-signin.stop"
   : > "$rigdir/outcomes-signin.txt"
   signin_sampler "$machine" "$rigdir/outcomes-signin.txt" "$rigdir/outcomes-signin.stop" < /dev/null > /dev/null 2>&1 &
   [[ $sends != nosends ]] || return 0
   as_user "$hubc" rm -f /tmp/outcomes-sends.stop
-  as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-sends.ts http://127.0.0.1:3456 \
-    "$machine" "$session" "$session-midupdate" /tmp/outcomes-sends.stop > "$rigdir/outcomes-sends.txt" 2>&1 &
+  # The file holds the sender's own words and nothing of the check's: its trace (-x) is off in the subshell before the
+  # redirection, or every helper line it traced reads as a message the hub did not take (nightly 90bdbf7b9: all 13
+  # sends "accepted", and the check failed on "+ [as_user:0] user_exec …").
+  ( set +x; as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-sends.ts http://127.0.0.1:3456 \
+    "$machine" "$session" "$session-midupdate" /tmp/outcomes-sends.stop > "$rigdir/outcomes-sends.txt" 2>&1 ) &
   wait_until 30 'grep -qE "^[0-9]+ " "$rigdir/outcomes-sends.txt"'
 }
 # No message goes after this; the last one sent has had its answer or its 120 s.
@@ -2077,7 +2086,11 @@ ws_cannot_read() {
 # call in $rigdir/ws-hook-calls.txt.
 ws_hook_calls_start() {
   as_user "$joinerc" rm -f /tmp/ws-hook-calls.stop
-  as_user "$joinerc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-hook-calls.ts "$(ws_state)" "$(cat "$rigdir/ws-clone")" /tmp/ws-hook-calls.stop > "$rigdir/ws-hook-calls.txt" 2>&1 &
+  # The caller's own words only: the check's trace is off in the subshell (see update_outcomes_start's sender).
+  local state clone
+  state=$(ws_state)
+  clone=$(cat "$rigdir/ws-clone")
+  ( set +x; as_user "$joinerc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-hook-calls.ts "$state" "$clone" /tmp/ws-hook-calls.stop > "$rigdir/ws-hook-calls.txt" 2>&1 ) &
   wait_until 30 'grep -q " ran$" "$rigdir/ws-hook-calls.txt"'
 }
 ws_hook_calls_stop() {
@@ -2220,7 +2233,7 @@ workspace_across_update() {
   ws_hook_calls_start
   install_now_request "$jid" > /dev/null
   wait_until 400 '[[ "$(build_version $jid)" == $NEXT && "$(phase $jid)" == installed ]]'
-  date +%s%3N > "$rigdir/ws-installed-at"
+  now_ms > "$rigdir/ws-installed-at"
   # The job ran through the update: the same process, in the sandbox it started in.
   as_user "$joinerc" kill -0 "$job"
   [[ "$(ns_of "$job")" == "$old_ns" ]]
@@ -2412,10 +2425,8 @@ rig_workspace() {
 # runaway that keeps forking reads pids.max + 1 for an instant, holding no such task (the nightly of 2026-10-15 read
 # 8193 so). pids.peak moves only with a charge that stands, a fork's or a migration's (pids_update_watermark), so it
 # is the most the group ever held, over its whole life; pids.events max counts the refusals.
-# The keeper's last word on where its children run, since a moment (unix seconds): one of the lines cgroup.ts says.
+# The task limit the capped rig sets on every keeper's unit (TasksMax=, an administrator's drop-in).
 export KEEPER_TASKS=200
-export PLACED_RE='^\[sessiond\] each child runs in a cgroup of its own under (/sys/fs/cgroup/.+/cawco-sessiond-[^/]+\.service/children), under pids\.max 8192, all of them under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\); memory and CPU limits apply when they are set on the hub$'
-keeper_said() { as_user "$1" journalctl --user --no-pager -o cat -u "$(current_unit "$1")" --since "@$2" | grep '^\[sessiond\] ' | grep -v ' listening on \|^\[sessiond\] SIGTERM\| names this keeper$\|not the machine.s keeper' | tail -n 1; }
 # Asks the keeper to start a child (container, procId, command, JSON args) and prints its ack for it. The keeper acks a
 # spawn only once the child has started or been refused, after a process-table read; socat's shut-none keeps the
 # request side open, and -t5 waits up to 5s for the ack.
@@ -2538,29 +2549,58 @@ memory_limit_stays_its_own() {
 # tightest task limit above it less the 64 tasks it keeps for itself (packages/sessiond/src/cgroup.ts). The limit is
 # set before the keeper starts: TasksMax on the keepers' units, in an administrator's drop-in for every unit named
 # cawco-sessiond-*, not on the user's whole tree (one there is shared with the hub, the agent and the dashboard).
+# Every cap is read off the cgroup files the kernel enforces, never off the keeper's start-up sentence (nightly
+# 90bdbf7b9: the keeper placed its children under pids.max 136 and gave itself cpu.weight 1000, and the check failed
+# on a sentence that had grown a clause).
+# A cgroup file on machine $1, `absent` when the file is not there (its controller is off for that group).
+cgroup_file() { as_user "$1" sh -c 'cat "$1" 2> /dev/null || echo absent' sh "$2"; }
+# The keeper's restart is over: a keeper process other than $2 holds the unit, and answers a listing. It places its
+# children before it listens (sessiond main.ts: placeChildren, then server.listen), so an answer means they are placed.
+keeper_restarted() {
+  local now
+  now=$(keeper_pid "$1")
+  [[ $now =~ ^[0-9]+$ && $now != 0 && $now != "$2" ]] && [[ "$(keeper_list "$1")" == *'"procs"'* ]]
+}
 keeper_children_capped_on() {
-  local c=$1 since said group max limit keeper pid own forker ack peak events
+  local c=$1 before top group max limit keeper pid own forker ack peak events weight
   on_exit "end_children $c cg-"
   echo "======== $c"
   $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond-.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond-.service.d/proof-tasks.conf"
   as_user "$c" systemctl --user daemon-reload
   end_all_sessions "$c"
-  since=$(as_user "$c" date +%s)
+  before=$(keeper_pid "$c")
   as_user "$c" systemctl --user restart "$(current_unit "$c")"
-  wait_until 60 '[[ -n "$(keeper_said "$c" "$since")" ]] && as_user "$c" test -S /run/user/1000/cawco/sessiond.sock'
-  # 1. The keeper says its children run in its delegated cgroup, under the limit set above less 64; any other line
-  # (not delegated, could not be asked, no task limit, could not be set up) is the failure, printed.
-  said=$(keeper_said "$c" "$since")
-  echo "the keeper said: $said"
-  [[ $said =~ $PLACED_RE ]] || { echo "FAIL: the keeper did not place its children in a capped cgroup: $said"; return 1; }
-  group=${BASH_REMATCH[1]} max=${BASH_REMATCH[2]} limit=${BASH_REMATCH[3]}
-  [[ $limit == "$KEEPER_TASKS" && $max == $((KEEPER_TASKS - 64)) ]] || { echo "FAIL: the cap is $max of $limit, not $((KEEPER_TASKS - 64)) of $KEEPER_TASKS"; return 1; }
-  [[ "$(as_user "$c" cat "$group/pids.max")" == "$max" ]]
-  # 2. A child it starts is in a cgroup of its own in children, under its own pids.max; children holds no process of
-  # its own; the keeper itself is in keeper.
+  wait_until 60 'keeper_restarted "$c" "$before"'
+  # 1. The keeper runs in its unit's delegated cgroup, in the leaf `keeper`; the unit's own pids.max is the TasksMax
+  # set above, and `children` beside the keeper holds every child under that less the 64 tasks it keeps for itself.
   keeper=$(keeper_pid "$c")
   echo "keeper $keeper is in $(cgroup_of "$c" "$keeper")"
-  [[ "$(cgroup_of "$c" "$keeper")" == */cawco-sessiond-*.service/keeper ]]
+  [[ "$(cgroup_of "$c" "$keeper")" == */cawco-sessiond-*.service/keeper ]] || { echo "FAIL: the keeper runs outside its unit's leaf"; return 1; }
+  top="/sys/fs/cgroup$(dirname "$(cgroup_of "$c" "$keeper")")"
+  group="$top/children"
+  limit=$(cgroup_file "$c" "$top/pids.max")
+  max=$(cgroup_file "$c" "$group/pids.max")
+  echo "unit $top: pids.max $limit, cgroup.controllers $(cgroup_file "$c" "$top/cgroup.controllers"), cgroup.subtree_control $(cgroup_file "$c" "$top/cgroup.subtree_control")"
+  echo "children $group: pids.max $max, cgroup.subtree_control $(cgroup_file "$c" "$group/cgroup.subtree_control")"
+  [[ $limit == "$KEEPER_TASKS" ]] || { echo "FAIL: the keeper's unit holds pids.max $limit, not the TasksMax $KEEPER_TASKS set on it"; return 1; }
+  [[ $max == $((KEEPER_TASKS - 64)) ]] || { echo "FAIL: the children are capped at pids.max $max, not $((KEEPER_TASKS - 64)) ($KEEPER_TASKS less the keeper's 64)"; return 1; }
+  [[ " $(cgroup_file "$c" "$top/cgroup.subtree_control") " == *" pids "* && " $(cgroup_file "$c" "$group/cgroup.subtree_control") " == *" pids "* ]] \
+    || { echo "FAIL: the pids controller is not on for the children's groups"; return 1; }
+  # 2. The keeper ahead of the children for CPU: the unit delegates cpu (Delegate=pids memory cpu), the controller is
+  # on in it, and the keeper's leaf weighs 1000 against the children's 100 (cgroup.ts KEEPER_CPU_WEIGHT).
+  [[ " $(cgroup_file "$c" "$top/cgroup.controllers") " == *" cpu "* ]] || { echo "FAIL: the keeper's unit does not delegate cpu"; return 1; }
+  [[ " $(cgroup_file "$c" "$top/cgroup.subtree_control") " == *" cpu "* ]] || { echo "FAIL: the cpu controller is not on in the keeper's unit"; return 1; }
+  weight="$(cgroup_file "$c" "$top/keeper/cpu.weight") $(cgroup_file "$c" "$group/cpu.weight")"
+  echo "cpu.weight: keeper, children: $weight"
+  [[ $weight == "1000 100" ]] || { echo "FAIL: the keeper and the children weigh $weight for CPU, not 1000 against 100"; return 1; }
+  # 3. Memory: the unit delegates it, so a limit the hub sets can apply, and with none set (this rig sets none) nothing
+  # caps the keeper or the children by memory: memory.max is absent (the controller off for them) or max.
+  [[ " $(cgroup_file "$c" "$top/cgroup.controllers") " == *" memory "* ]] || { echo "FAIL: the keeper's unit does not delegate memory"; return 1; }
+  echo "memory.max: keeper $(cgroup_file "$c" "$top/keeper/memory.max"), children $(cgroup_file "$c" "$group/memory.max")"
+  [[ "$(cgroup_file "$c" "$top/keeper/memory.max")" =~ ^(absent|max)$ && "$(cgroup_file "$c" "$group/memory.max")" =~ ^(absent|max)$ ]] \
+    || { echo "FAIL: the keeper or the children hold a memory limit the hub never set"; return 1; }
+  # 4. A child it starts is in a cgroup of its own in children, under its own pids.max and no memory.max; children
+  # holds no process of its own.
   ack=$(keeper_spawn "$c" cg-child sleep '["3000"]')
   echo "spawn cg-child: $ack"
   [[ $ack == *'"stage":"applied"'* ]]
@@ -2568,9 +2608,11 @@ keeper_children_capped_on() {
   own="/sys/fs/cgroup$(cgroup_of "$c" "$pid")"
   echo "child $pid is in $own"
   [[ $own == "$group"/cg-child-* ]]
-  [[ "$(as_user "$c" cat "$own/pids.max")" == 8192 ]]
+  echo "its pids.max $(cgroup_file "$c" "$own/pids.max"), memory.max $(cgroup_file "$c" "$own/memory.max")"
+  [[ "$(cgroup_file "$c" "$own/pids.max")" == 8192 ]]
+  [[ "$(cgroup_file "$c" "$own/memory.max")" =~ ^(absent|max)$ ]]
   [[ -z "$(as_user "$c" cat "$group/cgroup.procs")" ]]
-  # 3. A child that forks without end stops at the cap: the kernel refused its forks there. A forker that never gives
+  # 5. A child that forks without end stops at the cap: the kernel refused its forks there. A forker that never gives
   # up: dash exits at its first refused fork and bash after a few retries, and the keeper then reaps the tree,
   # emptying the group before the next spawn is tried. perl's fork() answers undef at the cap and the loop goes on.
   ack=$(keeper_spawn "$c" cg-forker /usr/bin/perl '["-e","while (1) { my $p = fork(); if (defined $p && $p == 0) { sleep 600; exit 0 } select(undef, undef, undef, 0.01) unless defined $p }"]')
@@ -2606,7 +2648,7 @@ keeper_children_capped() {
   keeper_children_capped_on "$hubc"
   keeper_children_capped_on "$joinerc"
 }
-export -f keeper_said keeper_spawn cgroup_of counter_on transcript_of send_message put_session_limits agent_said_limits group_of runaway_gone runaway_stays_its_own memory_limit_stays_its_own keeper_children_capped_on keeper_children_capped
+export -f cgroup_file keeper_restarted keeper_spawn cgroup_of counter_on transcript_of send_message put_session_limits agent_said_limits group_of runaway_gone runaway_stays_its_own memory_limit_stays_its_own keeper_children_capped_on keeper_children_capped
 rig_runaway() {
   fleet base "$BASE" hub hub
   setup_done
