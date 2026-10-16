@@ -560,6 +560,10 @@ async function measure(
           }; laid out again for ${
             longest.relaidOut.map(([what, n]) => `${what} ${n}x`).join("; ") ||
             "nothing traced"
+          }; its other phases: ${
+            longest.rendering
+              .map(([what, ms]) => `${what} ${ms.toFixed(1)}ms`)
+              .join("; ") || "none"
           }`
         : "nothing",
     };

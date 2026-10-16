@@ -35,6 +35,30 @@ export const SCROLLER = '[aria-label="Session transcript"]';
 const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
 /** A style invalidation that restyles a container's whole subtree. */
 const SUBTREE = /subtree/i;
+/**
+ * A frame's phases besides style and layout, as the trace names them: what
+ * a sampled profile counts as "(program)" when no script is on the stack.
+ */
+const RENDERING = new Set([
+  "PrePaint",
+  "Paint",
+  "Layerize",
+  "UpdateLayer",
+  "UpdateLayerTree",
+  "Commit",
+  "HitTest",
+  "IntersectionObserverController::computeIntersections",
+  "ResizeObserver::BroadcastObservations",
+  "ScrollLayer",
+  "MajorGC",
+  "MinorGC",
+  "V8.GC_SCAVENGER",
+  "V8.GC_MARK_COMPACTOR",
+  "ParseHTML",
+  "EventDispatch",
+  "TimerFire",
+  "FireAnimationFrame",
+]);
 
 export interface Watched {
   anchor: string | null;
@@ -426,6 +450,12 @@ export interface MainTask {
   invalidated: [string, number][];
   layoutMs: number;
   /**
+   * The frame's other work in it, by phase, ms, the most first (`restyles`
+   * only): what a sampled profile counts as "(program)", script not being
+   * on the stack.
+   */
+  rendering: [string, number][];
+  /**
    * Each style recalculation and layout in it, in order (`restyles` only):
    * what it was, the elements it restyled, its ms, and the script frame
    * that forced it (`url:line:column`), or "the frame" when the frame's own
@@ -658,6 +688,22 @@ export async function traceMain(
   );
   const recalcs = main.filter((event) => event.name === "UpdateLayoutTree");
   const layouts = main.filter((event) => event.name === "Layout");
+  /** The frame's phases besides style and layout (`MainTask.rendering`). */
+  const phases = main.filter((event) => RENDERING.has(event.name));
+  const renderingIn = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    for (const one of phases) {
+      if (one.ts >= from && one.ts < to) {
+        counted.set(
+          one.name,
+          (counted.get(one.name) ?? 0) + (one.dur ?? 0) / 1000
+        );
+      }
+    }
+    return [...counted]
+      .filter(([, ms]) => ms >= 0.5)
+      .sort((a, b) => b[1] - a[1]);
+  };
   const msIn = (list: TraceEvent[], from: number, to: number) =>
     list
       .filter((one) => one.ts >= from && one.ts < to)
@@ -790,6 +836,7 @@ export async function traceMain(
             .reduce((sum, recalc) => sum + elementsOf(recalc), 0),
           styleMs: msIn(recalcs, event.ts, end),
           layoutMs: msIn(layouts, event.ts, end),
+          rendering: restyles ? renderingIn(event.ts, end) : [],
           passes: restyles ? passesIn(event.ts, end) : [],
           invalidated: restyles ? askedIn(restyleAsks, event.ts, end) : [],
           relaidOut: restyles ? askedIn(relayoutAsks, event.ts, end) : [],
