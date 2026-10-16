@@ -16,7 +16,9 @@
 # apps/apple CawCo`). Each of those, git push and Playwright is a
 # working row: a failure fails the run, as an OPEN escape row does.
 # It starts its own sessiond on a scratch socket, creates one workspace through
-# the product code (rig-workspace.ts), runs everything through the workspace's
+# the product code (rig-workspace.ts, which first hands the agent the upstream
+# rules a hub would: guarded, SOURCE_REPO's remotes its own, so the gh rows
+# need SOURCE_REPO's remotes on GitHub), runs everything through the workspace's
 # executor, then archives the workspace and stops what it started.
 set -u
 source_repo=$1 other_env=$2 swift_package=${3:-} xcode_dir=${4:-} xcode_scheme=${5:-}
