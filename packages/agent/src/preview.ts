@@ -338,8 +338,15 @@ async function start(
     // A workspace no boundary runs refuses the preview in so many words.
     await upstreamOf(instanceId, source);
   }
-  /** A sheet's stage or a workspace preview's server, woken when it sleeps or failed; its refusal is the page the pane draws. */
-  const staged = async (): Promise<Response | null> => {
+  /**
+   * A sheet's stage or a workspace preview's server, woken when it sleeps;
+   * its refusal is the page the pane draws. One in `error` starts again only
+   * for a page's own load (a navigation: the pane opened, or its Try again):
+   * an open page's background requests (Vite's client pinging its server
+   * while it is down) are answered with the refusal, so the stage that
+   * didn't start stands until the person asks again.
+   */
+  const staged = async (request: Request): Promise<Response | null> => {
     if (!(
       "port" in source &&
       (source.stage || source.serve) &&
@@ -348,7 +355,10 @@ async function start(
       return null;
     }
     try {
-      await wakeSource(source);
+      await wakeSource(
+        source,
+        request.headers.get("sec-fetch-mode") === "navigate"
+      );
       return null;
     } catch (error) {
       previewFailed("agent listener", instanceId, causeOf(error));
@@ -421,7 +431,7 @@ async function start(
           }
         }
         headers.set("accept-encoding", "identity");
-        const asleep = await staged();
+        const asleep = await staged(request);
         if (asleep) {
           return asleep;
         }

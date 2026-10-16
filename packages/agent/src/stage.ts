@@ -1089,11 +1089,22 @@ const used = (stage: Stage, by: string): void => {
   stage.lastUse = Date.now();
 };
 
-/** Starts a stage that is not live (`waking` after sleep), or waits on its start under way; rejects with why it is in `error`. */
-async function wake(stage: Stage, by: string): Promise<void> {
+/**
+ * Starts a stage that is not live (`waking` after sleep), or waits on its
+ * start under way; rejects with why it is in `error`. One in `error` starts
+ * again only when `restart` (a person's load of its page, an agent's use);
+ * otherwise the refusal stands, so a page's background request never undoes
+ * the "didn't start" its pane shows.
+ */
+async function wake(stage: Stage, by: string, restart = true): Promise<void> {
   used(stage, by);
   if (stage.status === "live") {
     return;
+  }
+  if (stage.status === "error" && !restart) {
+    throw new StageRefusal(
+      `${stageWords(stage)} didn't start:${stage.message ?? " it ended."}`
+    );
   }
   if (!stage.ready || stage.status === "error" || stage.status === "asleep") {
     stage.status = stage.slept ? "waking" : "starting";
@@ -1174,18 +1185,22 @@ const keyOf = (source: PreviewSource): string | null => {
 /**
  * A preview's request for a stage's page: the stage woken when it sleeps,
  * and waited on, so a page opened after its stage slept or failed (Try
- * again) loads once it is live. A stage this daemon does not know (it
+ * again) loads once it is live. One in `error` starts again only for a
+ * page's own load (`navigation`). A stage this daemon does not know (it
  * restarted since) is found again from the source: the sheet's own file, or
  * the server's command. Nothing for a source no stage serves.
  */
-export async function wakeSource(source: PreviewSource): Promise<void> {
+export async function wakeSource(
+  source: PreviewSource,
+  navigation: boolean
+): Promise<void> {
   const key = keyOf(source);
   if (!(key && "port" in source && source.workspace)) {
     return;
   }
   const known = stages.get(key);
   if (known) {
-    await wake(known, "a preview's request");
+    await wake(known, "a preview's request", navigation);
     return;
   }
   const { workspace } = source;
