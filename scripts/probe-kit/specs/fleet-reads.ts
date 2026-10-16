@@ -41,6 +41,7 @@
  *
  *   bun scripts/probe-kit/run.ts fleet-reads
  */
+import { existsSync } from "node:fs";
 import {
   copyFile,
   lstat,
@@ -78,6 +79,17 @@ const PI_MODELS = "models.json";
 const REFUSED = /Read-only file system|Operation not permitted/;
 /** How long a command waits for the fleet to place the project's skill in its clone. */
 const PLACED_WAIT_S = 100;
+/**
+ * What a command leaves in its clone once it has read and tried to write
+ * every skill, and what it then waits for before it ends: the spec reads the
+ * clone's placed copy between the two. An item's end retires its workspace,
+ * clone and all (hub work-items.ts `settle`), and a mock answers in
+ * milliseconds, so the clone is read while the command still holds the turn.
+ */
+const DONE_MARK = ".probe-reads-done";
+const RELEASE_MARK = ".probe-reads-release";
+/** How long a command waits for the spec to read its clone. */
+const RELEASE_WAIT_S = 200;
 
 /** Where one leg reads a skill: a dir as the shell names it, and the skill's name there. */
 interface Root {
@@ -176,6 +188,8 @@ const commandFor = (leg: Leg): string => {
       `r=$(cat "${path}" 2>&1)`,
       line(leg.key, "hidden", what),
     ]),
+    `: > "$PWD/${DONE_MARK}"`,
+    `for i in $(seq ${RELEASE_WAIT_S * 2}); do [ -e "$PWD/${RELEASE_MARK}" ] && break; sleep 0.5; done`,
     `echo "F""R|${leg.key}|end|end|done"`,
   ].join("; ");
 };
@@ -200,8 +214,6 @@ const shellCall = (
 };
 
 const legs = new Map<string, Leg>();
-/** The legs whose clone the spec has read: only these finish their item. */
-const released = new Set<string>();
 const steps = new Map<
   string,
   { finished?: boolean; offered?: string[]; ran?: boolean; searched?: boolean }
@@ -214,7 +226,7 @@ const call = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** Each delegate runs its one command, then finishes its item once the spec has read its clone, if finish_item is offered. */
+/** Each delegate runs its one command, then finishes its item if finish_item is offered. */
 const respond = (request: Seen): Reply => {
   const key = request.tools
     ? TAG.exec(request.all)?.[1]?.toLowerCase()
@@ -233,11 +245,6 @@ const respond = (request: Seen): Reply => {
     }
     step.ran = true;
     return call(shell.name, shell.input);
-  }
-  // The hub fails an item after three quiet turns in a row: slack enough for
-  // the spec to read the clone, half a second after the output arrives.
-  if (!released.has(key)) {
-    return text("Done.");
   }
   const finish = request.toolNames.find((name) => name.endsWith("finish_item"));
   if (!step.finished && finish) {
@@ -367,18 +374,34 @@ interface Answered {
 }
 
 /**
- * Leg `leg`'s answers, once a request carries its command's output: any
- * request whose body holds the command's last line, spelled whole only in its
- * output (a harness may add words of its own after the tool's result). Its
- * clone's placed copy is read then, and only then is the delegate let finish
- * ({@link released}): an item's end retires its workspace, clone and all
- * (hub work-items.ts `settle`).
+ * Leg `leg`'s clone read on the host while its command waits
+ * ({@link DONE_MARK}, {@link RELEASE_MARK}), then its answers, once a request
+ * carries its command's output: any request whose body holds the command's
+ * last line, spelled whole only in its output (a harness may add words of its
+ * own after the tool's result).
  */
 const watch = async (
   fleet: Fleet,
   leg: Leg,
   clone: string | undefined
 ): Promise<Answered> => {
+  const copy =
+    leg.roots.placed && clone
+      ? join(clone, projectClaudeRelative("skills", PLACED))
+      : undefined;
+  let placed: Answered["placed"];
+  if (clone) {
+    await until(
+      `${leg.key}'s command at its wait`,
+      () => existsSync(join(clone, DONE_MARK)),
+      Boolean,
+      600_000
+    ).catch(() => undefined);
+    placed = copy
+      ? { layout: await linkedCopy(copy, PLACED), kept: await untouched(copy) }
+      : undefined;
+    await writeFile(join(clone, RELEASE_MARK), "").catch(() => undefined);
+  }
   const carried = await until(
     `${leg.key}'s command output`,
     () =>
@@ -386,14 +409,6 @@ const watch = async (
     Boolean,
     600_000
   ).catch(() => undefined);
-  const copy =
-    leg.roots.placed && clone
-      ? join(clone, projectClaudeRelative("skills", PLACED))
-      : undefined;
-  const placed = copy
-    ? { layout: await linkedCopy(copy, PLACED), kept: await untouched(copy) }
-    : undefined;
-  released.add(leg.key);
   return {
     leg,
     ...(carried ? { answers: answersOf(carried.body, leg.key) } : {}),
