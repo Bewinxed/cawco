@@ -1395,12 +1395,16 @@
             </div>
           {/snippet}
           {#snippet action()}
-            <!-- A starter opens his panel with its words in his composer. -->
+            <!-- A starter opens his panel with its words in his composer;
+                 a press on one is no press outside the panel (CawFloat,
+                 data-caw-asks), so another starter replaces the words. -->
             {#if (stages?.starters ?? []).length > 0}
-              <StarterCards
-                onpick={(text) => lead.ask(text)}
-                starters={stages?.starters ?? []}
-              />
+              <div class="contents" data-caw-asks>
+                <StarterCards
+                  onpick={(text) => lead.ask(text)}
+                  starters={stages?.starters ?? []}
+                />
+              </div>
             {/if}
           {/snippet}
         </EmptyState>

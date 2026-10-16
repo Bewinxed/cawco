@@ -35,9 +35,14 @@
   const setOpen = (next: boolean) => {
     lead.open = next;
   };
-  /** A press on a seat is the seat's own toggle, not a press outside. */
+  /**
+   * A press on a seat is the seat's own toggle, and a press on a starter
+   * that asks him (`data-caw-asks`, lead.ask) puts its words in the panel:
+   * neither is a press outside.
+   */
   const onSeat = (target: EventTarget | null) =>
-    target instanceof Element && target.closest(".caw-seat") !== null;
+    target instanceof Element &&
+    target.closest(".caw-seat, [data-caw-asks]") !== null;
 </script>
 
 {#if phone.current}

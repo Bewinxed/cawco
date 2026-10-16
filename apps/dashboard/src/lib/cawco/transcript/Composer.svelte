@@ -384,14 +384,17 @@
   const TOKEN_WHITESPACE = /\s/;
 
   /**
-   * The words put back from outside (Edit on a failed send) land with focus,
-   * and fade up in the field over --dur-control rather than replacing what
-   * was there in one frame. Their attachments come back with them, and the
-   * row that holds those folds open above the field.
+   * The words put back from outside (Edit on a failed send, a starter) land
+   * with focus and the caret after them, and fade up in the field over
+   * --dur-control rather than replacing what was there in one frame. Their
+   * attachments come back with them, and the row that holds those folds
+   * open above the field. The caret waits for the tick: the field draws the
+   * words in its own effect, and drawing them drops any selection.
    */
   $effect(() => {
     if (draft.focusWanted) {
       field?.focus();
+      tick().then(() => mentionField?.select(draft.text.length));
       field?.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: dur("--dur-control"),
         easing: ease("--ease-out"),

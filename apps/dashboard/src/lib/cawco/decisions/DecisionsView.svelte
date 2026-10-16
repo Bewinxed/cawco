@@ -261,11 +261,14 @@
               {/snippet}
               {#snippet action()}
                 <!-- The ask is a starter: it opens his panel with its words
-                     in his composer, nothing sent. -->
-                <CawStarters
-                  onpick={(text) => lead.ask(text)}
-                  starters={[DECISION_STARTER]}
-                />
+                     in his composer, nothing sent. A press on it is no
+                     press outside the panel (CawFloat, data-caw-asks). -->
+                <div class="contents" data-caw-asks>
+                  <CawStarters
+                    onpick={(text) => lead.ask(text)}
+                    starters={[DECISION_STARTER]}
+                  />
+                </div>
               {/snippet}
             </EmptyState>
           </div>

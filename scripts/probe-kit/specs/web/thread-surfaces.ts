@@ -278,26 +278,26 @@ async function thread(
 }
 
 /**
- * Where the thread has no split (Caw's dock beside the project page, desk
- * 1440): the file opens in the thread's own place, no scrim, the page beside
- * it still takes a press, and Close gives back the thread at the scroll it
- * had.
+ * Where the thread has no split (Caw's panel floating over the project page,
+ * desk 1440): the file opens in the thread's own place, no scrim, the page
+ * around the panel still takes a press, and Close gives back the thread at
+ * the scroll it had.
  */
 async function inPlace(kit: Kit, base: string, projectId: string) {
-  const leg = "desk 1440, docked";
+  const leg = "desk 1440, Caw's panel";
   const page = await kit.page("desk");
   const seat = ".project-head button.caw-seat";
   await open(page, `${base}/project/${projectId}`, seat);
   await settle(page, 400);
   await page.click(seat);
-  const chip = `[data-caw-dock] [data-folder-chip="${FILE}"]`;
+  const chip = `[data-caw-panel] [data-folder-chip="${FILE}"]`;
   await page.waitForSelector(chip, { timeout: 30_000 });
   await settle(page, 400);
   /** The thread's transcript scroller: its scroll, moved first by `by`. */
   const scrollOf = (by = 0) =>
     page.evaluate((move) => {
       const reply = document.querySelector(
-        "[data-caw-dock] [data-folder-chip]"
+        "[data-caw-panel] [data-folder-chip]"
       );
       let el: HTMLElement | null = reply?.parentElement ?? null;
       while (
@@ -322,8 +322,8 @@ async function inPlace(kit: Kit, base: string, projectId: string) {
   );
   await settle(page, 400);
   const opened = await page.evaluate(() => {
-    const dock = document
-      .querySelector("[data-caw-dock]")
+    const panel = document
+      .querySelector("[data-caw-panel]")
       ?.getBoundingClientRect();
     const place = document
       .querySelector("[data-file-in-place]")
@@ -333,30 +333,34 @@ async function inPlace(kit: Kit, base: string, projectId: string) {
         "[data-slot='sheet-overlay'], [data-slot='drawer-overlay'], [data-slot='dialog-overlay'], .kit-scrim, [data-vaul-overlay]"
       ),
     ].filter((el) => el.getBoundingClientRect().width > 0);
-    // The page beside the dock: a point halfway across what the dock leaves.
-    const x = dock ? dock.left / 2 : 0;
+    // The page around the panel: a point halfway across the wider side it
+    // leaves.
+    const left = panel?.left ?? 0;
+    const right = panel?.right ?? 0;
+    const x =
+      left > innerWidth - right ? left / 2 : (right + innerWidth) / 2;
     const y = innerHeight / 2;
     const hit = document.elementFromPoint(x, y);
     return {
       blockers: blockers.length,
-      inDock: Boolean(
-        dock &&
+      inPanel: Boolean(
+        panel &&
         place &&
-        place.left >= dock.left - 0.5 &&
-        place.right <= dock.right + 0.5
+        place.left >= panel.left - 0.5 &&
+        place.right <= panel.right + 0.5
       ),
       pageHit: Boolean(
-        hit && !hit.closest("[data-caw-dock]") && !hit.closest("[inert]")
+        hit && !hit.closest("[data-caw-panel]") && !hit.closest("[inert]")
       ),
     };
   });
   kit.check(
-    `${leg}: the file opens in the thread's own place, inside the dock, with no scrim or overlay`,
-    opened.inDock && opened.blockers === 0,
+    `${leg}: the file opens in the thread's own place, inside the panel, with no scrim or overlay`,
+    opened.inPanel && opened.blockers === 0,
     JSON.stringify(opened)
   );
   kit.check(
-    `${leg}: the page beside the dock still takes a press (elementFromPoint reaches it)`,
+    `${leg}: the page around the panel still takes a press (elementFromPoint reaches it)`,
     opened.pageHit,
     JSON.stringify(opened)
   );
