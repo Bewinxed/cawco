@@ -8,11 +8,21 @@
 # HTTP) and the machines its checks need. Each check prints one line ending in PASS (with its seconds), FAIL or NOT RUN.
 # PROOF_ONLY (an extended regex) runs only the rigs whose name, or one of whose checks' names, matches it; PROOF_LIST=1
 # says which rigs and checks a run would run and stops. PROOF_RIGS caps how many rigs run at once (default: all).
+#   bash scripts/binary/prove-stage2.sh --image-only /ABSOLUTE/OUTPUT
+# builds only the proof's images (host and machine) into the proof cache's store, prints their tags, and exits 0, or
+# with the build's error; it needs podman and bun, and no binaries.
 set -uo pipefail
-[[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "usage: $0 /absolute/fresh/output /absolute/binaries" >&2; exit 2; }
+IMAGE_ONLY=
+if [[ ${1:-} == --image-only ]]; then
+  IMAGE_ONLY=1
+  shift
+  [[ $# == 1 && "$1" = /* ]] || { echo "usage: $0 --image-only /absolute/output" >&2; exit 2; }
+else
+  [[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "usage: $0 /absolute/fresh/output /absolute/binaries" >&2; exit 2; }
+fi
 mkdir -p "$1"
 out=$(realpath "$1")
-bins=$(realpath "$2")
+bins=${2:+$(realpath "$2")}
 here=$(dirname "$(realpath "$0")")
 self=$(realpath "$0")
 [[ "$out" != *" "* ]] || { echo "output path may not contain spaces" >&2; exit 2; }
@@ -79,6 +89,81 @@ source "$here/base-image.sh"
 # shellcheck source=podman-instance.sh
 source "$here/podman-instance.sh"
 
+# ================================================================ THE IMAGES' RECIPES
+# Written into $out/images, built from there by proof_images (podman-instance.sh) once per recipe.
+write_images() {
+  mkdir -p "$out/images"
+  cat > "$out/images/host.Containerfile" <<EOF
+FROM $BASE_LOCAL
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+EOF
+  # A machine with nothing CawCo uses: no git, Bun, Node or openssl. Its only package source is a local folder holding
+  # openssl, so the installer's own package-manager step runs for real with no network, and git, which the workspace
+  # rig installs on the joined machine (a workspace is a git clone). It has what a workspace's srt boundary runs on
+  # (packages/agent/src/boundary.ts HOST_TOOLS, srt's own checkLinuxDependencies): bubblewrap and socat; srt's ripgrep
+  # ships in the build. The installer offers git only at a terminal and installs nothing without one (offerTools in
+  # packages/cli/src/binary-install.ts), so git stays uninstalled.
+  # A machine has the task room of a real one: podman's default pids limit (2048) makes systemd's own defaults, which
+  # are percents of it (DefaultTasksMax= "Defaults to 15% of the minimum of kernel.pid_max=, kernel.threads-max= and
+  # root cgroup pids.max", systemd-system.conf(5)), give every unit of the user's 307 tasks, under one session's own
+  # limit of 8,192. So each machine holds 65,536 tasks (`boot`), and these drop-ins give each unit of the user's 49,152,
+  # with no lower limit on the user's slice or manager. The user's service manager runs every unit and job (hub,
+  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps.
+  # No system service takes a kernel keyring of its own (KeyringMode=inherit for every service, a top-level `service.d`
+  # drop-in: systemd.unit(5), "a top-level drop-in with type.d/ … allows altering or adding to the settings of all
+  # corresponding unit files"). systemd.exec(5): KeyringMode "Defaults to private for services of the system service
+  # manager", and private allocates "a new session keyring" with "the unique invocation ID … added as a protected key".
+  # A rootless container's root is the host user, so every service of every machine took keys from that one user's
+  # kernel.keys.maxkeys (200): run A of 2026-10-15 booted three machines, and the rest never got user@1000.service's bus.
+  # Each machine has Claude Code installed as a person installs it, with its own installer, for the user that runs
+  # CawCo (https://code.claude.com/docs/en/setup: "curl -fsSL https://claude.ai/install.sh | bash"; "bash -s <version>"
+  # pins one): CawCo ships none, and a machine is signed in by that Claude Code's `auth status` reading the account dir
+  # (account-dir.sh). Pinned to the CLI the SDK in this tree is built against, so the image's recipe names it.
+  # The installer runs in a stage of its own, `claude`: it downloads over HTTPS, and the base image has no CA bundle
+  # (nightly 835fce0df: "curl: (77) error setting certificate file: /etc/ssl/certs/ca-certificates.crt"), and noble's
+  # ca-certificates depends on openssl ("dep: openssl (>= 1.1.1)", packages.ubuntu.com/noble/ca-certificates), which
+  # the machine must not have. The base has bash and su; curl comes in with the CA bundle. The machine takes only what
+  # the installer put in the user's ~/.local: the launcher ~/.local/bin/claude, an absolute link to the version under
+  # ~/.local/share/claude (\$XDG_DATA_HOME/claude when set, which `su -` leaves unset), at the same paths, so the link
+  # holds. Not the ~/.claude and ~/.claude.json it also writes: the machine's own Claude dir stays untouched.
+  local claude_version
+  claude_version=$(cd "$here/../../packages/agent" && bun -e 'console.log(require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion)') &&
+    [[ $claude_version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "could not read the SDK's claudeCodeVersion (got '${claude_version:-}')" >&2; return 1; }
+  cat > "$out/images/machine.Containerfile" <<EOF
+FROM $BASE_LOCAL AS claude
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \\
+ && apt-get install -y --no-install-recommends ca-certificates curl \\
+ && usermod -l cawco -d /home/cawco -m ubuntu && groupmod -n cawco ubuntu \\
+ && su - cawco -c 'curl -fsSL https://claude.ai/install.sh | bash -s $claude_version' \\
+ && test "\$(readlink /home/cawco/.local/bin/claude)" = /home/cawco/.local/share/claude/versions/$claude_version \\
+ && /home/cawco/.local/bin/claude --version | grep -F '$claude_version'
+
+FROM $BASE_LOCAL
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \\
+ && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap \\
+ && apt-get install -y --download-only openssl git \\
+ && mkdir /debs && cp /var/cache/apt/archives/*.deb /debs/ \\
+ && apt-get install -y --no-install-recommends dpkg-dev \\
+ && (cd /debs && dpkg-scanpackages . > Packages) \\
+ && apt-get purge -y dpkg-dev && apt-get autoremove -y --purge \\
+ && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \\
+ && echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list \\
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \\
+ && usermod -l cawco -d /home/cawco -m ubuntu && groupmod -n cawco ubuntu \\
+ && echo 'cawco ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cawco \\
+ && mkdir -p /etc/systemd/system/user@.service.d /etc/systemd/system/user-.slice.d /etc/systemd/user.conf.d /etc/systemd/system/service.d \\
+ && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
+ && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
+ && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
+ && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE\\n' > /etc/systemd/user.conf.d/proof.conf
+COPY --from=claude --chown=cawco:cawco /home/cawco/.local /home/cawco/.local
+RUN HOME=/tmp/claude-check /home/cawco/.local/bin/claude --version | grep -F '$claude_version' \\
+ && rm -rf /tmp/claude-check && ! command -v openssl
+EOF
+}
+
 # ================================================================ THE ORCHESTRATOR (run below, once every
 # function it uses is defined)
 orchestrate() {
@@ -121,55 +206,7 @@ orchestrate() {
 
   # ---------------------------------------------------------------- the images, from the proof cache's store
   # Each built there once per recipe (proof_images), and read by every rig as its additional image store.
-  cat > "$out/images/host.Containerfile" <<EOF
-FROM $BASE_LOCAL
-RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
-EOF
-  # A machine with nothing CawCo uses: no git, Bun, Node or openssl. Its only package source is a local folder holding
-  # openssl, so the installer's own package-manager step runs for real with no network, and git, which the workspace
-  # rig installs on the joined machine (a workspace is a git clone). It has what a workspace's srt boundary runs on
-  # (packages/agent/src/boundary.ts HOST_TOOLS, srt's own checkLinuxDependencies): bubblewrap and socat; srt's ripgrep
-  # ships in the build. The installer offers git only at a terminal and installs nothing without one (offerTools in
-  # packages/cli/src/binary-install.ts), so git stays uninstalled.
-  # A machine has the task room of a real one: podman's default pids limit (2048) makes systemd's own defaults, which
-  # are percents of it (DefaultTasksMax= "Defaults to 15% of the minimum of kernel.pid_max=, kernel.threads-max= and
-  # root cgroup pids.max", systemd-system.conf(5)), give every unit of the user's 307 tasks, under one session's own
-  # limit of 8,192. So each machine holds 65,536 tasks (`boot`), and these drop-ins give each unit of the user's 49,152,
-  # with no lower limit on the user's slice or manager. The user's service manager runs every unit and job (hub,
-  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps.
-  # No system service takes a kernel keyring of its own (KeyringMode=inherit for every service, a top-level `service.d`
-  # drop-in: systemd.unit(5), "a top-level drop-in with type.d/ … allows altering or adding to the settings of all
-  # corresponding unit files"). systemd.exec(5): KeyringMode "Defaults to private for services of the system service
-  # manager", and private allocates "a new session keyring" with "the unique invocation ID … added as a protected key".
-  # A rootless container's root is the host user, so every service of every machine took keys from that one user's
-  # kernel.keys.maxkeys (200): run A of 2026-10-15 booted three machines, and the rest never got user@1000.service's bus.
-  # Each machine has Claude Code installed as a person installs it, with its own installer, for the user that runs
-  # CawCo (https://code.claude.com/docs/en/setup: "curl -fsSL https://claude.ai/install.sh | bash"; "bash -s <version>"
-  # pins one): CawCo ships none, and a machine is signed in by that Claude Code's `auth status` reading the account dir
-  # (account-dir.sh). Pinned to the CLI the SDK in this tree is built against, so the image's recipe names it.
-  claude_version=$(cd "$here/../../packages/agent" && bun -e 'console.log(require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion)')
-  cat > "$out/images/machine.Containerfile" <<EOF
-FROM $BASE_LOCAL
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \\
- && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap \\
- && apt-get install -y --download-only openssl git \\
- && mkdir /debs && cp /var/cache/apt/archives/*.deb /debs/ \\
- && apt-get install -y --no-install-recommends dpkg-dev \\
- && (cd /debs && dpkg-scanpackages . > Packages) \\
- && apt-get purge -y dpkg-dev && apt-get autoremove -y --purge \\
- && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \\
- && echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list \\
- && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \\
- && usermod -l cawco -d /home/cawco -m ubuntu && groupmod -n cawco ubuntu \\
- && echo 'cawco ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cawco \\
- && mkdir -p /etc/systemd/system/user@.service.d /etc/systemd/system/user-.slice.d /etc/systemd/user.conf.d /etc/systemd/system/service.d \\
- && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
- && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
- && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
- && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE\\n' > /etc/systemd/user.conf.d/proof.conf
-RUN su - cawco -c 'curl -fsSL https://claude.ai/install.sh | bash -s $claude_version' && test -x /home/cawco/.local/bin/claude
-EOF
+  write_images
 
   # ---------------------------------------------------------------- what every rig reads: fixtures and feeds
   key="$bins/keys/test-release-private.pem"
@@ -379,6 +416,14 @@ for m in "$data"/cawco.db.migrating "$data"/cawco.db.migrated-* "$data"/cawco.db
 done
 EOF
 }
+if [[ -n $IMAGE_ONLY ]]; then
+  # The images alone, as the orchestrator's setup builds them: the tags on stdout, the build's output on stderr.
+  command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
+  mkdir -p "$out/tmp"
+  write_images || exit 1
+  proof_images "$out/images" host machine || { echo "the images failed to build" >&2; exit 1; }
+  exit 0
+fi
 if [[ -z ${RIG:-} ]]; then
   orchestrate "$@"
   exit $?
