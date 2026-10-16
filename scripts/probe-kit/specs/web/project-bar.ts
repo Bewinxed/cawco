@@ -18,9 +18,12 @@
  * leaving fades out of the row, the one arriving comes down 6px as it
  * fades in, read at 0, 25, 50, 75 and 100%.
  * Phone 390: the page's boxes are main's (`before.json`), the crumb with
- * them.
+ * them. Its entry was read again on main at fe73d0f7b: the name in the head
+ * stands in a 1px edge, clear at rest (7817bf0a8), 1.99px taller.
  *
  * `--approve project-bar` writes `before.json` from this run: on main, once.
+ * The wide legs' entries are the page from before the strip moved into the
+ * bar (they hold its row), so they are never approved again.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one step at a time, as a hand makes them
 import { existsSync } from "node:fs";
@@ -101,11 +104,16 @@ const layout = (page: Page, name: string): Promise<Layout> =>
         crumbs: [...(top?.querySelectorAll(".crumb") ?? [])].map((el) =>
           (el.textContent ?? "").trim()
         ),
+        // The words, not their wrappers: the innermost element that reads
+        // the name, so a span the words are drawn in is not a second name.
         namedInBar: [...(top?.querySelectorAll("*") ?? [])].filter(
           (el) =>
             shown(el) &&
             (el as HTMLElement).innerText?.trim() === project &&
-            el.getBoundingClientRect().width > 0
+            el.getBoundingClientRect().width > 0 &&
+            ![...el.children].some(
+              (child) => (child as HTMLElement).innerText?.trim() === project
+            )
         ).length,
         head: rect(document.querySelector(".project-head")),
         row: rect(row),
@@ -224,14 +232,18 @@ async function wide(kit: Kit, leg: Leg, url: string, was: Layout) {
   );
   const head = now.head as Rect;
   const pane = now.pane as Rect;
-  const gained = (was.pane?.top ?? Number.NaN) - pane.top;
+  // Read from the head's end, so a head that is taller or shorter for its
+  // own reasons is not the row's height: the pane stood the row below it.
+  const below = (h: Rect | null, p: Rect | null) =>
+    (p?.top ?? Number.NaN) - ((h?.top ?? Number.NaN) + (h?.height ?? 0));
+  const gained = below(was.head, was.pane) - below(head, pane);
   const rowWas = was.row?.height ?? Number.NaN;
   kit.check(
     `${leg.name}: no strip row under the head; the pane starts the row's height higher (${gained.toFixed(1)}px gained)`,
     now.row === null &&
       Math.abs(gained - rowWas) <= 0.5 &&
       Math.abs(pane.top - (head.top + head.height)) <= 0.5,
-    `pane top ${was.pane?.top} → ${pane.top}; the row was ${rowWas}px; head ends ${head.top + head.height}`
+    `pane below the head ${below(was.head, was.pane).toFixed(2)} → ${below(head, pane).toFixed(2)}px; the row was ${rowWas}px; head ends ${head.top + head.height}`
   );
   const edge = await edges(page);
   if (edge && (edge.start || edge.end)) {

@@ -22,6 +22,8 @@ import { type Kit, open, type Spec, settle } from "../../kit";
 
 const NAME = "Harbour";
 const SESSIONS = ["Alpha", "Beta"];
+/** The project's name in its row: the row's own run of words beside its mark. */
+const NAME_RUN = ":scope > span:not(.tree-mark)";
 
 /** The row, the mark's switch, and what the row's tree shows now. */
 const state = (page: Page, href: string, scope: string) =>
@@ -89,7 +91,7 @@ async function desk(kit: Kit, base: string, href: string) {
   );
 
   // (a) The name.
-  await row.locator("span.truncate").click();
+  await row.locator(NAME_RUN).click();
   await page.waitForURL(`**${href}`);
   await settle(page);
   const named = await state(page, href, RAIL);
@@ -172,9 +174,9 @@ async function phone(kit: Kit, base: string, href: string) {
   await settle(page);
   // The mark's switch under a finger: its touch area (`.touch-hit::after`)
   // reaches sideways to the name and no further.
-  const reach = await row.evaluate((el) => {
+  const reach = await row.evaluate((el, run) => {
     const hit = el.querySelector(".tree-mark .hit") as HTMLElement;
-    const name = el.querySelector("span.truncate") as HTMLElement;
+    const name = el.querySelector(run) as HTMLElement;
     const box = hit.getBoundingClientRect();
     const after = getComputedStyle(hit, "::after");
     const left = box.left + Number.parseFloat(after.left);
@@ -184,13 +186,13 @@ async function phone(kit: Kit, base: string, href: string) {
       right: Math.round((left + width) * 100) / 100,
       name: Math.round(name.getBoundingClientRect().left * 100) / 100,
     };
-  });
+  }, NAME_RUN);
   kit.check(
     "phone 390: the mark's touch area is wider than the tile and ends at the name",
     reach.width >= 30 && Math.abs(reach.right - reach.name) <= 0.5,
     JSON.stringify(reach)
   );
-  await row.locator("span.truncate").tap();
+  await row.locator(NAME_RUN).tap();
   await page.waitForURL(`**${href}`);
   await page.waitForSelector(SHEET, { state: "hidden", timeout: 10_000 });
   await settle(page);

@@ -1128,9 +1128,9 @@ function edgeCheck(kit: Kit, name: string, at: EdgeRead) {
 }
 
 /**
- * Every seam between two tabs: where the edge of the tab in front stands,
- * which way the tab behind lies from it (1 right, -1 left), the height to
- * read it at (the tabs' middle), and the two tabs' names.
+ * Every seam between two tabs: where the edge of the tab in front (the higher
+ * stack) stands, which way the tab behind lies from it (1 right, -1 left),
+ * the height to read it at (the tabs' middle), and the two tabs' names.
  */
 const seams = (page: Page) =>
   page.evaluate((sel) => {
@@ -1141,8 +1141,11 @@ const seams = (page: Page) =>
       const right = tabs[i + 1] as HTMLElement;
       const l = left.getBoundingClientRect();
       const r = right.getBoundingClientRect();
-      const leftInFront =
-        getComputedStyle(left).getPropertyValue("--under-end").trim() !== "1";
+      // Each tab is one stack at its rank (TabsList `--z`): the higher one
+      // stands in front at their seam.
+      const rank = (tab: HTMLElement) =>
+        Number.parseInt(getComputedStyle(tab).zIndex, 10) || 0;
+      const leftInFront = rank(left) > rank(right);
       return {
         name: `${name(left)}|${name(right)}`,
         edge: leftInFront ? l.right : r.left,
