@@ -245,56 +245,71 @@ const INK_APPROVED = 0.31;
 
 /**
  * T3's builder, a script a turn by what woke it (`t3Phase`): its brief, the
- * person's answer to its second proposal, the verifier's findings. Any
- * other wake (the first answer, a reminder) ends its turn.
+ * person's answer to each proposal, the verifier's findings. Any other wake
+ * (a reminder) ends its turn. A turn ends the wait it declared (hub
+ * work-items.ts `turnState`), so the first answer, with the second still
+ * pending, waits again, as an agent with a proposal open would.
  */
-const t3Turns: Record<"start" | "approved" | "findings", Call[]> = {
-  start: [
-    {
-      name: DESIGN_WRITE,
-      input: { files: [tokensWithInk(INK_DENIED)], why: WHY_DENIED },
-    },
-    {
-      name: DESIGN_WRITE,
-      input: { files: [tokensWithInk(INK_APPROVED)], why: WHY_APPROVED },
-    },
-    // No reminder wakes it while the person answers.
-    {
-      name: WAIT,
-      input: { minutes: 30, reason: "the person answers my design proposals" },
-    },
-  ],
-  approved: [
-    {
-      name: BASH,
-      input: {
-        command: `mkdir -p screens && printf %s '${HOME_RAW}' > screens/home.html && git status --porcelain`,
-        description: "Write the home screen",
+const t3Turns: Record<"start" | "declined" | "approved" | "findings", Call[]> =
+  {
+    declined: [
+      {
+        name: WAIT,
+        input: {
+          minutes: 30,
+          reason: "the person answers my other design proposal",
+        },
       },
-    },
-    {
-      name: RESULT,
-      input: { summary: "Harbour's home screen, in the system." },
-    },
-    {
-      name: FINISH,
-      input: { headline: "Built the home screen.", summary: "Built it." },
-    },
-  ],
-  findings: [
-    {
-      name: BASH,
-      input: {
-        command: `printf %s '${HOME_FIXED}' > screens/home.html && git add -A && git commit -qm 'Home screen in the system ink' && git status --porcelain`,
-        description: "Fix the hero's colour and commit",
+    ],
+    start: [
+      {
+        name: DESIGN_WRITE,
+        input: { files: [tokensWithInk(INK_DENIED)], why: WHY_DENIED },
       },
-    },
-    {
-      name: FINISH,
-      input: { headline: "Fixed the hero's ink.", summary: "Fixed it." },
-    },
-  ],
-};
+      {
+        name: DESIGN_WRITE,
+        input: { files: [tokensWithInk(INK_APPROVED)], why: WHY_APPROVED },
+      },
+      // No reminder wakes it while the person answers.
+      {
+        name: WAIT,
+        input: {
+          minutes: 30,
+          reason: "the person answers my design proposals",
+        },
+      },
+    ],
+    approved: [
+      {
+        name: BASH,
+        input: {
+          command: `mkdir -p screens && printf %s '${HOME_RAW}' > screens/home.html && git status --porcelain`,
+          description: "Write the home screen",
+        },
+      },
+      {
+        name: RESULT,
+        input: { summary: "Harbour's home screen, in the system." },
+      },
+      {
+        name: FINISH,
+        input: { headline: "Built the home screen.", summary: "Built it." },
+      },
+    ],
+    findings: [
+      {
+        name: BASH,
+        input: {
+          command: `printf %s '${HOME_FIXED}' > screens/home.html && git add -A && git commit -qm 'Home screen in the system ink' && git status --porcelain`,
+          description: "Fix the hero's colour and commit",
+        },
+      },
+      {
+        name: FINISH,
+        input: { headline: "Fixed the hero's ink.", summary: "Fixed it." },
+      },
+    ],
+  };
 let t3Phase: keyof typeof t3Turns | "idle" = "idle";
 /** Scripts woken by words read mid-turn, run in order once the script in hand is done. */
 const t3Woken: (keyof typeof t3Turns)[] = [];
@@ -351,6 +366,9 @@ const t3PhaseOf = (last: string): typeof t3Phase => {
   }
   if (last.includes("approved your design proposal")) {
     return "approved";
+  }
+  if (last.includes("declined your design proposal")) {
+    return "declined";
   }
   if (last.includes("must be fixed before your result reaches review")) {
     return "findings";
