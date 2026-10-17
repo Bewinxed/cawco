@@ -211,15 +211,16 @@
       placeholder="explore"
       bind:value={draft.name}
     />
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
       {name
         ? "The name is the key a running call already asks for by; renaming means creating a new type."
         : "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."}
     </p>
     {#if problemFor("name")}
-      <p class="problem" in:appear>{problem}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{problem}</p>
     {:else if duplicate}
-      <p class="problem" in:appear>{duplicate}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
     <Alert.Root>
       <Alert.Description>
@@ -228,7 +229,7 @@
       </Alert.Description>
     </Alert.Root>
     {#if failed}
-      <p class="problem" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{failed}</p>
     {/if}
   {/snippet}
 
@@ -254,7 +255,8 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconCpu} label="What it runs on">
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
       The harness and model the delegate spawns on, and how hard it should
       think.
     </p>
@@ -300,7 +302,8 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconKey} label="What it can reach">
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
       Comma-separated. Both are optional narrowings — empty means the delegate
       has the harness's ordinary defaults.
     </p>
@@ -334,15 +337,3 @@
     />
   </EditorSection>
 </EditorFrame>
-
-<style>
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

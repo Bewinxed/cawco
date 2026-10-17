@@ -30,7 +30,7 @@
 <!-- A label, so its touch area around the 24px title focuses the field. -->
 <label
   data-slot="title"
-  class="title touch-hit"
+  class="block w-full min-w-0 touch-hit"
   data-share="title:{page.url.pathname}"
   {@attach land(() => `title:${page.url.pathname}`, { uniform: true })}
 >
@@ -38,7 +38,8 @@
     aria-invalid={invalid ? "true" : undefined}
     aria-label={label}
     autocomplete="off"
-    class={["title-input", mono && "mono"]}
+    class="type-title w-full min-w-0 rounded-xs border-none border-current bg-transparent px-0 py-space-row text-ink-strong placeholder:text-ink-subtle data-mono:font-(family-name:--font-mono) disabled:text-ink-strong disabled:opacity-100"
+    data-mono={mono || undefined}
     {disabled}
     {onblur}
     {placeholder}
@@ -46,32 +47,3 @@
     bind:value
   />
 </label>
-
-<style>
-  .title {
-    display: block;
-    width: 100%;
-    min-width: 0;
-  }
-  .title-input {
-    width: 100%;
-    min-width: 0;
-    padding: 2px 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    font: var(--type-title);
-    letter-spacing: -0.01em;
-    color: var(--ink-strong);
-  }
-  .title-input.mono {
-    font-family: var(--font-mono);
-  }
-  .title-input::placeholder {
-    color: var(--ink-subtle);
-  }
-  .title-input:disabled {
-    color: var(--ink-strong);
-    opacity: 1;
-  }
-</style>

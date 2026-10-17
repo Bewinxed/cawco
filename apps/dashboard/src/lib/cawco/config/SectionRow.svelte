@@ -17,8 +17,8 @@
       `[data-row-name="${CSS.escape(name)}"]`
     );
     for (const [part, key] of [
-      [".tile", `icon:${href}`],
-      [".label", `title:${href}`],
+      ['[data-slot="tile"]', `icon:${href}`],
+      ['[data-slot="section-row-label"]', `title:${href}`],
     ]) {
       const piece = row?.querySelector<HTMLElement>(part);
       if (piece) {
@@ -99,21 +99,30 @@
 
 <li
   data-slot="item"
-  class={["item", flash && "flash"]}
+  class="flex min-w-0 flex-col gap-space-1 rounded-sm"
+  data-flash={flash || undefined}
   data-flip
   data-row-name={name}
 >
+  <!-- literal: 44px, 56px, 10px, 8px, 6px -->
   <div
     data-slot="row"
-    class="row"
-    class:off={enabled === false}
-    class:two={meta !== undefined}
+    class="group/row relative flex min-h-(--row-h) items-center gap-(--row-gap) rounded-sm px-(--row-px) py-(--row-py) transition-control data-two:min-h-(--row-h-two) has-data-link:cursor-pointer max-phone:flex-wrap"
+    data-off={enabled === false || undefined}
+    data-two={meta !== undefined || undefined}
+    style:--row-gap="10px"
+    style:--row-h="44px"
+    style:--row-h-two="56px"
+    style:--row-px="8px"
+    style:--row-py="6px"
   >
+    <!-- literal: 26px -->
     <span
       data-slot="tile"
-      class="tile"
+      class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised text-(color:--tile-ink) shadow-tile"
       data-share={href ? `icon:${href}` : undefined}
-      style={hue ? `color:${hue}` : undefined}
+      style:--tile="26px"
+      style:--tile-ink={hue ?? "var(--ink-muted)"}
       {@attach land(() => {
         const key = href ?? share;
         return key ? `icon:${key}` : undefined;
@@ -125,11 +134,24 @@
         <Icon />
       {/if}
     </span>
-    <span data-slot="text" class="text">
-      <span data-slot="name" class={["name", mono && "mono"]}>
+    <!-- literal: 1px, calc(100% - 36px) -->
+    <span
+      data-slot="text"
+      class="flex min-w-0 flex-auto flex-col gap-(--text-gap) transition-opacity dur-panel ease-out group-data-off/row:opacity-55 max-phone:basis-(--text-basis)"
+      style:--text-basis="calc(100% - 36px)"
+      style:--text-gap="1px"
+    >
+      <!-- literal: 8px -->
+      <span
+        data-slot="name"
+        class="flex min-w-0 items-center gap-(--name-gap) type-label text-ink-strong data-mono:font-(family-name:--font-mono)"
+        data-mono={mono || undefined}
+        style:--name-gap="8px"
+      >
         {#if href}
           <a
-            class="link"
+            class="truncate text-inherit no-underline outline-none"
+            data-link
             data-share="title:{href}"
             {href}
             {@attach land(() => `title:${href}`, { uniform: true })}>{name}</a
@@ -137,7 +159,7 @@
         {:else}
           <span
             data-slot="section-row-label"
-            class="label"
+            class="truncate text-inherit no-underline outline-none"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
             })}>{name}</span
@@ -148,10 +170,23 @@
         {/if}
       </span>
       {#if meta !== undefined}
-        <span data-slot="meta" class="meta" title={meta}>{meta}</span>
+        <span
+          data-slot="meta"
+          class="truncate type-meta text-ink-muted"
+          title={meta}>{meta}</span
+        >
       {/if}
     </span>
-    <span data-slot="controls" class="controls">
+    <!-- A 30px ⋯ and a 32px switch: on a coarse pointer the gap opens to 14px,
+         so each touch area reaches 44px before meeting its neighbour's. -->
+    <!-- literal: 8px, 14px, 36px -->
+    <span
+      data-slot="controls"
+      class="relative z-1 flex flex-none items-center gap-(--hit-gap-x) max-phone:ml-(--controls-ml)"
+      style:--controls-ml="36px"
+      style:--hit-gap-wide="14px"
+      style:--hit-gap-x="var(--hit-gap-coarse, 8px)"
+    >
       {#if rollout}
         {@render rollout()}
       {/if}
@@ -173,22 +208,30 @@
     </span>
   </div>
   {#if below || note}
-    <div class="below">
+    <!-- literal: 6px, 8px, 44px -->
+    <div
+      class="flex min-w-0 flex-col gap-(--below-gap) pt-0 pr-(--below-px) pb-(--below-gap) pl-(--below-pl) empty:hidden max-phone:pl-(--below-px)"
+      style:--below-gap="6px"
+      style:--below-pl="44px"
+      style:--below-px="8px"
+    >
       {#if note}
+        <!-- literal: 6px -->
         <p
           data-slot="note"
-          class="note mark-line"
+          class="mark-line flex items-start gap-(--below-gap) type-meta wrap-anywhere text-ink-muted tone-fail:text-status-fail-ink"
           data-flip
           data-tone={note.tone}
           role={note.tone === "fail" ? "alert" : "status"}
+          style:--below-gap="6px"
         >
           <span class="mark-cell">
             {#if note.tone === "busy"}
-              <Spinner aria-hidden="true" />
+              <Spinner aria-hidden="true" class="size-icon-sm flex-none" />
             {:else if note.tone === "fail"}
-              <IconWarningTriangle />
+              <IconWarningTriangle class="size-icon-sm flex-none" />
             {:else}
-              <IconCheck />
+              <IconCheck class="size-icon-sm flex-none" />
             {/if}
           </span>
           <span>{note.text}</span>
@@ -200,14 +243,8 @@
 </li>
 
 <style>
-  .item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-    border-radius: var(--radius-sm);
-  }
-  .item.flash {
+  /* residual: keyframes */
+  [data-flash] {
     animation: row-flash calc(var(--dur-fade) * 3) var(--ease-out) both;
   }
   @keyframes row-flash {
@@ -215,170 +252,52 @@
       opacity: 0.35;
     }
   }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 44px;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    transition: var(--transition-control);
-  }
+  /* residual: unmapped */
   /* The whole row is the link's hit area, so the whole row takes the press:
      the tint .press-tint gives (app.css), keyed on the link rather than the
      row, because the row's own switch and buttons are pressed inside it too. */
-  .row:has(.link:active) {
+  [data-slot="row"]:has([data-link]:active) {
     background-color: var(--surface-fill);
   }
   /* By day the press is the step past the ghost the row already stands on,
      and the row's muted inks go strong on it (app.css .press-tint). */
-  :global(:root:not(.dark)) .row:has(.link:active) {
+  :global(:root:not(.dark)) [data-slot="row"]:has([data-link]:active) {
     --ink-muted: var(--ink-strong);
     --ink-subtle: var(--ink-strong);
     background-color: var(--surface-fill-strong);
   }
+  /* On a coarse pointer the controls' gap opens to 14px (--hit-gap-x reads it). */
+  @media (pointer: coarse) {
+    [data-slot="controls"] {
+      --hit-gap-coarse: var(--hit-gap-wide);
+    }
+  }
+  /* residual: foreign-dom */
+  /* The icon tile holds a snippet's or a component's svg, which takes no class. */
+  [data-slot="tile"] :global(svg) {
+    width: var(--icon-md);
+    height: var(--icon-md);
+    flex: none;
+  }
   /* A control that rests clear in the row stands on the row's ghost, by day
      the hover step itself: its own hover is the step past it. The kit's
-     ghost button, whose ink is already the strong one. */
+     ghost button (RowMenu's trigger), whose ink is already the strong one. */
   @media (hover: hover) {
-    .controls
-      :global(
-        .bg-transparent.border-transparent:not(.text-link-ink):hover:not(
-            :disabled
-          )
-      ) {
+    [data-slot="controls"] :global([data-ghost]:hover:not(:disabled)) {
       background: light-dark(var(--surface-fill-strong), var(--surface-hover));
     }
   }
-  .row.two {
-    min-height: 56px;
-  }
-  .row:has(.link) {
-    cursor: pointer;
-  }
-  .tile {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 26px;
-    height: 26px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-muted);
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .text {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-    transition: opacity var(--dur-panel) var(--ease-out);
-  }
-  .off .text {
-    opacity: 0.55;
-  }
-  .name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .name.mono {
-    font-family: var(--font-mono);
-  }
-  .link,
-  .label {
-    overflow: hidden;
-    color: inherit;
-    text-decoration: none;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    outline: none;
-  }
+  /* residual: pseudo */
   /* The whole row is the link's hit area; the controls sit above it, and
      the focus ring is drawn round that area rather than round the words. */
-  .link::after {
+  [data-link]::after {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
   }
-  .link:focus-visible::after {
+  [data-link]:focus-visible::after {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-inset);
-  }
-  .meta {
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* A 30px ⋯ and a 32px switch: on a coarse pointer the gap opens to 14px,
-     so each touch area reaches 44px before meeting its neighbour's. */
-  .controls {
-    --hit-gap-x: 8px;
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: 8px;
-
-    @media (pointer: coarse) {
-      --hit-gap-x: 14px;
-      gap: 14px;
-    }
-  }
-  .below:empty {
-    display: none;
-  }
-  .note {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-
-    & :global(svg) {
-      width: 12px;
-      height: 12px;
-      flex: none;
-    }
-    &[data-tone="fail"] {
-      color: var(--status-fail-ink);
-    }
-  }
-  .below {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 0 8px 6px 44px;
-    min-width: 0;
-  }
-  @media (max-width: 640px) {
-    .row {
-      flex-wrap: wrap;
-    }
-    .text {
-      flex-basis: calc(100% - 36px);
-    }
-    .controls {
-      margin-left: 36px;
-    }
-    .below {
-      padding-left: 8px;
-    }
   }
 </style>

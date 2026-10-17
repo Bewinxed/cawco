@@ -95,23 +95,41 @@
   </Alert.Root>
 {/snippet}
 
-<div class="ground">
+<div
+  class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
+>
+  <!-- literal: 980px -->
   <div
     data-slot="body"
-    class="body"
-    style:min-height={card === null ? undefined : `${card}px`}
+    class="flex max-w-(--body-max) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-7 py-space-6 min-h-(--card-min)"
+    style:--body-max="980px"
+    style:--card-min={card === null ? undefined : `${card}px`}
     {@attach morph()}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >
-    <header data-slot="head" class="head">
-      <div class="titles">
-        <h1 data-slot="title" class="title">{title}</h1>
+    <!-- literal: 12px -->
+    <header
+      data-slot="head"
+      class="flex flex-wrap items-start justify-between gap-(--head-gap)"
+      style:--head-gap="12px"
+    >
+      <div class="flex min-w-0 flex-col gap-space-1">
+        <h1 data-slot="title" class="type-title text-ink-strong">{title}</h1>
         {#if purpose}
-          <p class="purpose">{purpose}</p>
+          <!-- literal: 8px -->
+          <p
+            class="flex flex-wrap items-center gap-(--line-gap)"
+            style:--line-gap="8px"
+          >{purpose}</p>
         {/if}
       </div>
       {#if actions}
-        <div data-slot="actions" class="actions">{@render actions(down)}</div>
+        <!-- literal: 8px -->
+        <div
+          data-slot="actions"
+          class="flex flex-wrap items-center gap-(--line-gap)"
+          style:--line-gap="8px"
+        >{@render actions(down)}</div>
       {/if}
     </header>
     {#if !ready && problem}
@@ -120,18 +138,21 @@
       <!-- The toolbar acts on the rows, so it arrives with them. -->
       <div
         data-fill={(!ready && card !== null) || undefined}
-        class="content"
-        class:fill={!ready && card !== null}
+        class="grid min-w-0 data-fill:min-h-0 data-fill:shrink data-fill:grow data-fill:basis-0 data-fill:grid-rows-1"
       >
         {#if ready}
           <div
             data-slot="slot"
-            class="slot"
+            class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
             in:appear
             {@attach holding && !settling ? settleThen : undefined}
           >
             {#if toolbar}
-              <div class="toolbar">{@render toolbar()}</div>
+              <!-- literal: 8px -->
+              <div
+                class="flex flex-wrap items-center gap-(--line-gap)"
+                style:--line-gap="8px"
+              >{@render toolbar()}</div>
             {/if}
             {#if problem}
               {@render fault(problem)}
@@ -141,7 +162,7 @@
         {:else}
           <div
             data-slot="slot"
-            class="slot"
+            class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
             out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
           >
             <SkeletonRows fill={card !== null} />
@@ -151,83 +172,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .ground {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    overflow-y: auto;
-    /* The pages' gutter, on a phone as at a desk (Usage stands on the same
-       one): the card never runs to the screen's edge. */
-    padding: var(--space-2) var(--space-5);
-    background: var(--surface-recess);
-  }
-  /* An inset panel in the rail's recipe: raised on the recess, which is the
-     seam, so no line or shadow. It fills the pane's height, its bottom one
-     gutter above the pane's, level with the rail's; taller rows scroll the
-     ground. */
-  .body {
-    display: flex;
-    flex: 1 0 auto;
-    flex-direction: column;
-    gap: var(--space-6);
-    max-width: 980px;
-    padding: var(--space-6) var(--space-7);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-  }
-  /* The skeleton and the rows share one cell, so the rows fade in where the
-     skeleton was. Standing at a kept height, the cell takes the room the
-     card has left, and the skeleton fills it. */
-  .content {
-    display: grid;
-    min-width: 0;
-
-    &.fill {
-      flex: 1 1 0;
-      min-height: 0;
-      grid-template-rows: minmax(0, 1fr);
-    }
-  }
-  .slot {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    min-width: 0;
-  }
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .titles {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-  }
-  .title {
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-    color: var(--ink-strong);
-  }
-  .purpose,
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-</style>

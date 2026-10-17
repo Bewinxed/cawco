@@ -25,6 +25,7 @@
   <DropdownMenu.Trigger
     aria-label={configureWords.moreFor(label)}
     class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+    data-ghost
   >
     <IconMore />
   </DropdownMenu.Trigger>

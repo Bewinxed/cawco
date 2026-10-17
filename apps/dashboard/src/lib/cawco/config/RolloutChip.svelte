@@ -113,36 +113,58 @@
 </script>
 
 <Popover.Root>
+  <!-- literal: 5px, 26px, 8px -->
   <Popover.Trigger
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="rollout-chip mark-line"
+    class="rollout-chip mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink data-fail:hover:bg-status-fail-bg motion-safe:active:scale-(--press-scale)"
     data-fail={failed > 0 ? "" : undefined}
+    style="--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px"
   >
+    <!-- literal: 5px -->
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="glyph"
+      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-(--glyph-pull) motion-safe:transition-[width,margin] motion-safe:dur-control motion-safe:ease-out"
       data-box
       data-glyph={glyph}
+      style:--glyph-pull="5px"
     >
-      <IconWarningTriangle data-for="fail" />
-      <IconCheck data-for="done" />
-      <Spinner aria-hidden="true" data-for="busy" role="presentation" />
+      <IconWarningTriangle
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        data-for="fail"
+      />
+      <IconCheck
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        data-for="done"
+      />
+      <Spinner
+        aria-hidden="true"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        data-for="busy"
+        role="presentation"
+      />
     </span>
     <!-- A machine catching up ticks the count over rather than swapping it. -->
-    <span data-slot="count" class="count"
+    <span data-slot="count" class="num text-inherit"
       ><MorphText text="{applied}/{machines.length}" /></span
     >
-    <span class="unit">machines</span>
+    <span>machines</span>
   </Popover.Trigger>
+  <!-- literal: 360px, calc(100vw - 2rem) -->
   <Popover.Content
     align="end"
-    class="w-[360px] max-w-[calc(100vw-2rem)] gap-space-1"
+    class="w-(--pop-w) max-w-(--pop-max) gap-space-1"
+    style="--pop-w: 360px; --pop-max: calc(100vw - 2rem)"
   >
     {#if machines.length === 0}
-      <p class="none">
+      <!-- literal: 10px, 8px -->
+      <p
+        class="type-meta py-(--none-py) px-(--gutter) text-ink-muted"
+        style:--gutter="8px"
+        style:--none-py="10px"
+      >
         <AddMachineLink>No machines yet</AddMachineLink>
         — this lands on the first one that registers.
       </p>
@@ -150,8 +172,20 @@
     {#each machines as machine, index (machine.machineId)}
       {@const item = stateOf(machine)}
       {@const online = machine.status === "online"}
-      <div data-slot="machine" class="machine">
-        <div class="line">
+      <!-- literal: 6px -->
+      <div
+        data-slot="machine"
+        class="flex flex-col gap-(--stack-gap)"
+        style:--stack-gap="6px"
+      >
+        <!-- literal: 10px, 44px, 6px, 8px -->
+        <div
+          class="flex min-h-(--line-h) items-center gap-(--line-gap) rounded-sm px-(--gutter) py-(--stack-gap)"
+          style:--gutter="8px"
+          style:--line-gap="10px"
+          style:--line-h="44px"
+          style:--stack-gap="6px"
+        >
           <MachineRow
             hue={machineHue(index, online)}
             icon={machineIcon(machine.os)}
@@ -163,23 +197,31 @@
           >
             {#snippet trailing()}
               {#if item?.state === "failed"}
-                <span data-slot="mark" class="mark fail"
-                  ><IconWarningTriangle /></span
+                <span data-slot="mark" class="inline-flex text-status-fail-ink"
+                  ><IconWarningTriangle class="size-icon-sm flex-none" /></span
                 >
               {:else if item?.state === "applied"}
-                <span data-slot="mark" class="mark"><IconCheck /></span>
+                <span data-slot="mark" class="inline-flex text-ink-muted"
+                  ><IconCheck class="size-icon-sm flex-none" /></span
+                >
               {:else}
                 {@const syncing = asked[machine.machineId] === true}
+                <!-- literal: 4px, 12px, 26px, 8px -->
                 <button
                   aria-busy={syncing || undefined}
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
-                  class="sync"
+                  data-slot="sync"
+                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
                     () => resync(machine)
                   )}
+                  style:--btn-gap="4px"
+                  style:--btn-icon="12px"
+                  style:--gutter="8px"
+                  style:--sync-h="26px"
                   type="button"
                 >
                   <PendingContent
@@ -198,7 +240,13 @@
           {#each Object.entries(machine.fleet?.mcpByHarness ?? {}) as [harness, rows] (harness)}
             {@const runtime = rows?.[name]}
             {#if runtime}
-              <p data-slot="note" class="note">
+              <!-- literal: 6px, 8px -->
+              <p
+                data-slot="note"
+                class="flex items-start gap-(--stack-gap) px-(--gutter) pt-0 pb-(--stack-gap) type-meta wrap-anywhere text-ink-muted"
+                style:--gutter="8px"
+                style:--stack-gap="6px"
+              >
                 <span
                   >{harness}: {SAID[runtime.state]}
                   {runtime.detail ? ` · ${runtime.detail}` : ""}</span
@@ -208,14 +256,19 @@
           {/each}
         {/if}
         {#if refused[machine.machineId]}
+          <!-- literal: 6px, 8px -->
           <p
             data-rollout-chip-refused
             data-slot="note"
-            class="note refused mark-line"
+            class="mark-line flex items-start gap-(--stack-gap) px-(--gutter) pt-0 pb-(--stack-gap) type-meta wrap-anywhere text-status-fail-ink"
             role="alert"
+            style:--gutter="8px"
+            style:--stack-gap="6px"
             in:appear
           >
-            <span class="mark-cell"><IconWarningTriangle /></span>
+            <span class="mark-cell"
+              ><IconWarningTriangle class="size-icon-sm flex-none" /></span
+            >
             <span>{refused[machine.machineId]}</span>
           </p>
         {/if}
@@ -241,8 +294,16 @@
           />
         {:else if item?.detail}
           <!-- A detail on a row that did not fail is a note, not an error. -->
-          <p data-slot="note" class="note mark-line">
-            <span class="mark-cell"><IconInfo /></span>
+          <!-- literal: 6px, 8px -->
+          <p
+            data-slot="note"
+            class="mark-line flex items-start gap-(--stack-gap) px-(--gutter) pt-0 pb-(--stack-gap) type-meta wrap-anywhere text-ink-muted"
+            style:--gutter="8px"
+            style:--stack-gap="6px"
+          >
+            <span class="mark-cell"
+              ><IconInfo class="size-icon-sm flex-none" /></span
+            >
             <span>{item.detail}</span>
           </p>
         {/if}
@@ -252,155 +313,30 @@
 </Popover.Root>
 
 <style>
-  /* The trigger is bits-ui's element, so its rules are global, under the
-     chip's own name (scripts/css-scope-check.ts). */
-  :global(.rollout-chip) {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 5px;
-    height: 26px;
-    padding: 0 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-    transition:
-      background-color var(--dur-panel) var(--ease-out),
-      color var(--dur-panel) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
+  /* residual: unmapped */
+  /* needs transition token: background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out), scale var(--dur-toggle) var(--ease-out) (the press is `scale`, the property scale-(--press-scale) sets) */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.rollout-chip) {
       transition:
         background-color var(--dur-panel) var(--ease-out),
         color var(--dur-panel) var(--ease-out),
-        transform var(--dur-toggle) var(--ease-out);
+        scale var(--dur-toggle) var(--ease-out);
     }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.rollout-chip:active) {
-      transform: scale(var(--press-scale));
-    }
-  }
-  :global(.rollout-chip:hover) {
-    background: var(--surface-hover);
-  }
-  :global(.rollout-chip[data-fail]) {
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
-  }
-  :global(.rollout-chip svg) {
-    width: 12px;
-    height: 12px;
-    flex: none;
-  }
-  /* One cell for the three glyphs, which cross-fade; with none showing the
-     cell closes, taking its gap with it, so a chip with no glyph is as
-     narrow as it was. */
-  .glyph {
-    display: inline-grid;
-    flex: none;
-    width: 12px;
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        width var(--dur-control) var(--ease-out),
-        margin var(--dur-control) var(--ease-out);
-    }
-
-    &[data-glyph="none"] {
-      width: 0;
-      margin-inline-end: -5px;
-    }
-    & > :global(*) {
-      grid-area: 1 / 1;
-      opacity: 0;
-      @media (prefers-reduced-motion: no-preference) {
-        transition: opacity var(--dur-control) var(--ease-out);
-      }
-    }
-    &[data-glyph="fail"] > :global([data-for="fail"]),
-    &[data-glyph="done"] > :global([data-for="done"]),
-    &[data-glyph="busy"] > :global([data-for="busy"]) {
-      opacity: 1;
-    }
-    &:not([data-glyph="busy"]) > :global([data-for="busy"]) {
-      animation-play-state: paused;
-    }
-  }
-  .count {
-    font-variant-numeric: tabular-nums;
-    color: inherit;
-  }
-  .machine {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 44px;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-  }
-  .mark {
-    display: inline-flex;
-    color: var(--ink-muted);
-  }
-  .mark.fail {
-    color: var(--status-fail-ink);
-  }
-  .mark :global(svg),
-  .sync :global(svg),
-  .note :global(svg) {
-    width: 12px;
-    height: 12px;
-    flex: none;
-  }
-  .sync {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    --btn-gap: 4px;
-    --btn-icon: 12px;
-    height: 26px;
-    padding: 0 8px;
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    transition: var(--transition-control);
-    @media (prefers-reduced-motion: no-preference) {
+    [data-slot="sync"] {
       transition:
         var(--transition-control),
-        transform var(--dur-toggle) var(--ease-out);
+        scale var(--dur-toggle) var(--ease-out);
     }
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .sync:active:not(:disabled, [aria-busy="true"]) {
-      transform: scale(var(--press-scale));
-    }
+  /* A glyph that is not showing does not spin: the busy spinner's animation holds. */
+  [data-slot="glyph"]:not([data-glyph="busy"]) > :global([data-for="busy"]) {
+    animation-play-state: paused;
   }
-  .sync:hover:not(:disabled) {
-    background: var(--surface-hover);
-  }
-  .sync:disabled {
-    opacity: 0.5;
-  }
-  .note {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 0 8px 6px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .refused {
-    color: var(--status-fail-ink);
-  }
-  .none {
-    padding: 10px 8px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
+  /* residual: foreign-dom */
+  /* PendingContent draws the sync icon and takes no class. */
+  [data-slot="sync"] :global(svg) {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+    flex: none;
   }
 </style>

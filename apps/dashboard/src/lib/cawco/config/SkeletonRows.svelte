@@ -12,31 +12,10 @@
 <div
   data-fill={fill || undefined}
   aria-label="Loading"
-  class="rows"
+  class="group flex flex-col gap-space-row data-fill:min-h-0 data-fill:grow data-fill:shrink data-fill:basis-0 data-fill:overflow-hidden"
   role="status"
-  class:fill
 >
   {#each rows as row (row)}
-    <Skeleton class="h-14 w-full" />
+    <Skeleton class="h-14 w-full group-data-fill:flex-none" />
   {/each}
 </div>
-
-<style>
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-
-    /* Rows keep their height and the room clips them: a row squeezed to
-       fit would change size as the room settles. */
-    &.fill {
-      flex: 1 1 0;
-      min-height: 0;
-      overflow: hidden;
-
-      & > :global(*) {
-        flex: none;
-      }
-    }
-  }
-</style>
