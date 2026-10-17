@@ -112,3 +112,12 @@ with `allow: ["pointer-events"]` for these 9 files. Then the 9 comment lines are
 - P2, shared-sheet classes (`ns-*`, `wf`/`wf-*`, `fai-*`): none in this lane's files
   (grep: no hits).
 - P3, `important kept:` lines: none. `grep important` over the 55 files finds nothing.
+- svelte-check: 0 errors, 1 warning, the foundation's own (Shot.svelte:212, a video
+  without captions). This lane adds no `Unused CSS selector` warning.
+
+## Contracts
+
+None. No file in this lane has a `<style>`, and ESLint is clean over all 55 files at the
+final commit. The 13 `style:pointer-events` overrides are an in-file matter: their other
+side is bits-ui's run-time inline style, in node_modules, not a file in the repository.
+They are covered by the reasoned file-level suppressions described above.
