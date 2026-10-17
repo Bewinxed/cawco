@@ -29,7 +29,13 @@ const ANY = /.*/;
 const SVELTE = /\.svelte$/;
 const MODULE_SCRIPT = /<script lang="ts" module>([\s\S]*?)<\/script>/;
 const STYLE = /<style>([\s\S]*?)<\/style>/;
-const GLOBAL = /:global\(([^)]*)\)/g;
+/**
+ * A rule's prelude: what follows a `{`, a `}` or the start, up to its `{`.
+ * A lookbehind, so an at-rule's own `{` still leads its first rule.
+ */
+const PRELUDE = /(?<=^|[{}])()([^{}]+?)\{/g;
+/** A character that separates compound selectors. */
+const COMBINATOR = /[\s>+~]/;
 const COMMENT = /\/\*[\s\S]*?\*\//g;
 const INTERPOLATION = /\{[^}]*\}/g;
 const SPACES = /\s+/g;
@@ -97,7 +103,7 @@ const RECIPE: Partial<Record<Tag, (p: Props) => string>> = {
 };
 
 /** The class string a line of today's consumer opens, `{…}` filled empty. */
-function classesAt(file: string, line: number): string {
+function classesAt(file: string, line: number, fill = ""): string {
   const text = readFileSync(join(app, file), "utf8")
     .split("\n")
     .slice(line - 1)
@@ -108,28 +114,122 @@ function classesAt(file: string, line: number): string {
     : text.indexOf('"') + 1;
   return text
     .slice(start, text.indexOf('"', start))
-    .replace(INTERPOLATION, "")
+    .replace(INTERPOLATION, fill)
     .replace(SPACES, " ")
     .trim();
 }
 
 /** A fixture's own scoping class, as Svelte gives each file its own hash. */
-const hash = (name: string): string => `svelte-${name.toLowerCase()}`;
+/** A fixture side's own scoping class: each side's stylesheet is its own file. */
+const hash = (name: string, side: Side): string =>
+  `svelte-${side}-${name.toLowerCase()}`;
 
-/** A consumer's `<style>` at T, unlayered, its scopes taking the file's hash. */
-function tStyle(name: string, file: string, scopes: string[]): string {
-  const source = execFileSync("git", ["show", `${T}:apps/dashboard/${file}`], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  let css = (source.match(STYLE)?.[1] ?? "")
-    .replace(COMMENT, "")
-    .replace(GLOBAL, "$1");
-  for (const scope of scopes) {
-    css = css.replaceAll(`.${scope}`, `.${scope}.${hash(name)}`);
+/** A consumer's `<style>` at T (git) or today (the tree), unlayered, scoped with the side's hash. */
+function styleOf(name: string, file: string, side: Side): string {
+  const source =
+    side === "t"
+      ? execFileSync("git", ["show", `${T}:apps/dashboard/${file}`], {
+          cwd: root,
+          encoding: "utf8",
+          maxBuffer: 64 * 1024 * 1024,
+        })
+      : readFileSync(join(app, file), "utf8");
+  const css = (source.match(STYLE)?.[1] ?? "").replace(COMMENT, "");
+  // Every rule's selector list, after a `{`, a `}` or the start; at-rules keep theirs.
+  return css.replace(PRELUDE, (_, lead: string, selectors: string) =>
+    selectors.trimStart().startsWith("@")
+      ? `${lead}${selectors}{`
+      : `${lead}${splitTop(selectors)
+          .map((selector) => scoped(selector, hash(name, side)))
+          .join(", ")} {`
+  );
+}
+
+/**
+ * A local selector part with the file's hash on every compound selector, as
+ * Svelte scopes it (`[data-slot="ledger"] .a:hover` → `[data-slot="ledger"].h
+ * .a:hover.h`), before any pseudo-element.
+ */
+function hashCompounds(local: string, fileHash: string): string {
+  let out = "";
+  let compound = "";
+  let depth = 0;
+  const flush = () => {
+    if (compound) {
+      const pseudo = compound.indexOf("::");
+      out +=
+        pseudo === -1
+          ? `${compound}.${fileHash}`
+          : `${compound.slice(0, pseudo)}.${fileHash}${compound.slice(pseudo)}`;
+      compound = "";
+    }
+  };
+  for (const ch of local) {
+    if (ch === "[" || ch === "(") {
+      depth += 1;
+    } else if (ch === "]" || ch === ")") {
+      depth -= 1;
+    }
+    if (depth === 0 && COMBINATOR.test(ch)) {
+      flush();
+      out += ch;
+    } else {
+      compound += ch;
+    }
   }
-  return css;
+  flush();
+  return out;
+}
+
+/** A selector list split on its top-level commas. */
+function splitTop(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const ch = list[i];
+    if (ch === "(") {
+      depth += 1;
+    } else if (ch === ")") {
+      depth -= 1;
+    } else if (ch === "," && depth === 0) {
+      out.push(list.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(list.slice(start));
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * One selector as Svelte scopes it: each compound outside `:global(…)` takes
+ * the file's hash (so a local rule reaches only the file's own elements, never
+ * a component's), and `:global(…)` is unwrapped as written.
+ */
+function scoped(selector: string, fileHash: string): string {
+  let out = "";
+  let i = 0;
+  while (i < selector.length) {
+    const at = selector.indexOf(":global(", i);
+    const local = selector.slice(i, at === -1 ? undefined : at);
+    out += hashCompounds(local, fileHash);
+    if (at === -1) {
+      break;
+    }
+    let depth = 1;
+    let j = at + ":global(".length;
+    while (j < selector.length && depth > 0) {
+      if (selector[j] === "(") {
+        depth += 1;
+      } else if (selector[j] === ")") {
+        depth -= 1;
+      }
+      j += 1;
+    }
+    out += selector.slice(at + ":global(".length, j - 1);
+    i = j;
+  }
+  return out;
 }
 
 interface Node {
@@ -139,18 +239,25 @@ interface Node {
   children?: Node[];
   content?: string;
   id?: string;
+  /** On K1's side, classes the consumer passes beside the variant (its mapping in K1.md). */
+  k1Adds?: string;
+  /** On K1's side, consumer classes the variant replaces (the appendix lists them). */
+  k1Drops?: string[];
   props?: Props;
+  /** The element's inline style, every side. */
+  style?: string;
   /** T's markup classes on top of T's base. */
   t?: string;
   tag: Tag;
-  /** Today's consumer classes: a site, or a literal. */
-  today?: { file: string; line: number } | string;
+  /** Today's consumer classes: a site (its `{…}` filled), or a literal. */
+  today?: { file: string; line: number; fill?: string } | string;
 }
 interface Fixture {
-  /** The consumer's file, for its `<style>` at T. */
+  /** The consumer's file, for its `<style>` at T and today. */
   file: string;
+  /** Rules of today's `<style>` that K1's side goes without (the set deletes them). */
+  k1Without?: RegExp;
   name: string;
-  scopes: string[];
   table: Node;
   wrapper: { t: string; now: string; attrs?: string; style?: string };
 }
@@ -160,6 +267,57 @@ const TT = "src/lib/cawco/tasks/TaskTable.svelte";
 const VR = "src/lib/cawco/views/ViewRoutines.svelte";
 const PS = "src/lib/cawco/usage/ProjectSpend.svelte";
 const UT = "src/lib/cawco/updates/UpdateTable.svelte";
+const VT = "src/lib/cawco/views/openui/ViewTable.svelte";
+/** ViewRoutines' `tr.band` and `tr.band th` rules, which K1's band mapping replaces. */
+const BAND_RULES = /[^{}]*tr\.band[^{}]*\{[^{}]*\}/g;
+
+/** A generated view's row: its lead cell (the first column's branch) and another. */
+const viewRow = (n: number): Node => ({
+  tag: "tr",
+  id: `view-row-${n}`,
+  t: "row",
+  today: { file: VT, line: 77 },
+  attrs: 'data-view-table-row=""',
+  children: [
+    {
+      tag: "td",
+      id: `view-lead-${n}`,
+      today: {
+        file: VT,
+        line: 81,
+        fill: "min-w-(--first-min) py-space-2 whitespace-normal",
+      },
+      style: "--first-min: 9rem",
+      props: { variant: "view-lead" },
+      k1Drops: ["border-border-hairline"],
+      content: "A title long enough to wrap onto a second line",
+    },
+    {
+      tag: "td",
+      id: `view-cell-${n}`,
+      today: { file: VT, line: 81 },
+      style: "--first-min: 9rem",
+      props: { variant: "view" },
+      k1Drops: ["border-border-hairline"],
+      content: "value",
+    },
+  ],
+});
+
+/** A routines-ledger head: today's width classes, K1's `caps` and `h-c-toolbar-ctl`. */
+const routinesHead = (
+  col: string,
+  line: number | undefined,
+  content: string
+): Node => ({
+  tag: "th",
+  id: `routines-head-${col}`,
+  t: `col-${col}`,
+  today: line === undefined ? "" : { file: VR, line },
+  props: { variant: "caps" },
+  k1Adds: "h-c-toolbar-ctl",
+  content,
+});
 
 const taskRow = (n: number): Node => ({
   tag: "tr",
@@ -190,8 +348,16 @@ const taskRow = (n: number): Node => ({
       id: `labels-${n}`,
       t: "col-labels",
       today: { file: TT, line: 317 },
-      props: { variant: "ledger-picks" },
+      props: { variant: "ledger-picks-stacks" },
       content: "label",
+    },
+    {
+      tag: "td",
+      id: `created-${n}`,
+      t: "col-created",
+      today: { file: TT, line: 319 },
+      props: { variant: "ledger-picks-stacks" },
+      content: "1d",
     },
   ],
 });
@@ -258,11 +424,10 @@ const FIXTURES: Fixture[] = [
   {
     name: "TaskTable",
     file: TT,
-    scopes: ["ledger"],
     wrapper: {
       t: "ledger",
-      now: "group/ledger",
-      attrs: 'data-pickable=""',
+      now: "group/ledger @container overflow-hidden rounded-lg bg-surface-raised shadow-tile",
+      attrs: 'data-slot="ledger" data-pickable=""',
       style: "--cell-gap: 0",
     },
     table: {
@@ -313,8 +478,13 @@ const FIXTURES: Fixture[] = [
   {
     name: "ViewRoutines",
     file: VR,
-    scopes: ["ledger"],
-    wrapper: { t: "ledger", now: "" },
+    wrapper: {
+      t: "ledger",
+      now: "@container/routines-ledger",
+      attrs: 'data-slot="ledger"',
+      style:
+        "--col-state: calc(var(--c-row-lead) + var(--space-3)); --col-menu: calc(var(--c-btn-h-sm) + var(--space-3) * 2)",
+    },
     table: {
       tag: "table",
       t: "routines table-fixed",
@@ -325,10 +495,10 @@ const FIXTURES: Fixture[] = [
   {
     name: "ProjectSpend",
     file: PS,
-    scopes: ["ledger"],
     wrapper: {
       t: "ledger",
-      now: "",
+      now: "overflow-hidden rounded-lg bg-surface-raised shadow-tile",
+      attrs: 'data-slot="ledger"',
       style: "--none: 0; --row-cols: 1fr auto auto",
     },
     table: {
@@ -348,11 +518,11 @@ const FIXTURES: Fixture[] = [
   {
     name: "UpdateTable",
     file: UT,
-    scopes: ["matrix"],
     wrapper: {
       t: "matrix",
-      now: "",
-      style: "--phone-cols: minmax(0, 1fr) auto",
+      now: "overflow-x-auto rounded-md bg-surface-raised shadow-(--matrix-ring)",
+      style:
+        "--phone-cols: minmax(0, 1fr) auto; --matrix-ring: inset 0 0 0 1px var(--border-hairline)",
     },
     table: {
       tag: "table",
@@ -385,6 +555,107 @@ const FIXTURES: Fixture[] = [
       ],
     },
   },
+  {
+    // A generated view: its cells' hairline is the bottom side's only (R4).
+    name: "ViewTable",
+    file: VT,
+    wrapper: {
+      t: "ledger",
+      now: "overflow-hidden rounded-lg bg-surface-raised shadow-tile",
+      attrs: 'data-slot="ledger"',
+    },
+    table: {
+      tag: "table",
+      children: [
+        {
+          tag: "thead",
+          children: [
+            {
+              tag: "tr",
+              id: "view-band",
+              t: "band border-0",
+              today: { file: VT, line: 63 },
+              props: { variant: "band" },
+              children: [
+                {
+                  tag: "th",
+                  id: "view-head",
+                  today: { file: VT, line: 67 },
+                  props: { variant: "caps-strong" },
+                  content: "Name",
+                },
+              ],
+            },
+          ],
+        },
+        { tag: "tbody", children: [viewRow(1), viewRow(2)] },
+      ],
+    },
+  },
+  {
+    // The routines ledger's head: today the hook `band` and this file's
+    // `tr.band`/`tr.band th` rules draw it; K1's mapping is `variant="band"`
+    // on the row and `caps` (with `h-c-toolbar-ctl`) on the heads, the two
+    // rules gone.
+    name: "ViewRoutinesHead",
+    file: VR,
+    k1Without: BAND_RULES,
+    wrapper: {
+      t: "ledger",
+      now: "@container/routines-ledger",
+      attrs: 'data-slot="ledger"',
+      style:
+        "--col-state: calc(var(--c-row-lead) + var(--space-3)); --col-menu: calc(var(--c-btn-h-sm) + var(--space-3) * 2)",
+    },
+    table: {
+      tag: "table",
+      t: "routines table-fixed",
+      today: { file: VR, line: 918 },
+      children: [
+        {
+          tag: "thead",
+          children: [
+            {
+              tag: "tr",
+              id: "routines-band",
+              t: "band border-0",
+              today: { file: VR, line: 922 },
+              props: { variant: "band" },
+              k1Drops: ["band"],
+              children: [
+                routinesHead(
+                  "state",
+                  924,
+                  '<span class="sr-only">State</span>'
+                ),
+                routinesHead("name", undefined, "Routine"),
+                routinesHead("last", 931, "Last run"),
+                routinesHead(
+                  "menu",
+                  938,
+                  '<span class="sr-only">Actions</span>'
+                ),
+              ],
+            },
+          ],
+        },
+        {
+          tag: "tbody",
+          t: "routine",
+          today: "group",
+          children: [
+            {
+              tag: "tr",
+              t: "row",
+              today: { file: VR, line: 724 },
+              props: { variant: "unruled" },
+              children: [{ tag: "td", t: "col-name", content: "A routine" }],
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 type Side = "t" | "today" | "k1";
@@ -396,23 +667,22 @@ function classesOf(node: Node, side: Side): string {
   }
   const raw =
     typeof node.today === "object"
-      ? classesAt(node.today.file, node.today.line)
+      ? classesAt(node.today.file, node.today.line, node.today.fill)
       : (node.today ?? "");
   const consumer = [raw, node.added ?? ""].join(" ").trim();
   if (side === "today") {
     return cn(BASE[node.tag], consumer);
   }
   const recipe = RECIPE[node.tag];
-  if (!(recipe && node.props)) {
-    return cn(BASE[node.tag], consumer);
-  }
-  const drawn = recipe(node.props);
-  const own = new Set(drawn.split(" "));
-  // The consumer keeps what the variant does not draw.
-  const rest = consumer
-    .split(" ")
-    .filter((token) => token && !own.has(token))
-    .join(" ");
+  const drawn = recipe && node.props ? recipe(node.props) : BASE[node.tag];
+  const own = new Set([...drawn.split(" "), ...(node.k1Drops ?? [])]);
+  // The consumer keeps what the variant does not draw, and adds its mapping's own.
+  const rest = [
+    ...consumer.split(" ").filter((token) => token && !own.has(token)),
+    node.k1Adds ?? "",
+  ]
+    .join(" ")
+    .trim();
   return cn(drawn, rest || undefined);
 }
 
@@ -421,16 +691,14 @@ function html(node: Node, side: Side, prefix: string): string {
   const inner =
     (node.children ?? []).map((child) => html(child, side, prefix)).join("") +
     (node.content ?? "");
-  return `<${node.tag}${id} class="${classesOf(node, side)}" ${node.attrs ?? ""}>${inner}</${node.tag}>`;
+  const style = node.style ? ` style="${node.style}"` : "";
+  return `<${node.tag}${id} class="${classesOf(node, side)}"${style} ${node.attrs ?? ""}>${inner}</${node.tag}>`;
 }
 
 function sides(fixture: Fixture): string {
   return (["t", "today", "k1"] as const)
     .map((side) => {
-      const wrap =
-        side === "t"
-          ? `${fixture.wrapper.t} ${hash(fixture.name)}`
-          : fixture.wrapper.now;
+      const wrap = `${side === "t" ? fixture.wrapper.t : fixture.wrapper.now} ${hash(fixture.name, side)}`;
       const table = html(fixture.table, side, `${fixture.name}:${side}`);
       return `<div class="${wrap}" ${fixture.wrapper.attrs ?? ""} style="${fixture.wrapper.style ?? ""}"><div data-slot="table-container" class="relative w-full overflow-x-auto">${table}</div></div>`;
     })
@@ -449,11 +717,21 @@ const compiler = await compile(readFileSync(join(app, "src/app.css"), "utf8"), {
   onDependency: () => undefined,
 });
 const utilities: string = compiler.build(candidates);
-const sources = FIXTURES.map((f) => tStyle(f.name, f.file, f.scopes)).join(
-  "\n"
-);
+const sources = FIXTURES.flatMap((f) => [
+  styleOf(f.name, f.file, "t"),
+  styleOf(f.name, f.file, "today"),
+  f.k1Without
+    ? styleOf(f.name, f.file, "k1").replace(f.k1Without, "")
+    : styleOf(f.name, f.file, "k1"),
+]).join("\n");
 
-const BOX = /^(padding|border)-(top|right|bottom|left|inline|block)/;
+/**
+ * What the kit's modifiers write, and whether the box shows: padding, the
+ * four sides' borders, display. Sizes are left to the 1a-against-K1 report:
+ * they follow the consumer's layout (its inline `--col-w` and the like), which
+ * the fixture does not carry, and no variant writes one.
+ */
+const BOX = /^((padding|border)-(top|right|bottom|left|inline|block)|display$)/;
 const WIDTHS = [
   { name: "desk 1440", width: 1440, height: 900 },
   { name: "phone 390", width: 390, height: 844 },
@@ -492,6 +770,8 @@ await browser.close();
 let compared = 0;
 let differ = 0;
 let preexisting = 0;
+/** A property K1 changes from 1a to a value that is not T's. */
+const offT = new Set<string>();
 const changed = new Map<string, Set<string>>();
 for (const { view, read } of reads) {
   for (const key of Object.keys(read).filter((k) => k.includes(":k1:"))) {
@@ -524,14 +804,22 @@ for (const { view, read } of reads) {
         changed.set(where, new Set());
       }
       changed.get(where)?.add(`${n} ${today[n]} → ${k1[n]} (T ${t[n]})`);
+      // As the style snapshot measures (surfaces/read.ts PROPS): no custom
+      // property, so Tailwind's own `--tw-*` plumbing is not a look.
+      if (t[n] !== k1[n] && !n.startsWith("--")) {
+        offT.add(`${where} ${n}: 1a ${today[n]}, K1 ${k1[n]}, T ${t[n]}`);
+      }
     }
   }
+}
+for (const line of offT) {
+  console.log(`K1 change off T, ${line}`);
 }
 
 for (const [where, props] of changed) {
   console.log(`K1 changes from 1a, ${where}: ${[...props].join("; ")}`);
 }
 console.log(
-  `${compared} states, ${differ} differ from T on padding and border by K1's change; ${changed.size} states where K1 changes 1a; ${preexisting} where 1a already differs from T and K1 keeps 1a's`
+  `${compared} states, ${differ} differ from T on padding, border and display by K1's change; ${changed.size} states where K1 changes 1a, ${offT.size} of their changed properties not T's; ${preexisting} where 1a already differs from T and K1 keeps 1a's`
 );
 process.exit(differ ? 1 : 0);
