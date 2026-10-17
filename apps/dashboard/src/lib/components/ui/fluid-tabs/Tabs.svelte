@@ -1,3 +1,16 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a root that draws no well of its own (no fill, no
+      padding), the host's surface showing through. */
+  export const tabsVariants = tv({
+    variants: { fill: { none: "bg-transparent p-0" } },
+  });
+
+  export type TabsLooks = VariantProps<typeof tabsVariants>;
+</script>
+
 <script lang="ts">
   /**
    * Fluid Functionalism's Tabs, the root: a segmented control with a sliding
@@ -8,6 +21,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  import { cn } from "#lib/utils.js";
   import {
     provideTabs,
     type TabsSize,
@@ -28,39 +42,42 @@
     travel = null,
     values,
     boxes,
+    fill,
+    class: className,
     children,
     ...rest
-  }: Omit<HTMLAttributes<HTMLDivElement>, "onselect"> & {
-    value?: string;
-    /**
-     * The items' values in the order they stand, when the host knows them:
-     * the chosen item and a folder track's stack are drawn from the first
-     * render, the server's included, before the track has measured its
-     * items. The track's own order replaces it once it has.
-     */
-    values?: readonly string[];
-    /**
-     * Each folder tab's shape as last measured, by value (fold-memory.ts,
-     * from its cookie): the server draws each tab to it, true from the
-     * first paint.
-     */
-    boxes?: Readonly<Record<string, FoldMeasure>>;
-    onValueChange?: (value: string) => void;
-    selectedIndex?: number;
-    onSelect?: (index: number) => void;
-    defaultValue?: string;
-    /** One step of the size ladder: 36px outer by default, 28px compact. */
-    size?: TabsSize;
-    /** A segmented control in a well (default), or folder tabs on a shelf. */
-    variant?: TabsVariant;
-    /**
-     * The indicator part-way from the chosen item toward another — a swipe
-     * between panels, say — so it follows the hand and lands with the value
-     * rather than jumping after it. Null at rest.
-     */
-    travel?: TabsTravel | null;
-    children: Snippet;
-  } = $props();
+  }: Omit<HTMLAttributes<HTMLDivElement>, "onselect"> &
+    TabsLooks & {
+      value?: string;
+      /**
+       * The items' values in the order they stand, when the host knows them:
+       * the chosen item and a folder track's stack are drawn from the first
+       * render, the server's included, before the track has measured its
+       * items. The track's own order replaces it once it has.
+       */
+      values?: readonly string[];
+      /**
+       * Each folder tab's shape as last measured, by value (fold-memory.ts,
+       * from its cookie): the server draws each tab to it, true from the
+       * first paint.
+       */
+      boxes?: Readonly<Record<string, FoldMeasure>>;
+      onValueChange?: (value: string) => void;
+      selectedIndex?: number;
+      onSelect?: (index: number) => void;
+      defaultValue?: string;
+      /** One step of the size ladder: 36px outer by default, 28px compact. */
+      size?: TabsSize;
+      /** A segmented control in a well (default), or folder tabs on a shelf. */
+      variant?: TabsVariant;
+      /**
+       * The indicator part-way from the chosen item toward another — a swipe
+       * between panels, say — so it follows the hand and lands with the value
+       * rather than jumping after it. Null at rest.
+       */
+      travel?: TabsTravel | null;
+      children: Snippet;
+    } = $props();
 
   // svelte-ignore state_referenced_locally — defaultValue is a one-time initial
   const state = new TabsState(defaultValue);
@@ -86,6 +103,12 @@
   provideTabs(state);
 </script>
 
-<div data-size={size} data-slot="tabs" data-variant={variant} {...rest}>
+<div
+  class={cn(tabsVariants({ fill }), className)}
+  data-size={size}
+  data-slot="tabs"
+  data-variant={variant}
+  {...rest}
+>
   {@render children()}
 </div>
