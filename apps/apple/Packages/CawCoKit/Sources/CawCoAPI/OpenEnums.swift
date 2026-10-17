@@ -1790,6 +1790,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DelegateWork`.
+    public enum DelegateWork: OpenEnum {
+        case leave
+        case move
+        case resume
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "leave": self = .leave
+            case "move": self = .move
+            case "resume": self = .resume
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .leave: "leave"
+            case .move: "move"
+            case .resume: "resume"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.leave, .move, .resume]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DeleteApiJevTypesafeKey200Route`.
     public enum DeleteApiJevTypesafeKey200Route: OpenEnum {
         case openrouter
@@ -6475,6 +6516,7 @@ public enum OpenEnums {
         case full
         case off
         case soon
+        case work
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -6484,6 +6526,7 @@ public enum OpenEnums {
             case "full": self = .full
             case "off": self = .off
             case "soon": self = .soon
+            case "work": self = .work
             default: self = .unrecognized(rawValue)
             }
         }
@@ -6494,6 +6537,7 @@ public enum OpenEnums {
             case .full: "full"
             case .off: "off"
             case .soon: "soon"
+            case .work: "work"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -6502,7 +6546,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.fork, .full, .off, .soon]
+        public static let allCases: [Self] = [.fork, .full, .off, .soon, .work]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

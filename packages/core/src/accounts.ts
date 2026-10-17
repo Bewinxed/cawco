@@ -279,9 +279,13 @@ export interface StrategyChoice {
  * and goes on; one of this many or more, moved to another organization
  * (whose cache it can't read), also files its open items and is compacted by
  * Claude Code's own `/compact` as its first steps there, before anything it
- * is owed.
+ * is owed. `delegateWork`: what a turn the limit refused is answered with
+ * when it was the hub's own word to a live work item's session
+ * ({@link DelegateWork}); every other word of the hub's a limit refused is
+ * left until a person or the session's parent writes.
  */
 export interface AtLimit {
+  delegateWork: DelegateWork;
   move: boolean;
   moveWholeUnderK: number;
   /**
@@ -295,11 +299,30 @@ export interface AtLimit {
   waitMinutes: number;
 }
 
+/**
+ * When a delegate's work reaches its account's limit: the hub's word to a
+ * live work item's session ("Your work item is still open", the sleep
+ * sweep's wake, a wait's end; core `WORK_ITEM_ORIGIN`) was refused there.
+ * `resume`: that word is sent again once, when the account's limit resets;
+ * nothing moves it meanwhile. `move`: it is answered as a person's turn is,
+ * moved whole to an account with room by the routing. `leave`: it waits
+ * until a person or its parent writes to it.
+ */
+export type DelegateWork = "resume" | "move" | "leave";
+
+/** The {@link DelegateWork} choices, in the order a control offers them. */
+export const DELEGATE_WORK: readonly DelegateWork[] = [
+  "resume",
+  "move",
+  "leave",
+];
+
 export const DEFAULT_AT_LIMIT: AtLimit = {
   move: true,
   waitMinutes: 15,
   moveWholeUnderK: 200,
   prepareAtPct: 90,
+  delegateWork: "resume",
 };
 
 /**
@@ -936,10 +959,12 @@ export const namedAccount = (account: Account): NamedAccount => ({
 /**
  * Why a session at its account's limit waits for the reset rather than
  * moving: it is a fork (it reads its origin's cache, on its origin's
- * account), moving is switched off, no other account has room, or the reset
- * comes sooner than re-reading its context elsewhere is worth.
+ * account), moving is switched off, no other account has room, the reset
+ * comes sooner than re-reading its context elsewhere is worth, or the limit
+ * refused the hub's word to a live work item and the routing has that carry
+ * on after the reset ({@link DelegateWork} `resume`).
  */
-export type WaitReason = "fork" | "off" | "full" | "soon";
+export type WaitReason = "fork" | "off" | "full" | "soon" | "work";
 
 /**
  * Where the compaction after an at-limit move stands ({@link AccountMove}
@@ -1149,6 +1174,7 @@ const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
   full: () => "No other account has room for it",
   soon: (tokens) =>
     `The reset comes sooner than re-reading ${tokens} elsewhere is worth`,
+  work: () => "Its work item carries on here after the reset",
 };
 
 /** A stop (Caw off) in words at `now`: it counts down to its account's reset, then asks for a message. */

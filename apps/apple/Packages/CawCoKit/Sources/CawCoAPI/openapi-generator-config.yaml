@@ -51,6 +51,7 @@ typeOverrides:
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
     DelegateTypeRole: OpenEnums.DelegateTypeRole
+    DelegateWork: OpenEnums.DelegateWork
     DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
     DesignOfferStateAnswer: OpenEnums.DesignOfferStateAnswer
     DeviceKind: OpenEnums.DeviceKind

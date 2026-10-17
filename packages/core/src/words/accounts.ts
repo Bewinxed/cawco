@@ -301,6 +301,13 @@ export const accountsWords = {
     kTokens: "k tokens",
     compacts:
       "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn.",
+    /** The fleet setting for a delegate's work at its limit (core `DelegateWork`), and its choices. */
+    delegateWork: "When a delegate’s work reaches its account’s limit",
+    delegateWorkChoices: {
+      resume: "Carry on after the reset",
+      move: "Move it to an account with room",
+      leave: "Leave it until someone writes",
+    },
     terms:
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
   },

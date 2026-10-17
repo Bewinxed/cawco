@@ -539,10 +539,21 @@ public enum Words {
 
             public static let compacts = "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn."
 
-            public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
+            /// The fleet setting for a delegate's work at its limit (core `DelegateWork`), and its choices.
+            public static let delegateWork = "When a delegate’s work reaches its account’s limit"
 
-            /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms]
+            public enum DelegateWorkChoices {
+                public static let resume = "Carry on after the reset"
+
+                public static let move = "Move it to an account with room"
+
+                public static let leave = "Leave it until someone writes"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["resume": resume, "move": move, "leave": leave]
+            }
+
+            public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
         }
 
         public enum Figure {
@@ -644,6 +655,8 @@ public enum Words {
                 public static let moveWholeUnderK = 200
 
                 public static let prepareAtPct = 90
+
+                public static let delegateWork = "resume"
             }
 
             /// How long the hub waits on a machine's sign-in step: Claude Code printing its link (the agent waits up to 30 s), exchanging a code (up to 60 s), a device code waited for (a minute at a time). A client asks for longer.

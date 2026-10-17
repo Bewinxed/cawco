@@ -186,6 +186,14 @@ export const CONTINUATION_ORIGIN = "continuation";
 export const COMPACTION_ORIGIN = "compaction";
 
 /**
+ * The `system` origin name of the hub's word to a work item's session about
+ * its open item (hub work-items.ts): a quiet turn's "still open", the sleep
+ * sweep's wake, a declared wait's end. One its account's limit refused is
+ * answered by the provider's `atLimit.delegateWork` (core `AtLimit`).
+ */
+export const WORK_ITEM_ORIGIN = "work-item";
+
+/**
  * The `system` origin name of the hub's word on the person's acts on one of
  * the session's artifacts: their picks sent (core injected.ts
  * `artifactResponsesNotice`), which the session reads with its tools, and

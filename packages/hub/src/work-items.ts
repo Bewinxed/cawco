@@ -82,6 +82,7 @@ import {
   holdingWords,
   machineCalled,
   sizeWords,
+  WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
   withInputsLine,
   withLandingLine,
@@ -923,7 +924,7 @@ const FINISH_LINE =
   "Finish the work and call finish_item with a report that quotes the output of every command that proves it, or call it with `blocked` and the exact command and error.";
 
 /** Whose word the sweep's wake is: the hub's about an item, as the quiet-turn word is. */
-const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: "work-item" };
+const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: WORK_ITEM_ORIGIN };
 
 /**
  * How long archiving waits on a running session's machine to confirm its
@@ -4167,7 +4168,7 @@ export const createWorkItems = ({
           uuid: crypto.randomUUID(),
           message: { role: "user", content },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: "work-item" },
+          origin: WAKE_ORIGIN,
         },
       },
     });

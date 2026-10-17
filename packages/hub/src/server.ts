@@ -193,6 +193,7 @@ import {
   clockWords,
   contextFitRefusal,
   DEFAULT_AT_LIMIT,
+  DELEGATE_WORK,
   delegateAskText,
   deriveTitleFromFirstMessage,
   EFFORT_NONE,
@@ -302,6 +303,7 @@ import {
   validateWorkflow,
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
+  WORK_ITEM_ORIGIN,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
 import {
@@ -20419,11 +20421,53 @@ export const createServer = (
     },
     // What its process was last handed: what it kept for later never reached
     // it. A turn the limit refused leaves the send that started it read.
-    startedBy: (row) =>
-      db
+    startedBy: (row) => {
+      const body = db
         .sendsIn(row.id, ["read", "pending", "failed"])
         .filter((send) => !(send.owed || isKeepAlive(send.body)))
-        .at(-1)?.body?.origin,
+        .at(-1)?.body;
+      if (!body?.origin) {
+        return;
+      }
+      const { content } = body.message;
+      return {
+        origin: body.origin,
+        words:
+          typeof content === "string"
+            ? content
+            : content
+                .flatMap((block) => (block.type === "text" ? [block.text] : []))
+                .join("\n"),
+      };
+    },
+    owedFrom: (row) =>
+      db
+        .owedSends({ instanceId: row.id })
+        .map((send) => send.body?.origin ?? { kind: "human" as const }),
+    // The hub's word to a work item, again: the one send path, which keeps it
+    // while anything still holds the session.
+    nudge: (row, words) => {
+      const sent = deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: words },
+            parent_tool_use_id: null,
+            origin: { kind: "system", name: WORK_ITEM_ORIGIN },
+          },
+        },
+      });
+      if (sent?.state === "failed") {
+        console.warn(
+          `[at-limit] ${sessionName(row)}: the hub's word to its work item, sent again after its account's reset, did not go: ${sent.reason ?? "the send failed"}.`
+        );
+      }
+    },
     note: noteAtLimit,
     unnote: unnoteAtLimit,
     // Whatever it decided, what a session it no longer holds was kept goes.
@@ -24652,6 +24696,11 @@ export const createServer = (
               moveWholeUnderK: t.Integer({ minimum: 0 }),
               // Read by nothing; shipped apps still send it (core AtLimit).
               prepareAtPct: t.Optional(t.Integer({ minimum: 0, maximum: 100 })),
+              // An app that has no control for it sends none, and keeps what
+              // was chosen.
+              delegateWork: t.Optional(
+                t.Union(DELEGATE_WORK.map((one) => t.Literal(one)))
+              ),
             }),
           }),
         },
@@ -24692,6 +24741,9 @@ export const createServer = (
               // Kept for the shipped apps that read it (core AtLimit).
               prepareAtPct:
                 body.atLimit.prepareAtPct ?? DEFAULT_AT_LIMIT.prepareAtPct,
+              delegateWork:
+                body.atLimit.delegateWork ??
+                db.accounts.routing(params.provider).atLimit.delegateWork,
             },
           };
           db.accounts.setRouting(routing);

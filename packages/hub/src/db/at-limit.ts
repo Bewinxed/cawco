@@ -8,6 +8,12 @@ export interface LimitHold {
   /** The account at its limit. */
   accountId: string;
   instanceId: string;
+  /**
+   * The hub's word to its live work item that the limit refused, sent again
+   * once at `until` (core `DelegateWork` `resume`): such a hold never moves
+   * the session. Absent: the hold moves it once an account has room.
+   */
+  nudge?: string;
   /** When it goes on: the earliest moment an account takes it again; null when none was named. */
   until: number | null;
 }
@@ -64,6 +70,7 @@ type HoldRow = typeof limitHolds.$inferSelect;
 const toHold = (row: HoldRow): LimitHold => ({
   instanceId: row.instanceId,
   accountId: row.accountId,
+  ...(row.nudge === null ? {} : { nudge: row.nudge }),
   until: row.until?.getTime() ?? null,
 });
 
@@ -96,9 +103,10 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .get();
     return row ? toHold(row) : undefined;
   },
-  putHold: ({ instanceId, accountId, until }) => {
+  putHold: ({ instanceId, accountId, nudge, until }) => {
     const values = {
       accountId,
+      nudge: nudge ?? null,
       until: until === null ? null : new Date(until),
     };
     db.insert(limitHolds)

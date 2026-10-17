@@ -171,8 +171,8 @@ import type { Tasks } from "./tasks";
  * sessions file what is open there rather than only in chat (the
  * continuation evaluation: 16% with native compaction alone, 47% with open
  * items filed). continue_session's words cut to its one mode. About 55
- * tokens for the worker, the delegate and the lead (worker 24,293, delegate
- * 7,321, lead 15,569 measured). Raised deliberately for the delegate; the
+ * tokens for the worker, the delegate and the lead (worker 24,445, delegate
+ * 7,325, lead 15,574 measured). Raised deliberately for the delegate; the
  * worker's and the lead's fit as they stand.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {

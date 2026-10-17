@@ -2314,6 +2314,13 @@ export const limitHolds = sqliteTable("limit_holds", {
   instanceId: text("instance_id").primaryKey(),
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
+  /**
+   * The hub's word to the session's live work item its limit refused, sent
+   * again once at `until`; such a hold never moves the session (core
+   * `DelegateWork` `resume`). Null for a hold that moves it once an account
+   * has room.
+   */
+  nudge: text("nudge"),
   until: timestamp("until"),
   createdAt: timestamp("created_at")
     .notNull()

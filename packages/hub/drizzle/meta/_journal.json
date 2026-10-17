@@ -1569,6 +1569,13 @@
       "when": 1792192047658,
       "tag": "0223_fleet_memory_doc_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "6",
+      "when": 1792212683519,
+      "tag": "0224_compact_after_move",
+      "breakpoints": true
     }
   ]
 }
