@@ -43,7 +43,8 @@
  * each element names the `.svelte` file it is written in
  * (`__svelte_meta.loc.file`), and writes which surfaces render each file
  * with a `<style>` (`style-snapshot-coverage.json`), then lists the files
- * no surface renders.
+ * no surface renders. It counts what the reader reads: not what a
+ * `content-visibility: hidden` box skips.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -418,15 +419,27 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
           const pool = [...document.querySelectorAll(root)];
           const els = pool.length > 0 ? pool : [document.body];
           const out = new Set<string>();
-          for (const top of els) {
-            for (const el of [top, ...top.querySelectorAll("*")]) {
-              const meta = (
-                el as unknown as { __svelte_meta?: { loc?: { file?: string } } }
-              ).__svelte_meta;
-              if (meta?.loc?.file) {
-                out.add(meta.loc.file);
-              }
+          // What the reader reads (read.ts): a box that skips its content
+          // (`content-visibility: hidden`) counts, what it skips does not.
+          const visit = (el: Element) => {
+            const meta = (
+              el as unknown as { __svelte_meta?: { loc?: { file?: string } } }
+            ).__svelte_meta;
+            if (meta?.loc?.file) {
+              out.add(meta.loc.file);
             }
+            if (getComputedStyle(el).contentVisibility === "hidden") {
+              return;
+            }
+            for (const kid of [
+              ...el.children,
+              ...(el.shadowRoot ? [...el.shadowRoot.children] : []),
+            ]) {
+              visit(kid);
+            }
+          };
+          for (const top of els) {
+            visit(top);
           }
           return [...out];
         }, state.root);
