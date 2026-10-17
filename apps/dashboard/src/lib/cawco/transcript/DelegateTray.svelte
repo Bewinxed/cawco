@@ -1163,7 +1163,6 @@
        layer of its own so it can arrive after a mark that flew in. Its
        floor is measured (`measureFloor`); the failure chip stands at the
        row's end, next to the plan. -->
-  <!-- literal: 224px -->
   <button
     data-end={failed || undefined}
     aria-controls={failed ? shelfId : panelId}
@@ -1191,7 +1190,6 @@
     tabindex={current === at ? 0 : -1}
     type="button"
     style:--floor="{floorOf(item.id)}px"
-    style:--chip-max="224px"
     {@attach measureFloor(item.id)}
   >
     {@render mark(item, flies)}
@@ -1844,12 +1842,16 @@
   [data-slot="dot"] {
     animation-delay: var(--dot-delay);
   }
-  /* A working chip's floor and cap. fly() clones the chip and rewrites the
-     copy's inline style, so the copy keeps only what the stylesheet gives
-     it: the size tokens (120px, 224px; integration adds them). The live
-     chip reads its measured floor and its cap from its own style first. */
+  /* A working chip's floor and cap: 120px and 224px. fly() clones the chip
+     and rewrites the copy's inline style, so both come from here, where
+     the copy keeps them; the live chip's measured floor (inline --floor)
+     comes first. The size tokens integration adds take over; until then,
+     30 and 56 steps of --space-1 (4px) are the same 120px and 224px. */
   button[data-key][data-status] {
-    min-inline-size: var(--floor, var(--tray-chip-min));
-    max-inline-size: var(--tray-chip-max, var(--chip-max));
+    min-inline-size: var(
+      --floor,
+      var(--tray-chip-min, calc(var(--space-1) * 30))
+    );
+    max-inline-size: var(--tray-chip-max, calc(var(--space-1) * 56));
   }
 </style>
