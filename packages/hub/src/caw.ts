@@ -259,6 +259,27 @@ export const leadPlaceRef = (
     : undefined;
 
 /**
+ * The place a sheet's stage runs in for a session with no workspace of its
+ * own (live components): Caw's place ({@link leadPlaceRef}); for any other
+ * session, a place over the folder it works in, on its machine, so the stage
+ * mounts the very files the session edits. Its boundary is the one a lead's
+ * place has (workspace-policy.ts `isLeadPlace`): the project's toolchain runs
+ * with no credential store, no service manager and its own network, as on a
+ * delegate's clone, while the session's own commands stay on the host. Its id
+ * names the machine and folder, so every session there shares one stage.
+ */
+export const stagePlaceRef = (
+  row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">
+): WorkspaceRef =>
+  leadPlaceRef(row) ?? {
+    id: `${createHash("sha256")
+      .update(`${row.machineId}\0${row.cwd}`)
+      .digest("hex")
+      .slice(0, 8)}${LEAD_PLACE_SUFFIX}`,
+    path: row.cwd,
+  };
+
+/**
  * What wakes Caw: who it is from (`you`, the person's own words: a thread, a
  * view request, a project's setup, which reach him on or off; or an `event`:
  * an attempt, a needs-you task, a routine, the dispatcher, which wakes him

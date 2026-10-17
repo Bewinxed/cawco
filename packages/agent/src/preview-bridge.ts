@@ -28,6 +28,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import { listeners, workspaceNetworks } from "./boundary";
 
@@ -77,7 +78,10 @@ const BRIDGE_START_MS = 3000;
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
 
-const WORKSPACE_ID = /^[0-9a-f-]{36}$/;
+/** A workspace's id, or a place's (core `isLeadPlace`): a sheet's stage runs in either. */
+const WORKSPACE_ID = new RegExp(
+  `^(?:[0-9a-f-]{36}|[0-9a-f]{8}${LEAD_PLACE_SUFFIX})$`
+);
 
 /**
  * What a bridge reaches: `port` of workspace `workspace`, in the network of

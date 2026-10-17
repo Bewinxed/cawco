@@ -283,7 +283,7 @@ export const artifactSavesNotice = (
   { id, kind, name }: ArtifactComments,
   sections: string[]
 ): string =>
-  `[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file in your workspace. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
+  `[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
 
 /**
  * A delegate put an artifact in its parent's panel (hub artifacts/service.ts

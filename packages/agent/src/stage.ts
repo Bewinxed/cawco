@@ -5,6 +5,9 @@
  * through the executor every command of the workspace runs through, so it
  * sees and writes what the workspace's commands do and listens on the
  * boundary's loopback, which the preview bridge reaches (`preview-bridge.ts`).
+ * A session with no workspace of its own has its stage in a place over the
+ * folder it works in (core `isLeadPlace`, hub `stagePlaceRef`): a boundary
+ * like a workspace's, over the person's own files.
  *
  * One stage per toolchain root of a workspace's clone (the dir of its
  * `vite.config`, `astro.config` or `nuxt.config`), found from the sheet's
@@ -67,11 +70,12 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
+import { isLeadPlace } from "@cawco/core/workspace-policy";
 import { ensureBoundary, shellQuote } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import { stageHost } from "./stage-host/build";
-import { workspaceRefs } from "./workspace-records";
+import { keepPlace, workspaceRefs } from "./workspace-records";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 
@@ -269,13 +273,13 @@ const namedIn = (dir: string, named: [RegExp, string][]): string | null => {
   );
 };
 
-/** The story file a sheet names, inside the clone, absolute; refused when it is no story file there. */
+/** The story file a sheet names, inside the clone or place, absolute; refused when it is no story file there. */
 const storyPath = (workspace: WorkspaceRef, file: string): string => {
   const abs = isAbsolute(file) ? file : resolve(workspace.path, file);
   const inside = relative(workspace.path, abs);
   if (inside.startsWith("..") || isAbsolute(inside)) {
     throw new StageRefusal(
-      `${file} is outside this workspace's clone (${workspace.path}): a sheet is a story file of the clone.`
+      `${file} is outside ${workspace.path}, the folder your stage runs on: a sheet is a story file in it.`
     );
   }
   if (!STORY_FILE.test(abs)) {
@@ -285,7 +289,7 @@ const storyPath = (workspace: WorkspaceRef, file: string): string => {
   }
   if (!existsSync(abs)) {
     throw new StageRefusal(
-      `${inside} does not exist in this workspace's clone. Write it, then call again.`
+      `${inside} does not exist in ${workspace.path}. Write it, then call again.`
     );
   }
   return abs;
@@ -937,6 +941,9 @@ async function stageAtRoot(
 ): Promise<Stage> {
   let stage = stages.get(found.key);
   if (!stage) {
+    if (isLeadPlace(found.workspace.id)) {
+      await keepPlace(found.workspace);
+    }
     stage = {
       ...found,
       status: "starting",
@@ -1035,15 +1042,17 @@ export async function stageComponents(
 ): Promise<{ components: Found[]; dir: string }> {
   const abs = resolve(workspace.path, dir);
   if (relative(workspace.path, abs).startsWith("..")) {
-    throw new StageRefusal(`${dir} is outside this workspace's clone.`);
+    throw new StageRefusal(
+      `${dir} is outside ${workspace.path}, the folder your stage runs on.`
+    );
   }
   const root = upFrom(abs, workspace.path).find(toolchainAt);
   if (!root) {
     const found = rootsUnder(workspace.path);
     throw new StageRefusal(
       found.length > 0
-        ? `${dir} is under no Vite, Astro or Nuxt root; this clone's are ${found.join(", ")}: name one as dir.`
-        : `This clone has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
+        ? `${dir} is under no Vite, Astro or Nuxt root; ${workspace.path}'s are ${found.join(", ")}: name one as dir.`
+        : `${workspace.path} has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
     );
   }
   // The stage is found from a file of the root: a file in it stands in for a story.

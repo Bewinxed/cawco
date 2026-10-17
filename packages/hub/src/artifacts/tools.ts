@@ -94,7 +94,7 @@ export const artifactCreate = {
       .max(1000)
       .regex(STORY_FILE)
       .optional()
-      .describe("From your clone's root."),
+      .describe("From your workspace's root, else your cwd."),
     dir: z
       .string()
       .startsWith("/")
@@ -253,12 +253,12 @@ export const artifactDelete = {
 export const componentsList = {
   name: "components_list",
   description:
-    "Your workspace's components a sheet can show, and each one's story files.",
+    "Components a sheet's file can name, and each one's story files.",
   input: {
     dir: z
       .string()
       .optional()
-      .describe("Only under this folder of your clone."),
+      .describe("Only under this folder, from file's root."),
   },
 };
 

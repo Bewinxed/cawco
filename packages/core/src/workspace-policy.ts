@@ -205,9 +205,11 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
 ];
 
 /**
- * A project lead's place (Caw's): the workspace id the hub gives the
- * boundary of the folder Caw starts in (hub `leadPlaceRef`), never a
- * delegate's. It is a person's own folder, not a disposable clone, so its
+ * A place: the workspace id the hub gives the boundary of a person's own
+ * folder, never a delegate's. A project lead's (Caw's) is the folder he
+ * starts in (hub `leadPlaceRef`); a session with no workspace of its own
+ * has one over the folder it works in, which its stage runs in (hub
+ * `stagePlaceRef`). It is a person's own folder, not a disposable clone, so its
  * boundary never writes into it (no stand-ins, no copied inodes, no exclude
  * lines): its policy denies what is there ({@link workspaceDenies},
  * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config

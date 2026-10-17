@@ -351,8 +351,14 @@ async function start(
       ? { dir: root as string }
       : portSource(port, { workspace, stage, serve });
   await stopNow(instanceId);
-  if ("port" in source) {
-    // A workspace no boundary runs refuses the preview in so many words.
+  // A workspace no boundary runs refuses the preview in so many words. A
+  // sheet's stage or a served preview's server is woken by its first
+  // request (`staged`), which starts the boundary it runs in: a boundary
+  // closed while it slept is no refusal.
+  if (
+    "port" in source &&
+    !(source.workspace && (source.stage || source.serve))
+  ) {
     await upstreamOf(instanceId, source);
   }
   /** A sheet's stage or a workspace preview's server, woken when it sleeps or failed; its refusal is the page the pane draws. */

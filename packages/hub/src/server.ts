@@ -418,6 +418,7 @@ import {
   cawRoutes,
   createCaw,
   leadPlaceRef,
+  stagePlaceRef,
   withCawDenials,
 } from "./caw";
 import {
@@ -10316,6 +10317,48 @@ export const createServer = (
     },
   });
   /**
+   * Where a stage runs, with its machine: a session's work item's workspace,
+   * else its place (caw.ts `stagePlaceRef`), on the session's machine; or
+   * the workspace or place a sheet was made in. Undefined when that is gone:
+   * a workspace the hub no longer has, a place no session names any more.
+   */
+  const stageWhere = (
+    at: StageAt
+  ): { machineId?: string; workspace: WorkspaceRef } | undefined => {
+    if ("session" in at) {
+      const own = workItems.workspaceOf(at.session);
+      return own
+        ? {
+            workspace: own,
+            machineId:
+              db.workspacesNamed(own.id)[0]?.machineId ?? at.session.machineId,
+          }
+        : {
+            workspace: stagePlaceRef(at.session),
+            machineId: at.session.machineId,
+          };
+    }
+    if (isLeadPlace(at.workspace)) {
+      const row = db
+        .listInstances()
+        .find(
+          (one) =>
+            stagePlaceRef(one).id === at.workspace &&
+            !workItems.workspaceOf(one)
+        );
+      return row
+        ? { workspace: stagePlaceRef(row), machineId: row.machineId }
+        : undefined;
+    }
+    const workspace = workItems.workspaceRef(at.workspace);
+    return workspace
+      ? {
+          workspace,
+          machineId: db.workspacesNamed(workspace.id)[0]?.machineId,
+        }
+      : undefined;
+  };
+  /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
    * own, or the one a sheet was made in), with the workspace and `arg`: its
    * answer, or a refusal saying why the stage can't be reached or said no.
@@ -10325,21 +10368,16 @@ export const createServer = (
     method: string,
     arg: unknown
   ): Promise<{ machineId: string; result: unknown; workspace: string }> => {
-    const workspace =
-      "session" in at
-        ? workItems.workspaceOf(at.session)
-        : workItems.workspaceRef(at.workspace);
-    if (!workspace) {
+    const where = stageWhere(at);
+    if (!where) {
+      // Only a sheet's names one that can be gone: a session always has a place.
+      const named = "workspace" in at ? at.workspace : "";
       throw new ArtifactRefusal(
         409,
-        "session" in at
-          ? "A sheet runs on your workspace's stage, and this session runs in no workspace."
-          : `The sheet's workspace ${at.workspace.slice(0, 8)} is gone, so its stage can't run.`
+        `The sheet's workspace ${named.slice(0, 8)} is gone, so its stage can't run.`
       );
     }
-    const held = db.workspacesNamed(workspace.id)[0]?.machineId;
-    const machineId =
-      held ?? ("session" in at ? at.session.machineId : undefined);
+    const { workspace, machineId } = where;
     if (machineId === undefined) {
       throw new ArtifactRefusal(
         409,
