@@ -3421,7 +3421,7 @@ export const artifacts = sqliteTable(
       onDelete: "set null",
     }),
     /**
-     * A sheet's place instead (core `isLeadPlace`): the boundary over the
+     * A sheet's place instead (core `isPlace`): the boundary over the
      * folder of a session with no workspace, whose stage runs there. No
      * workspace row is ever made for a place (archiving one deletes its
      * folder), so it is no key: the hub finds it through the session that

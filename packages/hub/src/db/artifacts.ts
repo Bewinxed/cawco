@@ -1,5 +1,5 @@
 import type { PreviewSource } from "@cawco/core";
-import { isLeadPlace } from "@cawco/core/workspace-policy";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { and, asc, count, desc, eq, gt, gte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -27,12 +27,12 @@ export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
   source: PreviewSource;
 };
 
-/** A port source's `workspace`: a workspace's id, kept as its key, or a place's, kept as itself ({@link isLeadPlace}). */
+/** A port source's `workspace`: a workspace's id, kept as its key, or a place's, kept as itself ({@link isPlace}). */
 const workspaceColumnsOf = (
   source: PreviewSource
 ): Pick<StoredArtifact, "sourcePlace" | "sourceWorkspace"> => {
   const named = "port" in source ? (source.workspace ?? null) : null;
-  return named !== null && isLeadPlace(named)
+  return named !== null && isPlace(named)
     ? { sourceWorkspace: null, sourcePlace: named }
     : { sourceWorkspace: named, sourcePlace: null };
 };
