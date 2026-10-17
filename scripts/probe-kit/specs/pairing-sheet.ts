@@ -20,7 +20,7 @@
  *    container, and the QR card and the code never overlap.
  * 6. Each storyboard's runs in the tokens it names, and reduced motion.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
@@ -455,10 +455,97 @@ const spec: Spec = {
       await sweep("after Start pairing, a new code waiting");
     }
     kit.note(`sweep total: ${total} findings`);
+    await live(kit);
     await weigh(kit, stage);
     await motion(kit, url);
   },
 };
+
+/**
+ * Every element of Caw's live panel as it draws: its tag, its classes (not
+ * the compiler's scoping hashes), its slot, its own words, its box and the
+ * styles that make its look. Equal signatures are the same drawing.
+ */
+function signature(): string[] {
+  const list = document.querySelector('[data-caw-pop] [data-slot="list"]');
+  if (!list) {
+    return [];
+  }
+  const origin = list.getBoundingClientRect();
+  const keys = [
+    "font",
+    "color",
+    "background-color",
+    "padding",
+    "margin",
+    "border",
+    "border-radius",
+    "display",
+    "gap",
+    "opacity",
+  ];
+  return [list, ...list.querySelectorAll("*")].map((el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    const own = [...el.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent?.trim())
+      .join("");
+    const classes = [...el.classList]
+      .filter((one) => !one.startsWith("svelte-"))
+      .sort()
+      .join(".");
+    return [
+      el.localName,
+      classes,
+      el.getAttribute("data-slot") ?? "",
+      own,
+      [box.x - origin.x, box.y - origin.y, box.width, box.height]
+        .map((n) => n.toFixed(1))
+        .join(","),
+      keys.map((key) => style.getPropertyValue(key)).join("|"),
+    ].join(" ¦ ");
+  });
+}
+
+/**
+ * Check 7: Caw's live panel (CawPanel and its NeedsCard rows, on the
+ * caw-notices bench's full fixture, a pairing among its asks) draws the
+ * same before and after its pieces were drawn out of it.
+ * `PROBE_LIVE_BASELINE` names the file: `PROBE_LIVE_WRITE=1` writes it
+ * (the before), otherwise the run reads it and compares.
+ */
+async function live(kit: Kit): Promise<void> {
+  const file = process.env.PROBE_LIVE_BASELINE;
+  if (!file) {
+    kit.note("PROBE_LIVE_BASELINE unset: the live panel was not read");
+    return;
+  }
+  const page = await kit.page("desk");
+  await open(
+    page,
+    `${await kit.bench()}/motion/caw-notices?frame&fixture=full`,
+    '[data-caw-pop] [data-kind="pairing"]'
+  );
+  await settle(page);
+  const now = await page.evaluate(signature);
+  if (process.env.PROBE_LIVE_WRITE === "1") {
+    writeFileSync(file, JSON.stringify(now, null, 1));
+    kit.note(`live panel read: ${now.length} elements, written to ${file}`);
+    return;
+  }
+  const before = JSON.parse(readFileSync(file, "utf8")) as string[];
+  const differ = before
+    .map((line, i) =>
+      line === now[i] ? null : `${i}: ${line}\n   → ${now[i]}`
+    )
+    .filter(Boolean);
+  kit.check(
+    `Caw's live panel draws the same as before (${before.length} elements before, ${now.length} now)`,
+    before.length === now.length && differ.length === 0,
+    differ.slice(0, 6).join("\n")
+  );
+}
 
 const IMPORT =
   /(?:import|export)\s*(?:[^"'`]*?from\s*)?["']([^"']+)["']|import\(\s*["']([^"']+)["']\s*\)/g;
