@@ -490,8 +490,8 @@
             <ProviderLogo
               class="size-icon-md flex-none"
               provider="github"
+              fade="dim"
               size={null}
-              tone="amber-dim"
             />
             <!-- literal: 30px / 44px minimum height, 1.4 line height, 1rem on a phone -->
             <input

@@ -210,7 +210,7 @@
           class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num opacity-(--o) shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
-          style:--knob-shadow="inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"
+          style:--knob-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
           style:--o={n ? 1 : 0.7}
           style:--pad-x="8px"
           bind:offsetWidth={knobWidth}
