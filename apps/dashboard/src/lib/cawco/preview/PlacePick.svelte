@@ -27,15 +27,20 @@
 
   const fleet = paneFleet();
   const onlineMachines = $derived(fleet.machines.filter((row) => row.online));
-  let machineId = $state(
-    fleet.machines.find((row) => row.online)?.machineId ?? ""
-  );
+  /** The machine the person chose; null until they choose one. */
+  let chosen = $state<string | null>(null);
   let path = $state("");
   let saving = $state(false);
   let problem = $state<string | null>(null);
 
+  /**
+   * Their choice while it is online; until they choose, the first machine
+   * online now, so one heard after the picker opened is offered at once.
+   */
   const machine = $derived(
-    onlineMachines.find((row) => row.machineId === machineId) ?? null
+    chosen === null
+      ? (onlineMachines[0] ?? null)
+      : (onlineMachines.find((row) => row.machineId === chosen) ?? null)
   );
   const folder = $derived(path.trim().replace(TRAILING_SLASHES, ""));
 
@@ -81,7 +86,15 @@
     <span class="text-label text-muted-foreground" id="place-machine-label"
       >Machine</span
     >
-    <Select.Root type="single" bind:value={machineId}>
+    <Select.Root
+      type="single"
+      bind:value={
+        () => machine?.machineId ?? "",
+        (next) => {
+          chosen = next;
+        }
+      }
+    >
       <Select.Trigger
         aria-labelledby="place-machine-label"
         class="w-full text-foreground"
