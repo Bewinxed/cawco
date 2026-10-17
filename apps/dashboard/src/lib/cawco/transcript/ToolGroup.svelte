@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shownAttachments, sidecarOf, VIDEO_FILE } from "@cawco/core";
   import {
     hasBody as bodyFor,
     inputFields,
@@ -51,6 +52,7 @@
    */
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
+  import DocThumb from "./DocThumb.svelte";
   import { disclosure } from "./disclosure.svelte";
   import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
@@ -61,21 +63,31 @@
   const machineMedia = (machineId: string, path: string): string =>
     `/api/agents/${encodeURIComponent(machineId)}/media?path=${encodeURIComponent(path)}`;
 
-  /** The clips the machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
-  const VIDEO_FILE = /\.(mp4|mov|webm)$/i;
   const isVideo = (path: string): boolean => VIDEO_FILE.test(path);
-  /** A video's captions: the `.vtt` of the same name beside it. */
-  const sidecar = (path: string): string => path.replace(VIDEO_FILE, ".vtt");
   /** Where a video's captions would be served from; nothing for a picture. */
   const captionsOf = (machineId: string, path: string): string | undefined =>
-    isVideo(path) ? machineMedia(machineId, sidecar(path)) : undefined;
+    isVideo(path) ? machineMedia(machineId, sidecarOf(path)) : undefined;
+  /** A captions file sent with no video of its own: a file, not a picture. */
+  const CAPTIONS_FILE = /\.vtt$/i;
+  /** A lone captions file's text, read once per URL, for its file row. */
+  const captionTexts = new Map<string, Promise<string>>();
+  const captionText = (url: string): Promise<string> => {
+    let text = captionTexts.get(url);
+    if (!text) {
+      text = fetch(url).then((answer) =>
+        answer.ok ? answer.text() : Promise.reject(new Error(answer.statusText))
+      );
+      captionTexts.set(url, text);
+    }
+    return text;
+  };
 
   /** `send_to_user` under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
   const SEND_TO_USER = /(^|_)send_to_user$/;
 
   /**
    * What a `send_to_user` call attached, shown under its row as the owner got
-   * it. A `.vtt` sent beside its video captions that video, not a row of its own.
+   * it (core `shownAttachments`, as Telegram gets it).
    */
   const sentAttachments = (m: Message): string[] => {
     const name = (m.metadata?.toolName ?? "").toLowerCase();
@@ -84,14 +96,11 @@
     }
     const attached = (m.metadata?.toolInput as { attachments?: unknown })
       ?.attachments;
-    if (!Array.isArray(attached)) {
-      return [];
-    }
-    const paths = attached.filter(
-      (path): path is string => typeof path === "string"
-    );
-    const captions = new Set(paths.filter(isVideo).map(sidecar));
-    return paths.filter((path) => !captions.has(path));
+    return Array.isArray(attached)
+      ? shownAttachments(
+          attached.filter((path): path is string => typeof path === "string")
+        )
+      : [];
   };
 
   let { messages }: { messages: Message[] } = $props();
@@ -552,14 +561,28 @@
           {#if machine && !failed && sentAttachments(m).length}
             <div class="shots" data-gallery>
               {#each sentAttachments(m) as path (path)}
-                <Shot
-                  alt={pathLeaf(path)}
-                  captions={captionsOf(machine(), path)}
-                  {path}
-                  size="card"
-                  src={machineMedia(machine(), path)}
-                  video={isVideo(path)}
-                />
+                {#if CAPTIONS_FILE.test(path)}
+                  {#await captionText(machineMedia(machine(), path)) then content}
+                    <DocThumb {content} name={pathLeaf(path)} />
+                  {:catch}
+                    <Shot
+                      alt={pathLeaf(path)}
+                      missing="Captions file"
+                      {path}
+                      size="card"
+                      src={machineMedia(machine(), path)}
+                    />
+                  {/await}
+                {:else}
+                  <Shot
+                    alt={pathLeaf(path)}
+                    captions={captionsOf(machine(), path)}
+                    {path}
+                    size="card"
+                    src={machineMedia(machine(), path)}
+                    video={isVideo(path)}
+                  />
+                {/if}
               {/each}
             </div>
           {/if}

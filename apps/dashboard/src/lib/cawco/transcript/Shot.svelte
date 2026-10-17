@@ -119,6 +119,7 @@
     alt,
     caption,
     captions,
+    missing,
     path,
     size = "card",
     video = false,
@@ -128,6 +129,8 @@
     caption?: string;
     /** Where a video's sidecar `.vtt` would be served from. */
     captions?: string;
+    /** What the box says it is when the file can't be read. */
+    missing?: string;
     path?: string;
     size?: "thumb" | "card";
     /** A clip rather than a picture: played in place, with the browser's own controls. */
@@ -279,7 +282,7 @@
     </div>
   {:else if failed === src}
     <div class="box missing">
-      <span>{video ? "Video" : "Image"} not available</span>
+      <span>{missing ?? (video ? "Video" : "Image")} not available</span>
       {#if path}
         <span data-slot="path" class="path">{path}</span>
       {/if}

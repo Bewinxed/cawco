@@ -13,6 +13,7 @@ import {
   CAWCO_ENV,
   changeStat,
   readEnv,
+  shownAttachments,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach, failureOf } from "@cawco/core/detach";
@@ -104,7 +105,8 @@ const PHOTO_LIMIT_BYTES = 10 * 1024 * 1024;
 
 /**
  * Which Bot API method carries a file, by its media type: a GIF as an
- * animation so it plays, a video as a video, any other picture as a photo.
+ * animation so it plays, a video as a video, any other picture as a photo;
+ * anything else (a captions file) goes as a document.
  */
 const uploadOf = (
   mediaType: string,
@@ -116,7 +118,7 @@ const uploadOf = (
   if (mediaType.startsWith("video/")) {
     return { method: "sendVideo", field: "video" };
   }
-  return size <= PHOTO_LIMIT_BYTES
+  return mediaType.startsWith("image/") && size <= PHOTO_LIMIT_BYTES
     ? { method: "sendPhoto", field: "photo" }
     : undefined;
 };
@@ -585,7 +587,8 @@ export const createTelegramBridge = ({
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
-    for (const path of attachments) {
+    // A video's sidecar `.vtt` stays behind: sendVideo takes no subtitles.
+    for (const path of shownAttachments(attachments)) {
       // biome-ignore lint/performance/noAwaitInLoops: each attachment is its own message, in the order they were given
       const problem = await deliverAttachment(machineId, instanceId, path);
       if (problem) {
