@@ -6,9 +6,9 @@
     variants: {
       align: {
         "inline-start":
-          "order-first pl-3 has-[>button]:-ml-space-1 has-[>kbd]:ml-[-0.15rem]",
+          "order-first pl-3 has-[>kbd]:ml-[-0.15rem] not-has-[>kbd]:has-[>button]:-ml-space-1",
         "inline-end":
-          "order-last pr-3 has-[>button]:-mr-space-1 has-[>kbd]:mr-[-0.15rem]",
+          "order-last pr-3 has-[>kbd]:mr-[-0.15rem] not-has-[>kbd]:has-[>button]:-mr-space-1",
         "block-start":
           "order-first w-full justify-start px-3 pt-3 [.border-b]:pb-3",
         "block-end":

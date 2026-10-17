@@ -165,6 +165,34 @@
   inherits: false;
   initial-value: 0;
 }
+/* How chosen a folder tab is (components/ui/fluid-tabs TabItem, `--pick`),
+   typed so a choice interpolates the one number and everything drawn from
+   it follows on its clock. */
+@property --pick {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+/* The fluid track's come-forward clock (TabsList, `tab-come-forward`): a
+   number the run carries from 0 to 1, which nothing draws. And a tab's rank
+   in the stack (`--z`, the track's; `--z-rest`, from the order and the value
+   until the track ranks it), read only on the box that carries it. Not
+   inherited: as plain custom properties each new rank restyled everything
+   its tab holds, 430 elements a choice. No initial value (`*`), so a box the
+   track has not ranked yet still falls back to its rest rank. */
+@property --forward {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --z {
+  syntax: "*";
+  inherits: false;
+}
+@property --z-rest {
+  syntax: "*";
+  inherits: false;
+}
 
 @layer base {
   /* The theme class is the one switch: it picks the palette through
@@ -2293,6 +2321,295 @@
    leaves a duration and curve the element set elsewhere. */
 @utility transition-off {
   transition: none;
+}
+
+/* No outline, as `outline: none` writes it: its style, width and colour
+   back to their initial values (none, medium, currentcolor). Tailwind's
+   `outline-none` sets only the style, so the base's focus-ring colour and
+   its :focus-visible width stay. */
+@utility outline-off {
+  outline: none;
+}
+
+/* A background as the `background` shorthand writes it: the colour given,
+   and every other longhand back to its initial value (no image, the clip
+   to the border box, the position at 0% 0%). Tailwind's `bg-*` sets the
+   colour alone. A colour token (`background-surface-raised`), `transparent`,
+   `none`, or a custom property (`background-(--sheet)`). */
+@utility background-* {
+  background: --value(--color-*);
+  background: --value("transparent", "none");
+  background: --value([*]);
+}
+
+/* Declarations Tailwind writes no utility for, each as the source wrote it.
+   A box that takes a value from its parent as it stands (`inherit`): a
+   custom property cannot carry the keyword, which would make the property
+   inherit rather than the value. */
+@utility rounded-inherit {
+  border-radius: inherit;
+}
+@utility font-inherit {
+  font: inherit;
+}
+@utility font-family-inherit {
+  font-family: inherit;
+}
+@utility gap-inherit {
+  gap: inherit;
+}
+/* `word-break: break-word` (Tailwind's `wrap-break-word` is overflow-wrap,
+   another property). */
+@utility break-word {
+  word-break: break-word;
+}
+/* A running animation held where it stands. */
+@utility animation-paused {
+  animation-play-state: paused;
+}
+/* The muted and subtle inks gone strong inside a control (press-tint sets
+   these two and two more). */
+@utility inks-strong {
+  --ink-muted: var(--ink-strong);
+  --ink-subtle: var(--ink-strong);
+}
+/* Custom properties a component reads, each set from another under a
+   state (`coarse:hit-gap-coarse-(--row-gap)`). */
+@utility hit-gap-coarse-* {
+  --hit-gap-coarse: --value([*]);
+}
+@utility hit-gap-y-* {
+  --hit-gap-y: --value([*]);
+}
+@utility rail-step-* {
+  --rail-step: --value([*]);
+}
+@utility prompt-fs-* {
+  --prompt-fs: --value([*]);
+}
+@utility hit-gap-x-* {
+  --hit-gap-x: --value(--spacing-*, [*]);
+}
+/* The radius of a joined glass's corners (Shell's join, whose outline reads
+   `--r`). */
+@utility join-radius-* {
+  --r: --value([*]);
+}
+@utility caw-neck-* {
+  --caw-neck: --value([*]);
+}
+@utility press-by-* {
+  --press-by: --value([*]);
+}
+@utility swap-away-* {
+  --swap-away: --value(integer);
+}
+@utility fade-inset-end-* {
+  --fade-inset-end: --value([*]);
+}
+/* A scroll timeline in reach of a head that reads it (HeadFade's
+   `--transcript-head`). A timeline's name is a dashed ident, which a
+   custom property would hand over as its value, so the name is the
+   utility's. */
+@utility timeline-scope-transcript-head {
+  timeline-scope: --transcript-head;
+}
+/* What a press shows by itself on a phone: no tap flash, no callout. */
+@utility tap-highlight-none {
+  -webkit-tap-highlight-color: transparent;
+}
+@utility touch-callout-none {
+  -webkit-touch-callout: none;
+}
+@utility content-visibility-hidden {
+  content-visibility: hidden;
+}
+@utility scheme-inherit {
+  color-scheme: inherit;
+}
+@utility pointer-events-all {
+  pointer-events: all;
+}
+@utility max-h-inherit {
+  max-height: inherit;
+}
+/* A clamp taken off as the source wrote it: Tailwind's `line-clamp-none`
+   also sets overflow, display and orientation. */
+@utility line-clamp-undo {
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+}
+/* The meta size in the mono face as the `font` shorthand sets it: line
+   height normal, every other font subproperty reset. */
+@utility font-mono-meta {
+  font: var(--text-meta) var(--font-mono);
+}
+/* The box keywords Tailwind does not write (its `items-start` is
+   `flex-start`), and the unsafe alignments. */
+@utility items-box-start {
+  align-items: start;
+}
+@utility items-box-end {
+  align-items: end;
+}
+@utility items-unsafe-end {
+  align-items: unsafe end;
+}
+@utility justify-box-end {
+  justify-content: end;
+}
+@utility justify-self-box-start {
+  justify-self: start;
+}
+@utility content-unsafe-end {
+  align-content: unsafe end;
+}
+/* `translate` from a custom property as it is, so an unset one computes
+   `none` (Tailwind's `translate-*` composes two axes). */
+@utility translate-raw-* {
+  translate: --value([*]);
+}
+@utility clip-margin-* {
+  overflow-clip-margin: --value(--spacing-*, [*]);
+}
+@utility anim-delay-* {
+  animation-delay: --value([*]);
+}
+@utility anchor-none {
+  overflow-anchor: none;
+}
+/* The transcript's scroll as the timeline its head blur reads (HeadFade),
+   the pair of `timeline-scope-transcript-head`. */
+@utility scroll-timeline-transcript-head {
+  scroll-timeline: --transcript-head block;
+}
+/* A suggestion chip's tint, a mix per chip (`--tint`): the border takes the
+   fill's share at 1.5×, mixed in sRGB so the accent reads as if laid over
+   the surface. */
+@utility border-suggest-tint {
+  border-color: color-mix(
+    in srgb,
+    var(--action-solid) calc(var(--tint) * 1.5),
+    var(--surface-raised)
+  );
+}
+@utility bg-suggest-tint {
+  background: color-mix(
+    in srgb,
+    var(--action-solid) var(--tint),
+    var(--surface-raised)
+  );
+}
+@utility bg-suggest-tint-hover {
+  background: color-mix(
+    in srgb,
+    var(--action-solid) calc(var(--tint) + 6%),
+    var(--surface-raised)
+  );
+}
+
+/* ---- Recipes: custom properties a component's states rewrite, each as its
+   source wrote them. */
+
+/* A pane tab's end pads (PaneTabs), set on the tab so `--px` and
+   `--overlap` resolve there: a pixel short of the kit's at the end, and on
+   the phone's row a title's room at each end that clears the overlap. */
+@utility pane-tab-pads {
+  --px-end: calc(var(--px) - 1px);
+
+  @media (width < 900px) {
+    --px-start: calc(var(--overlap) + var(--c-tab-lead));
+    --px-end: calc(var(--overlap) + var(--radius-lg) - 1px);
+  }
+}
+/* The strengths a pane tab's rim takes (PaneTabs `RIM`), solid under
+   Increase Contrast and reduced transparency. Read on the tab, so an
+   ancestor's `--tab-rim-mix-*` (the folder proof page) still reaches it. */
+@utility pane-tab-rims {
+  --rim-subtle: var(--tab-rim-mix-subtle);
+  --rim-chosen: var(--tab-rim-mix-chosen);
+  --rim-idle: var(--tab-rim-mix-idle);
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    --rim-subtle: 1;
+    --rim-chosen: 1;
+    --rim-idle: 1;
+  }
+}
+/* The compaction divider's chevron clock and line ink (CompactionDivider),
+   which every part of the row reads. How far in the chevron is: 0 away, 1
+   beside the word. It leaves a little quicker than it arrives; a state that
+   shows it names the arrival's clock. */
+@utility divider-chevron {
+  --line: var(--brand-solid);
+  --chev: 0;
+  --chev-dur: var(--dur-control);
+  --chev-ease: var(--ease-out);
+
+  /* In for keyboard focus and while the brief is open. */
+  &:is(:focus-visible, [aria-expanded="true"]) {
+    --chev: 1;
+    --chev-dur: var(--dur-toggle);
+    --chev-ease: var(--ease-arrive);
+  }
+  /* Under the pointer the line and word step to the stronger vermillion and
+     the chevron comes in. */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      --line: var(--brand-ink-strong);
+      --chev: 1;
+      --chev-dur: var(--dur-toggle);
+      --chev-ease: var(--ease-arrive);
+    }
+  }
+  /* A finger has no hover: what opens always shows that it does. */
+  @media (pointer: coarse) {
+    &:not(:disabled) {
+      --chev: 1;
+    }
+  }
+  /* Settling, nothing offers the brief yet. */
+  &[data-settling] {
+    --chev: 0;
+  }
+}
+/* A turn's pad (the transcript skeleton's reader well), a step down at the
+   narrow breakpoint. */
+@utility turn-pad {
+  --pad: var(--space-3);
+
+  @media (width <= 900px) {
+    --pad: var(--space-2);
+  }
+}
+/* A clip path, from a custom property on the element
+   (`clip-path-(--fold-clip)`). */
+@utility clip-path-* {
+  clip-path: --value([*]);
+}
+/* A name set down a column (a folded board column's rail). */
+@utility writing-vertical-rl {
+  writing-mode: vertical-rl;
+}
+/* Named grid areas, the areas string in a custom property on the element
+   (`grid-areas-(--row-areas)`). */
+@utility grid-areas-* {
+  grid-template-areas: --value([*]);
+}
+/* Right to left as the property alone: the `dir` attribute also sets
+   unicode-bidi. */
+@utility dir-rtl {
+  direction: rtl;
+}
+/* The ground a ring is cut against, set from a colour token under a state
+   (`hover:ring-ground-surface-hover`). */
+@utility ring-ground-* {
+  --ring-ground: --value(--color-*);
+}
+/* The standard `line-clamp` property alone: Tailwind's `line-clamp-N` writes
+   the `-webkit-` form with its display and overflow. */
+@utility line-clamp-std-* {
+  line-clamp: --value(integer);
 }
 
 /* A field that frames a borderless editor with its own controls beside it

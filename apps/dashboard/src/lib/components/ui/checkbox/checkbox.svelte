@@ -1,3 +1,27 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a card's pick box, shown while its card is in
+      reach (under the pointer, focused, picked, its column picking, or under
+      a finger), fading over --dur-control. Its hiding and showing hold over
+      the kit's disabled dimming, as the board's own rules did: the rest's
+      `disabled:` and field-disabled `opacity-0` take the kit's dimming's
+      place (the same modifiers, so `cn` keeps only these), and each state
+      shows in all four of their combinations, the variant sort never
+      choosing between them. */
+  export const checkboxVariants = tv({
+    variants: {
+      reveal: {
+        "card-pick":
+          "dur-control coarse:not-disabled:not-group-data-[disabled=true]/field:opacity-100 opacity-0 transition-[opacity] ease-out coarse:disabled:not-group-data-[disabled=true]/field:opacity-100 disabled:opacity-0 group-focus-within/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-[disabled=true]/field:opacity-0 group-data-picked/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-data-[disabled=true]/field:opacity-100 coarse:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-data-[disabled=true]/field:opacity-100",
+      },
+    },
+  });
+
+  export type CheckboxLooks = VariantProps<typeof checkboxVariants>;
+</script>
+
 <script lang="ts">
   import { Checkbox as CheckboxPrimitive } from "bits-ui";
   import { IconMinus, IconTick } from "#lib/icons.js";
@@ -8,8 +32,10 @@
     checked = $bindable(false),
     indeterminate = $bindable(false),
     class: className,
+    reveal,
     ...restProps
-  }: WithoutChildrenOrChild<CheckboxPrimitive.RootProps> = $props();
+  }: WithoutChildrenOrChild<CheckboxPrimitive.RootProps> &
+    CheckboxLooks = $props();
 </script>
 
 <CheckboxPrimitive.Root
@@ -22,9 +48,10 @@
     "aria-invalid:border-error-9",
     "aria-invalid:aria-checked:border-action-solid",
     "data-checked:border-action-solid data-checked:bg-action-solid",
-    "data-checked:text-on-action dark:bg-input/30",
+    "data-checked:text-on-action dark:not-data-checked:bg-input/30",
     "dark:data-checked:bg-action-solid",
     "dark:aria-invalid:border-error-9/50",
+    checkboxVariants({ reveal }),
     className
   )}
   data-slot="checkbox"

@@ -284,14 +284,18 @@
     "relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
     "[&:not(:has([data-slot=hit]:last-child))]:pe-(--end-pad)",
     "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",
-    "can-hover:data-ghosted:text-ink-strong data-tab-item-selected:text-ink-strong",
-    "can-hover:in-variant-folder:data-tab-item-selected:text-ink-muted in-variant-folder:data-tab-item-selected:text-ink-muted",
+    "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
+    "in-variant-folder:data-tab-item-selected:text-ink-muted",
     "motion-safe:dur-ghost motion-safe:transition-[color] motion-safe:ease-out",
+    "in-variant-folder:motion-safe:transition-[color,--pick] in-variant-folder:motion-safe:duration-(--pick-durs) in-variant-folder:motion-safe:ease-(--pick-eases)",
+    "hit-pressed:bg-press-fill in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
     className
   )}
   data-flush={flush}
   data-tab-index={index}
   bind:this={node}
+  style:--pick-durs="var(--dur-ghost), var(--choose-dur)"
+  style:--pick-eases="var(--ease-out), var(--choose-ease)"
   style:--pick={pick}
   style:--z-rest={restAt}
   style:--end-pad="calc(var(--px) - 6px)"
@@ -306,7 +310,7 @@
     <svg
       data-slot="fold"
       aria-hidden="true"
-      class="pointer-events-none inset-y-0 start-(--fold-start) h-full w-(--fold-w) overflow-visible"
+      class="pointer-events-none absolute inset-y-0 start-(--fold-start) z-1 h-full w-(--fold-w) overflow-visible clip-path-(--fold-clip)"
       style:--fold-start="calc(-1 * var(--flare))"
       style:--fold-w="calc(100% + 2 * var(--flare))"
       style:--fold-clip="inset(-24px -24px 0)"
@@ -357,7 +361,7 @@
     data-slot="hit"
     data-hit
     aria-selected={selected}
-    class="touch-hit flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch border-none border-current bg-transparent py-0 ps-(--hit-ps) whitespace-nowrap text-inherit no-underline outline-none last:pe-(--px)"
+    class="touch-hit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px)"
     style:--hit-gap="calc(var(--gap) + var(--space-1))"
     style:--hit-ps="var(--px-start, var(--px))"
     draggable={href ? "false" : undefined}
@@ -407,82 +411,16 @@
 </span>
 
 <style>
-  /* residual: unmapped — how chosen a folder tab is (`pick`), typed so a
-     choice interpolates the one number and everything drawn from it
-     follows on its clock: a registration no utility makes. */
-  @property --pick {
-    syntax: "<number>";
-    inherits: true;
-    initial-value: 0;
-  }
-  /* residual: foreign-dom — every child of the box rises over the
-     overlays, the trailing control a host renders (`trail`) included. */
-  [data-slot="ff-tab"] > :global(*) {
+  /* residual: foreign-dom — every other child of the box rises over the
+     overlays, the trailing control a host renders (`trail`) included. The
+     fold stands behind at z-index 1 and the hit is not positioned (the box
+     is the containing block of its area): their own classes say so. At
+     the weight `> *` had, so a host's rule on its trailing control still
+     meets it as before. */
+  [data-slot="ff-tab"]
+    > :global(:where(:not([data-slot="fold"], [data-slot="hit"]))) {
     position: relative;
     z-index: 3;
-  }
-  /* residual: unmapped — what outranks the rule above on the box's own
-     children, kept unlayered so it still does: the fold stands behind at
-     z-index 1, its glow clipped at the shelf's line (no clip-path
-     utility); the hit is not positioned, so the box is the containing
-     block of its area. The hit's `font: inherit` resets the size and line
-     height, so those stay after it. */
-  [data-slot="ff-tab"] > [data-slot="fold"] {
-    position: absolute;
-    z-index: 1;
-    clip-path: var(--fold-clip);
-  }
-  [data-slot="hit"] {
-    position: static;
-    border-radius: inherit;
-    font: inherit;
-    font-size: var(--text);
-    line-height: 1;
-  }
-  /* The press tints the whole segment (trailing controls included), not
-     the label's hit alone. A press on a trailing control leaves it be: the
-     state is the hit's `:active`, read on the box (a run-time :has). A
-     folder tab's press tints its own shape, its feet too; the box itself
-     stays clear behind it. */
-  [data-slot="ff-tab"]:has(
-    [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
-  ) {
-    --press: light-dark(var(--surface-fill-strong), var(--surface-fill));
-    background-color: var(--press);
-  }
-  :global([data-variant="folder"])
-    [data-slot="ff-tab"]:has(
-      [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
-    ) {
-    background-color: transparent;
-  }
-  /* needs transition token: color var(--dur-ghost) var(--ease-out),
-     --pick var(--choose-dur) var(--choose-ease). A choice carries `--pick`
-     over the choice's own length and curve; under a gesture it is where the
-     fraction puts it (the track's `data-ride`). Each folder tab is a sheet
-     standing on the shelf (fold-path.ts), filled in the receded tint (a
-     host may set it, `--tab-fill`) toward the sheet's own surface
-     (`--sheet`) as it is chosen (`--pick`); the tabs overlap, each its own
-     stack at its rank (TabsList), so the tab in front covers the one
-     behind, rim and all. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global([data-variant="folder"]) [data-slot="ff-tab"] {
-      transition:
-        color var(--dur-ghost) var(--ease-out),
-        --pick var(--choose-dur) var(--choose-ease);
-    }
-  }
-  :global([data-ride]) :global([data-variant="folder"]) [data-slot="ff-tab"] {
-    transition: none;
-  }
-  /* By day the press is the step past the hover ghost, and an unchosen
-     tab's muted label goes strong on it (app.css .press-tint). Last, so it
-     outranks every tab rule above by order as well as by weight. */
-  :global(:root:not(.dark))
-    [data-slot="ff-tab"]:has(
-      [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
-    ) {
-    color: var(--ink-strong);
   }
   /* residual: foreign-dom — the leading icon a caller passes (`icon`). */
   [data-slot="ff-tab"] :global(.ff-tab-icon) {
@@ -549,7 +487,7 @@
     )
     [data-slot="fold"]
     [data-slot="sheet"] {
-    fill: var(--press);
+    fill: var(--press-fill);
   }
   [data-slot="fold"] [data-slot="rim"] {
     opacity: calc(

@@ -200,7 +200,7 @@
       >
         <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
         <circle
-          class="origin-center -rotate-90 transition-[stroke-dasharray] dur-pop ease-out motion-reduce:transition-none"
+          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] dur-pop ease-out motion-reduce:transition-none"
           data-slot="ring-arc"
           cx="12"
           cy="12"
@@ -235,14 +235,18 @@
       class="transition-[opacity] dur-morph ease-out covered-true:opacity-0"
       data-covered={covered}
       >{#if swapsLabel}
-        <span class="inline-grid justify-items-start" data-slot="words"
+        <!-- literal: blur(2px) (the wording that steps out goes soft) -->
+        <span
+          class="inline-grid justify-items-start"
+          data-slot="words"
+          style:--words-blur="blur(2px)"
           ><span
             aria-hidden={pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0"
+            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:filter-(--words-blur)"
             data-active={!pending}><MorphText text={label} /></span
           ><span
             aria-hidden={!pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0"
+            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:filter-(--words-blur)"
             data-active={pending}>{pendingLabel}</span
           ></span
         >
@@ -262,15 +266,3 @@
     {/if}</span
   >
 {/if}
-
-<style>
-  /* residual: unmapped */
-  [data-slot="ring-arc"] {
-    transform-box: view-box;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="words"] > [data-active="false"] {
-      filter: blur(2px);
-    }
-  }
-</style>

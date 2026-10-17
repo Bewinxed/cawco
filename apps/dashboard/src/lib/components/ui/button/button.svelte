@@ -50,6 +50,86 @@
         "icon-sm": "size-[30px]",
         "icon-lg": "size-11",
       },
+      /* The looks its callers draw over a variant, each as they drew it. */
+      /** The ink: muted, or muted until the pointer is on it. */
+      tone: {
+        muted: "text-ink-muted",
+        quiet: "text-ink-muted hover:text-ink-strong",
+      },
+      /** An answer to an ask: filled in the status tint, edged on the recess,
+          or edged with its strong ink held (a prompt's answers). Its hover
+          holds over an open or invalid state, as the callers' own rules
+          did: the halves keep the states apart for the variant sort. The
+          tinted answers keep no edge, invalid too, and their tint fills
+          under it (the callers' `background` shorthand put the clip back
+          at the border box). */
+      answer: {
+        deny: "border-transparent bg-status-fail-bg bg-clip-border text-status-fail-ink not-aria-expanded:hover:bg-status-fail-bg hover:text-status-fail-ink aria-expanded:hover:bg-status-fail-bg aria-invalid:border-transparent",
+        approve:
+          "border-transparent bg-status-done-bg bg-clip-border text-status-done-ink not-aria-expanded:hover:bg-status-done-bg hover:text-status-done-ink aria-expanded:hover:bg-status-done-bg aria-invalid:border-transparent",
+        "deny-edge":
+          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-fail-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink aria-invalid:hover:border-status-fail-ink",
+        "approve-edge":
+          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink aria-invalid:hover:border-status-done-ink",
+        "deny-strong":
+          "border-status-fail-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink",
+        "approve-strong":
+          "border-status-done-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink",
+      },
+      /** No edge of its own. */
+      edge: { none: "border-transparent" },
+      /** Its box: a prompt's answer (the label size at medium weight, the
+          small corner), or 24px square. */
+      fit: {
+        prompt: "gap-(--btn-gap) rounded-sm px-space-3 font-medium text-label",
+        "prompt-wide":
+          "gap-(--btn-gap) rounded-sm px-space-4 font-medium text-label",
+        "square-24": "h-6 w-6",
+      },
+      /** A control inset in a field takes the field's tighter corner. */
+      shape: { inset: "rounded-xs" },
+      /** It may shrink below its words, or up to a field's cap. */
+      width: { shrink: "min-w-0", capped: "min-w-0 max-w-112" },
+      /** Pulled into what stands beside it, or set off from it. */
+      margin: {
+        "hairline-overlap": "-me-px",
+        "ghost-end": "-mr-1.5",
+        "start-gap": "ml-2",
+        "beside-num": "peer-data-num/place:ms-0",
+      },
+      /** Its words and mark spread apart. */
+      gap: { loose: "gap-2" },
+      /** Its inline padding: none (a link reading as text), or the caller's `--more-px`. */
+      pad: { none: "px-0", more: "px-(--more-px)" },
+      /** Shown only when its row is in reach: under the pointer, focused, or
+          under a finger. Disabled too, as the callers' own rules drew it
+          over the kit's dimming: the halves keep the states apart. */
+      reveal: {
+        "value-hover":
+          "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-hover/value:not-disabled:opacity-100 group-hover/value:disabled:opacity-100",
+        "row-hover":
+          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
+      },
+      /** Open, it draws no fill while the pointer is off it (its words and
+          chevron say it is open). */
+      expanded: { unfilled: "aria-expanded:unhovered:bg-transparent" },
+      /** A path, in the mono face at the label size. */
+      face: { path: "font-mono font-normal text-label" },
+      /** The last of a row of actions: its end padding moved to its start
+          (`--toggle-start`, `--end`), over the size's icon-side pads. */
+      toggle: {
+        last: "last:not-has-data-[icon=inline-start]:ps-(--toggle-start) last:not-has-data-[icon=inline-end]:pe-(--end) last:has-data-[icon=inline-start]:ps-(--toggle-start) last:has-data-[icon=inline-end]:pe-(--end)",
+      },
+      /** Its figures in tabular widths. */
+      figures: { tabular: "tabular-nums" },
+      /** While its page is open (`aria-current="page"`), the selected tint
+          (filling under the edge) and ink over every state, as its caller's
+          own rule held them, crossing over --dur-control; its press scales
+          at once. */
+      current: {
+        selected:
+          "[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] aria-current-page:bg-selected-bg! aria-current-page:bg-clip-border aria-current-page:text-selected-ink!",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -61,9 +141,15 @@
   export type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
   export type ButtonSize = VariantProps<typeof buttonVariants>["size"];
   export type ButtonPress = VariantProps<typeof buttonVariants>["press"];
+  /** The looks a caller draws over its variant and size. */
+  export type ButtonLooks = Omit<
+    VariantProps<typeof buttonVariants>,
+    "variant" | "size" | "press"
+  >;
 
   export type ButtonProps = WithElementRef<HTMLButtonAttributes> &
-    WithElementRef<HTMLAnchorAttributes> & {
+    WithElementRef<HTMLAnchorAttributes> &
+    ButtonLooks & {
       variant?: ButtonVariant;
       size?: ButtonSize;
       press?: ButtonPress;
@@ -107,6 +193,21 @@
     variant = "default",
     size = "default",
     press: pressKind = "scale",
+    tone,
+    answer,
+    edge,
+    fit,
+    shape,
+    width,
+    margin,
+    gap,
+    pad,
+    reveal,
+    expanded,
+    face,
+    toggle,
+    figures,
+    current,
     ref = $bindable(null),
     href,
     type = "button",
@@ -122,6 +223,32 @@
     children,
     ...restProps
   }: ButtonProps = $props();
+
+  const classes = $derived(
+    cn(
+      buttonVariants({
+        variant,
+        size,
+        press: pressKind,
+        tone,
+        answer,
+        edge,
+        fit,
+        shape,
+        width,
+        margin,
+        gap,
+        pad,
+        reveal,
+        expanded,
+        face,
+        toggle,
+        figures,
+        current,
+      }),
+      className
+    )
+  );
 
   const press = whileIdle(
     () => pending,
@@ -151,7 +278,7 @@
 {#if href}
   <a
     aria-disabled={disabled}
-    class={cn(buttonVariants({ variant, size, press: pressKind }), className)}
+    class={classes}
     data-slot="button"
     href={disabled ? undefined : href}
     {onclick}
@@ -166,7 +293,7 @@
   <button
     aria-busy={pending || undefined}
     aria-disabled={pending || undefined}
-    class={cn(buttonVariants({ variant, size, press: pressKind }), className)}
+    class={classes}
     data-slot="button"
     {disabled}
     onclick={press}

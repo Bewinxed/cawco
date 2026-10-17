@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: set a hairline down, on its label's first line. */
+  export const switchVariants = tv({
+    variants: { align: { "first-line": "mt-px" } },
+  });
+
+  export type SwitchLooks = VariantProps<typeof switchVariants>;
+</script>
+
 <script lang="ts">
   import { Switch as SwitchPrimitive } from "bits-ui";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -7,10 +19,12 @@
     class: className,
     checked = $bindable(false),
     size = "default",
+    align,
     ...restProps
-  }: WithoutChildrenOrChild<SwitchPrimitive.RootProps> & {
-    size?: "sm" | "default";
-  } = $props();
+  }: WithoutChildrenOrChild<SwitchPrimitive.RootProps> &
+    SwitchLooks & {
+      size?: "sm" | "default";
+    } = $props();
 </script>
 
 <SwitchPrimitive.Root
@@ -25,6 +39,7 @@
     "data-unchecked:bg-input data-disabled:opacity-50",
     "dark:data-unchecked:bg-input/80",
     "dark:aria-invalid:border-error-9/50",
+    switchVariants({ align }),
     className
   )}
   data-size={size}
@@ -35,7 +50,7 @@
 >
   <SwitchPrimitive.Thumb
     data-switch-block
-    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong kit-switch-thumb pointer-events-none block ring-0 rtl:data-[state=checked]:translate-x-[calc(-100%)]"
+    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong kit-switch-thumb pointer-events-none block ring-0 rtl:data-[state=checked]:not-group-data-[size=default]/switch:not-group-data-[size=sm]/switch:translate-x-[calc(-100%)]"
     data-slot="switch-thumb"
   />
 </SwitchPrimitive.Root>

@@ -15,7 +15,8 @@
     "text-left text-ink-muted text-meta leading-root",
     "group-data-[orientation=horizontal]/field:text-balance",
     "[[data-variant=legend]+&]:-mt-1.5",
-    "nth-last-2:-mt-space-1 last:mt-0",
+    "not-[[data-variant=legend]+&]:nth-last-2:-mt-space-1",
+    "not-[[data-variant=legend]+&]:not-nth-last-2:last:mt-0",
     "[&>a:hover]:text-link-ink [&>a]:underline [&>a]:underline-offset-4",
     className
   )}

@@ -1,3 +1,18 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: at the opacity the caller sets (`--o`), or at
+      80%. A caller never tints a mark, so no look carries a colour. */
+  export const providerLogoVariants = tv({
+    variants: {
+      fade: { set: "opacity-(--o)", dim: "opacity-80" },
+    },
+  });
+
+  export type ProviderLogoLooks = VariantProps<typeof providerLogoVariants>;
+</script>
+
 <script lang="ts">
   /**
    * A provider's mark, as a passive glyph: the lab behind a model (next to its
@@ -11,6 +26,7 @@
    */
   import type { Component } from "svelte";
   import { providerOf } from "#lib/cawco/models.svelte.js";
+  import { cn } from "#lib/utils.js";
   /*
    * Every mark here is square, and that is a hard requirement rather than a
    * coincidence: the caller sizes this with one number, so a mark whose viewBox
@@ -71,7 +87,8 @@
     size = 16,
     class: className = "",
     style = "",
-  }: {
+    fade,
+  }: ProviderLogoLooks & {
     /** The model id as known on the wire; the provider is read off its name. */
     model?: string;
     /** The provider named outright, for a mark that stands for no model. */
@@ -85,6 +102,7 @@
 
   const key = $derived(provider ?? providerOf(model) ?? "");
   const Logo = $derived(LOGOS[key]);
+  const classes = $derived(cn(providerLogoVariants({ fade }), className));
   const sized = $derived(size === null ? {} : { width: size, height: size });
   const box = $derived(
     size === null ? "" : `width:${size}px;height:${size}px;`
@@ -105,9 +123,9 @@
     instead. The attributes stay for the intrinsic size before CSS applies.
   -->
   <Logo
-    data-provider-logo-class={className}
+    data-provider-logo-class={classes}
     aria-hidden="true"
-    class={INK.has(key) ? `${className} provider-ink` : className}
+    class={INK.has(key) ? `${classes} provider-ink` : classes}
     style={`${box}${style}`}
     {...sized}
   />
