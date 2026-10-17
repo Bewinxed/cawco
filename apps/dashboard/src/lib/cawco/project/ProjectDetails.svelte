@@ -304,7 +304,7 @@
             }}
             type="button"
           >
-            <span data-slot="num"
+            <span data-slot="num" class="num"
               >{checkouts} {checkouts === 1 ? "place" : "places"}</span
             >
             <IconChevronDown
