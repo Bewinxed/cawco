@@ -88,7 +88,7 @@
       <span
         data-slot="frame"
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess"
+        class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
         data-dir={index === 1 ? "end" : "start"}
         style:--frame-end={index === 0 ? HALF : "0"}
         style:--frame-start={index === 0 ? "0" : HALF}
@@ -196,20 +196,6 @@
 </div>
 
 <style>
-  /* residual: unmapped — the frame's leading edge starts at once, the trailing edge after --dur-ghost (needs transition token: a different delay per property) */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="frame"][data-dir="end"] {
-      transition:
-        inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms,
-        inset-inline-start var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
-    }
-    [data-slot="frame"][data-dir="start"] {
-      transition:
-        inset-inline-start var(--dur-fade) var(--ease-in-out) 0ms,
-        inset-inline-end var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
-    }
-  }
-
   /* residual: svg-paint */
   [data-slot="check"] {
     stroke-linecap: round;

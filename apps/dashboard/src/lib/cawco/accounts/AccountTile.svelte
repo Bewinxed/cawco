@@ -17,16 +17,9 @@
 <span
   data-slot="tile"
   aria-hidden="true"
-  class="grid size-(--tile) flex-none place-items-center rounded-sm text-(color:--c) transition-[background-color,color] dur-fade ease-out"
+  class="grid size-(--tile) flex-none place-items-center rounded-sm bg-(--c)/18 text-(color:--c) transition-[background-color,color] dur-fade ease-out"
   style:--c={hueVar(hue)}
   style:--tile={`${size}px`}
 >
   <ProviderMark mono {provider} size={size === 32 ? 18 : 16} />
 </span>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="tile"] {
-    background: color-mix(in oklab, var(--c) 18%, transparent);
-  }
-</style>

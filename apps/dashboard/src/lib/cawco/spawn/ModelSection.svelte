@@ -433,7 +433,7 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) transition-[opacity] dur-control ease-out"
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
           style:--h={`${chosenHeight}px`}
           style:--o={hiOpacity}
           style:--shift={`translateY(calc(${modelIdx} * 46px))`}
@@ -630,15 +630,6 @@
     --rail-step: var(--rail-step-fine);
     @media (pointer: coarse) {
       --rail-step: var(--rail-step-coarse);
-    }
-  }
-  /* needs transition token: transform var(--dur-toggle) var(--ease-in-out), height var(--dur-toggle) var(--ease-in-out), opacity var(--dur-control) var(--ease-out) */
-  [data-slot="fill"] {
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-toggle) var(--ease-in-out),
-        height var(--dur-toggle) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
     }
   }
   /* residual: foreign-dom */

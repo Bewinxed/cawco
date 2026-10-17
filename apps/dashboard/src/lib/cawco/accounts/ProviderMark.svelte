@@ -31,7 +31,10 @@
     <!-- The mark's own source, from the icon sets bundled at build. -->
     {@html mark.logo}
   {:else}
-    <i class="size-full bg-current" style:--mask={mark.mask}></i>
+    <i
+      class="size-full bg-current mask-(--mask) mask-contain mask-center mask-no-repeat"
+      style:--mask={mark.mask}
+    ></i>
   {/if}
 </span>
 
@@ -40,9 +43,5 @@
   [data-slot="mark"] :global(svg) {
     width: 100%;
     height: 100%;
-  }
-  /* residual: unmapped */
-  i {
-    mask: var(--mask) center / contain no-repeat;
   }
 </style>

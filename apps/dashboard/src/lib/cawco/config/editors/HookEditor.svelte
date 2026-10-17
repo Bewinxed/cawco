@@ -732,10 +732,11 @@
           </Field>
         </div>
       {:else if draft.handler.type === "mcp_tool"}
-        <!-- literal: 8px, 12px -->
+        <!-- literal: 8px, 12px, 1fr 1fr -->
         <div
           data-slot="pair"
-          class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)"
+          class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y) phone:grid-cols-(--pair-cols)"
+          style:--pair-cols="1fr 1fr"
           style:--pair-gap-x="12px"
           style:--pair-gap-y="8px"
           in:crossIn
@@ -845,10 +846,11 @@
         value={draft.handler.if ?? ""}
       />
     </Field>
-    <!-- literal: 8px, 12px -->
+    <!-- literal: 8px, 12px, 1fr 1fr -->
     <div
       data-slot="pair"
-      class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)"
+      class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y) phone:grid-cols-(--pair-cols)"
+      style:--pair-cols="1fr 1fr"
       style:--pair-gap-x="12px"
       style:--pair-gap-y="8px"
     >
@@ -1112,13 +1114,3 @@
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  /* residual: unmapped */
-  /* grid-template-columns: 1fr 1fr is not repeat(2, minmax(0, 1fr)): a column holding something wide would differ. */
-  @media (min-width: 640px) {
-    [data-slot="pair"] {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-</style>

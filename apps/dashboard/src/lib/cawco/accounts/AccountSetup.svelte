@@ -716,18 +716,18 @@
               data-device
             >
               <b
-                class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
+                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
                 style:--area="name">{name}</b
               >
               <div
                 data-slot="controls"
-                class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
+                class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
                 style:--area="controls"
               >
                 <DevicePanel flow={device} machine={name} {online} />
               </div>
               <span
-                class="mark-line flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
               >
@@ -751,11 +751,11 @@
               data-paste
             >
               <b
-                class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
+                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
                 style:--area="name">{name}</b
               >
               <span
-                class="mark-line flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done-ink data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done-ink data-warn:text-status-attn-ink"
                 data-ok={done || undefined}
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
@@ -786,7 +786,7 @@
                 <!-- literal: 140px, 30px -->
                 <div
                   data-slot="controls"
-                  class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
+                  class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
                   in:unfold
                   style:--area="controls"
                   style:--code-flex="1 1 140px"
@@ -844,7 +844,7 @@
               {#if paste.problem}
                 <p
                   data-slot="row-problem"
-                  class="type-meta text-status-fail-ink"
+                  class="col-(--area) row-(--area) type-meta text-status-fail-ink"
                   role="alert"
                   in:appear
                   style:--area="problem"
@@ -854,7 +854,7 @@
               {:else if paste.phase === "mismatch"}
                 <p
                   data-slot="row-warn"
-                  class="type-meta text-status-attn-ink"
+                  class="col-(--area) row-(--area) type-meta text-status-attn-ink"
                   role="alert"
                   in:appear
                   style:--area="problem"
@@ -969,9 +969,6 @@
       "name st"
       "controls controls"
       "problem problem";
-  }
-  .mrow > * {
-    grid-area: var(--area);
   }
   /* A narrow page: the rail becomes a row of marks with the current step
      named, and each machine's controls go under its name. */

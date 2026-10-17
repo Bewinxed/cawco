@@ -182,7 +182,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="relative h-(--track-h) max-phone:h-(--track-h-phone) cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none select-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
+      class="relative h-(--track-h) max-phone:h-(--track-h-phone) cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -207,9 +207,10 @@
         <!-- literal: 8px inline padding -->
         <div
           data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num opacity-(--o) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num opacity-(--o) shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
+          style:--knob-shadow="inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"
           style:--o={n ? 1 : 0.7}
           style:--pad-x="8px"
           bind:offsetWidth={knobWidth}
@@ -253,7 +254,7 @@
                   />
                   <rect
                     data-slot="bar-fill"
-                    class="origin-bottom transform-(--t) fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:dur-morph motion-safe:ease-out"
+                    class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:dur-morph motion-safe:ease-out"
                     height="10"
                     rx="1"
                     style={`--delay:${barDelay(i)}ms`}
@@ -280,8 +281,10 @@
         <!-- literal: 5px dot, -2.5px offset -->
         <span
           data-slot="pip"
-          class="pointer-events-none absolute top-1/2 left-(--left) mt-(--mt) size-(--dot) rounded-pill bg-ink-strong opacity-(--o) transition-[opacity] dur-control ease-out"
+          class="pointer-events-none absolute top-1/2 left-(--left) mt-(--mt) size-(--dot) rounded-pill bg-ink-strong opacity-(--o) transition-[opacity] dur-control ease-out motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
           style:--dot="5px"
+          style:--pip-durs="var(--ns-fill-ms), var(--dur-control)"
+          style:--pip-eases="var(--ease-in-out), var(--ease-out)"
           style:--left={`calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)))`}
           style:--mt="-2.5px"
           style:--o={pip.on ? 0.3 : 0}
@@ -311,30 +314,6 @@
 </div>
 
 <style>
-  /* residual: unmapped */
-  /* needs transition token: var(--transition-control), box-shadow var(--dur-control) var(--ease-out) */
-  [data-slot="track"] {
-    transition:
-      var(--transition-control),
-      box-shadow var(--dur-control) var(--ease-out);
-  }
-  /* needs transition token: left var(--ns-fill-ms) var(--ease-in-out), opacity var(--dur-control) var(--ease-out) */
-  [data-slot="pip"] {
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        left var(--ns-fill-ms) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  /* A compound box-shadow: an inset ring and the raised shadow. */
-  [data-slot="knob"] {
-    box-shadow:
-      inset 0 0 0 1px var(--neutral-8),
-      var(--shadow-raised);
-  }
-  [data-slot="bar-fill"] {
-    transform-box: fill-box;
-  }
   /* residual: foreign-dom */
   /* Until the chip is measured nothing in the track moves. */
   [data-slot="track"]:not([data-ready]),
