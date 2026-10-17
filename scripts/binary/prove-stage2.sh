@@ -1339,8 +1339,32 @@ rig_legacy() {
 
 # ---------------------------------------------------------------- hubself: the hub's own machine updates (the hub
 # restarts itself) with a child held on its keeper and sessions asked for while it installs.
+# Before it, the machine's dashboard socket and hub unit are put back to what builds before the loopback dashboard
+# wrote (the network address alone; no loopback port in the hub's unit), the socket rebound on them, so the update
+# to NEXT carries a socket whose addresses NEXT writes otherwise, and no `cawco service install` runs after it. The
+# agent's and the hub's units are kept to compare after.
+units_before_loopback() {
+  as_user "$hubc" sh -c '
+    set -e
+    u=/home/cawco/.config/systemd/user
+    sed -i "/^ListenStream=127\.0\.0\.1:3455\$/d; /^ListenStream=\[::1\]:3455\$/d" $u/cawco-dashboard.socket
+    sed -i "/^Environment=CAWCO_LOCAL_DASHBOARD_PORT=/d" $u/cawco-hub.service
+    cp $u/cawco-agent.service /tmp/agent-before.service
+    cp $u/cawco-hub.service /tmp/hub-before.service
+    systemctl --user daemon-reload
+    systemctl --user stop cawco-dashboard.service
+    systemctl --user restart cawco-dashboard.socket
+    systemctl --user start cawco-dashboard.service'
+  [[ "$(as_user "$hubc" grep -c '^ListenStream=' /home/cawco/.config/systemd/user/cawco-dashboard.socket)" == 1 ]] \
+    || { echo "ASSERTION FAILED: the socket still names more than its network address"; return 1; }
+  if as_user "$hubc" curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3455/; then
+    echo "ASSERTION FAILED: localhost:3455 answers before the update, so the update proves nothing"
+    return 1
+  fi
+}
 hub_self_update() {
   need_hub
+  units_before_loopback
   spawn_child "$hubc" held
   child=$(child_pids "$hubc" boundary-held)
   keeper=$(keeper_pid "$hubc")
@@ -1379,13 +1403,41 @@ held_survives() {
   wait_until 60 '[[ "$(retiring $hid)" == *"$BASE:"* ]]'
   echo "retiring keepers: $(retiring $hid)"
 }
-export -f hub_self_update hub_starts_held held_survives
+# After the update, with no `cawco service install`: the socket listens where NEXT's install names (its network
+# address and 127.0.0.1:3455 and [::1]:3455), localhost:3455 is the dashboard, the hub's unit gained the loopback
+# port and nothing else, the agent's unit is as it was, and the apply log says NEXT wrote them.
+units_carried() {
+  need_hub
+  local u=/home/cawco/.config/systemd/user
+  echo "== the socket after the update"
+  as_user "$hubc" cat "$u/cawco-dashboard.socket"
+  as_user "$hubc" grep -qx 'ListenStream=127\.0\.0\.1:3455' "$u/cawco-dashboard.socket" \
+    || { echo "ASSERTION FAILED: the socket names no 127.0.0.1:3455"; return 1; }
+  as_user "$hubc" grep -qx 'ListenStream=\[::1\]:3455' "$u/cawco-dashboard.socket" \
+    || { echo "ASSERTION FAILED: the socket names no [::1]:3455"; return 1; }
+  wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/ | grep -q _app/immutable'
+  as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/' | grep -q _app/immutable \
+    || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  local hub_diff
+  hub_diff=$(as_user "$hubc" sh -c "diff /tmp/hub-before.service $u/cawco-hub.service || true")
+  echo "== the hub's unit, before and after"
+  echo "$hub_diff"
+  [[ "$(grep -c '^[<>]' <<< "$hub_diff")" == 1 && "$hub_diff" == *"> Environment=CAWCO_LOCAL_DASHBOARD_PORT=3455"* ]] \
+    || { echo "ASSERTION FAILED: the hub's unit changed by more than its loopback port"; return 1; }
+  as_user "$hubc" cmp /tmp/agent-before.service "$u/cawco-agent.service" \
+    || { echo "ASSERTION FAILED: the agent's unit changed though nothing in it did"; return 1; }
+  (( $(apply_log_count "units $NEXT: units: .*rewrote") >= 1 )) \
+    || { echo "ASSERTION FAILED: the apply log says nothing of $NEXT rewriting the units"; return 1; }
+  as_user "$hubc" grep "units $NEXT" /home/cawco/.local/share/cawco/binary/apply.log
+}
+export -f units_before_loopback hub_self_update hub_starts_held held_survives units_carried
 rig_hubself() {
   fleet base "$BASE" hub hub
   setup "the hub's own machine updates, with a child held and sessions asked for while it installs" hub_self_update
   setup_done
   check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
   check "a child held by the session keeper survives the update on that keeper, untouched, while the new build's keeper becomes the machine's" held_survives
+  check "the update rewrites the units from the build it installs: the dashboard socket gains 127.0.0.1:3455 and [::1]:3455 and localhost:3455 answers, the hub's unit gains its loopback port alone, the agent's is untouched, no service install run" units_carried
 }
 
 # ---------------------------------------------------------------- rollbacks, each on a hub of its own

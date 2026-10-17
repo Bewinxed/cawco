@@ -360,19 +360,18 @@ async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
 }
 
 /**
- * `cawco binary-units` from the build the keeper goes to: its keeper's own
- * unit (or plist) and the agent's, as that build writes them. A build from
- * before keepers ran side by side writes no unit of its own for its keeper,
- * and is refused here: it has no keeper to hand over to.
+ * `cawco binary-units` (with `args`) from `version`'s own executable: units as
+ * that build writes them, never as the build running this helper does. What
+ * it said, on one line.
  */
-async function writeKeeperUnits(
+async function binaryUnits(
   version: string,
-  file: string
+  args: readonly string[] = []
 ): Promise<string> {
-  const units = Bun.spawn([versionExecutable(version), "binary-units"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const units = Bun.spawn(
+    [versionExecutable(version), "binary-units", ...args],
+    { stdout: "pipe", stderr: "pipe" }
+  );
   const [out, err, code] = await Promise.all([
     new Response(units.stdout).text(),
     new Response(units.stderr).text(),
@@ -383,12 +382,41 @@ async function writeKeeperUnits(
       `binary-units exited ${code}: ${failureSentence(err) ?? out.trim()}`
     );
   }
+  return out.trim().replaceAll("\n", "; ") || "the units are current";
+}
+
+/**
+ * The build the keeper goes to writes its keeper's own unit (or plist) and
+ * the agent's. A build from before keepers ran side by side writes no unit of
+ * its own for its keeper, and is refused here: it has no keeper to hand over to.
+ */
+async function writeKeeperUnits(
+  version: string,
+  file: string
+): Promise<string> {
+  const said = await binaryUnits(version);
   if (!(await Bun.file(file).exists())) {
     throw new Error(
       `${version} wrote no ${file}: a build from before keepers ran side by side has no keeper of its own to hand over to`
     );
   }
-  return out.trim().replaceAll("\n", "; ") || "the units are current";
+  return said;
+}
+
+/**
+ * The hub's, the dashboard's and the agent's units and the dashboard's socket
+ * as `version` writes them (service.ts `refreshServices`), before the units
+ * restart onto it, so they start on what it names. Never throws: a refresh
+ * that failed is said, and the restart and the trial go on.
+ */
+async function refreshServiceUnits(version: string): Promise<void> {
+  try {
+    await say(
+      `units ${version}: ${await binaryUnits(version, ["--services"])}`
+    );
+  } catch (error) {
+    await say(`units ${version}: ${message(error)}`);
+  }
 }
 
 /**
@@ -607,6 +635,10 @@ async function applyBuild(version: string): Promise<void> {
       ...installed,
       installedVersion: version,
     });
+    // The units as the new build writes them, then the restart onto them: a
+    // socket whose addresses moved is rebound in the refresh (its dashboard
+    // stopped), and the restart starts the dashboard on it.
+    await refreshServiceUnits(version);
     await say(`swap ${previous} -> ${version}; restarting ${units.join(", ")}`);
     // The keeper is left alone: it is the one piece that holds sessions, and
     // it is handed over only once the new build has answered.
@@ -901,6 +933,10 @@ async function rollBack(start: TrialMarker): Promise<void> {
   }
   // Before the units restart, so the agent rolled back to starts beside its own.
   const pinsBack = await putBackPins(trial.version, trial.previous);
+  // The units as the build rolled back to writes them. A build from before
+  // the refresh refuses `--services`, which is said, and its units stay as
+  // the failed build wrote them.
+  await refreshServiceUnits(trial.previous);
   try {
     await svc("restart", units);
     await say(`roll back ${trial.version}: restarted ${units.join(", ")}`);

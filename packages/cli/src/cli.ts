@@ -189,6 +189,8 @@ interface Args {
   rest: string[];
   /** `binary-apply --resume`: decide the update trial a helper left open. */
   resume: boolean;
+  /** `binary-units --services`: the hub's, the dashboard's and the agent's units, not the keeper's. */
+  services: boolean;
   /** The session `tools`, `tool` and `relay` act as. */
   session?: string;
   signatureHeader?: string;
@@ -209,6 +211,7 @@ const parseArgs = (argv: string[]): Args => {
     ask: false,
     keeperOnly: false,
     resume: false,
+    services: false,
     autoUpdate: false,
     dev: false,
     whenIdle: false,
@@ -240,6 +243,9 @@ const parseArgs = (argv: string[]): Args => {
         break;
       case "--resume":
         args.resume = true;
+        break;
+      case "--services":
+        args.services = true;
         break;
       case "--release-host":
         index += 1;
@@ -560,6 +566,26 @@ const runBinaryApply = async (args: Args): Promise<number> => {
 };
 
 /**
+ * `cawco binary-units`: this build's units, as it writes them. `services`:
+ * the hub's, the dashboard's and the agent's and the dashboard's socket
+ * (service.ts `refreshServices`); else its keeper's own unit.
+ */
+const writeBinaryUnits = async (services: boolean): Promise<void> => {
+  const { binaryLayout } = await import("./binary-install");
+  const { refreshServices, refreshUnits } = await import("./service");
+  const say = (line: string) => console.log(`units: ${line}`);
+  if (services) {
+    await refreshServices(
+      ["hub", "dashboard", "agent"],
+      binaryLayout(CLI_VERSION),
+      say
+    );
+  } else {
+    await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), say);
+  }
+};
+
+/**
  * `cawco binary-pins`, run from this build by the build before it, before the
  * swap (agent binary-update.ts `#putOnPins`): this build's pinned harnesses go
  * on, with the methods this build knows, each recorded as it lands. `cawco
@@ -761,17 +787,15 @@ const run = async (argv: string[]): Promise<number> => {
       return 0;
     }
     case "binary-units": {
-      // A keeper handover's first step, run by the update helper from the build the
-      // keeper goes to: that build's own keeper unit, as this build writes it. Only
-      // that unit: the others carry what the installing shell knew (the hub's
-      // address, the dashboard's port), which this process may not. A failure is
-      // one sentence on stderr, as binary-pins says one.
+      // Run by the update helper from the build it installs, as that build
+      // writes its units. With `--services`, before the update restarts
+      // anything: the hub's, the dashboard's and the agent's units and the
+      // dashboard's socket, each from the environment its unit recorded
+      // (service.ts `refreshServices`). Without, a keeper handover's first
+      // step: that build's own keeper unit (builds before `--services` call
+      // it so). A failure is one sentence on stderr, as binary-pins says one.
       try {
-        const { binaryLayout } = await import("./binary-install");
-        const { refreshUnits } = await import("./service");
-        await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), (line) =>
-          console.log(`units: ${line}`)
-        );
+        await writeBinaryUnits(args.services);
         return 0;
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));

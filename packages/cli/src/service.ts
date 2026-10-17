@@ -272,10 +272,11 @@ const SOCK_SERVICE = /<key>SockServiceName<\/key>\s*<string>([^<]*)<\/string>/;
 
 /**
  * The address the installed dashboard socket already listens on, read back out
- * of its socket unit or its plist. The deploy poller reinstalls the dashboard's
- * units on every deploy that reaches it, from a daemon whose environment has no
- * PORT or HOST in it; without this, a dashboard installed on another port
- * would be moved back to 3000 by the next deploy.
+ * of its socket unit or its plist. Every binary update rewrites the dashboard's
+ * units from the incoming build (`refreshServices`, run as `cawco binary-units
+ * --services`), in a process with no PORT or HOST in its environment; without
+ * this, a dashboard installed on another port would be moved back to 3000 by
+ * the next update.
  */
 const installedDashboardAddress = ():
   { host: string; port: string } | undefined => {
@@ -298,12 +299,17 @@ const installedDashboardAddress = ():
 /**
  * Where the dashboard listens. Read from the installing shell so a second
  * machine can differ, then from the socket already installed, with the
- * defaults this one's browser expects.
+ * defaults this one's browser expects. Read as each unit is written: an
+ * update's refresh clears PORT and HOST (`asInstalled`), so the socket keeps
+ * the address it has.
  */
-const DASHBOARD_PORT =
-  process.env.PORT ?? installedDashboardAddress()?.port ?? "3000";
-const DASHBOARD_HOST =
-  process.env.HOST ?? installedDashboardAddress()?.host ?? "0.0.0.0";
+const dashboardAddress = (): { host: string; port: string } => {
+  const installed = installedDashboardAddress();
+  return {
+    port: process.env.PORT ?? installed?.port ?? "3000",
+    host: process.env.HOST ?? installed?.host ?? "0.0.0.0",
+  };
+};
 
 /**
  * Every address the dashboard's socket listens on: where it is reached from
@@ -315,9 +321,10 @@ const DASHBOARD_HOST =
  */
 export const dashboardListens = (): { host: string; port: string }[] => {
   const local = String(localDashboardPort());
+  const network = dashboardAddress();
   return [
-    { host: DASHBOARD_HOST, port: DASHBOARD_PORT },
-    ...(local === DASHBOARD_PORT
+    network,
+    ...(local === network.port
       ? []
       : [
           { host: "127.0.0.1", port: local },
@@ -350,15 +357,6 @@ const servicePath = (): string => {
   ];
   return [...new Set([...inherited, ...usual])].join(":");
 };
-
-/**
- * Where the hub's sqlite file lives (C9, our choice): per-user, created with
- * no sudo, and outside any git checkout — so `git clean -fdx` in a dev tree or
- * a deploy clone can never again reach the fleet's whole memory. Core's one
- * rule (`hubDbPath`), which the hub itself reads too. Every workspace
- * boundary hides the dir (`credentialStores`).
- */
-const DEFAULT_DB_PATH = hubDbPath();
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
@@ -456,7 +454,8 @@ const probeHub = async (): Promise<string> => {
 };
 
 const probeDashboard = async (): Promise<string> => {
-  const url = `http://${DASHBOARD_HOST}:${DASHBOARD_PORT}/`;
+  const { host, port } = dashboardAddress();
+  const url = `http://${host}:${port}/`;
   const answer = await probe(url, async (response) => {
     await response.body?.cancel();
     return response.status;
@@ -562,11 +561,10 @@ const probeSessiond = async (): Promise<string | undefined> => {
 
 /** The browser address corresponding to the socket we install. */
 export const dashboardUrl = (): string => {
+  const { host: listening, port } = dashboardAddress();
   const host =
-    DASHBOARD_HOST === "0.0.0.0" || DASHBOARD_HOST === "::"
-      ? "localhost"
-      : DASHBOARD_HOST;
-  return `http://${host.includes(":") ? `[${host}]` : host}:${DASHBOARD_PORT}`;
+    listening === "0.0.0.0" || listening === "::" ? "localhost" : listening;
+  return `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
 };
 
 const READY_TIMEOUT_MS = 90_000;
@@ -802,8 +800,14 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         // linux, ~/Library/Application Support/cawco on darwin), or the
         // CAWCO_DB_PATH the operator set. The hub's own boot migration
         // (packages/hub/src/index.ts) carries an existing in-tree database
-        // there the first time it finds one.
-        [CAWCO_ENV.dbPath]: DEFAULT_DB_PATH,
+        // there the first time it finds one. Read as the unit is written, so
+        // an update's refresh writes the path the unit already names
+        // (`refreshServices`). Where the file lives (C9, our choice):
+        // per-user, created with no sudo, and outside any git checkout — so
+        // `git clean -fdx` in a dev tree or a deploy clone can never again
+        // reach the fleet's whole memory. Every workspace boundary hides the
+        // dir (`credentialStores`).
+        [CAWCO_ENV.dbPath]: hubDbPath(),
         // Its preview listeners' ports: the operator's range, else the
         // hundred after the hub's own (hub config.ts `PREVIEW_PORTS`).
         ...(readEnv(CAWCO_ENV.previewPorts)
@@ -811,7 +815,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
           : {}),
         // The dashboard socket's port, which the hub's preview ports never
         // take (hub config.ts `FLEET_PORTS`) and its bridge's links name.
-        [CAWCO_ENV.dashboardPort]: DASHBOARD_PORT,
+        [CAWCO_ENV.dashboardPort]: dashboardAddress().port,
         // Its loopback port, the one the hub names to every agent: the same
         // one the dashboard's socket listens on here (`dashboardListens`).
         [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
@@ -1039,9 +1043,9 @@ const devFor = (
         DASHBOARD_VITE,
         "dev",
         "--port",
-        DASHBOARD_PORT,
+        dashboardAddress().port,
         "--host",
-        DASHBOARD_HOST,
+        dashboardAddress().host,
       ],
       // A vite server reads its hub from this variable alone and refuses to
       // start without it (vite.config.ts). This unit is the one vite server
@@ -2208,6 +2212,188 @@ export const refreshUnits = async (
     note("systemd reloaded its unit files");
   }
   return changed;
+};
+
+const UNIT_ENVIRONMENT = /^Environment=([^=\n]+)=(.*)$/gm;
+const PLIST_ENVIRONMENT =
+  /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/;
+const PLIST_PAIR = /<key>([^<]*)<\/key>\s*<string>([^<]*)<\/string>/g;
+
+/** What `xml` escaped, as it was. */
+const unxml = (value: string): string =>
+  value
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+
+/** The environment a unit (systemd) or plist (launchd) was written with. */
+const recordedEnvironment = (
+  text: string,
+  mac: boolean
+): Record<string, string> =>
+  Object.fromEntries(
+    mac
+      ? [...(PLIST_ENVIRONMENT.exec(text)?.[1] ?? "").matchAll(PLIST_PAIR)].map(
+          ([, name, value]) => [unxml(name ?? ""), unxml(value ?? "")]
+        )
+      : [...text.matchAll(UNIT_ENVIRONMENT)].map(([, name, value]) => [
+          name ?? "",
+          value ?? "",
+        ])
+  );
+
+/**
+ * What a unit's text takes from the installing shell's environment: its
+ * PATH, its XDG homes and CawCo's settings, and the dashboard's PORT and HOST
+ * (which no unit records: the socket's own address stands for them,
+ * `dashboardAddress`).
+ */
+const fromShell = (name: string): boolean =>
+  name === "PORT" ||
+  name === "HOST" ||
+  name === "PATH" ||
+  name === "XDG_CONFIG_HOME" ||
+  name === "XDG_DATA_HOME" ||
+  name.startsWith("CAWCO_");
+
+/**
+ * `render`, run as though the installing shell's environment were `recorded`:
+ * every variable a unit takes from that shell ({@link fromShell}) is the one
+ * the unit recorded, or none, and put back after.
+ */
+const asInstalled = <T>(
+  recorded: Record<string, string>,
+  render: () => T
+): T => {
+  const before = Object.entries(process.env).filter(([name]) =>
+    fromShell(name)
+  );
+  for (const [name] of before) {
+    delete process.env[name];
+  }
+  Object.assign(process.env, recorded);
+  try {
+    return render();
+  } finally {
+    for (const name of Object.keys(recorded)) {
+      delete process.env[name];
+    }
+    Object.assign(process.env, Object.fromEntries(before));
+  }
+};
+
+/**
+ * Service `id`'s unit (or plist) as this build writes it on a machine whose
+ * installed one reads `installed`: from the environment that unit recorded,
+ * the dashboard's with the loopback port the hub's unit records (`local`).
+ */
+const renderInstalled = (
+  id: ServiceId,
+  installed: string,
+  at: {
+    binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>;
+    local: string | undefined;
+    mac: boolean;
+  }
+): { spec: ServiceSpec; text: string } =>
+  asInstalled(
+    {
+      ...recordedEnvironment(installed, at.mac),
+      ...(id === "dashboard" && at.local
+        ? { [CAWCO_ENV.localDashboardPort]: at.local }
+        : {}),
+    },
+    () => {
+      const [spec] = specsOf([id], "prod", at.binaryLayout);
+      if (!spec) {
+        throw new ServiceError(`no service ${id}`);
+      }
+      return { spec, text: at.mac ? plist(spec) : unit(spec) };
+    }
+  );
+
+/**
+ * THE UPDATE'S UNIT REFRESH: what a binary update runs from the build it
+ * installs (`cawco binary-units --services`, binary-apply.ts), before it
+ * restarts anything, so the hub's, the dashboard's and the agent's units, and
+ * the dashboard's socket, are what this build's `cawco service install`
+ * writes. Only a unit this machine has is refreshed. Each is written as the
+ * install wrote it, from the environment it recorded then (the installing
+ * shell's PATH, XDG homes and CawCo settings, {@link asInstalled}), with the
+ * dashboard's loopback port as the hub's unit records it; the socket's
+ * network address is read back from the socket itself
+ * (`installedDashboardAddress`). Only a unit whose text changed is rewritten.
+ *
+ * systemd: one daemon-reload for the set; a socket that changed (or is not
+ * listening) is rebound through `bindSocket`, which stops the dashboard and
+ * restarts the socket on its new addresses, and the update's restart that
+ * follows starts the dashboard on them. launchd: a changed plist is
+ * reloaded, which reopens a job's sockets on what it names now.
+ */
+export const refreshServices = async (
+  ids: readonly ServiceId[],
+  binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
+  note: (line: string) => void
+): Promise<void> => {
+  const mac = platform() === "darwin";
+  const fileOf = (id: ServiceId) =>
+    mac ? launchAgentPath(id) : systemdPath(id);
+  const installed = new Map<ServiceId, string>();
+  for (const id of ids) {
+    // biome-ignore lint/performance/noAwaitInLoops: a handful of files, read in order
+    const text = await Bun.file(fileOf(id))
+      .text()
+      .catch(() => undefined);
+    if (text === undefined) {
+      note(`${fileOf(id)}: not installed here`);
+    } else {
+      installed.set(id, text);
+    }
+  }
+  const hub = installed.get("hub");
+  const local = hub
+    ? recordedEnvironment(hub, mac)[CAWCO_ENV.localDashboardPort]
+    : undefined;
+  const bootstrap = mac ? await hasBootstrap() : false;
+  let reload = false;
+  let rebind: ServiceSpec | undefined;
+  for (const [id, before] of installed) {
+    const { spec, text } = renderInstalled(id, before, {
+      mac,
+      local,
+      binaryLayout,
+    });
+    const path = fileOf(id);
+    if (text !== before) {
+      // biome-ignore lint/performance/noAwaitInLoops: units rewrite one at a time, each note in its order
+      await writeUnit(path, text);
+      note(`rewrote ${path}`);
+      if (mac) {
+        await loadLaunchAgent(spec, bootstrap, note);
+      } else {
+        reload = true;
+      }
+    }
+    if (
+      !mac &&
+      spec.socket &&
+      existsSync(socketPath(id)) &&
+      (await writeSocketUnit(spec, spec.socket, note))
+    ) {
+      reload = true;
+      rebind = spec;
+    }
+  }
+  if (reload) {
+    const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
+    if (reloaded.exitCode !== 0) {
+      throw failed("systemctl --user daemon-reload", reloaded);
+    }
+    note("systemd reloaded its unit files");
+  }
+  if (rebind) {
+    await bindSocket(rebind, note);
+  }
 };
 
 /** What the agent's unit said of the keeper before keepers ran side by side. */
