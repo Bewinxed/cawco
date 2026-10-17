@@ -62,7 +62,7 @@
  *
  * A LEG COUNTS ONLY UNCONTENDED. Each phase is a leg, and it counts when the
  * spec's own cgroup's CPU pressure (Linux PSI, `cpu.pressure`, `some avg10`)
- * is under `PSI_LIMIT` at its start, middle and end; a try over it is void
+ * is under `PSI_LIMIT` at every reading while it runs; a try over it is void
  * and measured again, until `REPEATS` tries ran uncontended (at most
  * `LEG_TRIES` more), and each try's note leads with its PSI, the box's load
  * average beside it for reference only. A timed reading is the median of its
@@ -848,12 +848,18 @@ async function switchLayoutParts(
  * A leg counts when the spec itself got the CPU it asked for: its own
  * cgroup's CPU pressure (Linux PSI, cgroup v2 `cpu.pressure`, `some avg10`:
  * the share of the last 10s some task of its waited for a CPU) under this at
- * the leg's start, middle and end. The box's load average says how busy the
+ * every reading while it runs. The box's load average says how busy the
  * machine is, not whether this spec waited on it; with the fleet's services
  * weighted low and the spec's scope high, the machine can be loaded and the
  * spec uncontended, and PSI is what proves it.
+ *
+ * Our own call, from what slight pressure did: in one run's streaming leg
+ * the tries at PSI 0 read two panes' CPU per message at 1.24-1.26x one
+ * pane's, and the three at 0.18-0.49 (under the 1.0 this was) at 1.52x,
+ * one pane cheaper and two dearer; another run, at 0-0.02 throughout, read
+ * 1.25-1.29x.
  */
-const PSI_LIMIT = 1.0;
+const PSI_LIMIT = 0.1;
 /** How often the pressure is read while waiting for it to fall. */
 const PSI_POLL_MS = 5000;
 /** The longest a leg waits for the pressure to fall before it is measured as it stands. */
@@ -969,7 +975,7 @@ async function uncontended(file: string): Promise<string> {
 /**
  * Runs a leg until `REPEATS` tries of it ran with the spec waiting on no one
  * for CPU, each once the pressure has fallen, its pressure read each second
- * while it runs: a try whose start, middle or end reading was `PSI_LIMIT` or
+ * while it runs: a try any of whose readings was `PSI_LIMIT` or
  * more is void, never kept. At most `REPEATS + LEG_TRIES` tries. What it
  * keeps is the uncontended tries; with none, every try, said contended.
  * Says each try's readings: PSI at start, middle and end, the wait, and the
@@ -1015,7 +1021,7 @@ async function quietTries<T>(
       readings[Math.floor(readings.length / 2)],
       readings.at(-1) ?? 0,
     ];
-    const calmHere = marks.every((one) => one < PSI_LIMIT);
+    const calmHere = readings.every((one) => one < PSI_LIMIT);
     const calm = (await step(`${key}:${attempt}:end`, calmHere)).every(Boolean);
     all.push(got);
     if (calm) {
@@ -1024,7 +1030,7 @@ async function quietTries<T>(
     const voided = calmHere
       ? ", void: the other layout's try waited for CPU"
       : `, CONTENDED (PSI ${PSI_LIMIT} or more), void`;
-    const line = `try ${attempt}: PSI some avg10 ${marks.join(" / ")} (start / middle / end, ${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${calm ? "" : voided}`;
+    const line = `try ${attempt}: PSI some avg10 ${marks.join(" / ")} (start / middle / end, the most ${Math.max(...readings)}, ${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${calm ? "" : voided}`;
     console.log(`  ${name}: ${line}`);
     said.push(line);
   }
