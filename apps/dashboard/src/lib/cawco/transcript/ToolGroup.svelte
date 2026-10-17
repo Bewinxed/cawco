@@ -393,7 +393,6 @@
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
-              class:closed={!opened}
             >
               <button
                 aria-busy={busy || undefined}
@@ -625,9 +624,6 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
 
-    &.closed {
-      opacity: 0.5;
-    }
     &:not(:has(.artifact-thumb)) {
       inline-size: fit-content;
     }
