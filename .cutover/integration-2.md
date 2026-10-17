@@ -1,0 +1,83 @@
+# Integration 2: notes
+
+The integration branch is this workspace's branch (`ws/484c6f7c`); the hub pushes it. A local `integration` ref marks its start at 1a.
+
+## Step 0: assembly (2026-10-17)
+
+Start: `git reset --hard origin/cawco/395b940c` (1a, 2824bba65), then `git merge --no-ff` in the brief's order. Heads as merged:
+
+| merge | branch | head |
+|---|---|---|
+| b5ba1940d | K1 `cawco/fb17c485` | e13f041ff |
+| ddaf20a4d | K2 `cawco/0bcf1f50` | 908c069c1 |
+| 0b3a69c7a | variant order `cawco/fdd881b4` | 8571c5d0f |
+| d66012690 | type-roles `cawco/180a58bc` | d1bc87e3c |
+| e8e88d902 | set 1 `cawco/1afacd39` | 38e254df9 |
+| a33b6bdf3 | set 2 `cawco/a31a94ff` | 7cc259958 |
+| 263613187 | set 3 `cawco/4ac09f9c` | 62cd8c25a |
+| f79e0f483 | set 4 `cawco/603f434a` | 974c899ad |
+| e73d34416 | set 5 `cawco/29668305` | df69f8895 |
+| 18cb5c78e | set 6 `cawco/0bdc3676` | 025350e90 |
+| a7a1b254e | set 7 `cawco/70689612` | 5019d9837 |
+| fd1fe53af | set 8 `cawco/70cc6501` | 97c0476cd |
+| fed4debac | set 9 `cawco/244811c1` | 4e6f21c94 |
+| 1e2e56de6 | switch `cawco/3f97de9c` | b45e9bff8 |
+
+No backup ref (`cawco-safe/*`) was needed. `bun run tokens` after the merges changed no file (the generated outputs agree with the merged JSON).
+
+Waiting: K2's final head c7999de2b (not on origin at 16:40), and type-roles' follow-up with `.cutover/type-roles/` site lists.
+
+### Type-roles against the sets (step 7c)
+
+Type-roles' site commit (d1bc87e3c) touches 44 component files; 25 of them a set also changed. Four merged with a conflict. Each keeps the set's form with type-roles' per-site change re-applied:
+
+- `transcript/SystemLine.svelte` (set 1), both note rows: set 1's `data-code:bg-none data-code:bg-auto data-code:bg-repeat` already holds type-roles' `data-code:bg-none`, so set 1's line as is.
+- `views/openui/ViewTable.svelte` (set 4): set 4 put the band heads on K1's `caps-strong`, which has no `type-label`, so the table base's tabular-nums reached them (K1.md:171 records it). T's rule is `.ledger :global(tr.band th) { font: var(--type-label) … }`. Type-roles' change is "add `type-label`"; on set 4's kit form that is `variant="caps"` (`type-label px-space-3 text-ink-muted uppercase tracking-caps`, plus a checkbox rule no ViewTable head meets).
+- `UsageMeter.svelte` (set 7), the "+N" slot: type-roles' `type-meta` in place of `font-body text-size-meta font-normal`, on set 7's line (`motion-reduce:transition-off`).
+- `find/MentionField.svelte` (set 9): the editor takes `type-body` in place of `font-body font-normal`, on set 9's line (`outline-none outline-current`); the tip's handle takes `type-code` (type-roles' second hunk, which `--theirs` had dropped).
+
+Every other type-roles line is in the merged tree (`$TMPDIR/scripts/tr-check.sh`: each added line found verbatim, the four above aside).
+
+Files waiting on type-roles' per-site lists: the four above, for a re-check against `site-map.txt`.
+
+## Step 2a: static gates
+
+Before (assembled tree, 1e2e56de6):
+- typecheck: `svelte-check: 620 files, 1 errors, 1 warnings` (RecordCard.svelte:185, `"unfilled-at-rest"`; Shot.svelte:218's captions)
+- eslint: crashed, `TSError: Type expected.` in `house/variant-order` (recipeClasses)
+- residual: `134 files with a <style> of 610; … unmapped 0; 0 violations`
+- svelte-unused-css: `610 file(s), no style rule pruned`
+- states-lint: `every switch over a union or enum is whole (1414 files)`
+- ratchet: `416 numeric spacing utilities (baseline 518)`
+- tokens `--check`: `the token source conforms and every output matches the committed files (241 files)` (the pre-fix `--check`; main's fixed one comes in phase 2)
+
+### Later heads merged
+
+| merge | branch | head |
+|---|---|---|
+| (after the gates' first pass) | K2 `cawco/0bcf1f50` | c7999de2b (Tabs `fill="none"` → `background-none p-0`; WorkTabs and TaskPanel already pass it) |
+| | type-roles `cawco/180a58bc` | 3d5220be2 (`@theme inline reference` for the 50 self-named keys; `.cutover/type-roles/` lists) |
+
+Both clean. `bun run tokens` after them changed no file. Step 7c against `changes.md`: the four conflict files carry its token swaps; set 5's two `--title-track: normal` workarounds (ProjectHead's h1, PlacePick's h2) are gone, since `type-title` no longer adds tracking and T's rule (`font: var(--type-title)`) set none.
+
+### Fixes, by cause
+
+Proof for each is `bun .cutover/i2-exact.ts` (Chromium, T's page against now's; cases in `.cutover/i2-cases.ts`). Final run: `i2-exact: 47 cases, 81 element states, 0 differ`. The run before the sweep fixes (`$TMPDIR/logs/exact2.log`) read 24 differ, each a loss listed below.
+
+1. **The variant-order rule could not read seven kit recipes** (`bunx eslint src` crashed: `TSError: Type expected.`). Its recipe reader cut a `tv(…)` call's arguments with the CSS selector walker, which reads an apostrophe as a quote and knows no comments. `callArguments` reads it as script. With the recipes read, nine hits appeared:
+   - popover-trigger's `badge && badgeVariants()` was worn on every trigger (UsageMeter's strip, 2): a recipe call behind a `$props()` binding is now worn only where the tag gives the prop.
+   - Split's handle (2): set 5 had stacked the kit's state onto each consumer class (k-landed step 3's fix), which the rule did not credit. A pair is settled when a third class holds exactly both chains' states, writes the same longhand and ranks no lower.
+   - TaskTable's created cell: `max-phone:@max-decisions-900px:hidden` (T's container rule, (0,3,2), beat the phone `td` rule, (0,2,2)). Proof: `same … created [phone|tablet|desk]: display`.
+   - table-row `picks-stacks`: `data-[state=selected]:data-picked:max-phone:bg-selected-bg` (the ledger's unlayered picked fill beat the kit's selected fill). Proof: `same … row [phone|desk]: background-color`. (Nothing in the app sets `data-state="selected"` on a row.)
+   - Spinner `glyph-busy`: `not-group-glyph-busy:` (T: `[data-slot="glyph"]:not([data-glyph="busy"]) > [data-for="busy"]`). Proof: busy reads `running`, a done cell (inside an outer `.group`) `paused`, as T.
+   - TableCell `between`: `[tr+tr>&]:` (T: `tr.action + tr.action > td`). Proof: first row `border-top-width 0px`, second `1px`, as T.
+2. **RecordCard** passed K2's removed `expanded="unfilled-at-rest"` (typecheck error); K2.md names `unfilled`.
+3. **`outline: none` → `outline-off`, 18 sites** (the orchestrator's 12, plus MentionField's editor, NewSessionDialog's drawer card in DrawerContent's `look="new-session"`, LocationSection's and ProjectChip's second inputs, SectionRow's label, Composer's recalling/grown pill, ToolGroup's artifact button). Set 1's Composer form applied its reset only under has-focus, so a recalling pill at rest kept the ring colour: it is now `data-recalling:outline-off data-grown:outline-off` plus the stacked has-focus form, which outranks `field-shell`'s (0,3,0). Composer's and ToolGroup's three-longhand forms and their `--ring-off: medium` are gone. Peer's, SideSheet's and PaneTabs' are still the shorthand in CSS. Proof: every site `same … [rest]` and `[focus-visible]` on `outline-*`.
+4. **Global classes the conversion dropped from markup** (the orchestrator's sweep; `$TMPDIR/scripts/class-sweep.mjs`: per file, class tokens in markup at T against now, kept where T's design system or T's global sheets draw the name, and split by whether the file's own `<style>` also styled it):
+   - `num`: NeedsYouChip's count, History's total, its spend head and cells (a `font: var(--type-label)` shorthand at T reset numerics, `num`'s `!important` restored them). MoveWait's two shares and PlanRing's count had `tabular-nums` (same value), now `num` as the map writes it.
+   - `ring` (Tailwind's 1px currentcolor ring, which T's scoped rules never overrode): DecisionNode's dot, DocThumb's progress ring, TabsList's focus ring.
+   - `shimmer`: thinking-indicator's word lost the whole look (its own rule set only position and display). Thinking-step's active label and description lost it under reduced motion (clip, size, repeat); they take `shimmer` when active again, plus `motion-safe:data-shimmer:bg-repeat`, since T's own rule wrote `background:` (repeat) over the utility's `no-repeat`.
+   - `icon-cards`: MachinesEmpty's card grid had lost app.css's grid (display, columns at three widths, gap, position).
+   - `count`: TextSection's Edit button, a direct child of `.kit-section-head` (app.css `& > .count`: margin, the meta shorthand, tabular-nums). A class on a kit Button is a no-restyle hit, so Button gains `head: { count: "count" }` and TextSection passes `head="count"`: the class itself, so T's components-layer cascade under the button's own utilities holds.
+   - `font-mono` (the base rule's `font-variant-ligatures: none`): 11 sites had become `font-(family-name:--font-mono)`, R3 applied to markup that already carried the class: ModelCombobox ×2, RuleTester's preview and its Textarea (K2's `face="mono-family"`, now `mono`; the `mono-family` value is deleted), TaskPanel, PeekPane ×3, ToolMatrix ×3.
+   - Checked and kept: `block`/`table`/`inline`/`hidden`/`filter`/`running`/`visible` (the scoped rule set the same property, or the value is the initial or inherited one); `pressable` (20 sites now `press="pressable"`); `rail-cell` (Skeleton `cell="rail"`); TreeMark's hooks (app.css retargeted to `data-slot`); `stop.edge`/`feFlood.near` (never matched: the sites are a `div` and a script variable); the ns-theme modifiers (every site carries the attribute ns-theme.css now selects).
