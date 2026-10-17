@@ -60,6 +60,13 @@ const twMergeConfig = {
       "border-none-r": ["border-r-none"],
       "border-none-s": ["border-s-none"],
       "border-style-t": ["border-t-dashed"],
+      // app.css's `outline: none` and `background` shorthands, a group each
+      // (`outline-off` would be read as an outline colour). They stand beside
+      // the longhands' utilities, and the sheet's order decides: `background-*`
+      // sorts after every `bg-*`, `outline-off` before Tailwind's outline
+      // longhands.
+      "outline-off": ["outline-off"],
+      "background-shorthand": [{ background: [validators.isAny] }],
       // app.css's utilities for declarations Tailwind writes none for. Those
       // that set a property tailwind-merge has a group for join it, so they
       // replace a rival as it would; the rest are a group each.
@@ -125,6 +132,8 @@ const twMerge = extendTailwindMerge<
   | "border-none-r"
   | "border-none-s"
   | "border-style-t"
+  | "outline-off"
+  | "background-shorthand"
   | "font-shorthand"
   | "line-clamp-undo"
   | "translate-raw"

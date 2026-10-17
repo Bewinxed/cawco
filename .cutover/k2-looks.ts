@@ -62,9 +62,9 @@ function literalsAround(source: string, marker: string): string {
   if (at < 0) {
     throw new Error(`no ${marker}`);
   }
-  const open = source.lastIndexOf("cn(", at);
-  const close = source.indexOf(")}", at);
-  return [...source.slice(open, close).matchAll(QUOTED)]
+  const start = source.lastIndexOf("cn(", at);
+  const end = source.indexOf(")}", at);
+  return [...source.slice(start, end).matchAll(QUOTED)]
     .map((m) => m[1])
     .join(" ");
 }
@@ -625,7 +625,7 @@ for (const b of buttonLooks) {
       .label.sv { color: var(--ink-strong); font-weight: var(--weight-body); transition: color var(--dur-control) var(--ease-out); }
       .step.sv[data-status="ahead"] .label.sv { color: var(--ink-muted); }
       @media (prefers-reduced-motion: no-preference) {
-        .shimmer.sv { color: transparent; background: linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%); background-size: 300% 100%; background-clip: text; }
+        .shimmer-at-t.sv { color: transparent; background: linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%); background-size: 300% 100%; background-clip: text; }
       }`,
     cases: grid({
       status: ["complete", "active", "ahead"],
@@ -635,7 +635,7 @@ for (const b of buttonLooks) {
       label: labelOf(c),
       media: "fine",
       reduced: Boolean(c.reduced),
-      ref: `<div class="step sv" data-status="${c.status}"><span data-k="label" class="label sv${c.shimmer ? " shimmer" : ""}">x</span></div>`,
+      ref: `<div class="step sv" data-status="${c.status}"><span data-k="label" class="label sv${c.shimmer ? " shimmer-at-t" : ""}">x</span></div>`,
       next: `<div><span data-k="label" class="${cur}" data-status="${c.status}"${attr(c.shimmer, "data-shimmer")}>x</span></div>`,
     })),
   });
@@ -958,6 +958,150 @@ for (const b of buttonLooks) {
   });
 }
 
+// ── The shorthands: each kit element whose rule at T wrote `outline: none`
+// or `background: …` (a shorthand, every longhand reset), read longhand by
+// longhand ─────────────────────────────────────────────────────────────────
+const OUTLINE = [
+  "outline-color",
+  "outline-style",
+  "outline-width",
+  "outline-offset",
+];
+const BACKGROUND = [
+  "background-color",
+  "background-image",
+  "background-position-x",
+  "background-position-y",
+  "background-size",
+  "background-repeat",
+  "background-attachment",
+  "background-origin",
+  "background-clip",
+];
+// TabItem's hit (TabItem.svelte:438 at T), drawn on the rail (WorkTabs
+// `variant="rail"`), a link or a button.
+{
+  const now = classWith(
+    readFileSync(join(ROOT, UI, "fluid-tabs/TabItem.svelte"), "utf8"),
+    "touch-hit static z-3"
+  );
+  looks.push({
+    name: "shorthand: TabItem's hit (outline: none; background: transparent)",
+    props: [...OUTLINE, ...BACKGROUND],
+    tCss: `
+      .hit.sv {
+        display: flex; align-items: center; align-self: stretch; flex: 1 1 auto; gap: calc(var(--gap) + 4px); min-inline-size: 0; padding-block: 0; padding-inline-start: var(--px-start, var(--px));
+        border: 0; border-radius: inherit; background: transparent; color: inherit; font: inherit; font-size: var(--text); line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer; outline: none; position: static;
+        &:last-child { padding-inline-end: var(--px); }
+      }`,
+    cases: grid({
+      tag: ["button", "a"],
+      state: ["rest", "hover", "focus-visible", "active"],
+      media: MEDIA,
+    }).map((c) => {
+      const pseudo = {
+        rest: [],
+        hover: ["hover"],
+        "focus-visible": ["focus", "focus-visible"],
+        active: ["active"],
+      }[String(c.state)] as string[];
+      const tag = String(c.tag);
+      const a =
+        tag === "a" ? 'href="#" role="tab"' : 'type="button" role="tab"';
+      const hit = (cls: string) =>
+        `<span data-slot="ff-tab" class="ff-tab sv"><${tag} data-k="hit" data-m="t" data-slot="hit" data-hit aria-selected="false" tabindex="0" class="${cls}" ${a}>Work</${tag}></span>`;
+      return {
+        label: labelOf(c),
+        media: c.media as Media,
+        force: pseudo.length > 0 ? [["t", pseudo]] : [],
+        ref: `<div data-variant="rail">${hit("hit sv touch-hit")}</div>`,
+        next: `<div data-variant="rail">${hit(now)}</div>`,
+      };
+    }),
+  });
+}
+// The rest of the kit's `background:` shorthands at T, each now a `bg-*`
+// colour: the segment (TabsList.svelte:1314), machine-row's tile (:60, :64)
+// and dot (:105–111), thinking-step's dot and connector (:176, :181) and its
+// shimmer (:255), the steps header (thinking-steps-header.svelte:43).
+// (TabsList's track rules, :1172 and :1242, are app.css's and still write
+// the shorthand.) T's `shimmer` class is `shimmer-at-t` here: today's sheet
+// has a `shimmer` utility T's had not, which T's element would not meet.
+{
+  const read = (path: string, marker: string) =>
+    classWith(readFileSync(join(ROOT, UI, path), "utf8"), marker);
+  const segment = read("fluid-tabs/TabsList.svelte", "bg-(--sheet)");
+  const tile = read("machine-row/machine-row.svelte", "data-ink:bg-ink-solid");
+  const dot = read("machine-row/machine-row.svelte", "data-is-online");
+  const stepDot = read("thinking-steps/thinking-step.svelte", "bg-current");
+  const connector = read(
+    "thinking-steps/thinking-step.svelte",
+    "bg-border-hairline"
+  );
+  const label = read(
+    "thinking-steps/thinking-step.svelte",
+    "status-ahead:text-ink-muted"
+  );
+  const header = read(
+    "thinking-steps/thinking-steps-header.svelte",
+    "group/header mark-line press-tint"
+  ).replace(" {className}", "");
+  const shimmer =
+    "linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%)";
+  const keyframes =
+    "@keyframes shimmer { from { background-position: 0% 0; } to { background-position: 100% 0; } }";
+  looks.push({
+    name: "shorthand: the kit's other background shorthands at T",
+    props: BACKGROUND,
+    tCss: `
+      .segment.sv { background: var(--sheet); }
+      .tile.sv { background: var(--surface-raised); }
+      .tile.sv.ink { background: var(--ink-solid); }
+      .dot.sv { background: var(--neutral-8); }
+      .dot.sv.online { background: var(--hue-green-500); }
+      .dot.sv.away { background: var(--hue-orange-500); }
+      .step-dot.sv { background: currentColor; }
+      .connector.sv { background: var(--border-hairline); }
+      @media (prefers-reduced-motion: no-preference) {
+        .shimmer-at-t.sv { color: transparent; background: ${shimmer}; background-size: 300% 100%; background-clip: text; animation: shimmer var(--breath) var(--ease-in-out) infinite; }
+      }
+      ${keyframes}
+      .thinking-header { margin: 0; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; font: inherit; color: inherit; text-align: start; }`,
+    nowCss: `
+      @media (prefers-reduced-motion: no-preference) {
+        [data-shimmer] { animation: shimmer var(--breath) var(--ease-in-out) infinite; }
+      }
+      ${keyframes}`,
+    cases: grid({
+      state: ["a", "b"],
+      reduced: [false, true],
+      media: MEDIA,
+    }).map((c) => {
+      const b = c.state === "b";
+      return {
+        label: labelOf(c),
+        media: c.media as Media,
+        reduced: Boolean(c.reduced),
+        force: [["t", ["hover"]]],
+        ref: `<div style="--sheet: var(--surface-raised)"><div data-k="segment" class="segment sv"></div></div>
+          <span data-k="tile" class="tile sv${b ? " ink" : ""}"></span>
+          <span data-k="dot" class="dot sv${b ? " online" : " away"}"></span>
+          <span data-k="step-dot" class="step-dot sv"></span>
+          <span data-k="connector" class="connector sv"></span>
+          <span data-k="label" class="label sv${b ? " shimmer-at-t" : ""}">x</span>
+          <button data-k="header" data-m="t" type="button" class="thinking-header mark-line press-tint">x</button>`,
+        next: `<div style="--sheet: var(--surface-raised)"><div data-k="segment" class="${segment}"></div></div>
+          <span data-k="tile" class="${tile}"${attr(b, "data-ink")}></span>
+          <span data-k="dot" class="${dot}"${b ? " data-is-online" : " data-is-away"}></span>
+          <span data-k="step-dot" class="${stepDot}"></span>
+          <span data-k="connector" class="${connector}"></span>
+          <span data-k="label" class="${label}" style="--step-shimmer: ${shimmer}; --step-shimmer-size: 300% 100%"${attr(b, "data-shimmer")}>x</span>
+          <button data-k="header" data-m="t" type="button" class="${header}" style="--header-min: 26px; --hit-reach: -9px">x</button>`,
+      };
+    }),
+  });
+}
+
 // ── The page ──────────────────────────────────────────────────────────────
 const app = join(DASH, "src", "app.css");
 const candidates = new Set<string>();
@@ -1023,36 +1167,44 @@ async function draw(look: Look, c: Case, markup: string, rules: string) {
     );
   }
   await page.evaluate(
-    ([markup, text, dark]: [string, string, boolean]) => {
+    ([inner, text, dark]: [string, string, boolean]) => {
       document.documentElement.classList.toggle("dark", dark);
       const t = document.getElementById("t");
       const stage = document.getElementById("stage");
       if (t && stage) {
         t.textContent = text;
-        stage.innerHTML = markup;
+        stage.innerHTML = inner;
       }
     },
     [markup, rules, Boolean(c.dark)] as [string, string, boolean]
   );
   const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
-  for (const [mark, pseudo] of c.force ?? []) {
-    const { nodeIds } = await cdp.send("DOM.querySelectorAll", {
-      nodeId: root.nodeId,
-      selector: `[data-m="${mark}"]`,
-    });
-    for (const nodeId of nodeIds) {
-      await cdp.send("CSS.forcePseudoState", {
-        nodeId,
-        forcedPseudoClasses: pseudo,
+  await Promise.all(
+    (c.force ?? []).map(async ([mark, pseudo]) => {
+      const { nodeIds } = await cdp.send("DOM.querySelectorAll", {
+        nodeId: root.nodeId,
+        selector: `[data-m="${mark}"]`,
       });
-    }
-  }
+      await Promise.all(
+        nodeIds.map((nodeId: number) =>
+          cdp.send("CSS.forcePseudoState", {
+            nodeId,
+            forcedPseudoClasses: pseudo,
+          })
+        )
+      );
+    })
+  );
   return (await page.evaluate(
     ([props, also]: ["all" | string[], string[]]) => {
       for (const a of document.getAnimations()) {
         if (
-          a.effect?.getComputedTiming().endTime !== Number.POSITIVE_INFINITY
+          a.effect?.getComputedTiming().endTime === Number.POSITIVE_INFINITY
         ) {
+          // A loop has no end: both sides are read at its start.
+          a.pause();
+          a.currentTime = 0;
+        } else {
           a.finish();
         }
       }
@@ -1105,7 +1257,7 @@ const TRANSITION_LISTS = [
     that length draw the same transitions. */
 function used(values: Record<string, string>): Record<string, string> {
   const property = values["transition-property"];
-  if (property === undefined) {
+  if (!property) {
     return values;
   }
   const n = items(property).length;
@@ -1128,6 +1280,7 @@ for (const look of looks) {
   let differ = 0;
   const skip = new Set(look.ignore ?? []);
   for (const c of look.cases) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page draws each side in turn, its rules and states set for that side alone
     const ref = await draw(look, c, c.ref, look.tCss);
     const next = await draw(look, c, c.next, look.nowCss ?? "");
     const found: string[] = [];

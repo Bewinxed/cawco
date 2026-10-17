@@ -2323,6 +2323,25 @@
   transition: none;
 }
 
+/* No outline, as `outline: none` writes it: its style, width and colour
+   back to their initial values (none, medium, currentcolor). Tailwind's
+   `outline-none` sets only the style, so the base's focus-ring colour and
+   its :focus-visible width stay. */
+@utility outline-off {
+  outline: none;
+}
+
+/* A background as the `background` shorthand writes it: the colour given,
+   and every other longhand back to its initial value (no image, the clip
+   to the border box, the position at 0% 0%). Tailwind's `bg-*` sets the
+   colour alone. A colour token (`background-surface-raised`), `transparent`,
+   `none`, or a custom property (`background-(--sheet)`). */
+@utility background-* {
+  background: --value(--color-*);
+  background: --value("transparent", "none");
+  background: --value([*]);
+}
+
 /* Declarations Tailwind writes no utility for, each as the source wrote it.
    A box that takes a value from its parent as it stands (`inherit`): a
    custom property cannot carry the keyword, which would make the property

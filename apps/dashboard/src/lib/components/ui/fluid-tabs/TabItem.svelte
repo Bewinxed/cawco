@@ -361,7 +361,7 @@
     data-slot="hit"
     data-hit
     aria-selected={selected}
-    class="touch-hit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current bg-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-none last:pe-(--px)"
+    class="touch-hit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px)"
     style:--hit-gap="calc(var(--gap) + var(--space-1))"
     style:--hit-ps="var(--px-start, var(--px))"
     draggable={href ? "false" : undefined}
