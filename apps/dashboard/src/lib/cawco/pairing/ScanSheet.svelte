@@ -27,8 +27,8 @@
   import Close from "#lib/components/icons/Close.svelte";
   import Tick from "#lib/components/icons/Tick.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import OtpCells, { type OtpArrival, type OtpTone } from "./OtpCells.svelte";
-  import PairingQr from "./PairingQr.svelte";
+  import OtpCells, { type OtpTone } from "./OtpCells.svelte";
+  import PairingQr, { type QrAct } from "./PairingQr.svelte";
   import SuccessCheck from "./SuccessCheck.svelte";
   import Swap from "./Swap.svelte";
 
@@ -38,7 +38,6 @@
     code,
     device,
     seen,
-    arrive = "pop",
     shake = 0,
     onapprove,
     ondeny,
@@ -53,13 +52,20 @@
     device: string;
     /** What the camera sees: the other device's QR text. */
     seen: string;
-    arrive?: OtpArrival;
     /** Each rise replays the cells' shake. */
     shake?: number;
     onapprove: () => void;
     ondeny: () => void;
     onclose: () => void;
   } = $props();
+
+  /** The key the camera holds: still, swallowed as the screen's is, or burst. */
+  const seenAct = $derived.by((): QrAct => {
+    if (phase === "approved") {
+      return "swallow";
+    }
+    return phase === "nomatch" ? "burst" : "still";
+  });
 
   const tone = $derived.by((): OtpTone => {
     switch (phase) {
@@ -105,14 +111,18 @@
       type="button"><Close aria-hidden="true" /></button
     >
   </header>
-  <div data-slot="camera" class="well">
-    <div class="view"><PairingQr payload={seen} state="code" /></div>
+  <div
+    data-slot="camera"
+    class="well"
+    data-locked={phase === "idle" ? undefined : ""}
+  >
+    <div class="view"><PairingQr act={seenAct} payload={seen} /></div>
     <span aria-hidden="true" class="corner"></span>
     <span aria-hidden="true" class="corner"></span>
     <span aria-hidden="true" class="corner"></span>
     <span aria-hidden="true" class="corner"></span>
   </div>
-  <OtpCells {arrive} {code} {shake} {tone} />
+  <OtpCells {code} {shake} {tone} />
   <p aria-live="polite" class="meta" data-tone={phase}>
     <Swap all={SAID} value={said}>
       {#snippet children(one)}
@@ -147,7 +157,7 @@
         icon={Close}
         label="Deny"
         onclick={ondeny}
-        size="sm"
+        size="lg"
         variant="secondary"
       />
       <Button
@@ -157,7 +167,7 @@
         icon={Tick}
         label="Approve"
         onclick={onapprove}
-        size="sm"
+        size="lg"
         variant="secondary"
       />
     </div>
@@ -206,6 +216,7 @@
     border-radius: var(--radius-lg);
     background: var(--surface-recess);
     overflow: hidden;
+    container-type: inline-size;
   }
   /* The other device's QR at a camera's distance: below its own width
      (min-inline-size 0, or a grid item stays as wide as its content). */
@@ -213,11 +224,18 @@
     inline-size: 64%;
     min-inline-size: 0;
   }
+  /* Locked onto a key, each bracket snaps in to the key's own corner: the
+     view is 64% of the well, so its corner stands 18% in (container units,
+     a transform only). */
   .corner {
+    --snap: calc(18cqi - var(--c-corner-grip-inset) * 4);
     position: absolute;
     inline-size: calc(var(--c-corner-grip-leg) * 2);
     block-size: calc(var(--c-corner-grip-leg) * 2);
     border: 0 solid var(--border-control);
+    transition:
+      transform var(--dur-pop) var(--ease-out),
+      border-color var(--dur-pop) var(--ease-out);
   }
   .corner:nth-of-type(1) {
     inset-block-start: calc(var(--c-corner-grip-inset) * 4);
@@ -242,6 +260,26 @@
     inset-inline-end: calc(var(--c-corner-grip-inset) * 4);
     border-block-end-width: var(--c-corner-grip-stroke);
     border-inline-end-width: var(--c-corner-grip-stroke);
+  }
+  [data-locked] .corner {
+    border-color: var(--brand-solid);
+  }
+  [data-locked] .corner:nth-of-type(1) {
+    transform: translate(var(--snap), var(--snap));
+  }
+  [data-locked] .corner:nth-of-type(2) {
+    transform: translate(calc(-1 * var(--snap)), var(--snap));
+  }
+  [data-locked] .corner:nth-of-type(3) {
+    transform: translate(var(--snap), calc(-1 * var(--snap)));
+  }
+  [data-locked] .corner:nth-of-type(4) {
+    transform: translate(calc(-1 * var(--snap)), calc(-1 * var(--snap)));
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .corner {
+      transition-property: border-color;
+    }
   }
   .meta {
     display: grid;
@@ -290,6 +328,10 @@
   }
   .peers > :global(.peer) {
     border-color: transparent;
+  }
+  /* Approve is the big one: it takes the row's room. */
+  .peers > :global(.approve) {
+    flex: 1;
   }
   .peers > :global(.deny),
   .peers > :global(.deny:hover) {
