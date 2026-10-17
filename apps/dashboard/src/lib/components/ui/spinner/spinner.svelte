@@ -1,3 +1,29 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks, each as they drew it. */
+  export const spinnerVariants = tv({
+    variants: {
+      /** The muted ink; or the live glyph while its run is running. */
+      tone: {
+        muted: "text-ink-muted",
+        "live-running": "group-status-running/time:text-status-live-glyph",
+      },
+      /** 24px, a page's own wait. */
+      box: { large: "size-6" },
+      /** In a glyph cell that shows it only while busy (`glyph-busy`),
+          fading in and out; held still while hidden. */
+      reveal: {
+        "glyph-busy":
+          "motion-safe:dur-control group-not-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:ease-out",
+      },
+    },
+  });
+
+  export type SpinnerLooks = VariantProps<typeof spinnerVariants>;
+</script>
+
 <script lang="ts">
   import type { SVGAttributes } from "svelte/elements";
   import { cn } from "#lib/utils.js";
@@ -6,13 +32,20 @@
     class: className,
     role = "status",
     "aria-label": ariaLabel = "Loading",
+    tone,
+    box,
+    reveal,
     ...restProps
-  }: SVGAttributes<SVGSVGElement> = $props();
+  }: SVGAttributes<SVGSVGElement> & SpinnerLooks = $props();
 </script>
 
 <svg
   aria-label={ariaLabel}
-  class={cn("size-icon-md animate-spin", className)}
+  class={cn(
+    "size-icon-md animate-spin",
+    spinnerVariants({ tone, box, reveal }),
+    className
+  )}
   fill="none"
   {role}
   stroke="currentColor"

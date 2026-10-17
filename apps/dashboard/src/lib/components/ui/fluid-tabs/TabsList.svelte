@@ -1139,7 +1139,7 @@
     <div
       data-slot="segment"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-1 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden"
+      class="pointer-events-none absolute start-0 top-0 z-1 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
       style:--box-at="translate({at.left}px,{at.top}px)"
       style:--box-w="{at.width}px"
       style:--box-h="{at.height}px"
@@ -1204,60 +1204,5 @@
      its own card in the hover tint instead (TabItem, `data-ghosted`). */
   :global([data-variant="folder"]) .ff-tabs-list > :global(.kit-ghost) {
     display: none;
-  }
-  /* residual: unmapped — the segment steps back a little while another tab
-     is under the hover ghost, so the ghost reads as the thing about to
-     take over: a run-time state (`data-ghosted`, the highlight's) on a
-     sibling. Under a hand, or riding a settle read off its clock each
-     frame (`data-travelling`), the position is the motion, and an easing
-     on top would lag the finger. needs transition token: transform
-     var(--dur-toggle) var(--ease-out), width var(--dur-toggle)
-     var(--ease-out), height var(--dur-toggle) var(--ease-out), opacity
-     var(--dur-ghost) var(--ease-out). */
-  @media (hover: hover) {
-    .ff-tabs-list:has(
-        :global(
-          [data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected])
-        )
-      )
-      > [data-slot="segment"] {
-      opacity: 0.85;
-    }
-  }
-  [data-slot="segment"][data-travelling] {
-    transition: none;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="segment"] {
-      transition:
-        transform var(--dur-toggle) var(--ease-out),
-        width var(--dur-toggle) var(--ease-out),
-        height var(--dur-toggle) var(--ease-out),
-        opacity var(--dur-ghost) var(--ease-out);
-    }
-  }
-  /* The come-forward's clock (`tab-come-forward`): a number on the track
-     the run carries from 0 to 1, which nothing draws; each tab's pose is
-     read off the run's time. A tab's rank in the stack (`--z`, the
-     script's; `--z-rest`, from the order and the value until the track
-     ranks it), read only on the box that carries it (its `z-index`; a
-     leaving tab's own). Not inherited: a choice re-ranks most of the strip,
-     and as plain custom properties each new rank restyled everything its
-     tab holds (its sheet, rim, name, glyph and controls), 430 elements a
-     choice. No initial value (`*`), so a box the track has not ranked yet
-     still falls back to its rest rank. */
-  /* residual: unmapped — registrations no utility makes. */
-  @property --forward {
-    syntax: "<number>";
-    inherits: false;
-    initial-value: 0;
-  }
-  @property --z {
-    syntax: "*";
-    inherits: false;
-  }
-  @property --z-rest {
-    syntax: "*";
-    inherits: false;
   }
 </style>

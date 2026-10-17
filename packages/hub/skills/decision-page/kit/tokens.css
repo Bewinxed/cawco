@@ -184,6 +184,8 @@
     --surface-fill: light-dark(var(--neutral-4), var(--neutral-5));
     /* A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open). */
     --surface-fill-strong: light-dark(var(--neutral-6), var(--neutral-7));
+    /* A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill. */
+    --press-fill: light-dark(var(--surface-fill-strong), var(--surface-fill));
     /* Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike. */
     --surface-hover: light-dark(var(--neutral-4), var(--neutral-4));
     /* The reader's well edge: darker than the well by day, the ink at 8% at night. */
@@ -300,6 +302,18 @@
     /* Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person. */
     --status-live-bg: color-mix(in oklab, var(--info-3) 76%, var(--info-9));
     --status-attn-bg: light-dark(oklch(91% 0.115 95), oklch(37% 0.07 92));
+    /* A task's needs section (TaskNeeds): the attention tint at a little under half, laid on the raised surface the task stands on. */
+    --needs-ground: color-mix(
+      in oklab,
+      var(--status-attn-bg) 45%,
+      var(--surface-raised)
+    );
+    /* The picked card among an account's routing strategies (StrategyPicker): the selection's tint at a little under half, laid on the raised surface. */
+    --strategy-card-picked: color-mix(
+      in oklab,
+      var(--selected-bg) 45%,
+      var(--surface-raised)
+    );
     --status-done-bg: color-mix(
       in oklab,
       var(--success-3) 76%,
@@ -823,6 +837,8 @@
     --c-block-drop-dot: 6px;
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
+    /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
+    --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);
     --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
     /* A working tray chip's narrowest: the floor under its measured width. */
@@ -1143,6 +1159,7 @@
   @media (pointer: coarse) {
     :root {
       --c-tray-chip: 34px;
+      --c-peek-glyph: var(--icon-lg);
       --c-tray-gap: var(--space-3);
     }
   }
