@@ -89,6 +89,7 @@ import {
   withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import {
   isMachinePath,
   type MachinePath,
@@ -3048,39 +3049,186 @@ export const createWorkItems = ({
     }
   };
 
-  /** Each workspace's settle under way, and whether one was asked for meanwhile. */
-  const settling = new Map<string, { again: boolean }>();
+  /** The last step queued in each workspace's turn ({@link inWorkspaceTurn}); it only resolves. */
+  const workspaceTurns = new Map<string, Promise<void>>();
 
   /**
-   * {@link settle} soon, off the caller's step, once at a time per
-   * workspace: one asked for while one runs runs again after it. Never
-   * throws.
+   * Runs `work` in workspace `id`'s turn: after every step queued before it,
+   * before any queued after. A step is anything that closes the workspace's
+   * boundary on its machine or reads its clone through it: its settle, its
+   * archive, the bundle a `from` cut takes of it, a read of what it holds
+   * on no remote ({@link unlandedOf}). On 2026-10-17 a read ran git through
+   * a boundary that the workspace's settle was closing, and failed. A step
+   * never takes its own workspace's turn again.
    */
-  const settleSoon = (id: string): void => {
-    const running = settling.get(id);
-    if (running) {
-      running.again = true;
-      return;
+  const inWorkspaceTurn = async <T>(
+    id: string,
+    work: () => Promise<T>
+  ): Promise<T> => {
+    const before = workspaceTurns.get(id);
+    const { promise: mine, resolve } = Promise.withResolvers<void>();
+    workspaceTurns.set(id, mine);
+    try {
+      await before;
+      return await work();
+    } finally {
+      resolve();
+      if (workspaceTurns.get(id) === mine) {
+        workspaceTurns.delete(id);
+      }
     }
-    settling.set(id, { again: false });
-    const run = (): void => {
-      settle(id)
-        .catch((error: unknown) =>
-          console.warn(
-            `[workspaces] ${id}: its settle failed: ${error instanceof Error ? error.message : String(error)}`
-          )
-        )
-        .finally(() => {
-          const asked = settling.get(id);
-          if (asked?.again) {
-            asked.again = false;
-            run();
-          } else {
-            settling.delete(id);
-          }
-        });
-    };
-    queueMicrotask(run);
+  };
+
+  /** A settle queued in its workspace's turn and not yet begun: every caller meanwhile shares it. */
+  const settleQueued = new Map<string, Promise<Settled>>();
+
+  /**
+   * THE way a workspace is settled ({@link settle}), in its turn: asked while
+   * one runs, one more runs after it, shared by every caller asking before
+   * it begins. The events, the sweep and a read of what the workspace holds
+   * all come here. Never rejects.
+   */
+  const settleNow = (id: string): Promise<Settled> => {
+    const queued = settleQueued.get(id);
+    if (queued !== undefined) {
+      return queued;
+    }
+    const run = inWorkspaceTurn(id, () => {
+      settleQueued.delete(id);
+      return settle(id);
+    }).catch((error: unknown): Settled => {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[workspaces] ${id}: its settle failed: ${reason}`);
+      return { kind: "failed", reason };
+    });
+    settleQueued.set(id, run);
+    return run;
+  };
+
+  /** {@link settleNow}, off the caller's step. */
+  const settleSoon = (id: string): void => {
+    queueMicrotask(() => detach(settleNow(id), `settle ${id}`));
+  };
+
+  /**
+   * What workspace `id` holds on no remote, in its turn
+   * ({@link inWorkspaceTurn}), so no close of its boundary runs meanwhile.
+   * Its settle comes first ({@link settle}): a workspace nothing holds any
+   * more is closed there and read as the settle recorded it, held with what
+   * it holds, or archived, holding nothing anywhere but its remote. Only one
+   * something still holds (a live item, an attached session, a preview) is
+   * read now, by git inside its boundary, which that hold keeps up; never
+   * waiting (a paused machine or a busy folder throws {@link WouldWait}).
+   * Undefined for one archived, gone, or a landing gate's. Throws the
+   * machine's words when git cannot say.
+   */
+  const unlandedOf = (
+    id: string
+  ): Promise<Omit<Unlanded, "live"> | undefined> =>
+    inWorkspaceTurn(id, async () => {
+      await settle(id);
+      const [workspace] = db.workspacesNamed(id);
+      if (!workspace || workspace.state === "archived" || workspace.checksFor) {
+        return;
+      }
+      if (isHeld(workspace)) {
+        const { dirty, stashes, ahead } = workspace.holding;
+        return { workspaceId: id, changed: dirty + stashes, ahead };
+      }
+      const skip = handedOver(workspace).map(
+        (path) => ` ${quote(`:(exclude,literal)${path}`)}`
+      );
+      const lines = (name: string): string =>
+        `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
+      const read = await command(
+        workspace.machineId,
+        workspace.path,
+        `${SAFE_GIT_SHELL}a=$(git rev-list --count HEAD --branches --not --remotes) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
+        GIT_TIMEOUT_MS,
+        refOf(workspace),
+        { noWait: true }
+      );
+      const [ahead, dirty, stashes] = read.stdout
+        .trim()
+        .split(SPACES)
+        .map(Number);
+      if (
+        read.exitCode !== 0 ||
+        [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
+      ) {
+        throw new Error(
+          `git in workspace ${id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+        );
+      }
+      return {
+        workspaceId: id,
+        changed: (dirty as number) + (stashes as number),
+        ahead: ahead as number,
+      };
+    });
+
+  /** The `archive` method's work, in the workspace's turn: the workspace read as it stands then. */
+  const archiveNow = async (
+    needle: string,
+    discard: boolean
+  ): Promise<ArchivedWorkspace> => {
+    const workspace = namedWorkspace(needle);
+    if (workspace.state === "archived") {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} is already archived.`
+      );
+    }
+    if (workspace.checksFor) {
+      return closeWorkspace(workspace, "check");
+    }
+    const live = db
+      .workItemsIn(workspace.id)
+      .find((item) => LIVE.has(item.state));
+    if (live) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
+      );
+    }
+    const skip = handedOver(workspace);
+    // Bounded well inside the HTTP call's own idle timeout: a machine that
+    // never confirms leaves the workspace active, and the answer says so.
+    const stops = await Promise.allSettled(
+      [
+        ...new Set(db.workItemsIn(workspace.id).map((item) => item.instanceId)),
+      ].map((instanceId) => end(instanceId, ARCHIVE_STOP_WAIT_MS))
+    );
+    const unconfirmed = stops.flatMap((stop) =>
+      stop.status === "rejected"
+        ? [
+            stop.reason instanceof Error
+              ? stop.reason.message
+              : String(stop.reason),
+          ]
+        : []
+    );
+    if (unconfirmed.length > 0) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
+      );
+    }
+    const closed = await closeWorkspace(
+      workspace,
+      discard ? "discard" : "keep",
+      skip
+    );
+    if (closed.held) {
+      throw new WorkspaceHoldsWork(closed.held);
+    }
+    // Its gate workspaces on other machines go with it: none outlives it.
+    await Promise.all(
+      db
+        .checkWorkspacesOf(workspace.id)
+        .map((check) => closeWorkspace(check, "check"))
+    );
+    return closed;
   };
 
   /**
@@ -3431,18 +3579,27 @@ export const createWorkItems = ({
    * started for that, is closed again however the bundle went, and the
    * workspace stays held.
    */
-  const bundleOf = async (source: WorkspaceRow): Promise<WorkspaceCommit> => {
-    try {
-      return (await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
-        refOf(source),
-        source.base,
-      ])) as WorkspaceCommit;
-    } finally {
-      if (source.state === "held") {
-        await closeWorkspace(source, "keep", handedOver(source));
+  const bundleOf = (id: string): Promise<WorkspaceCommit> =>
+    inWorkspaceTurn(id, async () => {
+      // As it stands in its turn: a settle before it may have closed it.
+      const [source] = db.workspacesNamed(id);
+      if (!source || source.state === "archived") {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${id} was archived before its branch could be read: its clone is gone. Delegate without from.`
+        );
       }
-    }
-  };
+      try {
+        return (await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
+          refOf(source),
+          source.base,
+        ])) as WorkspaceCommit;
+      } finally {
+        if (source.state === "held") {
+          await closeWorkspace(source, "keep", handedOver(source));
+        }
+      }
+    });
 
   /**
    * A new workspace's branch moved to `source`'s head: the source's HEAD
@@ -3458,7 +3615,7 @@ export const createWorkItems = ({
     source: WorkspaceRow
   ): Promise<void> => {
     try {
-      const made = await bundleOf(source);
+      const made = await bundleOf(source.id);
       await call(workspace.machineId, CONTROL_WORKSPACE_AT, [
         refOf(workspace),
         workspace.base,
@@ -3480,10 +3637,10 @@ export const createWorkItems = ({
       }
     } catch (error) {
       await closeWorkspace(workspace, "unmade");
-      throw new Error(
-        `Workspace ${workspace.id} could not be cut from workspace ${source.id}, so it was archived: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      );
+      const words = `Workspace ${workspace.id} could not be cut from workspace ${source.id}, so it was archived: ${error instanceof Error ? error.message : String(error)}`;
+      throw error instanceof WorkItemRefusal
+        ? new WorkItemRefusal(error.status, words, { cause: error })
+        : new Error(words, { cause: error });
     }
   };
 
@@ -6493,64 +6650,17 @@ export const createWorkItems = ({
 
     /**
      * What the workspace of session `instanceId`'s item holds that is on no
-     * remote ({@link Unlanded}): a held one's as its record keeps it, an
-     * active one's read now by git inside its boundary, never waiting (a
-     * paused machine or a busy folder throws {@link WouldWait}). Undefined
-     * for a session with no item, or one whose clone is gone or is a landing
-     * gate's. Throws the machine's words when git cannot say.
+     * remote ({@link Unlanded}, read by {@link unlandedOf}); undefined for a
+     * session with no item. Throws the machine's words when git cannot say.
      */
     async unlanded(instanceId: string): Promise<Unlanded | undefined> {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-      if (
-        !(item && workspace) ||
-        workspace.state === "archived" ||
-        workspace.checksFor
-      ) {
+      if (!item) {
         return;
       }
-      const live = LIVE.has(item.state);
-      if (isHeld(workspace)) {
-        const { dirty, stashes, ahead } = workspace.holding;
-        return {
-          workspaceId: workspace.id,
-          changed: dirty + stashes,
-          ahead,
-          live,
-        };
-      }
-      const skip = handedOver(workspace).map(
-        (path) => ` ${quote(`:(exclude,literal)${path}`)}`
-      );
-      const lines = (name: string): string =>
-        `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
-      const read = await command(
-        workspace.machineId,
-        workspace.path,
-        `${SAFE_GIT_SHELL}a=$(git rev-list --count HEAD --branches --not --remotes) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
-        GIT_TIMEOUT_MS,
-        refOf(workspace),
-        { noWait: true }
-      );
-      const [ahead, dirty, stashes] = read.stdout
-        .trim()
-        .split(SPACES)
-        .map(Number);
-      if (
-        read.exitCode !== 0 ||
-        [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
-      ) {
-        throw new Error(
-          `git in workspace ${workspace.id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
-        );
-      }
-      return {
-        workspaceId: workspace.id,
-        changed: (dirty as number) + (stashes as number),
-        ahead: ahead as number,
-        live,
-      };
+      const read = await unlandedOf(item.workspaceId);
+      return read && { ...read, live: LIVE.has(item.state) };
     },
 
     /** Every held workspace, with what it holds and where ({@link HeldWork}), newest first. */
@@ -6567,11 +6677,12 @@ export const createWorkItems = ({
     ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> {
       const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
       for (const workspace of db.activeWorkspacesOn(machineId)) {
-        if (settling.has(workspace.id)) {
+        // Something runs in its turn now: the sweep's next look settles it.
+        if (workspaceTurns.has(workspace.id)) {
           continue;
         }
         // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, so a sweep never loads a machine with many archives at once
-        done.push({ workspace, outcome: await settle(workspace.id) });
+        done.push({ workspace, outcome: await settleNow(workspace.id) });
       }
       return done;
     },
@@ -6612,69 +6723,14 @@ export const createWorkItems = ({
      * person chose to let it go, and its machine saves it to a carry before
      * deleting anything.
      */
-    async archive(
+    archive(
       needle: string,
       { discard = false }: { discard?: boolean } = {}
     ): Promise<ArchivedWorkspace> {
-      const workspace = namedWorkspace(needle);
-      if (workspace.state === "archived") {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${workspace.id} is already archived.`
-        );
-      }
-      if (workspace.checksFor) {
-        return closeWorkspace(workspace, "check");
-      }
-      const live = db
-        .workItemsIn(workspace.id)
-        .find((item) => LIVE.has(item.state));
-      if (live) {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
-        );
-      }
-      const skip = handedOver(workspace);
-      // Bounded well inside the HTTP call's own idle timeout: a machine that
-      // never confirms leaves the workspace active, and the answer says so.
-      const stops = await Promise.allSettled(
-        [
-          ...new Set(
-            db.workItemsIn(workspace.id).map((item) => item.instanceId)
-          ),
-        ].map((instanceId) => end(instanceId, ARCHIVE_STOP_WAIT_MS))
+      // In its turn: no settle, bundle or read meets this close.
+      return inWorkspaceTurn(namedWorkspace(needle).id, () =>
+        archiveNow(needle, discard)
       );
-      const unconfirmed = stops.flatMap((stop) =>
-        stop.status === "rejected"
-          ? [
-              stop.reason instanceof Error
-                ? stop.reason.message
-                : String(stop.reason),
-            ]
-          : []
-      );
-      if (unconfirmed.length > 0) {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
-        );
-      }
-      const closed = await closeWorkspace(
-        workspace,
-        discard ? "discard" : "keep",
-        skip
-      );
-      if (closed.held) {
-        throw new WorkspaceHoldsWork(closed.held);
-      }
-      // Its gate workspaces on other machines go with it: none outlives it.
-      await Promise.all(
-        db
-          .checkWorkspacesOf(workspace.id)
-          .map((check) => closeWorkspace(check, "check"))
-      );
-      return closed;
     },
 
     /**

@@ -399,7 +399,7 @@ const dirtyTakesHandoff = async (
     !handed.isError &&
       handed.text.startsWith("Handed to") &&
       attachCalls(jev) === asked,
-    `${handed.text.slice(0, 300)}; Jev asked ${attachCalls(jev) - asked} time(s)`
+    `${handed.text.slice(0, 1500)}; Jev asked ${attachCalls(jev) - asked} time(s)`
   );
   const reached = await until(
     "the hand-off reached the dirty delegate",
@@ -433,7 +433,7 @@ const aheadGoesFrom = async (
       refused.text.includes(`delegate with from: "${ahead.workspaceId}"`) &&
       refused.text.includes("1 commit on no remote") &&
       attachCalls(jev) === asked,
-    `${refused.text.slice(0, 400)}; Jev asked ${attachCalls(jev) - asked} time(s)`
+    `${refused.text.slice(0, 1500)}; Jev asked ${attachCalls(jev) - asked} time(s)`
   );
   const cut = await callAs(fleet, parent, "delegate", {
     prompt: `${FROM}: finish the commit you start from.`,
