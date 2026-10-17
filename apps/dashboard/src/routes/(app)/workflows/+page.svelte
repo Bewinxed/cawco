@@ -84,30 +84,42 @@
       {/snippet}
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align={inEmptyState ? "start" : "end"} class="w-64">
+      <!-- The title (the pending content: slot and label) on one line, what it
+           makes on the next. The 44px is the top bar's own height. -->
       <DropdownMenu.PendingItem
-        class="new-item"
+        class="min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong"
         label="New graph"
         pendingLabel="Creating…"
         run={() => create(GRAPH)}
       >
-        <small>Draw the steps; the hub compiles them.</small>
+        <small
+          class="basis-full text-size-meta leading-body font-normal text-ink-muted"
+          >Draw the steps; the hub compiles them.</small
+        >
       </DropdownMenu.PendingItem>
       <DropdownMenu.PendingItem
-        class="new-item"
+        class="min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong"
         label="New program"
         pendingLabel="Creating…"
         run={() => create(PROGRAM)}
       >
-        <small>Write the steps as TypeScript.</small>
+        <small
+          class="basis-full text-size-meta leading-body font-normal text-ink-muted"
+          >Write the steps as TypeScript.</small
+        >
       </DropdownMenu.PendingItem>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {/snippet}
 
-<div class="wf list-page">
+<!-- literal: 24px, 44px, 64px, minmax(180px, 1fr) 110px 110px 60px 70px -->
+<div
+  class="wf flex flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7"
+  data-slot="list-page"
+>
   <header class="wf-row wf-spread">
     <div>
-      <h1>Workflows</h1>
+      <h1 class="mb-space-1">Workflows</h1>
       <p class="wf-muted">Reusable steps across your fleet.</p>
     </div>
     <div class="wf-row">{@render newMenu(false)}</div>
@@ -124,28 +136,40 @@
   {#if loading}
     <table
       aria-label="Loading workflows"
-      class="table"
+      class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
       role="status"
+      style:--cols="minmax(180px, 1fr) 110px 110px 60px 70px"
+      style:--name-min="24px"
+      style:--name-min-coarse="44px"
+      style:--row-min="64px"
       out:crossOut
     >
       <thead>
-        <tr class="heading">
-          <th scope="col">Name</th>
-          <th scope="col">Last run</th>
-          <th scope="col">Started</th>
-          <th scope="col">Runs</th>
-          <th scope="col">Actions</th>
+        <tr
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted"
+          data-slot="heading"
+        >
+          <th class="font-medium" scope="col">Name</th>
+          <th class="font-medium" scope="col">Last run</th>
+          <th class="font-medium" scope="col">Started</th>
+          <th class="font-medium" scope="col">Runs</th>
+          <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
       <tbody aria-hidden="true">
         {#each [0, 1, 2] as index (index)}
-          <tr class="workflow-row">
-            <td data-slot="name" class="name"
+          <tr
+            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3"
+            data-slot="workflow-row"
+          >
+            <td
+              data-slot="name"
+              class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong"
               ><Skeleton class="h-icon-md w-40" /></td
             >
             <td><Skeleton class="h-icon-lg w-16" /></td>
-            <td class="age"><Skeleton class="h-icon-md w-20" /></td>
-            <td data-slot="count" class="count"
+            <td data-slot="age"><Skeleton class="h-icon-md w-20" /></td>
+            <td data-slot="count" class="num"
               ><Skeleton class="h-icon-md w-6" /></td
             >
             <td><Skeleton class="h-space-8 w-14" /></td>
@@ -157,7 +181,7 @@
     {#if !workflowState.error}
       <div in:crossIn>
         <EmptyState
-          class="mx-auto w-full max-w-[420px]"
+          class="mx-auto w-full max-w-105"
           icon={IconWorkflow}
           line="A workflow is a graph of steps that run one after another across your fleet."
           title="No workflows yet"
@@ -169,21 +193,38 @@
       </div>
     {/if}
   {:else}
-    <table aria-label="Workflows" class="table" in:crossIn>
+    <table
+      aria-label="Workflows"
+      class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
+      style:--cols="minmax(180px, 1fr) 110px 110px 60px 70px"
+      style:--name-min="24px"
+      style:--name-min-coarse="44px"
+      style:--row-min="64px"
+      in:crossIn
+    >
       <thead>
-        <tr class="heading">
-          <th scope="col">Name</th>
-          <th scope="col">Last run</th>
-          <th scope="col">Started</th>
-          <th scope="col">Runs</th>
-          <th scope="col">Actions</th>
+        <tr
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted"
+          data-slot="heading"
+        >
+          <th class="font-medium" scope="col">Name</th>
+          <th class="font-medium" scope="col">Last run</th>
+          <th class="font-medium" scope="col">Started</th>
+          <th class="font-medium" scope="col">Runs</th>
+          <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
       <tbody>
         {#each rows as { workflow, runs, last } (workflow.id)}
-          <tr class="workflow-row">
+          <tr
+            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3"
+            data-slot="workflow-row"
+          >
             <td>
-              <a data-slot="name" class="name" href="/workflows/{workflow.id}"
+              <a
+                data-slot="name"
+                class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong"
+                href="/workflows/{workflow.id}"
                 >{workflow.name}
                 <span class="wf-muted">{workflow.description}</span></a
               >
@@ -195,16 +236,17 @@
                 <span class="wf-muted">No runs</span>
               {/if}
             </td>
-            <td class="age wf-muted">
+            <td data-slot="age" class="wf-muted">
               {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
-              <span class="mobile"
+              <span class="hidden" data-slot="mobile"
                 >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
               >
             </td>
-            <td data-slot="count" class="count">{runs.length}</td>
+            <td data-slot="count" class="num">{runs.length}</td>
             <td>
               <button
-                class="wf-btn desktop"
+                class="wf-btn"
+                data-slot="desktop"
                 disabled={!live}
                 onclick={(event) => {
                   launch = { workflow, from: event.currentTarget };
@@ -216,7 +258,7 @@
               >
                 Run
               </button>
-              <details class="mobile">
+              <details class="hidden" data-slot="mobile">
                 <summary
                   aria-label="Actions for {workflow.name}"
                   class="pressable"
@@ -255,97 +297,21 @@
 {/if}
 
 <style>
-  .list-page {
-    position: relative;
-    padding: var(--space-7) var(--space-6);
-    overflow-y: auto;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-  }
-  header h1 {
-    margin-bottom: var(--space-1);
-  }
-  .table {
-    display: block;
-    width: 100%;
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    padding: var(--space-3);
-    box-shadow: var(--shadow-tile);
-  }
-  .heading,
-  .workflow-row {
-    display: grid;
-    grid-template-columns: minmax(180px, 1fr) 110px 110px 60px 70px;
-    gap: var(--space-3);
-    align-items: center;
-    padding: var(--space-3);
-  }
-  .heading {
-    text-align: left;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  .workflow-row {
-    border-top: 1px solid var(--border-hairline);
-    min-height: 64px;
-  }
-  th {
-    font-weight: var(--weight-strong);
-  }
-  .name {
-    min-height: 24px;
-    display: grid;
-    color: var(--ink-strong);
-    font-weight: var(--weight-strong);
-    overflow-wrap: anywhere;
-  }
-  .count {
-    font-variant-numeric: tabular-nums;
-  }
-  /* The title (the pending content: slot and label) on one line, what it
-     makes on the next. */
-  :global(.new-item) {
-    flex-wrap: wrap;
-    row-gap: var(--space-1);
-    min-height: 44px;
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  :global(.new-item) small {
-    flex-basis: 100%;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-  }
-  .mobile {
-    display: none;
-  }
-  /* DESIGN.md: 44px under a coarse pointer at any width. The row is 64px but
-     the link was 24, so a thumb landed on the row and not on the target. */
-  @media (pointer: coarse) {
-    .name {
-      min-height: 44px;
-      align-content: center;
-    }
-  }
+  /* residual: unmapped */
+  /* A 760px query: no variant carries it (needs variant: max-width 760px).
+     DESIGN.md: 44px under a coarse pointer at any width. */
   @media (max-width: 760px) {
-    .heading,
-    .desktop {
+    [data-slot="heading"],
+    [data-slot="desktop"] {
       display: none !important;
     }
-    span.mobile {
+    span[data-slot="mobile"] {
       display: inline;
     }
-    details.mobile {
+    details[data-slot="mobile"] {
       display: block;
     }
-    .count {
+    [data-slot="count"] {
       display: none;
     }
     thead,
@@ -353,16 +319,16 @@
       display: block;
       width: 100%;
     }
-    .workflow-row {
+    [data-slot="workflow-row"] {
       grid-template-columns: 1fr auto;
     }
-    .name {
+    [data-slot="name"] {
       grid-column: 1;
     }
-    .age {
+    [data-slot="age"] {
       grid-column: 1;
     }
-    .workflow-row > :last-child {
+    [data-slot="workflow-row"] > :last-child {
       grid-column: 2;
       grid-row: 2;
     }
@@ -371,7 +337,7 @@
       display: flex;
       align-items: center;
     }
-    .list-page {
+    [data-slot="list-page"] {
       padding: var(--space-4);
     }
   }

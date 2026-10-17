@@ -149,9 +149,18 @@
   <title>Usage &middot; CawCo</title>
 </svelte:head>
 
-<div class="page">
-  <div data-slot="col" class="col">
-    <header data-slot="top" class="top">
+<!-- The pages' one gutter: the ledger's asymmetric pair (DESIGN.md), as
+     the project page stands on it, the column from that edge. -->
+<div
+  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
+>
+  <!-- The page's width, to its gutter: as the project page stands, no cap
+       of its own leaving a wider margin on the right than any other page. -->
+  <div data-slot="col" class="m-0 flex flex-col gap-space-group">
+    <header
+      data-slot="top"
+      class="flex flex-wrap items-center justify-between gap-space-2 max-phone:contents"
+    >
       <!-- The shell's bar already names the page; the heading is for
            assistive tech only, so the name is not said twice. -->
       <h1 class="sr-only">Usage</h1>
@@ -162,7 +171,6 @@
       >
         <Select.Trigger
           aria-label="Project"
-          class="project-chip"
           data-on={filtered ? "" : undefined}
           size="sm"
         >
@@ -176,7 +184,7 @@
         </Select.Content>
       </Select.Root>
       {#if !filtered}
-        <div data-slot="controls" class="controls">
+        <div data-slot="controls" class="flex flex-wrap items-center gap-space-2 max-phone:order-2">
           <Tabs
             onValueChange={(next) => {
               range = next as Range;
@@ -202,8 +210,8 @@
     </header>
 
     {#if cawco.spendFailed}
-      <div class="page-error" role="alert">
-        <p data-slot="note" class="note">
+      <div class="flex flex-wrap items-center gap-space-3" role="alert">
+        <p data-slot="note" class="type-meta text-ink-muted">
           Could not reach the hub for usage data. Check that it is running, then
           try again.
         </p>
@@ -226,8 +234,8 @@
         projectName={filtered.name}
       />
     {:else}
-      <div class="limits"><LimitsBlock /></div>
-      <div class="ranged">
+      <div class="max-phone:order-1"><LimitsBlock /></div>
+      <div class="flex flex-col gap-space-group max-phone:order-3">
         <Tooltip.Provider>
           <WhereItGoes {since} bind:this={where} />
           <History hourly={range === "window" || range === "today"} {since} />
@@ -238,79 +246,12 @@
 </div>
 
 <style>
-  /* The pages' one gutter: the ledger's asymmetric pair (DESIGN.md), as
-     the project page stands on it, the column from that edge. */
-  .page {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    padding: var(--space-6) var(--space-6) var(--space-6) var(--space-7);
-    min-width: 0;
-  }
-  @media (max-width: 899px) {
-    .page {
-      padding-inline: var(--space-5);
-    }
-  }
-  /* The page's width, to its gutter: as the project page stands, no cap
-     of its own leaving a wider margin on the right than any other page. */
-  .col {
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-group);
-  }
-  .top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-  /* The filter chip, chosen: the selected pair while a project is picked. */
-  .top :global(.project-chip[data-on]) {
+  /* residual: unmapped */
+  /* The filter chip, chosen: the selected pair while a project is picked
+     (needs variant: data-on). */
+  [data-slot="top"] :global([data-slot="select-trigger"][data-on]) {
     border-color: transparent;
     background: var(--selected-bg);
     color: var(--selected-ink);
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .ranged {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-group);
-  }
-  .page-error {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-
-  /* A phone gives the first screen to the limits: the range and the export
-     only change what follows them, so they stand after the Limits block. */
-  @media (max-width: 639px) {
-    .page {
-      padding: var(--space-4) var(--space-5);
-    }
-    .top {
-      display: contents;
-    }
-    .limits {
-      order: 1;
-    }
-    .controls {
-      order: 2;
-    }
-    .ranged {
-      order: 3;
-    }
   }
 </style>
