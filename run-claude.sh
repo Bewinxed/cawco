@@ -25,8 +25,7 @@
 #   ledger.jsonl (one line per call attempt: tokens, cost, models), run.log, plan.txt, report.md
 # At most 4 calls at once (EVAL_PARALLEL lowers it). Uses the `claude` on PATH, or CLAUDE_BIN,
 # with its own login (CLAUDE_CONFIG_DIR picks the account, as for any claude run).
-# Exit: 0 complete; 75 stopped: a call failed (login, usage limit, non-zero exit, network, refusal) or the budget is
-# reached; nothing is stored for that call and no turn advances (rerun to resume); 1 incomplete; 2 not run (over budget).
+# Exit: 0 complete; 75 stopped on a login, usage or budget limit (rerun to resume); 1 incomplete; 2 not run (over budget).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -z "${CLAUDE_BIN:-}" ] && ! command -v claude >/dev/null 2>&1; then

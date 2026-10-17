@@ -20,9 +20,8 @@ Usage: python3 -I pipeline.py plan | run [--phases build,answer,judge,report] | 
            over the first N turns only), answers the probes from each finished one, and judges it beside the batch
            tree and cc-real+C-filed in the same judge calls. run refuses when the plan is over EVAL_BUDGET ($40), and
            no call starts once the reported spend reaches it (reruns count what earlier runs spent).
-Exit: 0 complete, 75 stopped: a call failed (login, usage limit, exit, network, refusal) or the budget is reached;
-      nothing from the failed call is stored and no turn advances (rerun to resume), 1 something incomplete,
-      2 not run (what was spent plus the plan is over the budget; plan exits 2 too).
+Exit: 0 complete, 75 stopped on a login, usage or budget limit (rerun later), 1 something incomplete,
+      2 not run (the plan is over the budget).
 """
 import argparse
 import collections
@@ -118,7 +117,7 @@ def summarise(meth, key, prompt):
         r = C.call(f"{key}/try{attempt}", "build", SYSTEM_OF[meth], prompt, cache="off")
         wf = M.well_formed(meth, r["text"])
         tries.append({"chars": len(r["text"]), "well_formed": wf, "usage": r["usage"], "seconds": r["seconds"],
-                      "off_model": r["off_model"]})
+                      "off_model": r["off_model"], "refused": r["refused"]})
         if wf:
             break
         log(f"{key}: malformed attempt {attempt} ({len(r['text'])} chars)")
@@ -148,7 +147,7 @@ def run_chain(meth):
             ctx = carry
         save(f, {"k": k, "cut": M.CUT_LABELS[k], "model": C.MODEL, "prompt_chars": len(prompt),
                  "summary_chars": len(summary), "carry": carry, "context": ctx, "raw": raw,
-                 "attempts": tries, "well_formed": tries[-1]["well_formed"],
+                 "attempts": tries, "well_formed": tries[-1]["well_formed"], "refused": tries[-1]["refused"],
                  "off_model": sorted({m for t in tries for m in t["off_model"]})})
         log(f"build {meth} gen{k}: prompt {len(prompt):,} chars → summary {len(summary):,} chars, "
             f"{len(tries)} attempt(s), well-formed {tries[-1]['well_formed']}")
@@ -169,7 +168,7 @@ def run_cc_real():
     summary = M.cc_extract(r["text"])
     save(f, {"model": C.MODEL, "prompt_chars": len(prompt), "summary_chars": len(summary), "raw": r["text"],
              "context": M.cc_context(summary), "attempts": tries, "well_formed": tries[-1]["well_formed"],
-             "off_model": sorted({m for t in tries for m in t["off_model"]})})
+             "refused": tries[-1]["refused"], "off_model": sorted({m for t in tries for m in t["off_model"]})})
     log(f"build cc-real: prompt {len(prompt):,} chars → summary {len(summary):,} chars")
 
 
@@ -368,8 +367,7 @@ class TreeStore:
 
     def retry_missing(self, task):
         """The level's left-out lines, SHORTEN_BATCH_MAX to a call, with their inputs only (no
-        <chat>). One the model's answer still leaves out is stored as "(compaction failed)"; a failed
-        call stops the run (C.Stopped) and stores nothing."""
+        <chat>). One still missing after this is stored as "(compaction failed)"."""
         todo, self.missing = sorted(self.missing), []
         if not todo:
             return
@@ -381,8 +379,12 @@ class TreeStore:
             (l0, i0), (_, i1) = group[0][0], group[-1][0]
             key = f"build/tree/retry/L{l0}/{i0}-{i1}"
             labels = [lab for _, lab, _ in group]
-            r = C.call(key, "build", system, inputs_body([(lab, txt) for _, lab, txt in group]) + ids_rule(labels), cache="off")
-            got, off = {lab: v for lab, v in parse_lines(r["text"], labels).items() if v}, r["off_model"]
+            got, off = {}, []
+            try:
+                r = C.call(key, "build", system, inputs_body([(lab, txt) for _, lab, txt in group]) + ids_rule(labels), cache="off")
+                got, off = {lab: v for lab, v in parse_lines(r["text"], labels).items() if v}, r["off_model"]
+            except C.CallError as e:  # a usage-limit Stopped still propagates
+                log(f"{key}: retry call failed ({e})")
             for k, lab, _ in group:
                 self.store_line(k, got.get(lab, "(compaction failed)"), key, off)
         pool_run(do, groups, "tree retry batch")
@@ -412,8 +414,12 @@ class TreeStore:
         def do(group):
             key = f"build/tree/shorten/L{group[0][0]}/{group[0][1]}-{group[-1][1]}"
             items = [(label(k), self.pending[k]["text"]) for k in group]
-            r = C.call(key, "build", system, inputs_body(items) + ids_rule([lab for lab, _ in items]), cache="off")
-            got, off = parse_lines(r["text"], [lab for lab, _ in items]), r["off_model"]
+            got, off = {}, []
+            try:
+                r = C.call(key, "build", system, inputs_body(items) + ids_rule([lab for lab, _ in items]), cache="off")
+                got, off = parse_lines(r["text"], [lab for lab, _ in items]), r["off_model"]
+            except C.CallError as e:  # a usage-limit Stopped still propagates
+                log(f"{key}: shorten call failed, cutting these lines ({e})")
             for k, (lab, text) in zip(group, items):
                 v = got.get(lab)
                 if v and TR.b(v) < TR.b(text):
@@ -676,11 +682,11 @@ class IncBuild:
         self.state_path = os.path.join(self.root, "state.json")
         self.s = (load(self.state_path) if write else None) or {
             "turn": 0, "view": [], "carry": [], "over": [], "events": [], "snapshot": None, "snap_len": 0,
-            "session": None, "session_chars": 0, "sessions": 0,
-            "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+            "session": None, "session_chars": 0, "sessions": 0}
         self.view = [tuple(k) for k in self.s["view"]]
         self.s["session"] = None  # never continue a session a stopped run may have left mid-turn
         self.lock = threading.Lock()
+        self.fails = 0
 
     # ---- state
     def save_state(self):
@@ -713,16 +719,28 @@ class IncBuild:
         return (self.ask_a if self.d == "A" else self.ask_b)(key, kind, user, labels, meta)
 
     def ask_a(self, key, kind, user, labels, meta):
-        new = self.s["session"] is None or self.s["session_chars"] > A_SESSION_CHARS
-        if new:
-            self.s["session"], self.s["session_chars"] = str(uuid.uuid4()), 0
-            self.s["sessions"] += 1
-            body = self.view_text() + "\n\nThe view above is your memory of the chat so far.\n\n" + user
-        else:
-            body = user
-        text, _ = self.call(key, self.d, inc_system("A"), body, labels, kind, session=(self.s["session"], new), meta=meta)
-        self.s["session_chars"] += len(body) + len(text)
-        return parse_lines(text, labels)
+        for attempt in range(3):
+            new = self.s["session"] is None or self.s["session_chars"] > A_SESSION_CHARS
+            if new:
+                self.s["session"], self.s["session_chars"] = str(uuid.uuid4()), 0
+                self.s["sessions"] += 1
+                body = self.view_text() + "\n\nThe view above is your memory of the chat so far.\n\n" + user
+            else:
+                body = user
+            try:
+                text, _ = self.call(key + (f"/again{attempt}" if attempt else ""), self.d, inc_system("A"), body, labels,
+                                    kind, session=(self.s["session"], new), meta=meta)
+            except C.CallError as e:
+                self.fails += 1
+                if self.fails >= 3:  # a broken --resume must not pass as new sessions every turn
+                    raise RuntimeError(f"inc-A: {self.fails} session calls failed in a row, the last: {e}")
+                log(f"{key}: session call failed, next attempt in a new session ({e})")
+                self.s["session"] = None
+                continue
+            self.fails = 0
+            self.s["session_chars"] += len(body) + len(text)
+            return parse_lines(text, labels)
+        return {}
 
     def ask_b(self, key, kind, user, labels, meta):
         if self.s["snapshot"] is None:
@@ -739,7 +757,11 @@ class IncBuild:
             if keep:
                 head = ("<recent>\n" + (f"({len(tail) - len(keep)} earlier lines filed since the view are left out)\n"
                                         if len(keep) < len(tail) else "") + "\n".join(reversed(keep)) + "\n</recent>\n\n")
-        text, _ = self.call(key, self.d, inc_system("B", self.s["snapshot"]), head + user, labels, kind, meta=meta)
+        try:
+            text, _ = self.call(key, self.d, inc_system("B", self.s["snapshot"]), head + user, labels, kind, meta=meta)
+        except C.CallError as e:
+            log(f"{key}: call failed ({e})")
+            return {}
         return parse_lines(text, labels)
 
     def snap(self):
@@ -1118,13 +1140,15 @@ def final_answer(text):
 def answer_one(run, pid, ctx):
     q = f"Owner's question: {P[pid]['question']}"
     key = f"answer/{run}/{pid}"
-    usage, calls, off, zooms = {}, [], set(), []
+    usage, calls, off, zooms, refused = {}, [], set(), [], []
 
     def ask(k, system, user):
         r = C.call(k, "answer", system, user, cache="5m")
         add_usage(usage, r["usage"])
         calls.append(k)
         off.update(r["off_model"])
+        if r["refused"]:
+            refused.append(k)
         return r["text"]
     if run in TREE_RUNS and TREE_RUNS[run][1]:
         st, system = ctx
@@ -1149,7 +1173,8 @@ def answer_one(run, pid, ctx):
     else:
         ans = ask(f"{key}/r0", ctx, q).strip()
     save(os.path.join(ANS, run, f"{pid}.json"), {"id": pid, "run": run, "model": C.MODEL, "answer": ans, "zooms": zooms,
-                                                 "calls": calls, "usage": usage, "off_model": sorted(off)})
+                                                 "calls": calls, "usage": usage, "off_model": sorted(off),
+                                                 "refused": refused})
 
 
 def answer_jobs():
@@ -1313,7 +1338,8 @@ def ledger_summary():
     rows = collections.OrderedDict()
     if not os.path.exists(C.LEDGER):
         return "(no calls yet)"
-    for d in ledger_rows():
+    for line in open(C.LEDGER):
+        d = json.loads(line)
         r = rows.setdefault(d["phase"], {"ok": 0, "failed": 0, "refused": 0, "off_model": 0, "cost": 0.0, "seconds": 0.0,
                                          "input": 0, "cache_write": 0, "cache_read": 0, "output": 0, "thinking": 0})
         r["ok" if d["ok"] else "failed"] += 1
@@ -1323,14 +1349,14 @@ def ledger_summary():
         r["seconds"] += d["seconds"]
         for k in ("input", "cache_write", "cache_read", "output", "thinking"):
             r[k] += d["usage"].get(k, 0)
-    out = ["| phase | calls ok | failed attempts | of them refused | off-model | input | cache write | cache read | output (of it thinking) | cost reported | call-seconds |",
+    out = ["| phase | calls ok | of them refused | failed attempts | off-model | input | cache write | cache read | output (of it thinking) | cost reported | call-seconds |",
            "|---|---|---|---|---|---|---|---|---|---|---|"]
     tot = collections.Counter()
     for ph, r in rows.items():
-        out.append(f"| {ph} | {r['ok']:,} | {r['failed']:,} | {r['refused']} | {r['off_model']} | {r['input']:,} | {r['cache_write']:,} | "
+        out.append(f"| {ph} | {r['ok']:,} | {r['refused']} | {r['failed']:,} | {r['off_model']} | {r['input']:,} | {r['cache_write']:,} | "
                    f"{r['cache_read']:,} | {r['output']:,} ({r['thinking']:,}) | ${r['cost']:.2f} | {r['seconds']:,.0f} |")
         tot.update({k: v for k, v in r.items()})
-    out.append(f"| **all** | {tot['ok']:,} | {tot['failed']:,} | {tot['refused']} | {tot['off_model']} | {tot['input']:,} | "
+    out.append(f"| **all** | {tot['ok']:,} | {tot['refused']} | {tot['failed']:,} | {tot['off_model']} | {tot['input']:,} | "
                f"{tot['cache_write']:,} | {tot['cache_read']:,} | {tot['output']:,} ({tot['thinking']:,}) | ${tot['cost']:.2f} | {tot['seconds']:,.0f} |")
     return "\n".join(out)
 
@@ -1416,10 +1442,7 @@ def inc_report():
                "|---|---|---|---|---|---|---|---|---|"]
     stats_lines = []
     for d in DESIGNS:
-        # only this build's rows: a build moved aside and restarted (inc-B.corrupt-20261017) keeps its rows in the
-        # ledger, before the new build's "started"
-        since = (load(os.path.join(INC[d], "state.json")) or {}).get("started", "")
-        R = [x for x in rows if x["phase"] == f"build-{d}" and x["ts"] >= since]
+        R = [x for x in rows if x["phase"] == f"build-{d}"]
         if not R:
             continue
         for kind in ("file", "fix", "merge", "shorten", None):
@@ -1530,20 +1553,25 @@ def report():
                   f"{stats['view_bytes']:,} bytes, levels {stats['view_levels']}",
                   f"- view mean {cs['view_bytes_mean']:,} B, max {cs['view_bytes_max']:,} B; cached share of view bytes per message "
                   f"{cs['cached_share_of_view_bytes']:.1%}; {cs['batch_events']} batch rewrites", ""]
-    # anything another model produced (left out); a refusal stops the run, so none is stored
-    offs = []
+    # refusals (Sonnet's own outcome, scored as answered) and anything another model produced (left out)
+    offs, refs = [], []
     for run in RUNS_END + list(RUNS_CUT) + ["tree-A", "tree-B"]:
         for pid, a in answers_for(run).items():
             if a["off_model"]:
                 offs.append(f"{run}/{pid}: {a['off_model']}")
+            if a.get("refused"):
+                refs.append(f"{run}/{pid}: {', '.join(a['refused'])}")
     builds = [(f"{meth} gen{k}", load(chain_path(meth, k))) for meth in METHODS for k in range(5)]
     for name, r in builds + [("cc-real", load(os.path.join(BUILD, "cc-real.json")))]:
         if r and r.get("off_model"):
             offs.append(f"build {name}: {r['off_model']}")
+        if r and any(t.get("refused") for t in r.get("attempts", [])):
+            refs.append(f"build {name}: {sum(1 for t in r['attempts'] if t.get('refused'))} of {len(r['attempts'])} attempts refused")
     st_meta = TreeStore(write=False).meta if os.path.exists(os.path.join(TREE, "nodes.jsonl")) else {}
     tree_off = sum(1 for m in st_meta.values() if m.get("off_model"))
     tree_failed = sum(1 for m in st_meta.values() if m.get("text") == "(compaction failed)")
-    lines += [f"Tree nodes left as \"(compaction failed)\" (a line the model's answer left out after the fix rounds): {tree_failed}", "",
+    lines += ["## Refusals (kept: they are the model's own outcome)", ""] + ([f"- {o}" for o in refs] or ["- none"]) + [
+        f"- tree nodes left as \"(compaction failed)\" after the fix rounds: {tree_failed}", "",
         "## Answered by another model (left out of the scores)", ""] + ([f"- {o}" for o in offs] or ["- none"]) + [
         f"- tree nodes from another model: {tree_off}", ""]
     lines += ["## Tokens and cost, from the ledger (`out/ledger.jsonl`)", "", ledger_summary(), ""]
@@ -1573,17 +1601,7 @@ def probe_rates():
 
 
 def ledger_rows():
-    """Every row with cost_usd the call's own cost. Rows written before claude_call split a resumed session's
-    running total (a "session" and no "session_cost_usd") are converted here: the total minus the session's
-    previous total."""
-    rows = [json.loads(x) for x in open(C.LEDGER)] if os.path.exists(C.LEDGER) else []
-    last = {}
-    for d in rows:
-        if "session" in d and "session_cost_usd" not in d and d.get("cost_usd"):
-            total = d["cost_usd"]
-            d["cost_usd"], d["session_cost_usd"] = max(0.0, total - last.get(d["session"], 0.0)), total
-            last[d["session"]] = total
-    return rows
+    return [json.loads(x) for x in open(C.LEDGER)] if os.path.exists(C.LEDGER) else []
 
 
 def call_kind(key):
@@ -1613,9 +1631,7 @@ def measured():
         k["in"] += t
         k["out"] += u["output"]
         k["read"] += u["cache_read"]
-        # build/cawco: its default system prompt isn't in system_chars. A resumed design-A session call: its tokens include
-        # the session's stored turns, which user_chars leaves out (the 10-17 rows: 4.25 tokens a character, fresh calls 0.45)
-        if not d["key"].startswith("build/cawco/") and not ("session" in d and not d.get("session_new")):
+        if not d["key"].startswith("build/cawco/"):  # its default system prompt isn't in system_chars
             sent += d["system_chars"] + d["user_chars"]
             toks += t
     return (toks / sent if sent else 1 / CPT), kinds
@@ -1872,20 +1888,16 @@ def main():
             return 75
         return 0
     text, planned_calls, total = plan()
-    # the budget covers this measurement across reruns: what its earlier runs spent counts (every ledger row's
-    # reported cost, a failed call's too; the 10-16 run's 1,168 failed rows reported $0)
-    mine = ("build/inc-", "answer/tree-A/", "answer/tree-B/", f"judge/{SCOPE}/")
-    prior = sum(d.get("cost_usd") or 0 for d in ledger_rows() if d["key"].startswith(mine)) if SCOPE == "incremental" else 0.0
-    over = prior + total > BUDGET
-    text += (f"\n\nBudget: ${prior:.2f} already spent by this measurement plus the plan's ${total:.2f} is ${prior + total:.2f} "
-             f"of ${BUDGET:.0f} (EVAL_BUDGET): " + ("over, so run refuses (exit 2)." if over else "within it."))
     print(text, flush=True)
     open(os.path.join(OUT, "plan.txt"), "w").write(text + "\n")
-    if over:
-        log(f"NOT RUN: ${prior:.2f} spent so far plus the plan's ${total:.2f} is over the ${BUDGET:.0f} budget (EVAL_BUDGET)")
-        return 2
     if a.cmd == "plan":
         return 0
+    # the budget covers this measurement across reruns: what its earlier runs spent counts
+    mine = ("build/inc-", "answer/tree-A/", "answer/tree-B/", f"judge/{SCOPE}/")
+    prior = sum(d.get("cost_usd") or 0 for d in ledger_rows() if d["key"].startswith(mine)) if SCOPE == "incremental" else 0.0
+    if prior + total > BUDGET:
+        log(f"NOT RUN: ${prior:.2f} spent so far plus the plan's ${total:.2f} is over the ${BUDGET:.0f} budget (EVAL_BUDGET)")
+        return 2
     # and a hard stop while running: no call starts once the reported cost reaches the budget
     C.SPEND_LIMIT, C._spent[0] = BUDGET, prior
     C.PLAN.update(planned_calls)

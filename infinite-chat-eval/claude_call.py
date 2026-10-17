@@ -12,8 +12,8 @@
 - Claude Code's small-model slot points at Sonnet too, so no Haiku call can happen.
 - CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK=1: a refusal is never retried on another model
   (binary: `function M1(){return!a.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK&&!CZ()}`). A call
-  that ends with stop_reason "refusal" stops the run like any other failed call. Any other
-  model in modelUsage is still recorded as off_model.
+  that ends with stop_reason "refusal" is Sonnet's final outcome: returned with refused=True
+  and not retried. Any other model in modelUsage is still recorded as off_model.
 - Prompt cache per call (`cache=`): "off" sets DISABLE_PROMPT_CACHING=1 (binary:
   `function Tre(e){if(a.DISABLE_PROMPT_CACHING)return!1`), so a prompt nobody reuses is billed
   as plain input ($2/MTok) instead of a 1-hour cache write ($4/MTok; the first run wrote all
@@ -24,18 +24,12 @@
 - At most 4 calls run at once (EVAL_PARALLEL lowers it, never raises it).
 - Design A of the incremental tree passes session=(id, new): --session-id starts a Claude Code session,
   --resume continues it, instead of --no-session-persistence.
-- A resumed session's total_cost_usd is the session's running total, not the call's (10-17 ledger:
-  t0 0.1476, t1 0.2914 = 0.1476 + t1's own 0.1438 at list price). The ledger's cost_usd is the call's
-  own cost (the total minus the session's previous total); session_cost_usd keeps the reported total.
 - SPEND_LIMIT (set by pipeline.py from EVAL_BUDGET): no call starts once the reported cost reaches it.
 - Every attempt appends one line to out/ledger.jsonl: key, phase, exit, seconds, usage
   (input, cache write, cache read, output, thinking), cost, models used.
 - Every 25 calls the measured pace is logged with a projection of the rest (out/progress.json).
-- A call that does not end in the model's answer (a login or usage-limit reply, a non-zero exit,
-  a timeout, the network, an empty or error result, a refusal) sets STOP and raises Stopped: no
-  new call starts, the caller stores nothing and advances nothing, and the run exits 75 so a
-  rerun resumes from what is on disk. There is no retry: the 10-16 run's expired login failed
-  1,168 attempts over nine hours while the run went on filing placeholders.
+- A login or usage-limit reply sets STOP: no new call starts, and the run exits 75 so a
+  rerun resumes from what is on disk.
 """
 import collections
 import hashlib
@@ -78,6 +72,9 @@ for k in ("CLAUDE_CODE_DISABLE_1M_CONTEXT", "ANTHROPIC_MODEL", "ANTHROPIC_DEFAUL
     ENV.pop(k, None)
 CACHE_ENV = {"off": {"DISABLE_PROMPT_CACHING": "1"}, "5m": {"FORCE_PROMPT_CACHING_5M": "1"}}
 
+LIMIT_MARKERS = ("hit your", "limit · resets", "usage limit", "not logged in", "/login",
+                 "credit balance", "out of extra usage", "invalid api key", "oauth token")
+
 _slots = threading.Semaphore(MAX_PARALLEL)
 _lock = threading.Lock()
 STOP = threading.Event()
@@ -85,10 +82,13 @@ STOP_REASON = []
 PLAN = {}            # phase -> calls the plan expects (set by pipeline.py before the run)
 SPEND_LIMIT = None   # $ the measurement may spend (reported cost); set by pipeline.py before the run
 _spent = [0.0]       # reported cost so far, including what earlier runs of the measurement spent
-_session_total = {}  # session id -> the last total_cost_usd it reported (a session's total is cumulative)
 on_progress = None   # set by pipeline.py: a function taking one log line
 _prog = collections.defaultdict(collections.Counter)
 _t_start = time.time()
+
+
+class CallError(RuntimeError):
+    pass
 
 
 class Stopped(RuntimeError):
@@ -193,65 +193,65 @@ def _progress(phase, secs, usage, cost):
         on_progress(line)
 
 
-def call(key, phase, system, user, cache, session=None, meta=None):
-    """Returns {"text", "usage", "cost", "models", "off_model", "seconds", "key"}: the model's answer,
-    or raises Stopped (see the module notes). system=None runs under Claude Code's own default system
-    prompt; cache is "off" or "5m". session: see command(). meta: extra ledger fields."""
+def call(key, phase, system, user, cache, attempts=3, session=None, meta=None):
+    """Returns {"text", "usage", "cost", "models", "off_model", "refused", "seconds", "key"}.
+    system=None runs under Claude Code's own default system prompt; cache is "off" or "5m".
+    session: see command(); a session call is never retried here (a failed turn may already sit in
+    the stored session), the caller starts a new session instead. meta: extra ledger fields."""
     sp = system_file(system) if system is not None else None
     cmd = command(sp, session)
+    if session is not None:
+        attempts = 1
     env = dict(ENV, **CACHE_ENV[cache])
-    if SPEND_LIMIT is not None and _spent[0] >= SPEND_LIMIT:
-        stop(f"budget: ${_spent[0]:.2f} spent by this measurement, the limit is ${SPEND_LIMIT:.2f}")
-    if STOP.is_set():
-        raise Stopped(STOP_REASON[0])
-    with _slots:
+    last = ""
+    for attempt in range(attempts):
+        if SPEND_LIMIT is not None and _spent[0] >= SPEND_LIMIT:
+            stop(f"budget: ${_spent[0]:.2f} spent by this measurement, the limit is ${SPEND_LIMIT:.2f}")
         if STOP.is_set():
             raise Stopped(STOP_REASON[0])
-        t0 = time.time()
-        try:
-            p = subprocess.run(cmd, input=user, capture_output=True, text=True,
-                               timeout=CALL_TIMEOUT, cwd=CWD, env=env)
-            out, err, code = p.stdout, p.stderr, p.returncode
-        except subprocess.TimeoutExpired:
-            out, err, code = "", f"timeout after {CALL_TIMEOUT}s", -1
-        except OSError as e:
-            out, err, code = "", f"could not start {cmd[0]}: {e}", -1
-        secs = round(time.time() - t0, 1)
+        with _slots:
+            if STOP.is_set():
+                raise Stopped(STOP_REASON[0])
+            t0 = time.time()
+            try:
+                p = subprocess.run(cmd, input=user, capture_output=True, text=True,
+                                   timeout=CALL_TIMEOUT, cwd=CWD, env=env)
+                out, err, code = p.stdout, p.stderr, p.returncode
+            except subprocess.TimeoutExpired:
+                out, err, code = "", f"timeout after {CALL_TIMEOUT}s", -1
+            secs = round(time.time() - t0, 1)
         res = None
         try:
             res = json.loads(out.strip().splitlines()[-1]) if out.strip() else None
         except (ValueError, IndexError):
             res = None
-        if not isinstance(res, dict):
-            res = None
         text = (res or {}).get("result") or ""
+        models = sorted(((res or {}).get("modelUsage") or {}).keys())
+        off = [m for m in models if not m.startswith(MODEL)]
         refused = (res or {}).get("stop_reason") == "refusal"
-        ok = not refused and code == 0 and res is not None and not res.get("is_error") and bool(text.strip())
-        if not ok:  # set before the slot is released, so no waiting call starts after a failure
-            stop(f"{key}: exit {code}: " + (("refusal: " if refused else "") + (text or err or out or f"exit {code}").strip())[:400])
-    models = sorted(((res or {}).get("modelUsage") or {}).keys())
-    off = [m for m in models if not m.startswith(MODEL)]
-    usage = _usage(res)
-    reported = (res or {}).get("total_cost_usd", 0) or 0
-    with _lock:
-        cost = reported
-        if session is not None and reported:
-            cost = max(0.0, reported - _session_total.get(session[0], 0.0))
-            _session_total[session[0]] = reported
-        _spent[0] += cost
-    error = None if ok else (("refusal: " if refused else "") + (text or err or out or f"exit {code}").strip())
-    _ledger({
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "key": key, "phase": phase, "cache": cache,
-        "ok": ok, "refused": refused, "exit": code, "seconds": secs,
-        "system_chars": len(system or ""), "user_chars": len(user), "usage": usage,
-        "cost_usd": cost, "models": models, "off_model": off,
-        **({"session_cost_usd": reported} if session else {}),
-        "stop_reason": (res or {}).get("stop_reason"), "terminal_reason": (res or {}).get("terminal_reason"),
-        "error": error and error[:600],
-        **({"session": session[0], "session_new": session[1]} if session else {}), **(meta or {}),
-    })
-    if not ok:
-        raise Stopped(STOP_REASON[0])
-    _progress(phase, secs, usage, cost)
-    return {"text": text, "usage": usage, "cost": cost, "models": models,
-            "off_model": off, "seconds": secs, "key": key}
+        ok = refused or (code == 0 and res is not None and not res.get("is_error") and bool(text.strip()))
+        usage = _usage(res)
+        with _lock:
+            _spent[0] += (res or {}).get("total_cost_usd", 0) or 0
+        _ledger({
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "key": key, "phase": phase, "cache": cache,
+            "attempt": attempt, "ok": ok, "refused": refused, "exit": code, "seconds": secs,
+            "system_chars": len(system or ""), "user_chars": len(user), "usage": usage,
+            "cost_usd": (res or {}).get("total_cost_usd", 0), "models": models, "off_model": off,
+            "stop_reason": (res or {}).get("stop_reason"), "terminal_reason": (res or {}).get("terminal_reason"),
+            "error": None if ok and not refused else (text or err or out)[:600],
+            **({"session": session[0], "session_new": session[1]} if session else {}), **(meta or {}),
+        })
+        if ok:
+            _progress(phase, secs, usage, (res or {}).get("total_cost_usd", 0))
+            if refused:
+                text = f"(refused by the model: {text.strip()[:300] or 'stop_reason refusal'})"
+            return {"text": text, "usage": usage, "cost": (res or {}).get("total_cost_usd", 0), "models": models,
+                    "off_model": off, "refused": refused, "seconds": secs, "key": key}
+        last = (text or err or out or f"exit {code}").strip()
+        if any(m in last.lower() for m in LIMIT_MARKERS):
+            stop(f"{key}: {last[:400]}")
+            raise Stopped(STOP_REASON[0])
+        if attempt + 1 < attempts:
+            time.sleep(30 * (attempt + 1))
+    raise CallError(f"{key}: failed after {attempts} attempts: {last[:400]}")
