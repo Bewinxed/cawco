@@ -181,7 +181,7 @@
     {#if !workflowState.error}
       <div in:crossIn>
         <EmptyState
-          class="mx-auto w-full max-w-105"
+          class="mx-auto w-full max-w-[420px]"
           icon={IconWorkflow}
           line="A workflow is a graph of steps that run one after another across your fleet."
           title="No workflows yet"
@@ -262,6 +262,7 @@
                 <summary
                   aria-label="Actions for {workflow.name}"
                   class="pressable"
+                  style:--summary-min="44px"
                 >
                   Actions
                 </summary>
@@ -333,7 +334,7 @@
       grid-row: 2;
     }
     summary {
-      min-height: 44px;
+      min-height: var(--summary-min);
       display: flex;
       align-items: center;
     }

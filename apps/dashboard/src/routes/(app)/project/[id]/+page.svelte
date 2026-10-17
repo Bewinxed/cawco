@@ -1984,8 +1984,8 @@
           <div class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--hairline-ring)"
             style:--hairline-ring="inset 0 0 0 1px var(--border-hairline)">
             <Skeleton class="h-space-4 w-3/5" />
-            <Skeleton class="h-13.5 w-full rounded-sm" />
-            <Skeleton class="h-13.5 w-full rounded-sm" />
+            <Skeleton class="h-[54px] w-full rounded-sm" />
+            <Skeleton class="h-[54px] w-full rounded-sm" />
           </div>
         {/each}
       </div>
