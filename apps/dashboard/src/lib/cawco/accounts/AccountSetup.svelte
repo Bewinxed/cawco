@@ -496,7 +496,7 @@
               {:else if at === "atLimit" && pair}
                 <section class="flex min-w-0 flex-col">
                   <h2
-                    class="type-title mb-space-5 text-balance text-ink-strong"
+                    class="type-title tracking-title mb-space-5 text-balance text-ink-strong"
                   >
                     {words.steps.atLimit}
                   </h2>
@@ -510,7 +510,7 @@
                 {@const line = routingLine(pair, { yours, delegates })}
                 <section class="flex min-w-0 flex-col">
                   <h2
-                    class="type-title mb-space-5 text-balance text-ink-strong"
+                    class="type-title tracking-title mb-space-5 text-balance text-ink-strong"
                   >
                     {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
                   </h2>
@@ -660,7 +660,7 @@
   <section class="flex min-w-0 flex-col">
     {#if choice}
       <h2
-        class="mark-line type-title mb-space-5 flex items-center gap-space-3 text-balance text-ink-strong"
+        class="mark-line type-title tracking-title mb-space-5 flex items-center gap-space-3 text-balance text-ink-strong"
       >
         <!-- literal: 26px -->
         <span
@@ -878,7 +878,9 @@
 
 {#snippet nameIt()}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+    <h2
+      class="type-title tracking-title mb-space-5 text-balance text-ink-strong"
+    >
       {words.steps.nameIt}
     </h2>
     <!-- literal: 280px -->
@@ -938,7 +940,9 @@
   onchoice: (choice: StrategyChoice) => void
 )}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+    <h2
+      class="type-title tracking-title mb-space-5 text-balance text-ink-strong"
+    >
       {heading}
     </h2>
     {#if pair}

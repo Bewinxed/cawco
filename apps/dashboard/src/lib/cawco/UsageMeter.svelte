@@ -533,7 +533,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center font-body text-size-meta leading-(--more-lh) font-normal num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
+                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center type-meta leading-(--more-lh) num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
                   data-strip-more
                   style:--more-lh="16px"
                   style:--slot-at={slotAt(

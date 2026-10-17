@@ -1853,7 +1853,10 @@
         class="inline-flex size-(--box) flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
         style:--box="22px"><Bolt class="size-icon-sm" /></span
       >
-      <h2 data-slot="title" class="type-title m-0 truncate text-ink-strong">
+      <h2
+        data-slot="title"
+        class="type-title tracking-title m-0 truncate text-ink-strong"
+      >
         <MorphText text={headTitle} />
       </h2>
     </div>

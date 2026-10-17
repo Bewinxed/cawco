@@ -145,6 +145,7 @@ none. Searched `src` for `querySelector`/`closest`/`:global(.x)` naming any clas
 - views/openui/ViewTable.svelte:63:27 <TableRow> "border-0"
 - views/openui/ViewTable.svelte:63:27 <TableRow> "bg-surface-band"
 - views/openui/ViewTable.svelte:67:22 <TableHead> "px-space-3"
+- views/openui/ViewTable.svelte:67:22 <TableHead> "type-label"
 - views/openui/ViewTable.svelte:67:22 <TableHead> "tracking-caps"
 - views/openui/ViewTable.svelte:67:22 <TableHead> "text-ink-muted"
 - views/openui/ViewTable.svelte:67:22 <TableHead> "uppercase"

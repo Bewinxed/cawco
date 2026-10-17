@@ -522,8 +522,8 @@
           <Refresh class="mt-(--mt) size-icon-md flex-none text-hue-blue-500" />
           <span class="type-meta min-w-0 text-pretty text-ink-muted"
             >Cloned into <span
-              class="min-w-0 font-(family-name:--font-mono) text-size-meta leading-(--lh) font-normal text-pretty text-ink-strong"
-              style:--lh="1.35">{dir.trim() || "~"}</span
+              class="min-w-0 type-meta font-(family-name:--font-mono) text-pretty text-ink-strong"
+              >{dir.trim() || "~"}</span
             > on each machine, pulled fresh before the agent starts.</span
           >
         </div>

@@ -289,7 +289,7 @@
               {#each running as task (task.id)}
                 <li class="flex min-w-0 items-baseline gap-space-2">
                   <span
-                    class="flex-none text-meta font-(family-name:--font-mono) liga-none text-ink-muted"
+                    class="flex-none type-meta font-(family-name:--font-mono) liga-none text-ink-muted"
                     >{task.id}</span
                   >
                   <span class="min-w-0 truncate type-label text-ink-strong"

@@ -2349,11 +2349,18 @@
 @utility rounded-inherit {
   border-radius: inherit;
 }
+/* A `font` shorthand utility files itself (`--tw-sort`, Tailwind's own
+   marker) where the type roles do, before every font longhand utility, so
+   one beside it wins (scripts/role-order.ts holds it). */
 @utility font-inherit {
+  --tw-sort: vertical-align;
   font: inherit;
 }
 @utility font-family-inherit {
   font-family: inherit;
+}
+@utility text-size-inherit {
+  font-size: inherit;
 }
 @utility gap-inherit {
   gap: inherit;
@@ -2442,6 +2449,7 @@
 /* The meta size in the mono face as the `font` shorthand sets it: line
    height normal, every other font subproperty reset. */
 @utility font-mono-meta {
+  --tw-sort: vertical-align;
   font: var(--text-meta) var(--font-mono);
 }
 /* The box keywords Tailwind does not write (its `items-start` is
@@ -2642,11 +2650,11 @@
 }
 
 /* A changing figure: digits of one width, so a count or a price that
-   ticks does not move what stands beside it. Important, because a
-   component's own (unlayered) rule that sets a role by the `font` shorthand
-   resets font-variant-numeric and would otherwise win over any utility. A
-   role's utility (`type-<role>`) sets longhands and leaves it alone: once
-   no component rule sets the shorthand, this needs no `!important`. */
+   ticks does not move what stands beside it. A role's utility
+   (`type-<role>`) is the `font` shorthand, which resets
+   font-variant-numeric, and sorts before this one, so `num` beside it wins.
+   Important, because a component's own (unlayered) rule that sets a role by
+   the shorthand resets it too and would otherwise win over any utility. */
 @utility num {
   font-variant-numeric: tabular-nums !important;
 }

@@ -492,7 +492,7 @@
               >
               <span
                 data-slot="meta"
-                class="block truncate font-(family-name:--font-mono) text-size-meta leading-meta font-normal text-ink-muted"
+                class="block truncate type-meta font-(family-name:--font-mono) text-ink-muted"
                 >{query}</span
               >
             </span>

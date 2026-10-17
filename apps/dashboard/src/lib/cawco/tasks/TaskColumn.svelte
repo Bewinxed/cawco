@@ -112,7 +112,7 @@
     </span>
     <span
       data-slot="kind"
-      class="flex-none type-code whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+      class="flex-none type-code liga-none whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
       >{kindWord}</span
     >
   </header>

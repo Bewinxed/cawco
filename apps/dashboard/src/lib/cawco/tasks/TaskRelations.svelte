@@ -72,7 +72,7 @@
       title={byId.get(id)?.title}
       type="button"
     >
-      <span class="flex-none text-meta font-mono liga-none text-ink-muted"
+      <span class="flex-none type-meta font-mono liga-none text-ink-muted"
         >{id}</span
       >
       {#if byId.get(id)}
@@ -164,7 +164,7 @@
                   type="button"
                 >
                   <span
-                    class="flex-none text-meta font-mono liga-none text-ink-muted"
+                    class="flex-none type-meta font-mono liga-none text-ink-muted"
                     >{each.id}</span
                   >
                   <span

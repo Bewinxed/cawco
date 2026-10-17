@@ -708,7 +708,7 @@
   bind:this={editor}
   data-phone={phone || undefined}
   class={[
-    "relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 font-body font-normal text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar",
+    "relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 type-body text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar",
     className,
   ]}
   style:--editor-min-h="34px"
@@ -766,10 +766,7 @@
     style:--tip-shift-y="calc(-100% - 8px)"
   >
     <span>{tip.text}</span>
-    <span
-      class="font-(family-name:--font-mono) text-size-code font-normal leading-code opacity-80"
-      >{tip.handle}</span
-    >
+    <span class="type-code opacity-80">{tip.handle}</span>
   </div>
 {/if}
 

@@ -123,7 +123,7 @@
   <span data-slot="head" class="flex min-h-c-badge-h items-center gap-space-1">
     <span
       data-slot="id"
-      class="text-meta font-(family-name:--font-mono) liga-none text-ink-subtle"
+      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle"
       >{task.id}</span
     >
     {#if task.problem}

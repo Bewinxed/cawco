@@ -78,7 +78,7 @@
         {#if fleet === "none"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             Connect a machine to run sessions
           </h1>
@@ -120,7 +120,7 @@
         {:else}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             None of your machines are online
           </h1>

@@ -27,7 +27,9 @@
  * `--check` builds the same in memory and writes nothing: it fails on a
  * value its type refuses (dtcg-validate.ts, before anything evaluates one)
  * and on any output unlike the committed file, a source file that would
- * settle included. Outputs are compared as `bun run tokens` leaves them
+ * settle included, and on a `font` shorthand utility (a type role,
+ * `font-inherit` …) that Tailwind sorts after a font longhand utility
+ * (role-order.ts). Outputs are compared as `bun run tokens` leaves them
  * formatted: JSON parsed, CSS and Swift with whitespace and numerals'
  * trailing zeros set aside (`bun fmt` rewrites `0.010` as `0.01`).
  */
@@ -46,6 +48,7 @@ import {
   colourSetsAction,
   swiftFormat,
 } from "./build-tokens-apple";
+import { fontOrderDrift } from "./role-order";
 import { printLadder } from "./theme-ladder";
 import { isProductToken } from "./token-groups";
 
@@ -181,11 +184,12 @@ const theme = tailwindThemeCss(built.view, {
   // writes `type-<role>` (for `font:`) or `text-size-<role>` (for
   // `font-size:`), never these.
   markupRoles: ["meta", "label", "body", "title", "kpi"],
-  // A kpi figure is always tabular (`num`); code sets with ligatures off
-  // (app.css base `code, pre, .font-mono`).
+  // What every use of a role sets beside its shorthand: a kpi figure is
+  // always tabular (`num`). Title's tracking and code's ligatures off are
+  // set by only some of their uses, which carry `tracking-title` and
+  // `liga-none` themselves.
   roleExtras: {
     "type-kpi": { "font-variant-numeric": "tabular-nums" },
-    "type-code": { "font-variant-ligatures": "none" },
   },
   defaults: {
     // Preflight's faces for html and code: the roles' stacks.
@@ -273,6 +277,10 @@ if (CHECK) {
     if (!sets.has(join(set, "Contents.json"))) {
       drift.push(`${join(catalog, set)}: committed, and no token makes it`);
     }
+  }
+  // Every `font` shorthand utility sorts before every font longhand utility.
+  for (const wrong of await fontOrderDrift(theme)) {
+    drift.push(`${THEME_OUT}: ${wrong}`);
   }
   console.log(
     drift.length === 0

@@ -475,7 +475,7 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none rail-row"
     data-code={wokeCaw || undefined}
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
@@ -528,7 +528,7 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none rail-row"
     data-code={wokeCaw || undefined}
   >
     <span

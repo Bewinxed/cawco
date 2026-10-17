@@ -89,7 +89,7 @@
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="grid size-(--mark) flex-none place-items-center rounded-(--mark-r) bg-surface-fill text-meta font-medium text-ink-strong"
+            class="grid size-(--mark) flex-none place-items-center rounded-(--mark-r) bg-surface-fill type-meta font-medium text-ink-strong"
             data-box
             style:--mark="24px"
             style:--mark-r="50%">{handle.slice(0, 1).toUpperCase()}</span

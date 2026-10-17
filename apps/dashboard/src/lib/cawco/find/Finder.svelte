@@ -711,7 +711,7 @@
   {:else if item.t === "head"}
     <div
       data-slot="head"
-      class="flex-none h-(--head-h) px-space-3 font-body font-medium text-(length:--caps-fs) leading-(--head-h) uppercase tracking-caps text-ink-muted truncate"
+      class="flex-none h-(--head-h) px-space-3 type-caps leading-(--head-h) uppercase tracking-caps text-ink-muted truncate"
       data-flip
       role="presentation"
     >
@@ -880,7 +880,7 @@
   </div>
 {/snippet}
 
-<!-- literal: 44px, 52px, 16px, 36px, 28px, 11px, 24px, 32px, 9px, 12px, 2px, 15px, 20px, 0.25em, 0.35em, 40px, 54px, 8px -->
+<!-- literal: 44px, 52px, 16px, 36px, 28px, 24px, 32px, 9px, 12px, 2px, 15px, 20px, 0.25em, 0.35em, 40px, 54px, 8px -->
 <div
   data-slot="finder"
   class={[
@@ -894,7 +894,6 @@
   style:--clear-size="36px"
   style:--clear-size-phone="44px"
   style:--head-h="28px"
-  style:--caps-fs="11px"
   style:--chips-min="36px"
   style:--chip-h="24px"
   style:--chip-h-phone="32px"

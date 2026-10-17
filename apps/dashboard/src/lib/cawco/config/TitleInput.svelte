@@ -38,7 +38,7 @@
     aria-invalid={invalid ? "true" : undefined}
     aria-label={label}
     autocomplete="off"
-    class="type-title w-full min-w-0 rounded-xs border-none border-current bg-transparent px-0 py-space-row text-ink-strong placeholder:text-ink-subtle data-mono:font-(family-name:--font-mono) disabled:text-ink-strong disabled:opacity-100"
+    class="type-title tracking-title w-full min-w-0 rounded-xs border-none border-current bg-transparent px-0 py-space-row text-ink-strong placeholder:text-ink-subtle data-mono:font-(family-name:--font-mono) disabled:text-ink-strong disabled:opacity-100"
     data-mono={mono || undefined}
     {disabled}
     {onblur}

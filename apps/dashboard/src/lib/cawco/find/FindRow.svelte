@@ -99,19 +99,19 @@
          (Gecko does not trim a scroll container). -->
     <span
       data-slot="title"
-      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-body text-size-label font-medium leading-(--line-1) text-ink-row group-data-phone/row:text-(length:--title-fs-phone) group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3"
+      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-(--line-1) text-ink-row group-data-phone/row:type-body group-data-phone/row:text-(length:--title-fs-phone) group-data-phone/row:leading-(--line-1) group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3"
       >{row.title}</span
     >
     {#if ago}
       <span
         data-slot="num"
-        class="num row-start-1 col-start-3 font-body text-size-meta font-normal leading-(--line-1) text-ink-muted group-data-phone/row:self-start"
+        class="num row-start-1 col-start-3 type-meta leading-(--line-1) text-ink-muted group-data-phone/row:self-start"
         aria-hidden="true">{ago}</span
       >
     {/if}
     <span
       data-slot="meta"
-      class="row-start-2 col-start-2 col-end-4 line-clamp-2 font-body text-size-meta font-normal leading-(--line-meta) text-ink-muted group-data-phone/row:text-size-label"
+      class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-(--line-meta) text-ink-muted group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-(--line-meta)"
       aria-hidden="true"
       data-box
     >
@@ -126,7 +126,7 @@
     {#if row.reason}
       <span
         data-slot="reason"
-        class="row-start-3 col-start-2 col-end-4 flex min-w-0 font-body text-size-meta font-normal leading-(--line-reason) text-ink-subtle group-data-phone/row:text-size-label group-data-phone/row:leading-(--line-meta)"
+        class="row-start-3 col-start-2 col-end-4 flex min-w-0 type-meta leading-(--line-reason) text-ink-subtle group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-(--line-meta)"
         aria-hidden="true"
         data-box
       >

@@ -122,7 +122,7 @@
     <p
       data-slot="peer-label"
       style:--label-min="26px"
-      class="relative min-h-(--label-min) m-0 font-body text-size-label font-medium leading-ui text-ink-muted rail-line"
+      class="relative min-h-(--label-min) m-0 type-label leading-ui text-ink-muted rail-line"
     >
       <span
         data-rail-cell

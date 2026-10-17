@@ -69,7 +69,7 @@
       >
         <span
           data-slot="id"
-          class="text-meta font-mono liga-none text-ink-muted">{task.id}</span
+          class="type-meta font-mono liga-none text-ink-muted">{task.id}</span
         >
         <span data-slot="title" class="type-label truncate text-ink-strong"
           >{task.title}</span

@@ -598,7 +598,7 @@
                       )}?task={attempt.taskId}"
                       >{attempt.title}<span
                         data-slot="id"
-                        class="type-code ms-space-2 text-ink-subtle"
+                        class="type-code liga-none ms-space-2 text-ink-subtle"
                         >{attempt.taskId}</span
                       ></a
                     >

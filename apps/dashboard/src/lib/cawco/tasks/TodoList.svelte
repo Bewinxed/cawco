@@ -228,7 +228,7 @@
               <span>{todo.text}</span>
               {#if todo.promoted}
                 <span
-                  class="flex-none text-meta font-mono liga-none text-ink-muted"
+                  class="flex-none type-meta font-mono liga-none text-ink-muted"
                   >→ {todo.promoted}</span
                 >
               {/if}
