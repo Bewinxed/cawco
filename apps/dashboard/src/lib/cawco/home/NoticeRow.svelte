@@ -82,7 +82,7 @@
       <button
         data-slot="x"
         aria-label={dismissLabel}
-        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-0 bg-transparent p-0 text-ink-muted motion-safe:active:scale-(--press-scale) hover:bg-surface-hover hover:text-ink-strong"
+        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted motion-safe:active:scale-(--press-scale) hover:bg-surface-hover hover:text-ink-strong"
         onclick={ondismiss}
         style:--box="24px"
         style:--hit-edge="0px"

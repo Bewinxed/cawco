@@ -37,3 +37,8 @@
 - StatusLine foreign-dom rule uses `var(--icon-sm)` (=12px) selected by `[role="status"]`.
 - cross-file hook: CawFace root .face → [data-slot="caw-face"]; selected by NeedsCaw.svelte:775 (O6) and CawMark.svelte:116,120
 - cross-file hook: CawMark.svelte:42 .mark → [data-slot="mark"] (existing); selected by NeedsCard.svelte:902 and TranscriptSkeleton.svelte:146
+
+R2 fixed: apps/dashboard/src/lib/cawco/home/NoticeRow.svelte:85
+
+## Contracts
+(none declared; the three shadcn/no-restyle hits stay as reports above)
