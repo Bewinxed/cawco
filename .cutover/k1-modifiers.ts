@@ -304,6 +304,39 @@ const viewRow = (n: number): Node => ({
   ],
 });
 
+/** ViewRoutines' `{rule}` for a row after the first. */
+const RULE = "border-t border-t-border-hairline";
+
+/** An event source's row: today's `{rule}` filled as given, K1's `rule="top"` with it. */
+const sourceRow = (n: number, rule: string): Node => {
+  const props = { variant: "list", rule: rule ? "top" : undefined };
+  return {
+    tag: "tr",
+    id: `source-row-${n}`,
+    t: "row",
+    today: { file: VR, line: 990 },
+    props: { variant: "unruled" },
+    children: [
+      {
+        tag: "td",
+        id: `source-state-${n}`,
+        t: "col-state",
+        today: { file: VR, line: 992, fill: rule },
+        props,
+        content: "x",
+      },
+      {
+        tag: "td",
+        id: `source-name-${n}`,
+        t: "col-name",
+        today: { file: VR, line: 1000, fill: rule },
+        props,
+        content: "A source",
+      },
+    ],
+  };
+};
+
 /** A routines-ledger head: today's width classes, K1's `caps` and `h-c-toolbar-ctl`. */
 const routinesHead = (
   col: string,
@@ -652,6 +685,53 @@ const FIXTURES: Fixture[] = [
               children: [{ tag: "td", t: "col-name", content: "A routine" }],
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // The event sources' ledger: its head (the band mapping again), and two
+    // rows, the second ruled above (`rule="top"`, today's `{rule}`).
+    name: "ViewRoutinesSources",
+    file: VR,
+    k1Without: BAND_RULES,
+    wrapper: {
+      t: "ledger",
+      now: "@container/routines-ledger",
+      attrs: 'data-slot="ledger"',
+      style: "--col-state: calc(var(--c-row-lead) + var(--space-3))",
+    },
+    table: {
+      tag: "table",
+      t: "quiet table-fixed",
+      today: { file: VR, line: 971 },
+      children: [
+        {
+          tag: "thead",
+          children: [
+            {
+              tag: "tr",
+              id: "sources-band",
+              t: "band border-0",
+              today: { file: VR, line: 974 },
+              props: { variant: "band" },
+              k1Drops: ["band"],
+              children: [
+                routinesHead(
+                  "state",
+                  976,
+                  '<span class="sr-only">Service</span>'
+                ),
+                routinesHead("name", undefined, "Source"),
+                routinesHead("last", 982, "Last read"),
+              ],
+            },
+          ],
+        },
+        {
+          tag: "tbody",
+          t: "quiet",
+          children: [sourceRow(1, ""), sourceRow(2, RULE)],
         },
       ],
     },
