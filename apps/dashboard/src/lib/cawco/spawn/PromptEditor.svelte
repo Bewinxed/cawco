@@ -36,7 +36,6 @@
     end: number;
     node: Text;
     query: string;
-    rect: DOMRect;
     start: number;
     type: "@" | "/";
   }
@@ -49,9 +48,31 @@
   const items = $derived(menu ? menuItems(menu.type, menu.query) : []);
   const promptEmpty = $derived(!(value || lead));
   const promptH = $derived(promptFocus || value || menu ? 120 : 44);
-  const anchor = $derived(
-    menu ? { getBoundingClientRect: () => (menu as Menu).rect } : null
-  );
+  /**
+   * The menu stands on the caret where the caret is now, measured each time
+   * the popover places itself. Measured once, as the trigger was typed, a
+   * `/` typed while the editor was still growing to 120px (the dialog
+   * re-centring 38px up as it did) left the menu 38px under the caret for
+   * good. The editor is the anchor's `contextElement`: floating-ui's
+   * autoUpdate observes it for size and movement, and its scrolling
+   * ancestors, so the menu follows whatever moves the caret.
+   */
+  const anchor = $derived.by(() => {
+    const at = menu;
+    const editor = element;
+    if (!(at && editor)) {
+      return null;
+    }
+    return {
+      contextElement: editor,
+      getBoundingClientRect: () => {
+        const range = document.createRange();
+        range.setStart(at.node, at.end);
+        range.collapse(true);
+        return range.getBoundingClientRect();
+      },
+    };
+  });
   const chips = new Map<HTMLElement, Record<string, unknown>>();
 
   function serialize(node: Node): string {
@@ -106,10 +127,6 @@
       closeMenu();
       return;
     }
-    const range = document.createRange();
-    range.setStart(node, offset);
-    range.collapse(true);
-    const rect = range.getBoundingClientRect();
     const [, , trigger, query] = match;
     const type = trigger as "@" | "/";
     const next = menuItems(type, query);
@@ -120,7 +137,6 @@
       node,
       start: offset - match[2].length - match[3].length,
       end: offset,
-      rect,
     };
   }
   function makeChip<Props extends Record<string, unknown>>(
