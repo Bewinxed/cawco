@@ -302,7 +302,7 @@ const PARTS: Record<string, Part> = {
       "ProviderLogo.svelte"
     ),
     recipe: "providerLogoVariants",
-    axes: ["fade", "tone"],
+    axes: ["fade"],
   },
 };
 /** A part that forwards everything to another part's recipe, with classes of its own first. */
@@ -443,6 +443,55 @@ const REWRITES: Record<
       ],
       source:
         "PaneGrid.svelte:236, the active rule after the :hover one at equal weight",
+    },
+  ],
+  Checkbox: [
+    {
+      from: ["opacity-0"],
+      to: [
+        "opacity-0",
+        "disabled:opacity-0",
+        "group-data-[disabled=true]/field:opacity-0",
+      ],
+      source:
+        "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+    },
+    ...[
+      "group-focus-within/card",
+      "group-hover/card",
+      "group-data-picked/card",
+      "group-data-picking/col",
+      "coarse",
+    ].map((state) => ({
+      from: [`${state}:opacity-100`],
+      to: [
+        "not-disabled:group-not-data-[disabled=true]/field",
+        "disabled:group-not-data-[disabled=true]/field",
+        "not-disabled:group-data-[disabled=true]/field",
+        "disabled:group-data-[disabled=true]/field",
+      ].map((regime) => `${state}:${regime}:opacity-100`),
+      source:
+        "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+    })),
+  ],
+  DropdownMenuItem: [
+    {
+      from: ["aria-current:text-ink-strong"],
+      to: [
+        "aria-current:text-ink-strong",
+        "aria-current:data-[variant=destructive]:text-ink-strong",
+        "aria-current:data-[variant=destructive]:focus:text-ink-strong",
+      ],
+      source:
+        "ArtifactMenu.svelte:306's unlayered `[aria-current=\"true\"]` ink outranks the kit's destructive ink (layer)",
+    },
+  ],
+  ProviderLogo: [
+    {
+      from: ["text-hue-amber-500", "opacity-80"],
+      to: ["opacity-80"],
+      source:
+        "a dead colour: on the GitHub mark (INK) ProviderLogo's `color: var(--ink-strong) !important` wins over the amber",
     },
   ],
 };

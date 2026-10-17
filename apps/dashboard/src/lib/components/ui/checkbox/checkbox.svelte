@@ -4,12 +4,17 @@
 
   /** Its callers' looks: a card's pick box, shown while its card is in
       reach (under the pointer, focused, picked, its column picking, or under
-      a finger), fading over --dur-control. */
+      a finger), fading over --dur-control. Its hiding and showing hold over
+      the kit's disabled dimming, as the board's own rules did: the rest's
+      `disabled:` and field-disabled `opacity-0` take the kit's dimming's
+      place (the same modifiers, so `cn` keeps only these), and each state
+      shows in all four of their combinations, the variant sort never
+      choosing between them. */
   export const checkboxVariants = tv({
     variants: {
       reveal: {
         "card-pick":
-          "dur-control coarse:opacity-100 opacity-0 transition-[opacity] ease-out group-focus-within/card:opacity-100 group-hover/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100",
+          "dur-control opacity-0 transition-[opacity] ease-out disabled:opacity-0 coarse:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 coarse:disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-[disabled=true]/field:opacity-0 group-data-picked/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-data-[disabled=true]/field:opacity-100 coarse:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-data-[disabled=true]/field:opacity-100",
       },
     },
   });

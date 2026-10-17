@@ -3,12 +3,14 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: a list of things one of which is current
-      (`aria-current`, in the strong ink) and any of which may be busy
-      (`aria-busy`, at half). */
+      (`aria-current`, in the strong ink, over a destructive item's ink as
+      the list's own rule was) and any of which may be busy (`aria-busy`,
+      at half). */
   export const dropdownMenuItemVariants = tv({
     variants: {
       marks: {
-        "current-busy": "aria-busy:opacity-50 aria-current:text-ink-strong",
+        "current-busy":
+          "aria-busy:opacity-50 aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong",
       },
     },
   });

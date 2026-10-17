@@ -3206,10 +3206,12 @@
     "rest": "group/artifact min-h-c-artifact-row-h",
     "dropped": [],
     "hooks": [],
-    "rewrites": [],
+    "rewrites": [
+      "ArtifactMenu.svelte:306's unlayered `[aria-current=\"true\"]` ink outranks the kit's destructive ink (layer)"
+    ],
     "ok": true,
-    "today": "kit-item group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-space-8 data-[variant=destructive]:text-error-9 data-disabled:opacity-50 data-[variant=destructive]:focus:text-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 px-2.5 data-[variant=destructive]:*:[svg]:text-error-9 group/artifact min-h-c-artifact-row-h aria-current:text-ink-strong aria-busy:opacity-50",
-    "next": "kit-item group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-space-8 data-[variant=destructive]:text-error-9 data-disabled:opacity-50 data-[variant=destructive]:focus:text-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 px-2.5 data-[variant=destructive]:*:[svg]:text-error-9 aria-busy:opacity-50 aria-current:text-ink-strong group/artifact min-h-c-artifact-row-h"
+    "today": "kit-item group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-space-8 data-[variant=destructive]:text-error-9 data-disabled:opacity-50 data-[variant=destructive]:focus:text-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 px-2.5 data-[variant=destructive]:*:[svg]:text-error-9 group/artifact min-h-c-artifact-row-h aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong aria-busy:opacity-50",
+    "next": "kit-item group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2.5 text-label outline-hidden data-disabled:pointer-events-none data-inset:pl-space-8 data-[variant=destructive]:text-error-9 data-disabled:opacity-50 data-[variant=destructive]:focus:text-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 px-2.5 data-[variant=destructive]:*:[svg]:text-error-9 aria-busy:opacity-50 aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong group/artifact min-h-c-artifact-row-h"
   },
   {
     "site": "src/lib/cawco/home/PeekSheet.svelte:48",
@@ -3318,10 +3320,17 @@
     "rest": "absolute end-space-3 top-(--pick-top)",
     "dropped": [],
     "hooks": [],
-    "rewrites": [],
+    "rewrites": [
+      "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+      "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+      "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+      "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+      "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)",
+      "TaskColumn.svelte's unlayered `li > .pick` rules outrank the kit's disabled dimming (layer)"
+    ],
     "ok": true,
-    "today": "peer flex size-icon-md shrink-0 items-center justify-center rounded-[var(--radius-xs)] border touch-hit border-input [--hit-edge:1px] disabled:cursor-not-allowed disabled:opacity-50 group-data-[disabled=true]/field:opacity-50 aria-invalid:border-error-9 aria-invalid:aria-checked:border-action-solid data-checked:border-action-solid data-checked:bg-action-solid data-checked:text-on-action dark:not-data-checked:bg-input/30 dark:data-checked:bg-action-solid dark:aria-invalid:border-error-9/50 absolute end-space-3 top-(--pick-top) opacity-0 transition-[opacity] dur-control ease-out group-focus-within/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100 group-hover/card:opacity-100 coarse:opacity-100",
-    "next": "peer flex size-icon-md shrink-0 items-center justify-center rounded-[var(--radius-xs)] border touch-hit border-input [--hit-edge:1px] disabled:cursor-not-allowed disabled:opacity-50 group-data-[disabled=true]/field:opacity-50 aria-invalid:border-error-9 aria-invalid:aria-checked:border-action-solid data-checked:border-action-solid data-checked:bg-action-solid data-checked:text-on-action dark:not-data-checked:bg-input/30 dark:data-checked:bg-action-solid dark:aria-invalid:border-error-9/50 dur-control coarse:opacity-100 opacity-0 transition-[opacity] ease-out group-focus-within/card:opacity-100 group-hover/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100 absolute end-space-3 top-(--pick-top)"
+    "today": "peer flex size-icon-md shrink-0 items-center justify-center rounded-[var(--radius-xs)] border touch-hit border-input [--hit-edge:1px] disabled:cursor-not-allowed aria-invalid:border-error-9 aria-invalid:aria-checked:border-action-solid data-checked:border-action-solid data-checked:bg-action-solid data-checked:text-on-action dark:not-data-checked:bg-input/30 dark:data-checked:bg-action-solid dark:aria-invalid:border-error-9/50 absolute end-space-3 top-(--pick-top) opacity-0 disabled:opacity-0 group-data-[disabled=true]/field:opacity-0 transition-[opacity] dur-control ease-out group-focus-within/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-not-data-[disabled=true]/field:opacity-100 coarse:disabled:group-not-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-data-[disabled=true]/field:opacity-100 coarse:disabled:group-data-[disabled=true]/field:opacity-100",
+    "next": "peer flex size-icon-md shrink-0 items-center justify-center rounded-[var(--radius-xs)] border touch-hit border-input [--hit-edge:1px] disabled:cursor-not-allowed aria-invalid:border-error-9 aria-invalid:aria-checked:border-action-solid data-checked:border-action-solid data-checked:bg-action-solid data-checked:text-on-action dark:not-data-checked:bg-input/30 dark:data-checked:bg-action-solid dark:aria-invalid:border-error-9/50 dur-control opacity-0 transition-[opacity] ease-out disabled:opacity-0 coarse:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 coarse:disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-[disabled=true]/field:opacity-0 group-data-picked/card:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-data-[disabled=true]/field:opacity-100 coarse:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-not-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-not-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-data-[disabled=true]/field:opacity-100 absolute end-space-3 top-(--pick-top)"
   },
   {
     "site": "src/lib/cawco/accounts/AccountSubmenu.svelte:32",
@@ -3678,14 +3687,16 @@
     "set": "8",
     "part": "ProviderLogo",
     "element": "src/lib/cawco/spawn/LocationSection.svelte:489:class",
-    "props": "tone=\"amber-dim\"",
+    "props": "fade=\"dim\"",
     "rest": "size-icon-md flex-none",
     "dropped": [],
     "hooks": [],
-    "rewrites": [],
+    "rewrites": [
+      "a dead colour: on the GitHub mark (INK) ProviderLogo's `color: var(--ink-strong) !important` wins over the amber"
+    ],
     "ok": true,
-    "today": "size-icon-md flex-none text-hue-amber-500 opacity-80",
-    "next": "text-hue-amber-500 opacity-80 size-icon-md flex-none"
+    "today": "size-icon-md flex-none opacity-80",
+    "next": "opacity-80 size-icon-md flex-none"
   },
   {
     "site": "src/lib/cawco/project/UpstreamMenu.svelte:51",
