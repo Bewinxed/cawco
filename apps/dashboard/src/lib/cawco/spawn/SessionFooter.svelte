@@ -33,7 +33,13 @@
   );
 </script>
 
-<div class="footer" data-ns-footer>
+<!-- literal: 10px top padding, 8px gap, 96px minimum width -->
+<div
+  class="flex flex-none items-center justify-end gap-(--gap) px-space-1 pt-(--pad-top) pb-space-row"
+  data-ns-footer
+  style:--gap="8px"
+  style:--pad-top="10px"
+>
   <button
     class="ns-btn touch-hit"
     inert={busy && !cancellable}
@@ -46,12 +52,13 @@
     data-slot="primary"
     aria-busy={busy || undefined}
     aria-disabled={busy || undefined}
-    class="ns-btn primary touch-hit"
+    class="ns-btn primary touch-hit min-w-(--min-w)"
     data-share="session:new"
     data-share-ttl="8000"
     {disabled}
     id="session-start"
     onclick={start}
+    style:--min-w="96px"
     type="button"
   >
     <PendingContent
@@ -62,19 +69,3 @@
     />
   </button>
 </div>
-
-<style>
-  /* Straight on the dialog's recess: the actions need no card of their own. */
-  .footer {
-    flex: none;
-    padding: 10px 4px 2px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-  /* On a phone the sheet's foot keeps the safe area clear (the kit drawer). */
-  #session-start {
-    min-width: 96px;
-  }
-</style>

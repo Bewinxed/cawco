@@ -33,94 +33,63 @@
   trapFocus={false}
   width={300}
 >
+  <!-- literal: 4px inset, 36px height, 38px row pitch -->
   <span
     aria-hidden="true"
-    class="hi"
-    style={`transform:translateY(calc(${index} * 38px));opacity:${items.length ? 1 : 0}`}
+    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-in-out"
+    style:--h="36px"
+    style:--o={items.length ? 1 : 0}
+    style:--shift={`translateY(calc(${index} * 38px))`}
   ></span>
   {#each items as item, i (item.key)}
     {@const Icon = item.icon}
+    <!-- literal: 9px gap, 36px height, 8px inline padding, 22px tile -->
     <button
       data-slot="row"
-      class="row press-tint"
+      class="press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) text-left text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();
         onpick(item);
       }}
+      style:--gap="9px"
+      style:--h="36px"
+      style:--pad-x="8px"
       tabindex="-1"
       type="button"
       class:active={i === index}
     >
-      <span data-slot="tile" class="ns-tile tile" style={`color:${item.hue}`}
-        ><Icon /></span
+      <span
+        data-slot="tile"
+        class="ns-tile size-(--tile) rounded-xs text-(--hue)"
+        style:--hue={item.hue}
+        style:--tile="22px"><Icon class="size-icon-sm" /></span
       >
-      <span data-slot="trigger-menu-label" class="label">{item.label}</span>
-      <span data-slot="kind" class="kind">{item.kind}</span>
+      <span
+        data-slot="trigger-menu-label"
+        class="min-w-0 flex-1 truncate font-body text-size-label leading-(--lh) font-medium"
+        style:--lh="1.2">{item.label}</span
+      >
+      <span data-slot="kind" class="type-meta whitespace-nowrap text-ink-subtle"
+        >{item.kind}</span
+      >
     </button>
   {/each}
   {#if items.length === 0}
-    <div class="none">No matches</div>
+    <!-- literal: 10px 8px padding -->
+    <div
+      class="type-meta px-(--pad-x) py-(--pad-y) text-ink-subtle"
+      style:--pad-x="8px"
+      style:--pad-y="10px"
+    >
+      No matches
+    </div>
   {/if}
 </NsPopover>
 
 <style>
+  /* residual: foreign-dom */
   :global(#trigger-menu-popover.ns-pop) {
-    padding: 4px;
-  }
-  .hi {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    height: 36px;
-    background: var(--surface-fill);
-    border-radius: var(--radius-sm);
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-in-out);
-    }
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    width: 100%;
-    height: 36px;
-    padding: 0 8px;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .tile {
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-xs);
-  }
-  .tile :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  .label {
-    flex: 1;
-    min-width: 0;
-    font: var(--weight-strong) var(--text-label) / 1.2 var(--font-body);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .kind {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-  }
-  .none {
-    padding: 10px 8px;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
+    padding: var(--space-1);
   }
 </style>
