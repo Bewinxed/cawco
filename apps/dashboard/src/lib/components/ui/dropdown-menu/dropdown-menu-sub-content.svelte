@@ -1,3 +1,20 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a width of its own, or a least width over the kit's. */
+  export const dropdownMenuSubContentVariants = tv({
+    variants: {
+      width: { wide: "w-72" },
+      min: { compact: "min-w-40" },
+    },
+  });
+
+  export type DropdownMenuSubContentLooks = VariantProps<
+    typeof dropdownMenuSubContentVariants
+  >;
+</script>
+
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
@@ -12,15 +29,15 @@
     ref = $bindable(null),
     class: className,
     portalProps,
+    width,
+    min,
     ...restProps
-  }: Omit<
-    DropdownMenuPrimitive.SubContentProps,
-    "side" | "collisionPadding"
-  > & {
-    portalProps?: WithoutChildrenOrChild<
-      ComponentProps<typeof DropdownMenuPortal>
-    >;
-  } = $props();
+  }: Omit<DropdownMenuPrimitive.SubContentProps, "side" | "collisionPadding"> &
+    DropdownMenuSubContentLooks & {
+      portalProps?: WithoutChildrenOrChild<
+        ComponentProps<typeof DropdownMenuPortal>
+      >;
+    } = $props();
 
   // The pages' gutter from the screen's edge, as the popover keeps it.
   const inset = browser ? numberOf("--space-5") : 0;
@@ -49,6 +66,7 @@
   <DropdownMenuPrimitive.SubContent
     class={cn(
       "kit-pop relative z-50 max-h-(--bits-menu-content-available-height) w-auto min-w-36 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      dropdownMenuSubContentVariants({ width, min }),
       className
     )}
     collisionPadding={inset}
