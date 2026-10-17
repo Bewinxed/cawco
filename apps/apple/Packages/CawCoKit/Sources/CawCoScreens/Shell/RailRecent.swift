@@ -220,7 +220,7 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
 
     /// `-rail-recent-probe`: where Recent stands in the rail, what it lists
     /// against what it holds, and the stored rows by title, each time that moves.
-    func probeLog(rail: UIView, projects: UIView, scroll: UIView, home: UIView, trial: UILabel) {
+    func probeLog(rail: UIView, projects: UIView, scroll: UIView, homeSlot: UIView, trial: UILabel, current: [String]) {
         guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe"), let dataSource, view.window != nil else { return }
         let frame = view.convert(view.bounds, to: rail)
         let above = projects.convert(projects.bounds, to: rail)
@@ -236,7 +236,7 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
         func box(_ r: CGRect) -> String { "\(Int(r.minX)),\(Int(r.minY)),\(Int(r.width))x\(Int(r.height))" }
         // Where the rail stands in the window, the room its safe area keeps, and its scroller in it.
         let safe = rail.safeAreaInsets
-        let geometry = "rail.window=\(box(rail.convert(rail.bounds, to: nil))) rail.safe=\(Int(safe.left)),\(Int(safe.top)),\(Int(safe.right)),\(Int(safe.bottom)) scroll=\(box(scroll.convert(scroll.bounds, to: rail))) home=\(box(home.convert(home.bounds, to: rail))) trial=\(trial.isHidden || trial.window == nil ? "hidden" : "\"\(trial.text ?? "")\"@\(box(trial.convert(trial.bounds, to: rail)))")"
+        let geometry = "rail.window=\(box(rail.convert(rail.bounds, to: nil))) rail.safe=\(Int(safe.left)),\(Int(safe.top)),\(Int(safe.right)),\(Int(safe.bottom)) scroll=\(box(scroll.convert(scroll.bounds, to: rail))) home=\(box(homeSlot.convert(homeSlot.bounds, to: rail))) current=[\(current.joined(separator: ","))] trial=\(trial.isHidden || trial.window == nil ? "hidden" : "\"\(trial.text ?? "")\"@\(box(trial.convert(trial.bounds, to: rail)))")"
         let line = "rail recent frame=\(box(frame)) projects=\(box(above)) \(geometry) rail=\(Int(rail.bounds.width)) under=\(frame.minY >= above.maxY) open=\(home.recentOpen) folded=\(empty.isActive) fits=\(Int(fits?.constant ?? -1)) all=\(recent.all.count) stored=\(recent.all.filter { $0.instance == nil }.count) rows=\(rows.count) drawn=\(drawn) style=\(traitCollection.userInterfaceStyle == .dark ? "dark" : "light") | \(rows.joined(separator: " | "))"
         guard line != probed else { return }
         probed = line

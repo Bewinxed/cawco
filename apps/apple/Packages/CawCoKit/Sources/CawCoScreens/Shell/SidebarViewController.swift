@@ -58,11 +58,16 @@ final class SidebarViewController: ObservedViewController {
     private let configureButton = GhostIconButton(.settings, label: "Configure")
     private let themeButton = ThemeButton()
     private let soundButton = SoundButton()
+    private let cawLoopButton = CawLoopButton()
     private let usage = UsageCell(frame: .zero)
     /// The account row, and under the name the one place CawCo Pro shows (DESIGN.md T):
     /// the free week's days left, or the Pro tag.
-    private let user = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
-    /// Said whole: it wraps under the name rather than cut mid-word in a narrow rail.
+    private let user = RailRow(height: nil, leading: 6, trailing: 6, gap: 0)
+    /// CawCo Pro's one place in the rail (DESIGN.md T): the free week's line, or the Pro tag.
+    private let access = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
+    private lazy var accessFold = access.heightAnchor.constraint(equalToConstant: 0)
+    private weak var footer: UIStackView?
+    /// Said whole: it wraps in its row rather than cut mid-word in a narrow rail.
     private let trialLine = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private let proTag = ProTag()
     private var navHeights: [NSLayoutConstraint] = []
@@ -451,7 +456,7 @@ final class SidebarViewController: ObservedViewController {
         #if DEBUG
         recent.onProbe = { [weak self, weak recent] in
             guard let self else { return }
-            recent?.probeLog(rail: view, projects: projectsGroup, scroll: scroll, home: homeSlot, trial: trialLine)
+            recent?.probeLog(rail: view, projects: projectsGroup, scroll: scroll, homeSlot: homeSlot, trial: trialLine, current: currentRows)
         }
         #endif
         // A docked keyboard covers the rail's foot: the list scrolls on under it, so Recent's search and results stay in reach.
@@ -586,34 +591,55 @@ final class SidebarViewController: ObservedViewController {
 
         // The strip's words start on the rail's content edge, where the rows' do.
         usage.textInset = 10
+        // The reader's chip: the avatar alone, as the web's ("You"); the
+        // product holds no name for its one operator.
         navConstraint(user)
         // No picture of the reader yet: Caw stands in.
         let avatar = BrandMark(round: true)
-        let name = KitLabel(TypeScale.typeBody, ink: Palette.foreground)
-        name.text = "bewinxed"
+        user.content.addArrangedSubview(RailRow.slot(avatar))
+        user.accessibilityLabel = "You"
+        user.isEnabled = false
+        // As wide as the avatar it holds; the spacer after it takes the row's room.
+        user.setContentHuggingPriority(.required, for: .horizontal)
+
+        // CawCo Pro's one place (the free week's days left, or the Pro tag): a
+        // row of its own over the settings, its words whole however narrow the rail.
+        // At least a nav row, taller as its words wrap; folded to nothing outweighs both.
+        let floor = access.heightAnchor.constraint(greaterThanOrEqualToConstant: navHeight)
+        floor.priority = .required - 2
+        floor.isActive = true
+        navHeights.append(floor)
+        // As tall as its words with a space-1 above and below (a wrapped line
+        // grows it), never under a nav row; below the floor, so the floor and
+        // the fold both outweigh it, and above the scroller, which takes the rest.
+        let fits = access.heightAnchor.constraint(equalTo: access.content.heightAnchor, constant: 2 * Space.space1)
+        fits.priority = .required - 3
+        fits.isActive = true
         trialLine.wrap = .pretty
-        // The words outweigh the row's nav height: a wrapped line grows the row, never clips.
-        for label in [name, trialLine] { label.setContentCompressionResistancePriority(.required, for: .vertical) }
-        let named = UIStackView(arrangedSubviews: [name, trialLine])
-        named.axis = .vertical
-        named.alignment = .leading
+        trialLine.setContentCompressionResistancePriority(.required - 1, for: .vertical)
         trialLine.isHidden = true
         proTag.isHidden = true
-        user.content.addArrangedSubview(RailRow.slot(avatar))
-        user.content.addArrangedSubview(named)
-        user.content.addArrangedSubview(proTag)
-        user.accessibilityLabel = "bewinxed"
-        user.isEnabled = false
-        user.addAction(UIAction { [weak self] _ in self?.host?.keepPro() }, for: .primaryActionTriggered)
+        access.content.addArrangedSubview(trialLine)
+        access.content.addArrangedSubview(UIView())
+        access.content.addArrangedSubview(proTag)
+        // Folded by a height until there is something to say: it is set from
+        // the layout pass, where hiding a stack's view does not hold (RailRecentController).
+        access.clipsToBounds = true
+        accessFold.isActive = true
+        access.addAction(UIAction { [weak self] _ in self?.host?.keepPro() }, for: .primaryActionTriggered)
 
         configureButton.addAction(UIAction { [weak self] _ in self?.host?.go(.configure) }, for: .primaryActionTriggered)
         KitTip.attach(to: configureButton, label: "Configure")
-        // Configure, the theme and sound, in the web footer's order.
-        let account = UIStackView(arrangedSubviews: [user, configureButton, themeButton, soundButton])
+        // Configure, the theme, sound and Caw's loop, at the row's end in the web footer's order.
+        let spacer = UIView()
+        spacer.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
+        let account = UIStackView(arrangedSubviews: [user, spacer, configureButton, themeButton, soundButton, cawLoopButton])
         account.spacing = 4
         account.alignment = .center
         navRow(account)
-        let stack = UIStackView(arrangedSubviews: [usage, account])
+        let stack = UIStackView(arrangedSubviews: [usage, access, account])
+        footer = stack
+        stack.setCustomSpacing(0, after: usage)
         stack.axis = .vertical
         stack.spacing = 8
         stack.isLayoutMarginsRelativeArrangement = true
@@ -675,9 +701,14 @@ final class SidebarViewController: ObservedViewController {
         trialLine.ink = last ? Palette.inkStrong : Palette.inkMuted
         trialLine.isHidden = line == nil
         proTag.isHidden = access != .owned
-        user.isEnabled = line != nil
-        user.accessibilityLabel = ["bewinxed", line, access == .owned ? PaywallCopy.Trial.owned : nil].compactMap { $0 }.joined(separator: ", ")
-        user.accessibilityTraits = line != nil ? .button : .staticText
+        let folded = line == nil && access != .owned
+        if accessFold.isActive != folded {
+            accessFold.isActive = folded
+            footer?.setCustomSpacing(folded ? 0 : 8, after: usage)
+        }
+        self.access.isEnabled = line != nil
+        self.access.accessibilityLabel = [line, access == .owned ? PaywallCopy.Trial.owned : nil].compactMap { $0 }.joined(separator: ", ")
+        self.access.accessibilityTraits = line != nil ? .button : .staticText
     }
 
     override func drawContent() {
@@ -892,6 +923,14 @@ final class SidebarViewController: ObservedViewController {
 
     /// Where a question about a session in this rail stands.
     var probeAskPlace: String { askPlace }
+
+    /// The rows drawn as the place in front: a place, a project, a session.
+    private var currentRows: [String] {
+        let places = [(fleetRow, "Fleet"), (workflowsRow, "Workflows")].filter { $0.0.active }.map(\.1)
+        let projects = blocks.values.filter(\.row.active).map(\.project.name)
+        let sessions = sessionRows.values.filter { $0.active && $0.window != nil }.map { $0.name.text ?? $0.id }
+        return places + projects + sessions
+    }
     #endif
 
     /// The session the window's one question stands under in this rail, if it is one of its rows.
@@ -1333,6 +1372,62 @@ final class SoundButton: TapControl {
         KitTip.attach(to: self, label: label)
         let shown = enabled ? on : off
         let hidden = enabled ? off : on
+        let still = !animated || UIAccessibility.isReduceMotionEnabled
+        if !still { shown.transform = CGAffineTransform(scaleX: 0.25, y: 0.25) }
+        let apply: @MainActor @Sendable () -> Void = {
+            shown.alpha = 1
+            shown.transform = .identity
+            hidden.alpha = 0
+            if !still { hidden.transform = CGAffineTransform(scaleX: 0.25, y: 0.25) }
+        }
+        if animated { Motion.easeOut.animator(Motion.durControl, animations: apply).startAnimation() } else { apply() }
+    }
+}
+
+/// The Caw loop switch, after the sound switch (CawLoopSwitcher.svelte):
+/// whether Caw plays his working loop while a project's lead works, or
+/// holds its still. Play and pause swap in place as the theme's glyphs do.
+final class CawLoopButton: TapControl {
+    private let playing = GlyphView(.loopOn, tint: Palette.sidebarForeground)
+    private let held = GlyphView(.loopHeld, tint: Palette.sidebarForeground)
+    private var watcher: NSObjectProtocol?
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = Radius.radiusSm
+        for glyph in [playing, held] {
+            glyph.isUserInteractionEnabled = false
+            addSubview(glyph)
+            NSLayoutConstraint.activate([glyph.centerXAnchor.constraint(equalTo: centerXAnchor), glyph.centerYAnchor.constraint(equalTo: centerYAnchor)])
+        }
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 30), heightAnchor.constraint(equalToConstant: 30)])
+        isAccessibilityElement = true
+        // The web's name, whichever way it stands; on or off is its pressed state.
+        accessibilityLabel = "Caw moves while the lead works"
+        addAction(UIAction { _ in CawLoopPreference.on.toggle() }, for: .primaryActionTriggered)
+        addInteraction(UIPointerInteraction(delegate: nil))
+        // Another window's switch turned it.
+        watcher = NotificationCenter.default.addObserver(forName: CawLoopPreference.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.show(animated: true) }
+        }
+        show(animated: false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("CawLoopButton is built in code")
+    }
+
+    override var isHighlighted: Bool { didSet { backgroundColor = isHighlighted ? Palette.surfaceFill : .clear } }
+
+    /// `icon-swap`: the arriving glyph from 0.25 scale, over `durControl` on the out curve.
+    private func show(animated: Bool) {
+        let on = CawLoopPreference.on
+        accessibilityTraits = on ? [.button, .selected] : .button
+        KitTip.attach(to: self, label: on ? "Caw moves while the lead works" : "Caw holds still while the lead works")
+        let shown = on ? playing : held
+        let hidden = on ? held : playing
         let still = !animated || UIAccessibility.isReduceMotionEnabled
         if !still { shown.transform = CGAffineTransform(scaleX: 0.25, y: 0.25) }
         let apply: @MainActor @Sendable () -> Void = {

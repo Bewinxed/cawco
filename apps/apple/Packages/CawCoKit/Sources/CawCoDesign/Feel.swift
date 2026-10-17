@@ -22,6 +22,24 @@ public enum SoundPreference {
     public static let changed = Notification.Name("dev.cawco.sound")
 }
 
+/// Caw's motion while a project's lead works (feel.svelte.ts `cawLoop`):
+/// his working loop plays, the default, or he holds its still.
+@MainActor
+public enum CawLoopPreference {
+    private static let key = "cawco-caw-loop"
+
+    public static var on: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: key)
+            NotificationCenter.default.post(name: changed, object: nil)
+        }
+    }
+
+    /// Posted when the switch is turned.
+    public static let changed = Notification.Name("dev.cawco.caw-loop")
+}
+
 /// What the composer's motion is felt and heard as (composer-recall
 /// `felt`): each entry the wheel lands on is a detent, Cuelume's `select`
 /// rising toward older entries and falling toward newer, with a selection

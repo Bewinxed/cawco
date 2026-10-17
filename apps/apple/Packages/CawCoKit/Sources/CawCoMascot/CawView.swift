@@ -193,6 +193,16 @@ public final class CawView: UIView {
 
     private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
     private var reducedMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+
+    /// He holds his still once he has entered (Caw.svelte `still`): the
+    /// file's `reducedMotion` written for this Caw alone, his fades and
+    /// entrances left to the system's setting.
+    public var still = false {
+        didSet { if still != oldValue { apply() } }
+    }
+
+    /// What the file's `reducedMotion` is written as.
+    private var holds: Bool { reducedMotion || (still && entered) }
     /// The side his still box is drawn at: the largest centred square, or with `ledge` the width.
     private var boxSide: Double { ledge != nil ? bounds.width : min(bounds.width, bounds.height) }
     private var pixel: Float { CawContract.pixel(side: boxSide, scale: traitCollection.displayScale) }
@@ -291,7 +301,7 @@ public final class CawView: UIView {
             }
             let incoming: CawLayer
             do {
-                incoming = try await CawLayer.load(file, dark: dark, reducedMotion: reducedMotion, pixel: pixel)
+                incoming = try await CawLayer.load(file, dark: dark, reducedMotion: holds, pixel: pixel)
             } catch {
                 CawContract.log.error("Caw \(file.name, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
                 loading = nil
@@ -386,6 +396,8 @@ public final class CawView: UIView {
         }
         entered = true
         CawContract.log.info("Caw \(self.status.rawValue, privacy: .public) entered")
+        // Landed: a held Caw stills now.
+        if still { apply() }
         onEntered?()
     }
 
@@ -416,7 +428,7 @@ public final class CawView: UIView {
     @objc private func apply() {
         if let shown {
             written = pixel
-            CawContract.write(to: shown.caw, dark: dark, reducedMotion: reducedMotion, pixel: pixel)
+            CawContract.write(to: shown.caw, dark: dark, reducedMotion: holds, pixel: pixel)
             if settled { drawAgain() }
         }
     }

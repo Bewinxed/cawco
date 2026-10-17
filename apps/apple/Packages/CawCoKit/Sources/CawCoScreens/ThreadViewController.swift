@@ -99,10 +99,15 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private let off = UIView()
     private let offWords = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
     private var offAction: UIButton?
+    /// The Caw loop switch turned: the seat holds or plays at once.
+    private var loopWatch: NSObjectProtocol?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
+        loopWatch = NotificationCenter.default.addObserver(forName: CawLoopPreference.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.requestRefresh() }
+        }
         addChild(transcriptHost)
         transcriptHost.view.backgroundColor = .clear
         transcriptHost.view.translatesAutoresizingMaskIntoConstraints = false
@@ -288,6 +293,8 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         case .needsYou: .needsYou
         default: .ready
         }
+        // His loop held while he works, when the reader turned it off (ThreadPane.svelte `still`).
+        seat.still = seat.status == .working && !CawLoopPreference.on
 
         // Why Caw cannot start, where the composer would stand.
         let cannot = caw?.problem

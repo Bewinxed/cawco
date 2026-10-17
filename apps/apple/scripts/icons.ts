@@ -138,6 +138,8 @@ const SOLAR_ICONS = [
   // The Sound switch.
   "volume-loud-bold-duotone", // Sound on
   "volume-cross-bold-duotone", // Sound off
+  "play-bold-duotone", // Caw's loop on (CawLoopSwitcher.svelte)
+  "pause-bold-duotone", // Caw's loop held
   // The task sheet (tasks/TaskSheet.svelte).
   "lock-keyhole-minimalistic-bold-duotone", // IconLock: waits on
   // The paywall's free-week rows (Today, Day 6; Day 7 is the lock above).

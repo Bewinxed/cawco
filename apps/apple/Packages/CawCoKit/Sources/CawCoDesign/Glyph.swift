@@ -127,6 +127,9 @@ public enum Glyph: String, CaseIterable, Sendable {
     // The Sound switch.
     case soundOn = "volume-loud-bold-duotone"
     case soundOff = "volume-cross-bold-duotone"
+    // The Caw loop switch (CawLoopSwitcher.svelte's IconPlay, IconPause).
+    case loopOn = "play-bold-duotone"
+    case loopHeld = "pause-bold-duotone"
     /// TaskSheet.svelte's `IconLock`: a task that waits on others.
     case lock = "lock-keyhole-minimalistic-bold-duotone"
     // The paywall's free-week rows: Today, Day 6 (Day 7 is `lock`).
