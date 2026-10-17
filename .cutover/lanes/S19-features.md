@@ -71,3 +71,6 @@ none (`group-state-open:` in MemoryBody uses state-open, not one of the eight)
 
 ## Delta O
 No colour literal in any `<style>`; no `needs colour token` lines. No class of mine is selected by another file whose rules I moved, so no `cross-file hook` lines. `wf-*` (rules in workflows/workflows.css under `.wf`) and `ln` (no rule) are classes whose rules were never in my files; left as written.
+
+## Contracts
+none
