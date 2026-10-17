@@ -103,6 +103,23 @@
 
   const chips = new Map<HTMLElement, () => void>();
 
+  const isTail = (node: Node | null): boolean =>
+    node instanceof HTMLElement && node.dataset.tail !== undefined;
+
+  /**
+   * A `<br>` the browser left at the end of a line box: with nothing after
+   * it but the tail, it opens no line, so it is no character. The field
+   * writes its own line breaks as "\n" text (`insertPlain`); a browser
+   * keeps an emptied field's line drawn with one of these (select all,
+   * delete: `<br>`), and ends a line break it made itself with one.
+   */
+  const isTrailingBreak = (node: Node): boolean =>
+    node instanceof HTMLElement &&
+    node.tagName === "BR" &&
+    !isTail(node) &&
+    (node.nextSibling === null ||
+      (isTail(node.nextSibling) && node.nextSibling.nextSibling === null));
+
   /** The message as sent: text as typed, each chip as its serialised form. */
   function serialise(node: Node): string {
     let out = "";
@@ -112,7 +129,7 @@
       } else if (child instanceof HTMLElement) {
         if (child.dataset.mention) {
           out += child.dataset.mention;
-        } else if (child.dataset.tail !== undefined) {
+        } else if (isTail(child) || isTrailingBreak(child)) {
           // The line a trailing newline opens, drawn: no character of its own.
         } else if (child.tagName === "BR") {
           out += "\n";
@@ -135,9 +152,12 @@
       return;
     }
     const last = editor.lastChild;
-    const has = last instanceof HTMLElement && last.dataset.tail !== undefined;
+    const has = isTail(last);
     const needs = (written ?? "").endsWith("\n");
-    if (needs && !has) {
+    if (needs && !has && last instanceof HTMLElement && last.tagName === "BR") {
+      // A browser's own trailing `<br>` already draws the line: it is the tail.
+      last.dataset.tail = "";
+    } else if (needs && !has) {
       const br = document.createElement("br");
       br.dataset.tail = "";
       editor.append(br);
@@ -260,7 +280,10 @@
     if (child.nodeType === Node.TEXT_NODE) {
       return (child as Text).data.length;
     }
-    if (!(child instanceof HTMLElement) || child.dataset.tail !== undefined) {
+    if (!(child instanceof HTMLElement) || isTail(child)) {
+      return 0;
+    }
+    if (isTrailingBreak(child)) {
       return 0;
     }
     if (child.dataset.mention) {
