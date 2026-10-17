@@ -82,7 +82,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 data-over:bg-surface-hover kind-you:bg-brand-wash"
+  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -194,9 +194,5 @@
   /* residual: foreign-dom — the board's New task button, from NewTaskForm. */
   [data-slot="foot"] > :global([data-slot="button"]) {
     inline-size: 100%;
-  }
-  /* residual: unmapped — the column's hairline ring (no token carries it). */
-  [data-slot="column"] {
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
 </style>
