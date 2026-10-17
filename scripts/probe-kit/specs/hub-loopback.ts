@@ -8,18 +8,23 @@
  * A scratch fleet whose hub listens on every address (`::`), so an agent
  * reaches it at each loopback name.
  *
- * 8. The agent, connected to the hub at 127.0.0.1, at ::1 and at localhost
- *    in turn: each time it says the hub is on its computer and listens on
- *    neither P nor any preview port nor 3000 (`ss`, by its pid).
+ * 8. The fleet's agent, whose machine id is the hub's: the hub's register
+ *    answer says `hostsHub`, and it carries nothing. Then a machine of
+ *    another id reaching the hub at 127.0.0.1, at ::1 and at localhost in
+ *    turn: each says that is this computer's loopback. None listens on P, a
+ *    preview port or 3000 (`ss`, by its pid).
  * 8b. A dev server started on 3000 after the agent registered binds it on
  *    each of 127.0.0.1 and ::1 that 3000 was free on before the agent
  *    started; a family something else held then is said with its holder.
- * 9. The hub's computer: the dashboard's socket unit and plist as the
- *    installer writes them name the network address, 127.0.0.1:P and, where
- *    this computer has an IPv6 loopback, [::1]:P; serve.js, run under
- *    `systemd-socket-activate` on those very listens, answers the dashboard
- *    on each, and its `/ws` gate admits `http://localhost:P` and refuses
- *    another origin.
+ * 9. The hub's computer: the installer writes the network address as
+ *    `cawco-dashboard.socket` (required) and 127.0.0.1:P and, where this
+ *    computer has an IPv6 loopback, [::1]:P as `cawco-dashboard-local.socket`
+ *    (`Service=` the dashboard, wanted through its `Sockets=`), and as two
+ *    plist keys; serve.js, run under `systemd-socket-activate` on those very
+ *    listens, answers the dashboard on each, and its `/ws` gate admits
+ *    `http://localhost:P` and refuses another origin.
+ * 9c. serve.js handed the network socket alone (the loopback unit did not
+ *    open): it says so, and answers the dashboard there.
  *
  *   bun scripts/probe-kit/run.ts hub-loopback
  */
@@ -29,8 +34,10 @@ import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
 
 const SPACES = /\s+/;
+const NOT_WORD = /\W/g;
 const LISTEN_STREAM = /^ListenStream=(.+)$/gm;
 const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/g;
+const SOCKET_KEY = /<key>(dashboard[a-z-]*)<\/key>\s*<array>/g;
 /** Another origin, for the `/ws` gate to refuse. */
 const FOREIGN = "http://localhost:9";
 
@@ -243,47 +250,115 @@ const fetchOr = async (url: string, init: RequestInit) => {
   }
 };
 
+/** The agent's line for a hub on its computer, from `logs`, once said; undefined when it never is. */
+export const onThisComputerLine = (
+  logs: () => Promise<string>,
+  name: string
+): Promise<string | undefined> =>
+  until(
+    `the agent's line for a hub at ${name}`,
+    async () =>
+      (await logs())
+        .split("\n")
+        .find((one) => one.includes(`the hub at ${name} is on this computer`)),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+
 /**
- * 8. The agent reaching its hub at each loopback name: the hub is on its
- * computer, and it listens on nothing of the hub's (`ss`, by its pid).
+ * 8. The hub on the agent's computer, by the hub's own word and by the
+ * address alone: the fleet's agent (its machine id is the hub's, so the
+ * register answer says `hostsHub`), then a machine of another id reaching
+ * the hub at each loopback name. Each says why and listens on nothing of the
+ * hub's (`ss`, by its pid).
  */
-async function nothingOnTheHubsComputer(kit: Kit, fleet: KitFleet) {
+async function nothingOnTheHubsComputer(
+  kit: Kit,
+  fleet: KitFleet,
+  agentPid: number
+) {
   const { port } = new URL(fleet.base);
   const among = loopbackPorts(fleet);
+  const word = await onThisComputerLine(() => fleet.logs("agent"), "127.0.0.1");
+  const wordHeld = await listening(agentPid, among);
+  kit.check(
+    "8: an agent the hub's register answer names its own computer (hostsHub) carries nothing, and listens on neither the loopback port, a preview port nor 3000",
+    !!word?.includes("the hub says this is its own computer") &&
+      wordHeld.length === 0,
+    `${word ?? "no line"}; listening on ${portList(wordHeld)} of ${portList(among)}`
+  );
   for (const [name, url] of [
     ["127.0.0.1", `ws://127.0.0.1:${port}/ws`],
     ["[::1]", `ws://[::1]:${port}/ws`],
     ["localhost", `ws://localhost:${port}/ws`],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one agent at a time, each stopped before the next starts
-    await fleet.stop("agent");
-    const agent = fleet.launch("agent", [], { CAWCO_HUB_URL: url });
-    await fleet.agentUp();
-    const line = await until(
-      `the agent's line for a hub at ${name}`,
-      async () =>
-        (await fleet.logs("agent"))
-          .split("\n")
-          .find((one) =>
-            one.includes(`the hub at ${name} is on this computer`)
-          ),
-      Boolean,
-      30_000
-    ).catch(() => undefined);
-    const held = await listening(agent.pid, among);
+    // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each said in its order
+    const machine = await fleet.launchMachine(
+      `elsewhere-${name.replace(NOT_WORD, "")}`,
+      { CAWCO_HUB_URL: url }
+    );
+    const line = await onThisComputerLine(machine.logs, name);
+    const held = await listening(machine.agent.pid, among);
     kit.check(
-      `8: an agent that reaches its hub at ${name} carries nothing: the hub is on its computer, and it listens on neither the loopback port, a preview port nor 3000`,
-      !!line && held.length === 0,
+      `8: an agent of another machine id that reaches the hub at ${name} carries nothing: that is this computer's loopback, and it listens on neither the loopback port, a preview port nor 3000`,
+      !!line?.includes("it is this computer's loopback") && held.length === 0,
       `${line ?? "no line"}; listening on ${portList(held)} of ${portList(among)}`
     );
   }
 }
 
+/** `text`'s `ListenStream=` addresses, in order. */
+const listensOf = (text: string): string[] =>
+  [...text.matchAll(LISTEN_STREAM)].map((match) => match[1] as string);
+
 /**
- * 9. The hub's computer: the dashboard's socket as the installer writes it,
- * under systemd's own socket activation (`systemd-socket-activate`, one
- * `--listen` per `ListenStream=`), with serve.js on the published build.
- * `started` is handed serve.js's process, for the spec to end.
+ * serve.js on the published build under systemd's own socket activation:
+ * `systemd-socket-activate`, one `--listen` per address, each descriptor
+ * named as its unit's `FileDescriptorName=` names it. Its output goes to `log`.
+ */
+const serveUnder = (
+  fleet: KitFleet,
+  sockets: { address: string; name: string }[],
+  log: string
+) =>
+  Bun.spawn(
+    [
+      "systemd-socket-activate",
+      ...sockets.map(({ address }) => `--listen=${address}`),
+      `--fdname=${sockets.map(({ name }) => name).join(":")}`,
+      `--setenv=CAWCO_HUB_URL=${fleet.base}`,
+      "node",
+      join(ROOT, "apps/dashboard/serve.js"),
+    ],
+    {
+      cwd: join(ROOT, "apps/dashboard"),
+      env: { ...process.env, CAWCO_HUB_URL: fleet.base },
+      stdout: Bun.file(log),
+      stderr: Bun.file(`${log}.err`),
+    }
+  );
+
+/** What each of `addresses` answers once it does: `<address> 200 (the dashboard)`, or what came instead. */
+const dashboardAt = (addresses: string[], host: string) =>
+  Promise.all(
+    addresses.map(async (address) => {
+      const answer = await until(
+        `the dashboard at ${address}`,
+        () => fetchOr(`http://${address}/`, { headers: { host } }),
+        (one) => one?.status === 200,
+        30_000
+      ).catch(() => undefined);
+      const text = (await answer?.text()) ?? "";
+      return `${address} ${answer?.status ?? "no answer"}${text.includes("_app/immutable") ? " (the dashboard)" : ""}`;
+    })
+  );
+
+/**
+ * 9. The hub's computer: the dashboard's sockets as the installer writes
+ * them, under systemd's own socket activation, with serve.js on the
+ * published build; then (9c) serve.js handed the network socket alone, as
+ * systemd hands it when the loopback socket unit did not open.
+ * `started` is handed each serve.js process, for the spec to end.
  */
 async function hubComputer(
   kit: Kit,
@@ -295,62 +370,62 @@ async function hubComputer(
   const network = await freePort();
   const v6 = hasIpv6Loopback();
   const texts = await installedSocket(network, dashboard);
-  const listens = [...texts.systemd.matchAll(LISTEN_STREAM)].map(
-    (match) => match[1] as string
-  );
+  const [own, loopback] = texts.systemd;
+  const networkListens = listensOf(own?.text ?? "");
+  const loopbackListens = listensOf(loopback?.text ?? "");
   const nodes = [...texts.launchd.matchAll(SOCK_NODE)].map(
     (match) => match[1] as string
   );
+  const keys = [...texts.launchd.matchAll(SOCKET_KEY)].map(
+    (match) => match[1] as string
+  );
   kit.check(
-    `9: the installer's dashboard socket listens where the network reaches it and on 127.0.0.1${v6 ? " and ::1" : " (this computer has no ::1)"} at the loopback port, in its systemd unit and its plist`,
-    JSON.stringify(listens) ===
-      JSON.stringify([
-        `127.0.0.1:${network}`,
-        `127.0.0.1:${dashboard}`,
-        ...(v6 ? [`[::1]:${dashboard}`] : []),
-      ]) &&
+    `9: the installer writes the network address and the loopback (127.0.0.1${v6 ? " and ::1" : "; this computer has no ::1"}) as two socket units, the loopback's wanted by the dashboard and starting it, and as two plist socket keys`,
+    own?.unit === "cawco-dashboard.socket" &&
+      JSON.stringify(networkListens) ===
+        JSON.stringify([`127.0.0.1:${network}`]) &&
+      loopback?.unit === "cawco-dashboard-local.socket" &&
+      JSON.stringify(loopbackListens) ===
+        JSON.stringify([
+          `127.0.0.1:${dashboard}`,
+          ...(v6 ? [`[::1]:${dashboard}`] : []),
+        ]) &&
+      loopback.text.includes("FileDescriptorName=dashboard-local") &&
+      loopback.text.includes("Service=cawco-dashboard.service") &&
+      texts.service.includes(
+        "Sockets=cawco-dashboard.socket cawco-dashboard-local.socket"
+      ) &&
+      texts.service.includes("Requires=cawco-dashboard.socket") &&
+      !texts.service.includes("Requires=cawco-dashboard-local.socket") &&
+      JSON.stringify(keys) ===
+        JSON.stringify(["dashboard", "dashboard-local"]) &&
       JSON.stringify(nodes) ===
         JSON.stringify(["127.0.0.1", "127.0.0.1", ...(v6 ? ["::1"] : [])]),
-    `ListenStream ${listens.join(", ")}; SockNodeName ${nodes.join(", ")}`
+    `${own?.unit}: ${networkListens.join(", ")}; ${loopback?.unit}: ${loopbackListens.join(", ")}; plist keys ${keys.join(", ")}, SockNodeName ${nodes.join(", ")}`
   );
-  kit.note(`9: the socket unit as written:\n${texts.systemd}`);
+  kit.note(
+    `9: the socket units as written:\n${texts.systemd.map((one) => `# ${one.unit}\n${one.text}`).join("\n")}`
+  );
   await $`bun ${join(ROOT, "apps/dashboard/scripts/publish-build.ts")}`.quiet();
   const serveLog = join(kit.out, "serve.log");
-  started(
-    Bun.spawn(
-      [
-        "systemd-socket-activate",
-        ...listens.map((address) => `--listen=${address}`),
-        `--fdname=${listens.map(() => "dashboard").join(":")}`,
-        `--setenv=CAWCO_HUB_URL=${fleet.base}`,
-        "node",
-        join(ROOT, "apps/dashboard/serve.js"),
-      ],
-      {
-        cwd: join(ROOT, "apps/dashboard"),
-        env: { ...process.env, CAWCO_HUB_URL: fleet.base },
-        stdout: Bun.file(serveLog),
-        stderr: "pipe",
-      }
-    )
+  const both = serveUnder(
+    fleet,
+    [
+      ...networkListens.map((address) => ({ address, name: "dashboard" })),
+      ...loopbackListens.map((address) => ({
+        address,
+        name: "dashboard-local",
+      })),
+    ],
+    serveLog
   );
-  const loads = await Promise.all(
-    listens.map(async (address) => {
-      const answer = await until(
-        `the dashboard at ${address}`,
-        () =>
-          fetchOr(`http://${address}/`, {
-            headers: { host: `localhost:${dashboard}` },
-          }),
-        (one) => one?.status === 200,
-        30_000
-      ).catch(() => undefined);
-      const text = (await answer?.text()) ?? "";
-      return `${address} ${answer?.status ?? "no answer"}${text.includes("_app/immutable") ? " (the dashboard)" : ""}`;
-    })
+  started(both);
+  const loads = await dashboardAt(
+    [...networkListens, ...loopbackListens],
+    `localhost:${dashboard}`
   );
   const ws = `ws://127.0.0.1:${dashboard}/ws/dashboard`;
-  const own = await socketHeard(ws, {
+  const heard = await socketHeard(ws, {
     host: `localhost:${dashboard}`,
     origin: local,
     "sec-fetch-site": "same-origin",
@@ -362,11 +437,37 @@ async function hubComputer(
   });
   const said = (await Bun.file(serveLog).text()).trim();
   kit.check(
-    "9: on the hub's computer serve.js answers on every address its socket names: localhost:P is the dashboard, and its /ws gate admits that origin and refuses another",
+    "9: on the hub's computer serve.js answers on every address its sockets name: localhost:P is the dashboard, and its /ws gate admits that origin and refuses another",
     loads.every((line) => line.endsWith("(the dashboard)")) &&
-      own === "heard" &&
+      heard === "heard" &&
       foreign.startsWith("closed"),
-    `${loads.join("; ")}; /ws ${local}: ${own}, ${FOREIGN}: ${foreign}; serve.js said: ${said}`
+    `${loads.join("; ")}; /ws ${local}: ${heard}, ${FOREIGN}: ${foreign}; serve.js said: ${said}`
+  );
+  both.kill();
+  await both.exited;
+
+  // 9c. The loopback socket unit did not open: systemd hands the service
+  // the network socket's descriptors alone (src/core/service.c
+  // `service_collect_fds`).
+  const alone = await freePort();
+  const aloneLog = join(kit.out, "serve-alone.log");
+  const networkOnly = serveUnder(
+    fleet,
+    [{ address: `127.0.0.1:${alone}`, name: "dashboard" }],
+    aloneLog
+  );
+  started(networkOnly);
+  const [aloneLoad = ""] = await dashboardAt(
+    [`127.0.0.1:${alone}`],
+    `127.0.0.1:${alone}`
+  );
+  const aloneSaid =
+    `${await Bun.file(aloneLog).text()}${await Bun.file(`${aloneLog}.err`).text()}`.trim();
+  kit.check(
+    "9c: with the loopback socket missing (its unit did not open), serve.js says so and the dashboard answers on its network address",
+    aloneLoad.endsWith("(the dashboard)") &&
+      aloneSaid.includes("no dashboard-local socket was handed over"),
+    `${aloneLoad}; serve.js said: ${aloneSaid}`
   );
 }
 
@@ -381,12 +482,12 @@ const run = async (kit: Kit) => {
     await fleet.hubUp();
     fleet.fileAccount();
     const before = await holdersOf3000();
-    fleet.launch("agent");
+    const agent = fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
 
     // 8.
-    await nothingOnTheHubsComputer(kit, fleet);
+    await nothingOnTheHubsComputer(kit, fleet, agent.pid);
 
     // 8b.
     const devServer = await devServerOn3000(before);

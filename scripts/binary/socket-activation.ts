@@ -2,6 +2,12 @@ import { dlopen, FFIType, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 
 /** The first descriptor systemd passes (sd_listen_fds(3) `SD_LISTEN_FDS_START`). */
 const SD_LISTEN_FDS_START = 3;
+/** launch_activate_socket(3): "[ENOENT] The socket name specified does not exist in the caller's launchd.plist(5)." */
+const ENOENT = 2;
+
+/** No socket under a name: `ENOENT`, as the npm socket-activation package throws it, so a wanted socket's absence reads the same on every build. */
+const noSocket = (message: string): Error =>
+  Object.assign(new Error(message), { code: "ENOENT" });
 
 /**
  * Every listening socket the service manager passed under `name`, in the
@@ -24,7 +30,7 @@ function collect(name: string): number[] {
       (_, index) => SD_LISTEN_FDS_START + index
     ).filter((_, index) => names === undefined || names[index] === name);
     if (fds.length === 0) {
-      throw new Error(
+      throw noSocket(
         `Dashboard was passed no socket named ${name} (LISTEN_FDNAMES=${process.env.LISTEN_FDNAMES})`
       );
     }
@@ -47,6 +53,9 @@ function collect(name: string): number[] {
     ptr(descriptors),
     ptr(count)
   );
+  if (error === ENOENT) {
+    throw noSocket(`launchd holds no socket named ${name} for this job`);
+  }
   if (error !== 0) {
     throw new Error(`launch_activate_socket(${name}) failed: errno ${error}`);
   }
@@ -56,7 +65,7 @@ function collect(name: string): number[] {
       ...new Int32Array(toArrayBuffer(address, 0, Number(count[0]) * 4)),
     ];
     if (result.length === 0) {
-      throw new Error(`launchd passed no socket named ${name}`);
+      throw noSocket(`launchd passed no socket named ${name}`);
     }
     return result;
   } finally {

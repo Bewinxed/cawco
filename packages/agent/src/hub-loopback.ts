@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises";
+import { networkInterfaces } from "node:os";
 import {
   causeOf,
   type PreviewSocket,
@@ -183,25 +184,54 @@ async function listenAll(
 }
 
 /**
+ * Why the hub at `hubHost` is on this computer, or undefined when it is
+ * elsewhere: the hub's own word (`hostsHub`, its register answer: this
+ * machine's id is the hub's), or an address it resolves to that is this
+ * computer's: its loopback ({@link loopbackAddress}) or one of its own
+ * interfaces' (obelisk's agent reached its hub at 192.168.3.100, its own LAN
+ * address, and took 3455 from its dashboard socket, 2026-10-18).
+ */
+async function onThisComputer(
+  hubHost: string,
+  hostsHub: boolean
+): Promise<string | undefined> {
+  if (hostsHub) {
+    return "the hub says this is its own computer";
+  }
+  const addresses = (
+    await lookup(hubHost.replace(BRACKETS, ""), { all: true })
+  ).map((one) => one.address);
+  if (addresses.some(loopbackAddress)) {
+    return "it is this computer's loopback";
+  }
+  const own = new Set(
+    Object.values(networkInterfaces())
+      .flat()
+      .flatMap((one) => (one ? [one.address] : []))
+  );
+  const mine = addresses.find((address) => own.has(address));
+  return mine ? `${mine} is this computer's own address` : undefined;
+}
+
+/**
  * Serves the hub at `hubUrl` (the address the agent is connected to it on)
  * on this computer's loopback: the dashboard's loopback port, carried to its
- * port on the hub, and every preview port, each to its own. A hub reached at
- * a loopback address ({@link loopbackAddress}) is on this computer, whose
- * dashboard socket listens on the loopback port itself: nothing is carried,
- * as a listener of the agent's would only relay to its own computer. A port
- * another listener holds is said once and left to it.
+ * port on the hub, and every preview port, each to its own. A hub on this
+ * computer ({@link onThisComputer}) gets nothing: its dashboard socket listens
+ * on the loopback port itself, and a listener of the agent's would only take
+ * that port and relay to its own computer. A port another listener holds is
+ * said once and left to it.
  */
 export async function startHubLoopback(
   hubUrl: string,
-  ports: HubPorts
+  ports: HubPorts,
+  hostsHub: boolean
 ): Promise<HubLoopback> {
   const hubHost = new URL(hubUrl).hostname;
-  const hubAddresses = (
-    await lookup(hubHost.replace(BRACKETS, ""), { all: true })
-  ).map((one) => one.address);
-  if (hubAddresses.some(loopbackAddress)) {
+  const here = await onThisComputer(hubHost, hostsHub);
+  if (here) {
     console.info(
-      `[${HOP}] the hub at ${hubHost} is on this computer: its own loopback is the hub, so nothing is carried`
+      `[${HOP}] the hub at ${hubHost} is on this computer (${here}): its dashboard socket is localhost here, so nothing is carried`
     );
     return { stop: async () => undefined };
   }
@@ -241,13 +271,18 @@ export async function startHubLoopback(
 let carried: { key: string; loopback: Promise<HubLoopback | null> } | undefined;
 
 /**
- * The agent registered with the hub at `hubUrl`, which named `ports`: its
- * loopback serves that hub. Started on the first register; a register with
- * another hub address (a rediscovery repinned it) or other ports stops the
+ * The agent registered with the hub at `hubUrl`, which named `ports` and
+ * whether this machine is its own computer (`hostsHub`): its loopback serves
+ * that hub. Started on the first register; a register with another hub
+ * address (a rediscovery repinned it), other ports or another word stops the
  * one before and starts anew.
  */
-export function carryHub(hubUrl: string, ports: HubPorts): void {
-  const key = JSON.stringify([hubUrl, ports]);
+export function carryHub(
+  hubUrl: string,
+  ports: HubPorts,
+  hostsHub: boolean
+): void {
+  const key = JSON.stringify([hubUrl, ports, hostsHub]);
   if (carried?.key === key) {
     return;
   }
@@ -255,7 +290,7 @@ export function carryHub(hubUrl: string, ports: HubPorts): void {
   const start = async (): Promise<HubLoopback | null> => {
     await (await before)?.stop();
     try {
-      return await startHubLoopback(hubUrl, ports);
+      return await startHubLoopback(hubUrl, ports, hostsHub);
     } catch (error) {
       console.warn(
         `[${HOP}] the hub at ${hubUrl} isn't served on this computer's loopback: ${causeOf(error)}`

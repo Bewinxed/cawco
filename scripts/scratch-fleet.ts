@@ -1900,13 +1900,18 @@ async function standUp(
    * hub holds it online with custody. Every machine runs on this host, so
    * the hub names them all by its hostname. It runs under the fleet's slot.
    */
-  const launchMachine = async (machineId: string): Promise<Machine> => {
+  const launchMachine = async (
+    machineId: string,
+    /** Laid over its environment: a spec's own `CAWCO_HUB_URL`, say. */
+    overrides: Record<string, string> = {}
+  ): Promise<Machine> => {
     const machineHome = await dirs.short(homes);
     const machineRuntime = await dirs.short(shortRoot);
     await furnish(machineHome);
     const socketPath = join(machineRuntime, "sessiond.sock");
     const machineEnv: Record<string, string> = {
       ...env,
+      ...overrides,
       HOME: machineHome,
       XDG_CONFIG_HOME: join(machineHome, ".config"),
       XDG_DATA_HOME: join(machineHome, ".local", "share"),

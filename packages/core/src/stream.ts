@@ -305,6 +305,13 @@ export interface RegisterAckPayload {
    */
   delivered?: Record<string, DeliveryMark>;
   /**
+   * Whether this machine is the hub's own computer: its machine id is the
+   * hub's (hub server.ts `isHubMachine`: "an agent registered under it shares
+   * the hub's disk"). The agent's loopback carries nothing there (agent
+   * hub-loopback.ts): the dashboard's own socket listens on the loopback port.
+   */
+  hostsHub: boolean;
+  /**
    * This hub process, random at its start: an agent that last saw another
    * epoch knows the hub restarted since, and that every connection a harness
    * held to it (OpenCode's MCP streams) went with it.

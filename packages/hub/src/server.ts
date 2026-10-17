@@ -1415,7 +1415,8 @@ const registerAck = (
   sessions: CarrySessionRequest[],
   machineCredential: string,
   sessionLimits: SessionLimits,
-  upstream: UpstreamRules
+  upstream: UpstreamRules,
+  hostsHub: boolean
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1428,8 +1429,10 @@ const registerAck = (
     machineCredential,
     sessionLimits,
     upstream,
-    // What the agent serves on its own computer's loopback (agent hub-loopback.ts).
+    // What the agent serves on its own computer's loopback (agent
+    // hub-loopback.ts), and whether that computer is this hub's: then nothing.
     dashboardPorts: { hub: DASHBOARD_PORT, local: LOCAL_DASHBOARD_PORT },
+    hostsHub,
     previewPorts: PREVIEW_PORTS,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
@@ -26439,7 +26442,9 @@ export const createServer = (
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),
                   db.sessionLimits(),
-                  upstreamRules(db)
+                  upstreamRules(db),
+                  // Its machine id is this hub's own: the same computer.
+                  await isHubMachine(message.machineId)
                 )
               );
               for (const row of toEnd) {

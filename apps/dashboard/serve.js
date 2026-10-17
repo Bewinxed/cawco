@@ -412,10 +412,33 @@ const dashboardServer = () => {
   return server;
 };
 
-// One descriptor per address the unit and the plist name for the socket
-// (cli service.ts `dashboardListens`): where the network reaches it, and
-// this computer's loopback at the dashboard's loopback port.
-const fds = sockets.collect("dashboard");
+/**
+ * The descriptors handed over under `name`, or none when its socket is not
+ * there: a loopback socket that did not open (its port held by something
+ * else) or an install that names none. Said, and the dashboard answers on
+ * the rest; any other refusal is the service manager's and stops it.
+ */
+function collectWanted(name) {
+  try {
+    return sockets.collect(name);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+    console.warn(
+      `[cawco] no ${name} socket was handed over: the dashboard answers without it (journalctl --user -u cawco-${name}.socket says why on systemd)`
+    );
+    return [];
+  }
+}
+
+// One descriptor per address the units and the plist name (cli service.ts
+// `dashboardSockets`): where the network reaches it, required, and this
+// computer's loopback at the dashboard's loopback port, wanted.
+const fds = [
+  ...sockets.collect("dashboard"),
+  ...collectWanted("dashboard-local"),
+];
 const ready = () => {
   console.log(
     `dashboard on inherited fds ${fds.join(", ")} — /ws -> ${target.origin}`
