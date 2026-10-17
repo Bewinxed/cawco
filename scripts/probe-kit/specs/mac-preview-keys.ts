@@ -47,6 +47,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { macProbeApp } from "../../lib/apple-app";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -81,17 +82,52 @@ function report() {
 report();
 </script></body></html>`;
 
+/** How long one Peekaboo or osascript call has before the run gives up on it. */
+const CALL_MS = 60_000;
+
+/**
+ * Runs `cmd` with a deadline of {@link CALL_MS}: its exit code and what it
+ * wrote, or throws naming the command when it is still running at the
+ * deadline (killed, so nothing waits on it after).
+ */
+async function bounded(cmd: string[]) {
+  const read = await readWithin(CALL_MS, async (signal) => {
+    const child = Bun.spawn(cmd, {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { exitCode, stdout, stderr };
+  });
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${cmd.join(" ")}: no answer within ${read.after} ms (${read.reason}), killed`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
 /**
  * Runs Peekaboo in its own process with `args`; its stdout, or throws with
  * what it said: its JSON's `error` (and the last of its debug lines) when
  * it wrote JSON, else its own words.
  */
 async function peekaboo(args: string[]): Promise<string> {
-  const run = await Bun.$`${PEEKABOO} ${args} --no-remote --json`
-    .quiet()
-    .nothrow();
+  const run = await bounded([PEEKABOO, ...args, "--no-remote", "--json"]);
   if (run.exitCode !== 0) {
-    const said = (run.stdout.toString() || run.stderr.toString()).trim();
+    const said = (run.stdout || run.stderr).trim();
     let why = said.slice(-600);
     try {
       const json = JSON.parse(said) as {
@@ -109,7 +145,7 @@ async function peekaboo(args: string[]): Promise<string> {
       `peekaboo ${args.join(" ")} exited ${run.exitCode}: ${why}`
     );
   }
-  return run.stdout.toString();
+  return run.stdout;
 }
 
 /**
@@ -176,16 +212,14 @@ JSON.stringify(out);`;
  * the largest when Catalyst stands helpers beside it.
  */
 async function windowOf(pid: number): Promise<string> {
-  const run = await Bun.$`osascript -l JavaScript -e ${WINDOWS}`
-    .quiet()
-    .nothrow();
+  const run = await bounded(["osascript", "-l", "JavaScript", "-e", WINDOWS]);
   if (run.exitCode !== 0) {
     throw new Error(
-      `the window server's list: osascript exited ${run.exitCode}: ${run.stderr.toString().trim()}`
+      `the window server's list: osascript exited ${run.exitCode}: ${run.stderr.trim()}`
     );
   }
   const windows = (
-    JSON.parse(run.stdout.toString()) as {
+    JSON.parse(run.stdout) as {
       area: number;
       id: number;
       layer: number;
