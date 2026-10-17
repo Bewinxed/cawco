@@ -30,6 +30,10 @@
  * phone dark 2 pictures → 1, tablet dark 4 → 1; usage-relay rest tablet
  * light 2 → 1, tablet dark 3 → 1, phone dark 1 → 1; caw-notices rest desk
  * light 2 → 1.
+ *
+ * A stopgap: the product paints such a layer's text at its entrance frame
+ * until something repaints it. Once a card and a drawer re-raster where
+ * they land, `atRest` has nothing to do and goes.
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
