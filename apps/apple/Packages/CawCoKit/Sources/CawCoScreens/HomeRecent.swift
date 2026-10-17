@@ -52,6 +52,9 @@ final class RecentList {
         self.hub = hub
         self.home = home
         self.place = place
+        // Made now, never first inside a list's cell provider: UIKit refuses
+        // to dequeue with a registration made there.
+        _ = (headCell, searchCell, rowCell, noneCell, moreCell)
     }
 
     /// Recent's entries from `recent` (the board's), the question standing

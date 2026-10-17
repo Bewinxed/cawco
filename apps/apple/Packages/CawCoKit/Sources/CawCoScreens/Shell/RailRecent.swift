@@ -28,6 +28,8 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
     private var prints = RowPrints<RecentList.Entry>()
     /// The list is as tall as its content.
     private var fits: NSLayoutConstraint?
+    /// Folds it away while it has nothing to list.
+    private lazy var empty = view.heightAnchor.constraint(equalToConstant: 0)
     private var sizeWatch: NSKeyValueObservation?
     /// A cell is under the finger; `pending` waits for it to lift (HomeViewController `commit`).
     private var pressed = false
@@ -131,8 +133,12 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
     override func drawContent() {
         guard let next = built else { return }
         built = nil
-        // Nothing to list (the hub not read, or nothing in it): the rail keeps no room for it.
-        view.isHidden = next.numberOfItems == 0
+        // Nothing to list (the hub not read, or nothing in it): the rail keeps
+        // no room for it. Folded by a height, not by hiding: a stack hides an
+        // arranged view with a required zero height of its own, and one hidden
+        // and shown again from inside the layout pass kept it (the list stood
+        // 0pt tall with Recent read, `frame=…x0 all=4`).
+        empty.isActive = next.numberOfItems == 0
         commit(next)
     }
 
@@ -220,7 +226,7 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
             let at = cell.convert(cell.bounds, to: rail)
             return "\(item.title)@\(Int(at.minY))+\(Int(at.height))\(item.instance == nil ? "[stored]" : "")"
         }
-        let line = "rail recent frame=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) projects.maxY=\(Int(above.maxY)) under=\(frame.minY >= above.maxY) open=\(home.recentOpen) all=\(recent.all.count) stored=\(recent.all.filter { $0.instance == nil }.count) rows=\(rows.count) style=\(traitCollection.userInterfaceStyle == .dark ? "dark" : "light") | \(rows.joined(separator: " | "))"
+        let line = "rail recent frame=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) projects.maxY=\(Int(above.maxY)) under=\(frame.minY >= above.maxY) open=\(home.recentOpen) folded=\(empty.isActive) fits=\(Int(fits?.constant ?? -1)) all=\(recent.all.count) stored=\(recent.all.filter { $0.instance == nil }.count) rows=\(rows.count) style=\(traitCollection.userInterfaceStyle == .dark ? "dark" : "light") | \(rows.joined(separator: " | "))"
         guard line != probed else { return }
         probed = line
         Self.probe.notice("\(line, privacy: .public)")
