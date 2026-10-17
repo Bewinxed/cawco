@@ -47,12 +47,19 @@ enum PreviewMeter {
         return Double(arguments[flag + 1])
     }()
 
-    /// The stopped state is up: what VoiceOver reads in it, and Try again pressed when the run asks.
+    /// The stopped state is up: its labels' and buttons' words, in reading
+    /// order (UIKit answers `isAccessibilityElement` only once its
+    /// accessibility support has loaded, so the words are read off the
+    /// views), and Try again pressed when the run asks.
     static func stopped(_ state: UIView, tryAgain: UIButton) {
         var labels: [String] = []
         var views: [UIView] = [state]
         while let next = views.popLast() {
-            if next.isAccessibilityElement, let label = next.accessibilityLabel, !label.isEmpty { labels.append(label) }
+            if let label = next as? UILabel, let text = label.text, !text.isEmpty { labels.append(text) }
+            if let button = next as? UIButton, let title = button.configuration?.attributedTitle {
+                labels.append(String(title.characters))
+                continue
+            }
             views += next.subviews.reversed()
         }
         PreviewProbe.say("preview stopped reads \(labels.map { "\"\($0)\"" }.joined(separator: " | "))")
