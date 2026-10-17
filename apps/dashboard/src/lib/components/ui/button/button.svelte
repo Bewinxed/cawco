@@ -59,19 +59,22 @@
       /** An answer to an ask: filled in the status tint, edged on the recess,
           or edged with its strong ink held (a prompt's answers). Its hover
           holds over an open or invalid state, as the callers' own rules
-          did: the halves keep the states apart for the variant sort. */
+          did: the halves keep the states apart for the variant sort. The
+          tinted answers keep no edge, invalid too, and their tint fills
+          under it (the callers' `background` shorthand put the clip back
+          at the border box). */
       answer: {
-        deny: "border-transparent bg-status-fail-bg text-status-fail-ink not-aria-expanded:hover:bg-status-fail-bg hover:text-status-fail-ink aria-expanded:hover:bg-status-fail-bg",
+        deny: "border-transparent bg-status-fail-bg bg-clip-border text-status-fail-ink not-aria-expanded:hover:bg-status-fail-bg hover:text-status-fail-ink aria-expanded:hover:bg-status-fail-bg aria-invalid:border-transparent",
         approve:
-          "border-transparent bg-status-done-bg text-status-done-ink not-aria-expanded:hover:bg-status-done-bg hover:text-status-done-ink aria-expanded:hover:bg-status-done-bg",
+          "border-transparent bg-status-done-bg bg-clip-border text-status-done-ink not-aria-expanded:hover:bg-status-done-bg hover:text-status-done-ink aria-expanded:hover:bg-status-done-bg aria-invalid:border-transparent",
         "deny-edge":
-          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-fail-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:hover:border-status-fail-ink",
+          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-fail-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink aria-invalid:hover:border-status-fail-ink",
         "approve-edge":
-          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:hover:border-status-done-ink",
+          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink aria-invalid:hover:border-status-done-ink",
         "deny-strong":
-          "border-status-fail-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess",
+          "border-status-fail-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink",
         "approve-strong":
-          "border-status-done-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess",
+          "border-status-done-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink",
       },
       /** No edge of its own. */
       edge: { none: "border-transparent" },
@@ -116,6 +119,16 @@
           (`--toggle-start`, `--end`), over the size's icon-side pads. */
       toggle: {
         last: "last:not-has-data-[icon=inline-start]:ps-(--toggle-start) last:not-has-data-[icon=inline-end]:pe-(--end) last:has-data-[icon=inline-start]:ps-(--toggle-start) last:has-data-[icon=inline-end]:pe-(--end)",
+      },
+      /** Its figures in tabular widths. */
+      figures: { tabular: "tabular-nums" },
+      /** While its page is open (`aria-current="page"`), the selected tint
+          (filling under the edge) and ink over every state, as its caller's
+          own rule held them, crossing over --dur-control; its press scales
+          at once. */
+      current: {
+        selected:
+          "[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] aria-current-page:bg-selected-bg! aria-current-page:bg-clip-border aria-current-page:text-selected-ink!",
       },
     },
     defaultVariants: {
@@ -193,6 +206,8 @@
     expanded,
     face,
     toggle,
+    figures,
+    current,
     ref = $bindable(null),
     href,
     type = "button",
@@ -228,6 +243,8 @@
         expanded,
         face,
         toggle,
+        figures,
+        current,
       }),
       className
     )
