@@ -77,7 +77,7 @@
            on it. -->
       <button
         aria-hidden="true"
-        class="absolute inset-y-0 left-(--gutter-start) z-1 w-(--gutter-w) p-0 border-none bg-transparent cursor-pointer"
+        class="absolute inset-y-0 left-(--gutter-start) z-1 w-(--gutter-w) p-0 border-none border-current bg-transparent cursor-pointer"
         onclick={() => openTrees.set(above, false, view.list)}
         style:--gutter-start="calc(var(--nest-x) - var(--nest-pad) - var(--space-2))"
         style:--gutter-w="calc(var(--nest-pad) - var(--nest-x) + var(--space-2))"

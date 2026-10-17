@@ -853,7 +853,7 @@
           <button
             {...tip}
             aria-label="Start session"
-            class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none rounded-sm bg-transparent text-ink-muted cursor-pointer transition-control hover:bg-surface-hover hover:text-ink-strong"
+            class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted cursor-pointer transition-control hover:bg-surface-hover hover:text-ink-strong"
             onclick={() => newSession()}
             type="button"
           >
