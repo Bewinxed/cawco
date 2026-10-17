@@ -101,6 +101,29 @@ const SPEND_ROW_ADDED = [
 ];
 
 /**
+ * What a variant carries beyond its consumers' classes: the source's value
+ * where, at ac7b79de8, the consumer's unlayered rule beat a kit base
+ * modifier that now beats the consumer's utility (TableCell's and TableHead's
+ * `[&:has([role=checkbox])]:pr-0`, TableBody's `[&_tr:last-child]:border-0`).
+ * Today's side takes them too, so these are the only classes K1 adds; each is
+ * proven against the source by .cutover/k1-modifiers.ts.
+ */
+const CARRY: Partial<Record<Part, Record<string, string>>> = {
+  "<TableCell>": {
+    "ledger-picks": "[&:has([role=checkbox])]:pr-space-3",
+    "ledger-picks-stacks":
+      "[&:has([role=checkbox])]:pr-space-3 max-phone:[&:has([role=checkbox])]:pr-0",
+  },
+  "<TableHead>": { caps: "[&:has([role=checkbox])]:pr-space-3" },
+  "<TableRow>": {
+    unruled: "[&:is(tbody>tr):last-child]:border-b-none",
+    stacks: "max-phone:[&:is(tbody>tr):last-child]:border-b",
+    "stacks-ruled": "max-phone:[&:is(tbody>tr):last-child]:border-b-none",
+    "picks-stacks": "[&:is(tbody>tr):last-child]:border-b-none",
+  },
+};
+
+/**
  * The class string at a site: the `attr="…"` value that starts on the line,
  * or the string literal the line opens (a branch of a `class={[…]}` list),
  * read across lines. `{…}` interpolations stay in it for the cases to fill.
@@ -302,8 +325,9 @@ function render(
     "<TableHead>": tableHeadVariants,
     "<TableRow>": tableRowVariants,
   }[part];
+  const carry = CARRY[part]?.[String(props.variant)];
   return {
-    today: cn(BASE[part], consumer),
+    today: cn(BASE[part], consumer, carry),
     k1: cn(recipe(props), rest || undefined),
   };
 }
