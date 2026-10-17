@@ -1,15 +1,17 @@
 <script lang="ts" module>
   import type { HTMLAttributes } from "svelte/elements";
+  import type { VariantProps } from "tailwind-variants";
   import { restOffscreen } from "#lib/cawco/motion/rest.js";
-  import type { WithElementRef } from "#lib/utils.js";
+  import { tv, type WithElementRef } from "#lib/utils.js";
   import type { SizeVariant } from "./size-context";
 
   export type ThinkingIndicatorProps = WithElementRef<
     HTMLAttributes<HTMLSpanElement>
-  > & {
-    showIcon?: boolean;
-    size?: SizeVariant;
-  };
+  > &
+    ThinkingIndicatorLooks & {
+      showIcon?: boolean;
+      size?: SizeVariant;
+    };
 
   const circle =
     "M 12 8 C 14.21 8 16 9.79 16 12 C 16 14.21 14.21 16 12 16 C 9.79 16 8 14.21 8 12 C 8 9.79 9.79 8 12 8 Z";
@@ -22,6 +24,16 @@
   ];
   const STILL = [{ name: "still", d: infinity }];
   const words = ["Thinking", "Moonwalking", "Planning", "Refining"];
+
+  /** Its callers' looks: inline in a line that pads it, its mark and words
+      the line's gap apart (`--indicator-gap`). */
+  export const thinkingIndicatorVariants = tv({
+    variants: { fit: { inline: "gap-(--indicator-gap) p-0" } },
+  });
+
+  export type ThinkingIndicatorLooks = VariantProps<
+    typeof thinkingIndicatorVariants
+  >;
 </script>
 
 <script lang="ts">
@@ -33,6 +45,7 @@
     class: className,
     showIcon = true,
     size,
+    fit,
     ref = $bindable(null),
     ...restProps
   }: ThinkingIndicatorProps = $props();
@@ -48,7 +61,8 @@
 
 <span
   class={cn(
-    "flex items-center gap-space-2 px-space-3 py-space-2 font-normal text-ink-muted",
+    "flex items-center gap-space-2 px-space-3 py-space-2 font-family-inherit font-normal text-ink-muted",
+    thinkingIndicatorVariants({ fit }),
     className
   )}
   bind:this={ref}
@@ -106,10 +120,13 @@
         <span class="motion-safe:relative motion-safe:inline-block"
           >{word}
           {#if motion.current}
-            <!-- literal: 300% (three words wide) -->
+            <!-- literal: 300% (three words wide). The band is the old
+                 gradient's geometry: ink-strong at its middle, fading to
+                 nothing 15% of its width either side. -->
             <span
-              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:w-(--sheen-width) motion-safe:text-ink-strong"
+              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:w-(--sheen-width) motion-safe:text-ink-strong motion-safe:mask-(--sheen-band)"
               data-slot="sheen"
+              style:--sheen-band={"linear-gradient(90deg, transparent 35%, var(--mask-opaque) 50%, transparent 65%)"}
               style:--sheen-width="300%"
               ><span class="motion-safe:inline-block" data-slot="sheen-word"
                 >{word}</span
@@ -123,25 +140,8 @@
 </span>
 
 <style>
-  /* residual: unmapped */
-  [data-slot="thinking-indicator"] {
-    font-family: inherit;
-  }
-  /* The band is the old gradient's geometry: three words wide, ink-strong
-     at its middle, fading to nothing 15% of its width either side. It
-     enters from the right and leaves on the left once a breath. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="sheen"] {
-      mask-image: linear-gradient(
-        90deg,
-        transparent 35%,
-        var(--mask-opaque) 50%,
-        transparent 65%
-      );
-    }
-  }
-
-  /* Every beat here is the breath (--breath): each word stands for two of
+  /* The band enters from the right and leaves on the left once a breath.
+     Every beat here is the breath (--breath): each word stands for two of
      them in an eight-breath cycle, the marks trade places on a three-breath
      loop, and the light crosses a word once a breath. */
   /* residual: keyframes */

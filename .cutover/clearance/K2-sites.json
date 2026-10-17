@@ -1,0 +1,6028 @@
+[
+  {
+    "file": "src/lib/cawco/config/EditorFooter.svelte",
+    "line": 132,
+    "set": "8",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 130,
+        "attr": "class",
+        "props": {
+          "data-delete": "data-delete",
+          "disabled": "disabled={down !== null || saving}",
+          "failed": "{failed}",
+          "icon": "icon={IconTrash}",
+          "label": "label={deleteLabel}",
+          "onclick": "onclick={ondelete}",
+          "pending": "pending={deleting}",
+          "pendingLabel": "pendingLabel={configureWords.deleting}",
+          "title": "title={down ?? undefined}",
+          "type": "type=\"button\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted max-phone:hidden\"",
+        "alts": ["text-ink-muted max-phone:hidden"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/DelegateTypeEditor.svelte",
+    "line": 286,
+    "set": "8",
+    "part": "Button",
+    "flagged": ["min-w-0", "max-w-112"],
+    "instances": [
+      {
+        "line": 285,
+        "attr": "class",
+        "wrapper": "ModelCombobox",
+        "props": {
+          "harness": "harness={draft.harness}",
+          "onchoose": "onchoose={(model) => {\n          draft.model = model;\n          touched.model = true;\n        }}",
+          "size": "size=\"default\"",
+          "value": "value={draft.model}"
+        },
+        "classSource": "class=\"w-full min-w-0 max-w-112\"",
+        "alts": ["w-full min-w-0 max-w-112"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/DelegateTypeEditor.svelte",
+    "line": 327,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 325,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"type-skills\"",
+          "placeholder": "placeholder=\"svelte-foundations:coding, ui-observer\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@10835": "bind:value={skillsText}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/DelegateTypeEditor.svelte",
+    "line": 337,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 335,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"type-deny\"",
+          "placeholder": "placeholder=\"Write, Edit, NotebookEdit\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@11101": "bind:value={denyToolsText}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/decisions/DecisionPage.svelte",
+    "line": 369,
+    "set": "9",
+    "part": "Button",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 367,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Send\"",
+          "disabled": "disabled={!note.trim()}",
+          "icon": "icon={IconSend}",
+          "pending": "pending={sendingNote}",
+          "size": "size=\"icon\"",
+          "style": "style=\"--btn-icon: 16px\"",
+          "type": "type=\"submit\"",
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class=\"size-c-composer-field flex-none rounded-xs\"",
+        "alts": ["size-c-composer-field flex-none rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/decisions/DecisionPage.svelte",
+    "line": 382,
+    "set": "9",
+    "part": "Button",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 380,
+        "attr": "class",
+        "props": {
+          "data-primary": "data-primary",
+          "failed": "{failed}",
+          "label": "label={primary.label}",
+          "onclick": "onclick={() => act(primary.act)}",
+          "pending": "pending={acting || shown?.state === \"making\"}",
+          "pendingLabel": "pendingLabel={primary.pendingLabel}"
+        },
+        "classSource": "class=\"h-c-composer-field rounded-xs\"",
+        "alts": ["h-c-composer-field rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/decisions/DecisionPage.svelte",
+    "line": 352,
+    "set": "9",
+    "part": "Textarea",
+    "flagged": [
+      "min-w-0",
+      "border-transparent",
+      "bg-transparent",
+      "px-0",
+      "py-space-2",
+      "leading-(--note-leading)",
+      "shadow-none",
+      "coarse:text-(length:--note-fs)",
+      "max-phone:text-(length:--note-fs)",
+      "placeholder-shown:truncate"
+    ],
+    "instances": [
+      {
+        "line": 349,
+        "attr": "class",
+        "props": {
+          "data-note": "data-note",
+          "aria-label": "aria-label=\"Add a note for the session\"",
+          "style": "style=\"--note-max-h: 200px; --note-leading: 1.25; --note-fs: max(16px, var(--text-body))\"",
+          "oninput": "oninput={() => {\n          refusal = null;\n        }}",
+          "onkeydown": "onkeydown={(event) => {\n          if (event.key === \"Enter\" && !event.shiftKey && !event.isComposing) {\n            event.preventDefault();\n            sendNote();\n          }\n        }}",
+          "placeholder": "placeholder=\"Add a note…\"",
+          "rows": "rows={1}",
+          "BindDirective@11939": "bind:value={note}"
+        },
+        "classSource": "class=\"max-h-(--note-max-h) min-h-c-composer-field min-w-0 flex-auto border-transparent bg-transparent px-0 py-space-2 leading-(--note-leading) shadow-none coarse:text-(length:--note-fs) max-phone:text-(length:--note-fs) placeholder-shown:truncate\"",
+        "alts": [
+          "max-h-(--note-max-h) min-h-c-composer-field min-w-0 flex-auto border-transparent bg-transparent px-0 py-space-2 leading-(--note-leading) shadow-none coarse:text-(length:--note-fs) max-phone:text-(length:--note-fs) placeholder-shown:truncate"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/CawPanel.svelte",
+    "line": 243,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["text-ink-muted", "hover:text-ink-strong"],
+    "instances": [
+      {
+        "line": 239,
+        "attr": "class",
+        "props": {
+          "data-clear": "data-clear",
+          "aria-label": "aria-label=\"Clear all {noticeCount} notices\"",
+          "data-box": "data-box",
+          "onclick": "onclick={clearAll}",
+          "size": "size=\"xs\"",
+          "style": "style=\"--clear-pull: -4px; --clear-hang: calc(-1 * (1px + 8px + 0.07em));\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"ms-auto me-(--clear-hang) my-(--clear-pull) self-center text-ink-muted hover:text-ink-strong\"",
+        "alts": [
+          "ms-auto me-(--clear-hang) my-(--clear-pull) self-center text-ink-muted hover:text-ink-strong"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/MovedLogins.svelte",
+    "line": 119,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "aria-expanded:bg-transparent",
+      "hover:aria-expanded:bg-surface-hover"
+    ],
+    "instances": [
+      {
+        "line": 115,
+        "attr": "class",
+        "props": {
+          "data-toggle": "data-toggle",
+          "aria-controls": "aria-controls=\"moved-done\"",
+          "aria-expanded": "aria-expanded={open}",
+          "onclick": "onclick={() => {\n            open = !open;\n          }}",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"me-(--hang) aria-expanded:bg-transparent hover:aria-expanded:bg-surface-hover\"",
+        "alts": [
+          "me-(--hang) aria-expanded:bg-transparent hover:aria-expanded:bg-surface-hover"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 713,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-fail-bg",
+      "text-status-fail-ink",
+      "hover:bg-status-fail-bg",
+      "hover:text-status-fail-ink"
+    ],
+    "instances": [
+      {
+        "line": 710,
+        "attr": "class",
+        "props": {
+          "data-deny": "data-deny",
+          "aria-label": "aria-label=\"Deny {item.ask} on {item.title}\"",
+          "disabled": "disabled={held || (answering && pressed !== \"deny\")}",
+          "failed": "failed={answerRefused !== null && pressed === \"deny\"}",
+          "icon": "icon={IconClose}",
+          "label": "label=\"Deny\"",
+          "onclick": "onclick={() => answer(\"deny\")}",
+          "onkeydown": "{onkeydown}",
+          "pending": "pending={answering && pressed === \"deny\"}",
+          "pendingLabel": "pendingLabel=\"Denying…\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink\"",
+        "alts": [
+          "border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 728,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-done-bg",
+      "text-status-done-ink",
+      "hover:bg-status-done-bg",
+      "hover:text-status-done-ink"
+    ],
+    "instances": [
+      {
+        "line": 725,
+        "attr": "class",
+        "props": {
+          "data-approve": "data-approve",
+          "aria-label": "aria-label=\"Approve {item.ask} on {item.title}\"",
+          "disabled": "disabled={held || (answering && pressed !== \"allow\")}",
+          "failed": "failed={answerRefused !== null && pressed === \"allow\"}",
+          "icon": "icon={IconTick}",
+          "label": "label=\"Approve\"",
+          "onclick": "onclick={() => answer(\"allow\")}",
+          "onkeydown": "{onkeydown}",
+          "pending": "pending={answering && pressed === \"allow\"}",
+          "pendingLabel": "pendingLabel=\"Approving…\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink\"",
+        "alts": [
+          "border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 758,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["border-transparent"],
+    "instances": [
+      {
+        "line": 757,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={stale || choosing === true}",
+          "failed": "failed={choiceRefusal !== null}",
+          "label": "label={UPSTREAM_WORDS.keepOff}",
+          "onclick": "onclick={() => choose(false)}",
+          "pending": "pending={choosing === false}",
+          "pendingLabel": "pendingLabel=\"Saving…\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent\"",
+        "alts": ["border-transparent"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 769,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["border-transparent"],
+    "instances": [
+      {
+        "line": 768,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={stale || choosing === false}",
+          "label": "label={UPSTREAM_WORDS.allow}",
+          "onclick": "onclick={() => choose(true)}",
+          "pending": "pending={choosing === true}",
+          "pendingLabel": "pendingLabel=\"Saving…\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent\"",
+        "alts": ["border-transparent"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 794,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-fail-bg",
+      "text-status-fail-ink",
+      "hover:bg-status-fail-bg",
+      "hover:text-status-fail-ink"
+    ],
+    "instances": [
+      {
+        "line": 791,
+        "attr": "class",
+        "props": {
+          "data-deny": "data-deny",
+          "aria-label": "aria-label=\"Deny {who}\"",
+          "disabled": "disabled={held || admitting === true}",
+          "icon": "icon={IconClose}",
+          "label": "label=\"Deny\"",
+          "onclick": "onclick={() => admitOrDeny(false)}",
+          "pending": "pending={admitting === false}",
+          "pendingLabel": "pendingLabel=\"Denying…\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink\"",
+        "alts": [
+          "border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 807,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-done-bg",
+      "text-status-done-ink",
+      "hover:bg-status-done-bg",
+      "hover:text-status-done-ink"
+    ],
+    "instances": [
+      {
+        "line": 804,
+        "attr": "class",
+        "props": {
+          "data-approve": "data-approve",
+          "aria-label": "aria-label=\"{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}\"",
+          "disabled": "disabled={held || admitting === false}",
+          "icon": "icon={IconTick}",
+          "label": "label={item.kind === \"pairing\" ? \"Approve\" : \"Admit\"}",
+          "onclick": "onclick={() => admitOrDeny(true)}",
+          "pending": "pending={admitting === true}",
+          "pendingLabel": "pendingLabel={item.kind === \"pairing\" ? \"Approving…\" : \"Admitting…\"}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink\"",
+        "alts": [
+          "border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 830,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-fail-bg",
+      "text-status-fail-ink",
+      "hover:bg-status-fail-bg",
+      "hover:text-status-fail-ink"
+    ],
+    "instances": [
+      {
+        "line": 827,
+        "attr": "class",
+        "props": {
+          "data-deny": "data-deny",
+          "aria-label": "aria-label=\"Deny {item.action.tool} on {item.action.connection}\"",
+          "disabled": "disabled={held || deciding}",
+          "onclick": "onclick={() => decide(\"deny\")}",
+          "onkeydown": "{onkeydown}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink\"",
+        "alts": [
+          "border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/NeedsCard.svelte",
+    "line": 843,
+    "set": "5",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-done-bg",
+      "text-status-done-ink",
+      "hover:bg-status-done-bg",
+      "hover:text-status-done-ink"
+    ],
+    "instances": [
+      {
+        "line": 840,
+        "attr": "class",
+        "props": {
+          "data-approve": "data-approve",
+          "aria-label": "aria-label=\"Approve {item.action.tool} on {item.action.connection}\"",
+          "disabled": "disabled={held || deciding}",
+          "onclick": "onclick={() => decide(\"approve\")}",
+          "onkeydown": "{onkeydown}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink\"",
+        "alts": [
+          "border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/UpdateCard.svelte",
+    "line": 374,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["min-w-0"],
+    "instances": [
+      {
+        "line": 371,
+        "attr": "class",
+        "props": {
+          "data-settings": "data-settings",
+          "href": "href=\"/config/updates\"",
+          "label": "label=\"Configure update behaviour\"",
+          "size": "size=\"sm\"",
+          "style": "style=\"--settings-hang: calc(-1 * (1px + 11px));\"",
+          "variant": "variant=\"link\""
+        },
+        "classSource": "class={[\n                \"min-w-0 shrink\",\n                notes !== null && \"ms-(--settings-hang) me-auto\",\n                notes === null && \"last:me-(--settings-hang)\",\n              ]}",
+        "alts": [
+          "min-w-0 shrink ms-(--settings-hang) me-auto last:me-(--settings-hang)",
+          "min-w-0 shrink ms-(--settings-hang) me-auto",
+          "min-w-0 shrink last:me-(--settings-hang)",
+          "min-w-0 shrink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/UpdateCard.svelte",
+    "line": 419,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["-me-px"],
+    "instances": [
+      {
+        "line": 418,
+        "attr": "class",
+        "props": {
+          "label": "label={ACTS[action]}",
+          "onclick": "onclick={() => act(action)}",
+          "size": "size=\"sm\""
+        },
+        "classSource": "class=\"-me-px\"",
+        "alts": ["-me-px"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/UpdateCard.svelte",
+    "line": 235,
+    "set": "5",
+    "part": "Spinner",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 235,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"size-space-4 shrink-0 text-ink-muted\"",
+        "alts": ["size-space-4 shrink-0 text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/KeyValueRows.svelte",
+    "line": 61,
+    "set": "7",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 59,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Remove {row.key || 'this line'}\"",
+          "disabled": "disabled={index === rows.length - 1}",
+          "onclick": "onclick={() => rows.splice(index, 1)}",
+          "size": "size=\"icon-sm\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/KeyValueRows.svelte",
+    "line": 43,
+    "set": "7",
+    "part": "Input",
+    "flagged": ["font-mono", "text-meta"],
+    "instances": [
+      {
+        "line": 40,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"{legend} name\"",
+          "autocomplete": "autocomplete=\"off\"",
+          "oninput": "oninput={settle}",
+          "placeholder": "placeholder={keyPlaceholder}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@1621": "bind:value={row.key}"
+        },
+        "classSource": "class=\"h-space-8 flex-1 font-mono text-meta\"",
+        "alts": ["h-space-8 flex-1 font-mono text-meta"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/KeyValueRows.svelte",
+    "line": 52,
+    "set": "7",
+    "part": "Input",
+    "flagged": ["font-mono", "text-meta"],
+    "instances": [
+      {
+        "line": 49,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"{legend} value\"",
+          "autocomplete": "autocomplete=\"off\"",
+          "style": "style=\"--value-basis: 0%; --value-grow: 2\"",
+          "oninput": "oninput={settle}",
+          "placeholder": "placeholder={valuePlaceholder}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@1965": "bind:value={row.value}"
+        },
+        "classSource": "class=\"h-space-8 grow-(--value-grow) basis-(--value-basis) font-mono text-meta\"",
+        "alts": [
+          "h-space-8 grow-(--value-grow) basis-(--value-basis) font-mono text-meta"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ModelCombobox.svelte",
+    "line": 145,
+    "set": "7",
+    "part": "Button",
+    "flagged": ["gap-2"],
+    "instances": [
+      {
+        "line": 141,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@5793": "{...props}",
+          "aria-expanded": "aria-expanded={open}",
+          "aria-label": "aria-label={unreported ? \"Model, not reported yet\" : \"Model\"}",
+          "role": "role=\"combobox\"",
+          "size": "{size}",
+          "title": "title={unreported\n          ? \"Read from this session's next turn — it has not said which model answers\"\n          : value || \"The model the harness picks for itself\"}",
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class=\"justify-between gap-2 {className}\"",
+        "alts": ["justify-between gap-2"],
+        "unresolved": ["className"]
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ModelCombobox.svelte",
+    "line": 165,
+    "set": "7",
+    "part": "PopoverContent",
+    "flagged": ["w-80", "p-0"],
+    "instances": [
+      {
+        "line": 165,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"w-80 p-0\"",
+        "alts": ["w-80 p-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/PeekPane.svelte",
+    "line": 307,
+    "set": "7",
+    "part": "Button",
+    "flagged": ["-mr-1.5"],
+    "instances": [
+      {
+        "line": 306,
+        "attr": "class",
+        "props": {
+          "href": "href={target.href}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"-mr-1.5 shrink-0\"",
+        "alts": ["-mr-1.5 shrink-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/PeekPane.svelte",
+    "line": 434,
+    "set": "7",
+    "part": "Button",
+    "flagged": [
+      "border-status-fail-ink",
+      "bg-surface-recess",
+      "text-ink-strong",
+      "hover:border-status-fail-ink",
+      "hover:bg-surface-recess",
+      "hover:text-ink-strong"
+    ],
+    "instances": [
+      {
+        "line": 431,
+        "attr": "class",
+        "props": {
+          "data-deny": "data-deny",
+          "aria-label": "aria-label=\"Deny {summary}\"",
+          "onclick": "onclick={() => answer(request, \"deny\")}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-status-fail-ink bg-surface-recess text-ink-strong hover:border-status-fail-ink hover:bg-surface-recess hover:text-ink-strong\"",
+        "alts": [
+          "border-status-fail-ink bg-surface-recess text-ink-strong hover:border-status-fail-ink hover:bg-surface-recess hover:text-ink-strong"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/PeekPane.svelte",
+    "line": 445,
+    "set": "7",
+    "part": "Button",
+    "flagged": [
+      "border-status-done-ink",
+      "bg-surface-recess",
+      "text-ink-strong",
+      "hover:border-status-done-ink",
+      "hover:bg-surface-recess",
+      "hover:text-ink-strong"
+    ],
+    "instances": [
+      {
+        "line": 442,
+        "attr": "class",
+        "props": {
+          "data-approve": "data-approve",
+          "aria-label": "aria-label=\"Approve {summary}\"",
+          "onclick": "onclick={() => answer(request, \"allow\")}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-status-done-ink bg-surface-recess text-ink-strong hover:border-status-done-ink hover:bg-surface-recess hover:text-ink-strong\"",
+        "alts": [
+          "border-status-done-ink bg-surface-recess text-ink-strong hover:border-status-done-ink hover:bg-surface-recess hover:text-ink-strong"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/plan/PlanPane.svelte",
+    "line": 255,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["px-(--more-px)"],
+    "instances": [
+      {
+        "line": 253,
+        "attr": "class",
+        "props": {
+          "data-more": "data-more",
+          "href": "href=\"/project/{encodeURIComponent(\n            projectId\n          )}?view=canvas&task={encodeURIComponent(plan.taskId)}\"",
+          "label": "label=\"Open in canvas\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"link\""
+        },
+        "classSource": "class=\"self-start px-(--more-px)\"",
+        "alts": ["self-start px-(--more-px)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/PreviewPane.svelte",
+    "line": 1669,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["px-0"],
+    "instances": [
+      {
+        "line": 1668,
+        "attr": "class",
+        "props": {
+          "href": "href=\"/config/previews\"",
+          "label": "label=\"Preview settings\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"link\""
+        },
+        "classSource": "class=\"px-0\"",
+        "alts": ["px-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/PreviewPane.svelte",
+    "line": 1861,
+    "set": "5",
+    "part": "Button",
+    "flagged": ["px-0"],
+    "instances": [
+      {
+        "line": 1860,
+        "attr": "class",
+        "props": {
+          "href": "href={fleet.sessionHref(owner.id)}",
+          "label": "label={`Open ${ownerName}`}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"link\""
+        },
+        "classSource": "class=\"px-0\"",
+        "alts": ["px-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/PreviewPane.svelte",
+    "line": 1564,
+    "set": "5",
+    "part": "PopoverContent",
+    "flagged": ["p-space-2", "gap-0"],
+    "instances": [
+      {
+        "line": 1561,
+        "attr": "class",
+        "props": {
+          "data-pin-list-pop": "data-pin-list-pop",
+          "align": "align=\"end\"",
+          "BindDirective@52355": "bind:ref={listPanel}",
+          "customAnchor": "customAnchor={wellCorner}",
+          "onEscapeKeydown": "onEscapeKeydown={(event) => {\n        // The panel's escape layer takes Esc before the window hears it, so\n        // Esc unwinds from the innermost here: the card, then Comment or\n        // Draw back to Interact, then the panel itself; the split's\n        // expansion is the next Esc's.\n        if (openPin || mode !== \"interact\") {\n          event.preventDefault();\n          pressKey(\"Escape\");\n        }\n      }}",
+          "onInteractOutside": "onInteractOutside={(event) => event.preventDefault()}",
+          "onOpenAutoFocus": "onOpenAutoFocus={(event) => event.preventDefault()}",
+          "side": "side=\"bottom\"",
+          "sideOffset": "sideOffset={GUTTER}",
+          "style": "style={`--pin-list-room: ${wellBox.h}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pin-list-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}",
+          "trapFocus": "trapFocus={false}"
+        },
+        "classSource": "class=\"w-(--pin-list-w) max-h-(--pin-list-h) p-space-2 gap-0\"",
+        "alts": ["w-(--pin-list-w) max-h-(--pin-list-h) p-space-2 gap-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 1220,
+    "set": "6",
+    "part": "Button",
+    "flagged": ["rail-configure"],
+    "instances": [
+      {
+        "line": 1216,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@47979": "{...tip}",
+          "aria-current": "aria-current={configuring ? \"page\" : undefined}",
+          "aria-label": "aria-label=\"Configure\"",
+          "href": "href={configureHref}",
+          "size": "size=\"icon-sm\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"rail-configure\"",
+        "alts": ["rail-configure"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 687,
+    "set": "6",
+    "part": "Skeleton",
+    "flagged": ["w-20"],
+    "instances": [
+      {
+        "line": 687,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-icon-sm w-20\"",
+        "alts": ["h-icon-sm w-20"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 176,
+    "set": "6",
+    "part": "SidebarMenuButton",
+    "flagged": [
+      "gap-2.5",
+      "px-2.5",
+      "text-body",
+      "gap-2.5",
+      "px-2.5",
+      "text-body",
+      "gap-2.5",
+      "px-2.5",
+      "text-body"
+    ],
+    "instances": [
+      {
+        "line": 816,
+        "attr": "class",
+        "props": {
+          "isActive": "isActive={false}"
+        },
+        "classSource": "class={NAV_ROW}",
+        "alts": ["h-c-nav-h gap-2.5 px-2.5 text-body"],
+        "unresolved": []
+      },
+      {
+        "line": 911,
+        "attr": "class",
+        "props": {
+          "isActive": "isActive={path.startsWith(\"/session\") && activeSession === null}"
+        },
+        "classSource": "class={NAV_ROW}",
+        "alts": ["h-c-nav-h gap-2.5 px-2.5 text-body"],
+        "unresolved": []
+      },
+      {
+        "line": 938,
+        "attr": "class",
+        "props": {
+          "isActive": "isActive={path.startsWith(\"/workflows\")}"
+        },
+        "classSource": "class={NAV_ROW}",
+        "alts": ["h-c-nav-h gap-2.5 px-2.5 text-body"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 179,
+    "set": "6",
+    "part": "SidebarMenuButton",
+    "flagged": ["gap-2.5", "pl-2.5", "pr-2", "py-0"],
+    "instances": [
+      {
+        "line": 1053,
+        "attr": "class",
+        "props": {
+          "isActive": "isActive={here}"
+        },
+        "classSource": "class={LIST_ROW}",
+        "alts": ["h-(--rail-list-row-h) gap-2.5 pl-2.5 pr-2 py-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 1193,
+    "set": "6",
+    "part": "SidebarMenuButton",
+    "flagged": ["p-0"],
+    "instances": [
+      {
+        "line": 1190,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@47019": "{...tip}",
+          "aria-label": "aria-label=\"You\""
+        },
+        "classSource": "class=\"touch-hit size-(--rail-avatar-size) justify-center overflow-visible p-0\"",
+        "alts": [
+          "touch-hit size-(--rail-avatar-size) justify-center overflow-visible p-0"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 986,
+    "set": "6",
+    "part": "DropdownMenuContent",
+    "flagged": ["w-44"],
+    "instances": [
+      {
+        "line": 986,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"w-44\"",
+        "alts": ["w-44"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 186,
+    "set": "6",
+    "part": "SidebarMenuSubButton",
+    "flagged": [
+      "gap-(--row-compact-gap)",
+      "pl-(--row-compact-gap)",
+      "pr-(--row-compact-pad-end)"
+    ],
+    "instances": [
+      {
+        "line": 1133,
+        "attr": "class",
+        "props": {
+          "data-branch-item": "data-branch-item",
+          "onclick": "onclick={() => newSession({ projectId: project.id })}"
+        },
+        "classSource": "class=\"{SUB_ROW} text-ink-muted\"",
+        "alts": [
+          "h-(--row-compact-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end) text-ink-muted"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 1134,
+    "set": "6",
+    "part": "SidebarMenuSubButton",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 1133,
+        "attr": "class",
+        "props": {
+          "data-branch-item": "data-branch-item",
+          "onclick": "onclick={() => newSession({ projectId: project.id })}"
+        },
+        "classSource": "class=\"{SUB_ROW} text-ink-muted\"",
+        "alts": [
+          "h-(--row-compact-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end) text-ink-muted"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 199,
+    "set": "6",
+    "part": "SidebarGroup",
+    "flagged": [
+      "px-2",
+      "py-space-1",
+      "px-2",
+      "py-space-1",
+      "px-2",
+      "py-space-1",
+      "px-2",
+      "py-space-1"
+    ],
+    "instances": [
+      {
+        "line": 685,
+        "attr": "class",
+        "props": {
+          "aria-busy": "aria-busy=\"true\"",
+          "aria-label": "aria-label=\"Loading\"",
+          "data-flip": "data-flip"
+        },
+        "classSource": "class={GROUP}",
+        "alts": ["px-2 py-space-1"],
+        "unresolved": []
+      },
+      {
+        "line": 906,
+        "attr": "class",
+        "props": {},
+        "classSource": "class={GROUP}",
+        "alts": ["px-2 py-space-1"],
+        "unresolved": []
+      },
+      {
+        "line": 963,
+        "attr": "class",
+        "props": {
+          "data-flip": "data-flip",
+          "AttachTag@37093": "{@attach echoBeat()}"
+        },
+        "classSource": "class={GROUP}",
+        "alts": ["px-2 py-space-1"],
+        "unresolved": []
+      },
+      {
+        "line": 1164,
+        "attr": "class",
+        "props": {
+          "data-flip": "data-flip"
+        },
+        "classSource": "class={GROUP}",
+        "alts": ["px-2 py-space-1"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 229,
+    "set": "6",
+    "part": "SidebarGroupLabel",
+    "flagged": ["px-2.5", "px-2.5"],
+    "instances": [
+      {
+        "line": 964,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"{GROUP_LABEL} {CONTROL_LABEL}\"",
+        "alts": ["px-2.5 pr-space-1 pointer-coarse:h-11"],
+        "unresolved": []
+      },
+      {
+        "line": 1165,
+        "attr": "class",
+        "props": {},
+        "classSource": "class={GROUP_LABEL}",
+        "alts": ["px-2.5"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 233,
+    "set": "6",
+    "part": "SidebarGroupLabel",
+    "flagged": ["pr-space-1", "pointer-coarse:h-11"],
+    "instances": [
+      {
+        "line": 964,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"{GROUP_LABEL} {CONTROL_LABEL}\"",
+        "alts": ["px-2.5 pr-space-1 pointer-coarse:h-11"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 928,
+    "set": "6",
+    "part": "SidebarMenuBadge",
+    "flagged": [
+      "bg-status-live-bg",
+      "text-status-live-ink!",
+      "data-blocked:bg-status-attn-bg",
+      "data-blocked:text-status-attn-ink!"
+    ],
+    "instances": [
+      {
+        "line": 927,
+        "attr": "class",
+        "props": {
+          "data-blocked": "data-blocked={cawco.blockedCount > 0 || undefined}",
+          "data-flip": "data-flip=\"pop box\""
+        },
+        "classSource": "class=\"bg-status-live-bg text-status-live-ink! data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink!\"",
+        "alts": [
+          "bg-status-live-bg text-status-live-ink! data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink!"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 235,
+    "set": "6",
+    "part": "SidebarMenu",
+    "flagged": ["gap-0.5", "gap-0.5"],
+    "instances": [
+      {
+        "line": 907,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Places\"",
+          "AttachTag@34624": "{@attach highlight(PILL)}"
+        },
+        "classSource": "class={MENU}",
+        "alts": ["gap-0.5"],
+        "unresolved": []
+      },
+      {
+        "line": 1031,
+        "attr": "class",
+        "props": {
+          "AttachTag@39885": "{@attach highlight(PILL)}",
+          "AttachTag@39923": "{@attach holdWhileInside(\"rail:\")}"
+        },
+        "classSource": "class={MENU}",
+        "alts": ["gap-0.5"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 814,
+    "set": "6",
+    "part": "SidebarMenu",
+    "flagged": ["min-w-0"],
+    "instances": [
+      {
+        "line": 814,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Workspace\""
+        },
+        "classSource": "class=\"min-w-0 flex-1\"",
+        "alts": ["min-w-0 flex-1"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Sidebar.svelte",
+    "line": 874,
+    "set": "6",
+    "part": "SidebarContent",
+    "flagged": ["gap-0", "py-space-1"],
+    "instances": [
+      {
+        "line": 873,
+        "attr": "class",
+        "props": {
+          "AttachTag@33106": "{@attach reflow()}",
+          "AttachTag@33129": "{@attach scroller}"
+        },
+        "classSource": "class=\"gap-0 py-space-1\"",
+        "alts": ["gap-0 py-space-1"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/NewTaskForm.svelte",
+    "line": 136,
+    "set": "3",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 135,
+        "attr": "class",
+        "props": {
+          "onclick": "onclick={() => {\n      open = true;\n    }}",
+          "press": "press=\"tint\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"justify-start text-ink-muted\"",
+        "alts": ["justify-start text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFields.svelte",
+    "line": 115,
+    "set": "3",
+    "part": "Button",
+    "flagged": [
+      "opacity-0",
+      "group-hover/value:opacity-100",
+      "focus-visible:opacity-100",
+      "coarse:opacity-100"
+    ],
+    "instances": [
+      {
+        "line": 112,
+        "attr": "class",
+        "props": {
+          "data-drop": "data-drop",
+          "aria-label": "aria-label=\"Remove {key}\"",
+          "onclick": "onclick={() => save({ [key]: \"\" })}",
+          "size": "size=\"icon-xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"opacity-0 group-hover/value:opacity-100 focus-visible:opacity-100 coarse:opacity-100\"",
+        "alts": [
+          "opacity-0 group-hover/value:opacity-100 focus-visible:opacity-100 coarse:opacity-100"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFields.svelte",
+    "line": 165,
+    "set": "3",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 164,
+        "attr": "class",
+        "props": {
+          "onclick": "onclick={() => {\n        adding = true;\n      }}",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"self-start text-ink-muted\"",
+        "alts": ["self-start text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskNeeds.svelte",
+    "line": 214,
+    "set": "3",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-fail-bg",
+      "text-status-fail-ink",
+      "hover:bg-status-fail-bg",
+      "hover:text-status-fail-ink"
+    ],
+    "instances": [
+      {
+        "line": 211,
+        "attr": "class",
+        "props": {
+          "data-deny": "data-deny",
+          "aria-label": "aria-label=\"Deny {action.tool} on {action.connection}\"",
+          "disabled": "disabled={deciding !== null}",
+          "onclick": "onclick={() => decide(action, \"deny\")}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink\"",
+        "alts": [
+          "border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskNeeds.svelte",
+    "line": 226,
+    "set": "3",
+    "part": "Button",
+    "flagged": [
+      "border-transparent",
+      "bg-status-done-bg",
+      "text-status-done-ink",
+      "hover:bg-status-done-bg",
+      "hover:text-status-done-ink"
+    ],
+    "instances": [
+      {
+        "line": 223,
+        "attr": "class",
+        "props": {
+          "data-approve": "data-approve",
+          "aria-label": "aria-label=\"Approve {action.tool} on {action.connection}\"",
+          "disabled": "disabled={deciding !== null}",
+          "onclick": "onclick={() => decide(action, \"approve\")}",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink\"",
+        "alts": [
+          "border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TextSection.svelte",
+    "line": 54,
+    "set": "3",
+    "part": "Button",
+    "flagged": ["count"],
+    "instances": [
+      {
+        "line": 51,
+        "attr": "class",
+        "props": {
+          "data-text-section-count": "data-text-section-count",
+          "data-box": "data-box",
+          "onclick": "onclick={() => {\n          draft = text;\n        }}",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"count\"",
+        "alts": ["count"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TextSection.svelte",
+    "line": 67,
+    "set": "3",
+    "part": "Textarea",
+    "flagged": ["font-mono", "text-label"],
+    "instances": [
+      {
+        "line": 65,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label={heading}",
+          "onkeydown": "onkeydown={(event) => {\n          if (event.key === \"Escape\") {\n            event.stopPropagation();\n            draft = null;\n            problem = null;\n          }\n          if (event.key === \"Enter\" && (event.metaKey || event.ctrlKey)) {\n            save();\n          }\n        }}",
+          "spellcheck": "spellcheck=\"true\"",
+          "BindDirective@2058": "bind:value={draft}"
+        },
+        "classSource": "class=\"font-mono text-label\"",
+        "alts": ["font-mono text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TodoList.svelte",
+    "line": 238,
+    "set": "3",
+    "part": "Button",
+    "flagged": [
+      "text-ink-muted",
+      "can-hover:opacity-0",
+      "can-hover:transition-[opacity]",
+      "can-hover:dur-control",
+      "can-hover:ease-out",
+      "can-hover:group-hover:opacity-100",
+      "can-hover:focus-visible:opacity-100"
+    ],
+    "instances": [
+      {
+        "line": 236,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Add a to-do under “{todo.text}”\"",
+          "onclick": "onclick={() => {\n                addingUnder = ref;\n                addText = \"\";\n              }}",
+          "size": "size=\"icon-xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"flex-none text-ink-muted can-hover:opacity-0 can-hover:transition-[opacity] can-hover:dur-control can-hover:ease-out can-hover:group-hover:opacity-100 can-hover:focus-visible:opacity-100\"",
+        "alts": [
+          "flex-none text-ink-muted can-hover:opacity-0 can-hover:transition-[opacity] can-hover:dur-control can-hover:ease-out can-hover:group-hover:opacity-100 can-hover:focus-visible:opacity-100"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TodoList.svelte",
+    "line": 125,
+    "set": "3",
+    "part": "Input",
+    "flagged": ["text-label"],
+    "instances": [
+      {
+        "line": 122,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label={under ? `Add a to-do under ${under}` : \"Add a to-do\"}",
+          "autocomplete": "autocomplete=\"off\"",
+          "onfocus": "onfocus={() => {\n        if (!under) {\n          addingUnder = \"\";\n        }\n      }}",
+          "oninput": "oninput={(event) => {\n        addingUnder = under;\n        addText = event.currentTarget.value;\n      }}",
+          "onkeydown": "onkeydown={(event) => {\n        if (event.key === \"Escape\" && under) {\n          event.stopPropagation();\n          addingUnder = null;\n          addText = \"\";\n        }\n      }}",
+          "placeholder": "placeholder={under ? \"A step of it\" : \"Add a to-do\"}",
+          "value": "value={addingUnder === under ? addText : \"\"}"
+        },
+        "classSource": "class=\"flex-auto h-c-btn-h-sm text-label\"",
+        "alts": ["flex-auto h-c-btn-h-sm text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TodoList.svelte",
+    "line": 197,
+    "set": "3",
+    "part": "Input",
+    "flagged": ["text-label"],
+    "instances": [
+      {
+        "line": 194,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"To-do\"",
+          "autocomplete": "autocomplete=\"off\"",
+          "disabled": "disabled={busy}",
+          "onblur": "onblur={() => saveEdit(todo)}",
+          "onkeydown": "onkeydown={(event) => {\n                  if (event.key === \"Escape\") {\n                    event.stopPropagation();\n                    editing = null;\n                  }\n                }}",
+          "BindDirective@5924": "bind:value={editText}"
+        },
+        "classSource": "class=\"h-c-btn-h-sm text-label\"",
+        "alts": ["h-c-btn-h-sm text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 122,
+    "set": "7",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 121,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={!online}",
+          "failed": "{failed}",
+          "label": "label=\"Reinstall\"",
+          "onclick": "onclick={() => install(machine, spec)}",
+          "pending": "{pending}",
+          "pendingLabel": "pendingLabel=\"Installing…\"",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 202,
+    "set": "7",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 201,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={!online}",
+          "failed": "{failed}",
+          "label": "label=\"Retry\"",
+          "onclick": "onclick={() => install(machine, spec)}",
+          "pending": "{pending}",
+          "pendingLabel": "pendingLabel=\"Installing…\"",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 248,
+    "set": "7",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 247,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={!online}",
+          "failed": "{failed}",
+          "label": "label=\"Install\"",
+          "onclick": "onclick={() => install(machine, spec)}",
+          "pending": "{pending}",
+          "pendingLabel": "pendingLabel=\"Installing…\"",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 40,
+    "set": "7",
+    "part": "Badge",
+    "flagged": [
+      "min-h-6",
+      "gap-1.5",
+      "px-2",
+      "min-h-6",
+      "gap-1.5",
+      "px-2",
+      "min-h-6",
+      "gap-1.5",
+      "px-2",
+      "min-h-6",
+      "gap-1.5",
+      "px-2",
+      "min-h-6",
+      "gap-1.5",
+      "px-2"
+    ],
+    "instances": [
+      {
+        "line": 112,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} text-success-9\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 text-success-9"],
+        "unresolved": []
+      },
+      {
+        "line": 135,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} text-ink-muted\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 text-ink-muted"],
+        "unresolved": []
+      },
+      {
+        "line": 155,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@5465": "{...props}",
+          "aria-label": "aria-label=\"Why {spec.name} did not install on {machineLabel(\n                machine.hostname\n              )}\"",
+          "variant": "variant=\"destructive\""
+        },
+        "classSource": "class=\"{CHIP} cursor-pointer\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 cursor-pointer"],
+        "unresolved": []
+      },
+      {
+        "line": 217,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@7536": "{...props}",
+          "aria-label": "aria-label=\"Why {spec.name} cannot run on {machineLabel(\n              machine.hostname\n            )}\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} cursor-pointer text-ink-muted\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 cursor-pointer text-ink-muted"],
+        "unresolved": []
+      },
+      {
+        "line": 240,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@8287": "{...props}",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} text-ink-subtle\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 text-ink-subtle"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 112,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["text-success-9"],
+    "instances": [
+      {
+        "line": 112,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} text-success-9\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 text-success-9"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 135,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 135,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} text-ink-muted\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 222,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 217,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@7536": "{...props}",
+          "aria-label": "aria-label=\"Why {spec.name} cannot run on {machineLabel(\n              machine.hostname\n            )}\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} cursor-pointer text-ink-muted\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 cursor-pointer text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 240,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["text-ink-subtle"],
+    "instances": [
+      {
+        "line": 240,
+        "attr": "class",
+        "props": {
+          "SpreadAttribute@8287": "{...props}",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"{CHIP} text-ink-subtle\"",
+        "alts": ["h-auto min-h-6 gap-1.5 px-2 text-ink-subtle"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 169,
+    "set": "7",
+    "part": "PopoverContent",
+    "flagged": ["w-96", "rounded-lg", "p-0", "shadow-xl"],
+    "instances": [
+      {
+        "line": 169,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"w-96 rounded-lg p-0 shadow-xl\"",
+        "alts": ["w-96 rounded-lg p-0 shadow-xl"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ToolMatrix.svelte",
+    "line": 229,
+    "set": "7",
+    "part": "PopoverContent",
+    "flagged": ["w-80", "rounded-lg", "shadow-xl"],
+    "instances": [
+      {
+        "line": 229,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"w-80 rounded-lg shadow-xl\"",
+        "alts": ["w-80 rounded-lg shadow-xl"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/ProjectOffer.svelte",
+    "line": 92,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 91,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px\"",
+          "href": "href=\"/project/{encodeURIComponent(joined.project.id)}\"",
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/ProjectOffer.svelte",
+    "line": 99,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 97,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Put this away\"",
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px\"",
+          "icon": "icon={IconClose}",
+          "onclick": "onclick={() => dismissProjectJoin(instanceId)}",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/ProjectOffer.svelte",
+    "line": 129,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 128,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px\"",
+          "disabled": "disabled={pending !== null}",
+          "label": "label=\"Not now\"",
+          "onclick": "onclick={() => answer(\"dismiss\")}",
+          "pending": "pending={pending === \"dismiss\"}",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/ProjectOffer.svelte",
+    "line": 138,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 137,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px\"",
+          "disabled": "disabled={pending !== null}",
+          "failed": "failed={!!refused}",
+          "icon": "icon={IconFolder}",
+          "label": "label=\"Create project\"",
+          "onclick": "onclick={() => answer(\"accept\")}",
+          "pending": "pending={pending === \"accept\"}",
+          "pendingLabel": "pendingLabel=\"Making project…\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 728,
+    "set": "1",
+    "part": "Button",
+    "flagged": ["peer-data-num/place:ms-0", "text-ink-muted"],
+    "instances": [
+      {
+        "line": 726,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Minimize question\"",
+          "data-box": "data-box",
+          "onclick": "onclick={onminimize}",
+          "size": "size=\"icon-xs\"",
+          "title": "title=\"Minimize\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"touch-hit flex-none -my-space-1 ms-auto peer-data-num/place:ms-0 text-ink-muted\"",
+        "alts": [
+          "touch-hit flex-none -my-space-1 ms-auto peer-data-num/place:ms-0 text-ink-muted"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 944,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-4",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 943,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={disabledOf(\"answer\") || (pressed === null && !allAnswered)}",
+          "failed": "failed={failedOf(\"answer\")}",
+          "icon": "icon={IconCheck}",
+          "label": "label=\"Answer\"",
+          "onclick": "onclick={submitQuestion}",
+          "pending": "pending={pendingOf(\"answer\")}",
+          "pendingLabel": "pendingLabel=\"Answering…\"",
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 956,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 955,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={disabledOf(\"deny\")}",
+          "failed": "failed={failedOf(\"deny\")}",
+          "label": "label=\"Dismiss\"",
+          "onclick": "onclick={dismissQuestion}",
+          "pending": "pending={pendingOf(\"deny\")}",
+          "pendingLabel": "pendingLabel=\"Dismissing…\"",
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem\"",
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 1021,
+    "set": "1",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 1015,
+        "attr": "class",
+        "props": {
+          "data-cmd-toggle": "data-cmd-toggle",
+          "aria-expanded": "aria-expanded={commandOpen}",
+          "aria-label": "aria-label={commandOpen\n                ? \"Show the command on one line\"\n                : \"Show the whole command\"}",
+          "onclick": "onclick={() => {\n                commandOpen = !commandOpen;\n              }}",
+          "size": "size=\"icon-xs\"",
+          "title": "title={commandOpen ? \"Show less\" : \"Show the whole command\"}",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"touch-hit flex-none -my-space-1 text-ink-muted\"",
+        "alts": ["touch-hit flex-none -my-space-1 text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 1103,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium",
+      "min-w-0",
+      "text-ink-strong!",
+      "border-status-done-ink",
+      "bg-surface-recess",
+      "hover:bg-surface-recess"
+    ],
+    "instances": [
+      {
+        "line": 1102,
+        "attr": "class",
+        "props": {
+          "data-prompt-grant": "data-prompt-grant={grant}",
+          "disabled": "disabled={disabledOf(\"allow\")}",
+          "failed": "failed={failedOf(\"allow\")}",
+          "icon": "icon={IconTick}",
+          "label": "label=\"Approve\"",
+          "onclick": "onclick={() => answer(\"allow\")}",
+          "pending": "pending={pendingOf(\"allow\")}",
+          "pendingLabel": "pendingLabel=\"Approving…\"",
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 1117,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium",
+      "min-w-0",
+      "text-ink-strong!",
+      "border-status-fail-ink",
+      "bg-surface-recess",
+      "hover:bg-surface-recess"
+    ],
+    "instances": [
+      {
+        "line": 1116,
+        "attr": "class",
+        "props": {
+          "data-prompt-refuse": "data-prompt-refuse={refuse}",
+          "disabled": "disabled={disabledOf(\"deny\")}",
+          "failed": "failed={failedOf(\"deny\")}",
+          "icon": "icon={IconClose}",
+          "label": "label=\"Deny\"",
+          "onclick": "onclick={() => answer(\"deny\")}",
+          "pending": "pending={pendingOf(\"deny\")}",
+          "pendingLabel": "pendingLabel=\"Denying…\"",
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem\"",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Prompt.svelte",
+    "line": 1154,
+    "set": "1",
+    "part": "Button",
+    "flagged": [
+      "gap-(--btn-gap)",
+      "rounded-sm",
+      "px-space-3",
+      "text-label",
+      "font-medium"
+    ],
+    "instances": [
+      {
+        "line": 1153,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={disabledOf(\"always\")}",
+          "failed": "failed={failedOf(\"always\")}",
+          "icon": "icon={IconShield}",
+          "label": "label=\"Always allow {rule.short}\"",
+          "onclick": "onclick={() => answer(\"always\")}",
+          "pending": "pending={pendingOf(\"always\")}",
+          "pendingLabel": "pendingLabel=\"Allowing…\"",
+          "style": "style=\"--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem\"",
+          "variant": "variant=\"grant\""
+        },
+        "classSource": "class=\"h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium\"",
+        "alts": [
+          "h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/updates/UpdateCell.svelte",
+    "line": 72,
+    "set": "8",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 71,
+        "attr": "class",
+        "props": {
+          "label": "label=\"Retry\"",
+          "onclick": "onclick={() => updates.installNow(machine)}",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/updates/UpdateCell.svelte",
+    "line": 81,
+    "set": "8",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 79,
+        "attr": "class",
+        "props": {
+          "aria-expanded": "aria-expanded={reading}",
+          "label": "label={reading ? \"Hide the error\" : \"Read the error\"}",
+          "onclick": "onclick={() => {\n                reading = !reading;\n              }}",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/updates/UpdateCell.svelte",
+    "line": 91,
+    "set": "8",
+    "part": "Button",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 90,
+        "attr": "class",
+        "props": {
+          "label": "label=\"Cancel\"",
+          "onclick": "onclick={() => updates.cancel(machine)}",
+          "size": "size=\"xs\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"text-ink-muted\"",
+        "alts": ["text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/updates/UpdateCell.svelte",
+    "line": 34,
+    "set": "8",
+    "part": "Badge",
+    "flagged": ["min-h-6", "gap-1.5", "px-2", "py-space-1"],
+    "instances": [
+      {
+        "line": 52,
+        "attr": "class",
+        "props": {
+          "variant": "variant={cell.fail ? \"destructive\" : \"ghost\"}"
+        },
+        "classSource": "class={CHIP}",
+        "alts": [
+          "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/updates/UpdateCell.svelte",
+    "line": 48,
+    "set": "8",
+    "part": "Spinner",
+    "flagged": ["text-ink-muted"],
+    "instances": [
+      {
+        "line": 48,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"size-icon-md shrink-0 text-ink-muted\"",
+        "alts": ["size-icon-md shrink-0 text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DiffView.svelte",
+    "line": 119,
+    "set": "9",
+    "part": "Button",
+    "flagged": ["h-6", "w-6", "ml-2"],
+    "instances": [
+      {
+        "line": 118,
+        "attr": "class",
+        "props": {
+          "disabled": "disabled={!drawn || failure !== null}",
+          "onclick": "onclick={() => {\n        showModal = true;\n      }}",
+          "size": "size=\"icon-sm\"",
+          "title": "title=\"Expand diff (full view)\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"h-6 w-6 ml-2 shrink-0\"",
+        "alts": ["h-6 w-6 ml-2 shrink-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DiffView.svelte",
+    "line": 165,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["rounded-none"],
+    "instances": [
+      {
+        "line": 164,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--skeleton-h: {expected}px\""
+        },
+        "classSource": "class=\"w-full h-(--skeleton-h) rounded-none\"",
+        "alts": ["w-full h-(--skeleton-h) rounded-none"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DirectoryPicker.svelte",
+    "line": 233,
+    "set": "9",
+    "part": "Button",
+    "flagged": ["font-mono", "text-label", "font-normal"],
+    "instances": [
+      {
+        "line": 232,
+        "attr": "class",
+        "props": {
+          "onclick": "onclick={() => go(join(path, dir.name), 1)}",
+          "press": "press=\"tint\"",
+          "size": "size=\"sm\"",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"w-full justify-start font-mono text-label font-normal\"",
+        "alts": ["w-full justify-start font-mono text-label font-normal"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/SkeletonRows.svelte",
+    "line": 19,
+    "set": "8",
+    "part": "Skeleton",
+    "flagged": ["h-14"],
+    "instances": [
+      {
+        "line": 19,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-14 w-full group-data-fill:flex-none\"",
+        "alts": ["h-14 w-full group-data-fill:flex-none"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/decisions/DecisionsView.svelte",
+    "line": 245,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-64", "rounded-lg"],
+    "instances": [
+      {
+        "line": 245,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-64 w-full rounded-lg\"",
+        "alts": ["h-64 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/decisions/DecisionsView.svelte",
+    "line": 343,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["rounded-lg"],
+    "instances": [
+      {
+        "line": 342,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--skeleton-h: 90px\""
+        },
+        "classSource": "class=\"h-(--skeleton-h) w-full rounded-lg\"",
+        "alts": ["h-(--skeleton-h) w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/WorkTabs.svelte",
+    "line": 866,
+    "set": "5",
+    "part": "Skeleton",
+    "flagged": ["h-11"],
+    "instances": [
+      {
+        "line": 866,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-11 w-full\"",
+        "alts": ["h-11 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/WorkTabs.svelte",
+    "line": 779,
+    "set": "5",
+    "part": "Tabs",
+    "flagged": ["bg-transparent", "p-0"],
+    "instances": [
+      {
+        "line": 775,
+        "attr": "class",
+        "props": {
+          "data-work-tabs": "data-work-tabs",
+          "boxes": "boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })\n          .foldBoxes}",
+          "onValueChange": "onValueChange={(id: string) => choose(id as WorkTab)}",
+          "value": "value={workTab.current}",
+          "values": "values={TAB_IDS}",
+          "variant": "variant=\"folder\""
+        },
+        "classSource": "class=\"bg-transparent p-0\"",
+        "alts": ["bg-transparent p-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/StagesControl.svelte",
+    "line": 201,
+    "set": "3",
+    "part": "Skeleton",
+    "flagged": ["w-24"],
+    "instances": [
+      {
+        "line": 201,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-space-4 w-24\"",
+        "alts": ["h-space-4 w-24"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/StagesControl.svelte",
+    "line": 144,
+    "set": "3",
+    "part": "PopoverContent",
+    "flagged": ["w-80", "gap-space-2"],
+    "instances": [
+      {
+        "line": 142,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "customAnchor": "customAnchor={anchor}",
+          "side": "side=\"bottom\""
+        },
+        "classSource": "class=\"w-80 gap-space-2\"",
+        "alts": ["w-80 gap-space-2"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskPane.svelte",
+    "line": 542,
+    "set": "3",
+    "part": "Skeleton",
+    "flagged": ["rounded-md"],
+    "instances": [
+      {
+        "line": 541,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--skeleton-h: 6rem\""
+        },
+        "classSource": "class=\"h-(--skeleton-h) w-full rounded-md\"",
+        "alts": ["h-(--skeleton-h) w-full rounded-md"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskPane.svelte",
+    "line": 465,
+    "set": "3",
+    "part": "Input",
+    "flagged": ["text-title"],
+    "instances": [
+      {
+        "line": 462,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Title\"",
+          "autocomplete": "autocomplete=\"off\"",
+          "onblur": "onblur={saveTitle}",
+          "onkeydown": "onkeydown={(event) => {\n              if (event.key === \"Escape\") {\n                event.stopPropagation();\n                titleDraft = null;\n                titleProblem = null;\n              }\n            }}",
+          "BindDirective@15876": "bind:value={titleDraft}",
+          "AttachTag@15912": "{@attach (node) => node.focus()}"
+        },
+        "classSource": "class=\"text-title\"",
+        "alts": ["text-title"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 56,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 54,
+        "attr": "class",
+        "props": {
+          "data-transcript-skeleton-mark": "data-transcript-skeleton-mark"
+        },
+        "classSource": "class=\"size-space-5 flex-none rounded-xs\"",
+        "alts": ["size-space-5 flex-none rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 59,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 57,
+        "attr": "class",
+        "props": {
+          "data-transcript-skeleton-name": "data-transcript-skeleton-name",
+          "style": "style=\"--name-w: 64px\""
+        },
+        "classSource": "class=\"w-(--name-w) h-icon-sm rounded-xs\"",
+        "alts": ["w-(--name-w) h-icon-sm rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 75,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 74,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--ln-w: 52%\""
+        },
+        "classSource": "class=\"w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs\"",
+        "alts": ["w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 92,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 90,
+        "attr": "class",
+        "props": {
+          "data-transcript-skeleton-mark": "data-transcript-skeleton-mark"
+        },
+        "classSource": "class=\"size-space-5 flex-none rounded-xs\"",
+        "alts": ["size-space-5 flex-none rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 95,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 93,
+        "attr": "class",
+        "props": {
+          "data-transcript-skeleton-name": "data-transcript-skeleton-name",
+          "style": "style=\"--name-w: 64px\""
+        },
+        "classSource": "class=\"w-(--name-w) h-icon-sm rounded-xs\"",
+        "alts": ["w-(--name-w) h-icon-sm rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 108,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 107,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--ln-w: {width}\""
+        },
+        "classSource": "class=\"w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs\"",
+        "alts": ["w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 123,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs", "rail-cell"],
+    "instances": [
+      {
+        "line": 123,
+        "attr": "class",
+        "props": {
+          "data-rail-cell": "data-rail-cell"
+        },
+        "classSource": "class=\"rounded-xs rail-cell\"",
+        "alts": ["rounded-xs rail-cell"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 124,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 123,
+        "attr": "class",
+        "props": {
+          "data-box": "data-box",
+          "style": "style=\"--tk-w: 40px\""
+        },
+        "classSource": "class=\"w-(--tk-w) h-space-3 flex-none rounded-xs\"",
+        "alts": ["w-(--tk-w) h-space-3 flex-none rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 129,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 128,
+        "attr": "class",
+        "props": {
+          "data-box": "data-box",
+          "style": "style=\"--arg-w: {width}\""
+        },
+        "classSource": "class=\"w-(--arg-w) h-space-3 rounded-xs\"",
+        "alts": ["w-(--arg-w) h-space-3 rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 147,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 145,
+        "attr": "class",
+        "props": {
+          "data-transcript-skeleton-mark": "data-transcript-skeleton-mark"
+        },
+        "classSource": "class=\"size-space-5 flex-none rounded-xs\"",
+        "alts": ["size-space-5 flex-none rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 150,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 148,
+        "attr": "class",
+        "props": {
+          "data-transcript-skeleton-name": "data-transcript-skeleton-name",
+          "style": "style=\"--name-w: 64px\""
+        },
+        "classSource": "class=\"w-(--name-w) h-icon-sm rounded-xs\"",
+        "alts": ["w-(--name-w) h-icon-sm rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/TranscriptSkeleton.svelte",
+    "line": 162,
+    "set": "1",
+    "part": "Skeleton",
+    "flagged": ["rounded-xs"],
+    "instances": [
+      {
+        "line": 161,
+        "attr": "class",
+        "props": {
+          "style": "style=\"--ln-w: {width}\""
+        },
+        "classSource": "class=\"w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs\"",
+        "alts": ["w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/History.svelte",
+    "line": 316,
+    "set": "2",
+    "part": "Skeleton",
+    "flagged": ["h-24"],
+    "instances": [
+      {
+        "line": 316,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-24 w-full\"",
+        "alts": ["h-24 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/LimitsBlock.svelte",
+    "line": 225,
+    "set": "2",
+    "part": "Skeleton",
+    "flagged": ["h-7", "w-24"],
+    "instances": [
+      {
+        "line": 225,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-7 w-24\"",
+        "alts": ["h-7 w-24"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/LimitsBlock.svelte",
+    "line": 234,
+    "set": "2",
+    "part": "Skeleton",
+    "flagged": ["h-48"],
+    "instances": [
+      {
+        "line": 234,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-48 w-full\"",
+        "alts": ["h-48 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/ProjectSpend.svelte",
+    "line": 229,
+    "set": "2",
+    "part": "Skeleton",
+    "flagged": ["rounded-md"],
+    "instances": [
+      {
+        "line": 229,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-c-stat-h rounded-md\"",
+        "alts": ["h-c-stat-h rounded-md"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/ProjectSpend.svelte",
+    "line": 232,
+    "set": "2",
+    "part": "Skeleton",
+    "flagged": ["h-48", "rounded-lg"],
+    "instances": [
+      {
+        "line": 232,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-48 rounded-lg\"",
+        "alts": ["h-48 rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/ProjectSpend.svelte",
+    "line": 276,
+    "set": "2",
+    "part": "PopoverContent",
+    "flagged": ["w-80"],
+    "instances": [
+      {
+        "line": 274,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "style": "style=\"--cap-max-w: calc(100vw - 2 * var(--space-5))\""
+        },
+        "classSource": "class=\"w-80 max-w-(--cap-max-w)\"",
+        "alts": ["w-80 max-w-(--cap-max-w)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/ProjectSpend.svelte",
+    "line": 390,
+    "set": "2",
+    "part": "PopoverContent",
+    "flagged": ["w-72"],
+    "instances": [
+      {
+        "line": 390,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"w-72\"",
+        "alts": ["w-72"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/WhereItGoes.svelte",
+    "line": 558,
+    "set": "2",
+    "part": "Skeleton",
+    "flagged": ["h-6"],
+    "instances": [
+      {
+        "line": 558,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-6 w-full\"",
+        "alts": ["h-6 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/views/ViewOpenUi.svelte",
+    "line": 88,
+    "set": "4",
+    "part": "Skeleton",
+    "flagged": ["h-40", "rounded-lg"],
+    "instances": [
+      {
+        "line": 88,
+        "attr": "class",
+        "props": {
+          "data-view-pending": "data-view-pending"
+        },
+        "classSource": "class=\"h-40 w-full rounded-lg\"",
+        "alts": ["h-40 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/views/ViewRoutines.svelte",
+    "line": 1132,
+    "set": "4",
+    "part": "Skeleton",
+    "flagged": ["h-64", "rounded-lg"],
+    "instances": [
+      {
+        "line": 1132,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-64 w-full rounded-lg\"",
+        "alts": ["h-64 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/tool-cards/MemoryBody.svelte",
+    "line": 199,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-20"],
+    "instances": [
+      {
+        "line": 199,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-20 w-full\"",
+        "alts": ["h-20 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/skills/+page.svelte",
+    "line": 533,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-10"],
+    "instances": [
+      {
+        "line": 533,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-10 w-full\"",
+        "alts": ["h-10 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/skills/+page.svelte",
+    "line": 630,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-10"],
+    "instances": [
+      {
+        "line": 630,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-10 w-full\"",
+        "alts": ["h-10 w-full"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 1671,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-64", "rounded-lg"],
+    "instances": [
+      {
+        "line": 1671,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-64 w-full rounded-lg\"",
+        "alts": ["h-64 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 1716,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-48", "max-w-144", "rounded-lg"],
+    "instances": [
+      {
+        "line": 1716,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-48 w-full max-w-144 rounded-lg\"",
+        "alts": ["h-48 w-full max-w-144 rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 1811,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-64", "rounded-lg"],
+    "instances": [
+      {
+        "line": 1811,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-64 w-full rounded-lg\"",
+        "alts": ["h-64 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 2034,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["rounded-sm"],
+    "instances": [
+      {
+        "line": 2034,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-(--card-h) w-full rounded-sm\"",
+        "alts": ["h-(--card-h) w-full rounded-sm"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 2035,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["rounded-sm"],
+    "instances": [
+      {
+        "line": 2035,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-(--card-h) w-full rounded-sm\"",
+        "alts": ["h-(--card-h) w-full rounded-sm"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 2052,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-64", "rounded-lg"],
+    "instances": [
+      {
+        "line": 2052,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-64 w-full rounded-lg\"",
+        "alts": ["h-64 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 1643,
+    "set": "9",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-48"],
+    "instances": [
+      {
+        "line": 1643,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\""
+        },
+        "classSource": "class=\"w-auto min-w-48\"",
+        "alts": ["w-auto min-w-48"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/project/[id]/+page.svelte",
+    "line": 1649,
+    "set": "9",
+    "part": "DropdownMenuSubContent",
+    "flagged": ["min-w-40"],
+    "instances": [
+      {
+        "line": 1649,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"w-auto min-w-40\"",
+        "alts": ["w-auto min-w-40"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 173,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["w-40"],
+    "instances": [
+      {
+        "line": 173,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-icon-md w-40\"",
+        "alts": ["h-icon-md w-40"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 175,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["w-16"],
+    "instances": [
+      {
+        "line": 175,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-icon-lg w-16\"",
+        "alts": ["h-icon-lg w-16"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 177,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["w-20"],
+    "instances": [
+      {
+        "line": 177,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-icon-md w-20\"",
+        "alts": ["h-icon-md w-20"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 180,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["w-6"],
+    "instances": [
+      {
+        "line": 180,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-icon-md w-6\"",
+        "alts": ["h-icon-md w-6"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 183,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["w-14"],
+    "instances": [
+      {
+        "line": 183,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-space-8 w-14\"",
+        "alts": ["h-space-8 w-14"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 85,
+    "set": "9",
+    "part": "DropdownMenuContent",
+    "flagged": ["w-64"],
+    "instances": [
+      {
+        "line": 85,
+        "attr": "class",
+        "props": {
+          "align": "align={inEmptyState ? \"start\" : \"end\"}"
+        },
+        "classSource": "class=\"w-64\"",
+        "alts": ["w-64"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 89,
+    "set": "9",
+    "part": "DropdownMenuPendingItem",
+    "flagged": [
+      "gap-y-space-1",
+      "text-size-label",
+      "font-medium",
+      "text-ink-strong"
+    ],
+    "instances": [
+      {
+        "line": 88,
+        "attr": "class",
+        "props": {
+          "label": "label=\"New graph\"",
+          "pendingLabel": "pendingLabel=\"Creating…\"",
+          "run": "run={() => create(GRAPH)}"
+        },
+        "classSource": "class=\"min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong\"",
+        "alts": [
+          "min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/workflows/+page.svelte",
+    "line": 100,
+    "set": "9",
+    "part": "DropdownMenuPendingItem",
+    "flagged": [
+      "gap-y-space-1",
+      "text-size-label",
+      "font-medium",
+      "text-ink-strong"
+    ],
+    "instances": [
+      {
+        "line": 99,
+        "attr": "class",
+        "props": {
+          "label": "label=\"New program\"",
+          "pendingLabel": "pendingLabel=\"Creating…\"",
+          "run": "run={() => create(PROGRAM)}"
+        },
+        "classSource": "class=\"min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong\"",
+        "alts": [
+          "min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/project/[id]/view/[name]/+page.svelte",
+    "line": 95,
+    "set": "9",
+    "part": "Skeleton",
+    "flagged": ["h-64", "rounded-lg"],
+    "instances": [
+      {
+        "line": 95,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"h-64 w-full rounded-lg\"",
+        "alts": ["h-64 w-full rounded-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/HookTester.svelte",
+    "line": 53,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["border-success-9", "text-success-9"],
+    "instances": [
+      {
+        "line": 50,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class={[\n        \"shrink-0\",\n        kind === \"exact\" && \"border-success-9 text-success-9\",\n        kind === \"regex\" && \"border-warning-9 text-warning-9\",\n        kind !== \"exact\" && kind !== \"regex\" && \"border-border text-ink-muted\",\n      ]}",
+        "alts": [
+          "shrink-0 border-success-9 text-success-9 border-warning-9 text-warning-9 border-border text-ink-muted",
+          "shrink-0 border-success-9 text-success-9 border-warning-9 text-warning-9",
+          "shrink-0 border-success-9 text-success-9 border-border text-ink-muted",
+          "shrink-0 border-success-9 text-success-9",
+          "shrink-0 border-warning-9 text-warning-9 border-border text-ink-muted",
+          "shrink-0 border-warning-9 text-warning-9",
+          "shrink-0 border-border text-ink-muted",
+          "shrink-0"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/HookTester.svelte",
+    "line": 54,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["border-warning-9", "text-warning-9"],
+    "instances": [
+      {
+        "line": 50,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class={[\n        \"shrink-0\",\n        kind === \"exact\" && \"border-success-9 text-success-9\",\n        kind === \"regex\" && \"border-warning-9 text-warning-9\",\n        kind !== \"exact\" && kind !== \"regex\" && \"border-border text-ink-muted\",\n      ]}",
+        "alts": [
+          "shrink-0 border-success-9 text-success-9 border-warning-9 text-warning-9 border-border text-ink-muted",
+          "shrink-0 border-success-9 text-success-9 border-warning-9 text-warning-9",
+          "shrink-0 border-success-9 text-success-9 border-border text-ink-muted",
+          "shrink-0 border-success-9 text-success-9",
+          "shrink-0 border-warning-9 text-warning-9 border-border text-ink-muted",
+          "shrink-0 border-warning-9 text-warning-9",
+          "shrink-0 border-border text-ink-muted",
+          "shrink-0"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/HookTester.svelte",
+    "line": 55,
+    "set": "7",
+    "part": "Badge",
+    "flagged": ["border-border", "text-ink-muted"],
+    "instances": [
+      {
+        "line": 50,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"outline\""
+        },
+        "classSource": "class={[\n        \"shrink-0\",\n        kind === \"exact\" && \"border-success-9 text-success-9\",\n        kind === \"regex\" && \"border-warning-9 text-warning-9\",\n        kind !== \"exact\" && kind !== \"regex\" && \"border-border text-ink-muted\",\n      ]}",
+        "alts": [
+          "shrink-0 border-success-9 text-success-9 border-warning-9 text-warning-9 border-border text-ink-muted",
+          "shrink-0 border-success-9 text-success-9 border-warning-9 text-warning-9",
+          "shrink-0 border-success-9 text-success-9 border-border text-ink-muted",
+          "shrink-0 border-success-9 text-success-9",
+          "shrink-0 border-warning-9 text-warning-9 border-border text-ink-muted",
+          "shrink-0 border-warning-9 text-warning-9",
+          "shrink-0 border-border text-ink-muted",
+          "shrink-0"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/HookTester.svelte",
+    "line": 84,
+    "set": "7",
+    "part": "Input",
+    "flagged": ["font-mono", "text-label"],
+    "instances": [
+      {
+        "line": 82,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "placeholder": "placeholder={info?.suggests?.[0] ?? \"a sample value\"}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@3680": "bind:value={sample}"
+        },
+        "classSource": "class=\"font-mono text-label\"",
+        "alts": ["font-mono text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskLabels.svelte",
+    "line": 53,
+    "set": "3",
+    "part": "Badge",
+    "flagged": ["gap-space-row"],
+    "instances": [
+      {
+        "line": 51,
+        "attr": "class",
+        "props": {
+          "data-task-labels-label": "data-task-labels-label",
+          "data-label": "data-label",
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"group/label gap-space-row\"",
+        "alts": ["group/label gap-space-row"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/MessageRow.svelte",
+    "line": 783,
+    "set": "1",
+    "part": "Badge",
+    "flagged": [
+      "rounded-xs",
+      "border-transparent",
+      "bg-surface-recess",
+      "px-space-2",
+      "py-px",
+      "text-size-meta",
+      "font-normal",
+      "text-ink-muted!"
+    ],
+    "instances": [
+      {
+        "line": 782,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted!\"",
+        "alts": [
+          "h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted!"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/ToolGroup.svelte",
+    "line": 341,
+    "set": "1",
+    "part": "Badge",
+    "flagged": [
+      "rounded-xs",
+      "border-transparent",
+      "bg-surface-recess",
+      "px-space-2",
+      "py-px",
+      "text-size-meta",
+      "font-normal",
+      "text-ink-muted!"
+    ],
+    "instances": [
+      {
+        "line": 340,
+        "attr": "class",
+        "props": {
+          "variant": "variant=\"secondary\""
+        },
+        "classSource": "class=\"h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted! flex-none\"",
+        "alts": [
+          "h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted! flex-none"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/FetchSkillPopover.svelte",
+    "line": 128,
+    "set": "8",
+    "part": "PopoverContent",
+    "flagged": ["gap-3", "p-3"],
+    "instances": [
+      {
+        "line": 126,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "style": "style=\"--pop-w: 380px; --pop-max: calc(100vw - 2rem)\"",
+          "BindDirective@3940": "bind:ref={surface}"
+        },
+        "classSource": "class=\"w-(--pop-w) max-w-(--pop-max) gap-3 p-3\"",
+        "alts": ["w-(--pop-w) max-w-(--pop-max) gap-3 p-3"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/FetchSkillPopover.svelte",
+    "line": 160,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 158,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"skill-source\"",
+          "oninput": "oninput={() => {\n            if (!named) {\n              skillName = suggestSkillName(normalizeSkillSource(typed));\n            }\n          }}",
+          "placeholder": "placeholder=\"bunx skills add pbakaus/impeccable\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@5237": "bind:value={typed}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/FetchSkillPopover.svelte",
+    "line": 188,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 185,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={skillName !== \"\" && nameProblem ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"skill-name\"",
+          "oninput": "oninput={() => {\n            named = true;\n          }}",
+          "placeholder": "placeholder=\"impeccable\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@6070": "bind:value={skillName}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/LinkMarketplacePopover.svelte",
+    "line": 150,
+    "set": "8",
+    "part": "PopoverContent",
+    "flagged": ["gap-3", "p-3"],
+    "instances": [
+      {
+        "line": 148,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "style": "style=\"--pop-w: 380px; --pop-max: calc(100vw - 2rem)\"",
+          "BindDirective@4557": "bind:ref={surface}"
+        },
+        "classSource": "class=\"w-(--pop-w) max-w-(--pop-max) gap-3 p-3\"",
+        "alts": ["w-(--pop-w) max-w-(--pop-max) gap-3 p-3"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/LinkMarketplacePopover.svelte",
+    "line": 169,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 167,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"market-source\"",
+          "placeholder": "placeholder=\"anthropics/skills\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@5326": "bind:value={source}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/LinkMarketplacePopover.svelte",
+    "line": 193,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 190,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={clash ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"market-name\"",
+          "placeholder": "placeholder=\"skills\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@6037": "bind:value={name}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/NewMemoryPopover.svelte",
+    "line": 100,
+    "set": "8",
+    "part": "PopoverContent",
+    "flagged": ["gap-3", "p-3"],
+    "instances": [
+      {
+        "line": 98,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "style": "style=\"--pop-w: 360px; --pop-max: calc(100vw - 2rem)\""
+        },
+        "classSource": "class=\"w-(--pop-w) max-w-(--pop-max) gap-3 p-3\"",
+        "alts": ["w-(--pop-w) max-w-(--pop-max) gap-3 p-3"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/NewMemoryPopover.svelte",
+    "line": 121,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 118,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={problem ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"memory-path\"",
+          "placeholder": "placeholder=\"models/deepseek-v4.md\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@3776": "bind:value={path}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/PickerChip.svelte",
+    "line": 61,
+    "set": "8",
+    "part": "PopoverContent",
+    "flagged": ["max-h-80", "w-64", "gap-0"],
+    "instances": [
+      {
+        "line": 61,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"max-h-80 w-64 gap-0 overflow-y-auto\"",
+        "alts": ["max-h-80 w-64 gap-0 overflow-y-auto"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/RolloutChip.svelte",
+    "line": 158,
+    "set": "8",
+    "part": "PopoverContent",
+    "flagged": ["gap-space-1"],
+    "instances": [
+      {
+        "line": 156,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "style": "style=\"--pop-w: 360px; --pop-max: calc(100vw - 2rem)\""
+        },
+        "classSource": "class=\"w-(--pop-w) max-w-(--pop-max) gap-space-1\"",
+        "alts": ["w-(--pop-w) max-w-(--pop-max) gap-space-1"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/RolloutChip.svelte",
+    "line": 144,
+    "set": "8",
+    "part": "Spinner",
+    "flagged": [
+      "opacity-0",
+      "group-glyph-busy:opacity-100",
+      "motion-safe:transition-opacity",
+      "motion-safe:dur-control",
+      "motion-safe:ease-out"
+    ],
+    "instances": [
+      {
+        "line": 142,
+        "attr": "class",
+        "props": {
+          "aria-hidden": "aria-hidden=\"true\"",
+          "data-for": "data-for=\"busy\"",
+          "role": "role=\"presentation\""
+        },
+        "classSource": "class=\"col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out\"",
+        "alts": [
+          "col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/RolloutChip.svelte",
+    "line": 121,
+    "set": "8",
+    "part": "PopoverTrigger",
+    "flagged": ["rollout-chip"],
+    "instances": [
+      {
+        "line": 117,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"{what}: on {applied} of {machines.length} machines{failed > 0\n      ? `, ${failed} refused`\n      : ''}\"",
+          "data-fail": "data-fail={failed > 0 ? \"\" : undefined}",
+          "style": "style=\"--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px; --tpress: scale(var(--press-scale))\""
+        },
+        "classSource": "class=\"rollout-chip mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink data-fail:hover:bg-status-fail-bg motion-safe:active:transform-(--tpress)\"",
+        "alts": [
+          "rollout-chip mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink data-fail:hover:bg-status-fail-bg motion-safe:active:transform-(--tpress)"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ContextMeter.svelte",
+    "line": 140,
+    "set": "7",
+    "part": "PopoverContent",
+    "flagged": ["w-72", "rounded-lg", "shadow-lg", "p-0"],
+    "instances": [
+      {
+        "line": 140,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "side": "side=\"top\""
+        },
+        "classSource": "class=\"w-72 rounded-lg shadow-lg p-0\"",
+        "alts": ["w-72 rounded-lg shadow-lg p-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/CawFloat.svelte",
+    "line": 76,
+    "set": "5",
+    "part": "PopoverContent",
+    "flagged": ["p-0"],
+    "instances": [
+      {
+        "line": 73,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "aria-label": "aria-label=\"Caw, lead of {projectName}\"",
+          "style": "style=\"--pop-h: min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px));\"",
+          "collisionPadding": "collisionPadding={12}",
+          "customAnchor": "customAnchor={lead.anchor}",
+          "onCloseAutoFocus": "onCloseAutoFocus={(event) => {\n        // Focus goes back to him without the ring: a ring left on him at\n        // rest reads as a state he is in.\n        event.preventDefault();\n        lead.anchor?.focus({ focusVisible: false } as FocusOptions);\n      }}",
+          "onInteractOutside": "onInteractOutside={(event) => {\n        if (onSeat(event.target)) {\n          event.preventDefault();\n        }\n      }}",
+          "onOpenAutoFocus": "onOpenAutoFocus={(event) => {\n        event.preventDefault();\n        // The caret in his composer, where a keyboard is at hand: on touch\n        // it would raise the screen's keyboard over the page.\n        if (fine.current) {\n          lead.draft.focusWanted = true;\n        }\n      }}",
+          "side": "side=\"bottom\"",
+          "sideOffset": "sideOffset={4}",
+          "trapFocus": "trapFocus={false}"
+        },
+        "classSource": "class=\"flex h-(--pop-h) w-c-panel-w overflow-hidden p-0\"",
+        "alts": ["flex h-(--pop-h) w-c-panel-w overflow-hidden p-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/CawFloat.svelte",
+    "line": 54,
+    "set": "5",
+    "part": "DrawerContent",
+    "flagged": [
+      "p-0",
+      "pb-(--sheet-foot)",
+      "vaul-drawer-direction-bottom:pb-(--sheet-foot)"
+    ],
+    "instances": [
+      {
+        "line": 53,
+        "attr": "class",
+        "props": {
+          "data-caw-float-sheet": "data-caw-float-sheet",
+          "style": "style=\"--drawer-max-height: 85dvh; --sheet-h: 85dvh; --sheet-foot: calc(var(--space-4) + var(--safe-bottom));\""
+        },
+        "classSource": "class=\"h-(--sheet-h) inset-x-space-3 p-0 pb-(--sheet-foot) vaul-drawer-direction-bottom:inset-x-space-3 vaul-drawer-direction-bottom:pb-(--sheet-foot)\"",
+        "alts": [
+          "h-(--sheet-h) inset-x-space-3 p-0 pb-(--sheet-foot) vaul-drawer-direction-bottom:inset-x-space-3 vaul-drawer-direction-bottom:pb-(--sheet-foot)"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/CawThread.svelte",
+    "line": 357,
+    "set": "5",
+    "part": "PopoverContent",
+    "flagged": ["p-0"],
+    "instances": [
+      {
+        "line": 353,
+        "attr": "class",
+        "props": {
+          "data-caw-lead-card": "data-caw-lead-card",
+          "align": "align=\"start\"",
+          "aria-label": "aria-label=\"Caw's session\"",
+          "style": "style=\"--lead-w: min(416px, calc(100vw - 24px)); --lead-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh))\"",
+          "collisionPadding": "collisionPadding={12}",
+          "customAnchor": "customAnchor={cardAnchor}",
+          "onfocusin": "onfocusin={() => {\n        clearTimeout(cardTimer);\n        cardPinned = true;\n      }}",
+          "onOpenAutoFocus": "onOpenAutoFocus={(event) => {\n        if (!cardPinned) {\n          event.preventDefault();\n        }\n      }}",
+          "onpointerdowncapture": "onpointerdowncapture={() => {\n        clearTimeout(cardTimer);\n        cardPinned = true;\n      }}",
+          "onpointerenter": "onpointerenter={() => clearTimeout(cardTimer)}",
+          "onpointerleave": "onpointerleave={cardLeave}",
+          "side": "side=\"bottom\"",
+          "sideOffset": "sideOffset={4}",
+          "trapFocus": "trapFocus={cardPinned}"
+        },
+        "classSource": "class=\"z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden p-0\"",
+        "alts": [
+          "z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden p-0"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ProjectHead.svelte",
+    "line": 510,
+    "set": "5",
+    "part": "PopoverContent",
+    "flagged": ["w-80"],
+    "instances": [
+      {
+        "line": 508,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "collisionPadding": "collisionPadding={8}",
+          "customAnchor": "customAnchor={spawnAnchor}",
+          "side": "side={spawnAnchor ? \"top\" : \"bottom\"}",
+          "sideOffset": "sideOffset={spawnAnchor ? 8 : 4}"
+        },
+        "classSource": "class=\"w-80\"",
+        "alts": ["w-80"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ProjectHead.svelte",
+    "line": 706,
+    "set": "5",
+    "part": "PopoverContent",
+    "flagged": ["p-space-2"],
+    "instances": [
+      {
+        "line": 703,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "aria-label": "aria-label=\"Caw, lead of {project.name}\"",
+          "style": "style=\"--settings-w: min(var(--c-panel-w), calc(100vw - 24px)); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))\"",
+          "collisionPadding": "collisionPadding={12}",
+          "customAnchor": "customAnchor={more}",
+          "side": "side=\"bottom\"",
+          "sideOffset": "sideOffset={4}"
+        },
+        "classSource": "class=\"w-(--settings-w) p-space-2 max-[900px]:w-(--settings-w-narrow)\"",
+        "alts": [
+          "w-(--settings-w) p-space-2 max-[900px]:w-(--settings-w-narrow)"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ProjectHead.svelte",
+    "line": 528,
+    "set": "5",
+    "part": "Input",
+    "flagged": ["text-label"],
+    "instances": [
+      {
+        "line": 526,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "placeholder": "placeholder=\"What should this session do?\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@20056": "bind:value={spawnPrompt}"
+        },
+        "classSource": "class=\"text-label\"",
+        "alts": ["text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ProjectHead.svelte",
+    "line": 595,
+    "set": "5",
+    "part": "DropdownMenuContent",
+    "flagged": ["w-52"],
+    "instances": [
+      {
+        "line": 593,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "onCloseAutoFocus": "onCloseAutoFocus={(event) => {\n          if (forgetHost.at === forgetAt) {\n            event.preventDefault();\n          }\n        }}"
+        },
+        "classSource": "class=\"w-52\"",
+        "alts": ["w-52"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ProjectHead.svelte",
+    "line": 696,
+    "set": "5",
+    "part": "DrawerContent",
+    "flagged": ["pb-(--safe-bottom)"],
+    "instances": [
+      {
+        "line": 696,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"pb-(--safe-bottom)\"",
+        "alts": ["pb-(--safe-bottom)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/BulkBar.svelte",
+    "line": 197,
+    "set": "3",
+    "part": "PopoverContent",
+    "flagged": ["w-64"],
+    "instances": [
+      {
+        "line": 197,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "side": "side=\"top\""
+        },
+        "classSource": "class=\"w-64\"",
+        "alts": ["w-64"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/BulkBar.svelte",
+    "line": 265,
+    "set": "3",
+    "part": "PopoverContent",
+    "flagged": ["w-80"],
+    "instances": [
+      {
+        "line": 265,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "side": "side=\"top\""
+        },
+        "classSource": "class=\"w-80\"",
+        "alts": ["w-80"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/BulkBar.svelte",
+    "line": 181,
+    "set": "3",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-40"],
+    "instances": [
+      {
+        "line": 181,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\""
+        },
+        "classSource": "class=\"w-auto min-w-40\"",
+        "alts": ["w-auto min-w-40"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFilterPopover.svelte",
+    "line": 128,
+    "set": "3",
+    "part": "PopoverContent",
+    "flagged": ["w-80"],
+    "instances": [
+      {
+        "line": 128,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "customAnchor": "customAnchor={anchor}"
+        },
+        "classSource": "class=\"w-80\"",
+        "alts": ["w-80"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFilterPopover.svelte",
+    "line": 164,
+    "set": "3",
+    "part": "SelectTrigger",
+    "flagged": ["min-w-0", "basis-0"],
+    "instances": [
+      {
+        "line": 161,
+        "attr": "class",
+        "props": {
+          "data-task-filter-popover-pick": "data-task-filter-popover-pick",
+          "aria-label": "aria-label=\"Label\"",
+          "size": "size=\"sm\""
+        },
+        "classSource": "class=\"min-w-0 shrink grow basis-0\"",
+        "alts": ["min-w-0 shrink grow basis-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFilterPopover.svelte",
+    "line": 191,
+    "set": "3",
+    "part": "SelectTrigger",
+    "flagged": ["min-w-0", "basis-0"],
+    "instances": [
+      {
+        "line": 188,
+        "attr": "class",
+        "props": {
+          "data-task-filter-popover-pick": "data-task-filter-popover-pick",
+          "aria-label": "aria-label=\"Type\"",
+          "size": "size=\"sm\""
+        },
+        "classSource": "class=\"min-w-0 shrink grow basis-0\"",
+        "alts": ["min-w-0 shrink grow basis-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFilterPopover.svelte",
+    "line": 213,
+    "set": "3",
+    "part": "SelectTrigger",
+    "flagged": ["min-w-0", "basis-0"],
+    "instances": [
+      {
+        "line": 210,
+        "attr": "class",
+        "props": {
+          "data-task-filter-popover-pick": "data-task-filter-popover-pick",
+          "aria-label": "aria-label=\"Field\"",
+          "size": "size=\"sm\""
+        },
+        "classSource": "class=\"min-w-0 shrink grow basis-0\"",
+        "alts": ["min-w-0 shrink grow basis-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskFilterPopover.svelte",
+    "line": 232,
+    "set": "3",
+    "part": "SelectTrigger",
+    "flagged": ["min-w-0", "basis-0"],
+    "instances": [
+      {
+        "line": 229,
+        "attr": "class",
+        "props": {
+          "data-task-filter-popover-pick": "data-task-filter-popover-pick",
+          "aria-label": "aria-label=\"Value\"",
+          "size": "size=\"sm\""
+        },
+        "classSource": "class=\"min-w-0 shrink grow basis-0\"",
+        "alts": ["min-w-0 shrink grow basis-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/usage/SessionsChip.svelte",
+    "line": 193,
+    "set": "2",
+    "part": "PopoverContent",
+    "flagged": ["gap-0", "p-0", "shadow-raised"],
+    "instances": [
+      {
+        "line": 191,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "customAnchor": "customAnchor={anchor}",
+          "data-sessions-flyover": "data-sessions-flyover",
+          "onCloseAutoFocus": "onCloseAutoFocus={keepFocus}",
+          "onOpenAutoFocus": "onOpenAutoFocus={keepFocus}",
+          "onpointerenter": "onpointerenter={rest}",
+          "onpointerleave": "onpointerleave={leave}",
+          "side": "side=\"bottom\"",
+          "sideOffset": "sideOffset={4}",
+          "style": "style={reach > 0 ? `--reach: ${reach}px` : undefined}",
+          "trapFocus": "trapFocus={!byPointer}"
+        },
+        "classSource": "class=\"w-(--bits-popover-anchor-width) gap-0 overflow-hidden p-0 shadow-raised min-h-(--reach)\"",
+        "alts": [
+          "w-(--bits-popover-anchor-width) gap-0 overflow-hidden p-0 shadow-raised min-h-(--reach)"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/UsageMeter.svelte",
+    "line": 1168,
+    "set": "7",
+    "part": "PopoverContent",
+    "flagged": ["gap-0", "rounded-lg", "p-0", "shadow-lg"],
+    "instances": [
+      {
+        "line": 1166,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "collisionPadding": "collisionPadding={8}",
+          "onOpenAutoFocus": "onOpenAutoFocus={keepFocus}",
+          "side": "side=\"top\"",
+          "sideOffset": "sideOffset={6}",
+          "style": "style=\"--usage-pop-w: min(var(--c-panel-w), calc(100vw - 16px));\""
+        },
+        "classSource": "class=\"w-(--usage-pop-w) gap-0 rounded-lg p-0 shadow-lg\"",
+        "alts": ["w-(--usage-pop-w) gap-0 rounded-lg p-0 shadow-lg"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/UsageMeter.svelte",
+    "line": 1159,
+    "set": "7",
+    "part": "PopoverTrigger",
+    "flagged": ["strip-hit"],
+    "instances": [
+      {
+        "line": 1157,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label={triggerLabel}",
+          "onkeydown": "onkeydown={keyed}",
+          "onpointerdown": "onpointerdown={pressed}"
+        },
+        "classSource": "class=\"strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover\"",
+        "alts": [
+          "strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/UsageMeter.svelte",
+    "line": 1142,
+    "set": "7",
+    "part": "DrawerTrigger",
+    "flagged": ["strip-hit"],
+    "instances": [
+      {
+        "line": 1140,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label={triggerLabel}",
+          "onkeydown": "onkeydown={keyed}",
+          "onpointerdown": "onpointerdown={pressed}"
+        },
+        "classSource": "class=\"strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover\"",
+        "alts": [
+          "strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/connections/+page.svelte",
+    "line": 726,
+    "set": "9",
+    "part": "PopoverContent",
+    "flagged": ["w-64"],
+    "instances": [
+      {
+        "line": 726,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\"",
+          "customAnchor": "customAnchor={chooseAnchor}"
+        },
+        "classSource": "class=\"w-64\"",
+        "alts": ["w-64"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/connections/+page.svelte",
+    "line": 414,
+    "set": "9",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-44"],
+    "instances": [
+      {
+        "line": 414,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\""
+        },
+        "classSource": "class=\"w-auto min-w-44\"",
+        "alts": ["w-auto min-w-44"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/accounts/AccountEditor.svelte",
+    "line": 212,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["px-space-2"],
+    "instances": [
+      {
+        "line": 206,
+        "attr": "class",
+        "props": {
+          "data-field": "data-field",
+          "aria-describedby": "aria-describedby={reservePct === undefined\n              ? \"reserve-line\"\n              : undefined}",
+          "aria-invalid": "aria-invalid={reservePct === undefined ? \"true\" : undefined}",
+          "id": "id=\"reserve\"",
+          "inputmode": "inputmode=\"numeric\"",
+          "BindDirective@6573": "bind:value={fields.reserve}"
+        },
+        "classSource": "class=\"num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center\"",
+        "alts": [
+          "num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/accounts/AccountSetup.svelte",
+    "line": 821,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["min-w-0", "flex-(--code-flex)"],
+    "instances": [
+      {
+        "line": 816,
+        "attr": "class",
+        "props": {
+          "data-account-setup-code": "data-account-setup-code",
+          "aria-invalid": "aria-invalid={paste.problem ? \"true\" : undefined}",
+          "aria-label": "aria-label={words.codeFor(name)}",
+          "autocomplete": "autocomplete=\"off\"",
+          "disabled": "disabled={paste.url === null}",
+          "onkeydown": "onkeydown={(event) => {\n                      if (event.key === \"Enter\") {\n                        event.preventDefault();\n                        paste.done();\n                      }\n                    }}",
+          "placeholder": "placeholder={words.pasteCode}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@29698": "bind:value={paste.code}"
+        },
+        "classSource": "class=\"h-(--code-h) min-w-0 flex-(--code-flex)\"",
+        "alts": ["h-(--code-h) min-w-0 flex-(--code-flex)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/accounts/AtLimitBlock.svelte",
+    "line": 73,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["px-space-2"],
+    "instances": [
+      {
+        "line": 70,
+        "attr": "class",
+        "props": {
+          "data-num": "data-num",
+          "data-field": "data-field",
+          "id": "id=\"{id}-wait\"",
+          "inputmode": "inputmode=\"numeric\"",
+          "min": "min=\"0\"",
+          "oninput": "oninput={(event) => {\n            atLimit.waitMinutes = whole(event.currentTarget.value);\n          }}",
+          "type": "type=\"number\"",
+          "value": "value={atLimit.waitMinutes}"
+        },
+        "classSource": "class=\"num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center\"",
+        "alts": [
+          "num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/accounts/AtLimitBlock.svelte",
+    "line": 92,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["px-space-2"],
+    "instances": [
+      {
+        "line": 89,
+        "attr": "class",
+        "props": {
+          "data-num": "data-num",
+          "data-field": "data-field",
+          "id": "id=\"{id}-over\"",
+          "inputmode": "inputmode=\"numeric\"",
+          "min": "min=\"0\"",
+          "oninput": "oninput={(event) => {\n            atLimit.moveWholeUnderK = whole(event.currentTarget.value);\n          }}",
+          "type": "type=\"number\"",
+          "value": "value={atLimit.moveWholeUnderK}"
+        },
+        "classSource": "class=\"num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center\"",
+        "alts": [
+          "num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 600,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 597,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"matcher\") ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-matcher\"",
+          "onblur": "onblur={() => {\n              touched.matcher = true;\n            }}",
+          "placeholder": "placeholder={eventInfo?.suggests?.[0] ?? \"*\"}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@19192": "bind:value={draft.matcher}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 672,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 670,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-args\"",
+          "placeholder": "placeholder=\"--flag value\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@21433": "bind:value={commandArgs}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 723,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 720,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"url\") ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-url\"",
+          "onblur": "onblur={() => {\n                touched.url = true;\n              }}",
+          "placeholder": "placeholder=\"https://example.com/hooks/cawco\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@23238": "bind:value={draft.handler.url}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 752,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 749,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"mcp_server_name\") ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-server\"",
+          "onblur": "onblur={() => {\n                touched.mcp_server_name = true;\n              }}",
+          "placeholder": "placeholder=\"filesystem\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@24142": "bind:value={draft.handler.mcp_server_name}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 766,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 763,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"tool_name\") ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-tool\"",
+          "onblur": "onblur={() => {\n                touched.tool_name = true;\n              }}",
+          "placeholder": "placeholder=\"read_file\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@24650": "bind:value={draft.handler.tool_name}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 811,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 809,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-agent\"",
+          "placeholder": "placeholder=\"Inherits Claude Code's default\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@26062": "bind:value={draft.handler.agent}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 835,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 832,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"if\") ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"hook-if\"",
+          "onblur": "onblur={() => {\n          touched.if = true;\n        }}",
+          "oninput": "oninput={(event) => {\n          draft.handler.if = event.currentTarget.value || undefined;\n        }}",
+          "placeholder": "placeholder=\"Bash(git *)\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "value": "value={draft.handler.if ?? \"\"}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 862,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 860,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"timeout\") ? \"true\" : undefined}",
+          "id": "id=\"hook-timeout\"",
+          "min": "min=\"1\"",
+          "oninput": "oninput={(event) => {\n            const raw = event.currentTarget.value;\n            draft.handler.timeout = raw === \"\" ? undefined : Number(raw);\n          }}",
+          "placeholder": "placeholder=\"Claude Code's default\"",
+          "step": "step=\"1\"",
+          "type": "type=\"number\"",
+          "value": "value={draft.handler.timeout ?? \"\"}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/HookEditor.svelte",
+    "line": 658,
+    "set": "8",
+    "part": "Textarea",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 656,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"script\") ? \"true\" : undefined}",
+          "id": "id=\"hook-script\"",
+          "onblur": "onblur={() => {\n                touched.script = true;\n              }}",
+          "placeholder": "placeholder={\"#!/bin/bash\\nset -euo pipefail\\n\\n# The event JSON arrives on stdin.\"}",
+          "rows": "rows={10}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@21110": "bind:value={draft.script}"
+        },
+        "classSource": "class=\"resize-y font-mono\"",
+        "alts": ["resize-y font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/McpEditor.svelte",
+    "line": 365,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 363,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"mcp-package\"",
+          "oninput": "oninput={() => {\n                if (!named) {\n                  serverName = suggestMcpName(pkg);\n                }\n              }}",
+          "placeholder": "placeholder=\"@modelcontextprotocol/server-filesystem\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@11233": "bind:value={pkg}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/McpEditor.svelte",
+    "line": 380,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 378,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"mcp-package-args\"",
+          "placeholder": "placeholder=\"/home/you/projects\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@11567": "bind:value={pkgArgs}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/McpEditor.svelte",
+    "line": 408,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 406,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"mcp-command\"",
+          "placeholder": "placeholder=\"uvx\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@12350": "bind:value={command}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/McpEditor.svelte",
+    "line": 422,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 420,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"mcp-args\"",
+          "placeholder": "placeholder=\"mcp-server-git --repository /home/you/repo\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@12781": "bind:value={argsLine}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/McpEditor.svelte",
+    "line": 450,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 448,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"mcp-url\"",
+          "placeholder": "placeholder=\"https://mcp.example.com/sse\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@13554": "bind:value={url}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/RuleEditor.svelte",
+    "line": 373,
+    "set": "8",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 370,
+        "attr": "class",
+        "props": {
+          "aria-invalid": "aria-invalid={shown(\"pattern\") ? \"true\" : undefined}",
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"rule-pattern\"",
+          "onblur": "onblur={() => {\n              touched.pattern = true;\n            }}",
+          "placeholder": "placeholder={draft.matchKind === \"phrase\"\n              ? \"honest caveat\"\n              : \"should (work|be fine)|probably works\"}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@11792": "bind:value={draft.pattern}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/PlacePick.svelte",
+    "line": 110,
+    "set": "5",
+    "part": "Input",
+    "flagged": ["font-mono"],
+    "instances": [
+      {
+        "line": 108,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"place-folder\"",
+          "oninput": "oninput={() => {\n        problem = null;\n      }}",
+          "placeholder": "placeholder=\"/home/you/project\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@3748": "bind:value={path}"
+        },
+        "classSource": "class=\"font-mono\"",
+        "alts": ["font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/PlacePick.svelte",
+    "line": 87,
+    "set": "5",
+    "part": "SelectTrigger",
+    "flagged": ["text-ink-strong"],
+    "instances": [
+      {
+        "line": 85,
+        "attr": "class",
+        "props": {
+          "aria-labelledby": "aria-labelledby=\"place-machine-label\"",
+          "size": "size=\"sm\""
+        },
+        "classSource": "class=\"w-full text-ink-strong\"",
+        "alts": ["w-full text-ink-strong"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ProjectDetails.svelte",
+    "line": 437,
+    "set": "5",
+    "part": "Input",
+    "flagged": ["text-label"],
+    "instances": [
+      {
+        "line": 434,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Folder on that machine\"",
+          "autocomplete": "autocomplete=\"off\"",
+          "placeholder": "placeholder=\"/absolute/path on that machine\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@16319": "bind:value={addPath}"
+        },
+        "classSource": "class=\"h-(--field-h) text-label\"",
+        "alts": ["h-(--field-h) text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/DelegateTray.svelte",
+    "line": 1391,
+    "set": "1",
+    "part": "Input",
+    "flagged": ["min-w-0"],
+    "instances": [
+      {
+        "line": 1386,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Why {item.title} is no longer owed\"",
+          "BindDirective@47547": "bind:value={\n            () => reasons.get(item.id) ?? \"\", (v) => reasons.set(item.id, v)\n          }",
+          "placeholder": "placeholder=\"Why this is no longer owed\""
+        },
+        "classSource": "class=\"flex-auto min-w-0 h-c-btn-h-sm\"",
+        "alts": ["flex-auto min-w-0 h-c-btn-h-sm"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/DelegateTray.svelte",
+    "line": 1677,
+    "set": "1",
+    "part": "Input",
+    "flagged": ["min-w-0"],
+    "instances": [
+      {
+        "line": 1675,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Why all {failures.length} are no longer owed\"",
+          "placeholder": "placeholder=\"Why these are no longer owed\"",
+          "BindDirective@58719": "bind:ref={allField}",
+          "BindDirective@58761": "bind:value={allReason}"
+        },
+        "classSource": "class=\"flex-auto min-w-0 h-c-btn-h-sm\"",
+        "alts": ["flex-auto min-w-0 h-c-btn-h-sm"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/DelegateTray.svelte",
+    "line": 1336,
+    "set": "1",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-48"],
+    "instances": [
+      {
+        "line": 1334,
+        "attr": "class",
+        "props": {
+          "align": "align=\"start\"",
+          "portalProps": "portalProps={{ disabled: true }}",
+          "side": "side=\"bottom\""
+        },
+        "classSource": "class=\"w-auto min-w-48\"",
+        "alts": ["w-auto min-w-48"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/memory/+page.svelte",
+    "line": 136,
+    "set": "9",
+    "part": "Input",
+    "flagged": ["max-w-64"],
+    "instances": [
+      {
+        "line": 134,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Filter memory files\"",
+          "placeholder": "placeholder=\"Filter files…\"",
+          "BindDirective@4606": "bind:value={filter}"
+        },
+        "classSource": "class=\"max-w-64\"",
+        "alts": ["max-w-64"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/previews/+page.svelte",
+    "line": 140,
+    "set": "9",
+    "part": "Input",
+    "flagged": ["max-w-96"],
+    "instances": [
+      {
+        "line": 138,
+        "attr": "class",
+        "props": {
+          "autocomplete": "autocomplete=\"off\"",
+          "id": "id=\"preview-pattern\"",
+          "placeholder": "placeholder={\"https://p-{port}.example.com\"}",
+          "spellcheck": "spellcheck={false}",
+          "BindDirective@5803": "bind:value={pattern}"
+        },
+        "classSource": "class=\"w-full max-w-96\"",
+        "alts": ["w-full max-w-96"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/previews/+page.svelte",
+    "line": 116,
+    "set": "9",
+    "part": "NativeSelect",
+    "flagged": ["max-w-96"],
+    "instances": [
+      {
+        "line": 115,
+        "attr": "class",
+        "props": {
+          "id": "id=\"preview-mode\"",
+          "onchange": "onchange={(event) => {\n          mode = (event.currentTarget as HTMLSelectElement).value as\n            \"port\" | \"host\";\n          refused = undefined;\n        }}",
+          "value": "value={mode}"
+        },
+        "classSource": "class=\"w-full max-w-96\"",
+        "alts": ["w-full max-w-96"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/editors/SubagentEditor.svelte",
+    "line": 212,
+    "set": "8",
+    "part": "Textarea",
+    "flagged": ["min-h-80", "font-mono"],
+    "instances": [
+      {
+        "line": 210,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"{target ?? 'New'} definition\"",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@6651": "bind:value={draft}"
+        },
+        "classSource": "class=\"min-h-80 resize-y font-mono\"",
+        "alts": ["min-h-80 resize-y font-mono"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/PinCard.svelte",
+    "line": 454,
+    "set": "5",
+    "part": "Textarea",
+    "flagged": ["group-data-sheet/pin:text-(length:--field-fs)"],
+    "instances": [
+      {
+        "line": 449,
+        "attr": "class",
+        "props": {
+          "data-field": "data-field",
+          "aria-describedby": "aria-describedby={problem ? `pin-error-${pin.id}` : undefined}",
+          "aria-invalid": "aria-invalid={problem ? true : undefined}",
+          "aria-label": "aria-label={pin.thread.length > 0 ? \"Reply\" : \"Comment\"}",
+          "onkeydown": "onkeydown={(event: KeyboardEvent) => {\n        if (event.key === \"Enter\" && (event.metaKey || event.ctrlKey)) {\n          event.preventDefault();\n          reply();\n        }\n      }}",
+          "placeholder": "placeholder={fieldHint}",
+          "rows": "rows={2}",
+          "BindDirective@16576": "bind:ref={field}",
+          "BindDirective@16599": "bind:value={draft}"
+        },
+        "classSource": "class=\"group-data-sheet/pin:text-(length:--field-fs)\"",
+        "alts": ["group-data-sheet/pin:text-(length:--field-fs)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/RuleTester.svelte",
+    "line": 80,
+    "set": "7",
+    "part": "Textarea",
+    "flagged": [
+      "bg-surface-page",
+      "font-(family-name:--font-mono)",
+      "text-label"
+    ],
+    "instances": [
+      {
+        "line": 78,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"Sample text to test this rule against\"",
+          "placeholder": "placeholder=\"I've fixed the parser. One honest caveat: the error path is still untested.\"",
+          "rows": "rows={3}",
+          "spellcheck": "spellcheck=\"false\"",
+          "BindDirective@2993": "bind:value={sample}"
+        },
+        "classSource": "class=\"resize-y bg-surface-page font-(family-name:--font-mono) text-label\"",
+        "alts": [
+          "resize-y bg-surface-page font-(family-name:--font-mono) text-label"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/ViewBar.svelte",
+    "line": 147,
+    "set": "5",
+    "part": "SelectTrigger",
+    "flagged": [
+      "group-data-bar:min-w-0",
+      "group-data-bar:rounded-(--bar-control-radius)"
+    ],
+    "instances": [
+      {
+        "line": 145,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label=\"View: {label}\"",
+          "mark": "mark=\"chevron\"",
+          "BindDirective@5623": "bind:ref={pill}"
+        },
+        "classSource": "class=\"group-data-bar:h-c-composer-field group-data-bar:min-w-0 group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto group-data-bar:overflow-clip group-data-bar:rounded-(--bar-control-radius)\"",
+        "alts": [
+          "group-data-bar:h-c-composer-field group-data-bar:min-w-0 group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto group-data-bar:overflow-clip group-data-bar:rounded-(--bar-control-radius)"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/motion/overlays/+page.svelte",
+    "line": 197,
+    "set": "9",
+    "part": "SelectTrigger",
+    "flagged": [
+      "rounded-sm",
+      "border",
+      "border-border-control",
+      "px-space-3",
+      "py-space-2"
+    ],
+    "instances": [
+      {
+        "line": 196,
+        "attr": "class",
+        "props": {
+          "data-open": "data-open=\"select\""
+        },
+        "classSource": "class=\"rounded-sm border border-border-control px-space-3 py-space-2\"",
+        "alts": [
+          "rounded-sm border border-border-control px-space-3 py-space-2"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/side/Split.svelte",
+    "line": 368,
+    "set": "5",
+    "part": "ResizableHandle",
+    "flagged": [
+      "bg-border-hairline",
+      "transition-[background-color]",
+      "dur-control",
+      "ease-out",
+      "hover:bg-border-control",
+      "data-active:bg-ink-muted"
+    ],
+    "instances": [
+      {
+        "line": 365,
+        "attr": "class",
+        "props": {
+          "data-side-divider": "data-side-divider={open || !open || undefined}",
+          "data-hidden": "data-hidden={!open || undefined}",
+          "onDraggingChange": "onDraggingChange={(dragging) => {\n        resizing = dragging;\n        if (dragging) {\n          dragFrom = savedWidth;\n        } else if (expandAsked) {\n          // A drag that ends at the edge was never a width: going back\n          // gives the one it started from.\n          keepWidth(dragFrom);\n        }\n      }}"
+        },
+        "classSource": "class=\"z-2 bg-border-hairline transition-[background-color] dur-control ease-out group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:after:w-(--divider-hit) group-data-split-expanded/split:after:transform-none hover:bg-border-control data-active:bg-ink-muted data-hidden:hidden\"",
+        "alts": [
+          "z-2 bg-border-hairline transition-[background-color] dur-control ease-out group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:after:w-(--divider-hit) group-data-split-expanded/split:after:transform-none hover:bg-border-control data-active:bg-ink-muted data-hidden:hidden"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/workspace/PaneGrid.svelte",
+    "line": 205,
+    "set": "5",
+    "part": "ResizableHandle",
+    "flagged": [
+      "bg-border-hairline",
+      "hover:bg-border-control",
+      "active-keyboard:bg-ink-muted",
+      "active-pointer:bg-ink-muted",
+      "motion-safe:transition-[background-color]",
+      "motion-safe:dur-control",
+      "motion-safe:ease-out",
+      "motion-reduce:transition-none"
+    ],
+    "instances": [
+      {
+        "line": 204,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"bg-border-hairline hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:dur-control motion-safe:ease-out motion-reduce:transition-none\"",
+        "alts": [
+          "bg-border-hairline hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:dur-control motion-safe:ease-out motion-reduce:transition-none"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/blocks/Block.svelte",
+    "line": 166,
+    "set": "9",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-48"],
+    "instances": [
+      {
+        "line": 166,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\""
+        },
+        "classSource": "class=\"w-auto min-w-48\"",
+        "alts": ["w-auto min-w-48"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/blocks/BlockPage.svelte",
+    "line": 335,
+    "set": "9",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-48"],
+    "instances": [
+      {
+        "line": 335,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\""
+        },
+        "classSource": "class=\"w-auto min-w-48\"",
+        "alts": ["w-auto min-w-48"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/EditorFrame.svelte",
+    "line": 204,
+    "set": "8",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-44"],
+    "instances": [
+      {
+        "line": 204,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\""
+        },
+        "classSource": "class=\"w-auto min-w-44\"",
+        "alts": ["w-auto min-w-44"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/RowMenu.svelte",
+    "line": 32,
+    "set": "8",
+    "part": "DropdownMenuContent",
+    "flagged": ["min-w-44"],
+    "instances": [
+      {
+        "line": 32,
+        "attr": "class",
+        "props": {
+          "align": "align=\"end\""
+        },
+        "classSource": "class=\"w-auto min-w-44\"",
+        "alts": ["w-auto min-w-44"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/ArtifactMenu.svelte",
+    "line": 215,
+    "set": "5",
+    "part": "DropdownMenuContent",
+    "flagged": ["w-64"],
+    "instances": [
+      {
+        "line": 212,
+        "attr": "class",
+        "props": {
+          "data-artifact-list": "data-artifact-list",
+          "align": "align=\"start\"",
+          "BindDirective@6861": "bind:ref={list}"
+        },
+        "classSource": "class=\"w-64\"",
+        "alts": ["w-64"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/ArtifactMenu.svelte",
+    "line": 233,
+    "set": "5",
+    "part": "DropdownMenuItem",
+    "flagged": ["aria-current:text-ink-strong", "aria-busy:opacity-50"],
+    "instances": [
+      {
+        "line": 221,
+        "attr": "class",
+        "props": {
+          "data-artifact-row": "data-artifact-row",
+          "aria-busy": "aria-busy={removing.has(artifact.id) || undefined}",
+          "aria-current": "aria-current={artifact.id === shown.id || undefined}",
+          "aria-keyshortcuts": "aria-keyshortcuts=\"Delete Backspace\"",
+          "aria-labelledby": "aria-labelledby={[\n            part(artifact.id, \"name\"),\n            artifact.promoted ? part(artifact.id, \"promoted\") : \"\",\n            artifact.createdAt ? part(artifact.id, \"age\") : \"\",\n          ]\n            .filter(Boolean)\n            .join(\" \")}",
+          "data-artifact": "data-artifact={artifact.id}",
+          "data-flip": "data-flip",
+          "onkeydown": "onkeydown={(event: KeyboardEvent) => {\n            if (event.key === \"Delete\" || event.key === \"Backspace\") {\n              event.preventDefault();\n              remove(artifact);\n            }\n          }}",
+          "onSelect": "onSelect={() => choose(artifact)}"
+        },
+        "classSource": "class=\"group/artifact min-h-c-artifact-row-h aria-current:text-ink-strong aria-busy:opacity-50\"",
+        "alts": [
+          "group/artifact min-h-c-artifact-row-h aria-current:text-ink-strong aria-busy:opacity-50"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/home/PeekSheet.svelte",
+    "line": 48,
+    "set": "5",
+    "part": "DrawerContent",
+    "flagged": ["vaul-drawer-direction-bottom:pb-(--safe-bottom)"],
+    "instances": [
+      {
+        "line": 46,
+        "attr": "class",
+        "props": {
+          "data-peek-sheet": "data-peek-sheet",
+          "style": "style=\"--sheet-h: 80dvh\""
+        },
+        "classSource": "class=\"vaul-drawer-direction-bottom:h-(--sheet-h) vaul-drawer-direction-bottom:pb-(--safe-bottom)\"",
+        "alts": [
+          "vaul-drawer-direction-bottom:h-(--sheet-h) vaul-drawer-direction-bottom:pb-(--safe-bottom)"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/spawn/NewSessionDialog.svelte",
+    "line": 1760,
+    "set": "8",
+    "part": "DrawerContent",
+    "flagged": [
+      "ns-theme",
+      "outline-none",
+      "m-0",
+      "motion-reduce:animate-none!",
+      "motion-reduce:transition-none!"
+    ],
+    "instances": [
+      {
+        "line": 1757,
+        "attr": "class",
+        "props": {
+          "data-session-card": "data-session-card",
+          "aria-label": "aria-label=\"New Session\"",
+          "data-ns-dialog": "data-ns-dialog",
+          "onCloseAutoFocus": "onCloseAutoFocus={(event) => {\n        event.preventDefault();\n        opener?.focus({ preventScroll: true });\n      }}",
+          "onEscapeKeydown": "onEscapeKeydown={escapeStep}",
+          "onOpenAutoFocus": "onOpenAutoFocus={(event) => {\n        event.preventDefault();\n        card?.focus({ preventScroll: true });\n      }}",
+          "style": "style=\"--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), 24px))\"",
+          "BindDirective@58994": "bind:ref={card}"
+        },
+        "classSource": "class=\"ns-theme fixed z-81 flex origin-center flex-col outline-none m-0 motion-reduce:animate-none! motion-reduce:transition-none!\"",
+        "alts": [
+          "ns-theme fixed z-81 flex origin-center flex-col outline-none m-0 motion-reduce:animate-none! motion-reduce:transition-none!"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/workflows/WorkflowEditor.svelte",
+    "line": 887,
+    "set": "9",
+    "part": "DrawerContent",
+    "flagged": ["min-h-0"],
+    "instances": [
+      {
+        "line": 887,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"min-h-0\"",
+        "alts": ["min-h-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/workflows/WorkflowEditor.svelte",
+    "line": 755,
+    "set": "9",
+    "part": "ResizablePaneGroup",
+    "flagged": ["min-h-0"],
+    "instances": [
+      {
+        "line": 755,
+        "attr": "class",
+        "props": {
+          "direction": "direction=\"horizontal\""
+        },
+        "classSource": "class=\"min-h-0 flex-1\"",
+        "alts": ["min-h-0 flex-1"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/OlderRows.svelte",
+    "line": 205,
+    "set": "6",
+    "part": "SidebarMenuSubButton",
+    "flagged": [
+      "gap-(--row-compact-gap)",
+      "pl-(--row-compact-gap)",
+      "pr-(--row-compact-pad-end)",
+      "data-tall:gap-space-2",
+      "data-tall:pl-space-3",
+      "data-tall:pr-space-3",
+      "text-ink-muted"
+    ],
+    "instances": [
+      {
+        "line": 204,
+        "attr": "class",
+        "props": {
+          "data-branch-item": "data-branch-item",
+          "data-tall": "data-tall={tall || undefined}"
+        },
+        "classSource": "class=\"h-(--older-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end) data-tall:gap-space-2 data-tall:pl-space-3 data-tall:pr-space-3 text-ink-muted\"",
+        "alts": [
+          "h-(--older-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end) data-tall:gap-space-2 data-tall:pl-space-3 data-tall:pr-space-3 text-ink-muted"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/MachineAuthStatus.svelte",
+    "line": 66,
+    "set": "7",
+    "part": "Spinner",
+    "flagged": ["size-6"],
+    "instances": [
+      {
+        "line": 66,
+        "attr": "class",
+        "props": {
+          "aria-hidden": "aria-hidden=\"true\"",
+          "role": "role=\"presentation\""
+        },
+        "classSource": "class=\"size-6\"",
+        "alts": ["size-6"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/routines/RunStatus.svelte",
+    "line": 56,
+    "set": "4",
+    "part": "Spinner",
+    "flagged": ["group-status-running/time:text-status-live-glyph"],
+    "instances": [
+      {
+        "line": 54,
+        "attr": "class",
+        "props": {
+          "aria-hidden": "aria-hidden=\"true\"",
+          "role": "role=\"presentation\""
+        },
+        "classSource": "class=\"size-icon-sm flex-none group-status-running/time:text-status-live-glyph\"",
+        "alts": [
+          "size-icon-sm flex-none group-status-running/time:text-status-live-glyph"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/tasks/TaskColumn.svelte",
+    "line": 150,
+    "set": "3",
+    "part": "Checkbox",
+    "flagged": [
+      "opacity-0",
+      "transition-[opacity]",
+      "dur-control",
+      "ease-out",
+      "group-focus-within/card:opacity-100",
+      "group-data-picked/card:opacity-100",
+      "group-data-picking/col:opacity-100",
+      "group-hover/card:opacity-100",
+      "coarse:opacity-100"
+    ],
+    "instances": [
+      {
+        "line": 146,
+        "attr": "class",
+        "props": {
+          "data-task-column-pick": "data-task-column-pick",
+          "aria-label": "aria-label=\"Pick {task.id} {task.title}\"",
+          "checked": "checked={on}",
+          "onclick": "onclick={(event: MouseEvent) => {\n              event.preventDefault();\n              onpick(task.id, !on, event.shiftKey);\n            }}",
+          "style": "style=\"--pick-top: calc(var(--space-2) + (var(--c-badge-h) - 1rem) / 2)\""
+        },
+        "classSource": "class=\"absolute end-space-3 top-(--pick-top) opacity-0 transition-[opacity] dur-control ease-out group-focus-within/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100 group-hover/card:opacity-100 coarse:opacity-100\"",
+        "alts": [
+          "absolute end-space-3 top-(--pick-top) opacity-0 transition-[opacity] dur-control ease-out group-focus-within/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100 group-hover/card:opacity-100 coarse:opacity-100"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/accounts/AccountSubmenu.svelte",
+    "line": 32,
+    "set": "8",
+    "part": "ContextMenuSubContent",
+    "flagged": ["min-w-52"],
+    "instances": [
+      {
+        "line": 32,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"min-w-52\"",
+        "alts": ["min-w-52"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/accounts/AccountSubmenu.svelte",
+    "line": 28,
+    "set": "8",
+    "part": "ContextMenuSubTrigger",
+    "flagged": ["gap-2.5"],
+    "instances": [
+      {
+        "line": 28,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"gap-2.5\"",
+        "alts": ["gap-2.5"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/FolderMenu.svelte",
+    "line": 134,
+    "set": "7",
+    "part": "ContextMenuSubContent",
+    "flagged": ["w-64", "rounded-lg", "p-3", "shadow-xl"],
+    "instances": [
+      {
+        "line": 134,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"w-64 rounded-lg p-3 shadow-xl\"",
+        "alts": ["w-64 rounded-lg p-3 shadow-xl"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/FolderMenu.svelte",
+    "line": 130,
+    "set": "7",
+    "part": "ContextMenuSubTrigger",
+    "flagged": ["gap-2.5"],
+    "instances": [
+      {
+        "line": 130,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"gap-2.5\"",
+        "alts": ["gap-2.5"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/MachineMenu.svelte",
+    "line": 181,
+    "set": "7",
+    "part": "ContextMenuSubContent",
+    "flagged": ["min-w-52"],
+    "instances": [
+      {
+        "line": 181,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"min-w-52\"",
+        "alts": ["min-w-52"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/MachineMenu.svelte",
+    "line": 176,
+    "set": "7",
+    "part": "ContextMenuSubTrigger",
+    "flagged": ["gap-2.5"],
+    "instances": [
+      {
+        "line": 176,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"gap-2.5\"",
+        "alts": ["gap-2.5"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/AddMachineDialog.svelte",
+    "line": 608,
+    "set": "7",
+    "part": "DialogContent",
+    "flagged": ["phone:max-w-128"],
+    "instances": [
+      {
+        "line": 608,
+        "attr": "class",
+        "props": {
+          "showCloseButton": "showCloseButton={!joined}"
+        },
+        "classSource": "class=\"phone:max-w-128\"",
+        "alts": ["phone:max-w-128"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/AddMachineDialog.svelte",
+    "line": 581,
+    "set": "7",
+    "part": "DrawerDescription",
+    "flagged": ["text-body", "text-ink-muted"],
+    "instances": [
+      {
+        "line": 581,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"text-body text-ink-muted\"",
+        "alts": ["text-body text-ink-muted"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/AddMachineDialog.svelte",
+    "line": 588,
+    "set": "7",
+    "part": "DrawerFooter",
+    "flagged": ["px-0", "pb-0"],
+    "instances": [
+      {
+        "line": 588,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"flex-col-reverse px-0 pb-0\"",
+        "alts": ["flex-col-reverse px-0 pb-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ErrorDialog.svelte",
+    "line": 36,
+    "set": "7",
+    "part": "DialogContent",
+    "flagged": ["phone:max-w-168"],
+    "instances": [
+      {
+        "line": 36,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"phone:max-w-168\"",
+        "alts": ["phone:max-w-168"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ErrorDialog.svelte",
+    "line": 39,
+    "set": "7",
+    "part": "DialogTitle",
+    "flagged": ["gap-2"],
+    "instances": [
+      {
+        "line": 39,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"mark-line flex items-center gap-2\"",
+        "alts": ["mark-line flex items-center gap-2"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DiffModal.svelte",
+    "line": 80,
+    "set": "9",
+    "part": "DialogContent",
+    "flagged": ["gap-0", "p-0"],
+    "instances": [
+      {
+        "line": 78,
+        "attr": "bodyClass",
+        "props": {
+          "aria-label": "aria-label={`Diff: ${filePath}`}",
+          "class": "class=\"h-(--modal-h) w-(--modal-w) phone:max-w-320\"",
+          "style": "style=\"--modal-h: 90vh; --modal-w: 95vw\""
+        },
+        "classSource": "bodyClass=\"flex h-full flex-col gap-0 overflow-hidden p-0\"",
+        "alts": ["flex h-full flex-col gap-0 overflow-hidden p-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DiffModal.svelte",
+    "line": 81,
+    "set": "9",
+    "part": "DialogContent",
+    "flagged": ["phone:max-w-320"],
+    "instances": [
+      {
+        "line": 78,
+        "attr": "class",
+        "props": {
+          "aria-label": "aria-label={`Diff: ${filePath}`}",
+          "bodyClass": "bodyClass=\"flex h-full flex-col gap-0 overflow-hidden p-0\"",
+          "style": "style=\"--modal-h: 90vh; --modal-w: 95vw\""
+        },
+        "classSource": "class=\"h-(--modal-h) w-(--modal-w) phone:max-w-320\"",
+        "alts": ["h-(--modal-h) w-(--modal-w) phone:max-w-320"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DiffModal.svelte",
+    "line": 96,
+    "set": "9",
+    "part": "DialogTitle",
+    "flagged": ["truncate", "font-mono", "text-label"],
+    "instances": [
+      {
+        "line": 96,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"truncate font-mono text-label\"",
+        "alts": ["truncate font-mono text-label"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/DiffModal.svelte",
+    "line": 100,
+    "set": "9",
+    "part": "CopyButton",
+    "flagged": ["h-6", "w-6"],
+    "instances": [
+      {
+        "line": 99,
+        "attr": "class",
+        "props": {
+          "size": "size=\"icon-sm\"",
+          "text": "text={filePath}",
+          "variant": "variant=\"ghost\""
+        },
+        "classSource": "class=\"h-6 w-6\"",
+        "alts": ["h-6 w-6"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ThreadPane.svelte",
+    "line": 1085,
+    "set": "6",
+    "part": "Alert",
+    "flagged": [
+      "border",
+      "border-border-control",
+      "rounded-lg",
+      "bg-surface-raised",
+      "shadow-tile"
+    ],
+    "instances": [
+      {
+        "line": 1084,
+        "attr": "class",
+        "props": {
+          "role": "role=\"status\""
+        },
+        "classSource": "class=\"items-center border border-border-control rounded-lg bg-surface-raised shadow-tile\"",
+        "alts": [
+          "items-center border border-border-control rounded-lg bg-surface-raised shadow-tile"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/ThreadPane.svelte",
+    "line": 1090,
+    "set": "6",
+    "part": "AlertAction",
+    "flagged": ["inset-y-0"],
+    "instances": [
+      {
+        "line": 1090,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"inset-y-0 flex items-center\"",
+        "alts": ["inset-y-0 flex items-center"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/workspace/PaneTabs.svelte",
+    "line": 1397,
+    "set": "5",
+    "part": "Tabs",
+    "flagged": ["session-tabs", "hosted"],
+    "instances": [
+      {
+        "line": 1394,
+        "attr": "class",
+        "props": {
+          "data-session-tabs": "data-session-tabs",
+          "boxes": "boxes={servedBoxes}",
+          "data-strip": "data-strip={leaf.id}",
+          "style": "style=\"--strip-px: 12px; --strip-item-rest: 32px; --strip-reach: 10px; --strip-fade: 16px; --strip-uncapped: 100vw\"",
+          "onValueChange": "onValueChange={(id) => workspace.activate(id, leaf.id)}",
+          "travel": "{travel}",
+          "value": "value={leaf.active ?? \"\"}",
+          "values": "values={leaf.tabs}",
+          "variant": "variant=\"folder\""
+        },
+        "classSource": "class=\"session-tabs {hosted ? 'hosted' : ''}\"",
+        "alts": ["session-tabs hosted", "session-tabs"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/preview/SheetInspector.svelte",
+    "line": 244,
+    "set": "5",
+    "part": "NativeSelect",
+    "flagged": ["min-w-0"],
+    "instances": [
+      {
+        "line": 243,
+        "attr": "class",
+        "props": {
+          "id": "id={`${id}-story`}",
+          "onchange": "onchange={(event) =>\n            inspector.choose((event.currentTarget as HTMLSelectElement).value)}",
+          "size": "size=\"sm\"",
+          "value": "value={inspector.chosen ?? \"\"}"
+        },
+        "classSource": "class=\"flex-1 min-w-0\"",
+        "alts": ["flex-1 min-w-0"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/routes/(app)/config/spend/+page.svelte",
+    "line": 96,
+    "set": "9",
+    "part": "NativeSelect",
+    "flagged": ["max-w-96"],
+    "instances": [
+      {
+        "line": 95,
+        "attr": "class",
+        "props": {
+          "id": "id=\"spend-on-cap\"",
+          "onchange": "onchange={(event) =>\n          choose((event.currentTarget as HTMLSelectElement).value as OnCap)}",
+          "value": "value={onCap ?? \"\"}"
+        },
+        "classSource": "class=\"w-full max-w-96\"",
+        "alts": ["w-full max-w-96"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/SessionPane.svelte",
+    "line": 130,
+    "set": "6",
+    "part": "EmptyState",
+    "flagged": ["px-space-6", "px-space-6", "px-space-6"],
+    "instances": [
+      {
+        "line": 1090,
+        "attr": "class",
+        "props": {
+          "icon": "icon={fault.reason === \"offline\" ? IconLaptop : IconAlert}",
+          "line": "line={faultLine}",
+          "role": "role=\"alert\"",
+          "title": "title={faultTitle}"
+        },
+        "classSource": "class={STATEFUL}",
+        "alts": [
+          "m-auto max-w-(--stateful-measure) items-center px-space-6 text-center"
+        ],
+        "unresolved": []
+      },
+      {
+        "line": 1124,
+        "attr": "class",
+        "props": {
+          "icon": "icon={IconAlert}",
+          "title": "title=\"This session isn't reachable from here\""
+        },
+        "classSource": "class={STATEFUL}",
+        "alts": [
+          "m-auto max-w-(--stateful-measure) items-center px-space-6 text-center"
+        ],
+        "unresolved": []
+      },
+      {
+        "line": 1185,
+        "attr": "class",
+        "props": {
+          "icon": "icon={IconChat}",
+          "line": "line=\"Write the first message below.\"",
+          "title": "title=\"Nothing has been said here yet\""
+        },
+        "classSource": "class={STATEFUL}",
+        "alts": [
+          "m-auto max-w-(--stateful-measure) items-center px-space-6 text-center"
+        ],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/spawn/LocationSection.svelte",
+    "line": 200,
+    "set": "8",
+    "part": "ProviderLogo",
+    "flagged": ["opacity-(--o)"],
+    "instances": [
+      {
+        "line": 199,
+        "attr": "class",
+        "props": {
+          "provider": "provider=\"github\"",
+          "size": "size={null}",
+          "style": "style={`--o:${on ? 1 : 0.6}`}"
+        },
+        "classSource": "class=\"opacity-(--o)\"",
+        "alts": ["opacity-(--o)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/spawn/LocationSection.svelte",
+    "line": 490,
+    "set": "8",
+    "part": "ProviderLogo",
+    "flagged": ["text-hue-amber-500", "opacity-80"],
+    "instances": [
+      {
+        "line": 489,
+        "attr": "class",
+        "props": {
+          "provider": "provider=\"github\"",
+          "size": "size={null}"
+        },
+        "classSource": "class=\"size-icon-md flex-none text-hue-amber-500 opacity-80\"",
+        "alts": ["size-icon-md flex-none text-hue-amber-500 opacity-80"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/project/UpstreamMenu.svelte",
+    "line": 51,
+    "set": "5",
+    "part": "DropdownMenuSubContent",
+    "flagged": ["w-72"],
+    "instances": [
+      {
+        "line": 51,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"w-72\"",
+        "alts": ["w-72"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/transcript/Thinking.svelte",
+    "line": 218,
+    "set": "1",
+    "part": "ThinkingIndicator",
+    "flagged": ["p-0", "gap-(--indicator-gap)"],
+    "instances": [
+      {
+        "line": 216,
+        "attr": "class",
+        "props": {
+          "aria-live": "aria-live={announce ? \"polite\" : \"off\"}",
+          "style": "style=\"--indicator-gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph)); --thinking-icon-size: var(--w-glyph)\""
+        },
+        "classSource": "class=\"p-0 gap-(--indicator-gap)\"",
+        "alts": ["p-0 gap-(--indicator-gap)"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/config/SwitchField.svelte",
+    "line": 30,
+    "set": "8",
+    "part": "Switch",
+    "flagged": ["mt-px"],
+    "instances": [
+      {
+        "line": 29,
+        "attr": "class",
+        "props": {
+          "disabled": "{disabled}",
+          "id": "{id}",
+          "onCheckedChange": "onCheckedChange={onchange}",
+          "BindDirective@702": "bind:checked"
+        },
+        "classSource": "class=\"mt-px\"",
+        "alts": ["mt-px"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/cawco/Shell.svelte",
+    "line": 1002,
+    "set": "6",
+    "part": "SheetContent",
+    "flagged": ["p-0"],
+    "instances": [
+      {
+        "line": 1000,
+        "attr": "class",
+        "props": {
+          "data-rail-sheet": "data-rail-sheet",
+          "style": "style=\"--rail-sheet-w: 284px; --rail-sheet-close-room: 46px\"",
+          "onCloseAutoFocus": "onCloseAutoFocus={(event) => {\n          if (barGlass.open === \"jump\") {\n            event.preventDefault();\n          }\n        }}",
+          "side": "side=\"left\""
+        },
+        "classSource": "class=\"w-(--rail-sheet-w) p-0 min-[900px]:hidden\"",
+        "alts": ["w-(--rail-sheet-w) p-0 min-[900px]:hidden"],
+        "unresolved": []
+      }
+    ]
+  },
+  {
+    "file": "src/lib/components/features/workflows/WorkflowRunView.svelte",
+    "line": 352,
+    "set": "9",
+    "part": "CardContent",
+    "flagged": ["gap-space-4"],
+    "instances": [
+      {
+        "line": 352,
+        "attr": "class",
+        "props": {},
+        "classSource": "class=\"flex flex-col gap-space-4\"",
+        "alts": ["flex flex-col gap-space-4"],
+        "unresolved": []
+      }
+    ]
+  }
+]
