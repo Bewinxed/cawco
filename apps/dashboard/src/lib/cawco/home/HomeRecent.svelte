@@ -85,19 +85,24 @@
 {#if home.ready && home.recentCount > 0}
   <section
     data-slot="recent"
-    class={["recent", { inset }]}
+    class="flex flex-col gap-space-row data-inset:px-space-2 data-inset:pt-space-1 data-inset:pb-space-2"
     data-flip="box"
+    data-inset={inset || undefined}
     {@attach holdWhileInside("home:recent")}
   >
+    <!-- literal: 36px -->
     <button
       data-slot="disclosure"
       aria-expanded={recentOpen}
-      class="kit-section-head disclosure press-tint focus-inset"
+      class="group/disclosure kit-section-head press-tint focus-inset min-h-(--disclosure-min) w-full cursor-pointer rounded-t-sm border-0 bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
       onclick={toggleRecent}
+      style:--disclosure-min="36px"
       type="button"
     >
-      <span data-slot="chev" class="chev" class:open={recentOpen} data-box
-        ><IconChevronRight /></span
+      <span
+        data-slot="chev"
+        class="inline-flex group-aria-expanded/disclosure:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
+        data-box><IconChevronRight class="size-icon-sm" /></span
       >
       <span>Recent</span>
       <!-- Closed, the count says what is still live inside, as an "N older"
@@ -105,11 +110,19 @@
            tells the reader a running session is in it. -->
       <span data-num data-slot="count" class="num count" data-box>
         <span
-          style="display:inline-grid;inline-size:{String(home.recentCount)
-            .length}ch"><MorphText text={String(home.recentCount)} /></span
+          class="inline-grid w-(--count-w)"
+          style:--count-w="{String(home.recentCount).length}ch"
+          ><MorphText text={String(home.recentCount)} /></span
         >
         {#if !recentOpen && home.recentRunning > 0}
-          <span data-slot="live" class="live"
+          <!-- What a closed Recent still holds live, after its count: the
+               words an "N older" row says its failures in, in the header's
+               own muted ink. -->
+          <!-- literal: 0.3em -->
+          <span
+            data-slot="live"
+            class="ms-(--live-gap)"
+            style:--live-gap="0.3em"
             ><MorphText text={runningWords(home.recentRunning)} /></span
           >
         {/if}
@@ -117,15 +130,21 @@
     </button>
     {#if recentOpen}
       <div
-        class="recent-body"
+        class="flex flex-col gap-space-row"
         data-flip
         {@attach highlight(ROW_PILL)}
         {@attach echoBeat()}
         {@attach view.keys}
       >
-        <label data-slot="search" class="search touch-hit">
-          <IconSearch aria-hidden="true" />
+        <!-- literal: 1px -->
+        <label
+          data-slot="search"
+          class="touch-hit field-shell mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
+          style:--hit-edge="1px"
+        >
+          <IconSearch aria-hidden="true" class="size-icon-md flex-none" />
           <input
+            class="min-w-0 flex-auto border-0 bg-transparent type-body text-ink-strong outline-none"
             aria-label="Search recent sessions"
             oninput={() => {
               recentShown = RECENT_PAGE;
@@ -154,7 +173,8 @@
             trail={!context && at ? formatAgeShort(at, clock.now) : ""}
           />
         {/snippet}
-        <ul class="session-tree">
+        <!-- The tree's container (SessionTree's recipe): rows --tree-gap apart. -->
+        <ul class="m-0 flex list-none flex-col gap-(--tree-gap) p-0">
           {#each recentMatches.slice(0, recentListed) as item (item.key)}
             {#if item.instance}
               <SessionTree
@@ -179,7 +199,9 @@
               </li>
             {/if}
           {:else}
-            <li class="none">No session matches “{search}”.</li>
+            <li class="m-0 px-space-3 py-space-2 type-meta text-ink-muted"
+              >No session matches “{search}”.</li
+            >
           {/each}
         </ul>
         {#if recentMatches.length > recentListed}
@@ -201,90 +223,3 @@
   </section>
 {/if}
 
-<style>
-  .recent {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .recent.inset {
-    padding: var(--space-1) var(--space-2) var(--space-2);
-  }
-  .disclosure {
-    width: 100%;
-    min-height: 36px;
-    border: 0;
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    background: none;
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .disclosure:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  .chev {
-    display: inline-flex;
-  }
-  /* What a closed Recent still holds live, after its count: the words an
-     "N older" row says its failures in, in the header's own muted ink. */
-  .live {
-    margin-inline-start: 0.3em;
-  }
-  .chev :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .chev {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-  }
-  .chev.open {
-    rotate: 90deg;
-  }
-  .recent-body {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .search {
-    --hit-edge: 1px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: var(--c-input-h);
-    margin: var(--space-1) 0 var(--space-2);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
-  }
-  .search :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .search:has(input:focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .search input {
-    flex: 1 1 auto;
-    min-width: 0;
-    border: 0;
-    background: none;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    outline: none;
-  }
-  .none {
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>
