@@ -14,7 +14,12 @@
  */
 import type { Page } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
-import { DELEGATE_TITLE, type Scene, STUDIO_HOST } from "./scene";
+import {
+  DELEGATE_TITLE,
+  type Scene,
+  STUDIO_HOST,
+  type Variant,
+} from "./scene";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -27,6 +32,12 @@ export interface State {
    * holds one (`split`), and left out, with a NOTE, from any other.
    */
   hostOnly?: true;
+  /**
+   * The hub state it reads, when not the scene's own: one the scene moves
+   * the fleet into after the main recording (scene.ts `VARIANTS`), recorded
+   * and played on its own (hub-tape.ts `variants`).
+   */
+  hub?: Variant;
   name: string;
   /**
    * What is read: a selector, the largest visible match when several match
@@ -175,6 +186,46 @@ const HIDDEN_FILE = "input[type=file][data-slot=hidden-file]";
 /** A graph workflow's node picked on its canvas, by its title. */
 const pickNode = (title: string) => (page: Page) =>
   page.getByText(title, { exact: true }).first().click();
+
+/** How much later the rail's older state reads the fleet: past a project's day (older.ts `PROJECT_WINDOW`). */
+const LATER = 2 * 24 * 60 * 60 * 1000;
+/** A finished thinking row's header (Thinking's), and the plan's ring (PlanRing's "Plan, 1 of 3 done"). */
+const REASONING = /^Reasoning/;
+const PLAN_RING = /^Plan, /;
+/** An API-key provider the scratch machine's OpenCode runs (the providers list's). */
+const KEY_PROVIDER = "302.AI";
+/** The keychain dialog's password field and its Unlock (UnlockKeychain's). */
+const KEYCHAIN_PASSWORD = /^Login password for /;
+const UNLOCK = /^Unlock$/;
+/** The machine control a keychain's unlock sends (UnlockKeychain `machineControl(…, "unlockKeychain")`). */
+const UNLOCK_CONTROL = (frame: string) => frame.includes('"unlockKeychain"');
+
+/** The offline Mac's menu in the machines list, then its Unlock keychain…: the dialog. */
+const openKeychain = async (page: Page) => {
+  await press(MACHINES)(page);
+  await page
+    .locator(LAYER)
+    .getByText(STUDIO_HOST, { exact: true })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Unlock keychain…" }).click();
+};
+
+/**
+ * The page's socket to the hub carrying every frame but those `withheld`
+ * names: those the hub never hears, so the page stands waiting on their
+ * answer, as it does while a machine takes its time.
+ */
+const withholding =
+  (withheld: (frame: string) => boolean) => (page: Page) =>
+    page.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
+      const hub = ws.connectToServer();
+      ws.onMessage((frame) => {
+        if (!(typeof frame === "string" && withheld(frame))) {
+          hub.send(frame);
+        }
+      });
+    });
 
 /** The project's ⋯ menu, then its row named `item`. */
 const fromMore = (item: string) => async (page: Page) => {
@@ -386,6 +437,24 @@ const EDITORS: Record<string, State[]> = {
       act: (page) => page.getByRole("radio", { name: FILL_FIRST }).click(),
       root: "body",
     },
+    {
+      // A new account by API key (a provider the machine's OpenCode runs),
+      // on to signing in: the key's field and the machines it goes to.
+      name: "key",
+      route: () => "/config/accounts/new",
+      act: async (page) => {
+        await page
+          .getByRole("textbox", { name: "Search providers" })
+          .fill(KEY_PROVIDER);
+        await page
+          .locator("[data-choice]")
+          .filter({ hasText: KEY_PROVIDER })
+          .first()
+          .click();
+        await press("Continue")(page);
+      },
+      root: "body",
+    },
   ],
 };
 
@@ -406,14 +475,19 @@ export const SURFACES: Surface[] = [
         // The offline Mac's menu in the machines list: Unlock keychain…, its dialog.
         name: "keychain",
         widths: ["desk"],
+        act: openKeychain,
+        root: "body",
+      },
+      {
+        // Its password sent and the Mac yet to answer: the unlock under way.
+        // Its socket's route stays the page's, withholding the unlock alone.
+        name: "unlocking",
+        widths: ["desk"],
         act: async (page) => {
-          await press(MACHINES)(page);
-          await page
-            .locator(LAYER)
-            .getByText(STUDIO_HOST, { exact: true })
-            .first()
-            .click({ button: "right" });
-          await page.getByRole("menuitem", { name: "Unlock keychain…" }).click();
+          await unanswered(withholding(UNLOCK_CONTROL))(page);
+          await openKeychain(page);
+          await page.getByPlaceholder(KEYCHAIN_PASSWORD).fill("probe-password");
+          await press(UNLOCK)(page);
         },
         root: "body",
       },
@@ -478,6 +552,20 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk"],
       },
+      {
+        // The same fleet two days on: the project's stopped sessions past
+        // its day, beyond its six rows, under "N older". Last (the page's
+        // clock stays where it moved).
+        name: "older",
+        act: async (page) => {
+          const at = await page.evaluate(() => Date.now());
+          await page.clock.setFixedTime(at + LATER);
+          await page.reload({ waitUntil: "domcontentloaded" });
+          await page.waitForFunction(() => window.kitHydrated === true);
+          await openRail(page);
+        },
+        root: "aside:has([data-slot=sidebar-content]), [data-slot=sheet-content][data-state=open]",
+      },
     ],
   },
   {
@@ -492,6 +580,25 @@ export const SURFACES: Surface[] = [
     route: (s) => `/session/${s.chips}`,
     states: [
       { name: "rest", root: "body" },
+      // Turns still going as the walk reads them (scene.ts `SLOW_MS`), read
+      // early: one writing its reply, one still thinking.
+      { name: "live", route: (s) => `/session/${s.live}`, root: MAIN },
+      {
+        name: "live-thinking",
+        route: (s) => `/session/${s.liveThink}`,
+        root: MAIN,
+      },
+      // A finished turn's thinking, opened: its steps.
+      {
+        name: "thinking",
+        route: (s) => `/session/${s.think}`,
+        act: press(REASONING),
+        root: MAIN,
+      },
+      // Compacted: the divider where the summary starts.
+      { name: "compacted", route: (s) => `/session/${s.compact}`, root: MAIN },
+      // The plan's ring pressed: its steps in the side panel.
+      { name: "plan", act: press(PLAN_RING), root: "body" },
       {
         name: "tools-open",
         act: async (page) => {
@@ -1006,6 +1113,29 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/no-such-page",
     states: [{ name: "rest", root: "body" }],
+  },
+  {
+    // Every machine offline: where the page says where to start (MachinesEmpty).
+    name: "no-machine",
+    serve: "built",
+    route: () => "/",
+    states: [
+      { name: "rest", hub: "machineless", root: "body" },
+      // A session on the machine that went away: what its pane can still show.
+      {
+        name: "session",
+        hub: "machineless",
+        route: (s) => `/session/${s.chips}`,
+        root: MAIN,
+      },
+    ],
+  },
+  {
+    // Paired devices required, and this browser no paired one: the pairing screen.
+    name: "pairing",
+    serve: "built",
+    route: () => "/",
+    states: [{ name: "rest", hub: "pairing", root: "body" }],
   },
   ...BENCHES.map(([name, path]): Surface => ({
     name: `bench-${name}`,

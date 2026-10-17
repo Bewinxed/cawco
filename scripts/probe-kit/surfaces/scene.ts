@@ -101,6 +101,13 @@ const REVIEW_REPORT =
   "I read the push probe's last six runs. It never reads a push sent while the phone is locked, and it counts a burst of three as one. The post says what changed for the tray; the notes list each miss with its run.";
 const FAILED_WHY =
   "The attempt's session ended before it handed anything in: the token sheet's build failed on a missing font.";
+/** Short sessions of the cawco project, stopped: its older rows a later day folds. */
+const SKETCHES = [
+  "Sketch the tray's empty state",
+  "List the chip's hues",
+  "Time the tray's open",
+  "Read the chip row's issues",
+];
 /** The words the scene's rule watches for, which only the "todo" session says. */
 const TODO_PHRASE = "TODO:";
 /** The fleet's memory, saved twice: the second keeps the first as a version. */
@@ -148,7 +155,11 @@ const GRAPH = {
       harness: "claude",
       model: "claude-haiku-4-5",
       prompt: "Read the chip row and say what overflows.",
-      outputSchema: { type: "object", properties: {} },
+      outputSchema: {
+        type: "object",
+        properties: { overflows: { type: "boolean" } },
+        required: ["overflows"],
+      },
       retries: 2,
       timeoutMinutes: 60,
       failedPorts: ["fail"],
@@ -160,7 +171,8 @@ const GRAPH = {
       title: "Overflows?",
       position: { x: 560, y: 120 },
       cases: [
-        { port: "overflows", when: { op: "truthy", path: "step-1.overflows" } },
+        // A case reads the result of the node before it (workflow-compile.ts `whenExpr`).
+        { port: "overflows", when: { op: "truthy", path: "overflows" } },
         { port: "else" },
       ],
     },
@@ -211,7 +223,29 @@ export default async function (w: Workflow<typeof inputs>) {
 `;
 const STEP = /PROBE-STEP:([a-z-]+)/g;
 
-type Step = { tool: { input: object; name: string } } | { words: string };
+type Step =
+  | { tool: { input: object; name: string } }
+  | {
+      /**
+       * Streamed a piece every `slow` ms (each word its own piece, as each
+       * piece of `thinking` is): a turn still going while the walk reads it.
+       */
+      slow?: number;
+      /** Thought before the words, in pieces (scratch-fleet.ts `Reply.thinking`). */
+      thinking?: string[];
+      words: string;
+    };
+
+/** Where a slow reply's words part: after each run of space. */
+const AFTER_SPACE = /(?<=\s)/;
+/** Words as a slow reply streams them: each word, with the space before the next, one piece. */
+const pieces = (words: string): string[] =>
+  words.split(AFTER_SPACE).filter(Boolean);
+/** A slow reply's pace: a piece every 15 s, so a page shown it stands still between pieces (walk.ts `stand`). */
+const SLOW_MS = 15_000;
+/** What the live sessions say and think, long enough at {@link SLOW_MS} a piece to outlast the walk. */
+const LONG_NOTE = `The tray's chip row is measured at every width the dashboard is read at. At 390px the third chip is cut, and its count badge with it. The label takes its whole width because nothing lets it shrink, so a long branch name pushes everything after it out of the row. Letting the label shrink, clipping it with an ellipsis and keeping the badge whole fixes the phone. The tablet and the desk keep their widths. The next step is to measure the row again with a forty character branch name, then with two chips that both carry long names, and to say where each one clips and whether the badge stays readable at every width. After that the same check runs on the board's cards, which reuse the chip, and on the rail's rows, which show a smaller one. Each measurement is written down with its width, the branch name used and the pixel where the label clipped, so the next change to the chip can be checked against them.`;
+const LONG_THOUGHT = `The row is a flex row with no wrap. Each chip holds a label and a badge. The label has no minimum width of zero, so it never shrinks below its content. The badge comes after the label in source order. When the row is narrower than its chips, the last chip overflows the row. Clipping happens at the row's edge, so the last chip loses its badge first. The fix belongs on the label: let it shrink, clip it with an ellipsis, and leave the badge alone. Before writing it, the cards and the rail rows that reuse the chip need checking, because a change to the label's shrinking changes them too. The board's cards are wider, so they rarely clip. The rail's rows are narrower, and their chips already truncate, which suggests the rail styles the label differently. That difference is worth reading before the fix, so the fix is one rule and not two.`;
 
 /** The markdown a reply draws: one of each block the transcript renders. */
 const REPLY = `## What overflows
@@ -316,6 +350,24 @@ const plans = (repo: string): Record<string, Step[]> => ({
       words: `The chip's label shrinks now. ${TODO_PHRASE} measure it on a phone.`,
     },
   ],
+  think: [
+    {
+      thinking: [
+        "The badge is the one number the row is for, ",
+        "so the label has to give way first.",
+      ],
+      words: "The label gives way and the badge stays whole.",
+    },
+  ],
+  live: [{ words: LONG_NOTE, slow: SLOW_MS }],
+  "live-think": [
+    {
+      thinking: pieces(LONG_THOUGHT),
+      words: "The label shrinks; the badge stays.",
+      slow: SLOW_MS,
+    },
+  ],
+  compact: [{ words: "The chip notes are in order." }],
   memory: [
     {
       tool: {
@@ -608,7 +660,11 @@ export const scriptedReply =
     const taken = (request.body.slice(at).match(/"tool_result"/g) ?? []).length;
     const step = plan[Math.min(taken, plan.length - 1)] as Step;
     if ("words" in step) {
-      return { everyMs: 2, words: [step.words] };
+      return {
+        everyMs: step.slow ?? 2,
+        words: step.slow ? pieces(step.words) : [step.words],
+        ...(step.thinking ? { thinking: step.thinking } : {}),
+      };
     }
     return { everyMs: 2, words: [], tool: step.tool };
   };
@@ -654,6 +710,46 @@ export interface Scene {
   tray: string;
   workflow: string;
   [name: string]: string;
+}
+
+/**
+ * The hub states the scene moves the fleet into once the main recording is
+ * done, in this order (each leaves the fleet in it): every machine offline,
+ * then paired devices required. A state that reads one names it (catalogue
+ * `hub`); the tape keeps each on its own (hub-tape.ts `variants`).
+ */
+export const VARIANTS = ["machineless", "pairing"] as const;
+export type Variant = (typeof VARIANTS)[number];
+
+/** Moves the scene's fleet into `variant` (after the ones before it in {@link VARIANTS}). */
+export async function enterVariant(
+  fleet: KitFleet,
+  variant: Variant
+): Promise<void> {
+  if (variant === "machineless") {
+    // Its one machine's agent stopped: no machine online (the Mac was never).
+    await fleet.stop("agent");
+    await until(
+      "every machine offline on the hub",
+      () => fleet.api<{ status: string }[]>("/api/agents"),
+      (machines) => machines.every((machine) => machine.status !== "online"),
+      60_000
+    );
+    return;
+  }
+  // Paired devices required, as Configure → Devices turns it on: the asking
+  // caller is the first paired one, and a browser with no device's cookie
+  // (every page the walk opens) is a stranger to the hub from then on.
+  const response = await fetch(`${fleet.base}/api/auth/pairing`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ required: true, kind: "browser" }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `PUT /api/auth/pairing: ${response.status} ${await response.text()}`
+    );
+  }
 }
 
 /** The MCP server behind OAuth the scene signs the hub in to, standing while the scene's hub does (`sceneHub`). */
@@ -791,6 +887,16 @@ export async function seedScene(
   await writeFile(join(skillDir, "SKILL.md"), SKILL);
   const skillRun = await fleet.spawn("claude", "Run the tray check", fleet.repo);
   await fleet.send(skillRun, "Run the tray check skill. PROBE-STEP:skill");
+  // A session that thought before it answered (its thinking row), and one
+  // compacted once its turn rests (its compaction's divider).
+  const think = await fleet.spawn("claude", "Weigh the chip's wrap", fleet.repo);
+  await fleet.send(think, "Which gives way, label or badge? PROBE-STEP:think");
+  const compact = await fleet.spawn(
+    "claude",
+    "Order the chip notes",
+    fleet.repo
+  );
+  await fleet.send(compact, "Put the chip notes in order. PROBE-STEP:compact");
   // A delegate it starts, which reports back: its card, transcript inline.
   const split = delegate
     ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
@@ -1020,6 +1126,8 @@ export async function seedScene(
     ["the named session's turn done", answered],
     ["the memory session's turn done", memoryRead],
     ["the skill session's turn done", skillRun],
+    ["the thinking session's turn done", think],
+    ["the compact session's turn done", compact],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
@@ -1053,6 +1161,25 @@ export async function seedScene(
       return (
         reply !== -1 &&
         blocks.slice(reply + 1).some((block) => block.type === "assistant") &&
+        row?.status === "running" &&
+        row.turn_open_at === null
+      );
+    },
+    Boolean,
+    180_000
+  );
+  // Compacted, as a person's /compact compacts it: Claude Code summarises the
+  // conversation and the transcript keeps the boundary.
+  await fleet.send(compact, "/compact");
+  await until(
+    "the compact session compacted, at rest",
+    async () => {
+      const { blocks } = await fleet.api<{ blocks: { type: string }[] }>(
+        `/api/instances/${compact}/transcript`
+      );
+      const row = await fleet.instance(compact);
+      return (
+        blocks.some((block) => block.type === "system.compact_boundary") &&
         row?.status === "running" &&
         row.turn_open_at === null
       );
@@ -1410,6 +1537,28 @@ export async function seedScene(
     );
   }
 
+  // The project's finished work stopped, as an attempt's session stops once
+  // it has handed in, with four more short sessions of the project: rows a
+  // later day folds under "N older" (older.ts: past the project's day and
+  // beyond its six rows, nothing running).
+  const sketches: string[] = [];
+  for (const title of SKETCHES) {
+    // biome-ignore lint/performance/noAwaitInLoops: the rail's order is the order they start
+    const id = await fleet.spawn("claude", title, fleet.repo, {
+      projectId: project.id,
+    });
+    sketches.push(id);
+  }
+  for (const id of [reviewDone, reviewFailed, tokenFailed, ...sketches]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one stop at a time
+    await fleet.stopSession(id);
+    await until(
+      "a finished session of the project stopped",
+      () => fleet.instance(id),
+      (row) => row?.status !== undefined && row.status !== "running",
+      60_000
+    );
+  }
   // The fleet's configuration, filed once every turn is at rest so no
   // session runs under it: the memory saved twice (a version behind it) and
   // a model's document, an MCP server the hub signs in to (McpSignIn), a
@@ -1492,6 +1641,29 @@ export async function seedScene(
   if (unoffered.length > 0) {
     throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
   }
+  // Last of all, two turns still going while the walk reads them: one
+  // writing its reply (the live row), one still thinking (the thinking
+  // row, live), a piece every SLOW_MS for longer than the walk lasts.
+  const live = await fleet.spawn("claude", "Write the tray note", fleet.repo);
+  await fleet.send(live, "Write the tray's note. PROBE-STEP:live");
+  const liveThink = await fleet.spawn(
+    "claude",
+    "Think through the chip row",
+    fleet.repo
+  );
+  await fleet.send(liveThink, "Think the chip row through. PROBE-STEP:live-think");
+  for (const [what, id] of [
+    ["the live session's turn open", live],
+    ["the thinking live session's turn open", liveThink],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one session at a time
+    await until(
+      what,
+      () => fleet.instance(id),
+      (row) => row?.status === "running" && row.turn_open_at !== null,
+      120_000
+    );
+  }
   kit.note(
     `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
@@ -1519,6 +1691,10 @@ export async function seedScene(
     rule: rule.id,
     todo,
     memoryRead,
+    think,
+    compact,
+    live,
+    liveThink,
     skillRun,
     hook: HOOK_ID,
     memoryDoc: MODEL_DOC,

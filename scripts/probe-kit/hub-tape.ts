@@ -70,15 +70,25 @@ export interface TapeSocket {
   path: string;
 }
 
-export interface Tape {
-  /** The moment the page's clock stands at (ms since the epoch). */
-  at: number;
+/** One hub state's exchanges: what its pages asked and were answered. */
+export interface TapeHub {
   http: TapeHttp[];
   /** What the previews' own origins answered. */
   preview: TapePreview[];
+  sockets: TapeSocket[];
+}
+
+export interface Tape extends TapeHub {
+  /** The moment the page's clock stands at (ms since the epoch). */
+  at: number;
   /** What the recording made, by name (a session's id, a project's), for the probe's routes. */
   scene: Record<string, string>;
-  sockets: TapeSocket[];
+  /**
+   * Hub states the scene moved the fleet into after the main recording (no
+   * machine online, pairing required), each recorded on its own: what the
+   * states that read it asked. A player of one answers as that hub did.
+   */
+  variants?: Record<string, TapeHub>;
 }
 
 /**
@@ -334,7 +344,7 @@ const PREVIEW_KEY = (port: string, method: string, path: string, body: string) =
  * A proxy to `target` (a hub's `http://host:port`) that records every
  * exchange onto `tape`. Its address is the hub a dashboard is served against.
  */
-export function recorder(target: string, tape: Tape) {
+export function recorder(target: string, tape: TapeHub) {
   const server = Bun.serve<SocketData>({
     hostname: "127.0.0.1",
     port: 0,
@@ -589,7 +599,7 @@ export interface Miss {
 }
 
 /** The hub `tape` recorded, answering again: its address, and what it could not answer. */
-export function player(tape: Tape) {
+export function player(tape: TapeHub) {
   const http = new Map<string, TapeHttp>();
   for (const one of tape.http) {
     const key = HTTP_KEY(one.method, one.path, one.body);

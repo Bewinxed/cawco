@@ -41,11 +41,25 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
-import { player, readTape, recorder, type Tape, writeTape } from "../hub-tape";
+import {
+  player,
+  readTape,
+  recorder,
+  type Tape,
+  type TapeHub,
+  writeTape,
+} from "../hub-tape";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { chosen, type Surface } from "../surfaces/catalogue";
 import { PROPS, readSurface } from "../surfaces/read";
-import { sceneHub, scriptedReply, seedScene } from "../surfaces/scene";
+import {
+  enterVariant,
+  sceneHub,
+  scriptedReply,
+  seedScene,
+  VARIANTS,
+  type Variant,
+} from "../surfaces/scene";
 import {
   counts,
   differences,
@@ -53,7 +67,14 @@ import {
   SnapshotWriter,
   saveSnapshot,
 } from "../surfaces/snapshot";
-import { PASSES, Servers, TAPE, walk } from "../surfaces/walk";
+import {
+  PASSES,
+  type Pass,
+  Servers,
+  TAPE,
+  type Visit,
+  walk,
+} from "../surfaces/walk";
 
 const KIT = join(import.meta.dir, "..");
 const BASELINES = join(
@@ -72,10 +93,62 @@ const flag = (name: string): string | undefined =>
     ?.slice(name.length + 3);
 const has = (name: string): boolean => process.argv.includes(`--${name}`);
 
+/** The surfaces as one hub reads them: each with its states that read `hub` (the scene's own when none), and none left with no state. */
+function onHub(surfaces: Surface[], hub: Variant | undefined): Surface[] {
+  return surfaces
+    .map((surface) => ({
+      ...surface,
+      states: surface.states.filter((state) => state.hub === hub),
+    }))
+    .filter((surface) => surface.states.length > 0);
+}
+
+/**
+ * Walks `surfaces` against each hub on the tape their states read: the
+ * scene's own, then each variant (scene.ts `VARIANTS`), each answered by a
+ * player of its own section and served by a dashboard of its own. Returns
+ * each surface's seconds and every request no section answered.
+ */
+async function walkTape(
+  kit: Kit,
+  tape: Tape,
+  surfaces: Surface[],
+  passes: Pass[],
+  visit: (v: Visit) => Promise<void>,
+  failed: (what: string, why: string) => void
+): Promise<{ misses: string[]; seconds: Map<string, number> }> {
+  const seconds = new Map<string, number>();
+  const misses: string[] = [];
+  for (const hub of [undefined, ...VARIANTS]) {
+    const reading = onHub(surfaces, hub);
+    if (reading.length === 0) {
+      continue;
+    }
+    const section = hub ? tape.variants?.[hub] : tape;
+    if (!section) {
+      throw new Error(
+        `the tape holds no "${hub}" hub, which ${reading.map((s) => s.name).join(", ")} read: record it again (--record)`
+      );
+    }
+    const played = player(section);
+    const servers = new Servers(kit, played);
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one hub at a time, each its own dashboard
+      const took = await walk(kit, servers, tape, reading, passes, visit, failed);
+      for (const [name, s] of took) {
+        seconds.set(name, (seconds.get(name) ?? 0) + s);
+      }
+    } finally {
+      await servers.close();
+      played.stop();
+    }
+    misses.push(...played.misses().map((m) => (hub ? `${hub}: ${m}` : m)));
+  }
+  return { misses, seconds };
+}
+
 async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
   const tape = await readTape(TAPE);
-  const hub = player(tape);
-  const servers = new Servers(kit, hub);
   const writers = new Map<string, SnapshotWriter>();
   const writer = (surface: string) => {
     let w = writers.get(surface);
@@ -85,33 +158,25 @@ async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
     }
     return w;
   };
-  let seconds = new Map<string, number>();
-  try {
-    seconds = await walk(
-      kit,
-      servers,
-      tape,
-      surfaces,
-      PASSES,
-      async ({ page, pass, state, surface }) => {
-        const cdp = await page.context().newCDPSession(page);
-        await cdp.send("DOM.enable");
-        await cdp.send("CSS.enable");
-        const read = await readSurface(page, cdp, state.root);
-        writer(surface.name).add(`${state.name} · ${pass.name}`, read);
-        await cdp.detach().catch(() => undefined);
-      },
-      (what, why) => {
-        const [surface, rest] = what.split("/");
-        writer(surface as string).add(rest as string, null, why);
-        kit.note(`${what}: did not open or read (${why})`);
-      }
-    );
-  } finally {
-    await servers.close();
-    hub.stop();
-  }
-  const misses = hub.misses();
+  const { misses, seconds } = await walkTape(
+    kit,
+    tape,
+    surfaces,
+    PASSES,
+    async ({ page, pass, state, surface }) => {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("DOM.enable");
+      await cdp.send("CSS.enable");
+      const read = await readSurface(page, cdp, state.root);
+      writer(surface.name).add(`${state.name} · ${pass.name}`, read);
+      await cdp.detach().catch(() => undefined);
+    },
+    (what, why) => {
+      const [surface, rest] = what.split("/");
+      writer(surface as string).add(rest as string, null, why);
+      kit.note(`${what}: did not open or read (${why})`);
+    }
+  );
   if (misses.length > 0) {
     kit.note(
       `the tape answered ${misses.length} request(s) with "not on the tape" (the same on every run): ${misses.slice(0, 8).join("; ")}`
@@ -193,29 +258,48 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
     sockets: [],
     scene,
   };
-  const rec = recorder(fleet.base, tape);
-  const servers = new Servers(kit, rec);
   let fails = 0;
+  // Every route and state at each width, opened as a snapshot opens it:
+  // what the page asks the hub for. A read asks nothing (a forced state
+  // fires no event), so none is made; a theme or reduced motion asks for
+  // nothing a width does not.
+  const recordOn = async (into: TapeHub, reading: Surface[]) => {
+    const rec = recorder(fleet.base, into);
+    const servers = new Servers(kit, rec);
+    try {
+      await walk(
+        kit,
+        servers,
+        tape,
+        reading,
+        PASSES.filter((p) => p.theme === "light" && !p.reduced),
+        async () => undefined,
+        (what, why) => {
+          fails += 1;
+          kit.note(`${what}: did not open (${why})`);
+        }
+      );
+    } finally {
+      await servers.close();
+      rec.stop();
+    }
+  };
   try {
-    // Every route and state at each width, opened as a snapshot opens it:
-    // what the page asks the hub for. A read asks nothing (a forced state
-    // fires no event), so none is made; a theme or reduced motion asks for
-    // nothing a width does not.
-    await walk(
-      kit,
-      servers,
-      tape,
-      surfaces,
-      PASSES.filter((p) => p.theme === "light" && !p.reduced),
-      async () => undefined,
-      (what, why) => {
-        fails += 1;
-        kit.note(`${what}: did not open (${why})`);
+    await recordOn(tape, onHub(surfaces, undefined));
+    // Then each hub state the scene moves the fleet into, in order, each
+    // on its own section of the tape.
+    for (const hub of VARIANTS) {
+      const reading = onHub(surfaces, hub);
+      if (reading.length === 0) {
+        continue;
       }
-    );
+      // biome-ignore lint/performance/noAwaitInLoops: the fleet moves from one hub state to the next
+      await enterVariant(fleet, hub);
+      const section: TapeHub = { http: [], preview: [], sockets: [] };
+      await recordOn(section, reading);
+      tape.variants = { ...tape.variants, [hub]: section };
+    }
   } finally {
-    await servers.close();
-    rec.stop();
     stopJev();
   }
   await mkdir(join(TAPE, ".."), { recursive: true });
@@ -350,28 +434,20 @@ function heard(
 /** Which surfaces render an element of each styled file: the dev server's `__svelte_meta`. */
 async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   const tape = await readTape(TAPE);
-  const hub = player(tape);
-  const servers = new Servers(kit, hub);
   const seen = new Map<string, Set<string>>();
   const chained = new Map<string, Set<string>>();
-  try {
-    await walk(
-      kit,
-      servers,
-      tape,
-      surfaces.map((s) => ({ ...s, serve: "dev" as const })),
-      PASSES.filter((p) => !p.reduced && p.theme === "light"),
-      async ({ page, state, surface }) => {
-        const read = await page.evaluate(filesUnder, state.root);
-        heard(seen, read.own, surface.name);
-        heard(chained, read.chain, surface.name);
-      },
-      (what, why) => kit.note(`${what}: did not open (${why})`)
-    );
-  } finally {
-    await servers.close();
-    hub.stop();
-  }
+  await walkTape(
+    kit,
+    tape,
+    surfaces.map((s) => ({ ...s, serve: "dev" as const })),
+    PASSES.filter((p) => !p.reduced && p.theme === "light"),
+    async ({ page, state, surface }) => {
+      const read = await page.evaluate(filesUnder, state.root);
+      heard(seen, read.own, surface.name);
+      heard(chained, read.chain, surface.name);
+    },
+    (what, why) => kit.note(`${what}: did not open (${why})`)
+  );
   const map: Record<string, string[]> = {};
   const uncovered: string[] = [];
   const files = styled();
