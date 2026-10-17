@@ -181,6 +181,53 @@
   let connected = $state(false);
   let loaded = $state(false);
   let captured = false;
+  /**
+   * The page has said it is ready and has not been drawn for its thumbnail
+   * yet. The page draws itself at the frame's width (the overlay's capture),
+   * so it is drawn once the frame's box has stood still for
+   * CAPTURE_STILL_FRAMES frames, every resize starting the count again.
+   * Drawn the moment the page was ready, it was drawn at whatever width a
+   * pane still opening had reached: the session's thumbnail of one page was
+   * 467, 422 or 479px wide by the race.
+   */
+  let captureWanted = false;
+  let captureFrame = 0;
+  /** Frames the frame's box stands still before the page is drawn. Our call: three, past a resize's own frame. */
+  const CAPTURE_STILL_FRAMES = 3;
+  function captureWhenStill() {
+    cancelAnimationFrame(captureFrame);
+    let still = 0;
+    const standing = () => {
+      if (!captureWanted) {
+        return;
+      }
+      still += 1;
+      if (still < CAPTURE_STILL_FRAMES) {
+        captureFrame = requestAnimationFrame(standing);
+        return;
+      }
+      captureWanted = false;
+      captured = true;
+      post({ type: "cawco:capture" });
+    };
+    captureFrame = requestAnimationFrame(standing);
+  }
+  $effect(() => {
+    const frame = iframe;
+    if (!frame) {
+      return;
+    }
+    const sizes = new ResizeObserver(() => {
+      if (captureWanted) {
+        captureWhenStill();
+      }
+    });
+    sizes.observe(frame);
+    return () => {
+      sizes.disconnect();
+      cancelAnimationFrame(captureFrame);
+    };
+  });
   let reload = $state(0);
   /**
    * What last went wrong, and what trying again means: the frame's own
@@ -482,6 +529,8 @@
       connected = false;
       loaded = false;
       captured = false;
+      captureWanted = false;
+      cancelAnimationFrame(captureFrame);
       // A new load says again whether it is served.
       down = null;
       downWhy = null;
@@ -1111,9 +1160,9 @@
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
           }
-          if (!captured) {
-            captured = true;
-            post({ type: "cawco:capture" });
+          if (!(captured || captureWanted)) {
+            captureWanted = true;
+            captureWhenStill();
           }
         }
         break;
