@@ -1168,18 +1168,18 @@ const canvasBox = async (page: Page) => {
  */
 const columnParts = (page: Page) =>
   page.evaluate(() => {
-    const column = document.querySelector('[data-slot="composer"]');
-    const slot = column?.querySelector('[data-slot="canvas-slot"]');
-    const field = column?.querySelector(
+    const composer = document.querySelector('[data-slot="composer"]');
+    const slot = composer?.querySelector('[data-slot="canvas-slot"]');
+    const field = composer?.querySelector(
       '[role="combobox"][contenteditable="true"]'
     );
     return {
-      top: column?.getBoundingClientRect().top ?? null,
+      top: composer?.getBoundingClientRect().top ?? null,
       slot: slot?.getBoundingClientRect().height ?? null,
       field: field
         ? `${Math.round(field.getBoundingClientRect().height * 10) / 10}px ${JSON.stringify(field.innerHTML.slice(0, 160))}`
         : null,
-      parts: [...(column?.children ?? [])].map(
+      parts: [...(composer?.children ?? [])].map(
         (el) =>
           `${el.getAttribute("data-slot") ?? el.tagName.toLowerCase()} ${Math.round(el.getBoundingClientRect().height * 10) / 10}`
       ),
