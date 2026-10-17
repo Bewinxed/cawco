@@ -20,9 +20,12 @@
  *    asks for its thumbnail) to the thumbnail's arrival plus `AFTER_MS`, the
  *    dashboard's longest task is under `TASK_MS`, and the thumbnail is at
  *    most `THUMB_BYTES` of base64.
- * 2. The preview frame runs in a process of its own (an out-of-process
- *    iframe target), the hub asking for one (`Origin-Agent-Cluster: ?1`) on
- *    a secure origin (127.0.0.1).
+ * 2. The preview's origin asks for a process of its own on every answer
+ *    (`Origin-Agent-Cluster: ?1`); where Chromium runs the frame (an
+ *    out-of-process iframe target or not) is noted. Playwright's Chromium
+ *    keys a secure origin's process by itself, so 1 reads the thumbnail's
+ *    own cost on the dashboard's thread only where 5 does: WebKit, which
+ *    runs every frame there, as Chromium does over plain http.
  * 3. The light page: the same window, noted beside 1, the tool's own cost.
  * 4. A conversation's tab put off screen: its preview's frame stands for
  *    `PARK_MS`, is gone after it, and loads again (the page says ready)
@@ -280,9 +283,14 @@ const run = async (kit: Kit) => {
     : [];
   numbers.isolated = { previewOrigin, headers, isolated };
   kit.check(
-    "2: the preview's frame runs in a process of its own (an out-of-process iframe), the hub asking for one",
-    isolated.length > 0 && headers === "?1",
-    `origin ${previewOrigin}, origin-agent-cluster ${headers}, out-of-process frames ${isolated.length}`
+    "2: every answer on the preview's origin asks for a process of its own (Origin-Agent-Cluster: ?1)",
+    headers === "?1",
+    `origin ${previewOrigin}, origin-agent-cluster ${headers}`
+  );
+  // Playwright's Chromium keys this origin's process by itself (it did
+  // without the header too): where the frame runs is said, not held.
+  kit.note(
+    `2: the preview's frame in Chromium: ${isolated.length > 0 ? "out of process" : "in the dashboard's process"} (${isolated.length} out-of-process frames)`
   );
 
   // 3. The heavy page's tab put off screen (its neighbour's shown): its
