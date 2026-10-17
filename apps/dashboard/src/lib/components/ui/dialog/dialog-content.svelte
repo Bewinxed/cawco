@@ -1,4 +1,5 @@
 <script lang="ts">
+  /* eslint-disable shadcn/no-inline-styles -- style:pointer-events overrides bits-ui's run-time inline pointer-events: auto, which no class can (floating-presence.ts pressable) */
   import { Dialog as DialogPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";

@@ -14,7 +14,7 @@
 
 <PaneGroup
   class={cn(
-    "cn-resizable-panel-group flex h-full w-full data-[direction=vertical]:flex-col",
+    "flex h-full w-full data-[direction=vertical]:flex-col",
     className
   )}
   data-slot="resizable-pane-group"

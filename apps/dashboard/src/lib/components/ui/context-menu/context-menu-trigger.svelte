@@ -10,7 +10,7 @@
 </script>
 
 <ContextMenuPrimitive.Trigger
-  class={cn("cn-context-menu-trigger select-none", className)}
+  class={cn("select-none", className)}
   data-slot="context-menu-trigger"
   bind:ref
   {...restProps}
