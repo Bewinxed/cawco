@@ -80,9 +80,12 @@
 <!-- Focus never leaves the field: the menu swallows the mousedown that would
      blur it, so a picked row lands its chip where the words were typed. -->
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
+<!-- literal: 6px, 36px, 8px, 16px, 24px -->
 <div
   data-slot="menu"
-  class={["menu", { phone }]}
+  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-border-control rounded-lg bg-surface-raised shadow-overlay"
+  data-phone={phone || undefined}
+  style:--menu-bottom="calc(100% + var(--space-2))"
   onmousedown={(event) => event.preventDefault()}
   role="presentation"
   transition:grow
@@ -93,21 +96,26 @@
 >
   <div
     {id}
-    class="rows"
+    class="isolate flex flex-col p-(--rows-pad)"
+    style:--rows-pad="6px"
+    style:--sk-h="36px"
+    style:--sk-my="8px"
+    style:--line-fs="16px"
+    style:--line-lh="24px"
     aria-label="Name a session, thread or machine"
     role="listbox"
     {@attach reflow()}
     {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
   >
     {#if mention.answer.state === "unreached"}
-      <p class="line" data-flip>
+      <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>
         Can't reach the hub. Nothing can be named until it's back.
-        <button class="link" onclick={() => mention.retry()} type="button"
+        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer" onclick={() => mention.retry()} type="button"
           >Retry</button
         >
       </p>
     {:else if mention.answer.state === "refused"}
-      <p class="line" data-flip>{mention.answer.detail}</p>
+      <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>{mention.answer.detail}</p>
     {:else if mention.candidates.length > 0}
       {#each mention.candidates as result (keyOf(result))}
         {@const key = keyOf(result)}
@@ -124,53 +132,9 @@
         />
       {/each}
     {:else if mention.current && mention.answer.state === "ok"}
-      <p class="line" data-flip>No sessions for “{mention.words}”</p>
+      <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>No sessions for “{mention.words}”</p>
     {:else if late}
-      <Skeleton class="menu-skeleton" />
+      <Skeleton class="h-(--sk-h) mx-space-3 my-(--sk-my)" />
     {/if}
   </div>
 </div>
-
-<style>
-  .menu {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-end: calc(100% + var(--space-2));
-    z-index: 2;
-    transform-origin: bottom center;
-    overflow: hidden;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-  }
-  .rows {
-    isolation: isolate;
-    display: flex;
-    flex-direction: column;
-    padding: 6px;
-  }
-  .line {
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    font: var(--type-label);
-    font-weight: 400;
-    color: var(--ink-muted);
-  }
-  .link {
-    border: 0;
-    padding: 0;
-    background: none;
-    font: inherit;
-    color: var(--link-ink);
-    cursor: pointer;
-  }
-  .menu :global(.menu-skeleton) {
-    block-size: 36px;
-    margin: 8px var(--space-3);
-  }
-  .phone .line {
-    font-size: 16px;
-    line-height: 24px;
-  }
-</style>

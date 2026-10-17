@@ -53,28 +53,42 @@
   const conversation = $derived(result.kind === "conversation" ? result : null);
 </script>
 
-<div data-slot="peek" {id} class={["peek", { phone }]}>
+<!-- literal: 20px, 28px, 44px, 0.35em, max-content minmax(0, 1fr) -->
+<div
+  data-slot="peek"
+  {id}
+  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pr-0 pl-space-3 border-s border-border-control font-body text-size-meta font-normal leading-(--peek-lh) data-phone:text-size-label data-phone:leading-(--peek-lh-phone)"
+  data-phone={phone || undefined}
+  style:--peek-cols="max-content minmax(0, 1fr)"
+  style:--peek-ms="calc(var(--space-3) + var(--icon-md) + var(--space-2))"
+  style:--peek-lh="20px"
+  style:--peek-lh-phone="28px"
+  style:--peek-hit="44px"
+  style:--sep-pad="0.35em"
+>
   {#if conversation?.purpose}
-    <span data-slot="find-peek-label" class="label">purpose</span>
-    <span data-slot="value" class="value">{conversation.purpose}</span>
+    <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
+    <span data-slot="value" class="min-w-0 text-ink-row">{conversation.purpose}</span>
   {/if}
   {#if conversation?.lastReport}
-    <span data-slot="find-peek-label" class="label">last</span>
-    <span data-slot="value" class="value"
-      >report “{conversation.lastReport.headline}”<span class="sep">·</span
+    <span data-slot="find-peek-label" class="text-ink-subtle">last</span>
+    <span data-slot="value" class="min-w-0 text-ink-row"
+      >report “{conversation.lastReport.headline}”<span class="px-(--sep-pad)">·</span
       ><span data-slot="num" class="num"
         >{age(conversation.lastReport.at, now)}</span
       ></span
     >
   {/if}
   {#if moments.length > 0}
-    <span data-slot="find-peek-label" class="label">said</span>
-    <span class="moments" role="presentation">
+    <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
+    <span class="grid min-w-0" role="presentation">
       {#each moments as moment, i (moment.docId)}
         {@const key = keyOf(i)}
         <button
           id={idOf(key)}
-          class="moment"
+          class="group/moment relative flex items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-ink-row cursor-default active:bg-surface-fill group-data-phone/peek:min-h-(--peek-hit)"
+          style:--moment-w="calc(100% + 2 * var(--space-1))"
+          style:--moment-mx="calc(-1 * var(--space-1))"
           aria-selected={activeKey === key}
           data-active={activeKey === key ? "" : undefined}
           data-find-row
@@ -83,40 +97,40 @@
           tabindex="-1"
           type="button"
         >
-          <span class="clip"
-            >{AUTHOR[moment.author]}{#if moment.at !== null}<span class="sep"
+          <span class="flex-1 min-w-0 truncate"
+            >{AUTHOR[moment.author]}{#if moment.at !== null}<span class="px-(--sep-pad)"
                 >·</span
               ><span data-slot="num" class="num">{age(moment.at, now)}</span
-              >{/if}<span class="sep">·</span
-            >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark
+              >{/if}<span class="px-(--sep-pad)">·</span
+            >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark class="bg-transparent text-ink-strong font-medium"
                   >{part.text}</mark
                 >{:else}{part.text}{/if}{/each}”</span
           >
-          <span data-slot="enter" class="enter" aria-hidden="true">↵</span>
+          <span data-slot="enter" class="text-ink-subtle opacity-0 group-data-active/moment:opacity-100 group-data-phone/peek:opacity-100" aria-hidden="true">↵</span>
         </button>
       {/each}
     </span>
   {:else if momentsState.state === "asking"}
-    <span data-slot="find-peek-label" class="label">said</span>
-    <span data-slot="value" class="value muted"
+    <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
+    <span data-slot="value" class="min-w-0 text-ink-muted"
       >Asking {momentsState.machine}…</span
     >
   {:else if momentsState.state === "missing"}
-    <span data-slot="find-peek-label" class="label">said</span>
-    <span data-slot="value" class="value muted"
-      >{momentsState.machine} didn't answer<span class="sep">·</span><button
-        class="link"
+    <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
+    <span data-slot="value" class="min-w-0 text-ink-muted"
+      >{momentsState.machine} didn't answer<span class="px-(--sep-pad)">·</span><button
+        class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer"
         onclick={onretry}
         type="button">Retry</button
       ></span
     >
   {/if}
   {#if conversation && conversation.children.count > 0}
-    <span data-slot="find-peek-label" class="label">delegates</span>
-    <span data-slot="value" class="value"
+    <span data-slot="find-peek-label" class="text-ink-subtle">delegates</span>
+    <span data-slot="value" class="min-w-0 text-ink-row"
       ><span data-slot="num" class="num">{conversation.children.count}</span
-      >{#if conversation.children.needsYou > 0}<span class="sep">·</span><span
-          class="attn"
+      >{#if conversation.children.needsYou > 0}<span class="px-(--sep-pad)">·</span><span
+          class="text-status-attn-ink font-medium"
           ><span data-slot="num" class="num"
             >{conversation.children.needsYou}</span
           > needs you</span
@@ -124,112 +138,8 @@
     >
   {/if}
   {#if !phone}
-    <span data-slot="foot" class="foot" aria-hidden="true"
-      >↵ open<span class="sep">·</span>← fold</span
+    <span data-slot="foot" class="col-span-full text-ink-subtle" aria-hidden="true"
+      >↵ open<span class="px-(--sep-pad)">·</span>← fold</span
     >
   {/if}
 </div>
-
-<style>
-  .peek {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    column-gap: var(--space-3);
-    row-gap: 2px;
-    margin-inline-start: calc(var(--space-3) + var(--icon-md) + var(--space-2));
-    margin-block: 0 var(--space-2);
-    padding: 4px 0 4px var(--space-3);
-    border-inline-start: 1px solid var(--border-control);
-    font: var(--type-meta);
-    line-height: 20px;
-  }
-  .label {
-    color: var(--ink-subtle);
-  }
-  .value {
-    min-inline-size: 0;
-    color: var(--ink-row);
-  }
-  .muted {
-    color: var(--ink-muted);
-  }
-  .attn {
-    color: var(--status-attn-ink);
-    font-weight: var(--weight-strong);
-  }
-  .sep {
-    padding-inline: 0.35em;
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
-  }
-  .moments {
-    display: grid;
-    min-inline-size: 0;
-  }
-  .moment {
-    position: relative;
-    display: flex;
-    inline-size: calc(100% + 2 * var(--space-1));
-    border: 0;
-    background: none;
-    font: inherit;
-    text-align: start;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    margin-inline: calc(-1 * var(--space-1));
-    padding-inline: var(--space-1);
-    border-radius: var(--radius-xs);
-    color: var(--ink-row);
-    cursor: default;
-
-    & mark {
-      background: none;
-      color: var(--ink-strong);
-      font-weight: var(--weight-strong);
-    }
-    &:active {
-      background: var(--surface-fill);
-    }
-  }
-  .clip {
-    flex: 1;
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .enter {
-    color: var(--ink-subtle);
-    opacity: 0;
-  }
-  .moment[data-active] .enter {
-    opacity: 1;
-  }
-  .foot {
-    grid-column: 1 / -1;
-    color: var(--ink-subtle);
-  }
-  .link {
-    border: 0;
-    padding: 0;
-    background: none;
-    font: inherit;
-    color: var(--link-ink);
-    cursor: pointer;
-  }
-
-  .phone {
-    font: var(--type-label);
-    font-weight: 400;
-    line-height: 28px;
-    margin-inline-start: calc(var(--space-3) + var(--icon-md) + var(--space-2));
-  }
-  .phone .moment {
-    min-block-size: 44px;
-  }
-  .phone .moment .enter {
-    opacity: 1;
-  }
-</style>

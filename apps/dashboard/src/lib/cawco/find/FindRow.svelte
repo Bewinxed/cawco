@@ -41,56 +41,100 @@
   const ago = $derived(age(row.at, now));
 </script>
 
+<!-- literal: 44px -->
 <div
   data-slot="slot"
-  class={["slot", { phone }]}
+  class="relative flex flex-col flex-none"
   data-flip
   data-key={row.key}
+  data-phone={phone || undefined}
   role="none"
+  style:--hit="44px"
 >
   <!-- The glyph, title and age are the mark line (DESIGN.md The Mark Line
        Rule): the glyph's cell is a box on it, and the meta and reason lines
        stand under it, boxes the recipe leaves as they are. -->
+  <!-- literal: 20px, 16px, 18px, 8px, 10px, 56px, 0.35em, 0.25em, minmax(0, 1fr) -->
   <button
     data-slot="row"
     {id}
-    class={["row mark-line", { phone, "has-reason": row.reason !== null }]}
+    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-(--row-min) px-space-3 py-(--row-pad) border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-none select-none active:bg-surface-fill data-phone:min-h-(--row-min-phone) data-phone:py-(--row-pad-phone) data-peekable:pe-(--hit)"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-selected={active}
     data-active={active ? "" : undefined}
     data-find-row
+    data-has-reason={row.reason !== null ? "" : undefined}
+    data-peekable={peekable || undefined}
+    data-phone={phone || undefined}
     onclick={onpick}
     onpointermove={onhover}
     role="option"
     tabindex="-1"
     type="button"
+    style:--line-1="20px"
+    style:--line-meta="16px"
+    style:--line-reason="18px"
+    style:--row-cols="var(--icon-md) minmax(0, 1fr) auto"
+    style:--row-rows="var(--line-1) auto"
+    style:--row-min="calc(var(--line-1) + var(--line-meta) + 16px)"
+    style:--row-min-phone="56px"
+    style:--row-pad="8px"
+    style:--row-pad-phone="10px"
+    style:--title-fs-phone="16px"
+    style:--sep-pad="0.35em"
+    style:--arrow-pad="0.25em"
   >
     <span
       data-slot="glyph"
-      class={["glyph", { breathes: row.breathes }]}
+      class="grid place-items-center row-start-1 col-start-1 w-icon-md h-(--line-1) text-status-idle-glyph tone-live:text-status-live-glyph tone-attn:text-status-attn-glyph tone-fail:text-status-fail-glyph group-data-phone/row:self-start"
+      data-breathes={row.breathes ? "" : undefined}
       data-tone={row.state.tone}
       aria-hidden="true"
       data-box
     >
-      <row.glyph />
+      <row.glyph class="size-icon-md" />
     </span>
-    <span data-slot="title" class="title">{row.title}</span>
+    <!-- Its words trimmed to their x-height on the mark line, so the box clips
+         (Gecko does not trim a scroll container). -->
+    <span
+      data-slot="title"
+      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-body text-size-label font-medium leading-(--line-1) text-ink-row group-data-phone/row:text-(length:--title-fs-phone) group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3"
+      >{row.title}</span
+    >
     {#if ago}
-      <span data-slot="num" class="age num" aria-hidden="true">{ago}</span>
+      <span
+        data-slot="num"
+        class="num row-start-1 col-start-3 font-body text-size-meta font-normal leading-(--line-1) text-ink-muted group-data-phone/row:self-start"
+        aria-hidden="true">{ago}</span
+      >
     {/if}
-    <span data-slot="meta" class="meta" aria-hidden="true" data-box>
-      <span class="state" data-tone={row.state.tone}>{row.state.word}</span>
+    <span
+      data-slot="meta"
+      class="row-start-2 col-start-2 col-end-4 line-clamp-2 font-body text-size-meta font-normal leading-(--line-meta) text-ink-muted group-data-phone/row:text-size-label"
+      aria-hidden="true"
+      data-box
+    >
+      <span
+        class="font-medium text-ink-muted tone-live:text-status-live-ink tone-attn:text-status-attn-ink tone-fail:text-status-fail-ink"
+        data-tone={row.state.tone}>{row.state.word}</span
+      >
       {#each row.meta as word (word)}
-        <span class="sep">·</span>{word}
+        <span class="px-(--sep-pad)">·</span>{word}
       {/each}
     </span>
     {#if row.reason}
-      <span data-slot="reason" class="reason" aria-hidden="true" data-box>
-        <span class="clip"
-          ><span class="arrow">↳</span>
+      <span
+        data-slot="reason"
+        class="row-start-3 col-start-2 col-end-4 flex min-w-0 font-body text-size-meta font-normal leading-(--line-reason) text-ink-subtle group-data-phone/row:text-size-label group-data-phone/row:leading-(--line-meta)"
+        aria-hidden="true"
+        data-box
+      >
+        <span class="truncate"
+          ><span class="pe-(--arrow-pad)">↳</span>
           {row.reason.source}
           “{#each row.reason.parts as part, i (i)}{#if part.matched}<mark
+                class="bg-transparent text-ink-strong font-medium"
                 >{part.text}</mark
               >{:else}{part.text}{/if}{/each}”</span
         >
@@ -99,7 +143,7 @@
   </button>
   {#if peekable}
     <button
-      class={["disclose", { open: peeked }]}
+      class="group/disclose absolute inset-y-0 end-0 grid place-items-center w-(--hit) min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-fill"
       aria-controls={`${id}-peek`}
       aria-expanded={peeked}
       aria-label={peeked ? "Fold" : "Peek"}
@@ -109,72 +153,17 @@
       }}
       type="button"
     >
-      <ChevronDown />
+      <ChevronDown
+        class="size-icon-md motion-safe:transition-[rotate] motion-safe:dur-toggle motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
+      />
     </button>
   {/if}
 </div>
 
 <style>
-  .slot {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: none;
-  }
-  .row {
-    --line-1: 20px;
-    --line-meta: 16px;
-    --line-reason: 18px;
-    position: relative;
-    display: grid;
-    inline-size: 100%;
-    border: 0;
-    background: none;
-    font: inherit;
-    text-align: start;
-    color: inherit;
-    grid-template-columns: var(--icon-md) minmax(0, 1fr) auto;
-    grid-template-rows: var(--line-1) auto;
-    column-gap: var(--space-2);
-    align-items: center;
-    box-sizing: border-box;
-    min-block-size: calc(var(--line-1) + var(--line-meta) + 16px);
-    padding: 8px var(--space-3);
-    border-radius: var(--radius-sm);
-    cursor: default;
-    outline: none;
-    user-select: none;
-
-    &:active {
-      background: var(--surface-fill);
-    }
-  }
-
-  .glyph {
-    display: grid;
-    place-items: center;
-    grid-row: 1;
-    grid-column: 1;
-    inline-size: var(--icon-md);
-    block-size: var(--line-1);
-    color: var(--status-idle-glyph);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-    &[data-tone="live"] {
-      color: var(--status-live-glyph);
-    }
-    &[data-tone="attn"] {
-      color: var(--status-attn-glyph);
-    }
-    &[data-tone="fail"] {
-      color: var(--status-fail-glyph);
-    }
-  }
+  /* residual: keyframes */
   @media (prefers-reduced-motion: no-preference) {
-    .breathes {
+    [data-breathes] {
       animation: find-breathe var(--breath) var(--ease-in-out) infinite
         alternate;
     }
@@ -183,160 +172,5 @@
     to {
       opacity: 0.45;
     }
-  }
-
-  /* Its words trimmed to their x-height on the mark line, so the box clips
-     (Gecko does not trim a scroll container). */
-  .title {
-    grid-row: 1;
-    grid-column: 2;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-label);
-    line-height: var(--line-1);
-    color: var(--ink-row);
-  }
-  .clip {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .age {
-    grid-row: 1;
-    grid-column: 3;
-    font: var(--type-meta);
-    line-height: var(--line-1);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .meta {
-    grid-row: 2;
-    grid-column: 2 / 4;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-    font: var(--type-meta);
-    line-height: var(--line-meta);
-    color: var(--ink-muted);
-  }
-  .state {
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-
-    &[data-tone="live"] {
-      color: var(--status-live-ink);
-    }
-    &[data-tone="attn"] {
-      color: var(--status-attn-ink);
-    }
-    &[data-tone="fail"] {
-      color: var(--status-fail-ink);
-    }
-  }
-  .sep {
-    padding-inline: 0.35em;
-  }
-
-  .reason {
-    grid-row: 3;
-    grid-column: 2 / 4;
-    display: flex;
-    min-inline-size: 0;
-    font: var(--type-meta);
-    line-height: var(--line-reason);
-    color: var(--ink-subtle);
-
-    & mark {
-      background: none;
-      color: var(--ink-strong);
-      font-weight: var(--weight-strong);
-    }
-  }
-  .arrow {
-    padding-inline-end: 0.25em;
-  }
-
-  /* A phone: 16px titles that wrap whole on 20px lines, 13px meta on 16px
-     lines, 10px above and below: 56px, 72px when the meta line wraps (the
-     wireframe's figures), and 20px more per line a title wraps onto. A ⌄
-     at the end. */
-  .row.phone {
-    --line-1: 20px;
-    --line-meta: 16px;
-    --line-reason: 16px;
-    min-block-size: 56px;
-    padding-block: 10px;
-
-    & .title {
-      font: var(--type-body);
-      font-size: 16px;
-      line-height: var(--line-1);
-      font-weight: var(--weight-strong);
-    }
-    & .title {
-      white-space: normal;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 3;
-      line-clamp: 3;
-    }
-    & .glyph {
-      align-self: start;
-    }
-    & .age {
-      align-self: start;
-    }
-    & .meta,
-    & .reason {
-      grid-column: 2 / 4;
-      font: var(--type-label);
-      font-weight: 400;
-      line-height: var(--line-meta);
-    }
-    & .state {
-      font-weight: var(--weight-strong);
-    }
-  }
-
-  .slot:has(.disclose) .row {
-    padding-inline-end: 44px;
-  }
-
-  /* The ⌄: the row's trailing 44px, its whole height, beside the option. */
-  .disclose {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-end: 0;
-    display: grid;
-    place-items: center;
-    inline-size: 44px;
-    min-block-size: 0;
-    border: 0;
-    padding: 0;
-    background: none;
-    color: var(--ink-muted);
-    border-radius: var(--radius-sm);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-    &:active {
-      background: var(--surface-fill);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .disclose :global(svg) {
-      transition: rotate var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-  .disclose.open :global(svg) {
-    rotate: 180deg;
   }
 </style>

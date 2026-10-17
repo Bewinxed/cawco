@@ -73,21 +73,21 @@
     <button
       data-slot="pin-row"
       aria-current={pin.id === focused || undefined}
-      class="pin-row"
+      class="flex items-center gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-0 border-none border-current rounded-sm bg-transparent text-ink-row text-start transition-[background-color] dur-control ease-out cursor-pointer hover:bg-surface-hover active:bg-surface-fill aria-current:bg-surface-fill focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onclick={() => onopen(pin.id)}
       type="button"
     >
       <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
-      <span data-slot="words" class="words">
-        <span data-slot="name" class="name">{pinName(pin)}</span>
-        <span class="last">{lastLine(pin)}</span>
+      <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
+        <span data-slot="name" class="truncate text-ink-strong type-label">{pinName(pin)}</span>
+        <span class="truncate text-ink-muted text-size-meta">{lastLine(pin)}</span>
       </span>
       {#if live.has(pin.id)}
         <span
           data-slot="live"
           aria-label="The agent is working on it"
-          class="live"
+          class="shrink-0 size-(--live-dot) rounded-pill bg-status-live-glyph"
           role="img"
         ></span>
       {/if}
@@ -95,9 +95,18 @@
   </li>
 {/snippet}
 
-<section data-slot="pin-list" aria-label="Comments" class="pin-list">
-  <header data-slot="head" class="head">
-    <h2 data-slot="title" class="title">Comments</h2>
+<!-- literal: 8px -->
+<section
+  data-slot="pin-list"
+  aria-label="Comments"
+  class="flex flex-initial flex-col gap-space-1 min-h-0"
+  style:--live-dot="8px"
+>
+  <header
+    data-slot="head"
+    class="flex shrink-0 items-center justify-between gap-space-2 ps-space-2"
+  >
+    <h2 data-slot="title" class="m-0 text-ink-strong type-label">Comments</h2>
     <Button
       aria-label="Close comments"
       icon={IconClose}
@@ -107,7 +116,7 @@
       variant="ghost"
     />
   </header>
-  <div class="filter">
+  <div class="shrink-0 py-space-1 px-space-2">
     <Tabs
       onValueChange={(next) => {
         filter = next as "open" | "resolved";
@@ -121,38 +130,45 @@
       </TabsList>
     </Tabs>
   </div>
-  <div class="scroll kit-edge-fade-block">
+  <div
+    class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain"
+  >
     {#if shown.length > 0}
-      <ul class="rows">
+      <ul class="m-0 p-0 list-none">
         {#each shown as pin (pin.id)}
           {@render row(pin)}
         {/each}
       </ul>
     {:else if filter === "open"}
-      <p data-slot="pin-list-empty" class="empty">
-        <span class="empty-title">No open comments</span>
+      <p data-slot="pin-list-empty"
+        class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta">
+        <span class="text-ink-strong type-label">No open comments</span>
         Choose Comment, then click the page to pin one.
       </p>
     {:else}
-      <p data-slot="pin-list-empty" class="empty">
-        <span class="empty-title">No resolved comments</span>
+      <p data-slot="pin-list-empty"
+        class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta">
+        <span class="text-ink-strong type-label">No resolved comments</span>
         A pin you resolve leaves the page and waits here.
       </p>
     {/if}
     {#if moved.length > 0}
-      <section data-slot="moved" aria-label="Moved" class="moved">
-        <p class="moved-head mark-line"><IconMapPoint /><span>Moved</span></p>
-        <ul class="rows">
+      <section data-slot="moved" aria-label="Moved">
+        <p
+          class="mark-line flex items-center gap-space-1 m-0 px-space-2 py-space-1 text-ink-muted type-label"
+          ><IconMapPoint class="size-icon-md" /><span>Moved</span></p
+        >
+        <ul class="m-0 p-0 list-none">
           {#each moved as pin (pin.id)}
             <li
               data-slot="moved-row"
-              class="moved-row"
+              class="flex items-center gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-0 border-none border-current rounded-sm bg-transparent text-ink-row text-start transition-[background-color] dur-control ease-out"
               data-moved-row={pin.number}
             >
               <PinDisc moved number={pin.number} />
-              <span data-slot="words" class="words">
-                <span data-slot="name" class="name">{pinName(pin)}</span>
-                <span class="last">Its element is gone from the page</span>
+              <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
+                <span data-slot="name" class="truncate text-ink-strong type-label">{pinName(pin)}</span>
+                <span class="truncate text-ink-muted text-size-meta">Its element is gone from the page</span>
               </span>
               <Button
                 aria-pressed={placing === pin.id}
@@ -170,138 +186,15 @@
 </section>
 
 <style>
-  /* A column the panel's height bounds: the head and the filter stand, the
-     rows under them scroll on their own. */
-  .pin-list {
-    display: flex;
-    flex: 0 1 auto;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-height: 0;
-  }
-  .head {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding-inline-start: var(--space-2);
-  }
-  .title {
-    margin: 0;
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .filter {
-    flex-shrink: 0;
-    padding: var(--space-1) var(--space-2);
-  }
-  .scroll {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: var(--space-3) var(--space-2);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  .empty-title {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .rows {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .pin-row,
-  .moved-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    min-height: var(--c-artifact-row-h);
-    padding: 0 var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--ink-row);
-    text-align: start;
-    font: inherit;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .pin-row {
-    cursor: pointer;
-  }
-  @media (hover: hover) {
-    .pin-row:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .pin-row:active,
-  .pin-row[aria-current="true"] {
-    background: var(--surface-fill);
-  }
-  .pin-row:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .words {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-  }
-  .name,
-  .last {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .last {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  /* The activity dot's working form: 8px, info blue, on the one loop. */
-  .live {
-    flex-shrink: 0;
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--status-live-glyph);
-  }
+  /* residual: keyframes */
   @media (prefers-reduced-motion: no-preference) {
-    .live {
+    [data-slot="live"] {
       animation: pin-live var(--dur-loop) var(--ease-in-out) infinite;
     }
   }
   @keyframes pin-live {
     50% {
       opacity: 0.4;
-    }
-  }
-  .moved-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: 0;
-    padding: var(--space-1) var(--space-2);
-    color: var(--ink-muted);
-    font: var(--type-label);
-
-    & :global(svg) {
-      width: 16px;
-      height: 16px;
     }
   }
 </style>

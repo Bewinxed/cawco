@@ -190,7 +190,7 @@
       heir === undefined
         ? null
         : list?.querySelector<HTMLElement>(
-            `.artifact-row[data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
+            `[data-artifact-row][data-artifact="${CSS.escape(heir)}"]:not([data-reflow-ghost])`
           );
     (next ?? list)?.focus();
   });
@@ -199,18 +199,18 @@
 <DropdownMenu.Root bind:open>
   <DropdownMenu.Trigger
     data-artifact-trigger
-    class="artifact-trigger mark-line"
+    class="mark-line min-w-0 max-w-full text-ink-strong type-label"
     data-artifact={shown.id}
   >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />
-    <span class="artifact-name">{shown.name}</span>
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">{shown.name}</span>
     <IconChevronDown />
   </DropdownMenu.Trigger>
   <DropdownMenu.Content
     data-artifact-list
     align="start"
-    class="artifact-list w-64"
+    class="w-64"
     bind:ref={list}
   >
     <div {@attach reflow()} {@attach keepFocus}>
@@ -228,7 +228,7 @@
           ]
             .filter(Boolean)
             .join(" ")}
-          class="artifact-row"
+          class="group/artifact min-h-c-artifact-row-h aria-current:text-ink-strong aria-busy:opacity-50"
           data-artifact={artifact.id}
           data-flip
           onkeydown={(event: KeyboardEvent) => {
@@ -242,13 +242,13 @@
           <Glyph />
           <span
             data-slot="row-name"
-            class="row-name"
+            class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label"
             id={part(artifact.id, "name")}>{artifact.name}</span
           >
           {#if artifact.promoted}
             <span
               data-slot="row-promoted"
-              class="row-promoted"
+              class="shrink-100 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
               id={part(artifact.id, "promoted")}
               title="Promoted into the project's folder at artifacts/{artifact.name}/"
               >Promoted {artifact.promoted.commit.slice(0, 7)}</span
@@ -257,15 +257,16 @@
           {#if artifact.createdAt}
             <span
               data-slot="row-age"
-              class="row-age"
+              class="text-ink-muted text-size-meta num"
               id={part(artifact.id, "age")}
               >{formatAgeShort(Date.parse(artifact.createdAt))}</span
             >
           {/if}
           <button
             aria-label="Remove {artifact.name}"
-            class="row-remove"
+            class="grid place-items-center me-(--remove-me) p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] dur-control ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
             data-box
+            style:--remove-me="calc(-1 * var(--space-1))"
             disabled={removing.has(artifact.id)}
             onclick={(event) => {
               own(event);
@@ -284,82 +285,3 @@
     </div>
   </DropdownMenu.Content>
 </DropdownMenu.Root>
-
-<style>
-  /* The head's first control: the name in the label role, the button
-     recipe the head gives every control (SideSurface). */
-  :global(.artifact-trigger) {
-    min-width: 0;
-    max-width: 100%;
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .artifact-name {
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  :global(.artifact-list .artifact-row) {
-    min-block-size: var(--c-artifact-row-h);
-  }
-  :global(.artifact-list .artifact-row[aria-current="true"]) {
-    color: var(--ink-strong);
-  }
-  /* The name is what a row is chosen by: it keeps its own width, and in a
-     row too narrow for everything the promoted tag gives up its room first
-     (its title and the row's name still say it). */
-  .row-name {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-label);
-  }
-  .row-promoted,
-  .row-age {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-variant-numeric: tabular-nums;
-  }
-  .row-promoted {
-    flex-shrink: 100;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  :global(.artifact-list .artifact-row[aria-busy="true"]) {
-    opacity: 0.5;
-  }
-  /* Shown on the highlighted row (pointer or arrow keys), always under a
-     finger; red under the pointer, as a destructive item's glyph is. */
-  .row-remove {
-    display: grid;
-    place-items: center;
-    margin-inline-end: calc(-1 * var(--space-1));
-    padding: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-muted);
-    opacity: 0;
-    transition:
-      opacity var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-  :global(.artifact-row[data-highlighted]) .row-remove {
-    opacity: 1;
-  }
-  @media (hover: hover) {
-    .row-remove:hover {
-      color: var(--destructive);
-    }
-  }
-  @media (pointer: coarse) {
-    .row-remove {
-      opacity: 1;
-    }
-  }
-</style>

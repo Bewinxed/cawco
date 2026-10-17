@@ -72,11 +72,11 @@
 
 <form
   aria-label="Pick a machine and folder"
-  class="place-pick"
+  class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-5 bg-surface-raised"
   onsubmit={use}
   transition:appear
 >
-  <h2 class="pick-title">Pick a machine and folder</h2>
+  <h2 class="type-title text-ink-strong">Pick a machine and folder</h2>
   <div class="flex flex-col gap-space-1">
     <span class="text-label text-ink-muted" id="place-machine-label"
       >Machine</span
@@ -146,23 +146,3 @@
     {/if}
   </div>
 </form>
-
-<style>
-  /* Over the whole well, opaque: the page under it is put by while the
-     person picks, never shown cut through, so it carries its own heading. */
-  .place-pick {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    overflow-y: auto;
-    padding: var(--space-5);
-    background: var(--surface-raised);
-  }
-  .pick-title {
-    font: var(--type-title);
-    color: var(--ink-strong);
-  }
-</style>
