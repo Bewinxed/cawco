@@ -1506,6 +1506,17 @@ export type FramePayload =
 export const CAWCO_HUB_PORT = 3456;
 
 /**
+ * The dashboard's port on every computer's loopback, beside the hub's
+ * (IANA lists 3455 as `prsvp`, a legacy RSVP encapsulation; no dev server
+ * defaults to it, unlike 3000): `http://localhost:3455` is the dashboard on
+ * the hub's computer, where the dashboard's socket listens on it, and on
+ * every other computer running the agent, which carries it to the hub
+ * (agent hub-loopback.ts). Loopback is a secure context, so its previews run
+ * in a process of their own.
+ */
+export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
+
+/**
  * A preview's start page: a path on the previewed server, one leading slash
  * (never `//host`, which would leave it), no whitespace.
  */
@@ -1706,6 +1717,8 @@ export const CAWCO_ENV = {
    * hub's composed links point at it.
    */
   dashboardPort: "CAWCO_DASHBOARD_PORT",
+  /** The dashboard's loopback port on every computer ({@link localDashboardPort}). */
+  localDashboardPort: "CAWCO_LOCAL_DASHBOARD_PORT",
   /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
   githubApi: "CAWCO_GITHUB_API",
   /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
@@ -1787,6 +1800,23 @@ export const mcpGatewayPort = (): number => {
     gatewayPort = port;
   }
   return gatewayPort;
+};
+
+/**
+ * The dashboard's loopback port: `CAWCO_LOCAL_DASHBOARD_PORT`, else
+ * {@link CAWCO_LOCAL_DASHBOARD_PORT}. The hub names it to every agent in its
+ * register answer, and the installer listens on it with the dashboard's
+ * socket on the hub's computer; both read it here.
+ */
+export const localDashboardPort = (): number => {
+  const named = readEnv(CAWCO_ENV.localDashboardPort);
+  const port = named === undefined ? CAWCO_LOCAL_DASHBOARD_PORT : Number(named);
+  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+    throw new Error(
+      `${CAWCO_ENV.localDashboardPort} must be a port number, not "${named}"`
+    );
+  }
+  return port;
 };
 
 /**

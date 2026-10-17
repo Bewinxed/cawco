@@ -49,6 +49,7 @@ import {
 import {
   ARTIFACTS_ROOT,
   FLEET_PORTS,
+  LOCAL_DASHBOARD_PORT,
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
@@ -115,6 +116,8 @@ export const noteParent = (origin: string | undefined): void => {
 
 // The operator's own dashboard address, before any dashboard has connected.
 noteParent(readEnv(CAWCO_ENV.dashboardUrl));
+// The dashboard on every computer's loopback (core `localDashboardPort`).
+noteParent(`http://localhost:${LOCAL_DASHBOARD_PORT}`);
 
 /** Every origin that may frame a preview now. */
 export const previewParents = (): string[] => [...parents];

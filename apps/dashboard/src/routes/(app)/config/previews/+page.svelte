@@ -98,7 +98,7 @@
       address once this is saved.
     </p>
     <p data-slot="note" class="note">
-      On a computer running CawCo, open <code>http://localhost:3000</code>;
+      On a computer running CawCo, open <code>http://localhost:3455</code>;
       previews there run in their own process on Chrome, Edge and Brave.
     </p>
     <Field

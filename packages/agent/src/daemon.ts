@@ -2386,7 +2386,7 @@ const attach = (
         takeUpstream((envelope.payload as RegisterAckPayload).upstream);
         // localhost on this computer is the hub this connection reached.
         carryHub(url, {
-          dashboard: (envelope.payload as RegisterAckPayload).dashboardPort,
+          dashboard: (envelope.payload as RegisterAckPayload).dashboardPorts,
           previews: (envelope.payload as RegisterAckPayload).previewPorts,
         });
         // This connection's credential for the hub's git remote, in memory only.

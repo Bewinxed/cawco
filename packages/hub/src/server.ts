@@ -429,6 +429,7 @@ import {
   GIT_ROOT,
   HUB_VERSION,
   LFS_ROOT,
+  LOCAL_DASHBOARD_PORT,
   PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
@@ -1423,7 +1424,7 @@ const registerAck = (
     sessionLimits,
     upstream,
     // What the agent serves on its own computer's loopback (agent hub-loopback.ts).
-    dashboardPort: DASHBOARD_PORT,
+    dashboardPorts: { hub: DASHBOARD_PORT, local: LOCAL_DASHBOARD_PORT },
     previewPorts: PREVIEW_PORTS,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,

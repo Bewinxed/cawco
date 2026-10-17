@@ -290,11 +290,13 @@ export interface DeliveryMark {
 export interface RegisterAckPayload {
   addressContract?: true;
   /**
-   * The port the hub's dashboard is served on (hub config.ts
-   * `DASHBOARD_PORT`): the agent serves it on its own computer's loopback
-   * (agent hub-loopback.ts), with {@link previewPorts}.
+   * The dashboard's ports: `hub`, where the hub's computer serves it to the
+   * network (hub config.ts `DASHBOARD_PORT`), and `local`, its port on every
+   * computer's loopback (core `localDashboardPort`). The agent serves `local`
+   * on its own loopback, carried to the hub's `hub` (agent hub-loopback.ts),
+   * with {@link previewPorts}.
    */
-  dashboardPort: number;
+  dashboardPorts: { hub: number; local: number };
   /**
    * The hub's delivery mark for each instance the register names
    * ({@link DeliveryMark}): the agent sends again what it has past it.
@@ -325,7 +327,7 @@ export interface RegisterAckPayload {
    */
   machineCredential: string;
   ok: true;
-  /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPort}. */
+  /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
   previewPorts: { first: number; last: number };
   /**
    * The fleet's session limits ({@link import("./index").SessionLimits}), so

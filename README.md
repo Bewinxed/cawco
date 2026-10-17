@@ -18,7 +18,7 @@ On macOS, missing command-line tools or other prerequisites stop installation wi
 
 ## After install
 
-Open the dashboard URL printed by the installer, normally <http://localhost:3000> on the hub machine. On a computer running cawco, open <http://localhost:3000>; previews there run in their own process on Chrome, Edge and Brave. The root opens the Fleet board. Check that the connection is live and your machine is online.
+Open the dashboard URL printed by the installer, normally <http://localhost:3000> on the hub machine. On any computer running cawco, the hub machine included, open <http://localhost:3455>; previews there run in their own process on Chrome, Edge and Brave. The root opens the Fleet board. Check that the connection is live and your machine is online.
 
 Add a project from the projects rail: name it, choose a machine, and pick its directory. Open the project and start a session with an instruction, or start empty. Review the machine, harness, model, permission mode, rules, and tools before starting. The session's transcript opens as it starts; when it needs permission, read the request and approve or deny it there.
 

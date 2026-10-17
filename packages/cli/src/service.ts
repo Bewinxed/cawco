@@ -6,6 +6,7 @@ import type { AgentRow } from "@cawco/core";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  localDashboardPort,
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
@@ -264,6 +265,8 @@ const HERE = here();
 const ROOT = HERE.root;
 
 const LISTEN_STREAM = /^ListenStream=(.+):(\d+)$/m;
+/** An IPv6 host as `ListenStream=` writes it, in brackets (`listenAddress`). */
+const BRACKETED = /^\[(.*)\]$/;
 const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
 const SOCK_SERVICE = /<key>SockServiceName<\/key>\s*<string>([^<]*)<\/string>/;
 
@@ -288,7 +291,7 @@ const installedDashboardAddress = ():
     ? LISTEN_STREAM.exec(readFileSync(path, "utf8"))
     : null;
   return listen?.[1] && listen[2]
-    ? { host: listen[1], port: listen[2] }
+    ? { host: listen[1].replace(BRACKETED, "$1"), port: listen[2] }
     : undefined;
 };
 
@@ -301,6 +304,27 @@ const DASHBOARD_PORT =
   process.env.PORT ?? installedDashboardAddress()?.port ?? "3000";
 const DASHBOARD_HOST =
   process.env.HOST ?? installedDashboardAddress()?.host ?? "0.0.0.0";
+
+/**
+ * Every address the dashboard's socket listens on: where it is reached from
+ * the network first (installedDashboardAddress reads that one back), then
+ * this computer's loopback at the dashboard's loopback port (core
+ * `localDashboardPort`), so `http://localhost:3455` is the dashboard here as
+ * it is on every computer whose agent carries it (agent hub-loopback.ts).
+ * The loopback port is left out when it is the network port already.
+ */
+export const dashboardListens = (): { host: string; port: string }[] => {
+  const local = String(localDashboardPort());
+  return [
+    { host: DASHBOARD_HOST, port: DASHBOARD_PORT },
+    ...(local === DASHBOARD_PORT
+      ? []
+      : [
+          { host: "127.0.0.1", port: local },
+          { host: "::1", port: local },
+        ]),
+  ];
+};
 
 /**
  * The PATH the installing shell had. A launchd job otherwise inherits a nearly
@@ -735,12 +759,14 @@ export interface ServiceSpec {
    * service at every start (systemd `.socket` unit, launchd `Sockets`). A
    * connection that arrives while the service restarts waits in the socket's
    * backlog for the new process rather than being refused. `name` is what the
-   * service collects it by.
+   * service collects it by, one descriptor per address in `listens`.
    */
   readonly socket?: {
-    readonly host: string;
+    readonly listens: readonly {
+      readonly host: string;
+      readonly port: string;
+    }[];
     readonly name: string;
-    readonly port: string;
   };
   readonly wants: readonly string[];
   readonly workingDirectory: string;
@@ -786,6 +812,9 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         // The dashboard socket's port, which the hub's preview ports never
         // take (hub config.ts `FLEET_PORTS`) and its bridge's links name.
         [CAWCO_ENV.dashboardPort]: DASHBOARD_PORT,
+        // Its loopback port, the one the hub names to every agent: the same
+        // one the dashboard's socket listens on here (`dashboardListens`).
+        [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
       },
       workingDirectory: LAYOUT_ROOT,
       after: ["network-online.target"],
@@ -807,7 +836,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       },
       // serve.js collects this socket by name and never binds the port itself,
       // so a deploy's restart leaves the port open the whole time.
-      socket: { name: "dashboard", host: DASHBOARD_HOST, port: DASHBOARD_PORT },
+      socket: { name: "dashboard", listens: dashboardListens() },
       workingDirectory: layout.dashboardCwd,
       after: [unitName("hub"), socketName("dashboard")],
       wants: [unitName("hub")],
@@ -1131,12 +1160,18 @@ ${
     ? `  <key>Sockets</key>
   <dict>
     <key>${xml(spec.socket.name)}</key>
-    <dict>
-      <key>SockNodeName</key>
-      <string>${xml(spec.socket.host)}</string>
-      <key>SockServiceName</key>
-      <string>${xml(spec.socket.port)}</string>
-    </dict>
+    <array>
+${spec.socket.listens
+  .map(
+    ({ host, port }) => `      <dict>
+        <key>SockNodeName</key>
+        <string>${xml(host)}</string>
+        <key>SockServiceName</key>
+        <string>${xml(port)}</string>
+      </dict>`
+  )
+  .join("\n")}
+    </array>
   </dict>
 `
     : ""
@@ -1211,11 +1246,15 @@ RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}${
 ${["WantedBy=default.target", ...(spec.requiredBy ?? []).map((target) => `RequiredBy=${target}`)].join("\n")}
 `;
 
+/** An address as `ListenStream=` takes it: an IPv6 host in brackets. */
+const listenAddress = ({ host, port }: { host: string; port: string }) =>
+  `${host.includes(":") ? `[${host}]` : host}:${port}`;
+
 /**
- * The listening socket systemd holds for a socket-activated service. The
- * service unit of the same name is the one it starts; `FileDescriptorName=` is
- * what the service collects it by. `NoDelay=` because every byte on it is an
- * interactive page load.
+ * The listening sockets systemd holds for a socket-activated service, one per
+ * address it listens on. The service unit of the same name is the one it
+ * starts; `FileDescriptorName=` is what the service collects them by.
+ * `NoDelay=` because every byte on them is an interactive page load.
  */
 const socketUnit = (
   spec: ServiceSpec,
@@ -1224,7 +1263,7 @@ const socketUnit = (
 Description=${spec.description} socket
 
 [Socket]
-ListenStream=${socket.host}:${socket.port}
+${socket.listens.map((listen) => `ListenStream=${listenAddress(listen)}`).join("\n")}
 FileDescriptorName=${socket.name}
 NoDelay=true
 
@@ -2007,7 +2046,7 @@ const systemdStatus = async (
       socketName(spec.id),
     ]);
     note(
-      `socket   ${socketName(spec.id)} ${listening.stdout.toString().trim() || "unknown"} on ${spec.socket.host}:${spec.socket.port}`
+      `socket   ${socketName(spec.id)} ${listening.stdout.toString().trim() || "unknown"} on ${spec.socket.listens.map(listenAddress).join(", ")}`
     );
   }
   note(`mode     ${await modeLine(spec, systemdPath(spec.name))}`);
@@ -2110,6 +2149,18 @@ const specsOf = (
       }
     : HERE;
   return ids.map((id) => specFor(id, mode, layout));
+};
+
+/** The dashboard's socket as `cawco service install` writes it on this computer: its systemd socket unit and its launchd plist. */
+export const dashboardSocketTexts = (): {
+  launchd: string;
+  systemd: string;
+} => {
+  const [spec] = specsOf(["dashboard"], "prod", undefined);
+  if (!spec?.socket) {
+    throw new Error("the dashboard's service has no socket");
+  }
+  return { systemd: socketUnit(spec, spec.socket), launchd: plist(spec) };
 };
 
 /**

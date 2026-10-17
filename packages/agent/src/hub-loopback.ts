@@ -11,9 +11,11 @@ import type { Server } from "bun";
 
 /**
  * The hub's dashboard and preview ports on this computer's loopback: on any
- * computer running the agent, `http://localhost:3000` is the hub's
- * dashboard, carried to the hub over the network the agent already reaches
- * it on. Loopback is a secure context, so the hub's
+ * computer running the agent, `http://localhost:3455` (core
+ * `localDashboardPort`, a port of CawCo's own, never a dev server's 3000) is
+ * the hub's dashboard, carried to the dashboard's port on the hub over the
+ * network the agent already reaches it on; on the hub's computer the
+ * dashboard's own socket listens on it. Loopback is a secure context, so the hub's
  * `Origin-Agent-Cluster: ?1` holds there and Chromium runs each preview in a
  * process of its own (a frame at 127.0.0.1 attached as its own process with a
  * 13 ms worst dashboard stall, against 2002 ms over a tailnet IP, Chrome 156);
@@ -32,9 +34,13 @@ const LOOPBACK = ["127.0.0.1", "::1"];
 /** An IPv6 literal's brackets, as a URL's hostname carries them. */
 const BRACKETS = /^\[|\]$/g;
 
-/** The ports the hub serves its dashboard and its previews on, as its register answer names them. */
+/**
+ * The ports the hub's register answer names: the dashboard's on the hub
+ * (`hub`) and on every computer's loopback (`local`), and its previews',
+ * the same on both.
+ */
 export interface HubPorts {
-  dashboard: number;
+  dashboard: { hub: number; local: number };
   previews: { first: number; last: number };
 }
 
@@ -70,15 +76,16 @@ const unreachable = (hub: string, cause: string): Response =>
     }
   );
 
-/** One loopback listener: `hostname:port`, every request and socket carried to the same port of `hubHost`. */
+/** One loopback listener: `hostname:local`, every request and socket carried to `hubHost:port`. */
 const listen = (
   hubHost: string,
   hostname: string,
+  local: number,
   port: number
 ): Server<PreviewSocket> =>
   Bun.serve<PreviewSocket>({
     hostname,
-    port,
+    port: local,
     websocket: previewWebSocket,
     async fetch(request, server) {
       const url = new URL(request.url);
@@ -126,8 +133,8 @@ const listen = (
 
 /**
  * Serves the hub at `hubUrl` (the address the agent is connected to it on)
- * on this computer's loopback, at the hub's dashboard port and every preview
- * port. An address the hub itself is reached at is never bound: the hub is
+ * on this computer's loopback: the dashboard's loopback port, carried to its
+ * port on the hub, and every preview port, each to its own. An address the hub itself is reached at is never bound: the hub is
  * on this computer there, its loopback already is the hub, and a listener of
  * its own would relay to itself. A port another listener holds (the hub's,
  * on its own computer) is said once and left to it.
@@ -149,26 +156,29 @@ export async function startHubLoopback(
     );
     return { stop: async () => undefined };
   }
-  const all = [ports.dashboard];
+  /** Each loopback port, and the hub's port it is carried to. */
+  const all: [local: number, hub: number][] = [
+    [ports.dashboard.local, ports.dashboard.hub],
+  ];
   for (
     let port = ports.previews.first;
     port <= ports.previews.last;
     port += 1
   ) {
-    all.push(port);
+    all.push([port, port]);
   }
   const servers: Server<PreviewSocket>[] = [];
   const held = new Map<string, number[]>();
   try {
     for (const hostname of hosts) {
-      for (const port of all) {
+      for (const [local, port] of all) {
         try {
-          servers.push(listen(hubHost, hostname, port));
+          servers.push(listen(hubHost, hostname, local, port));
         } catch (error) {
           if ((error as { code?: unknown }).code !== "EADDRINUSE") {
             throw error;
           }
-          held.set(hostname, [...(held.get(hostname) ?? []), port]);
+          held.set(hostname, [...(held.get(hostname) ?? []), local]);
         }
       }
     }
@@ -183,7 +193,7 @@ export async function startHubLoopback(
     );
   }
   console.info(
-    `[${HOP}] the hub at ${hubHost} is served on ${hosts.join(" and ")}: http://localhost:${ports.dashboard}, previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
+    `[${HOP}] the hub at ${hubHost} is served on ${hosts.join(" and ")}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
   );
   return {
     stop: async () => {
