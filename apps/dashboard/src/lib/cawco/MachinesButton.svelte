@@ -88,8 +88,10 @@
 </Tip>
 
 <style>
-  /* residual: unmapped — outranks Shell's unlayered `.tools .bar-symbol` ink,
-     which a utility on the glyph cannot; clears when Shell's lane moves it. */
+  /* residual: foreign-dom — the glyph's DOM, reached through `.bar-symbol`;
+     unlayered, so it outranks Shell's unlayered foreign-dom rule on the same
+     target (`[data-slot="tools"] .bar-symbol`'s ink), which a utility on
+     the glyph cannot. */
   [data-machines][data-tone="attn"] :global(.bar-symbol) {
     color: var(--status-attn-glyph);
   }

@@ -175,6 +175,17 @@
 
   /** The cell a relay band stands for, while the band is hovered or open. */
   let lit = $state<string | null>(null);
+  /** The ground a cell's reserve notch takes: the hover wash while lit,
+      else the limit wash at its limit (lit wins, as its background does). */
+  function groundOf(ring: RingAccount): string | undefined {
+    if (ring.id === lit) {
+      return "var(--surface-hover)";
+    }
+    if (ring.state === "limit") {
+      return "var(--meter-wash-over)";
+    }
+    return undefined;
+  }
   /** Where a cell's tooltips open. */
   type TipSide = "top" | "right";
   /**
@@ -187,7 +198,7 @@
   const rowOf = (id: string) => ({
     getBoundingClientRect: () => {
       const cell = document.querySelector<HTMLElement>(
-        `.cell-d[data-account="${CSS.escape(id)}"]`
+        `[data-slot="cell-d"][data-account="${CSS.escape(id)}"]`
       );
       const grid = cell?.closest<HTMLElement>('[data-slot="wall"]');
       if (!(cell && grid)) {
@@ -516,7 +527,7 @@
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
+                  class="absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
                   style:--slot-at={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
@@ -533,7 +544,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center font-body text-size-meta leading-(--more-lh) font-normal num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
+                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center font-body text-size-meta leading-(--more-lh) font-normal num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:--more-lh="16px"
                   style:--slot-at={slotAt(
@@ -571,7 +582,7 @@
                it end in an ellipsis. -->
           <!-- literal: 15px -->
           <span
-            class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
             data-next={claude.next?.id}
             data-strip-caption
             style:--cap-lh="15px"
@@ -619,7 +630,7 @@
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
               data-strip-go-week
               style:--cap-lh="15px"
               ><WeekMark ring={openCode} />
@@ -782,13 +793,15 @@
        edge (3:1 on the raised surface); an account at its limit the limit
        wash, which the dial's reserve notch takes as its ground; the cell a
        relay band stands for, while that band is hovered or open, the hover
-       wash. (`cell-d` is the class rowOf reads and the states' hook.) -->
+       wash; each of those washes is also the ground the notch takes
+       (`--ring-ground`). (`cell-d` is the hook rowOf reads.) -->
   <!-- literal: span 5; auto auto -->
   <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <div
+    data-slot="cell-d"
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="cell-d relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out motion-reduce:transition-none"
+    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -799,6 +812,7 @@
     role="group"
     style:--cell-rows="auto auto"
     style:--cell-span="span 5"
+    style:--ring-ground={groundOf(ring)}
   >
     {@render dial(ring, c, shown, side)}
     <!-- The first line, from the time's x to the share's end, so the name
@@ -1025,9 +1039,9 @@
               <div data-slot="block" class="contents" data-org-group="opencode">
                 <!-- The providers' hairline, inside the wall's grid: across
                      the whole popover, edge to edge, as a section's edge
-                     is. -->
+                     is: `border: 0`, then its top edge. -->
                 <hr
-                  class="col-span-full mx-(--seam-pull) my-space-1"
+                  class="col-span-full mx-(--seam-pull) my-space-1 border-t border-t-border-hairline border-r-none border-b-none border-l-none"
                   style:--seam-pull="calc(-1 * var(--group-pad-x))"
                 />
                 {@render cell(openCode, null, sideFor())}
@@ -1062,9 +1076,9 @@
         <!-- Claude's gap: the whole why the strip's line stands for, and
              the sign-in that fixes it when one does. -->
         <div
-          class="pop-gap flex flex-col items-start gap-space-2 px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+          class="flex flex-col items-start gap-space-2 px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
         >
-          <p class="pop-note mark-line flex items-center gap-(--note-gap)">
+          <p class="mark-line flex items-center gap-(--note-gap)">
             <span
               data-slot="mark"
               aria-hidden="true"
@@ -1086,9 +1100,11 @@
       {/if}
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
-        <!-- A provider with nothing to draw: why, and what to do about it. -->
+        <!-- A provider with nothing to draw: why, and what to do about it.
+             A hairline parts it from the group, the gap or the note before
+             it. -->
         <p
-          class="pop-note mark-line flex items-center gap-(--note-gap) px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+          class="mark-line flex items-center gap-(--note-gap) px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted not-first:border-t not-first:border-t-border-hairline"
         >
           <span
             data-slot="mark"
@@ -1120,8 +1136,9 @@
 
 <!-- Its ground is the surface it stands on: the rail's by default, the phone
      home's raised card. A reserve notch is cut in the same paint. One
-     control, one height whatever it says (`strip-hit`, which the
-     usage-relay bench finds it by). -->
+     control, one height whatever it says (`data-strip-hit`, which the
+     usage-relay bench finds it by); under the pointer or open it paints its
+     own ground, and the dials' reserve notch takes it (`ring-ground-*`). -->
 <!-- literal: 44px, 56px -->
 <div
   data-slot="strip"
@@ -1139,7 +1156,8 @@
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        class="press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        data-strip-hit
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1156,7 +1174,8 @@
     <Popover.Root bind:open>
       <Popover.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        class="press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        data-strip-hit
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1165,9 +1184,12 @@
       <!-- literal: 100vw, 16px -->
       <Popover.Content
         align="start"
-        class="w-(--usage-pop-w) gap-0 rounded-lg p-0 shadow-lg"
+        class="w-(--usage-pop-w)"
         collisionPadding={8}
+        frame="panel"
+        gap="none"
         onOpenAutoFocus={keepFocus}
+        pad="none"
         side="top"
         sideOffset={6}
         style="--usage-pop-w: min(var(--c-panel-w), calc(100vw - 16px));"
@@ -1177,50 +1199,3 @@
     </Popover.Root>
   {/if}
 </div>
-
-<style>
-  /* css-scope .strip-hit: the strip's own control; the usage-relay motion bench draws the strip with it */
-  /* residual: unmapped — the strip's control under the pointer or open
-     paints its own ground, and the dials' reserve notch takes it
-     (--ring-ground: a custom property no utility sets); the strip's caption
-     clamps by the standard property too; a cell's states (the carrier's
-     inset ring, the limit wash and the lit wash, each a ground the notch
-     takes); and the hairline between the popover's sections (a sibling
-     rule). */
-  @media (hover: hover) and (pointer: fine) {
-    :global(.strip-hit:hover) {
-      --ring-ground: var(--surface-hover);
-    }
-  }
-  :global(.strip-hit[aria-expanded="true"]),
-  :global(.strip-hit[data-state="open"]) {
-    --ring-ground: var(--surface-hover);
-  }
-  [data-strip-caption],
-  [data-strip-go-week] {
-    line-clamp: 1;
-  }
-  .cell-d[data-carrying] {
-    box-shadow: inset 0 0 0 1px var(--border-button-outline);
-  }
-  .cell-d[data-limit] {
-    background: var(--meter-wash-over);
-    --ring-ground: var(--meter-wash-over);
-  }
-  .cell-d[data-lit] {
-    background: var(--surface-hover);
-    --ring-ground: var(--surface-hover);
-  }
-  /* The providers' hairline: `border: 0` then its top edge, which
-     `border-none` would leave unstyled (delta R2). */
-  [data-slot="wall"] hr {
-    border: 0;
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  [data-slot="group"] + [data-slot="group"],
-  [data-slot="group"] + .pop-note,
-  .pop-gap + .pop-note,
-  .pop-note + .pop-note {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-</style>

@@ -578,14 +578,14 @@
         style:--sheet-gap="calc(var(--spacing) * 6)"
       >
         {#if !joined}
-          <Drawer.Description class="text-body text-ink-muted">
+          <Drawer.Description text="body">
             {@render description()}
           </Drawer.Description>
         {/if}
         {@render body()}
       </div>
       {#if !joined}
-        <Drawer.Footer class="flex-col-reverse px-0 pb-0">
+        <Drawer.Footer class="flex-col-reverse" pad="flush">
           {@render actions()}
         </Drawer.Footer>
       {/if}
@@ -605,7 +605,7 @@
     }
   >
     <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
-    <Dialog.Content class="phone:max-w-128" showCloseButton={!joined}>
+    <Dialog.Content showCloseButton={!joined} width="form">
       <Dialog.Header>
         <Dialog.Title>Connect a machine</Dialog.Title>
         {#if !joined}

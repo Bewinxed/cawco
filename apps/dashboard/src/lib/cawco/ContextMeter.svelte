@@ -137,7 +137,7 @@
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content align="end" class="w-72 rounded-lg shadow-lg p-0" side="top">
+  <Popover.Content align="end" frame="panel" pad="none" side="top">
     <div
       class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
     >
