@@ -211,11 +211,16 @@ async function report(
     if (!pair) {
       continue;
     }
-    const tally: Tally = { shadowLayers: 0 };
+    const tally: Tally = { shadowLayers: 0, transitionLists: 0 };
     const lines = differences(pair[0], pair[1], tally);
     if (tally.shadowLayers > 0) {
       kit.note(
         `${surface.name}: ${tally.shadowLayers} box-shadow value(s) equal once their blank layers (rgba(0, 0, 0, 0) 0px 0px 0px 0px) are set aside`
+      );
+    }
+    if (tally.transitionLists > 0) {
+      kit.note(
+        `${surface.name}: ${tally.transitionLists} transition duration, timing-function, delay or behavior list(s) equal once each is repeated or cut to its transition-property's length (CSS Transitions Level 1 §2: "the user agent must calculate its used value by repeating the list of values until there are enough")`
       );
     }
     all.push(...lines.map((line) => parsed(surface.name, line)));
