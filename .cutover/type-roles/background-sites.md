@@ -1,444 +1,1906 @@
-654 background sites; 159 listed (every site not rendered, and every site with a difference)
+# background: every site, rendered as whole components (T against now)
 
-- lib/cawco/MessageBody.svelte:120  `.msg :global(:not(pre) > code)`  `background: var(--code-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/MessageBody.svelte:135  `.msg :global(.prose > pre)`  `background: var(--surface-recess)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/MessageBody.svelte:141  `.msg :global(.prose > pre code)`  `background: none`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/ScreenEdges.svelte:102  `:global(body)`  `background: var(--edge-bottom-background)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/ScreenEdges.svelte:98  `:global(:root)`  `background: var(--edge-top-background)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/SessionRow.svelte:610  `.item[data-current] .row-action`  `background: var(--selected-bg)`
-    head: lib/cawco/SessionRow.svelte:499 <button>, lib/cawco/SessionRow.svelte:527 <button>
-    rest: same
-    note: ancestor-state: state on an ancestor: .item[data-current]
-- lib/cawco/Shell.svelte:1331  `.top`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/Shell.svelte:1343  `.top.hosting`  `background: linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat, var(--surface-shelf)`
-    note: css: the declaration is still CSS here
-- lib/cawco/Shell.svelte:1519  `.top.hosting`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/Shell.svelte:1559  `.tools::before`  `background: var(--material-panel)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/Shell.svelte:1569  `.tools::before`  `background: var(--surface-raised)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/Shell.svelte:1618  `.join::before`  `background: var(--surface-raised)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/Shell.svelte:1655  `.tools :global(.bar-item)`  `background: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/Shell.svelte:1671  `.tools :global(.bar-item:hover)`  `background: var(--surface-hover)`
-    note: css: the declaration is still CSS here
-- lib/cawco/Shell.svelte:1810  `.top.floating`  `background: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/Shell.svelte:1892  `.content.floating`  `background: linear-gradient(var(--surface-shelf), var(--surface-shelf)) top / 100% var(--c-top-bar-h) no-repeat`
-    note: css: the declaration is still CSS here
-- lib/cawco/Sidebar.svelte:1308  `:global(.rail-configure[aria-current="page"])`  `background: var(--selected-bg)`
-    note: css: the declaration is still CSS here
-- lib/cawco/ThreadPane.svelte:1141  `.off :global(.off-line)`  `background: var(--surface-raised)`
-    head: lib/cawco/ThreadPane.svelte:1084 <Alert>
-    rest: same
-    note: component <Alert>: its own classes not included
-- lib/cawco/TreeMark.svelte:239  `.tree-mark[data-bare] .tile`  `background: none`
-    head: lib/cawco/TreeMark.svelte:187 <span>, lib/cawco/TreeMark.svelte:279 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .tree-mark[data-bare]
-- lib/cawco/TreeMark.svelte:353  `.card::after, .skin::after`  `background: var(--mark-deck-shade)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/TreeMark.svelte:365  `.card::before, .skin::before`  `background: linear-gradient(var(--mark-deck-cast), transparent)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/UsageMeter.svelte:1278  `.cell-d.limit`  `background: var(--meter-wash-over)`
-    note: css: the declaration is still CSS here
-- lib/cawco/UsageMeter.svelte:1282  `.cell-d.lit`  `background: var(--surface-hover)`
-    note: css: the declaration is still CSS here
-- lib/cawco/UsageMeter.svelte:955  `:global(.strip-hit)`  `background: transparent`
-    head: lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>, lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>
-    rest: same
-    note: component <Drawer.Trigger>: its own classes not included; component <Popover.Trigger>: its own classes not included
-- lib/cawco/UsageMeter.svelte:963  `:global(.strip-hit):hover`  `background: var(--surface-hover)`
-    head: lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>, lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>
-    rest: same
-    own: same
-    note: component <Drawer.Trigger>: its own classes not included; component <Popover.Trigger>: its own classes not included
-- lib/cawco/UsageMeter.svelte:969  `:global(.strip-hit)[aria-expanded="true"], :global(.strip-hit)[data-state="open"]`  `background: var(--surface-hover)`
-    head: lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>, lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>
-    rest: same
-    own: same
-    note: component <Drawer.Trigger>: its own classes not included; component <Popover.Trigger>: its own classes not included
-- lib/cawco/accounts/AccountSetup.svelte:860  `.dot::after`  `background: var(--neutral-8)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/accounts/AccountSetup.svelte:868  `.step.cur .dot::after`  `background: var(--selected-icon)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/accounts/AccountTile.svelte:35  `.tile`  `background: color-mix(in oklab, var(--c) 18%, transparent)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:142  `.stage`  `background: var(--surface-recess)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:177  `.stage :global(.ln-lbl .dot)`  `background: var(--c)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:196  `.stage :global(.clkw)`  `background: color-mix(in oklab, var(--c) 26%, transparent)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:217  `.stage :global(.bar)`  `background: var(--surface-fill)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:220  `.stage :global(.hr)`  `background: color-mix(in oklab, var(--c) 42%, transparent)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:224  `.stage :global(.fl)`  `background: var(--c)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:229  `.stage :global(.gh)`  `background: color-mix(in oklab, var(--c) 22%, transparent)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:236  `.stage :global(.chip)`  `background: var(--c)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:243  `.stage :global(.chip.child)`  `background: var(--surface-recess)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyFigure.svelte:251  `.stage :global(.tag)`  `background: var(--surface-fill)`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyPicker.svelte:252  `.card[aria-checked="true"]`  `background: color-mix( in oklab, var(--selected-bg) 45%, var(--surface-raised) )`
-    note: css: the declaration is still CSS here
-- lib/cawco/accounts/StrategyPicker.svelte:288  `.radio::after`  `background: var(--selected-icon)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/blocks/Block.svelte:312  `.drop`  `background: var(--brand-solid)`
-    note: css: the declaration is still CSS here
-- lib/cawco/blocks/Block.svelte:320  `.drop::before`  `background: var(--brand-solid)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/config/PickerChip.svelte:109  `:global(.picker-chip)`  `background: var(--surface-raised)`
-    head: lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger>
-    rest: same
-    note: component <Popover.Trigger>: its own classes not included
-- lib/cawco/config/PickerChip.svelte:125  `:global(.picker-chip:hover)`  `background: var(--surface-hover)`
-    head: lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger>
-    rest: same
-    own: same
-    note: component <Popover.Trigger>: its own classes not included
-- lib/cawco/config/RolloutChip.svelte:262  `:global(.rollout-chip)`  `background: var(--surface-recess)`
-    head: lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>
-    rest: same
-    note: component <Popover.Trigger>: its own classes not included
-- lib/cawco/config/RolloutChip.svelte:282  `:global(.rollout-chip:hover)`  `background: var(--surface-hover)`
-    head: lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>
-    rest: same
-    own: same
-    note: component <Popover.Trigger>: its own classes not included
-- lib/cawco/config/RolloutChip.svelte:285  `:global(.rollout-chip[data-fail])`  `background: var(--status-fail-bg)`
-    head: lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>
-    rest: same
-    own: same
-    note: component <Popover.Trigger>: its own classes not included
-- lib/cawco/config/SectionRow.svelte:249  `.controls :global( .bg-transparent.border-transparent:not(.text-link):hover:not(:disabled) )`  `background: light-dark(var(--surface-fill-strong), var(--surface-hover))`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/decisions/DecisionPage.svelte:475  `.cin :global(.note)`  `background: transparent`
-    head: lib/cawco/decisions/DecisionPage.svelte:349 <Textarea>
-    rest: same
-    note: component <Textarea>: its own classes not included
-- lib/cawco/decisions/graph/DecisionNode.svelte:82  `.decision-node[data-picked] .ring`  `background: var(--status-done-glyph)`
-    head: lib/cawco/decisions/graph/DecisionNode.svelte:40 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .decision-node[data-picked]
-- lib/cawco/decisions/graph/DecisionNode.svelte:90  `.decision-node :global(.svelte-flow__handle)`  `background: transparent`
-    note: css: the declaration is still CSS here
-- lib/cawco/find/MentionField.svelte:785  `.editor :global(.mention-chip)`  `background: var(--surface-recess)`
-    note: css: the declaration is still CSS here
-- lib/cawco/home/Home.svelte:222  `.home.page`  `background: var(--surface-recess)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/home/Home.svelte:289  `.dock`  `background: linear-gradient( transparent, var(--surface-recess) var(--space-4) )`
-    note: css: the declaration is still CSS here
-- lib/cawco/home/NeedsCard.svelte:737  `.row:has(.cover:hover)`  `background: var(--surface-hover)`
-    note: css: the declaration is still CSS here
-- lib/cawco/home/NeedsCard.svelte:953  `.peers > :global(.deny), .peers > :global(.deny:hover)`  `background: var(--status-fail-bg)`
-    head: lib/cawco/home/NeedsCard.svelte:710 <Button>, lib/cawco/home/NeedsCard.svelte:791 <Button>, lib/cawco/home/NeedsCard.svelte:827 <Button>
-    rest: same
-    note: component <Button>: its own classes not included
-- lib/cawco/home/NeedsCard.svelte:958  `.peers > :global(.approve), .peers > :global(.approve:hover)`  `background: var(--status-done-bg)`
-    head: lib/cawco/home/NeedsCard.svelte:725 <Button>, lib/cawco/home/NeedsCard.svelte:804 <Button>, lib/cawco/home/NeedsCard.svelte:840 <Button>
-    rest: same
-    note: component <Button>: its own classes not included
-- lib/cawco/home/UpdateCard.svelte:458  `.actions::before`  `background: linear-gradient(to bottom, transparent, var(--surface-raised))`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/home/WorkTabs.svelte:1025  `.count`  `background: color-mix( in oklab, var(--wash) calc(var(--pick) * 100%), transparent )`
-    note: css: the declaration is still CSS here
-- lib/cawco/home/WorkTabs.svelte:956  `:global(.work-tabs[data-slot="tabs"])`  `background: none`
-    head: lib/cawco/home/WorkTabs.svelte:775 <Tabs>
-    rest: same
-    own: same
-    note: component <Tabs>: its own classes not included
-- lib/cawco/lightbox/Lightbox.svelte:378  `:global .cawco-pswp .pswp__button`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/lightbox/Lightbox.svelte:388  `:global .cawco-pswp .pswp__button:hover`  `background: var(--surface-hover)`
-    note: css: the declaration is still CSS here
-- lib/cawco/lightbox/Lightbox.svelte:411  `:global .cawco-pswp .pswp__counter`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/lightbox/Lightbox.svelte:432  `:global .cawco-pswp .pswp__description`  `background: var(--surface-recess)`
-    note: css: the declaration is still CSS here
-- lib/cawco/move/MoveAsk.svelte:58  `:global(.move-details-trigger)`  `background: none`
-    head: lib/cawco/move/MoveAsk.svelte:28 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/preview/PreviewPane.svelte:2002  `iframe`  `background: Canvas`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/project/CawFloat.svelte:127  `:global([data-slot="drawer-content"].caw-float-sheet)::before`  `background: var(--material-panel)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/project/CawFloat.svelte:135  `:global([data-slot="drawer-content"].caw-float-sheet)::before`  `background: var(--surface-raised)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/routines/ActionsTable.svelte:143  `.actions-ledger :global(tr.band)`  `background: var(--surface-band)`
-    head: lib/cawco/routines/ActionsTable.svelte:90 <Table.Row>
-    rest: same
-    note: component <Table.Row>: its own classes not included
-- lib/cawco/routines/RoutineDetail.svelte:281  `.runs-ledger :global(tr.band)`  `background: var(--surface-band)`
-    head: lib/cawco/routines/RoutineDetail.svelte:182 <Table.Row>
-    rest: same
-    note: component <Table.Row>: its own classes not included
-- lib/cawco/side/SideSheet.svelte:435  `:global(.preview-sheet .preview-grab[data-vaul-handle])`  `background: var(--border-control)`
-    note: css: the declaration is still CSS here
-- lib/cawco/side/SideSurface.svelte:208  `.side-head :global(:is(button, a):not([role="tab"]))`  `background: transparent`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/side/SideSurface.svelte:241  `.side-head :global(:is(button, a):not([role="tab"]):hover)`  `background: var(--surface-hover)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/side/Split.svelte:482  `.side-split :global(.side-divider)`  `background: var(--border-hairline)`
-    head: lib/cawco/side/Split.svelte:365 <Resizable.Handle>
-    rest: same
-    note: component <Resizable.Handle>: its own classes not included
-- lib/cawco/side/Split.svelte:501  `.side-split :global(.side-divider[data-active])`  `background: var(--ink-muted)`
-    head: lib/cawco/side/Split.svelte:365 <Resizable.Handle>
-    rest: same
-    own: same
-    note: component <Resizable.Handle>: its own classes not included
-- lib/cawco/side/Split.svelte:505  `.side-split :global(.side-divider:hover)`  `background: var(--border-control)`
-    head: lib/cawco/side/Split.svelte:365 <Resizable.Handle>
-    rest: same
-    own: same
-    note: component <Resizable.Handle>: its own classes not included
-- lib/cawco/spawn/ModelSection.svelte:548  `:global(.harness-rail)`  `background: var(--surface-recess)`
-    head: lib/cawco/spawn/ModelSection.svelte:318 <Rail>
-    rest: same
-    note: component <Rail>: its own classes not included
-- lib/cawco/spawn/ModelSection.svelte:689  `.tools :global(.ns-chip-btn.tool)`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/spawn/NewSessionDialog.svelte:2165  `:global(.session-scrim)`  `background: var(--scrim)`
-    head: lib/cawco/spawn/NewSessionDialog.svelte:1791 <DialogPrimitive.Overlay>
-    rest: same
-    note: component <DialogPrimitive.Overlay>: its own classes not included
-- lib/cawco/spawn/NewSessionDialog.svelte:2177  `:global(.session-card:not([data-vaul-drawer]))`  `background: var(--surface-recess)`
-    head: lib/cawco/spawn/NewSessionDialog.svelte:1757 <DrawerContent>, lib/cawco/spawn/NewSessionDialog.svelte:1804 <DialogPrimitive.Content>
-    rest: same
-    note: component <DrawerContent>: its own classes not included; component <DialogPrimitive.Content>: its own classes not included
-- lib/cawco/spawn/PromptEditor.svelte:419  `.editor :global(.ns-chip)`  `background: var(--surface-fill)`
-    note: css: the declaration is still CSS here
-- lib/cawco/tasks/PostCard.svelte:175  `.card + .card::before`  `background: var(--border-control)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/tasks/TaskActivity.svelte:417  `.part :global(.fold-head)`  `background: none`
-    head: lib/cawco/tasks/TaskActivity.svelte:288 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/tasks/TaskColumn.svelte:201  `li[data-picked] > :global(.task-card)`  `background: var(--selected-bg)`
-    note: css: the declaration is still CSS here
-- lib/cawco/tasks/TaskNeeds.svelte:369  `.peers > :global(.deny), .peers > :global(.deny:hover)`  `background: var(--status-fail-bg)`
-    head: lib/cawco/tasks/TaskNeeds.svelte:211 <Button>
-    rest: same
-    note: component <Button>: its own classes not included
-- lib/cawco/tasks/TaskNeeds.svelte:374  `.peers > :global(.approve), .peers > :global(.approve:hover)`  `background: var(--status-done-bg)`
-    head: lib/cawco/tasks/TaskNeeds.svelte:223 <Button>
-    rest: same
-    note: component <Button>: its own classes not included
-- lib/cawco/tasks/TaskTable.svelte:360  `.ledger :global(tr.band)`  `background: var(--surface-band)`
-    head: lib/cawco/tasks/TaskTable.svelte:225 <Table.Row>
-    rest: same
-    note: component <Table.Row>: its own classes not included
-- lib/cawco/tasks/TaskTable.svelte:396  `.ledger :global(tr.row[data-picked] td)`  `background: var(--selected-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/tasks/TaskTable.svelte:552  `.ledger[data-pickable] :global(tr.row[data-picked])`  `background: var(--selected-bg)`
-    head: lib/cawco/tasks/TaskTable.svelte:303 <Table.Row>
-    rest: same
-    note: component <Table.Row>: its own classes not included; ancestor-state: state on an ancestor: .ledger[data-pickable]; unrendered: T :258 state own: the state is on an ancestor (.ledger[data-pickable])
-- lib/cawco/tasks/TaskTable.svelte:555  `.ledger[data-pickable] :global(tr.row[data-picked] td)`  `background: none`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/AttachButton.svelte:111  `.att-btn:hover`  `background: var(--surface-hover)`
-    head: lib/cawco/transcript/AttachButton.svelte:47 <DropdownMenu.Trigger>, lib/cawco/transcript/AttachButton.svelte:68 <button>
-    rest: same
-    own: same
-    note: component <DropdownMenu.Trigger>: its own classes not included
-- lib/cawco/transcript/AttachButton.svelte:93  `.att-btn`  `background: var(--surface-raised)`
-    head: lib/cawco/transcript/AttachButton.svelte:47 <DropdownMenu.Trigger>, lib/cawco/transcript/AttachButton.svelte:68 <button>
-    rest: same
-    note: component <DropdownMenu.Trigger>: its own classes not included
-- lib/cawco/transcript/CompactionDivider.svelte:372  `.fail`  `background: linear-gradient(var(--status-fail-ink), var(--status-fail-ink)) left top / 2px 100% no-repeat`
-    note: css: the declaration is still CSS here
-- lib/cawco/transcript/Composer.svelte:3764  `.field > :global(.editor)`  `background: transparent`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Composer.svelte:3918  `.menu :global([data-slot="command"])`  `background: transparent`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Composer.svelte:4237  `.what::before`  `background: var(--selected-icon)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/transcript/Delegate.svelte:558  `.delegate :global(.bhead)`  `background: none`
-    head: lib/cawco/transcript/Delegate.svelte:429 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/transcript/Delegate.svelte:686  `.pill.live`  `background: var(--status-live-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Delegate.svelte:698  `.pill.attn`  `background: var(--status-attn-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Delegate.svelte:702  `.pill.done`  `background: var(--status-done-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Delegate.svelte:706  `.pill.fail`  `background: var(--status-fail-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Peer.svelte:216  `.label :global(.peer-toggle)`  `background: none`
-    head: lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/transcript/Row.svelte:487  `.row[data-marked]::before`  `background: var(--selection)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/transcript/Subagent.svelte:183  `.branch :global(.bhead)`  `background: none`
-    head: lib/cawco/transcript/Subagent.svelte:83 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/transcript/Subagent.svelte:299  `.pill.running`  `background: var(--status-live-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Subagent.svelte:303  `.pill.done`  `background: var(--status-done-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/Subagent.svelte:307  `.pill.failed`  `background: var(--status-fail-bg)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/transcript/SuggestionChips.svelte:367  `.chip`  `background: color-mix( in srgb, var(--action-solid) var(--tint), var(--surface-raised) )`
-    note: css: the declaration is still CSS here
-- lib/cawco/transcript/SuggestionChips.svelte:392  `.chip:hover`  `background: color-mix( in srgb, var(--action-solid) calc(var(--tint) + 6%), var(--surface-raised) )`
-    note: css: the declaration is still CSS here
-- lib/cawco/transcript/SystemLine.svelte:450  `.note :global(.ftrig)`  `background: none`
-    head: lib/cawco/transcript/SystemLine.svelte:205 <Collapsible.Trigger>, lib/cawco/transcript/SystemLine.svelte:482 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/transcript/SystemLine.svelte:492  `.note[data-code]`  `background: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/transcript/ToolGroup.svelte:671  `.mark`  `background: var(--mark-overlay), var(--mark-6)`
-    note: css: the declaration is still CSS here
-- lib/cawco/turn/Well.svelte:104  `.well :global(.msg code)`  `background: var(--surface-raised)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/turn/Well.svelte:68  `.well::before`  `background: var(--surface-recess-deep)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/turn/Well.svelte:89  `.well::after`  `background: var(--seam)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/updates/ChannelCards.svelte:183  `.chooser :global(.ccard)`  `background: none`
-    head: lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>
-    rest: same
-    note: component <RadioGroup.Item>: its own classes not included
-- lib/cawco/updates/ChannelCards.svelte:195  `.chooser :global(.ccard:active)`  `background: var(--surface-fill)`
-    head: lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>
-    rest: same
-    own: same
-    note: component <RadioGroup.Item>: its own classes not included
-- lib/cawco/updates/ChannelCards.svelte:199  `.chooser :global(.ccard:hover)`  `background: var(--surface-hover)`
-    head: lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>
-    rest: same
-    own: same
-    note: component <RadioGroup.Item>: its own classes not included
-- lib/cawco/usage/History.svelte:512  `.slot:hover .bar`  `background: var(--ink-strong)`
-    head: lib/cawco/usage/History.svelte:368 <span>, lib/cawco/usage/History.svelte:387 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .slot:hover
-- lib/cawco/usage/ProjectSpend.svelte:625  `.ledger :global(tr.band)`  `background: var(--surface-band)`
-    head: lib/cawco/usage/ProjectSpend.svelte:474 <Table.Row>, lib/cawco/usage/ProjectSpend.svelte:562 <Table.Row>
-    rest: same
-    note: component <Table.Row>: its own classes not included
-- lib/cawco/usage/Relay.svelte:303  `.blank`  `background: repeating-linear-gradient( -45deg, var(--border-control) 0 1px, var(--ring-ground, var(--surface-raised)) 1px var(--space-1) )`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/ViewCalendar.svelte:188  `.view-calendar :global(.ec-main)`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/ViewCalendar.svelte:226  `.view-calendar :global(.ec-event.chip-set)`  `background: var(--surface-raised)`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/ViewCalendar.svelte:231  `.view-calendar :global(.ec-event.chip-done)`  `background: var(--status-done-bg)`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/ViewCalendar.svelte:235  `.view-calendar :global(.ec-event.chip-attn)`  `background: var(--status-attn-bg)`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/ViewPipeline.svelte:164  `.row[data-kind="you"] .bar`  `background: var(--brand-solid)`
-    head: lib/cawco/views/ViewPipeline.svelte:81 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .row[data-kind="you"]
-- lib/cawco/views/ViewPipeline.svelte:167  `.row[data-kind="done"] .bar`  `background: var(--status-done-bg)`
-    head: lib/cawco/views/ViewPipeline.svelte:81 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .row[data-kind="done"]
-- lib/cawco/views/ViewPipeline.svelte:176  `.row[data-kind="dropped"] .bar`  `background: transparent`
-    head: lib/cawco/views/ViewPipeline.svelte:81 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .row[data-kind="dropped"]
-- lib/cawco/views/ViewRoutines.svelte:1071  `.ledger :global(table > thead th)`  `background: var(--surface-band)`
-    head: lib/cawco/views/ViewRoutines.svelte:923 <th>, lib/cawco/views/ViewRoutines.svelte:927 <th>, lib/cawco/views/ViewRoutines.svelte:975 <th>, lib/cawco/views/ViewRoutines.svelte:979 <th>, lib/cawco/views/ViewRoutines.svelte:981 <th>
-    rest: same
-    note: unmapped: T :888 has no element now; unmapped: T :892 has no element now; unmapped: T :894 has no element now
-- lib/cawco/views/ViewRoutines.svelte:1079  `.ledger :global(tr.band)`  `background: var(--surface-band)`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/ViewRoutines.svelte:1150  `.ledger :global(.opener)`  `background: none`
-    head: lib/cawco/views/ViewRoutines.svelte:739 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/views/ViewRoutines.svelte:1213  `.ledger :global(tbody.routine[data-state="open"] > tr > td)`  `background: var(--surface-well)`
-    head: lib/cawco/views/ViewRoutines.svelte:812 <td>, lib/cawco/views/ViewRoutines.svelte:842 <td>
-    rest: same
-    note: ancestor-state: state on an ancestor: .ledger tbody.routine[data-state="open"] tr
-- lib/cawco/views/canvas/TaskNode.svelte:87  `.task-node :global(.svelte-flow__handle)`  `background: transparent`
-    note: css: the declaration is still CSS here
-- lib/cawco/views/openui/ViewTable.svelte:100  `.ledger :global(tr.band)`  `background: var(--surface-band)`
-    head: lib/cawco/views/openui/ViewTable.svelte:63 <Table.Row>
-    rest: same
-    note: component <Table.Row>: its own classes not included
-- lib/cawco/workspace/PaneGrid.svelte:228  `:global(.grid-group [data-pane-resizer])`  `background: var(--border-hairline)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/workspace/PaneGrid.svelte:233  `:global(.grid-group [data-pane-resizer]:hover)`  `background: var(--border-control)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/workspace/PaneGrid.svelte:238  `:global(.grid-group [data-pane-resizer][data-active="pointer"]), :global(.grid-group [data-pane-resizer][data-active="keyboard"])`  `background: var(--ink-muted)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/cawco/workspace/PaneTabs.svelte:2016  `:global(.session-tabs)`  `background: var(--surface-shelf)`
-    note: css: the declaration is still CSS here
-- lib/cawco/workspace/PaneTabs.svelte:2029  `:global(.session-tabs.hosted)`  `background: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/workspace/PaneTabs.svelte:2168  `.tab.drop-before::before, .tab.drop-after::after`  `background: var(--ink-strong)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/workspace/SessionDetails.svelte:947  `.model-pop :global(.picker)`  `background: transparent`
-    note: css: the declaration is still CSS here
-- lib/components/features/MarkdownEditor.svelte:162  `.crepe-host :global(.milkdown)`  `background: var(--surface-recess)`
-    note: css: the declaration is still CSS here
-- lib/components/features/MarkdownEditor.svelte:250  `.crepe-host :global(.milkdown .milkdown-code-block)`  `background: var(--surface-recess)`
-    note: css: the declaration is still CSS here
-- lib/components/features/MarkdownEditor.svelte:255  `.crepe-host :global(.milkdown :is(.cm-editor, .cm-gutters))`  `background: var(--surface-recess)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/components/features/MarkdownEditor.svelte:275  `.crepe-host :global(.milkdown :is(button, [role="button"]):active)`  `background: var(--surface-fill)`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/components/features/MarkdownEditor.svelte:283  `.crepe-host :global(.milkdown .milkdown-block-handle .operation-item.active)`  `background: light-dark(var(--surface-fill-strong), var(--surface-fill))`
-    note: css: the declaration is still CSS here
-- lib/components/features/tool-cards/MemoryBody.svelte:286  `.docs :global(.doc)`  `background: none`
-    head: lib/components/features/tool-cards/MemoryBody.svelte:244 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/components/features/workflows/WorkflowCanvas.svelte:264  `.canvas :global(.svelte-flow__handle)`  `background: var(--neutral-8)`
-    note: css: the declaration is still CSS here
-- lib/components/features/workflows/WorkflowCanvas.svelte:271  `.canvas :global(.svelte-flow__handle:active)`  `background: var(--brand-solid)`
-    note: css: the declaration is still CSS here
-- lib/components/features/workflows/WorkflowNodeCard.svelte:255  `.port.near :global(.svelte-flow__handle)`  `background: var(--brand-solid)`
-    note: css: the declaration is still CSS here
-- lib/components/ui/fluid-tabs/TabsList.svelte:1242  `:global([data-variant="folder"]) .ff-tabs-list`  `background: none`
-    head: lib/components/ui/fluid-tabs/TabsList.svelte:1104 <div>
-    rest: same
-    note: ancestor-state: state on an ancestor: [data-variant="folder"]
-- lib/components/ui/thinking-steps/thinking-step.svelte:255  `.shimmer`  `background: linear-gradient( 90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100% )`
-    head: lib/components/ui/thinking-steps/thinking-step.svelte:139 <span>, lib/components/ui/thinking-steps/thinking-step.svelte:157 <span>
-    rest: same
-    own: backgroundPosition: 82.4989% 0px → 0% 0%
-- lib/components/ui/thinking-steps/thinking-steps-header.svelte:43  `:global(.thinking-header)`  `background: none`
-    head: lib/components/ui/thinking-steps/thinking-steps-header.svelte:18 <Collapsible.Trigger>
-    rest: same
-    note: component <Collapsible.Trigger>: its own classes not included
-- routes/(app)/config/models/+page.svelte:638  `[data-tone="ok"] .dot`  `background: var(--status-live-glyph)`
-    head: routes/(app)/config/models/+page.svelte:362 <span>, routes/(app)/config/models/+page.svelte:394 <span>, routes/(app)/config/models/+page.svelte:464 <span>, routes/(app)/config/models/+page.svelte:526 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: [data-tone="ok"]
-- routes/(app)/config/phone/+page.svelte:252  `[data-tone="ok"] .dot`  `background: var(--status-live-glyph)`
-    head: routes/(app)/config/phone/+page.svelte:168 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: [data-tone="ok"]
-- routes/(app)/config/phone/+page.svelte:256  `[data-tone="bad"] .dot`  `background: var(--status-attn-glyph)`
-    head: routes/(app)/config/phone/+page.svelte:168 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: [data-tone="bad"]
-- routes/(app)/project/[id]/+page.svelte:2259  `:global(.kit-pop.view-ask-pop)`  `background: none`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- routes/(app)/usage/+page.svelte:272  `.top :global(.project-chip[data-on])`  `background: var(--selected-bg)`
-    head: routes/(app)/usage/+page.svelte:172 <Select.Trigger>
-    rest: same
-    own: same
-    note: component <Select.Trigger>: its own classes not included
+654 sites; 0 differ in a longhand the mapped utility leaves unwritten; every other site is the same in every state rendered.
+
+- lib/cawco/accounts/AccountListRow.svelte:94 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/accounts/AccountListRow.svelte:29 <i> → now lib/cawco/accounts/AccountListRow.svelte:41 <i>]
+- lib/cawco/accounts/AccountSetup.svelte:1026 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.signed-as` rest: same [T lib/cawco/accounts/AccountSetup.svelte:610 <div> → now lib/cawco/accounts/AccountSetup.svelte:679 <div>]
+- lib/cawco/accounts/AccountSetup.svelte:1146 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.preview` rest: same [T lib/cawco/accounts/AccountSetup.svelte:758 <div> → now lib/cawco/accounts/AccountSetup.svelte:895 <div>]
+- lib/cawco/accounts/AccountSetup.svelte:1187 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.foot` rest: same [T lib/cawco/accounts/AccountSetup.svelte:498 <div> → now lib/cawco/accounts/AccountSetup.svelte:534 <div>]
+- lib/cawco/accounts/AccountSetup.svelte:860 `background: var(--neutral-8)` (first pass: not rendered: css)
+    - `.dot::after` rest: same [T lib/cawco/accounts/AccountSetup.svelte:443 <span> → now lib/cawco/accounts/AccountSetup.svelte:452 <span>]
+- lib/cawco/accounts/AccountSetup.svelte:864 `background: var(--selected-bg)` (first pass: rendered: same)
+    - `.step.cur` rest: same [T lib/cawco/accounts/AccountSetup.svelte:430 <li> → now lib/cawco/accounts/AccountSetup.svelte:439 <li>]
+    - `.step.cur` state (.cur): same [T lib/cawco/accounts/AccountSetup.svelte:430 <li> → now lib/cawco/accounts/AccountSetup.svelte:439 <li>]
+- lib/cawco/accounts/AccountSetup.svelte:868 `background: var(--selected-icon)` (first pass: not rendered: css)
+    - `.step.cur .dot::after` rest: same [T lib/cawco/accounts/AccountSetup.svelte:443 <span> → now lib/cawco/accounts/AccountSetup.svelte:452 <span>]
+    - `.step.cur .dot::after` state (lib/cawco/accounts/AccountSetup.svelte:430 <li> .cur): same [T lib/cawco/accounts/AccountSetup.svelte:443 <span> → now lib/cawco/accounts/AccountSetup.svelte:452 <span>]
+- lib/cawco/accounts/AccountSetup.svelte:883 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.box` rest: same [T lib/cawco/accounts/AccountSetup.svelte:452 <div> → now lib/cawco/accounts/AccountSetup.svelte:470 <div>]
+- lib/cawco/accounts/AccountSetup.svelte:954 `background: transparent` (first pass: rendered: same)
+    - `.choice` rest: same [T lib/cawco/accounts/AccountSetup.svelte:552 <button> → now lib/cawco/accounts/AccountSetup.svelte:603 <button>]
+- lib/cawco/accounts/AccountSetup.svelte:977 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.ptile` rest: same [T lib/cawco/accounts/AccountSetup.svelte:567 <span> → now lib/cawco/accounts/AccountSetup.svelte:622 <span>]
+    - `.ptile` rest: same [T lib/cawco/accounts/AccountSetup.svelte:599 <span> → now lib/cawco/accounts/AccountSetup.svelte:666 <span>]
+- lib/cawco/accounts/AccountSubmenu.svelte:71 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/accounts/AccountSubmenu.svelte:47 <i> → now lib/cawco/accounts/AccountSubmenu.svelte:48 <i>]
+- lib/cawco/accounts/AccountSwitch.svelte:130 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/accounts/AccountSwitch.svelte:48 <span> → now lib/cawco/accounts/AccountSwitch.svelte:49 <span>]
+    - `.dot` rest: same [T lib/cawco/accounts/AccountSwitch.svelte:90 <span> → now lib/cawco/accounts/AccountSwitch.svelte:102 <span>]
+- lib/cawco/accounts/AccountSwitch.svelte:156 `background: none` (first pass: rendered: same)
+    - `.option` rest: same [T lib/cawco/accounts/AccountSwitch.svelte:80 <button> → now lib/cawco/accounts/AccountSwitch.svelte:89 <button>]
+- lib/cawco/accounts/AccountTile.svelte:35 `background: color-mix(in oklab, var(--c) 18%, transparent)` (first pass: not rendered: css)
+    - `.tile` rest: same [T lib/cawco/accounts/AccountTile.svelte:17 <span> → now lib/cawco/accounts/AccountTile.svelte:17 <span>]
+- lib/cawco/accounts/DevicePanel.svelte:153 `background: var(--code-bg)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/cawco/accounts/DevicePanel.svelte:81 <div> → now lib/cawco/accounts/DevicePanel.svelte:86 <div>]
+- lib/cawco/accounts/OrderList.svelte:183 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/accounts/OrderList.svelte:130 <button> → now lib/cawco/accounts/OrderList.svelte:135 <button>]
+- lib/cawco/accounts/OrderList.svelte:201 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.held .row` rest: same [T lib/cawco/accounts/OrderList.svelte:130 <button> → now lib/cawco/accounts/OrderList.svelte:135 <button>]
+    - `.held .row` state (lib/cawco/accounts/OrderList.svelte:122 <li> .held): same [T lib/cawco/accounts/OrderList.svelte:130 <button> → now lib/cawco/accounts/OrderList.svelte:135 <button>]
+- lib/cawco/accounts/OrderList.svelte:209 `background: radial-gradient( circle, var(--ink-subtle) 1px, transparent 1.5px ) 0 0 / 5px 5px` (first pass: rendered: same)
+    - `.handle` rest: same [T lib/cawco/accounts/OrderList.svelte:145 <span> → now lib/cawco/accounts/OrderList.svelte:151 <span>]
+- lib/cawco/accounts/OrderList.svelte:221 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/accounts/OrderList.svelte:146 <span> → now lib/cawco/accounts/OrderList.svelte:159 <span>]
+- lib/cawco/accounts/ProviderMark.svelte:56 `background: currentColor` (first pass: rendered: same)
+    - `.ink` rest: same [T lib/cawco/accounts/ProviderMark.svelte:33 <i> → now lib/cawco/accounts/ProviderMark.svelte:34 <i>]
+- lib/cawco/accounts/RoutingEditor.svelte:251 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/cawco/accounts/RoutingEditor.svelte:201 <section> → now lib/cawco/accounts/RoutingEditor.svelte:210 <section>]
+- lib/cawco/accounts/StrategyFigure.svelte:142 `background: var(--surface-recess)` (first pass: not rendered: css)
+    - `.stage` rest: same [T lib/cawco/accounts/StrategyFigure.svelte:126 <div> → now lib/cawco/accounts/StrategyFigure.svelte:127 <div>]
+- lib/cawco/accounts/StrategyFigure.svelte:177 `background: var(--c)` (first pass: not rendered: css)
+    - `.stage :global(.ln-lbl .dot)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:196 `background: color-mix(in oklab, var(--c) 26%, transparent)` (first pass: not rendered: css)
+    - `.stage :global(.clkw)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:217 `background: var(--surface-fill)` (first pass: not rendered: css)
+    - `.stage :global(.bar)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:220 `background: color-mix(in oklab, var(--c) 42%, transparent)` (first pass: not rendered: css)
+    - `.stage :global(.hr)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:224 `background: var(--c)` (first pass: not rendered: css)
+    - `.stage :global(.fl)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:229 `background: color-mix(in oklab, var(--c) 22%, transparent)` (first pass: not rendered: css)
+    - `.stage :global(.gh)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:236 `background: var(--c)` (first pass: not rendered: css)
+    - `.stage :global(.chip)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:243 `background: var(--surface-recess)` (first pass: not rendered: css)
+    - `.stage :global(.chip.child)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyFigure.svelte:251 `background: var(--surface-fill)` (first pass: not rendered: css)
+    - `.stage :global(.tag)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/accounts/StrategyPicker.svelte:227 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T lib/cawco/accounts/StrategyPicker.svelte:125 <div> → now lib/cawco/accounts/StrategyPicker.svelte:136 <div>]
+- lib/cawco/accounts/StrategyPicker.svelte:252 `background: color-mix( in oklab, var(--selected-bg) 45%, var(--surface-raised) )` (first pass: not rendered: css)
+    - `.card[aria-checked="true"]` rest: same [T lib/cawco/accounts/StrategyPicker.svelte:125 <div> → now lib/cawco/accounts/StrategyPicker.svelte:136 <div>]
+    - `.card[aria-checked="true"]` state ([aria-checked=true]): same [T lib/cawco/accounts/StrategyPicker.svelte:125 <div> → now lib/cawco/accounts/StrategyPicker.svelte:136 <div>]
+- lib/cawco/accounts/StrategyPicker.svelte:288 `background: var(--selected-icon)` (first pass: not rendered: css)
+    - `.radio::after` rest: same [T lib/cawco/accounts/StrategyPicker.svelte:146 <span> → now lib/cawco/accounts/StrategyPicker.svelte:166 <span>]
+- lib/cawco/accounts/Swatches.svelte:40 `background: var(--c)` (first pass: rendered: same)
+    - `.swatch` rest: same [T lib/cawco/accounts/Swatches.svelte:15 <button> → now lib/cawco/accounts/Swatches.svelte:16 <button>]
+- lib/cawco/AddMachineDialog.svelte:583 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.waiting` rest: same [T lib/cawco/AddMachineDialog.svelte:306 <ul> → now lib/cawco/AddMachineDialog.svelte:311 <ul>]
+- lib/cawco/AddMachineDialog.svelte:665 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `pre` rest: same [T lib/cawco/AddMachineDialog.svelte:372 <pre> → now lib/cawco/AddMachineDialog.svelte:409 <pre>]
+    - `pre` rest: same [T lib/cawco/AddMachineDialog.svelte:416 <pre> → now lib/cawco/AddMachineDialog.svelte:468 <pre>]
+- lib/cawco/AskHere.svelte:157 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/AskHere.svelte:106 <div> → now lib/cawco/AskHere.svelte:112 <div>]
+- lib/cawco/blocks/Block.svelte:274 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.block-body.card` rest: same [T lib/cawco/blocks/Block.svelte:191 <div> → now lib/cawco/blocks/Block.svelte:214 <div>]
+    - `.block-body.card` state (.card): same [T lib/cawco/blocks/Block.svelte:191 <div> → now lib/cawco/blocks/Block.svelte:214 <div>]
+- lib/cawco/blocks/Block.svelte:299 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.block[data-dragging]` rest: same [T lib/cawco/blocks/Block.svelte:107 <section> → now lib/cawco/blocks/Block.svelte:106 <section>]
+    - `.block[data-dragging]` state ([data-dragging]): same [T lib/cawco/blocks/Block.svelte:107 <section> → now lib/cawco/blocks/Block.svelte:106 <section>]
+- lib/cawco/blocks/Block.svelte:312 `background: var(--brand-solid)` (first pass: not rendered: css)
+    - `.drop` rest: same [T lib/cawco/blocks/Block.svelte:199 <span> → now lib/cawco/blocks/Block.svelte:224 <span>]
+- lib/cawco/blocks/Block.svelte:320 `background: var(--brand-solid)` (first pass: not rendered: css)
+    - `.drop::before` rest: same [T lib/cawco/blocks/Block.svelte:199 <span> → now lib/cawco/blocks/Block.svelte:224 <span>]
+- lib/cawco/blocks/Block.svelte:368 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.block-head:global([data-block-preview])` rest: same [T lib/cawco/blocks/Block.svelte:124 <header> → now lib/cawco/blocks/Block.svelte:125 <header>]
+    - `.block-head:global([data-block-preview])` state ([data-block-preview]): same [T lib/cawco/blocks/Block.svelte:124 <header> → now lib/cawco/blocks/Block.svelte:125 <header>]
+- lib/cawco/canvas/CanvasStages.svelte:200 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.canvas-stage` rest: same [T lib/cawco/canvas/CanvasStages.svelte:126 <div> → now lib/cawco/canvas/CanvasStages.svelte:126 <div>]
+- lib/cawco/canvas/CanvasStages.svelte:235 `background: var(--border-control)` (first pass: rendered: same)
+    - `.grabber` rest: same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+    - `.grabber` state (.grabber): same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+- lib/cawco/config/ConfigRail.svelte:139 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.rail[data-variant="rail"]` rest: same [T lib/cawco/config/ConfigRail.svelte:58 <nav> → now lib/cawco/config/ConfigRail.svelte:59 <nav>]
+    - `.rail[data-variant="rail"]` state ([data-variant=rail]): same [T lib/cawco/config/ConfigRail.svelte:58 <nav> → now lib/cawco/config/ConfigRail.svelte:59 <nav>]
+- lib/cawco/config/ConfigRail.svelte:187 `background: var(--surface-tile)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/config/ConfigRail.svelte:80 <span> → now lib/cawco/config/ConfigRail.svelte:98 <span>]
+- lib/cawco/config/ConfigRail.svelte:222 `background: var(--ink-strong)` (first pass: rendered: same)
+    - `.unsaved` rest: same [T lib/cawco/config/ConfigRail.svelte:85 <span> → now lib/cawco/config/ConfigRail.svelte:109 <span>]
+- lib/cawco/config/ConfigRail.svelte:236 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.fault` rest: same [T lib/cawco/config/ConfigRail.svelte:90 <span> → now lib/cawco/config/ConfigRail.svelte:116 <span>]
+- lib/cawco/config/EditorFooter.svelte:161 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.footer` rest: same [T lib/cawco/config/EditorFooter.svelte:110 <footer> → now lib/cawco/config/EditorFooter.svelte:111 <footer>]
+- lib/cawco/config/EditorFrame.svelte:243 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.editor` rest: same [T lib/cawco/config/EditorFrame.svelte:135 <form> → now lib/cawco/config/EditorFrame.svelte:135 <form>]
+- lib/cawco/config/EditorFrame.svelte:274 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.body` rest: same [T lib/cawco/config/EditorFrame.svelte:144 <div> → now lib/cawco/config/EditorFrame.svelte:150 <div>]
+- lib/cawco/config/EditorFrame.svelte:320 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/config/EditorFrame.svelte:155 <span> → now lib/cawco/config/EditorFrame.svelte:164 <span>]
+    - `.tile` rest: same [T lib/cawco/config/EditorFrame.svelte:164 <span> → now lib/cawco/config/EditorFrame.svelte:173 <span>]
+- lib/cawco/config/editors/HookEditor.svelte:1039 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.machine` rest: same [T lib/cawco/config/editors/HookEditor.svelte:868 <li> → now lib/cawco/config/editors/HookEditor.svelte:960 <li>]
+- lib/cawco/config/editors/HookEditor.svelte:1058 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.said` rest: same [T lib/cawco/config/editors/HookEditor.svelte:916 <pre> → now lib/cawco/config/editors/HookEditor.svelte:1026 <pre>]
+- lib/cawco/config/editors/MemoryEditor.svelte:867 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/cawco/config/editors/MemoryEditor.svelte:581 <div> → now lib/cawco/config/editors/MemoryEditor.svelte:609 <div>]
+- lib/cawco/config/editors/MemoryEditor.svelte:906 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.entry` rest: same [T lib/cawco/config/editors/MemoryEditor.svelte:613 <li> → now lib/cawco/config/editors/MemoryEditor.svelte:667 <li>]
+    - `.entry` rest: same [T lib/cawco/config/editors/MemoryEditor.svelte:735 <li> → now lib/cawco/config/editors/MemoryEditor.svelte:847 <li>]
+- lib/cawco/config/editors/MemoryEditor.svelte:942 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.said` rest: same [T lib/cawco/config/editors/MemoryEditor.svelte:787 <pre> → now lib/cawco/config/editors/MemoryEditor.svelte:917 <pre>]
+- lib/cawco/config/PickerChip.svelte:109 `background: var(--surface-raised)` (first pass: rendered without its kit component's classes)
+    - `:global(.picker-chip)` rest: same [T lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger> → now lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger>]
+- lib/cawco/config/PickerChip.svelte:125 `background: var(--surface-hover)` (first pass: rendered without its kit component's classes)
+    - `:global(.picker-chip:hover)` rest: same [T lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger> → now lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger>]
+    - `:global(.picker-chip:hover)` state (:hover): same [T lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger> → now lib/cawco/config/PickerChip.svelte:47 <Popover.Trigger>]
+- lib/cawco/config/PreviousVersions.svelte:147 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.version` rest: same [T lib/cawco/config/PreviousVersions.svelte:66 <li> → now lib/cawco/config/PreviousVersions.svelte:85 <li>]
+- lib/cawco/config/ReadingWell.svelte:15 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/cawco/config/ReadingWell.svelte:8 <p> → now lib/cawco/config/ReadingWell.svelte:9 <p>]
+- lib/cawco/config/RolloutChip.svelte:262 `background: var(--surface-recess)` (first pass: rendered without its kit component's classes)
+    - `:global(.rollout-chip)` rest: same [T lib/cawco/config/RolloutChip.svelte:116 <Popover.Trigger> → now lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>]
+- lib/cawco/config/RolloutChip.svelte:282 `background: var(--surface-hover)` (first pass: rendered without its kit component's classes)
+    - `:global(.rollout-chip:hover)` rest: same [T lib/cawco/config/RolloutChip.svelte:116 <Popover.Trigger> → now lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>]
+    - `:global(.rollout-chip:hover)` state (:hover): same [T lib/cawco/config/RolloutChip.svelte:116 <Popover.Trigger> → now lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>]
+- lib/cawco/config/RolloutChip.svelte:285 `background: var(--status-fail-bg)` (first pass: rendered without its kit component's classes)
+    - `:global(.rollout-chip[data-fail])` rest: same [T lib/cawco/config/RolloutChip.svelte:116 <Popover.Trigger> → now lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>]
+    - `:global(.rollout-chip[data-fail])` state ([data-fail]): same [T lib/cawco/config/RolloutChip.svelte:116 <Popover.Trigger> → now lib/cawco/config/RolloutChip.svelte:117 <Popover.Trigger>]
+- lib/cawco/config/RolloutChip.svelte:381 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.sync:hover:not(:disabled)` rest: same [T lib/cawco/config/RolloutChip.svelte:170 <button> → now lib/cawco/config/RolloutChip.svelte:210 <button>]
+    - `.sync:hover:not(:disabled)` state (:hover): same [T lib/cawco/config/RolloutChip.svelte:170 <button> → now lib/cawco/config/RolloutChip.svelte:210 <button>]
+- lib/cawco/config/SectionFrame.svelte:166 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.ground` rest: same [T lib/cawco/config/SectionFrame.svelte:98 <div> → now lib/cawco/config/SectionFrame.svelte:98 <div>]
+- lib/cawco/config/SectionFrame.svelte:180 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.body` rest: same [T lib/cawco/config/SectionFrame.svelte:99 <div> → now lib/cawco/config/SectionFrame.svelte:102 <div>]
+- lib/cawco/config/SectionRow.svelte:249 `background: light-dark(var(--surface-fill-strong), var(--surface-hover))` (first pass: not rendered: unmapped)
+    - `.controls :global( .bg-transparent.border-transparent:not(.text-link):hover:not(:disabled) )` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+    - `.controls :global( .bg-transparent.border-transparent:not(.text-link):hover:not(:disabled) )` state (:hover): same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/config/SectionRow.svelte:266 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/config/SectionRow.svelte:112 <span> → now lib/cawco/config/SectionRow.svelte:120 <span>]
+- lib/cawco/config/TitleInput.svelte:62 `background: transparent` (first pass: rendered: same)
+    - `.title-input` rest: same [T lib/cawco/config/TitleInput.svelte:37 <input> → now lib/cawco/config/TitleInput.svelte:37 <input>]
+- lib/cawco/decisions/DecisionPage.svelte:380 `background: var(--surface-band)` (first pass: rendered: same)
+    - `.page-head` rest: same [T lib/cawco/decisions/DecisionPage.svelte:214 <div> → now lib/cawco/decisions/DecisionPage.svelte:221 <div>]
+- lib/cawco/decisions/DecisionPage.svelte:475 `background: transparent` (first pass: rendered without its kit component's classes)
+    - `.cin :global(.note)` rest: same [T lib/cawco/decisions/DecisionPage.svelte:303 <Textarea> → now lib/cawco/decisions/DecisionPage.svelte:349 <Textarea>]
+- lib/cawco/decisions/DecisionTile.svelte:119 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/decisions/DecisionTile.svelte:46 <a> → now lib/cawco/decisions/DecisionTile.svelte:46 <a>]
+- lib/cawco/decisions/graph/DecisionGraph.svelte:219 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.graph` rest: same [T lib/cawco/decisions/graph/DecisionGraph.svelte:143 <section> → now lib/cawco/decisions/graph/DecisionGraph.svelte:143 <section>]
+- lib/cawco/decisions/graph/DecisionNode.svelte:57 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.decision-node` rest: same [T lib/cawco/decisions/graph/DecisionNode.svelte:14 <div> → now lib/cawco/decisions/graph/DecisionNode.svelte:15 <div>]
+- lib/cawco/decisions/graph/DecisionNode.svelte:82 `background: var(--status-done-glyph)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.decision-node[data-picked] .ring` rest: same [T lib/cawco/decisions/graph/DecisionNode.svelte:32 <span> → now lib/cawco/decisions/graph/DecisionNode.svelte:40 <span>]
+    - `.decision-node[data-picked] .ring` state (lib/cawco/decisions/graph/DecisionNode.svelte:14 <div> [data-picked]): same [T lib/cawco/decisions/graph/DecisionNode.svelte:32 <span> → now lib/cawco/decisions/graph/DecisionNode.svelte:40 <span>]
+- lib/cawco/decisions/graph/DecisionNode.svelte:90 `background: transparent` (first pass: not rendered: css)
+    - `.decision-node :global(.svelte-flow__handle)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/decisions/PageFrame.svelte:220 `background: transparent` (first pass: rendered: same)
+    - `.kit-page` rest: same [T lib/cawco/decisions/PageFrame.svelte:197 <iframe> → now lib/cawco/decisions/PageFrame.svelte:197 <iframe>]
+- lib/cawco/decisions/RecordCard.svelte:195 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.record` rest: same [T lib/cawco/decisions/RecordCard.svelte:60 <article> → now lib/cawco/decisions/RecordCard.svelte:61 <article>]
+- lib/cawco/decisions/RecordCard.svelte:205 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.still` rest: same [T lib/cawco/decisions/RecordCard.svelte:62 <img> → now lib/cawco/decisions/RecordCard.svelte:67 <img>]
+- lib/cawco/decisions/RecordCard.svelte:272 `background: var(--action-surface)` (first pass: rendered: same)
+    - `.mark` rest: same [T lib/cawco/decisions/RecordCard.svelte:99 <span> → now lib/cawco/decisions/RecordCard.svelte:125 <span>]
+- lib/cawco/decisions/StatePill.svelte:48 `background: var(--status-live-bg)` (first pass: rendered: same)
+    - `.state-pill[data-tone="live"]` rest: same [T lib/cawco/decisions/StatePill.svelte:24 <span> → now lib/cawco/decisions/StatePill.svelte:25 <span>]
+    - `.state-pill[data-tone="live"]` state ([data-tone=live]): same [T lib/cawco/decisions/StatePill.svelte:24 <span> → now lib/cawco/decisions/StatePill.svelte:25 <span>]
+- lib/cawco/decisions/StatePill.svelte:52 `background: var(--status-done-bg)` (first pass: rendered: same)
+    - `.state-pill[data-tone="done"]` rest: same [T lib/cawco/decisions/StatePill.svelte:24 <span> → now lib/cawco/decisions/StatePill.svelte:25 <span>]
+    - `.state-pill[data-tone="done"]` state ([data-tone=done]): same [T lib/cawco/decisions/StatePill.svelte:24 <span> → now lib/cawco/decisions/StatePill.svelte:25 <span>]
+- lib/cawco/ErrorDialog.svelte:76 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.error-text` rest: same [T lib/cawco/ErrorDialog.svelte:45 <pre> → now lib/cawco/ErrorDialog.svelte:45 <pre>]
+- lib/cawco/find/Finder.svelte:1010 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.chip` rest: same [T lib/cawco/find/Finder.svelte:496 <button> → now lib/cawco/find/Finder.svelte:507 <button>]
+    - `.chip` rest: same [T lib/cawco/find/Finder.svelte:510 <span> → now lib/cawco/find/Finder.svelte:521 <span>]
+    - `.chip` rest: same [T lib/cawco/find/Finder.svelte:522 <span> → now lib/cawco/find/Finder.svelte:535 <span>]
+- lib/cawco/find/Finder.svelte:1017 `background: var(--brand-wash)` (first pass: rendered: same)
+    - `.chip[aria-pressed="true"]` rest: same [T lib/cawco/find/Finder.svelte:496 <button> → now lib/cawco/find/Finder.svelte:507 <button>]
+    - `.chip[aria-pressed="true"]` rest: same [T lib/cawco/find/Finder.svelte:510 <span> → now lib/cawco/find/Finder.svelte:521 <span>]
+    - `.chip[aria-pressed="true"]` rest: same [T lib/cawco/find/Finder.svelte:522 <span> → now lib/cawco/find/Finder.svelte:535 <span>]
+    - `.chip[aria-pressed="true"]` state ([aria-pressed=true]): same [T lib/cawco/find/Finder.svelte:496 <button> → now lib/cawco/find/Finder.svelte:507 <button>]
+    - `.chip[aria-pressed="true"]` state ([aria-pressed=true]): same [T lib/cawco/find/Finder.svelte:510 <span> → now lib/cawco/find/Finder.svelte:521 <span>]
+    - `.chip[aria-pressed="true"]` state ([aria-pressed=true]): same [T lib/cawco/find/Finder.svelte:522 <span> → now lib/cawco/find/Finder.svelte:535 <span>]
+- lib/cawco/find/Finder.svelte:1022 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.chip:not([aria-pressed="true"]):hover` rest: same [T lib/cawco/find/Finder.svelte:496 <button> → now lib/cawco/find/Finder.svelte:507 <button>]
+    - `.chip:not([aria-pressed="true"]):hover` rest: same [T lib/cawco/find/Finder.svelte:510 <span> → now lib/cawco/find/Finder.svelte:521 <span>]
+    - `.chip:not([aria-pressed="true"]):hover` rest: same [T lib/cawco/find/Finder.svelte:522 <span> → now lib/cawco/find/Finder.svelte:535 <span>]
+    - `.chip:not([aria-pressed="true"]):hover` state (:hover): same [T lib/cawco/find/Finder.svelte:496 <button> → now lib/cawco/find/Finder.svelte:507 <button>]
+    - `.chip:not([aria-pressed="true"]):hover` state (:hover): same [T lib/cawco/find/Finder.svelte:510 <span> → now lib/cawco/find/Finder.svelte:521 <span>]
+    - `.chip:not([aria-pressed="true"]):hover` state (:hover): same [T lib/cawco/find/Finder.svelte:522 <span> → now lib/cawco/find/Finder.svelte:535 <span>]
+- lib/cawco/find/Finder.svelte:1039 `background: var(--brand-wash)` (first pass: rendered: same)
+    - `.chip.word` rest: same [T lib/cawco/find/Finder.svelte:510 <span> → now lib/cawco/find/Finder.svelte:521 <span>]
+    - `.chip.word` rest: same [T lib/cawco/find/Finder.svelte:522 <span> → now lib/cawco/find/Finder.svelte:535 <span>]
+- lib/cawco/find/Finder.svelte:1050 `background: none` (first pass: rendered: same)
+    - `.chip-x` rest: same [T lib/cawco/find/Finder.svelte:511 <button> → now lib/cawco/find/Finder.svelte:524 <button>]
+    - `.chip-x` rest: same [T lib/cawco/find/Finder.svelte:523 <button> → now lib/cawco/find/Finder.svelte:538 <button>]
+- lib/cawco/find/Finder.svelte:1095 `background: none` (first pass: rendered: same)
+    - `.link` rest: same [T lib/cawco/find/Finder.svelte:698 <button> → now lib/cawco/find/Finder.svelte:741 <button>]
+    - `.link` rest: same [T lib/cawco/find/Finder.svelte:716 <button> → now lib/cawco/find/Finder.svelte:772 <button>]
+    - `.link` rest: same [T lib/cawco/find/Finder.svelte:783 <button> → now lib/cawco/find/Finder.svelte:845 <button>]
+    - `.link` rest: same [T lib/cawco/find/Finder.svelte:823 <button> → now lib/cawco/find/Finder.svelte:929 <button>]
+- lib/cawco/find/Finder.svelte:1111 `background: none` (first pass: rendered: same)
+    - `.waiting-row` rest: same [T lib/cawco/find/Finder.svelte:655 <button> → now lib/cawco/find/Finder.svelte:681 <button>]
+    - `.fold-row` rest: same [T lib/cawco/find/Finder.svelte:628 <button> → now lib/cawco/find/Finder.svelte:650 <button>]
+    - `.act` rest: same [T lib/cawco/find/Finder.svelte:607 <button> → now lib/cawco/find/Finder.svelte:625 <button>]
+- lib/cawco/find/Finder.svelte:1128 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.waiting-row:active` rest: same [T lib/cawco/find/Finder.svelte:655 <button> → now lib/cawco/find/Finder.svelte:681 <button>]
+    - `.waiting-row:active` state (:active): same [T lib/cawco/find/Finder.svelte:655 <button> → now lib/cawco/find/Finder.svelte:681 <button>]
+    - `.fold-row:active` rest: same [T lib/cawco/find/Finder.svelte:628 <button> → now lib/cawco/find/Finder.svelte:650 <button>]
+    - `.fold-row:active` state (:active): same [T lib/cawco/find/Finder.svelte:628 <button> → now lib/cawco/find/Finder.svelte:650 <button>]
+- lib/cawco/find/Finder.svelte:1197 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.act:active` rest: same [T lib/cawco/find/Finder.svelte:607 <button> → now lib/cawco/find/Finder.svelte:625 <button>]
+    - `.act:active` state (:active): same [T lib/cawco/find/Finder.svelte:607 <button> → now lib/cawco/find/Finder.svelte:625 <button>]
+- lib/cawco/find/Finder.svelte:1254 `background: none` (first pass: rendered: same)
+    - `.back` rest: same [T lib/cawco/find/Finder.svelte:742 <button> → now lib/cawco/find/Finder.svelte:802 <button>]
+- lib/cawco/find/Finder.svelte:1262 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.back:active` rest: same [T lib/cawco/find/Finder.svelte:742 <button> → now lib/cawco/find/Finder.svelte:802 <button>]
+    - `.back:active` state (:active): same [T lib/cawco/find/Finder.svelte:742 <button> → now lib/cawco/find/Finder.svelte:802 <button>]
+- lib/cawco/find/Finder.svelte:905 `background: none` (first pass: rendered: same)
+    - `.field input` rest: same [T lib/cawco/find/Finder.svelte:455 <input> → now lib/cawco/find/Finder.svelte:465 <input>]
+- lib/cawco/find/Finder.svelte:934 `background: none` (first pass: rendered: same)
+    - `.clear` rest: same [T lib/cawco/find/Finder.svelte:474 <button> → now lib/cawco/find/Finder.svelte:485 <button>]
+- lib/cawco/find/Finder.svelte:943 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.clear:hover` rest: same [T lib/cawco/find/Finder.svelte:474 <button> → now lib/cawco/find/Finder.svelte:485 <button>]
+    - `.clear:hover` state (:hover): same [T lib/cawco/find/Finder.svelte:474 <button> → now lib/cawco/find/Finder.svelte:485 <button>]
+- lib/cawco/find/Finder.svelte:947 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.clear:active` rest: same [T lib/cawco/find/Finder.svelte:474 <button> → now lib/cawco/find/Finder.svelte:485 <button>]
+    - `.clear:active` state (:active): same [T lib/cawco/find/Finder.svelte:474 <button> → now lib/cawco/find/Finder.svelte:485 <button>]
+- lib/cawco/find/FindPeek.svelte:175 `background: none` (first pass: rendered: same)
+    - `.moment` rest: same [T lib/cawco/find/FindPeek.svelte:75 <button> → now lib/cawco/find/FindPeek.svelte:90 <button>]
+- lib/cawco/find/FindPeek.svelte:188 `background: none` (first pass: rendered: same)
+    - `.moment mark` rest: same [T lib/cawco/find/FindPeek.svelte:91 <mark> → now lib/cawco/find/FindPeek.svelte:108 <mark>]
+- lib/cawco/find/FindPeek.svelte:193 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.moment:active` rest: same [T lib/cawco/find/FindPeek.svelte:75 <button> → now lib/cawco/find/FindPeek.svelte:90 <button>]
+    - `.moment:active` state (:active): same [T lib/cawco/find/FindPeek.svelte:75 <button> → now lib/cawco/find/FindPeek.svelte:90 <button>]
+- lib/cawco/find/FindPeek.svelte:217 `background: none` (first pass: rendered: same)
+    - `.link` rest: same [T lib/cawco/find/FindPeek.svelte:107 <button> → now lib/cawco/find/FindPeek.svelte:130 <button>]
+- lib/cawco/find/FindRow.svelte:132 `background: none` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/find/FindRow.svelte:54 <button> → now lib/cawco/find/FindRow.svelte:58 <button>]
+- lib/cawco/find/FindRow.svelte:149 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.row:active` rest: same [T lib/cawco/find/FindRow.svelte:54 <button> → now lib/cawco/find/FindRow.svelte:58 <button>]
+    - `.row:active` state (:active): same [T lib/cawco/find/FindRow.svelte:54 <button> → now lib/cawco/find/FindRow.svelte:58 <button>]
+- lib/cawco/find/FindRow.svelte:256 `background: none` (first pass: rendered: same)
+    - `.reason mark` rest: same [T lib/cawco/find/FindRow.svelte:93 <mark> → now lib/cawco/find/FindRow.svelte:136 <mark>]
+- lib/cawco/find/FindRow.svelte:322 `background: none` (first pass: rendered: same)
+    - `.disclose` rest: same [T lib/cawco/find/FindRow.svelte:101 <button> → now lib/cawco/find/FindRow.svelte:145 <button>]
+- lib/cawco/find/FindRow.svelte:331 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.disclose:active` rest: same [T lib/cawco/find/FindRow.svelte:101 <button> → now lib/cawco/find/FindRow.svelte:145 <button>]
+    - `.disclose:active` state (:active): same [T lib/cawco/find/FindRow.svelte:101 <button> → now lib/cawco/find/FindRow.svelte:145 <button>]
+- lib/cawco/find/MentionField.svelte:785 `background: var(--surface-recess)` (first pass: not rendered: css)
+    - `.editor :global(.mention-chip)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/find/MentionField.svelte:825 `background: var(--ink-solid)` (first pass: rendered: same)
+    - `.tip` rest: same [T lib/cawco/find/MentionField.svelte:739 <div> → now lib/cawco/find/MentionField.svelte:756 <div>]
+- lib/cawco/find/MentionMenu.svelte:144 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.menu` rest: same [T lib/cawco/find/MentionMenu.svelte:83 <div> → now lib/cawco/find/MentionMenu.svelte:84 <div>]
+- lib/cawco/find/MentionMenu.svelte:163 `background: none` (first pass: rendered: same)
+    - `.link` rest: same [T lib/cawco/find/MentionMenu.svelte:105 <button> → now lib/cawco/find/MentionMenu.svelte:116 <button>]
+- lib/cawco/FleetFault.svelte:470 `background: var(--tone-bg)` (first pass: rendered: same)
+    - `.fault` rest: same [T lib/cawco/FleetFault.svelte:247 <div> → now lib/cawco/FleetFault.svelte:251 <div>]
+- lib/cawco/FleetFault.svelte:537 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tag` rest: same [T lib/cawco/FleetFault.svelte:255 <span> → now lib/cawco/FleetFault.svelte:279 <span>]
+    - `.tag` rest: same [T lib/cawco/FleetFault.svelte:257 <span> → now lib/cawco/FleetFault.svelte:285 <span>]
+    - `.tag` rest: same [T lib/cawco/FleetFault.svelte:266 <span> → now lib/cawco/FleetFault.svelte:297 <span>]
+- lib/cawco/FleetFault.svelte:577 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.tool` rest: same [T lib/cawco/FleetFault.svelte:310 <div> → now lib/cawco/FleetFault.svelte:365 <div>]
+- lib/cawco/FleetFault.svelte:600 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tool .badge` rest: same [T lib/cawco/FleetFault.svelte:318 <span> → now lib/cawco/FleetFault.svelte:381 <span>]
+- lib/cawco/FleetFault.svelte:652 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.said` rest: same [T lib/cawco/FleetFault.svelte:339 <pre> → now lib/cawco/FleetFault.svelte:411 <pre>]
+    - `.said` rest: same [T lib/cawco/FleetFault.svelte:359 <pre> → now lib/cawco/FleetFault.svelte:438 <pre>]
+- lib/cawco/home/Home.svelte:222 `background: var(--surface-recess)` (first pass: not rendered: unmapped)
+    - `.home.page` rest: same [T lib/cawco/home/Home.svelte:118 <section> → now lib/cawco/home/Home.svelte:123 <section>]
+    - `.home.page` state (.page): same [T lib/cawco/home/Home.svelte:118 <section> → now lib/cawco/home/Home.svelte:123 <section>]
+- lib/cawco/home/Home.svelte:289 `background: linear-gradient( transparent, var(--surface-recess) var(--space-4) )` (first pass: not rendered: css)
+    - `.dock` rest: same [T lib/cawco/home/Home.svelte:203 <div> → now lib/cawco/home/Home.svelte:236 <div>]
+- lib/cawco/home/HomeRecent.svelte:218 `background: none` (first pass: rendered: same)
+    - `.disclosure` rest: same [T lib/cawco/home/HomeRecent.svelte:92 <button> → now lib/cawco/home/HomeRecent.svelte:94 <button>]
+- lib/cawco/home/HomeRecent.svelte:224 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.disclosure:hover` rest: same [T lib/cawco/home/HomeRecent.svelte:92 <button> → now lib/cawco/home/HomeRecent.svelte:94 <button>]
+    - `.disclosure:hover` state (:hover): same [T lib/cawco/home/HomeRecent.svelte:92 <button> → now lib/cawco/home/HomeRecent.svelte:94 <button>]
+- lib/cawco/home/HomeRecent.svelte:263 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.search` rest: same [T lib/cawco/home/HomeRecent.svelte:126 <label> → now lib/cawco/home/HomeRecent.svelte:140 <label>]
+- lib/cawco/home/HomeRecent.svelte:279 `background: none` (first pass: rendered: same)
+    - `.search input` rest: same [T lib/cawco/home/HomeRecent.svelte:128 <input> → now lib/cawco/home/HomeRecent.svelte:146 <input>]
+- lib/cawco/home/NeedsCard.svelte:1032 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.args` rest: same [T lib/cawco/home/NeedsCard.svelte:494 <pre> → now lib/cawco/home/NeedsCard.svelte:605 <pre>]
+- lib/cawco/home/NeedsCard.svelte:737 `background: var(--surface-hover)` (first pass: not rendered: css)
+    - `.row:has(.cover:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:363 <div> → now lib/cawco/home/NeedsCard.svelte:368 <div>]
+    - `.row:has(.cover:hover)` state (lib/cawco/home/NeedsCard.svelte:375 <a> :hover): same [T lib/cawco/home/NeedsCard.svelte:363 <div> → now lib/cawco/home/NeedsCard.svelte:368 <div>]
+- lib/cawco/home/NeedsCard.svelte:812 `background: transparent` (first pass: rendered: same)
+    - `.peek` rest: same [T lib/cawco/home/NeedsCard.svelte:430 <button> → now lib/cawco/home/NeedsCard.svelte:477 <button>]
+- lib/cawco/home/NeedsCard.svelte:831 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.peek:hover` rest: same [T lib/cawco/home/NeedsCard.svelte:430 <button> → now lib/cawco/home/NeedsCard.svelte:477 <button>]
+    - `.peek:hover` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:430 <button> → now lib/cawco/home/NeedsCard.svelte:477 <button>]
+- lib/cawco/home/NeedsCard.svelte:953 `background: var(--status-fail-bg)` (first pass: rendered without its kit component's classes)
+    - `.peers > :global(.deny)` rest: same [T lib/cawco/home/NeedsCard.svelte:548 <Button> → now lib/cawco/home/NeedsCard.svelte:710 <Button>]
+    - `.peers > :global(.deny)` rest: same [T lib/cawco/home/NeedsCard.svelte:625 <Button> → now lib/cawco/home/NeedsCard.svelte:791 <Button>]
+    - `.peers > :global(.deny)` rest: same [T lib/cawco/home/NeedsCard.svelte:662 <Button> → now lib/cawco/home/NeedsCard.svelte:827 <Button>]
+    - `.peers > :global(.deny:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:548 <Button> → now lib/cawco/home/NeedsCard.svelte:710 <Button>]
+    - `.peers > :global(.deny:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:625 <Button> → now lib/cawco/home/NeedsCard.svelte:791 <Button>]
+    - `.peers > :global(.deny:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:662 <Button> → now lib/cawco/home/NeedsCard.svelte:827 <Button>]
+    - `.peers > :global(.deny:hover)` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:548 <Button> → now lib/cawco/home/NeedsCard.svelte:710 <Button>]
+    - `.peers > :global(.deny:hover)` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:625 <Button> → now lib/cawco/home/NeedsCard.svelte:791 <Button>]
+    - `.peers > :global(.deny:hover)` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:662 <Button> → now lib/cawco/home/NeedsCard.svelte:827 <Button>]
+- lib/cawco/home/NeedsCard.svelte:958 `background: var(--status-done-bg)` (first pass: rendered without its kit component's classes)
+    - `.peers > :global(.approve)` rest: same [T lib/cawco/home/NeedsCard.svelte:563 <Button> → now lib/cawco/home/NeedsCard.svelte:725 <Button>]
+    - `.peers > :global(.approve)` rest: same [T lib/cawco/home/NeedsCard.svelte:638 <Button> → now lib/cawco/home/NeedsCard.svelte:804 <Button>]
+    - `.peers > :global(.approve)` rest: same [T lib/cawco/home/NeedsCard.svelte:675 <Button> → now lib/cawco/home/NeedsCard.svelte:840 <Button>]
+    - `.peers > :global(.approve:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:563 <Button> → now lib/cawco/home/NeedsCard.svelte:725 <Button>]
+    - `.peers > :global(.approve:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:638 <Button> → now lib/cawco/home/NeedsCard.svelte:804 <Button>]
+    - `.peers > :global(.approve:hover)` rest: same [T lib/cawco/home/NeedsCard.svelte:675 <Button> → now lib/cawco/home/NeedsCard.svelte:840 <Button>]
+    - `.peers > :global(.approve:hover)` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:563 <Button> → now lib/cawco/home/NeedsCard.svelte:725 <Button>]
+    - `.peers > :global(.approve:hover)` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:638 <Button> → now lib/cawco/home/NeedsCard.svelte:804 <Button>]
+    - `.peers > :global(.approve:hover)` state (:hover): same [T lib/cawco/home/NeedsCard.svelte:675 <Button> → now lib/cawco/home/NeedsCard.svelte:840 <Button>]
+- lib/cawco/home/NoticeRow.svelte:123 `background: transparent` (first pass: rendered: same)
+    - `.x` rest: same [T lib/cawco/home/NoticeRow.svelte:51 <button> → now lib/cawco/home/NoticeRow.svelte:82 <button>]
+- lib/cawco/home/NoticeRow.svelte:138 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.x:hover` rest: same [T lib/cawco/home/NoticeRow.svelte:51 <button> → now lib/cawco/home/NoticeRow.svelte:82 <button>]
+    - `.x:hover` state (:hover): same [T lib/cawco/home/NoticeRow.svelte:51 <button> → now lib/cawco/home/NoticeRow.svelte:82 <button>]
+- lib/cawco/home/SessionTree.svelte:171 `background: none` (first pass: rendered: same)
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+    - `.gutter` rest: same [T lib/cawco/home/SessionTree.svelte:73 <button> → now lib/cawco/home/SessionTree.svelte:75 <button>]
+- lib/cawco/home/UpdateCard.svelte:449 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.actions` rest: same [T lib/cawco/home/UpdateCard.svelte:299 <div> → now lib/cawco/home/UpdateCard.svelte:364 <div>]
+- lib/cawco/home/UpdateCard.svelte:458 `background: linear-gradient(to bottom, transparent, var(--surface-raised))` (first pass: not rendered: css)
+    - `.actions::before` rest: same [T lib/cawco/home/UpdateCard.svelte:299 <div> → now lib/cawco/home/UpdateCard.svelte:364 <div>]
+- lib/cawco/home/WorkTabs.svelte:1025 `background: color-mix( in oklab, var(--wash) calc(var(--pick) * 100%), transparent )` (first pass: not rendered: css)
+    - `.count` rest: same [T lib/cawco/home/WorkTabs.svelte:744 <span> → now lib/cawco/home/WorkTabs.svelte:803 <span>]
+- lib/cawco/home/WorkTabs.svelte:1065 `background: none` (first pass: rendered: same)
+    - `.delegates` rest: same [T lib/cawco/home/WorkTabs.svelte:768 <button> → now lib/cawco/home/WorkTabs.svelte:836 <button>]
+- lib/cawco/home/WorkTabs.svelte:1081 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.delegates:hover` rest: same [T lib/cawco/home/WorkTabs.svelte:768 <button> → now lib/cawco/home/WorkTabs.svelte:836 <button>]
+    - `.delegates:hover` state (:hover): same [T lib/cawco/home/WorkTabs.svelte:768 <button> → now lib/cawco/home/WorkTabs.svelte:836 <button>]
+- lib/cawco/home/WorkTabs.svelte:1190 `background: none` (first pass: rendered: same)
+    - `.archive-all` rest: same [T lib/cawco/home/WorkTabs.svelte:627 <button> → now lib/cawco/home/WorkTabs.svelte:638 <button>]
+- lib/cawco/home/WorkTabs.svelte:1203 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.archive-all:hover` rest: same [T lib/cawco/home/WorkTabs.svelte:627 <button> → now lib/cawco/home/WorkTabs.svelte:638 <button>]
+    - `.archive-all:hover` state (:hover): same [T lib/cawco/home/WorkTabs.svelte:627 <button> → now lib/cawco/home/WorkTabs.svelte:638 <button>]
+- lib/cawco/home/WorkTabs.svelte:1219 `background: none` (first pass: rendered: same)
+    - `.more` rest: same [T lib/cawco/home/WorkTabs.svelte:863 <button> → now lib/cawco/home/WorkTabs.svelte:951 <button>]
+    - `.more` rest: same [T lib/cawco/home/WorkTabs.svelte:879 <span> → now lib/cawco/home/WorkTabs.svelte:976 <span>]
+- lib/cawco/home/WorkTabs.svelte:956 `background: none` (first pass: rendered without its kit component's classes)
+    - `:global(.work-tabs[data-slot="tabs"])` rest: same [T lib/cawco/home/WorkTabs.svelte:726 <Tabs> → now lib/cawco/home/WorkTabs.svelte:775 <Tabs>]
+    - `:global(.work-tabs[data-slot="tabs"])` state ([data-slot=tabs]): same [T lib/cawco/home/WorkTabs.svelte:726 <Tabs> → now lib/cawco/home/WorkTabs.svelte:775 <Tabs>]
+- lib/cawco/HoverPanel.svelte:221 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.panel` rest: same [T lib/cawco/HoverPanel.svelte:189 <div> → now lib/cawco/HoverPanel.svelte:196 <div>]
+- lib/cawco/join/AddMachineLink.svelte:27 `background: none` (first pass: rendered: same)
+    - `.add-link` rest: same [T lib/cawco/join/AddMachineLink.svelte:12 <button> → now lib/cawco/join/AddMachineLink.svelte:13 <button>]
+- lib/cawco/join/CheckInStatus.svelte:42 `background: var(--hue-orange-500)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/join/CheckInStatus.svelte:14 <span> → now lib/cawco/join/CheckInStatus.svelte:24 <span>]
+- lib/cawco/join/CopyBox.svelte:47 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.box` rest: same [T lib/cawco/join/CopyBox.svelte:26 <div> → now lib/cawco/join/CopyBox.svelte:29 <div>]
+- lib/cawco/join/CopyBox.svelte:69 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.copy` rest: same [T lib/cawco/join/CopyBox.svelte:29 <button> → now lib/cawco/join/CopyBox.svelte:46 <button>]
+- lib/cawco/join/CopyBox.svelte:85 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.copy:hover` rest: same [T lib/cawco/join/CopyBox.svelte:29 <button> → now lib/cawco/join/CopyBox.svelte:46 <button>]
+    - `.copy:hover` state (:hover): same [T lib/cawco/join/CopyBox.svelte:29 <button> → now lib/cawco/join/CopyBox.svelte:46 <button>]
+- lib/cawco/LawsBroken.svelte:58 `background: transparent` (first pass: rendered: same)
+    - `.laws-broken` rest: same [T lib/cawco/LawsBroken.svelte:35 <div> → now lib/cawco/LawsBroken.svelte:35 <div>]
+- lib/cawco/lightbox/Lightbox.svelte:318 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.doc-sheet` rest: same [T lib/cawco/lightbox/Lightbox.svelte:246 <div> → now lib/cawco/lightbox/Lightbox.svelte:251 <div>]
+- lib/cawco/lightbox/Lightbox.svelte:378 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `:global .cawco-pswp .pswp__button` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/lightbox/Lightbox.svelte:388 `background: var(--surface-hover)` (first pass: not rendered: css)
+    - `:global .cawco-pswp .pswp__button:hover` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+    - `:global .cawco-pswp .pswp__button:hover` state (:hover): same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/lightbox/Lightbox.svelte:411 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `:global .cawco-pswp .pswp__counter` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/lightbox/Lightbox.svelte:432 `background: var(--surface-recess)` (first pass: not rendered: css)
+    - `:global .cawco-pswp .pswp__description` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/MachineInventory.svelte:265 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.head:hover:not(:disabled)` rest: same [T lib/cawco/MachineInventory.svelte:122 <button> → now lib/cawco/MachineInventory.svelte:134 <button>]
+    - `.head:hover:not(:disabled)` state (:hover): same [T lib/cawco/MachineInventory.svelte:122 <button> → now lib/cawco/MachineInventory.svelte:134 <button>]
+- lib/cawco/MachineInventory.svelte:287 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.entry` rest: same [T lib/cawco/MachineInventory.svelte:170 <li> → now lib/cawco/MachineInventory.svelte:197 <li>]
+- lib/cawco/MachinesList.svelte:278 `background: none` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/MachinesList.svelte:145 <li> → now lib/cawco/MachinesList.svelte:149 <li>]
+    - `.row` rest: same [T lib/cawco/MachinesList.svelte:188 <button> → now lib/cawco/MachinesList.svelte:200 <button>]
+    - `.row` rest: same [T lib/cawco/MachinesList.svelte:219 <div> → now lib/cawco/MachinesList.svelte:243 <div>]
+    - `.row` rest: same [T lib/cawco/MachinesList.svelte:244 <button> → now lib/cawco/MachinesList.svelte:270 <button>]
+- lib/cawco/MachinesList.svelte:288 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.row:hover` rest: same [T lib/cawco/MachinesList.svelte:145 <li> → now lib/cawco/MachinesList.svelte:149 <li>]
+    - `.row:hover` rest: same [T lib/cawco/MachinesList.svelte:188 <button> → now lib/cawco/MachinesList.svelte:200 <button>]
+    - `.row:hover` rest: same [T lib/cawco/MachinesList.svelte:219 <div> → now lib/cawco/MachinesList.svelte:243 <div>]
+    - `.row:hover` rest: same [T lib/cawco/MachinesList.svelte:244 <button> → now lib/cawco/MachinesList.svelte:270 <button>]
+    - `.row:hover` state (:hover): same [T lib/cawco/MachinesList.svelte:145 <li> → now lib/cawco/MachinesList.svelte:149 <li>]
+    - `.row:hover` state (:hover): same [T lib/cawco/MachinesList.svelte:188 <button> → now lib/cawco/MachinesList.svelte:200 <button>]
+    - `.row:hover` state (:hover): same [T lib/cawco/MachinesList.svelte:219 <div> → now lib/cawco/MachinesList.svelte:243 <div>]
+    - `.row:hover` state (:hover): same [T lib/cawco/MachinesList.svelte:244 <button> → now lib/cawco/MachinesList.svelte:270 <button>]
+- lib/cawco/MessageBody.svelte:120 `background: var(--code-bg)` (first pass: not rendered: unmapped)
+    - `.msg :global(:not(pre) > code)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/MessageBody.svelte:135 `background: var(--surface-recess)` (first pass: not rendered: unmapped)
+    - `.msg :global(.prose > pre)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/MessageBody.svelte:141 `background: none` (first pass: not rendered: unmapped)
+    - `.msg :global(.prose > pre code)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/motion/Rail.svelte:255 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.thumb` rest: same [T lib/cawco/motion/Rail.svelte:192 <span> → now lib/cawco/motion/Rail.svelte:193 <span>]
+- lib/cawco/motion/Rail.svelte:271 `background: transparent` (first pass: rendered: same)
+    - `.rail-item` rest: same [T lib/cawco/motion/Rail.svelte:204 <button> → now lib/cawco/motion/Rail.svelte:205 <button>]
+- lib/cawco/motion/Rail.svelte:283 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.rail-item:not(.on):not(:disabled):hover` rest: same [T lib/cawco/motion/Rail.svelte:204 <button> → now lib/cawco/motion/Rail.svelte:205 <button>]
+    - `.rail-item:not(.on):not(:disabled):hover` state (:hover): same [T lib/cawco/motion/Rail.svelte:204 <button> → now lib/cawco/motion/Rail.svelte:205 <button>]
+- lib/cawco/motion/Rail.svelte:300 `background: var(--ink-strong)` (first pass: rendered: same)
+    - `.tip` rest: same [T lib/cawco/motion/Rail.svelte:227 <span> → now lib/cawco/motion/Rail.svelte:230 <span>]
+- lib/cawco/move/MoveAsk.svelte:58 `background: none` (first pass: rendered without its kit component's classes)
+    - `:global(.move-details-trigger)` rest: same [T lib/cawco/move/MoveAsk.svelte:22 <Collapsible.Trigger> → now lib/cawco/move/MoveAsk.svelte:28 <Collapsible.Trigger>]
+- lib/cawco/move/MoveAsk.svelte:86 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.details` rest: same [T lib/cawco/move/MoveAsk.svelte:29 <pre> → now lib/cawco/move/MoveAsk.svelte:42 <pre>]
+- lib/cawco/move/MoveWait.svelte:622 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.wait` rest: same [T lib/cawco/move/MoveWait.svelte:410 <div> → now lib/cawco/move/MoveWait.svelte:411 <div>]
+- lib/cawco/move/MoveWait.svelte:712 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T lib/cawco/move/MoveWait.svelte:495 <div> → now lib/cawco/move/MoveWait.svelte:522 <div>]
+- lib/cawco/PairingScreen.svelte:136 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.code` rest: same [T lib/cawco/PairingScreen.svelte:50 <p> → now lib/cawco/PairingScreen.svelte:79 <p>]
+- lib/cawco/PairingScreen.svelte:96 `background: var(--background)` (first pass: rendered: same)
+    - `.pairing` rest: same [T lib/cawco/PairingScreen.svelte:37 <main> → now lib/cawco/PairingScreen.svelte:38 <main>]
+- lib/cawco/plan/PlanPane.svelte:356 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.dot.live` rest: same [T lib/cawco/plan/PlanPane.svelte:154 <span> → now lib/cawco/plan/PlanPane.svelte:159 <span>]
+    - `.dot.live` state (.live): same [T lib/cawco/plan/PlanPane.svelte:154 <span> → now lib/cawco/plan/PlanPane.svelte:159 <span>]
+- lib/cawco/preview/ArtifactMenu.svelte:345 `background: none` (first pass: rendered: same)
+    - `.row-remove` rest: same [T lib/cawco/preview/ArtifactMenu.svelte:265 <button> → now lib/cawco/preview/ArtifactMenu.svelte:267 <button>]
+- lib/cawco/preview/PinCard.svelte:468 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.pin-card` rest: same [T lib/cawco/preview/PinCard.svelte:293 <div> → now lib/cawco/preview/PinCard.svelte:293 <div>]
+- lib/cawco/preview/PinCard.svelte:558 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.live` rest: same [T lib/cawco/preview/PinCard.svelte:318 <span> → now lib/cawco/preview/PinCard.svelte:339 <span>]
+- lib/cawco/preview/PinCard.svelte:592 `background: var(--code-bg)` (first pass: rendered: same)
+    - `.files code` rest: same [T lib/cawco/preview/PinCard.svelte:411 <code> → now lib/cawco/preview/PinCard.svelte:432 <code>]
+- lib/cawco/preview/PinDisc.svelte:28 `background: var(--action-solid)` (first pass: rendered: same)
+    - `.disc` rest: same [T lib/cawco/preview/PinDisc.svelte:14 <span> → now lib/cawco/preview/PinDisc.svelte:14 <span>]
+- lib/cawco/preview/PinDisc.svelte:37 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.moved` rest: same [T lib/cawco/preview/PinDisc.svelte:14 <span> → now lib/cawco/preview/PinDisc.svelte:14 <span>]
+    - `.moved` state (.moved): same [T lib/cawco/preview/PinDisc.svelte:14 <span> → now lib/cawco/preview/PinDisc.svelte:14 <span>]
+- lib/cawco/preview/PinList.svelte:233 `background: transparent` (first pass: rendered: same)
+    - `.pin-row` rest: same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.moved-row` rest: same [T lib/cawco/preview/PinList.svelte:147 <li> → now lib/cawco/preview/PinList.svelte:172 <li>]
+- lib/cawco/preview/PinList.svelte:244 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.pin-row:hover` rest: same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.pin-row:hover` state (:hover): same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+- lib/cawco/preview/PinList.svelte:249 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.pin-row:active` rest: same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.pin-row:active` state (:active): same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.pin-row[aria-current="true"]` rest: same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.pin-row[aria-current="true"]` state ([aria-current=true]): same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+- lib/cawco/preview/PinList.svelte:281 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.live` rest: same [T lib/cawco/preview/PinList.svelte:87 <span> → now lib/cawco/preview/PinList.svelte:91 <span>]
+- lib/cawco/preview/PlacePick.svelte:163 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.place-pick` rest: same [T lib/cawco/preview/PlacePick.svelte:73 <form> → now lib/cawco/preview/PlacePick.svelte:73 <form>]
+- lib/cawco/preview/PreviewPane.svelte:1919 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.inset-well` rest: same [T lib/cawco/preview/PreviewPane.svelte:1601 <div> → now lib/cawco/preview/PreviewPane.svelte:1606 <div>]
+- lib/cawco/preview/PreviewPane.svelte:1963 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.comments[aria-expanded="true"]` rest: same [T lib/cawco/preview/PreviewPane.svelte:1502 <button> → now lib/cawco/preview/PreviewPane.svelte:1503 <button>]
+    - `.comments[aria-expanded="true"]` state ([aria-expanded=true]): same [T lib/cawco/preview/PreviewPane.svelte:1502 <button> → now lib/cawco/preview/PreviewPane.svelte:1503 <button>]
+    - `.inspect[aria-pressed="true"]` rest: same [T lib/cawco/preview/PreviewPane.svelte:1455 <button> → now lib/cawco/preview/PreviewPane.svelte:1456 <button>]
+    - `.inspect[aria-pressed="true"]` state ([aria-pressed=true]): same [T lib/cawco/preview/PreviewPane.svelte:1455 <button> → now lib/cawco/preview/PreviewPane.svelte:1456 <button>]
+- lib/cawco/preview/PreviewPane.svelte:2002 `background: Canvas` (first pass: not rendered: unmapped)
+    - `iframe` rest: same [T lib/cawco/preview/PreviewPane.svelte:1669 <iframe> → now lib/cawco/preview/PreviewPane.svelte:1684 <iframe>]
+- lib/cawco/preview/PreviewPane.svelte:2024 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.cover` rest: same [T lib/cawco/preview/PreviewPane.svelte:1705 <div> → now lib/cawco/preview/PreviewPane.svelte:1721 <div>]
+- lib/cawco/preview/PreviewPane.svelte:2042 `background: var(--scrim)` (first pass: rendered: same)
+    - `.sheet-dim` rest: same [T lib/cawco/preview/PreviewPane.svelte:1725 <div> → now lib/cawco/preview/PreviewPane.svelte:1745 <div>]
+- lib/cawco/preview/PreviewPane.svelte:2056 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.sheet-error` rest: same [T lib/cawco/preview/PreviewPane.svelte:1726 <div> → now lib/cawco/preview/PreviewPane.svelte:1750 <div>]
+- lib/cawco/preview/PreviewPane.svelte:2082 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.sheet-error-frame` rest: same [T lib/cawco/preview/PreviewPane.svelte:1737 <pre> → now lib/cawco/preview/PreviewPane.svelte:1764 <pre>]
+- lib/cawco/preview/PreviewPane.svelte:2098 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.down` rest: same [T lib/cawco/preview/PreviewPane.svelte:1637 <div> → now lib/cawco/preview/PreviewPane.svelte:1647 <div>]
+    - `.down` rest: same [T lib/cawco/preview/PreviewPane.svelte:1749 <div> → now lib/cawco/preview/PreviewPane.svelte:1777 <div>]
+    - `.down` rest: same [T lib/cawco/preview/PreviewPane.svelte:1778 <div> → now lib/cawco/preview/PreviewPane.svelte:1811 <div>]
+- lib/cawco/preview/PreviewPane.svelte:2118 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.error` rest: same [T lib/cawco/preview/PreviewPane.svelte:1876 <div> → now lib/cawco/preview/PreviewPane.svelte:1914 <div>]
+- lib/cawco/preview/SheetInspector.svelte:521 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.inspector` rest: same [T lib/cawco/preview/SheetInspector.svelte:187 <aside> → now lib/cawco/preview/SheetInspector.svelte:188 <aside>]
+- lib/cawco/project/CardFace.svelte:69 `background: var(--surface-tile)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/project/CardFace.svelte:33 <span> → now lib/cawco/project/CardFace.svelte:38 <span>]
+- lib/cawco/project/CawFloat.svelte:127 `background: var(--material-panel)` (first pass: not rendered: css)
+    - `:global([data-slot="drawer-content"].caw-float-sheet)::before` rest: same [T lib/cawco/project/CawFloat.svelte:50 <Drawer.Content> → now lib/cawco/project/CawFloat.svelte:53 <Drawer.Content>]
+    - `:global([data-slot="drawer-content"].caw-float-sheet)::before` state ([data-slot=drawer-content]): same [T lib/cawco/project/CawFloat.svelte:50 <Drawer.Content> → now lib/cawco/project/CawFloat.svelte:53 <Drawer.Content>]
+- lib/cawco/project/CawFloat.svelte:135 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `:global([data-slot="drawer-content"].caw-float-sheet)::before` rest: same [T lib/cawco/project/CawFloat.svelte:50 <Drawer.Content> → now lib/cawco/project/CawFloat.svelte:53 <Drawer.Content>]
+    - `:global([data-slot="drawer-content"].caw-float-sheet)::before` state ([data-slot=drawer-content]): same [T lib/cawco/project/CawFloat.svelte:50 <Drawer.Content> → now lib/cawco/project/CawFloat.svelte:53 <Drawer.Content>]
+- lib/cawco/project/CawSeat.svelte:76 `background: transparent` (first pass: rendered: same)
+    - `.caw-seat` rest: same [T lib/cawco/project/CawSeat.svelte:44 <button> → now lib/cawco/project/CawSeat.svelte:44 <button>]
+- lib/cawco/project/CawThread.svelte:414 `background: none` (first pass: rendered: same)
+    - `.name` rest: same [T lib/cawco/project/CawThread.svelte:252 <button> → now lib/cawco/project/CawThread.svelte:260 <button>]
+    - `.name` rest: same [T lib/cawco/project/CawThread.svelte:269 <span> → now lib/cawco/project/CawThread.svelte:278 <span>]
+- lib/cawco/project/CawThread.svelte:425 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `button.name:hover` rest: same [T lib/cawco/project/CawThread.svelte:252 <button> → now lib/cawco/project/CawThread.svelte:260 <button>]
+    - `button.name:hover` state (:hover): same [T lib/cawco/project/CawThread.svelte:252 <button> → now lib/cawco/project/CawThread.svelte:260 <button>]
+- lib/cawco/project/FolderFiles.svelte:56 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.file` rest: same [T lib/cawco/project/FolderFiles.svelte:24 <button> → now lib/cawco/project/FolderFiles.svelte:25 <button>]
+- lib/cawco/project/FolderFiles.svelte:63 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.file[aria-pressed="true"]` rest: same [T lib/cawco/project/FolderFiles.svelte:24 <button> → now lib/cawco/project/FolderFiles.svelte:25 <button>]
+    - `.file[aria-pressed="true"]` state ([aria-pressed=true]): same [T lib/cawco/project/FolderFiles.svelte:24 <button> → now lib/cawco/project/FolderFiles.svelte:25 <button>]
+- lib/cawco/project/NeedsYouChip.svelte:51 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.needs` rest: same [T lib/cawco/project/NeedsYouChip.svelte:27 <button> → now lib/cawco/project/NeedsYouChip.svelte:27 <button>]
+- lib/cawco/project/ProjectDetails.svelte:547 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/project/ProjectDetails.svelte:253 <div> → now lib/cawco/project/ProjectDetails.svelte:258 <div>]
+- lib/cawco/project/ProjectDetails.svelte:616 `background: none` (first pass: rendered: same)
+    - `.disclose` rest: same [T lib/cawco/project/ProjectDetails.svelte:269 <button> → now lib/cawco/project/ProjectDetails.svelte:297 <button>]
+- lib/cawco/project/ProjectDetails.svelte:624 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.disclose:hover` rest: same [T lib/cawco/project/ProjectDetails.svelte:269 <button> → now lib/cawco/project/ProjectDetails.svelte:297 <button>]
+    - `.disclose:hover` state (:hover): same [T lib/cawco/project/ProjectDetails.svelte:269 <button> → now lib/cawco/project/ProjectDetails.svelte:297 <button>]
+- lib/cawco/project/ProjectHead.svelte:764 `background: none` (first pass: rendered: same)
+    - `.name` rest: same [T lib/cawco/project/ProjectHead.svelte:362 <input> → now lib/cawco/project/ProjectHead.svelte:373 <input>]
+    - `.name` rest: same [T lib/cawco/project/ProjectHead.svelte:392 <button> → now lib/cawco/project/ProjectHead.svelte:403 <button>]
+- lib/cawco/project/ProjectHead.svelte:773 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `button.name:hover` rest: same [T lib/cawco/project/ProjectHead.svelte:392 <button> → now lib/cawco/project/ProjectHead.svelte:403 <button>]
+    - `button.name:hover` state (:hover): same [T lib/cawco/project/ProjectHead.svelte:392 <button> → now lib/cawco/project/ProjectHead.svelte:403 <button>]
+- lib/cawco/project/ProjectHead.svelte:784 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.field` rest: same [T lib/cawco/project/ProjectHead.svelte:362 <input> → now lib/cawco/project/ProjectHead.svelte:373 <input>]
+- lib/cawco/project/ProjectHead.svelte:834 `background: none` (first pass: rendered: same)
+    - `.place-press` rest: same [T lib/cawco/project/ProjectHead.svelte:423 <button> → now lib/cawco/project/ProjectHead.svelte:443 <button>]
+- lib/cawco/project/ProjectHead.svelte:845 `background: none` (first pass: rendered: same)
+    - `.places` rest: same [T lib/cawco/project/ProjectHead.svelte:445 <button> → now lib/cawco/project/ProjectHead.svelte:467 <button>]
+- lib/cawco/project/ProjectHead.svelte:856 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.place-press:hover` rest: same [T lib/cawco/project/ProjectHead.svelte:423 <button> → now lib/cawco/project/ProjectHead.svelte:443 <button>]
+    - `.place-press:hover` state (:hover): same [T lib/cawco/project/ProjectHead.svelte:423 <button> → now lib/cawco/project/ProjectHead.svelte:443 <button>]
+    - `.place-press[aria-expanded="true"]` rest: same [T lib/cawco/project/ProjectHead.svelte:423 <button> → now lib/cawco/project/ProjectHead.svelte:443 <button>]
+    - `.place-press[aria-expanded="true"]` state ([aria-expanded=true]): same [T lib/cawco/project/ProjectHead.svelte:423 <button> → now lib/cawco/project/ProjectHead.svelte:443 <button>]
+    - `.places:hover` rest: same [T lib/cawco/project/ProjectHead.svelte:445 <button> → now lib/cawco/project/ProjectHead.svelte:467 <button>]
+    - `.places:hover` state (:hover): same [T lib/cawco/project/ProjectHead.svelte:445 <button> → now lib/cawco/project/ProjectHead.svelte:467 <button>]
+- lib/cawco/project/StarterCards.svelte:140 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.starter` rest: same [T lib/cawco/project/StarterCards.svelte:90 <button> → now lib/cawco/project/StarterCards.svelte:96 <button>]
+- lib/cawco/project/StarterCards.svelte:159 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.starter:hover` rest: same [T lib/cawco/project/StarterCards.svelte:90 <button> → now lib/cawco/project/StarterCards.svelte:96 <button>]
+    - `.starter:hover` state (:hover): same [T lib/cawco/project/StarterCards.svelte:90 <button> → now lib/cawco/project/StarterCards.svelte:96 <button>]
+- lib/cawco/routines/ActionsTable.svelte:143 `background: var(--surface-band)` (first pass: rendered without its kit component's classes)
+    - `.actions-ledger :global(tr.band)` rest: same [T lib/cawco/routines/ActionsTable.svelte:81 <Table.Row> → now lib/cawco/routines/ActionsTable.svelte:90 <Table.Row>]
+- lib/cawco/routines/RoutineDetail.svelte:274 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.runs-ledger` rest: same [T lib/cawco/routines/RoutineDetail.svelte:143 <div> → now lib/cawco/routines/RoutineDetail.svelte:167 <div>]
+    - `.runs-ledger` rest: same [T lib/cawco/routines/RoutineDetail.svelte:212 <div> → now lib/cawco/routines/RoutineDetail.svelte:275 <div>]
+- lib/cawco/routines/RoutineDetail.svelte:281 `background: var(--surface-band)` (first pass: rendered without its kit component's classes)
+    - `.runs-ledger :global(tr.band)` rest: same [T lib/cawco/routines/RoutineDetail.svelte:150 <Table.Row> → now lib/cawco/routines/RoutineDetail.svelte:182 <Table.Row>]
+    - `.runs-ledger :global(tr.band)` rest: same [T lib/cawco/routines/ActionsTable.svelte:81 <Table.Row> → now lib/cawco/routines/ActionsTable.svelte:90 <Table.Row>]
+- lib/cawco/RuleActivity.svelte:146 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.entry` rest: same [T lib/cawco/RuleActivity.svelte:78 <li> → now lib/cawco/RuleActivity.svelte:102 <li>]
+- lib/cawco/RunSteps.svelte:304 `background: none` (first pass: rendered: same)
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:190 <button> → now lib/cawco/RunSteps.svelte:196 <button>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:200 <div> → now lib/cawco/RunSteps.svelte:210 <div>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:190 <button> → now lib/cawco/RunSteps.svelte:196 <button>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:200 <div> → now lib/cawco/RunSteps.svelte:210 <div>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:190 <button> → now lib/cawco/RunSteps.svelte:196 <button>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:200 <div> → now lib/cawco/RunSteps.svelte:210 <div>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:190 <button> → now lib/cawco/RunSteps.svelte:196 <button>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:200 <div> → now lib/cawco/RunSteps.svelte:210 <div>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:190 <button> → now lib/cawco/RunSteps.svelte:196 <button>]
+    - `.line` rest: same [T lib/cawco/RunSteps.svelte:200 <div> → now lib/cawco/RunSteps.svelte:210 <div>]
+- lib/cawco/RunSteps.svelte:351 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.jump:hover` rest: same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/RunSteps.svelte:205 <a> → now lib/cawco/RunSteps.svelte:222 <a>]
+- lib/cawco/RunSteps.svelte:377 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.result` rest: same [T lib/cawco/RunSteps.svelte:255 <pre> → now lib/cawco/RunSteps.svelte:280 <pre>]
+    - `.result` rest: same [T lib/cawco/RunSteps.svelte:255 <pre> → now lib/cawco/RunSteps.svelte:280 <pre>]
+    - `.result` rest: same [T lib/cawco/RunSteps.svelte:255 <pre> → now lib/cawco/RunSteps.svelte:280 <pre>]
+    - `.result` rest: same [T lib/cawco/RunSteps.svelte:255 <pre> → now lib/cawco/RunSteps.svelte:280 <pre>]
+    - `.result` rest: same [T lib/cawco/RunSteps.svelte:255 <pre> → now lib/cawco/RunSteps.svelte:280 <pre>]
+- lib/cawco/ScreenEdges.svelte:102 `background: var(--edge-bottom-background)` (first pass: not rendered: unmapped)
+    - `:global(body)` rest: same [T body → now body]
+- lib/cawco/ScreenEdges.svelte:98 `background: var(--edge-top-background)` (first pass: not rendered: unmapped)
+    - `:global(:root)` rest: same [T html → now html]
+- lib/cawco/SessionHover.svelte:506 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/SessionHover.svelte:368 <span> → now lib/cawco/SessionHover.svelte:379 <span>]
+- lib/cawco/SessionPane.svelte:1288 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.pane` rest: same [T lib/cawco/SessionPane.svelte:1140 <div> → now lib/cawco/SessionPane.svelte:1141 <div>]
+- lib/cawco/SessionPane.svelte:1343 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.veil` rest: same [T lib/cawco/SessionPane.svelte:1208 <div> → now lib/cawco/SessionPane.svelte:1217 <div>]
+- lib/cawco/SessionRow.svelte:581 `background: none` (first pass: rendered: same)
+    - `.row-action` rest: same [T lib/cawco/SessionRow.svelte:432 <button> → now lib/cawco/SessionRow.svelte:499 <button>]
+    - `.row-action` rest: same [T lib/cawco/SessionRow.svelte:452 <button> → now lib/cawco/SessionRow.svelte:527 <button>]
+- lib/cawco/SessionRow.svelte:606 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.row-action` rest: same [T lib/cawco/SessionRow.svelte:432 <button> → now lib/cawco/SessionRow.svelte:499 <button>]
+    - `.row-action` rest: same [T lib/cawco/SessionRow.svelte:452 <button> → now lib/cawco/SessionRow.svelte:527 <button>]
+- lib/cawco/SessionRow.svelte:610 `background: var(--selected-bg)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.item[data-current] .row-action` rest: same [T lib/cawco/SessionRow.svelte:432 <button> → now lib/cawco/SessionRow.svelte:499 <button>]
+    - `.item[data-current] .row-action` rest: same [T lib/cawco/SessionRow.svelte:452 <button> → now lib/cawco/SessionRow.svelte:527 <button>]
+    - `.item[data-current] .row-action` state (lib/cawco/SessionRow.svelte:367 <div> [data-current]): same [T lib/cawco/SessionRow.svelte:432 <button> → now lib/cawco/SessionRow.svelte:499 <button>]
+    - `.item[data-current] .row-action` state (lib/cawco/SessionRow.svelte:367 <div> [data-current]): same [T lib/cawco/SessionRow.svelte:452 <button> → now lib/cawco/SessionRow.svelte:527 <button>]
+- lib/cawco/SessionRow.svelte:631 `background: light-dark(var(--surface-fill-strong), var(--surface-fill))` (first pass: rendered: same)
+    - `.row-action:hover` rest: same [T lib/cawco/SessionRow.svelte:432 <button> → now lib/cawco/SessionRow.svelte:499 <button>]
+    - `.row-action:hover` rest: same [T lib/cawco/SessionRow.svelte:452 <button> → now lib/cawco/SessionRow.svelte:527 <button>]
+    - `.row-action:hover` state (:hover): same [T lib/cawco/SessionRow.svelte:432 <button> → now lib/cawco/SessionRow.svelte:499 <button>]
+    - `.row-action:hover` state (:hover): same [T lib/cawco/SessionRow.svelte:452 <button> → now lib/cawco/SessionRow.svelte:527 <button>]
+- lib/cawco/SessionRow.svelte:687 `background: var(--selected-bg)` (first pass: rendered: same)
+    - `.swipe-reveal` rest: same [T lib/cawco/SessionRow.svelte:382 <span> → now lib/cawco/SessionRow.svelte:440 <span>]
+- lib/cawco/SessionRow.svelte:781 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.field` rest: same [T lib/cawco/SessionRow.svelte:296 <input> → now lib/cawco/SessionRow.svelte:307 <input>]
+- lib/cawco/SessionRow.svelte:830 `background: none` (first pass: rendered: same)
+    - `.session-note button` rest: same [T lib/cawco/SessionRow.svelte:517 <button> → now lib/cawco/SessionRow.svelte:610 <button>]
+- lib/cawco/SessionSurface.svelte:687 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.empty-detail` rest: same [T lib/cawco/SessionSurface.svelte:579 <div> → now lib/cawco/SessionSurface.svelte:579 <div>]
+- lib/cawco/Shell.svelte:1258 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.skip` rest: same [T lib/cawco/Shell.svelte:927 <a> → now lib/cawco/Shell.svelte:929 <a>]
+- lib/cawco/Shell.svelte:1271 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.shell` rest: same [T lib/cawco/Shell.svelte:938 <div> → now lib/cawco/Shell.svelte:945 <div>]
+- lib/cawco/Shell.svelte:1284 `background: var(--sidebar)` (first pass: rendered: same)
+    - `.rail` rest: same [T lib/cawco/Shell.svelte:946 <aside> → now lib/cawco/Shell.svelte:956 <aside>]
+- lib/cawco/Shell.svelte:1305 `background: var(--border-control)` (first pass: rendered: same)
+    - `.grip:hover` rest: same [T lib/cawco/Shell.svelte:952 <div> → now lib/cawco/Shell.svelte:967 <div>]
+    - `.grip:hover` state (:hover): same [T lib/cawco/Shell.svelte:952 <div> → now lib/cawco/Shell.svelte:967 <div>]
+- lib/cawco/Shell.svelte:1331 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.top` rest: same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+- lib/cawco/Shell.svelte:1343 `background: linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat, var(--surface-shelf)` (first pass: not rendered: css)
+    - `.top.hosting` rest: same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+    - `.top.hosting` state (.hosting): same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+- lib/cawco/Shell.svelte:1391 `background: var(--ink-muted)` (first pass: rendered: same)
+    - `.col-rail` rest: same [T lib/cawco/Shell.svelte:1041 <span> → now lib/cawco/Shell.svelte:1117 <span>]
+- lib/cawco/Shell.svelte:1465 `background: none` (first pass: rendered: same)
+    - `.burger` rest: same [T lib/cawco/Shell.svelte:1007 <button> → now lib/cawco/Shell.svelte:1055 <button>]
+- lib/cawco/Shell.svelte:1519 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.top.hosting` rest: same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+    - `.top.hosting` state (.hosting): same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+- lib/cawco/Shell.svelte:1559 `background: var(--material-panel)` (first pass: not rendered: css)
+    - `.tools::before` rest: same [T lib/cawco/Shell.svelte:1089 <div> → now lib/cawco/Shell.svelte:1201 <div>]
+- lib/cawco/Shell.svelte:1569 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.tools::before` rest: same [T lib/cawco/Shell.svelte:1089 <div> → now lib/cawco/Shell.svelte:1201 <div>]
+- lib/cawco/Shell.svelte:1600 `background: var(--border-control)` (first pass: rendered: same)
+    - `.join` rest: same [T lib/cawco/Shell.svelte:1098 <span> → now lib/cawco/Shell.svelte:1230 <span>]
+- lib/cawco/Shell.svelte:1618 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.join::before` rest: same [T lib/cawco/Shell.svelte:1098 <span> → now lib/cawco/Shell.svelte:1230 <span>]
+- lib/cawco/Shell.svelte:1655 `background: none` (first pass: not rendered: css)
+    - `.tools :global(.bar-item)` rest: same [T lib/cawco/Shell.svelte:1102 <button> → now lib/cawco/Shell.svelte:1241 <button>]
+    - `.tools :global(.bar-item)` rest: same [T lib/cawco/MachinesButton.svelte:72 <button> → now lib/cawco/MachinesButton.svelte:72 <button>]
+    - `.tools :global(.bar-item)` rest: same [T lib/cawco/NeedsCaw.svelte:631 <button> → now lib/cawco/NeedsCaw.svelte:659 <button>]
+- lib/cawco/Shell.svelte:1671 `background: var(--surface-hover)` (first pass: not rendered: css)
+    - `.tools :global(.bar-item:hover)` rest: same [T lib/cawco/Shell.svelte:1102 <button> → now lib/cawco/Shell.svelte:1241 <button>]
+    - `.tools :global(.bar-item:hover)` rest: same [T lib/cawco/MachinesButton.svelte:72 <button> → now lib/cawco/MachinesButton.svelte:72 <button>]
+    - `.tools :global(.bar-item:hover)` rest: same [T lib/cawco/NeedsCaw.svelte:631 <button> → now lib/cawco/NeedsCaw.svelte:659 <button>]
+    - `.tools :global(.bar-item:hover)` state (:hover): same [T lib/cawco/Shell.svelte:1102 <button> → now lib/cawco/Shell.svelte:1241 <button>]
+    - `.tools :global(.bar-item:hover)` state (:hover): same [T lib/cawco/MachinesButton.svelte:72 <button> → now lib/cawco/MachinesButton.svelte:72 <button>]
+    - `.tools :global(.bar-item:hover)` state (:hover): same [T lib/cawco/NeedsCaw.svelte:631 <button> → now lib/cawco/NeedsCaw.svelte:659 <button>]
+- lib/cawco/Shell.svelte:1680 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.burger:hover` rest: same [T lib/cawco/Shell.svelte:1007 <button> → now lib/cawco/Shell.svelte:1055 <button>]
+    - `.burger:hover` state (:hover): same [T lib/cawco/Shell.svelte:1007 <button> → now lib/cawco/Shell.svelte:1055 <button>]
+- lib/cawco/Shell.svelte:1810 `background: none` (first pass: not rendered: css)
+    - `.top.floating` rest: same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+    - `.top.floating` state (.floating): same [T lib/cawco/Shell.svelte:1001 <header> → now lib/cawco/Shell.svelte:1038 <header>]
+- lib/cawco/Shell.svelte:1858 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.banner.warn` rest: same [T lib/cawco/Shell.svelte:1159 <div> → now lib/cawco/Shell.svelte:1314 <div>]
+    - `.banner.warn` state (.warn): same [T lib/cawco/Shell.svelte:1159 <div> → now lib/cawco/Shell.svelte:1314 <div>]
+- lib/cawco/Shell.svelte:1862 `background: var(--status-fail-bg)` (first pass: rendered: same)
+    - `.banner.bad` rest: same [T lib/cawco/Shell.svelte:1159 <div> → now lib/cawco/Shell.svelte:1314 <div>]
+    - `.banner.bad` state (.bad): same [T lib/cawco/Shell.svelte:1159 <div> → now lib/cawco/Shell.svelte:1314 <div>]
+- lib/cawco/Shell.svelte:1892 `background: linear-gradient(var(--surface-shelf), var(--surface-shelf)) top / 100% var(--c-top-bar-h) no-repeat` (first pass: not rendered: css)
+    - `.content.floating` rest: same [T lib/cawco/Shell.svelte:1193 <main> → now lib/cawco/Shell.svelte:1362 <main>]
+    - `.content.floating` state (.floating): same [T lib/cawco/Shell.svelte:1193 <main> → now lib/cawco/Shell.svelte:1362 <main>]
+- lib/cawco/side/SideSheet.svelte:424 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.sheet` rest: same [T lib/cawco/side/SideSheet.svelte:346 <div> → now lib/cawco/side/SideSheet.svelte:364 <div>]
+- lib/cawco/side/SideSheet.svelte:435 `background: var(--border-control)` (first pass: not rendered: css)
+    - `:global(.preview-sheet .preview-grab[data-vaul-handle])` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+    - `:global(.preview-sheet .preview-grab[data-vaul-handle])` state ([data-vaul-handle]): same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/side/SideSurface.svelte:145 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.side-card` rest: same [T lib/cawco/side/SideSurface.svelte:71 <section> → now lib/cawco/side/SideSurface.svelte:77 <section>]
+- lib/cawco/side/SideSurface.svelte:208 `background: transparent` (first pass: not rendered: unmapped)
+    - `.side-head :global(:is(button, a):not([role="tab"]))` rest: same [T lib/cawco/side/SideSurface.svelte:99 <button> → now lib/cawco/side/SideSurface.svelte:132 <button>]
+    - `.side-head :global(:is(button, a):not([role="tab"]))` rest: same [T lib/cawco/side/SideSurface.svelte:114 <button> → now lib/cawco/side/SideSurface.svelte:147 <button>]
+- lib/cawco/side/SideSurface.svelte:233 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.side-head :global(button[aria-pressed="true"]:not([role="tab"]))` rest: same [T lib/cawco/side/SideSurface.svelte:99 <button> → now lib/cawco/side/SideSurface.svelte:132 <button>]
+    - `.side-head :global(button[aria-pressed="true"]:not([role="tab"]))` rest: same [T lib/cawco/side/SideSurface.svelte:114 <button> → now lib/cawco/side/SideSurface.svelte:147 <button>]
+    - `.side-head :global(button[aria-pressed="true"]:not([role="tab"]))` state ([aria-pressed=true]): same [T lib/cawco/side/SideSurface.svelte:99 <button> → now lib/cawco/side/SideSurface.svelte:132 <button>]
+    - `.side-head :global(button[aria-pressed="true"]:not([role="tab"]))` state ([aria-pressed=true]): same [T lib/cawco/side/SideSurface.svelte:114 <button> → now lib/cawco/side/SideSurface.svelte:147 <button>]
+- lib/cawco/side/SideSurface.svelte:241 `background: var(--surface-hover)` (first pass: not rendered: unmapped)
+    - `.side-head :global(:is(button, a):not([role="tab"]):hover)` rest: same [T lib/cawco/side/SideSurface.svelte:99 <button> → now lib/cawco/side/SideSurface.svelte:132 <button>]
+    - `.side-head :global(:is(button, a):not([role="tab"]):hover)` rest: same [T lib/cawco/side/SideSurface.svelte:114 <button> → now lib/cawco/side/SideSurface.svelte:147 <button>]
+    - `.side-head :global(:is(button, a):not([role="tab"]):hover)` state (:hover): same [T lib/cawco/side/SideSurface.svelte:99 <button> → now lib/cawco/side/SideSurface.svelte:132 <button>]
+    - `.side-head :global(:is(button, a):not([role="tab"]):hover)` state (:hover): same [T lib/cawco/side/SideSurface.svelte:114 <button> → now lib/cawco/side/SideSurface.svelte:147 <button>]
+- lib/cawco/side/SideSurface.svelte:255 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.side-well` rest: same [T lib/cawco/side/SideSurface.svelte:128 <div> → now lib/cawco/side/SideSurface.svelte:165 <div>]
+- lib/cawco/side/Split.svelte:482 `background: var(--border-hairline)` (first pass: rendered without its kit component's classes)
+    - `.side-split :global(.side-divider)` rest: same [T lib/cawco/side/Split.svelte:355 <Resizable.Handle> → now lib/cawco/side/Split.svelte:365 <Resizable.Handle>]
+- lib/cawco/side/Split.svelte:501 `background: var(--ink-muted)` (first pass: rendered without its kit component's classes)
+    - `.side-split :global(.side-divider[data-active])` rest: same [T lib/cawco/side/Split.svelte:355 <Resizable.Handle> → now lib/cawco/side/Split.svelte:365 <Resizable.Handle>]
+    - `.side-split :global(.side-divider[data-active])` state ([data-active]): same [T lib/cawco/side/Split.svelte:355 <Resizable.Handle> → now lib/cawco/side/Split.svelte:365 <Resizable.Handle>]
+- lib/cawco/side/Split.svelte:505 `background: var(--border-control)` (first pass: rendered without its kit component's classes)
+    - `.side-split :global(.side-divider:hover)` rest: same [T lib/cawco/side/Split.svelte:355 <Resizable.Handle> → now lib/cawco/side/Split.svelte:365 <Resizable.Handle>]
+    - `.side-split :global(.side-divider:hover)` state (:hover): same [T lib/cawco/side/Split.svelte:355 <Resizable.Handle> → now lib/cawco/side/Split.svelte:365 <Resizable.Handle>]
+- lib/cawco/Sidebar.svelte:1261 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.search` rest: same [T lib/cawco/Sidebar.svelte:867 <button> → now lib/cawco/Sidebar.svelte:884 <button>]
+- lib/cawco/Sidebar.svelte:1290 `background: none` (first pass: rendered: same)
+    - `.head-action` rest: same [T lib/cawco/Sidebar.svelte:842 <button> → now lib/cawco/Sidebar.svelte:853 <button>]
+- lib/cawco/Sidebar.svelte:1301 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.head-action:hover` rest: same [T lib/cawco/Sidebar.svelte:842 <button> → now lib/cawco/Sidebar.svelte:853 <button>]
+    - `.head-action:hover` state (:hover): same [T lib/cawco/Sidebar.svelte:842 <button> → now lib/cawco/Sidebar.svelte:853 <button>]
+- lib/cawco/Sidebar.svelte:1308 `background: var(--selected-bg)` (first pass: not rendered: css)
+    - `:global(.rail-configure[aria-current="page"])` rest: same [T lib/cawco/Sidebar.svelte:1190 <Button> → now lib/cawco/Sidebar.svelte:1216 <Button>]
+    - `:global(.rail-configure[aria-current="page"])` state ([aria-current=page]): same [T lib/cawco/Sidebar.svelte:1190 <Button> → now lib/cawco/Sidebar.svelte:1216 <Button>]
+- lib/cawco/spawn/AccountChip.svelte:141 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/spawn/AccountChip.svelte:80 <span> → now lib/cawco/spawn/AccountChip.svelte:82 <span>]
+    - `.dot` rest: same [T lib/cawco/spawn/AccountChip.svelte:116 <span> → now lib/cawco/spawn/AccountChip.svelte:137 <span>]
+- lib/cawco/spawn/AccountChip.svelte:164 `background: none` (first pass: rendered: same)
+    - `.option` rest: same [T lib/cawco/spawn/AccountChip.svelte:88 <button> → now lib/cawco/spawn/AccountChip.svelte:101 <button>]
+    - `.option` rest: same [T lib/cawco/spawn/AccountChip.svelte:103 <button> → now lib/cawco/spawn/AccountChip.svelte:121 <button>]
+- lib/cawco/spawn/EffortPips.svelte:275 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.box` rest: same [T lib/cawco/spawn/EffortPips.svelte:165 <div> → now lib/cawco/spawn/EffortPips.svelte:166 <div>]
+- lib/cawco/spawn/EffortPips.svelte:284 `background: transparent` (first pass: rendered: same)
+    - `.box.embedded` rest: same [T lib/cawco/spawn/EffortPips.svelte:165 <div> → now lib/cawco/spawn/EffortPips.svelte:166 <div>]
+    - `.box.embedded` state (.embedded): same [T lib/cawco/spawn/EffortPips.svelte:165 <div> → now lib/cawco/spawn/EffortPips.svelte:166 <div>]
+- lib/cawco/spawn/EffortPips.svelte:295 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.track` rest: same [T lib/cawco/spawn/EffortPips.svelte:170 <div> → now lib/cawco/spawn/EffortPips.svelte:181 <div>]
+- lib/cawco/spawn/EffortPips.svelte:323 `background: var(--surface-recess-deep)` (first pass: rendered: same)
+    - `.fill` rest: same [T lib/cawco/spawn/EffortPips.svelte:188 <div> → now lib/cawco/spawn/EffortPips.svelte:201 <div>]
+- lib/cawco/spawn/EffortPips.svelte:336 `background: var(--ink-strong)` (first pass: rendered: same)
+    - `.pip` rest: same [T lib/cawco/spawn/EffortPips.svelte:242 <span> → now lib/cawco/spawn/EffortPips.svelte:281 <span>]
+- lib/cawco/spawn/EffortPips.svelte:352 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.knob` rest: same [T lib/cawco/spawn/EffortPips.svelte:193 <div> → now lib/cawco/spawn/EffortPips.svelte:208 <div>]
+- lib/cawco/spawn/LifetimeChip.svelte:117 `background: transparent` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/spawn/LifetimeChip.svelte:68 <button> → now lib/cawco/spawn/LifetimeChip.svelte:77 <button>]
+- lib/cawco/spawn/LifetimeChip.svelte:125 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.row.on` rest: same [T lib/cawco/spawn/LifetimeChip.svelte:68 <button> → now lib/cawco/spawn/LifetimeChip.svelte:77 <button>]
+    - `.row.on` state (.on): same [T lib/cawco/spawn/LifetimeChip.svelte:68 <button> → now lib/cawco/spawn/LifetimeChip.svelte:77 <button>]
+- lib/cawco/spawn/LocationSection.svelte:400 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.field` rest: same [T lib/cawco/spawn/LocationSection.svelte:203 <div> → now lib/cawco/spawn/LocationSection.svelte:210 <div>]
+    - `.field` rest: same [T lib/cawco/spawn/LocationSection.svelte:355 <div> → now lib/cawco/spawn/LocationSection.svelte:476 <div>]
+- lib/cawco/spawn/LocationSection.svelte:408 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.field.locked` rest: same [T lib/cawco/spawn/LocationSection.svelte:203 <div> → now lib/cawco/spawn/LocationSection.svelte:210 <div>]
+    - `.field.locked` state (.locked): same [T lib/cawco/spawn/LocationSection.svelte:203 <div> → now lib/cawco/spawn/LocationSection.svelte:210 <div>]
+- lib/cawco/spawn/LocationSection.svelte:435 `background: transparent` (first pass: rendered: same)
+    - `input` rest: same [T lib/cawco/spawn/LocationSection.svelte:210 <input> → now lib/cawco/spawn/LocationSection.svelte:230 <input>]
+    - `input` rest: same [T lib/cawco/spawn/LocationSection.svelte:358 <input> → now lib/cawco/spawn/LocationSection.svelte:495 <input>]
+- lib/cawco/spawn/LocationSection.svelte:447 `background: var(--status-live-bg)` (first pass: rendered: same)
+    - `.badge` rest: same [T lib/cawco/spawn/LocationSection.svelte:223 <span> → now lib/cawco/spawn/LocationSection.svelte:249 <span>]
+- lib/cawco/spawn/LocationSection.svelte:457 `background: transparent` (first pass: rendered: same)
+    - `.override` rest: same [T lib/cawco/spawn/LocationSection.svelte:224 <button> → now lib/cawco/spawn/LocationSection.svelte:255 <button>]
+- lib/cawco/spawn/LocationSection.svelte:473 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.browse` rest: same [T lib/cawco/spawn/LocationSection.svelte:233 <button> → now lib/cawco/spawn/LocationSection.svelte:268 <button>]
+- lib/cawco/spawn/LocationSection.svelte:495 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.override:hover` rest: same [T lib/cawco/spawn/LocationSection.svelte:224 <button> → now lib/cawco/spawn/LocationSection.svelte:255 <button>]
+    - `.override:hover` state (:hover): same [T lib/cawco/spawn/LocationSection.svelte:224 <button> → now lib/cawco/spawn/LocationSection.svelte:255 <button>]
+- lib/cawco/spawn/LocationSection.svelte:500 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.browse:not(:disabled):hover` rest: same [T lib/cawco/spawn/LocationSection.svelte:233 <button> → now lib/cawco/spawn/LocationSection.svelte:268 <button>]
+    - `.browse:not(:disabled):hover` state (:hover): same [T lib/cawco/spawn/LocationSection.svelte:233 <button> → now lib/cawco/spawn/LocationSection.svelte:268 <button>]
+    - `.crumb:hover` rest: same [T lib/cawco/spawn/LocationSection.svelte:263 <button> → now lib/cawco/spawn/LocationSection.svelte:327 <button>]
+    - `.crumb:hover` rest: same [T lib/cawco/spawn/LocationSection.svelte:274 <button> → now lib/cawco/spawn/LocationSection.svelte:341 <button>]
+    - `.crumb:hover` state (:hover): same [T lib/cawco/spawn/LocationSection.svelte:263 <button> → now lib/cawco/spawn/LocationSection.svelte:327 <button>]
+    - `.crumb:hover` state (:hover): same [T lib/cawco/spawn/LocationSection.svelte:274 <button> → now lib/cawco/spawn/LocationSection.svelte:341 <button>]
+- lib/cawco/spawn/LocationSection.svelte:503 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.folder:hover` rest: same [T lib/cawco/spawn/LocationSection.svelte:287 <button> → now lib/cawco/spawn/LocationSection.svelte:363 <button>]
+    - `.folder:hover` rest: same [T lib/cawco/spawn/LocationSection.svelte:309 <button> → now lib/cawco/spawn/LocationSection.svelte:401 <button>]
+    - `.folder:hover` state (:hover): same [T lib/cawco/spawn/LocationSection.svelte:287 <button> → now lib/cawco/spawn/LocationSection.svelte:363 <button>]
+    - `.folder:hover` state (:hover): same [T lib/cawco/spawn/LocationSection.svelte:309 <button> → now lib/cawco/spawn/LocationSection.svelte:401 <button>]
+- lib/cawco/spawn/LocationSection.svelte:513 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.browser` rest: same [T lib/cawco/spawn/LocationSection.svelte:253 <div> → now lib/cawco/spawn/LocationSection.svelte:295 <div>]
+- lib/cawco/spawn/LocationSection.svelte:521 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.crumbs` rest: same [T lib/cawco/spawn/LocationSection.svelte:254 <div> → now lib/cawco/spawn/LocationSection.svelte:297 <div>]
+- lib/cawco/spawn/LocationSection.svelte:530 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.machine` rest: same [T lib/cawco/spawn/LocationSection.svelte:255 <span> → now lib/cawco/spawn/LocationSection.svelte:304 <span>]
+- lib/cawco/spawn/LocationSection.svelte:540 `background: var(--hue-green-500)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/spawn/LocationSection.svelte:256 <span> → now lib/cawco/spawn/LocationSection.svelte:310 <span>]
+- lib/cawco/spawn/LocationSection.svelte:565 `background: transparent` (first pass: rendered: same)
+    - `.crumb` rest: same [T lib/cawco/spawn/LocationSection.svelte:263 <button> → now lib/cawco/spawn/LocationSection.svelte:327 <button>]
+    - `.crumb` rest: same [T lib/cawco/spawn/LocationSection.svelte:274 <button> → now lib/cawco/spawn/LocationSection.svelte:341 <button>]
+- lib/cawco/spawn/LocationSection.svelte:574 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.crumb.current` rest: same [T lib/cawco/spawn/LocationSection.svelte:274 <button> → now lib/cawco/spawn/LocationSection.svelte:341 <button>]
+- lib/cawco/spawn/LocationSection.svelte:601 `background: transparent` (first pass: rendered: same)
+    - `.folder` rest: same [T lib/cawco/spawn/LocationSection.svelte:287 <button> → now lib/cawco/spawn/LocationSection.svelte:363 <button>]
+    - `.folder` rest: same [T lib/cawco/spawn/LocationSection.svelte:309 <button> → now lib/cawco/spawn/LocationSection.svelte:401 <button>]
+- lib/cawco/spawn/LocationSection.svelte:645 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.use` rest: same [T lib/cawco/spawn/LocationSection.svelte:333 <div> → now lib/cawco/spawn/LocationSection.svelte:436 <div>]
+- lib/cawco/spawn/LocationSection.svelte:674 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.note` rest: same [T lib/cawco/spawn/LocationSection.svelte:371 <div> → now lib/cawco/spawn/LocationSection.svelte:514 <div>]
+- lib/cawco/spawn/MachinesChip.svelte:168 `background: transparent` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/spawn/MachinesChip.svelte:115 <button> → now lib/cawco/spawn/MachinesChip.svelte:118 <button>]
+    - `.row` rest: same [T lib/cawco/spawn/MachinesChip.svelte:144 <button> → now lib/cawco/spawn/MachinesChip.svelte:163 <button>]
+- lib/cawco/spawn/MachinesChip.svelte:184 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.row.on` rest: same [T lib/cawco/spawn/MachinesChip.svelte:115 <button> → now lib/cawco/spawn/MachinesChip.svelte:118 <button>]
+    - `.row.on` state (.on): same [T lib/cawco/spawn/MachinesChip.svelte:115 <button> → now lib/cawco/spawn/MachinesChip.svelte:118 <button>]
+- lib/cawco/spawn/MachinesChip.svelte:205 `background: var(--border-hairline)` (first pass: rendered: same)
+    - `.divider` rest: same [T lib/cawco/spawn/MachinesChip.svelte:143 <div> → now lib/cawco/spawn/MachinesChip.svelte:157 <div>]
+- lib/cawco/spawn/ModelSection.svelte:517 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.picker` rest: same [T lib/cawco/spawn/ModelSection.svelte:302 <div> → now lib/cawco/spawn/ModelSection.svelte:304 <div>]
+- lib/cawco/spawn/ModelSection.svelte:548 `background: var(--surface-recess)` (first pass: rendered without its kit component's classes)
+    - `:global(.harness-rail)` rest: same [T lib/cawco/spawn/ModelSection.svelte:304 <Rail> → now lib/cawco/spawn/ModelSection.svelte:318 <Rail>]
+- lib/cawco/spawn/ModelSection.svelte:588 `background: transparent` (first pass: rendered: same)
+    - `.search input` rest: same [T lib/cawco/spawn/ModelSection.svelte:340 <input> → now lib/cawco/spawn/ModelSection.svelte:376 <input>]
+- lib/cawco/spawn/ModelSection.svelte:600 `background: transparent` (first pass: rendered: same)
+    - `.clear` rest: same [T lib/cawco/spawn/ModelSection.svelte:364 <button> → now lib/cawco/spawn/ModelSection.svelte:404 <button>]
+- lib/cawco/spawn/ModelSection.svelte:614 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.custom:hover` rest: same [T lib/cawco/spawn/ModelSection.svelte:412 <button> → now lib/cawco/spawn/ModelSection.svelte:468 <button>]
+    - `.custom:hover` state (:hover): same [T lib/cawco/spawn/ModelSection.svelte:412 <button> → now lib/cawco/spawn/ModelSection.svelte:468 <button>]
+- lib/cawco/spawn/ModelSection.svelte:644 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.fill` rest: same [T lib/cawco/spawn/ModelSection.svelte:390 <span> → now lib/cawco/spawn/ModelSection.svelte:433 <span>]
+- lib/cawco/spawn/ModelSection.svelte:689 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.tools :global(.ns-chip-btn.tool)` rest: same [T lib/cawco/spawn/ToolChips.svelte:117 <span> → now lib/cawco/spawn/ToolChips.svelte:120 <span>]
+    - `.tools :global(.ns-chip-btn.tool)` rest: same [T lib/cawco/spawn/ToolChips.svelte:129 <span> → now lib/cawco/spawn/ToolChips.svelte:133 <span>]
+    - `.tools :global(.ns-chip-btn.tool)` rest: same [T lib/cawco/spawn/ToolChips.svelte:148 <span> → now lib/cawco/spawn/ToolChips.svelte:160 <span>]
+- lib/cawco/spawn/ModelSection.svelte:699 `background: transparent` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/spawn/ModelSection.svelte:399 <div> → now lib/cawco/spawn/ModelSection.svelte:450 <div>]
+    - `.row` rest: same [T lib/cawco/spawn/ModelSection.svelte:412 <button> → now lib/cawco/spawn/ModelSection.svelte:468 <button>]
+    - `.row` rest: same [T lib/cawco/spawn/ModelSection.svelte:449 <button> → now lib/cawco/spawn/ModelSection.svelte:534 <button>]
+- lib/cawco/spawn/ModelSection.svelte:711 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.custom` rest: same [T lib/cawco/spawn/ModelSection.svelte:412 <button> → now lib/cawco/spawn/ModelSection.svelte:468 <button>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2165 `background: var(--scrim)` (first pass: rendered without its kit component's classes)
+    - `:global(.session-scrim)` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1792 <DialogPrimitive.Overlay> → now lib/cawco/spawn/NewSessionDialog.svelte:1791 <DialogPrimitive.Overlay>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2177 `background: var(--surface-recess)` (first pass: rendered without its kit component's classes)
+    - `:global(.session-card:not([data-vaul-drawer]))` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1759 <DrawerContent> → now lib/cawco/spawn/NewSessionDialog.svelte:1757 <DrawerContent>]
+    - `:global(.session-card:not([data-vaul-drawer]))` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1797 <DialogPrimitive.Content> → now lib/cawco/spawn/NewSessionDialog.svelte:1804 <DialogPrimitive.Content>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2221 `background: var(--ink-solid)` (first pass: rendered: same)
+    - `.bolt` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1831 <span> → now lib/cawco/spawn/NewSessionDialog.svelte:1852 <span>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2247 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.body` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1864 <div> → now lib/cawco/spawn/NewSessionDialog.svelte:1900 <div>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2349 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.composer` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1889 <div> → now lib/cawco/spawn/NewSessionDialog.svelte:1927 <div>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2426 `background: none` (first pass: rendered: same)
+    - `.body` rest: same [T lib/cawco/spawn/NewSessionDialog.svelte:1864 <div> → now lib/cawco/spawn/NewSessionDialog.svelte:1900 <div>]
+- lib/cawco/spawn/PermissionSection.svelte:143 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.perms` rest: same [T lib/cawco/spawn/PermissionSection.svelte:77 <div> → now lib/cawco/spawn/PermissionSection.svelte:77 <div>]
+- lib/cawco/spawn/PermissionSection.svelte:152 `background: transparent` (first pass: rendered: same)
+    - `.perms.embedded` rest: same [T lib/cawco/spawn/PermissionSection.svelte:77 <div> → now lib/cawco/spawn/PermissionSection.svelte:77 <div>]
+    - `.perms.embedded` state (.embedded): same [T lib/cawco/spawn/PermissionSection.svelte:77 <div> → now lib/cawco/spawn/PermissionSection.svelte:77 <div>]
+- lib/cawco/spawn/PermissionSection.svelte:160 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.fill` rest: same [T lib/cawco/spawn/PermissionSection.svelte:84 <span> → now lib/cawco/spawn/PermissionSection.svelte:87 <span>]
+- lib/cawco/spawn/PermissionSection.svelte:179 `background: transparent` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/spawn/PermissionSection.svelte:94 <button> → now lib/cawco/spawn/PermissionSection.svelte:99 <button>]
+- lib/cawco/spawn/ProjectChip.svelte:253 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.clear:hover` rest: same [T lib/cawco/spawn/ProjectChip.svelte:102 <span> → now lib/cawco/spawn/ProjectChip.svelte:103 <span>]
+    - `.clear:hover` state (:hover): same [T lib/cawco/spawn/ProjectChip.svelte:102 <span> → now lib/cawco/spawn/ProjectChip.svelte:103 <span>]
+- lib/cawco/spawn/ProjectChip.svelte:270 `background: transparent` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/spawn/ProjectChip.svelte:185 <button> → now lib/cawco/spawn/ProjectChip.svelte:223 <button>]
+    - `.row` rest: same [T lib/cawco/spawn/ProjectChip.svelte:208 <button> → now lib/cawco/spawn/ProjectChip.svelte:261 <button>]
+- lib/cawco/spawn/ProjectChip.svelte:284 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.row.on` rest: same [T lib/cawco/spawn/ProjectChip.svelte:185 <button> → now lib/cawco/spawn/ProjectChip.svelte:223 <button>]
+    - `.row.on` state (.on): same [T lib/cawco/spawn/ProjectChip.svelte:185 <button> → now lib/cawco/spawn/ProjectChip.svelte:223 <button>]
+- lib/cawco/spawn/ProjectChip.svelte:319 `background: var(--border-hairline)` (first pass: rendered: same)
+    - `.divider` rest: same [T lib/cawco/spawn/ProjectChip.svelte:207 <div> → now lib/cawco/spawn/ProjectChip.svelte:255 <div>]
+- lib/cawco/spawn/ProjectChip.svelte:341 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.field` rest: same [T lib/cawco/spawn/ProjectChip.svelte:126 <label> → now lib/cawco/spawn/ProjectChip.svelte:130 <label>]
+    - `.field` rest: same [T lib/cawco/spawn/ProjectChip.svelte:137 <label> → now lib/cawco/spawn/ProjectChip.svelte:153 <label>]
+- lib/cawco/spawn/ProjectChip.svelte:357 `background: transparent` (first pass: rendered: same)
+    - `.field input` rest: same [T lib/cawco/spawn/ProjectChip.svelte:128 <input> → now lib/cawco/spawn/ProjectChip.svelte:140 <input>]
+    - `.field input` rest: same [T lib/cawco/spawn/ProjectChip.svelte:139 <input> → now lib/cawco/spawn/ProjectChip.svelte:163 <input>]
+- lib/cawco/spawn/PromptEditor.svelte:374 `background: transparent` (first pass: rendered: same)
+    - `.editor` rest: same [T lib/cawco/spawn/PromptEditor.svelte:314 <div> → now lib/cawco/spawn/PromptEditor.svelte:321 <div>]
+- lib/cawco/spawn/PromptEditor.svelte:419 `background: var(--surface-fill)` (first pass: not rendered: css)
+    - `.editor :global(.ns-chip)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/spawn/Segmented.svelte:112 `background: transparent` (first pass: rendered: same)
+    - `.tab` rest: same [T lib/cawco/spawn/Segmented.svelte:61 <button> → now lib/cawco/spawn/Segmented.svelte:72 <button>]
+- lib/cawco/spawn/Segmented.svelte:87 `background: var(--surface-recess-deep)` (first pass: rendered: same)
+    - `.segmented` rest: same [T lib/cawco/spawn/Segmented.svelte:44 <div> → now lib/cawco/spawn/Segmented.svelte:45 <div>]
+- lib/cawco/spawn/Segmented.svelte:96 `background: var(--surface-lift)` (first pass: rendered: same)
+    - `.thumb` rest: same [T lib/cawco/spawn/Segmented.svelte:53 <span> → now lib/cawco/spawn/Segmented.svelte:61 <span>]
+- lib/cawco/spawn/ToolChips.svelte:240 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tool-chips .off:hover` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+    - `.tool-chips .off:hover` state (:hover): same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/spawn/ToolChips.svelte:243 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.tool-chips .off.static:hover` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+    - `.tool-chips .off.static:hover` state (.static, :hover): same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/spawn/ToolChips.svelte:258 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.tool-chips :global(.ns-chip-btn.tool.full-send)` rest: same [T lib/cawco/spawn/ToolChips.svelte:148 <span> → now lib/cawco/spawn/ToolChips.svelte:160 <span>]
+    - `.tool-chips :global(.ns-chip-btn.tool.full-send)` state (.full-send): same [T lib/cawco/spawn/ToolChips.svelte:148 <span> → now lib/cawco/spawn/ToolChips.svelte:160 <span>]
+- lib/cawco/spawn/ToolChips.svelte:267 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.tool-chips :global(.ns-chip-btn.tool.full-send:hover)` rest: same [T lib/cawco/spawn/ToolChips.svelte:148 <span> → now lib/cawco/spawn/ToolChips.svelte:160 <span>]
+    - `.tool-chips :global(.ns-chip-btn.tool.full-send:hover)` state (.full-send, :hover): same [T lib/cawco/spawn/ToolChips.svelte:148 <span> → now lib/cawco/spawn/ToolChips.svelte:160 <span>]
+- lib/cawco/spawn/TriggerMenu.svelte:77 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.hi` rest: same [T lib/cawco/spawn/TriggerMenu.svelte:36 <span> → now lib/cawco/spawn/TriggerMenu.svelte:37 <span>]
+- lib/cawco/spawn/TriggerMenu.svelte:92 `background: transparent` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/spawn/TriggerMenu.svelte:43 <button> → now lib/cawco/spawn/TriggerMenu.svelte:47 <button>]
+- lib/cawco/StatTile.svelte:61 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.st-card` rest: same [T lib/cawco/StatTile.svelte:33 <div> → now lib/cawco/StatTile.svelte:33 <div>]
+- lib/cawco/StopTray.svelte:946 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/StopTray.svelte:860 <div> → now lib/cawco/StopTray.svelte:908 <div>]
+- lib/cawco/tasks/BulkBar.svelte:345 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.floating` rest: same [T lib/cawco/tasks/BulkBar.svelte:124 <div> → now lib/cawco/tasks/BulkBar.svelte:124 <div>]
+- lib/cawco/tasks/PostCard.svelte:164 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T lib/cawco/tasks/PostCard.svelte:73 <li> → now lib/cawco/tasks/PostCard.svelte:79 <li>]
+- lib/cawco/tasks/PostCard.svelte:175 `background: var(--border-control)` (first pass: not rendered: css)
+    - `.card + .card::before` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/tasks/PostCard.svelte:190 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.mark` rest: same [T lib/cawco/tasks/PostCard.svelte:75 <span> → now lib/cawco/tasks/PostCard.svelte:89 <span>]
+- lib/cawco/tasks/stage/ArtifactStage.svelte:81 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.cover` rest: same [T lib/cawco/tasks/stage/ArtifactStage.svelte:67 <div> → now lib/cawco/tasks/stage/ArtifactStage.svelte:67 <div>]
+- lib/cawco/tasks/StagesControl.svelte:241 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.template:hover:not(:disabled)` rest: same [T lib/cawco/tasks/StagesControl.svelte:168 <button> → now lib/cawco/tasks/StagesControl.svelte:168 <button>]
+    - `.template:hover:not(:disabled)` state (:hover): same [T lib/cawco/tasks/StagesControl.svelte:168 <button> → now lib/cawco/tasks/StagesControl.svelte:168 <button>]
+- lib/cawco/tasks/TaskActivity.svelte:395 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.comment` rest: same [T lib/cawco/tasks/TaskActivity.svelte:203 <li> → now lib/cawco/tasks/TaskActivity.svelte:203 <li>]
+- lib/cawco/tasks/TaskActivity.svelte:417 `background: none` (first pass: rendered without its kit component's classes)
+    - `.part :global(.fold-head)` rest: same [T lib/cawco/tasks/TaskActivity.svelte:265 <Collapsible.Trigger> → now lib/cawco/tasks/TaskActivity.svelte:288 <Collapsible.Trigger>]
+- lib/cawco/tasks/TaskBoard.svelte:241 `background: var(--surface-band)` (first pass: rendered: same)
+    - `.archive-rail` rest: same [T lib/cawco/tasks/TaskBoard.svelte:185 <button> → now lib/cawco/tasks/TaskBoard.svelte:199 <button>]
+- lib/cawco/tasks/TaskBoard.svelte:270 `background: none` (first pass: rendered: same)
+    - `.rail-close` rest: same [T lib/cawco/tasks/TaskBoard.svelte:173 <button> → now lib/cawco/tasks/TaskBoard.svelte:187 <button>]
+- lib/cawco/tasks/TaskCard.svelte:207 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.task-card` rest: same [T lib/cawco/tasks/TaskCard.svelte:103 <a> → now lib/cawco/tasks/TaskCard.svelte:103 <a>]
+- lib/cawco/tasks/TaskCard.svelte:218 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.task-card:hover` rest: same [T lib/cawco/tasks/TaskCard.svelte:103 <a> → now lib/cawco/tasks/TaskCard.svelte:103 <a>]
+    - `.task-card:hover` state (:hover): same [T lib/cawco/tasks/TaskCard.svelte:103 <a> → now lib/cawco/tasks/TaskCard.svelte:103 <a>]
+- lib/cawco/tasks/TaskCard.svelte:278 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.dot.live` rest: same [T lib/cawco/tasks/TaskCard.svelte:144 <span> → now lib/cawco/tasks/TaskCard.svelte:162 <span>]
+- lib/cawco/tasks/TaskColumn.svelte:201 `background: var(--selected-bg)` (first pass: not rendered: css)
+    - `li[data-picked] > :global(.task-card)` rest: same [T lib/cawco/tasks/TaskCard.svelte:103 <a> → now lib/cawco/tasks/TaskCard.svelte:103 <a>]
+    - `li[data-picked] > :global(.task-card)` state (lib/cawco/tasks/TaskColumn.svelte:108 <li> [data-picked]): same [T lib/cawco/tasks/TaskCard.svelte:103 <a> → now lib/cawco/tasks/TaskCard.svelte:103 <a>]
+- lib/cawco/tasks/TaskColumn.svelte:214 `background: var(--surface-band)` (first pass: rendered: same)
+    - `.column` rest: same [T lib/cawco/tasks/TaskColumn.svelte:82 <section> → now lib/cawco/tasks/TaskColumn.svelte:82 <section>]
+- lib/cawco/tasks/TaskColumn.svelte:222 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.column[data-over]` rest: same [T lib/cawco/tasks/TaskColumn.svelte:82 <section> → now lib/cawco/tasks/TaskColumn.svelte:82 <section>]
+    - `.column[data-over]` state ([data-over]): same [T lib/cawco/tasks/TaskColumn.svelte:82 <section> → now lib/cawco/tasks/TaskColumn.svelte:82 <section>]
+- lib/cawco/tasks/TaskColumn.svelte:231 `background: var(--brand-wash)` (first pass: rendered: same)
+    - `.column[data-kind="you"]` rest: same [T lib/cawco/tasks/TaskColumn.svelte:82 <section> → now lib/cawco/tasks/TaskColumn.svelte:82 <section>]
+    - `.column[data-kind="you"]` state ([data-kind=you]): same [T lib/cawco/tasks/TaskColumn.svelte:82 <section> → now lib/cawco/tasks/TaskColumn.svelte:82 <section>]
+- lib/cawco/tasks/TaskFields.svelte:204 `background: none` (first pass: rendered: same)
+    - `.shown` rest: same [T lib/cawco/tasks/TaskFields.svelte:94 <button> → now lib/cawco/tasks/TaskFields.svelte:104 <button>]
+- lib/cawco/tasks/TaskFields.svelte:213 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.shown:hover` rest: same [T lib/cawco/tasks/TaskFields.svelte:94 <button> → now lib/cawco/tasks/TaskFields.svelte:104 <button>]
+    - `.shown:hover` state (:hover): same [T lib/cawco/tasks/TaskFields.svelte:94 <button> → now lib/cawco/tasks/TaskFields.svelte:104 <button>]
+- lib/cawco/tasks/TaskFields.svelte:235 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.field` rest: same [T lib/cawco/tasks/TaskFields.svelte:76 <input> → now lib/cawco/tasks/TaskFields.svelte:86 <input>]
+    - `.field` rest: same [T lib/cawco/tasks/TaskFields.svelte:129 <input> → now lib/cawco/tasks/TaskFields.svelte:140 <input>]
+    - `.field` rest: same [T lib/cawco/tasks/TaskFields.svelte:137 <input> → now lib/cawco/tasks/TaskFields.svelte:149 <input>]
+- lib/cawco/tasks/TaskFilterPopover.svelte:304 `background: var(--brand-wash)` (first pass: rendered: same)
+    - `.count` rest: same [T lib/cawco/tasks/TaskFilterPopover.svelte:114 <span> → now lib/cawco/tasks/TaskFilterPopover.svelte:114 <span>]
+- lib/cawco/tasks/TaskLabels.svelte:120 `background: none` (first pass: rendered: same)
+    - `.remove` rest: same [T lib/cawco/tasks/TaskLabels.svelte:53 <button> → now lib/cawco/tasks/TaskLabels.svelte:58 <button>]
+- lib/cawco/tasks/TaskLabels.svelte:162 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.field` rest: same [T lib/cawco/tasks/TaskLabels.svelte:63 <input> → now lib/cawco/tasks/TaskLabels.svelte:69 <input>]
+- lib/cawco/tasks/TaskNeeds.svelte:304 `background: var(--needs-ground)` (first pass: rendered: same)
+    - `.needs` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:123 <section> → now lib/cawco/tasks/TaskNeeds.svelte:123 <section>]
+    - `.needs` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:142 <section> → now lib/cawco/tasks/TaskNeeds.svelte:156 <section>]
+    - `.needs` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:214 <section> → now lib/cawco/tasks/TaskNeeds.svelte:251 <section>]
+    - `.needs` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:254 <section> → now lib/cawco/tasks/TaskNeeds.svelte:299 <section>]
+- lib/cawco/tasks/TaskNeeds.svelte:308 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.needs.quiet` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:254 <section> → now lib/cawco/tasks/TaskNeeds.svelte:299 <section>]
+- lib/cawco/tasks/TaskNeeds.svelte:351 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.args` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:169 <pre> → now lib/cawco/tasks/TaskNeeds.svelte:199 <pre>]
+- lib/cawco/tasks/TaskNeeds.svelte:369 `background: var(--status-fail-bg)` (first pass: rendered without its kit component's classes)
+    - `.peers > :global(.deny)` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:174 <Button> → now lib/cawco/tasks/TaskNeeds.svelte:211 <Button>]
+    - `.peers > :global(.deny:hover)` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:174 <Button> → now lib/cawco/tasks/TaskNeeds.svelte:211 <Button>]
+    - `.peers > :global(.deny:hover)` state (:hover): same [T lib/cawco/tasks/TaskNeeds.svelte:174 <Button> → now lib/cawco/tasks/TaskNeeds.svelte:211 <Button>]
+- lib/cawco/tasks/TaskNeeds.svelte:374 `background: var(--status-done-bg)` (first pass: rendered without its kit component's classes)
+    - `.peers > :global(.approve)` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:186 <Button> → now lib/cawco/tasks/TaskNeeds.svelte:223 <Button>]
+    - `.peers > :global(.approve:hover)` rest: same [T lib/cawco/tasks/TaskNeeds.svelte:186 <Button> → now lib/cawco/tasks/TaskNeeds.svelte:223 <Button>]
+    - `.peers > :global(.approve:hover)` state (:hover): same [T lib/cawco/tasks/TaskNeeds.svelte:186 <Button> → now lib/cawco/tasks/TaskNeeds.svelte:223 <Button>]
+- lib/cawco/tasks/TaskOutput.svelte:182 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.output` rest: same [T lib/cawco/tasks/TaskOutput.svelte:114 <figure> → now lib/cawco/tasks/TaskOutput.svelte:114 <figure>]
+- lib/cawco/tasks/TaskOutput.svelte:227 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.open:hover` rest: same [T lib/cawco/tasks/TaskOutput.svelte:120 <a> → now lib/cawco/tasks/TaskOutput.svelte:131 <a>]
+    - `.open:hover` state (:hover): same [T lib/cawco/tasks/TaskOutput.svelte:120 <a> → now lib/cawco/tasks/TaskOutput.svelte:131 <a>]
+- lib/cawco/tasks/TaskOutput.svelte:268 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `video` rest: same [T lib/cawco/tasks/TaskOutput.svelte:165 <video> → now lib/cawco/tasks/TaskOutput.svelte:196 <video>]
+- lib/cawco/tasks/TaskPane.svelte:814 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.title-button:hover:not(:disabled)` rest: same [T lib/cawco/tasks/TaskPane.svelte:469 <button> → now lib/cawco/tasks/TaskPane.svelte:480 <button>]
+    - `.title-button:hover:not(:disabled)` state (:hover): same [T lib/cawco/tasks/TaskPane.svelte:469 <button> → now lib/cawco/tasks/TaskPane.svelte:480 <button>]
+- lib/cawco/tasks/TaskPane.svelte:860 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.session` rest: same [T lib/cawco/tasks/TaskPane.svelte:637 <a> → now lib/cawco/tasks/TaskPane.svelte:668 <a>]
+- lib/cawco/tasks/TaskPane.svelte:886 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.session:hover` rest: same [T lib/cawco/tasks/TaskPane.svelte:637 <a> → now lib/cawco/tasks/TaskPane.svelte:668 <a>]
+    - `.session:hover` state (:hover): same [T lib/cawco/tasks/TaskPane.svelte:637 <a> → now lib/cawco/tasks/TaskPane.svelte:668 <a>]
+- lib/cawco/tasks/TaskRelations.svelte:222 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.ref` rest: same [T lib/cawco/tasks/TaskRelations.svelte:66 <span> → now lib/cawco/tasks/TaskRelations.svelte:66 <span>]
+- lib/cawco/tasks/TaskRelations.svelte:234 `background: none` (first pass: rendered: same)
+    - `.ref-open` rest: same [T lib/cawco/tasks/TaskRelations.svelte:67 <button> → now lib/cawco/tasks/TaskRelations.svelte:69 <button>]
+- lib/cawco/tasks/TaskReview.svelte:534 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.review.compact` rest: same [T lib/cawco/tasks/TaskReview.svelte:294 <section> → now lib/cawco/tasks/TaskReview.svelte:306 <section>]
+    - `.review.compact` state (.compact): same [T lib/cawco/tasks/TaskReview.svelte:294 <section> → now lib/cawco/tasks/TaskReview.svelte:306 <section>]
+- lib/cawco/tasks/TaskReview.svelte:759 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.more:hover` rest: same [T lib/cawco/tasks/TaskReview.svelte:364 <button> → now lib/cawco/tasks/TaskReview.svelte:396 <button>]
+    - `.more:hover` state (:hover): same [T lib/cawco/tasks/TaskReview.svelte:364 <button> → now lib/cawco/tasks/TaskReview.svelte:396 <button>]
+    - `.open:hover` rest: same [T lib/cawco/tasks/TaskReview.svelte:348 <div> → now lib/cawco/tasks/TaskReview.svelte:371 <div>]
+    - `.open:hover` state (.open, :hover): same [T lib/cawco/tasks/TaskReview.svelte:348 <div> → now lib/cawco/tasks/TaskReview.svelte:371 <div>]
+    - `.attachment:hover` rest: same [T lib/cawco/tasks/TaskReview.svelte:257 <button> → now lib/cawco/tasks/TaskReview.svelte:258 <button>]
+    - `.attachment:hover` rest: same [T lib/cawco/tasks/TaskReview.svelte:269 <a> → now lib/cawco/tasks/TaskReview.svelte:274 <a>]
+    - `.attachment:hover` state (:hover): same [T lib/cawco/tasks/TaskReview.svelte:257 <button> → now lib/cawco/tasks/TaskReview.svelte:258 <button>]
+    - `.attachment:hover` state (:hover): same [T lib/cawco/tasks/TaskReview.svelte:269 <a> → now lib/cawco/tasks/TaskReview.svelte:274 <a>]
+- lib/cawco/tasks/TaskTable.svelte:351 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.ledger` rest: same [T lib/cawco/tasks/TaskTable.svelte:200 <div> → now lib/cawco/tasks/TaskTable.svelte:209 <div>]
+- lib/cawco/tasks/TaskTable.svelte:360 `background: var(--surface-band)` (first pass: rendered without its kit component's classes)
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/tasks/TaskTable.svelte:204 <Table.Row> → now lib/cawco/tasks/TaskTable.svelte:225 <Table.Row>]
+- lib/cawco/tasks/TaskTable.svelte:396 `background: var(--selected-bg)` (first pass: not rendered: unmapped)
+    - `.ledger :global(tr.row[data-picked] td)` rest: same [T lib/cawco/tasks/TaskTable.svelte:265 <Table.Cell> → now lib/cawco/tasks/TaskTable.svelte:310 <Table.Cell>]
+    - `.ledger :global(tr.row[data-picked] td)` state (lib/cawco/tasks/TaskTable.svelte:258 <Table.Row> [data-picked]): same [T lib/cawco/tasks/TaskTable.svelte:265 <Table.Cell> → now lib/cawco/tasks/TaskTable.svelte:310 <Table.Cell>]
+- lib/cawco/tasks/TaskTable.svelte:552 `background: var(--selected-bg)` (first pass: rendered without its kit component's classes; not rendered: ancestor-state; not rendered: unrendered)
+    - `.ledger[data-pickable] :global(tr.row[data-picked])` rest: same [T lib/cawco/tasks/TaskTable.svelte:258 <Table.Row> → now lib/cawco/tasks/TaskTable.svelte:303 <Table.Row>]
+    - `.ledger[data-pickable] :global(tr.row[data-picked])` state (lib/cawco/tasks/TaskTable.svelte:200 <div> [data-pickable], [data-picked]): same [T lib/cawco/tasks/TaskTable.svelte:258 <Table.Row> → now lib/cawco/tasks/TaskTable.svelte:303 <Table.Row>]
+- lib/cawco/tasks/TaskTable.svelte:555 `background: none` (first pass: not rendered: unmapped)
+    - `.ledger[data-pickable] :global(tr.row[data-picked] td)` rest: same [T lib/cawco/tasks/TaskTable.svelte:265 <Table.Cell> → now lib/cawco/tasks/TaskTable.svelte:310 <Table.Cell>]
+    - `.ledger[data-pickable] :global(tr.row[data-picked] td)` state (lib/cawco/tasks/TaskTable.svelte:200 <div> [data-pickable], lib/cawco/tasks/TaskTable.svelte:258 <Table.Row> [data-picked]): same [T lib/cawco/tasks/TaskTable.svelte:265 <Table.Cell> → now lib/cawco/tasks/TaskTable.svelte:310 <Table.Cell>]
+- lib/cawco/tasks/TodoList.svelte:300 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.text:hover` rest: same [T lib/cawco/tasks/TodoList.svelte:204 <button> → now lib/cawco/tasks/TodoList.svelte:210 <button>]
+    - `.text:hover` state (:hover): same [T lib/cawco/tasks/TodoList.svelte:204 <button> → now lib/cawco/tasks/TodoList.svelte:210 <button>]
+- lib/cawco/ThreadPane.svelte:1073 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.pane` rest: same [T lib/cawco/ThreadPane.svelte:942 <div> → now lib/cawco/ThreadPane.svelte:987 <div>]
+- lib/cawco/ThreadPane.svelte:1117 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.veil` rest: same [T lib/cawco/ThreadPane.svelte:935 <div> → now lib/cawco/ThreadPane.svelte:977 <div>]
+- lib/cawco/ThreadPane.svelte:1141 `background: var(--surface-raised)` (first pass: rendered without its kit component's classes)
+    - `.off :global(.off-line)` rest: same [T lib/cawco/ThreadPane.svelte:1018 <Alert> → now lib/cawco/ThreadPane.svelte:1084 <Alert>]
+- lib/cawco/ThreadPane.svelte:1202 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.file-in-place` rest: same [T lib/cawco/ThreadPane.svelte:1002 <div> → now lib/cawco/ThreadPane.svelte:1057 <div>]
+- lib/cawco/ToolMatrix.svelte:409 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.matrix` rest: same [T lib/cawco/ToolMatrix.svelte:297 <div> → now lib/cawco/ToolMatrix.svelte:287 <div>]
+- lib/cawco/transcript/AccountMoveDivider.svelte:145 `background: none` (first pass: rendered: same)
+    - `.line` rest: same [T lib/cawco/transcript/AccountMoveDivider.svelte:93 <button> → now lib/cawco/transcript/AccountMoveDivider.svelte:97 <button>]
+- lib/cawco/transcript/AccountMoveDivider.svelte:152 `background: var(--border-control)` (first pass: rendered: same)
+    - `.arm` rest: same [T lib/cawco/transcript/AccountMoveDivider.svelte:102 <span> → now lib/cawco/transcript/AccountMoveDivider.svelte:107 <span>]
+    - `.arm` rest: same [T lib/cawco/transcript/AccountMoveDivider.svelte:119 <span> → now lib/cawco/transcript/AccountMoveDivider.svelte:140 <span>]
+- lib/cawco/transcript/AccountMoveDivider.svelte:182 `background: var(--account)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/transcript/AccountMoveDivider.svelte:110 <span> → now lib/cawco/transcript/AccountMoveDivider.svelte:120 <span>]
+- lib/cawco/transcript/AttachButton.svelte:111 `background: var(--surface-hover)` (first pass: rendered without its kit component's classes; rendered: same)
+    - `.att-btn:hover` rest: same [T lib/cawco/transcript/AttachButton.svelte:67 <button> → now lib/cawco/transcript/AttachButton.svelte:68 <button>]
+    - `.att-btn:hover` state (:hover): same [T lib/cawco/transcript/AttachButton.svelte:67 <button> → now lib/cawco/transcript/AttachButton.svelte:68 <button>]
+- lib/cawco/transcript/AttachButton.svelte:93 `background: var(--surface-raised)` (first pass: rendered without its kit component's classes; rendered: same)
+    - `.att-btn` rest: same [T lib/cawco/transcript/AttachButton.svelte:67 <button> → now lib/cawco/transcript/AttachButton.svelte:68 <button>]
+- lib/cawco/transcript/AttachmentChips.svelte:162 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.att` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:50 <span> → now lib/cawco/transcript/AttachmentChips.svelte:64 <span>]
+    - `.att` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:83 <span> → now lib/cawco/transcript/AttachmentChips.svelte:112 <span>]
+- lib/cawco/transcript/AttachmentChips.svelte:190 `background: none` (first pass: rendered: same)
+    - `.att button` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:58 <button> → now lib/cawco/transcript/AttachmentChips.svelte:74 <button>]
+    - `.att button` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:72 <button> → now lib/cawco/transcript/AttachmentChips.svelte:101 <button>]
+    - `.att button` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:86 <button> → now lib/cawco/transcript/AttachmentChips.svelte:126 <button>]
+- lib/cawco/transcript/AttachmentChips.svelte:196 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.att button:hover` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:58 <button> → now lib/cawco/transcript/AttachmentChips.svelte:74 <button>]
+    - `.att button:hover` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:72 <button> → now lib/cawco/transcript/AttachmentChips.svelte:101 <button>]
+    - `.att button:hover` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:86 <button> → now lib/cawco/transcript/AttachmentChips.svelte:126 <button>]
+    - `.att button:hover` state (:hover): same [T lib/cawco/transcript/AttachmentChips.svelte:58 <button> → now lib/cawco/transcript/AttachmentChips.svelte:74 <button>]
+    - `.att button:hover` state (:hover): same [T lib/cawco/transcript/AttachmentChips.svelte:72 <button> → now lib/cawco/transcript/AttachmentChips.svelte:101 <button>]
+    - `.att button:hover` state (:hover): same [T lib/cawco/transcript/AttachmentChips.svelte:86 <button> → now lib/cawco/transcript/AttachmentChips.svelte:126 <button>]
+- lib/cawco/transcript/AttachmentChips.svelte:217 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.doc-remove` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:102 <button> → now lib/cawco/transcript/AttachmentChips.svelte:143 <button>]
+    - `.doc-remove` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:121 <button> → now lib/cawco/transcript/AttachmentChips.svelte:163 <button>]
+- lib/cawco/transcript/AttachmentChips.svelte:251 `background: none` (first pass: rendered: same)
+    - `.att .canvas-open:hover` rest: same [T lib/cawco/transcript/AttachmentChips.svelte:58 <button> → now lib/cawco/transcript/AttachmentChips.svelte:74 <button>]
+    - `.att .canvas-open:hover` state (:hover): same [T lib/cawco/transcript/AttachmentChips.svelte:58 <button> → now lib/cawco/transcript/AttachmentChips.svelte:74 <button>]
+- lib/cawco/transcript/Behind.svelte:102 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.floating` rest: same [T lib/cawco/transcript/Behind.svelte:50 <div> → now lib/cawco/transcript/Behind.svelte:50 <div>]
+    - `.floating` state (.floating): same [T lib/cawco/transcript/Behind.svelte:50 <div> → now lib/cawco/transcript/Behind.svelte:50 <div>]
+- lib/cawco/transcript/CatchUp.svelte:38 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.catchup` rest: same [T lib/cawco/transcript/CatchUp.svelte:18 <div> → now lib/cawco/transcript/CatchUp.svelte:18 <div>]
+- lib/cawco/transcript/CatchUp.svelte:51 `background: var(--status-live-ink)` (first pass: rendered: same)
+    - `.beat` rest: same [T lib/cawco/transcript/CatchUp.svelte:25 <span> → now lib/cawco/transcript/CatchUp.svelte:26 <span>]
+- lib/cawco/transcript/CompactionDivider.svelte:272 `background: none` (first pass: rendered: same)
+    - `.divider` rest: same [T lib/cawco/transcript/CompactionDivider.svelte:154 <button> → now lib/cawco/transcript/CompactionDivider.svelte:157 <button>]
+- lib/cawco/transcript/CompactionDivider.svelte:372 `background: linear-gradient(var(--status-fail-ink), var(--status-fail-ink)) left top / 2px 100% no-repeat` (first pass: not rendered: css)
+    - `.fail` rest: same [T lib/cawco/transcript/CompactionDivider.svelte:226 <span> → now lib/cawco/transcript/CompactionDivider.svelte:286 <span>]
+- lib/cawco/transcript/Composer.svelte:3697 `background: transparent` (first pass: rendered: same)
+    - `.cin.recalling` rest: same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.recalling` state (.recalling): same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.grown` rest: same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.grown` state (.grown): same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+- lib/cawco/transcript/Composer.svelte:3764 `background: transparent` (first pass: not rendered: unmapped)
+    - `.field > :global(.editor)` rest: same [T lib/cawco/transcript/Composer.svelte:3304 <MentionField> → now lib/cawco/transcript/Composer.svelte:3485 <MentionField>]
+- lib/cawco/transcript/Composer.svelte:3918 `background: transparent` (first pass: not rendered: unmapped)
+    - `.menu :global([data-slot="command"])` rest: same [T lib/cawco/transcript/Composer.svelte:3257 <Command.Root> → now lib/cawco/transcript/Composer.svelte:3404 <Command.Root>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/cawco/transcript/Composer.svelte:3258 <Command.List> → now lib/cawco/transcript/Composer.svelte:3405 <Command.List>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/cawco/transcript/Composer.svelte:3260 <Command.Group> → now lib/cawco/transcript/Composer.svelte:3407 <Command.Group>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/components/ui/command/command-group.svelte:25 <CommandPrimitive.GroupHeading> → now lib/components/ui/command/command-group.svelte:25 <CommandPrimitive.GroupHeading>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/components/ui/command/command-group.svelte:31 <CommandPrimitive.GroupItems> → now lib/components/ui/command/command-group.svelte:31 <CommandPrimitive.GroupItems>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/cawco/transcript/Composer.svelte:3262 <Command.Item> → now lib/cawco/transcript/Composer.svelte:3409 <Command.Item>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/components/ui/command/command-item.svelte:24 <IconTick> → now lib/components/ui/command/command-item.svelte:24 <IconTick>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/cawco/transcript/Composer.svelte:3267 <span> → now lib/cawco/transcript/Composer.svelte:3415 <span>]
+    - `.menu :global([data-slot="command"])` rest: same [T lib/cawco/transcript/Composer.svelte:3271 <span> → now lib/cawco/transcript/Composer.svelte:3421 <span>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/cawco/transcript/Composer.svelte:3257 <Command.Root> → now lib/cawco/transcript/Composer.svelte:3404 <Command.Root>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/cawco/transcript/Composer.svelte:3258 <Command.List> → now lib/cawco/transcript/Composer.svelte:3405 <Command.List>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/cawco/transcript/Composer.svelte:3260 <Command.Group> → now lib/cawco/transcript/Composer.svelte:3407 <Command.Group>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/components/ui/command/command-group.svelte:25 <CommandPrimitive.GroupHeading> → now lib/components/ui/command/command-group.svelte:25 <CommandPrimitive.GroupHeading>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/components/ui/command/command-group.svelte:31 <CommandPrimitive.GroupItems> → now lib/components/ui/command/command-group.svelte:31 <CommandPrimitive.GroupItems>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/cawco/transcript/Composer.svelte:3262 <Command.Item> → now lib/cawco/transcript/Composer.svelte:3409 <Command.Item>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/components/ui/command/command-item.svelte:24 <IconTick> → now lib/components/ui/command/command-item.svelte:24 <IconTick>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/cawco/transcript/Composer.svelte:3267 <span> → now lib/cawco/transcript/Composer.svelte:3415 <span>]
+    - `.menu :global([data-slot="command"])` state ([data-slot=command]): same [T lib/cawco/transcript/Composer.svelte:3271 <span> → now lib/cawco/transcript/Composer.svelte:3421 <span>]
+- lib/cawco/transcript/Composer.svelte:4237 `background: var(--selected-icon)` (first pass: not rendered: css)
+    - `.what::before` rest: same [T lib/cawco/transcript/Composer.svelte:3174 <span> → now lib/cawco/transcript/Composer.svelte:3271 <span>]
+- lib/cawco/transcript/Delegate.svelte:558 `background: none` (first pass: rendered without its kit component's classes)
+    - `.delegate :global(.bhead)` rest: same [T lib/cawco/transcript/Delegate.svelte:413 <Collapsible.Trigger> → now lib/cawco/transcript/Delegate.svelte:429 <Collapsible.Trigger>]
+    - `.delegate :global(.bhead)` rest: same [T lib/cawco/transcript/Delegate.svelte:413 <Collapsible.Trigger> → now lib/cawco/transcript/Delegate.svelte:429 <Collapsible.Trigger>]
+    - `.delegate :global(.bhead)` rest: same [T lib/cawco/transcript/Subagent.svelte:77 <Collapsible.Trigger> → now lib/cawco/transcript/Subagent.svelte:83 <Collapsible.Trigger>]
+- lib/cawco/transcript/Delegate.svelte:677 `background: var(--status-idle-bg)` (first pass: rendered: same)
+    - `.pill` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+- lib/cawco/transcript/Delegate.svelte:686 `background: var(--status-live-bg)` (first pass: not rendered: unmapped)
+    - `.pill.live` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.live` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.live` state (.live): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.live` state (.live): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+- lib/cawco/transcript/Delegate.svelte:698 `background: var(--status-attn-bg)` (first pass: not rendered: unmapped)
+    - `.pill.attn` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.attn` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.attn` state (.attn): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.attn` state (.attn): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+- lib/cawco/transcript/Delegate.svelte:702 `background: var(--status-done-bg)` (first pass: not rendered: unmapped)
+    - `.pill.done` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.done` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.done` state (.done): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.done` state (.done): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+- lib/cawco/transcript/Delegate.svelte:706 `background: var(--status-fail-bg)` (first pass: not rendered: unmapped)
+    - `.pill.fail` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.fail` rest: same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.fail` state (.fail): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+    - `.pill.fail` state (.fail): same [T lib/cawco/transcript/Delegate.svelte:441 <span> → now lib/cawco/transcript/Delegate.svelte:508 <span>]
+- lib/cawco/transcript/Delegate.svelte:733 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.jump:hover` rest: same [T lib/cawco/transcript/Delegate.svelte:460 <a> → now lib/cawco/transcript/Delegate.svelte:542 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/transcript/Delegate.svelte:460 <a> → now lib/cawco/transcript/Delegate.svelte:542 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/transcript/Delegate.svelte:460 <a> → now lib/cawco/transcript/Delegate.svelte:542 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/transcript/Delegate.svelte:460 <a> → now lib/cawco/transcript/Delegate.svelte:542 <a>]
+- lib/cawco/transcript/Delegate.svelte:781 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.beat` rest: same [T lib/cawco/transcript/Delegate.svelte:488 <span> → now lib/cawco/transcript/Delegate.svelte:593 <span>]
+    - `.beat` rest: same [T lib/cawco/transcript/Delegate.svelte:488 <span> → now lib/cawco/transcript/Delegate.svelte:593 <span>]
+- lib/cawco/transcript/Delegate.svelte:814 `background: var(--status-attn-ink)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/transcript/Delegate.svelte:501 <span> → now lib/cawco/transcript/Delegate.svelte:629 <span>]
+    - `.dot` rest: same [T lib/cawco/transcript/Delegate.svelte:501 <span> → now lib/cawco/transcript/Delegate.svelte:629 <span>]
+- lib/cawco/transcript/Delegate.svelte:833 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.report` rest: same [T lib/cawco/transcript/Delegate.svelte:514 <section> → now lib/cawco/transcript/Delegate.svelte:648 <section>]
+    - `.report` rest: same [T lib/cawco/transcript/Delegate.svelte:514 <section> → now lib/cawco/transcript/Delegate.svelte:648 <section>]
+- lib/cawco/transcript/DelegateTray.svelte:1748 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/transcript/DelegateTray.svelte:1128 <span> → now lib/cawco/transcript/DelegateTray.svelte:1142 <span>]
+- lib/cawco/transcript/DelegateTray.svelte:1843 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.shelf` rest: same [T lib/cawco/transcript/DelegateTray.svelte:1471 <section> → now lib/cawco/transcript/DelegateTray.svelte:1596 <section>]
+- lib/cawco/transcript/DelegateTray.svelte:2028 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.jump:hover` rest: same [T lib/cawco/transcript/DelegateTray.svelte:1220 <a> → now lib/cawco/transcript/DelegateTray.svelte:1284 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/transcript/DelegateTray.svelte:1356 <a> → now lib/cawco/transcript/DelegateTray.svelte:1454 <a>]
+    - `.jump:hover` rest: same [T lib/cawco/transcript/DelegateTray.svelte:1606 <a> → now lib/cawco/transcript/DelegateTray.svelte:1752 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/transcript/DelegateTray.svelte:1220 <a> → now lib/cawco/transcript/DelegateTray.svelte:1284 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/transcript/DelegateTray.svelte:1356 <a> → now lib/cawco/transcript/DelegateTray.svelte:1454 <a>]
+    - `.jump:hover` state (:hover): same [T lib/cawco/transcript/DelegateTray.svelte:1606 <a> → now lib/cawco/transcript/DelegateTray.svelte:1752 <a>]
+- lib/cawco/transcript/DocThumb.svelte:184 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.doc` rest: same [T lib/cawco/transcript/DocThumb.svelte:120 <button> → now lib/cawco/transcript/DocThumb.svelte:150 <button>]
+    - `.doc` rest: same [T lib/cawco/transcript/DocThumb.svelte:133 <a> → now lib/cawco/transcript/DocThumb.svelte:165 <a>]
+    - `.doc` rest: same [T lib/cawco/transcript/DocThumb.svelte:144 <button> → now lib/cawco/transcript/DocThumb.svelte:178 <button>]
+    - `.doc` rest: same [T lib/cawco/transcript/DocThumb.svelte:156 <span> → now lib/cawco/transcript/DocThumb.svelte:192 <span>]
+    - `.doc` rest: same [T lib/cawco/transcript/DocThumb.svelte:167 <span> → now lib/cawco/transcript/DocThumb.svelte:205 <span>]
+- lib/cawco/transcript/DocThumb.svelte:190 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.doc:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:120 <button> → now lib/cawco/transcript/DocThumb.svelte:150 <button>]
+    - `.doc:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:133 <a> → now lib/cawco/transcript/DocThumb.svelte:165 <a>]
+    - `.doc:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:144 <button> → now lib/cawco/transcript/DocThumb.svelte:178 <button>]
+    - `.doc:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:156 <span> → now lib/cawco/transcript/DocThumb.svelte:192 <span>]
+    - `.doc:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:167 <span> → now lib/cawco/transcript/DocThumb.svelte:205 <span>]
+    - `.doc:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:120 <button> → now lib/cawco/transcript/DocThumb.svelte:150 <button>]
+    - `.doc:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:133 <a> → now lib/cawco/transcript/DocThumb.svelte:165 <a>]
+    - `.doc:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:144 <button> → now lib/cawco/transcript/DocThumb.svelte:178 <button>]
+    - `.doc:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:156 <span> → now lib/cawco/transcript/DocThumb.svelte:192 <span>]
+    - `.doc:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:167 <span> → now lib/cawco/transcript/DocThumb.svelte:205 <span>]
+- lib/cawco/transcript/DocThumb.svelte:250 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.doc.still:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:156 <span> → now lib/cawco/transcript/DocThumb.svelte:192 <span>]
+    - `.doc.still:hover` rest: same [T lib/cawco/transcript/DocThumb.svelte:167 <span> → now lib/cawco/transcript/DocThumb.svelte:205 <span>]
+    - `.doc.still:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:156 <span> → now lib/cawco/transcript/DocThumb.svelte:192 <span>]
+    - `.doc.still:hover` state (:hover): same [T lib/cawco/transcript/DocThumb.svelte:167 <span> → now lib/cawco/transcript/DocThumb.svelte:205 <span>]
+- lib/cawco/transcript/FootFade.svelte:36 `background: linear-gradient( to top, var(--surface-recess) 22%, oklch(from var(--surface-recess) l c h / 0) )` (first pass: rendered: same)
+    - `.foot-fade` rest: same [T lib/cawco/transcript/FootFade.svelte:19 <div> → now lib/cawco/transcript/FootFade.svelte:20 <div>]
+- lib/cawco/transcript/FootFade.svelte:44 `background: linear-gradient( to top, var(--surface-recess) var(--fade-solid), oklch(from var(--surface-recess) l c h / 0) )` (first pass: rendered: same)
+    - `.foot-fade.standing` rest: same [T lib/cawco/transcript/FootFade.svelte:19 <div> → now lib/cawco/transcript/FootFade.svelte:20 <div>]
+    - `.foot-fade.standing` state (.standing): same [T lib/cawco/transcript/FootFade.svelte:19 <div> → now lib/cawco/transcript/FootFade.svelte:20 <div>]
+- lib/cawco/transcript/HeadFade.svelte:66 `background: var(--tab-sheet)` (first pass: rendered: same)
+    - `.tint` rest: same [T lib/cawco/transcript/HeadFade.svelte:42 <div> → now lib/cawco/transcript/HeadFade.svelte:48 <div>]
+- lib/cawco/transcript/InlineTranscript.svelte:231 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.inner` rest: same [T lib/cawco/transcript/InlineTranscript.svelte:136 <div> → now lib/cawco/transcript/InlineTranscript.svelte:139 <div>]
+    - `.inner` rest: same [T lib/cawco/transcript/InlineTranscript.svelte:136 <div> → now lib/cawco/transcript/InlineTranscript.svelte:139 <div>]
+    - `.inner` rest: same [T lib/cawco/transcript/InlineTranscript.svelte:136 <div> → now lib/cawco/transcript/InlineTranscript.svelte:139 <div>]
+- lib/cawco/transcript/Latest.svelte:35 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.latest` rest: same [T lib/cawco/transcript/Latest.svelte:14 <button> → now lib/cawco/transcript/Latest.svelte:15 <button>]
+- lib/cawco/transcript/Latest.svelte:49 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.latest:hover` rest: same [T lib/cawco/transcript/Latest.svelte:14 <button> → now lib/cawco/transcript/Latest.svelte:15 <button>]
+    - `.latest:hover` state (:hover): same [T lib/cawco/transcript/Latest.svelte:14 <button> → now lib/cawco/transcript/Latest.svelte:15 <button>]
+- lib/cawco/transcript/MessageRow.svelte:1024 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:625 <button> → now lib/cawco/transcript/MessageRow.svelte:625 <button>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:634 <button> → now lib/cawco/transcript/MessageRow.svelte:636 <button>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:679 <button> → now lib/cawco/transcript/MessageRow.svelte:689 <button>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:696 <button> → now lib/cawco/transcript/MessageRow.svelte:708 <button>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:796 <a> → now lib/cawco/transcript/MessageRow.svelte:836 <a>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:807 <button> → now lib/cawco/transcript/MessageRow.svelte:849 <button>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:832 <button> → now lib/cawco/transcript/MessageRow.svelte:881 <button>]
+    - `.action` rest: same [T lib/cawco/transcript/MessageRow.svelte:852 <button> → now lib/cawco/transcript/MessageRow.svelte:903 <button>]
+- lib/cawco/transcript/MessageRow.svelte:1032 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:625 <button> → now lib/cawco/transcript/MessageRow.svelte:625 <button>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:634 <button> → now lib/cawco/transcript/MessageRow.svelte:636 <button>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:679 <button> → now lib/cawco/transcript/MessageRow.svelte:689 <button>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:696 <button> → now lib/cawco/transcript/MessageRow.svelte:708 <button>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:796 <a> → now lib/cawco/transcript/MessageRow.svelte:836 <a>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:807 <button> → now lib/cawco/transcript/MessageRow.svelte:849 <button>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:832 <button> → now lib/cawco/transcript/MessageRow.svelte:881 <button>]
+    - `.action:hover:not(:disabled)` rest: same [T lib/cawco/transcript/MessageRow.svelte:852 <button> → now lib/cawco/transcript/MessageRow.svelte:903 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:625 <button> → now lib/cawco/transcript/MessageRow.svelte:625 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:634 <button> → now lib/cawco/transcript/MessageRow.svelte:636 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:679 <button> → now lib/cawco/transcript/MessageRow.svelte:689 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:696 <button> → now lib/cawco/transcript/MessageRow.svelte:708 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:796 <a> → now lib/cawco/transcript/MessageRow.svelte:836 <a>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:807 <button> → now lib/cawco/transcript/MessageRow.svelte:849 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:832 <button> → now lib/cawco/transcript/MessageRow.svelte:881 <button>]
+    - `.action:hover:not(:disabled)` state (:hover): same [T lib/cawco/transcript/MessageRow.svelte:852 <button> → now lib/cawco/transcript/MessageRow.svelte:903 <button>]
+- lib/cawco/transcript/MessageRow.svelte:1062 `background: var(--c)` (first pass: rendered: same)
+    - `.action .dot` rest: same [T lib/cawco/transcript/MessageRow.svelte:818 <i> → now lib/cawco/transcript/MessageRow.svelte:865 <i>]
+- lib/cawco/transcript/MessageRow.svelte:991 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `:global(.turn.grouped) .turn-actions` rest: same [T lib/cawco/transcript/MessageRow.svelte:654 <div> → now lib/cawco/transcript/MessageRow.svelte:662 <div>]
+    - `:global(.turn.grouped) .turn-actions` state (lib/cawco/transcript/MessageRow.svelte:559 <Turn> .grouped): same [T lib/cawco/transcript/MessageRow.svelte:654 <div> → now lib/cawco/transcript/MessageRow.svelte:662 <div>]
+- lib/cawco/transcript/Peer.svelte:216 `background: none` (first pass: rendered without its kit component's classes)
+    - `.label :global(.peer-toggle)` rest: same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+- lib/cawco/transcript/ProjectOffer.svelte:150 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.offer` rest: same [T lib/cawco/transcript/ProjectOffer.svelte:76 <section> → now lib/cawco/transcript/ProjectOffer.svelte:71 <section>]
+    - `.offer` rest: same [T lib/cawco/transcript/ProjectOffer.svelte:102 <section> → now lib/cawco/transcript/ProjectOffer.svelte:109 <section>]
+- lib/cawco/transcript/Prompt.svelte:1021 `background: var(--brand-solid)` (first pass: rendered: same)
+    - `.rail` rest: same [T lib/cawco/transcript/Prompt.svelte:729 <span> → now lib/cawco/transcript/Prompt.svelte:775 <span>]
+- lib/cawco/transcript/Prompt.svelte:1201 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.fields` rest: same [T lib/cawco/transcript/Prompt.svelte:928 <dl> → now lib/cawco/transcript/Prompt.svelte:1054 <dl>]
+- lib/cawco/transcript/QuestionCard.svelte:326 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.hitl` rest: same [T lib/cawco/transcript/QuestionCard.svelte:219 <section> → now lib/cawco/transcript/QuestionCard.svelte:224 <section>]
+- lib/cawco/transcript/QuestionCard.svelte:378 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.pill.attn` rest: same [T lib/cawco/transcript/QuestionCard.svelte:270 <span> → now lib/cawco/transcript/QuestionCard.svelte:290 <span>]
+- lib/cawco/transcript/QuestionCard.svelte:382 `background: var(--status-done-bg, var(--surface-recess))` (first pass: rendered: same)
+    - `.pill.done` rest: same [T lib/cawco/transcript/QuestionCard.svelte:251 <span> → now lib/cawco/transcript/QuestionCard.svelte:265 <span>]
+- lib/cawco/transcript/QuestionCard.svelte:386 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.pill.muted` rest: same [T lib/cawco/transcript/QuestionCard.svelte:258 <span> → now lib/cawco/transcript/QuestionCard.svelte:272 <span>]
+    - `.pill.muted` rest: same [T lib/cawco/transcript/QuestionCard.svelte:262 <span> → now lib/cawco/transcript/QuestionCard.svelte:278 <span>]
+    - `.pill.muted` rest: same [T lib/cawco/transcript/QuestionCard.svelte:266 <span> → now lib/cawco/transcript/QuestionCard.svelte:284 <span>]
+- lib/cawco/transcript/RecallWheel.svelte:1025 `background: var(--selection)` (first pass: rendered: same)
+    - `mark` rest: same [T lib/cawco/transcript/RecallWheel.svelte:925 <mark> → now lib/cawco/transcript/RecallWheel.svelte:939 <mark>]
+- lib/cawco/transcript/RecallWheel.svelte:1045 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.qchip` rest: same [T lib/cawco/transcript/RecallWheel.svelte:946 <span> → now lib/cawco/transcript/RecallWheel.svelte:968 <span>]
+- lib/cawco/transcript/Row.svelte:487 `background: var(--selection)` (first pass: not rendered: css)
+    - `.row[data-marked]::before` rest: same [T lib/cawco/transcript/Row.svelte:448 <div> → now lib/cawco/transcript/Row.svelte:453 <div>]
+    - `.row[data-marked]::before` state ([data-marked]): same [T lib/cawco/transcript/Row.svelte:448 <div> → now lib/cawco/transcript/Row.svelte:453 <div>]
+- lib/cawco/transcript/Shot.svelte:294 `background: transparent` (first pass: rendered: same)
+    - `.box` rest: same [T lib/cawco/transcript/Shot.svelte:210 <div> → now lib/cawco/transcript/Shot.svelte:213 <div>]
+    - `.box` rest: same [T lib/cawco/transcript/Shot.svelte:224 <div> → now lib/cawco/transcript/Shot.svelte:231 <div>]
+    - `.box` rest: same [T lib/cawco/transcript/Shot.svelte:231 <button> → now lib/cawco/transcript/Shot.svelte:244 <button>]
+- lib/cawco/transcript/Shot.svelte:350 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.missing` rest: same [T lib/cawco/transcript/Shot.svelte:224 <div> → now lib/cawco/transcript/Shot.svelte:231 <div>]
+- lib/cawco/transcript/Subagent.svelte:183 `background: none` (first pass: rendered without its kit component's classes)
+    - `.branch :global(.bhead)` rest: same [T lib/cawco/transcript/Subagent.svelte:77 <Collapsible.Trigger> → now lib/cawco/transcript/Subagent.svelte:83 <Collapsible.Trigger>]
+- lib/cawco/transcript/Subagent.svelte:295 `background: var(--status-idle-bg)` (first pass: rendered: same)
+    - `.pill` rest: same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+- lib/cawco/transcript/Subagent.svelte:299 `background: var(--status-live-bg)` (first pass: not rendered: unmapped)
+    - `.pill.running` rest: same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+    - `.pill.running` state (.running): same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+- lib/cawco/transcript/Subagent.svelte:303 `background: var(--status-done-bg)` (first pass: not rendered: unmapped)
+    - `.pill.done` rest: same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+    - `.pill.done` state (.done): same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+- lib/cawco/transcript/Subagent.svelte:307 `background: var(--status-fail-bg)` (first pass: not rendered: unmapped)
+    - `.pill.failed` rest: same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+    - `.pill.failed` state (.failed): same [T lib/cawco/transcript/Subagent.svelte:96 <span> → now lib/cawco/transcript/Subagent.svelte:135 <span>]
+- lib/cawco/transcript/Subagent.svelte:336 `background: var(--status-live-glyph)` (first pass: rendered: same)
+    - `.beat` rest: same [T lib/cawco/transcript/Subagent.svelte:116 <span> → now lib/cawco/transcript/Subagent.svelte:168 <span>]
+- lib/cawco/transcript/Subagent.svelte:349 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.inner` rest: same [T lib/cawco/transcript/Subagent.svelte:129 <div> → now lib/cawco/transcript/Subagent.svelte:204 <div>]
+- lib/cawco/transcript/Subagent.svelte:358 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.report` rest: same [T lib/cawco/transcript/Subagent.svelte:154 <section> → now lib/cawco/transcript/Subagent.svelte:239 <section>]
+- lib/cawco/transcript/Subagent.svelte:376 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.fail` rest: same [T lib/cawco/transcript/Subagent.svelte:152 <p> → now lib/cawco/transcript/Subagent.svelte:233 <p>]
+- lib/cawco/transcript/SuggestionChips.svelte:315 `background: linear-gradient( to top, var(--surface-recess) 55%, oklch(from var(--surface-recess) l c h / 0) )` (first pass: rendered: same)
+    - `.suggest:has(.chip, .shimmer, .fail)` rest: same [T lib/cawco/transcript/SuggestionChips.svelte:216 <div> → now lib/cawco/transcript/SuggestionChips.svelte:222 <div>]
+- lib/cawco/transcript/SuggestionChips.svelte:367 `background: color-mix( in srgb, var(--action-solid) var(--tint), var(--surface-raised) )` (first pass: not rendered: css)
+    - `.chip` rest: same [T lib/cawco/transcript/SuggestionChips.svelte:227 <button> → now lib/cawco/transcript/SuggestionChips.svelte:246 <button>]
+- lib/cawco/transcript/SuggestionChips.svelte:392 `background: color-mix( in srgb, var(--action-solid) calc(var(--tint) + 6%), var(--surface-raised) )` (first pass: not rendered: css)
+    - `.chip:hover` rest: same [T lib/cawco/transcript/SuggestionChips.svelte:227 <button> → now lib/cawco/transcript/SuggestionChips.svelte:246 <button>]
+    - `.chip:hover` state (:hover): same [T lib/cawco/transcript/SuggestionChips.svelte:227 <button> → now lib/cawco/transcript/SuggestionChips.svelte:246 <button>]
+- lib/cawco/transcript/SystemLine.svelte:426 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/cawco/transcript/SystemLine.svelte:254 <pre> → now lib/cawco/transcript/SystemLine.svelte:302 <pre>]
+    - `.well` rest: same [T lib/cawco/transcript/SystemLine.svelte:379 <pre> → now lib/cawco/transcript/SystemLine.svelte:507 <pre>]
+- lib/cawco/transcript/SystemLine.svelte:450 `background: none` (first pass: rendered without its kit component's classes)
+    - `.note :global(.ftrig)` rest: same [T lib/cawco/transcript/SystemLine.svelte:198 <Collapsible.Trigger> → now lib/cawco/transcript/SystemLine.svelte:205 <Collapsible.Trigger>]
+    - `.note :global(.ftrig)` rest: same [T lib/cawco/transcript/SystemLine.svelte:364 <Collapsible.Trigger> → now lib/cawco/transcript/SystemLine.svelte:482 <Collapsible.Trigger>]
+- lib/cawco/transcript/SystemLine.svelte:492 `background: none` (first pass: not rendered: css)
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:195 <div> → now lib/cawco/transcript/SystemLine.svelte:195 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:235 <div> → now lib/cawco/transcript/SystemLine.svelte:263 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:249 <div> → now lib/cawco/transcript/SystemLine.svelte:289 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:259 <div> → now lib/cawco/transcript/SystemLine.svelte:310 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:266 <div> → now lib/cawco/transcript/SystemLine.svelte:329 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:302 <div> → now lib/cawco/transcript/SystemLine.svelte:381 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:322 <div> → now lib/cawco/transcript/SystemLine.svelte:417 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:349 <div> → now lib/cawco/transcript/SystemLine.svelte:451 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:357 <div> → now lib/cawco/transcript/SystemLine.svelte:475 <div>]
+    - `.note[data-code]` rest: same [T lib/cawco/transcript/SystemLine.svelte:395 <div> → now lib/cawco/transcript/SystemLine.svelte:528 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:195 <div> → now lib/cawco/transcript/SystemLine.svelte:195 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:235 <div> → now lib/cawco/transcript/SystemLine.svelte:263 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:249 <div> → now lib/cawco/transcript/SystemLine.svelte:289 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:259 <div> → now lib/cawco/transcript/SystemLine.svelte:310 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:266 <div> → now lib/cawco/transcript/SystemLine.svelte:329 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:302 <div> → now lib/cawco/transcript/SystemLine.svelte:381 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:322 <div> → now lib/cawco/transcript/SystemLine.svelte:417 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:349 <div> → now lib/cawco/transcript/SystemLine.svelte:451 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:357 <div> → now lib/cawco/transcript/SystemLine.svelte:475 <div>]
+    - `.note[data-code]` state ([data-code]): same [T lib/cawco/transcript/SystemLine.svelte:395 <div> → now lib/cawco/transcript/SystemLine.svelte:528 <div>]
+- lib/cawco/transcript/SystemLine.svelte:536 `background: none` (first pass: rendered: same)
+    - `.aname` rest: same [T lib/cawco/transcript/SystemLine.svelte:277 <button> → now lib/cawco/transcript/SystemLine.svelte:343 <button>]
+- lib/cawco/transcript/ToolGroup.svelte:587 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.preview-tool` rest: same [T lib/cawco/transcript/ToolGroup.svelte:369 <div> → now lib/cawco/transcript/ToolGroup.svelte:394 <div>]
+- lib/cawco/transcript/ToolGroup.svelte:598 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.preview-tool:has(.artifact-open:hover)` rest: same [T lib/cawco/transcript/ToolGroup.svelte:369 <div> → now lib/cawco/transcript/ToolGroup.svelte:394 <div>]
+    - `.preview-tool:has(.artifact-open:hover)` state (lib/cawco/transcript/ToolGroup.svelte:376 <button> :hover): same [T lib/cawco/transcript/ToolGroup.svelte:369 <div> → now lib/cawco/transcript/ToolGroup.svelte:394 <div>]
+- lib/cawco/transcript/ToolGroup.svelte:615 `background: transparent` (first pass: rendered: same)
+    - `.artifact-open` rest: same [T lib/cawco/transcript/ToolGroup.svelte:376 <button> → now lib/cawco/transcript/ToolGroup.svelte:405 <button>]
+- lib/cawco/transcript/ToolGroup.svelte:671 `background: var(--mark-overlay), var(--mark-6)` (first pass: not rendered: css)
+    - `.mark` rest: same [T lib/cawco/transcript/ToolGroup.svelte:393 <span> → now lib/cawco/transcript/ToolGroup.svelte:425 <span>]
+- lib/cawco/transcript/ToolGroup.svelte:686 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.artifact-thumb` rest: same [T lib/cawco/transcript/ToolGroup.svelte:410 <div> → now lib/cawco/transcript/ToolGroup.svelte:459 <div>]
+- lib/cawco/transcript/ToolGroup.svelte:723 `background: none` (first pass: rendered: same)
+    - `.trow` rest: same [T lib/cawco/transcript/ToolGroup.svelte:435 <button> → now lib/cawco/transcript/ToolGroup.svelte:501 <button>]
+    - `.trow` rest: same [T lib/cawco/transcript/ToolGroup.svelte:520 <div> → now lib/cawco/transcript/ToolGroup.svelte:657 <div>]
+    - `.row :global(.trow)` rest: same [T lib/cawco/transcript/ToolGroup.svelte:435 <button> → now lib/cawco/transcript/ToolGroup.svelte:501 <button>]
+    - `.row :global(.trow)` rest: same [T lib/cawco/transcript/ToolGroup.svelte:520 <div> → now lib/cawco/transcript/ToolGroup.svelte:657 <div>]
+- lib/cawco/transcript/ToolGroup.svelte:849 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.fields` rest: same [T lib/cawco/transcript/ToolGroup.svelte:484 <div> → now lib/cawco/transcript/ToolGroup.svelte:577 <div>]
+    - `.fields` rest: same [T lib/cawco/transcript/ToolGroup.svelte:495 <div> → now lib/cawco/transcript/ToolGroup.svelte:607 <div>]
+- lib/cawco/transcript/Transcript.svelte:3787 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.unfound` rest: same [T lib/cawco/transcript/Transcript.svelte:3608 <p> → now lib/cawco/transcript/Transcript.svelte:3674 <p>]
+- lib/cawco/transcript/TranscriptSkeleton.svelte:125 `background: var(--surface-recess-deep)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/cawco/transcript/TranscriptSkeleton.svelte:39 <div> → now lib/cawco/transcript/TranscriptSkeleton.svelte:63 <div>]
+- lib/cawco/TreeCount.svelte:69 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.count` rest: same [T lib/cawco/TreeCount.svelte:36 <span> → now lib/cawco/TreeCount.svelte:39 <span>]
+- lib/cawco/TreeCount.svelte:81 `background: var(--surface-fill-strong)` (first pass: rendered: same)
+    - `.count[data-open]` rest: same [T lib/cawco/TreeCount.svelte:36 <span> → now lib/cawco/TreeCount.svelte:39 <span>]
+    - `.count[data-open]` state ([data-open]): same [T lib/cawco/TreeCount.svelte:36 <span> → now lib/cawco/TreeCount.svelte:39 <span>]
+- lib/cawco/TreeCount.svelte:86 `background: var(--surface-fill-strong)` (first pass: rendered: same)
+    - `.count:hover` rest: same [T lib/cawco/TreeCount.svelte:36 <span> → now lib/cawco/TreeCount.svelte:39 <span>]
+    - `.count:hover` state (:hover): same [T lib/cawco/TreeCount.svelte:36 <span> → now lib/cawco/TreeCount.svelte:39 <span>]
+- lib/cawco/TreeMark.svelte:239 `background: none` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.tree-mark[data-bare] .tile` rest: same [T lib/cawco/TreeMark.svelte:149 <span> → now lib/cawco/TreeMark.svelte:187 <span>]
+    - `.tree-mark[data-bare] .tile` rest: same [T lib/cawco/TreeMark.svelte:171 <span> → now lib/cawco/TreeMark.svelte:279 <span>]
+    - `.tree-mark[data-bare] .tile` state (lib/cawco/TreeMark.svelte:125 <span> [data-bare]): same [T lib/cawco/TreeMark.svelte:149 <span> → now lib/cawco/TreeMark.svelte:187 <span>]
+    - `.tree-mark[data-bare] .tile` state (lib/cawco/TreeMark.svelte:125 <span> [data-bare]): same [T lib/cawco/TreeMark.svelte:171 <span> → now lib/cawco/TreeMark.svelte:279 <span>]
+- lib/cawco/TreeMark.svelte:353 `background: var(--mark-deck-shade)` (first pass: not rendered: css)
+    - `.card::after` rest: same [T lib/cawco/TreeMark.svelte:142 <span> → now lib/cawco/TreeMark.svelte:164 <span>]
+    - `.skin::after` rest: same [T lib/cawco/TreeMark.svelte:163 <span> → now lib/cawco/TreeMark.svelte:230 <span>]
+- lib/cawco/TreeMark.svelte:365 `background: linear-gradient(var(--mark-deck-cast), transparent)` (first pass: not rendered: css)
+    - `.card::before` rest: same [T lib/cawco/TreeMark.svelte:142 <span> → now lib/cawco/TreeMark.svelte:164 <span>]
+    - `.skin::before` rest: same [T lib/cawco/TreeMark.svelte:163 <span> → now lib/cawco/TreeMark.svelte:230 <span>]
+- lib/cawco/turn/Well.svelte:104 `background: var(--surface-raised)` (first pass: not rendered: unmapped)
+    - `.well :global(.msg code)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/turn/Well.svelte:68 `background: var(--surface-recess-deep)` (first pass: not rendered: css)
+    - `.well::before` rest: same [T lib/cawco/turn/Well.svelte:34 <div> → now lib/cawco/turn/Well.svelte:34 <div>]
+- lib/cawco/turn/Well.svelte:89 `background: var(--seam)` (first pass: not rendered: css)
+    - `.well::after` rest: same [T lib/cawco/turn/Well.svelte:34 <div> → now lib/cawco/turn/Well.svelte:34 <div>]
+- lib/cawco/turn/Who.svelte:167 `background: var(--action-surface)` (first pass: rendered: same)
+    - `.dot.u` rest: same [T lib/cawco/turn/Who.svelte:90 <span> → now lib/cawco/turn/Who.svelte:103 <span>]
+    - `.dot.u` state (.u): same [T lib/cawco/turn/Who.svelte:90 <span> → now lib/cawco/turn/Who.svelte:103 <span>]
+- lib/cawco/turn/Who.svelte:176 `background: var(--brand-solid)` (first pass: rendered: same)
+    - `.dot.a` rest: same [T lib/cawco/turn/Who.svelte:90 <span> → now lib/cawco/turn/Who.svelte:103 <span>]
+    - `.dot.a` state (.a): same [T lib/cawco/turn/Who.svelte:90 <span> → now lib/cawco/turn/Who.svelte:103 <span>]
+- lib/cawco/UnlockKeychain.svelte:261 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/UnlockKeychain.svelte:173 <div> → now lib/cawco/UnlockKeychain.svelte:173 <div>]
+- lib/cawco/updates/ChannelCards.svelte:183 `background: none` (first pass: rendered without its kit component's classes)
+    - `.chooser :global(.ccard)` rest: same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+- lib/cawco/updates/ChannelCards.svelte:195 `background: var(--surface-fill)` (first pass: rendered without its kit component's classes)
+    - `.chooser :global(.ccard:active)` rest: same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+    - `.chooser :global(.ccard:active)` state (:active): same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+- lib/cawco/updates/ChannelCards.svelte:199 `background: var(--surface-hover)` (first pass: rendered without its kit component's classes)
+    - `.chooser :global(.ccard:hover)` rest: same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+    - `.chooser :global(.ccard:hover)` state (:hover): same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+- lib/cawco/updates/ChannelCards.svelte:240 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.frame` rest: same [T lib/cawco/updates/ChannelCards.svelte:83 <span> → now lib/cawco/updates/ChannelCards.svelte:88 <span>]
+    - `.frame` rest: same [T lib/cawco/updates/ChannelCards.svelte:92 <span> → now lib/cawco/updates/ChannelCards.svelte:98 <span>]
+- lib/cawco/updates/ReleaseNotes.svelte:107 `background: var(--note-new-bg)` (first pass: rendered: same)
+    - `.label[data-tone="new"]` rest: same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+    - `.label[data-tone="new"]` state ([data-tone=new]): same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+- lib/cawco/updates/ReleaseNotes.svelte:111 `background: var(--note-improved-bg)` (first pass: rendered: same)
+    - `.label[data-tone="improved"]` rest: same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+    - `.label[data-tone="improved"]` state ([data-tone=improved]): same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+- lib/cawco/updates/ReleaseNotes.svelte:115 `background: var(--note-fixed-bg)` (first pass: rendered: same)
+    - `.label[data-tone="fixed"]` rest: same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+    - `.label[data-tone="fixed"]` state ([data-tone=fixed]): same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+- lib/cawco/updates/ReleaseNotes.svelte:94 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.label` rest: same [T lib/cawco/updates/ReleaseNotes.svelte:61 <h3> → now lib/cawco/updates/ReleaseNotes.svelte:65 <h3>]
+- lib/cawco/updates/UpdateCell.svelte:145 `background: var(--surface-well)` (first pass: rendered: same)
+    - `.said` rest: same [T lib/cawco/updates/UpdateCell.svelte:104 <pre> → now lib/cawco/updates/UpdateCell.svelte:111 <pre>]
+- lib/cawco/updates/UpdateTable.svelte:122 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.matrix` rest: same [T lib/cawco/updates/UpdateTable.svelte:40 <div> → now lib/cawco/updates/UpdateTable.svelte:42 <div>]
+- lib/cawco/usage/AccountDot.svelte:61 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/usage/AccountDot.svelte:40 <span> → now lib/cawco/usage/AccountDot.svelte:41 <span>]
+- lib/cawco/usage/History.svelte:414 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T lib/cawco/usage/History.svelte:241 <section> → now lib/cawco/usage/History.svelte:241 <section>]
+- lib/cawco/usage/History.svelte:505 `background: var(--meter-share)` (first pass: rendered: same)
+    - `.bar` rest: same [T lib/cawco/usage/History.svelte:344 <span> → now lib/cawco/usage/History.svelte:368 <span>]
+    - `.bar` rest: same [T lib/cawco/usage/History.svelte:362 <span> → now lib/cawco/usage/History.svelte:387 <span>]
+- lib/cawco/usage/History.svelte:512 `background: var(--ink-strong)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.slot:hover .bar` rest: same [T lib/cawco/usage/History.svelte:344 <span> → now lib/cawco/usage/History.svelte:368 <span>]
+    - `.slot:hover .bar` rest: same [T lib/cawco/usage/History.svelte:362 <span> → now lib/cawco/usage/History.svelte:387 <span>]
+    - `.slot:hover .bar` state (lib/cawco/usage/History.svelte:343 <span> :hover): same [T lib/cawco/usage/History.svelte:344 <span> → now lib/cawco/usage/History.svelte:368 <span>]
+    - `.slot:hover .bar` state (lib/cawco/usage/History.svelte:353 <span> :hover): same [T lib/cawco/usage/History.svelte:362 <span> → now lib/cawco/usage/History.svelte:387 <span>]
+- lib/cawco/usage/LimitBar.svelte:111 `background: var(--fill)` (first pass: rendered: same)
+    - `.fill` rest: same [T lib/cawco/usage/LimitBar.svelte:75 <span> → now lib/cawco/usage/LimitBar.svelte:75 <span>]
+- lib/cawco/usage/LimitBar.svelte:126 `background: var(--row-paint, var(--surface-raised))` (first pass: rendered: same)
+    - `.tick` rest: same [T lib/cawco/usage/LimitBar.svelte:77 <span> → now lib/cawco/usage/LimitBar.svelte:83 <span>]
+- lib/cawco/usage/LimitBar.svelte:89 `background: var(--track)` (first pass: rendered: same)
+    - `.bar` rest: same [T lib/cawco/usage/LimitBar.svelte:63 <span> → now lib/cawco/usage/LimitBar.svelte:63 <span>]
+- lib/cawco/usage/LimitsBlock.svelte:318 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T lib/cawco/usage/LimitsBlock.svelte:179 <section> → now lib/cawco/usage/LimitsBlock.svelte:213 <section>]
+- lib/cawco/usage/LimitsBlock.svelte:410 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/usage/LimitsBlock.svelte:147 <div> → now lib/cawco/usage/LimitsBlock.svelte:159 <div>]
+- lib/cawco/usage/LimitsBlock.svelte:414 `background: var(--meter-wash-over)` (first pass: rendered: same)
+    - `.tile.limit` rest: same [T lib/cawco/usage/LimitsBlock.svelte:147 <div> → now lib/cawco/usage/LimitsBlock.svelte:159 <div>]
+    - `.tile.limit` state (.limit): same [T lib/cawco/usage/LimitsBlock.svelte:147 <div> → now lib/cawco/usage/LimitsBlock.svelte:159 <div>]
+- lib/cawco/usage/LimitsBlock.svelte:428 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/usage/LimitsBlock.svelte:155 <span> → now lib/cawco/usage/LimitsBlock.svelte:170 <span>]
+- lib/cawco/usage/LimitsBlock.svelte:480 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.session` rest: same [T lib/cawco/usage/LimitsBlock.svelte:124 <div> → now lib/cawco/usage/LimitsBlock.svelte:125 <div>]
+- lib/cawco/usage/ProjectSpend.svelte:617 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.ledger` rest: same [T lib/cawco/usage/ProjectSpend.svelte:428 <div> → now lib/cawco/usage/ProjectSpend.svelte:464 <div>]
+- lib/cawco/usage/ProjectSpend.svelte:625 `background: var(--surface-band)` (first pass: rendered without its kit component's classes)
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/usage/ProjectSpend.svelte:432 <Table.Row> → now lib/cawco/usage/ProjectSpend.svelte:474 <Table.Row>]
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/usage/ProjectSpend.svelte:484 <Table.Row> → now lib/cawco/usage/ProjectSpend.svelte:562 <Table.Row>]
+- lib/cawco/usage/Relay.svelte:279 `background: var(--border-control)` (first pass: rendered: same)
+    - `.bar` rest: same [T lib/cawco/usage/Relay.svelte:184 <div> → now lib/cawco/usage/Relay.svelte:190 <div>]
+- lib/cawco/usage/Relay.svelte:294 `background: var(--c)` (first pass: rendered: same)
+    - `.band` rest: same [T lib/cawco/usage/Relay.svelte:204 <span> → now lib/cawco/usage/Relay.svelte:209 <span>]
+- lib/cawco/usage/Relay.svelte:303 `background: repeating-linear-gradient( -45deg, var(--border-control) 0 1px, var(--ring-ground, var(--surface-raised)) 1px var(--space-1) )` (first pass: not rendered: css)
+    - `.blank` rest: same [T lib/cawco/usage/Relay.svelte:233 <span> → now lib/cawco/usage/Relay.svelte:238 <span>]
+- lib/cawco/usage/Relay.svelte:348 `background: var(--ink-subtle)` (first pass: rendered: same)
+    - `.mark` rest: same [T lib/cawco/usage/Relay.svelte:255 <span> → now lib/cawco/usage/Relay.svelte:263 <span>]
+- lib/cawco/usage/SessionsChip.svelte:288 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.item:hover` rest: same [T lib/cawco/usage/SessionsChip.svelte:217 <a> → now lib/cawco/usage/SessionsChip.svelte:218 <a>]
+    - `.item:hover` state (:hover): same [T lib/cawco/usage/SessionsChip.svelte:217 <a> → now lib/cawco/usage/SessionsChip.svelte:218 <a>]
+- lib/cawco/usage/WhereItGoes.svelte:674 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T lib/cawco/usage/WhereItGoes.svelte:478 <section> → now lib/cawco/usage/WhereItGoes.svelte:488 <section>]
+- lib/cawco/usage/WhereItGoes.svelte:802 `background: var(--meter-share)` (first pass: rendered: same)
+    - `.fill` rest: same [T lib/cawco/usage/WhereItGoes.svelte:630 <span> → now lib/cawco/usage/WhereItGoes.svelte:687 <span>]
+    - `.fill` rest: same [T lib/cawco/usage/WhereItGoes.svelte:642 <span> → now lib/cawco/usage/WhereItGoes.svelte:707 <span>]
+- lib/cawco/usage/Words.svelte:53 `background: var(--c)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/usage/Words.svelte:34 <span> → now lib/cawco/usage/Words.svelte:35 <span>]
+- lib/cawco/UsageMeter.svelte:1238 `background: transparent` (first pass: rendered: same)
+    - `.ring-tip` rest: same [T lib/cawco/UsageMeter.svelte:582 <button> → now lib/cawco/UsageMeter.svelte:653 <button>]
+- lib/cawco/UsageMeter.svelte:1278 `background: var(--meter-wash-over)` (first pass: not rendered: css)
+    - `.cell-d.limit` rest: same [T lib/cawco/UsageMeter.svelte:686 <div> → now lib/cawco/UsageMeter.svelte:788 <div>]
+    - `.cell-d.limit` state (.limit): same [T lib/cawco/UsageMeter.svelte:686 <div> → now lib/cawco/UsageMeter.svelte:788 <div>]
+- lib/cawco/UsageMeter.svelte:1282 `background: var(--surface-hover)` (first pass: not rendered: css)
+    - `.cell-d.lit` rest: same [T lib/cawco/UsageMeter.svelte:686 <div> → now lib/cawco/UsageMeter.svelte:788 <div>]
+    - `.cell-d.lit` state (.lit): same [T lib/cawco/UsageMeter.svelte:686 <div> → now lib/cawco/UsageMeter.svelte:788 <div>]
+- lib/cawco/UsageMeter.svelte:940 `background: var(--ring-ground)` (first pass: rendered: same)
+    - `.strip` rest: same [T lib/cawco/UsageMeter.svelte:886 <div> → now lib/cawco/UsageMeter.svelte:1126 <div>]
+- lib/cawco/UsageMeter.svelte:955 `background: transparent` (first pass: rendered without its kit component's classes)
+    - `:global(.strip-hit)` rest: same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit)` rest: same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+- lib/cawco/UsageMeter.svelte:963 `background: var(--surface-hover)` (first pass: rendered without its kit component's classes)
+    - `:global(.strip-hit):hover` rest: same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit):hover` rest: same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+    - `:global(.strip-hit):hover` state (:hover): same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit):hover` state (:hover): same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+- lib/cawco/UsageMeter.svelte:969 `background: var(--surface-hover)` (first pass: rendered without its kit component's classes)
+    - `:global(.strip-hit)[aria-expanded="true"]` rest: same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit)[aria-expanded="true"]` rest: same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+    - `:global(.strip-hit)[aria-expanded="true"]` state ([aria-expanded=true]): same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit)[aria-expanded="true"]` state ([aria-expanded=true]): same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+    - `:global(.strip-hit)[data-state="open"]` rest: same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit)[data-state="open"]` rest: same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+    - `:global(.strip-hit)[data-state="open"]` state ([data-state=open]): same [T lib/cawco/UsageMeter.svelte:891 <Drawer.Trigger> → now lib/cawco/UsageMeter.svelte:1140 <Drawer.Trigger>]
+    - `:global(.strip-hit)[data-state="open"]` state ([data-state=open]): same [T lib/cawco/UsageMeter.svelte:908 <Popover.Trigger> → now lib/cawco/UsageMeter.svelte:1157 <Popover.Trigger>]
+- lib/cawco/views/canvas/TaskNode.svelte:79 `background: var(--brand-wash)` (first pass: rendered: same)
+    - `.task-node[data-kind="you"]` rest: same [T lib/cawco/views/canvas/TaskNode.svelte:41 <div> → now lib/cawco/views/canvas/TaskNode.svelte:43 <div>]
+    - `.task-node[data-kind="you"]` state ([data-kind=you]): same [T lib/cawco/views/canvas/TaskNode.svelte:41 <div> → now lib/cawco/views/canvas/TaskNode.svelte:43 <div>]
+- lib/cawco/views/canvas/TaskNode.svelte:87 `background: transparent` (first pass: not rendered: css)
+    - `.task-node :global(.svelte-flow__handle)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/views/openui/ViewTable.svelte:100 `background: var(--surface-band)` (first pass: rendered without its kit component's classes)
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/views/openui/ViewTable.svelte:60 <Table.Row> → now lib/cawco/views/openui/ViewTable.svelte:63 <Table.Row>]
+- lib/cawco/views/openui/ViewTable.svelte:96 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.ledger` rest: same [T lib/cawco/views/openui/ViewTable.svelte:56 <div> → now lib/cawco/views/openui/ViewTable.svelte:56 <div>]
+- lib/cawco/views/ViewCalendar.svelte:188 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.view-calendar :global(.ec-main)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/views/ViewCalendar.svelte:226 `background: var(--surface-raised)` (first pass: not rendered: css)
+    - `.view-calendar :global(.ec-event.chip-set)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/views/ViewCalendar.svelte:231 `background: var(--status-done-bg)` (first pass: not rendered: css)
+    - `.view-calendar :global(.ec-event.chip-done)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/views/ViewCalendar.svelte:235 `background: var(--status-attn-bg)` (first pass: not rendered: css)
+    - `.view-calendar :global(.ec-event.chip-attn)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/cawco/views/ViewCanvas.svelte:285 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.canvas` rest: same [T lib/cawco/views/ViewCanvas.svelte:204 <section> → now lib/cawco/views/ViewCanvas.svelte:204 <section>]
+- lib/cawco/views/ViewMade.svelte:102 `background: var(--surface-band)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/cawco/views/ViewMade.svelte:38 <li> → now lib/cawco/views/ViewMade.svelte:44 <li>]
+- lib/cawco/views/ViewMade.svelte:121 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.head:hover` rest: same [T lib/cawco/views/ViewMade.svelte:39 <a> → now lib/cawco/views/ViewMade.svelte:52 <a>]
+    - `.head:hover` state (:hover): same [T lib/cawco/views/ViewMade.svelte:39 <a> → now lib/cawco/views/ViewMade.svelte:52 <a>]
+- lib/cawco/views/ViewPipeline.svelte:105 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.row` rest: same [T lib/cawco/views/ViewPipeline.svelte:43 <div> → now lib/cawco/views/ViewPipeline.svelte:44 <div>]
+- lib/cawco/views/ViewPipeline.svelte:145 `background: var(--border-control)` (first pass: rendered: same)
+    - `.bar` rest: same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+- lib/cawco/views/ViewPipeline.svelte:158 `background: var(--brand-wash)` (first pass: rendered: same)
+    - `.row[data-kind="you"]` rest: same [T lib/cawco/views/ViewPipeline.svelte:43 <div> → now lib/cawco/views/ViewPipeline.svelte:44 <div>]
+    - `.row[data-kind="you"]` state ([data-kind=you]): same [T lib/cawco/views/ViewPipeline.svelte:43 <div> → now lib/cawco/views/ViewPipeline.svelte:44 <div>]
+- lib/cawco/views/ViewPipeline.svelte:164 `background: var(--brand-solid)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.row[data-kind="you"] .bar` rest: same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+    - `.row[data-kind="you"] .bar` state (lib/cawco/views/ViewPipeline.svelte:43 <div> [data-kind=you]): same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+- lib/cawco/views/ViewPipeline.svelte:167 `background: var(--status-done-bg)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.row[data-kind="done"] .bar` rest: same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+    - `.row[data-kind="done"] .bar` state (lib/cawco/views/ViewPipeline.svelte:43 <div> [data-kind=done]): same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+- lib/cawco/views/ViewPipeline.svelte:176 `background: transparent` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.row[data-kind="dropped"] .bar` rest: same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+    - `.row[data-kind="dropped"] .bar` state (lib/cawco/views/ViewPipeline.svelte:43 <div> [data-kind=dropped]): same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+- lib/cawco/views/ViewRoutines.svelte:1071 `background: var(--surface-band)` (first pass: rendered: same; not rendered: unmapped)
+    - `.ledger :global(table > thead th)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/views/ViewRoutines.svelte:1079 `background: var(--surface-band)` (first pass: not rendered: css)
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/views/ViewRoutines.svelte:881 <Table.Row> → now lib/cawco/views/ViewRoutines.svelte:922 <Table.Row>]
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/views/ViewRoutines.svelte:918 <Table.Row> → now lib/cawco/views/ViewRoutines.svelte:974 <Table.Row>]
+    - `.ledger :global(tr.band)` rest: same [T lib/cawco/routines/ActionsTable.svelte:81 <Table.Row> → now lib/cawco/routines/ActionsTable.svelte:90 <Table.Row>]
+- lib/cawco/views/ViewRoutines.svelte:1150 `background: none` (first pass: rendered without its kit component's classes)
+    - `.ledger :global(.opener)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/views/ViewRoutines.svelte:1213 `background: var(--surface-well)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `.ledger :global(tbody.routine[data-state="open"] > tr > td)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+    - `.ledger :global(tbody.routine[data-state="open"] > tr > td)` state (built (a clone of the file's element) [data-state=open]): same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/cawco/workspace/PaneDeck.svelte:220 `background: var(--ink-muted)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/cawco/workspace/PaneDeck.svelte:75 <span> → now lib/cawco/workspace/PaneDeck.svelte:135 <span>]
+- lib/cawco/workspace/PaneDeck.svelte:229 `background: var(--ink-strong)` (first pass: rendered: same)
+    - `.dot-on` rest: same [T lib/cawco/workspace/PaneDeck.svelte:75 <span> → now lib/cawco/workspace/PaneDeck.svelte:135 <span>]
+    - `.dot-on` state (.dot-on): same [T lib/cawco/workspace/PaneDeck.svelte:75 <span> → now lib/cawco/workspace/PaneDeck.svelte:135 <span>]
+- lib/cawco/workspace/PaneDeck.svelte:95 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.deck` rest: same [T lib/cawco/workspace/PaneDeck.svelte:46 <div> → now lib/cawco/workspace/PaneDeck.svelte:50 <div>]
+- lib/cawco/workspace/PaneGrid.svelte:228 `background: var(--border-hairline)` (first pass: not rendered: unmapped)
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer])` rest: same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer])` state ([data-pane-resizer]): same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+- lib/cawco/workspace/PaneGrid.svelte:233 `background: var(--border-control)` (first pass: not rendered: unmapped)
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` rest: same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer]:hover)` state ([data-pane-resizer], :hover): same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+- lib/cawco/workspace/PaneGrid.svelte:238 `background: var(--ink-muted)` (first pass: not rendered: unmapped)
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` rest: same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer][data-active="pointer"])` state ([data-pane-resizer], [data-active=pointer]): same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` rest: same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/workspace/PaneGrid.svelte:201 <Resizable.Handle> → now lib/cawco/workspace/PaneGrid.svelte:204 <Resizable.Handle>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/components/ui/resizable/resizable-handle.svelte:35 <div> → now lib/components/ui/resizable/resizable-handle.svelte:62 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/workspace/PaneGrid.svelte:203 <Resizable.Pane> → now lib/cawco/workspace/PaneGrid.svelte:211 <Resizable.Pane>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:46 <svelte:boundary> → now lib/cawco/RegionBoundary.svelte:46 <svelte:boundary>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:47 <RegionHeld> → now lib/cawco/RegionBoundary.svelte:47 <RegionHeld>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:50 <div> → now lib/cawco/RegionBoundary.svelte:50 <div>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:51 <Alert> → now lib/cawco/RegionBoundary.svelte:51 <Alert>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:52 <AlertDescription> → now lib/cawco/RegionBoundary.svelte:52 <AlertDescription>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:56 <AlertAction> → now lib/cawco/RegionBoundary.svelte:56 <AlertAction>]
+    - `:global(.grid-group [data-pane-resizer][data-active="keyboard"])` state ([data-pane-resizer], [data-active=keyboard]): same [T lib/cawco/RegionBoundary.svelte:57 <Button> → now lib/cawco/RegionBoundary.svelte:57 <Button>]
+- lib/cawco/workspace/PaneLeaf.svelte:540 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.leaf` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:360 <section> → now lib/cawco/workspace/PaneLeaf.svelte:364 <section>]
+- lib/cawco/workspace/PaneLeaf.svelte:550 `background: var(--ink-muted)` (first pass: rendered: same)
+    - `.rail` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:372 <span> → now lib/cawco/workspace/PaneLeaf.svelte:379 <span>]
+- lib/cawco/workspace/PaneLeaf.svelte:570 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.drop-preview` rest: same [T lib/cawco/workspace/PaneLeaf.svelte:393 <div> → now lib/cawco/workspace/PaneLeaf.svelte:401 <div>]
+- lib/cawco/workspace/PaneTabs.svelte:1957 `background: transparent` (first pass: rendered: same)
+    - `.tdetails` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1622 <button> → now lib/cawco/workspace/PaneTabs.svelte:1677 <button>]
+- lib/cawco/workspace/PaneTabs.svelte:1990 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.tdetails:hover` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1622 <button> → now lib/cawco/workspace/PaneTabs.svelte:1677 <button>]
+    - `.tdetails:hover` state (:hover): same [T lib/cawco/workspace/PaneTabs.svelte:1622 <button> → now lib/cawco/workspace/PaneTabs.svelte:1677 <button>]
+- lib/cawco/workspace/PaneTabs.svelte:2016 `background: var(--surface-shelf)` (first pass: not rendered: css)
+    - `:global(.session-tabs)` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1388 <Tabs> → now lib/cawco/workspace/PaneTabs.svelte:1394 <Tabs>]
+- lib/cawco/workspace/PaneTabs.svelte:2029 `background: none` (first pass: not rendered: css)
+    - `:global(.session-tabs.hosted)` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1388 <Tabs> → now lib/cawco/workspace/PaneTabs.svelte:1394 <Tabs>]
+    - `:global(.session-tabs.hosted)` state (.hosted): same [T lib/cawco/workspace/PaneTabs.svelte:1388 <Tabs> → now lib/cawco/workspace/PaneTabs.svelte:1394 <Tabs>]
+- lib/cawco/workspace/PaneTabs.svelte:2168 `background: var(--ink-strong)` (first pass: not rendered: css)
+    - `.tab.drop-before::before` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1414 <div> → now lib/cawco/workspace/PaneTabs.svelte:1429 <div>]
+    - `.tab.drop-before::before` state (.drop-before): same [T lib/cawco/workspace/PaneTabs.svelte:1414 <div> → now lib/cawco/workspace/PaneTabs.svelte:1429 <div>]
+    - `.tab.drop-after::after` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1414 <div> → now lib/cawco/workspace/PaneTabs.svelte:1429 <div>]
+    - `.tab.drop-after::after` state (.drop-after): same [T lib/cawco/workspace/PaneTabs.svelte:1414 <div> → now lib/cawco/workspace/PaneTabs.svelte:1429 <div>]
+- lib/cawco/workspace/PaneTabs.svelte:2261 `background: var(--surface-recess-deep)` (first pass: rendered: same)
+    - `.shade > span` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1477 <span> → now lib/cawco/workspace/PaneTabs.svelte:1515 <span>]
+    - `.shade > span` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1477 <span> → now lib/cawco/workspace/PaneTabs.svelte:1518 <span>]
+- lib/cawco/workspace/PaneTabs.svelte:2388 `background: none` (first pass: rendered: same)
+    - `.tclose` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1647 <button> → now lib/cawco/workspace/PaneTabs.svelte:1711 <button>]
+    - `.tnew` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1709 <button> → now lib/cawco/workspace/PaneTabs.svelte:1785 <button>]
+- lib/cawco/workspace/PaneTabs.svelte:2401 `background: var(--surface-fill)` (first pass: rendered: same)
+    - `.tclose:hover` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1647 <button> → now lib/cawco/workspace/PaneTabs.svelte:1711 <button>]
+    - `.tclose:hover` state (:hover): same [T lib/cawco/workspace/PaneTabs.svelte:1647 <button> → now lib/cawco/workspace/PaneTabs.svelte:1711 <button>]
+    - `.tnew:hover` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1709 <button> → now lib/cawco/workspace/PaneTabs.svelte:1785 <button>]
+    - `.tnew:hover` state (:hover): same [T lib/cawco/workspace/PaneTabs.svelte:1709 <button> → now lib/cawco/workspace/PaneTabs.svelte:1785 <button>]
+- lib/cawco/workspace/SessionDetails.svelte:1070 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.icon-action:hover` rest: same [T lib/cawco/workspace/SessionDetails.svelte:590 <button> → now lib/cawco/workspace/SessionDetails.svelte:612 <button>]
+    - `.icon-action:hover` state (:hover): same [T lib/cawco/workspace/SessionDetails.svelte:590 <button> → now lib/cawco/workspace/SessionDetails.svelte:612 <button>]
+- lib/cawco/workspace/SessionDetails.svelte:813 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.head` rest: same [T lib/cawco/workspace/SessionDetails.svelte:584 <div> → now lib/cawco/workspace/SessionDetails.svelte:595 <div>]
+- lib/cawco/workspace/SessionDetails.svelte:871 `background: transparent` (first pass: rendered: same)
+    - `.cwd` rest: same [T lib/cawco/workspace/SessionDetails.svelte:625 <button> → now lib/cawco/workspace/SessionDetails.svelte:657 <button>]
+- lib/cawco/workspace/SessionDetails.svelte:890 `background: transparent` (first pass: rendered: same)
+    - `.icon-action` rest: same [T lib/cawco/workspace/SessionDetails.svelte:590 <button> → now lib/cawco/workspace/SessionDetails.svelte:612 <button>]
+- lib/cawco/workspace/SessionDetails.svelte:947 `background: transparent` (first pass: not rendered: css)
+    - `.model-pop :global(.picker)` rest: same [T lib/cawco/spawn/ModelSection.svelte:302 <div> → now lib/cawco/spawn/ModelSection.svelte:304 <div>]
+- lib/components/features/MarkdownEditor.svelte:162 `background: var(--surface-recess)` (first pass: not rendered: css)
+    - `.crepe-host :global(.milkdown)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/MarkdownEditor.svelte:250 `background: var(--surface-recess)` (first pass: not rendered: css)
+    - `.crepe-host :global(.milkdown .milkdown-code-block)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/MarkdownEditor.svelte:255 `background: var(--surface-recess)` (first pass: not rendered: unmapped)
+    - `.crepe-host :global(.milkdown :is(.cm-editor, .cm-gutters))` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/MarkdownEditor.svelte:275 `background: var(--surface-fill)` (first pass: not rendered: unmapped)
+    - `.crepe-host :global(.milkdown :is(button, [role="button"]):active)` rest: same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+    - `.crepe-host :global(.milkdown :is(button, [role="button"]):active)` state ([role=button], :active): same [T built (a clone of the file's element) → now built (a clone of the file's element)]
+- lib/components/features/MarkdownEditor.svelte:283 `background: light-dark(var(--surface-fill-strong), var(--surface-fill))` (first pass: not rendered: css)
+    - `.crepe-host :global(.milkdown .milkdown-block-handle .operation-item.active)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/tool-cards/MemoryBody.svelte:262 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/components/features/tool-cards/MemoryBody.svelte:183 <div> → now lib/components/features/tool-cards/MemoryBody.svelte:184 <div>]
+- lib/components/features/tool-cards/MemoryBody.svelte:286 `background: none` (first pass: rendered without its kit component's classes)
+    - `.docs :global(.doc)` rest: same [T lib/components/features/tool-cards/MemoryBody.svelte:218 <Collapsible.Trigger> → now lib/components/features/tool-cards/MemoryBody.svelte:244 <Collapsible.Trigger>]
+- lib/components/features/tool-cards/OutputBlock.svelte:71 `background: var(--code-syntax-background)` (first pass: rendered: same)
+    - `.well` rest: same [T lib/components/features/tool-cards/OutputBlock.svelte:55 <div> → now lib/components/features/tool-cards/OutputBlock.svelte:56 <div>]
+- lib/components/features/workflows/CodeView.svelte:242 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.code-view` rest: same [T lib/components/features/workflows/CodeView.svelte:236 <section> → now lib/components/features/workflows/CodeView.svelte:236 <section>]
+- lib/components/features/workflows/WorkflowCanvas.svelte:261 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.canvas` rest: same [T lib/components/features/workflows/WorkflowCanvas.svelte:165 <section> → now lib/components/features/workflows/WorkflowCanvas.svelte:166 <section>]
+- lib/components/features/workflows/WorkflowCanvas.svelte:264 `background: var(--neutral-8)` (first pass: not rendered: css)
+    - `.canvas :global(.svelte-flow__handle)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/workflows/WorkflowCanvas.svelte:271 `background: var(--brand-solid)` (first pass: not rendered: css)
+    - `.canvas :global(.svelte-flow__handle:active)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+    - `.canvas :global(.svelte-flow__handle:active)` state (:active): same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/workflows/WorkflowCanvasTools.svelte:154 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tools` rest: same [T lib/components/features/workflows/WorkflowCanvasTools.svelte:73 <div> → now lib/components/features/workflows/WorkflowCanvasTools.svelte:73 <div>]
+- lib/components/features/workflows/WorkflowEdge.svelte:79 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `span` rest: same [T lib/components/features/workflows/WorkflowEdge.svelte:43 <span> → now lib/components/features/workflows/WorkflowEdge.svelte:51 <span>]
+- lib/components/features/workflows/WorkflowEdge.svelte:90 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `button` rest: same [T lib/components/features/workflows/WorkflowEdge.svelte:46 <button> → now lib/components/features/workflows/WorkflowEdge.svelte:57 <button>]
+- lib/components/features/workflows/WorkflowEditor.svelte:1008 `background: transparent` (first pass: rendered: same)
+    - `.filters :global(.wf-btn)` rest: same [T lib/components/features/workflows/WorkflowEditor.svelte:751 <button> → now lib/components/features/workflows/WorkflowEditor.svelte:811 <button>]
+    - `.filters :global(.wf-btn[aria-pressed="true"])` rest: same [T lib/components/features/workflows/WorkflowEditor.svelte:751 <button> → now lib/components/features/workflows/WorkflowEditor.svelte:811 <button>]
+    - `.filters :global(.wf-btn[aria-pressed="true"])` state ([aria-pressed=true]): same [T lib/components/features/workflows/WorkflowEditor.svelte:751 <button> → now lib/components/features/workflows/WorkflowEditor.svelte:811 <button>]
+- lib/components/features/workflows/WorkflowEditor.svelte:842 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `header` rest: same [T lib/components/features/workflows/WorkflowEditor.svelte:565 <header> → now lib/components/features/workflows/WorkflowEditor.svelte:598 <header>]
+- lib/components/features/workflows/WorkflowEditor.svelte:899 `background: var(--brand-solid)` (first pass: rendered: same)
+    - `.filled` rest: same [T lib/components/features/workflows/WorkflowEditor.svelte:482 <span> → now lib/components/features/workflows/WorkflowEditor.svelte:491 <span>]
+    - `.filled` state (.filled): same [T lib/components/features/workflows/WorkflowEditor.svelte:482 <span> → now lib/components/features/workflows/WorkflowEditor.svelte:491 <span>]
+- lib/components/features/workflows/WorkflowEditor.svelte:905 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.inspector-scroll` rest: same [T lib/components/features/workflows/WorkflowEditor.svelte:724 <div> → now lib/components/features/workflows/WorkflowEditor.svelte:778 <div>]
+- lib/components/features/workflows/WorkflowInspector.svelte:1241 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.problem` rest: same [T lib/components/features/workflows/WorkflowInspector.svelte:1212 <button> → now lib/components/features/workflows/WorkflowInspector.svelte:1226 <button>]
+- lib/components/features/workflows/WorkflowNodeCard.svelte:163 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.wf-node` rest: same [T lib/components/features/workflows/WorkflowNodeCard.svelte:90 <article> → now lib/components/features/workflows/WorkflowNodeCard.svelte:96 <article>]
+- lib/components/features/workflows/WorkflowNodeCard.svelte:207 `background: var(--brand-solid)` (first pass: rendered: same)
+    - `.filled` rest: same [T lib/components/features/workflows/WorkflowNodeCard.svelte:103 <span> → now lib/components/features/workflows/WorkflowNodeCard.svelte:113 <span>]
+    - `.filled` state (.filled): same [T lib/components/features/workflows/WorkflowNodeCard.svelte:103 <span> → now lib/components/features/workflows/WorkflowNodeCard.svelte:113 <span>]
+- lib/components/features/workflows/WorkflowNodeCard.svelte:255 `background: var(--brand-solid)` (first pass: not rendered: css)
+    - `.port.near :global(.svelte-flow__handle)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+    - `.port.near :global(.svelte-flow__handle)` state (lib/components/features/workflows/WorkflowNodeCard.svelte:128 <div> .near): same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/workflows/WorkflowProgram.svelte:100 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.code` rest: same [T lib/components/features/workflows/WorkflowProgram.svelte:38 <div> → now lib/components/features/workflows/WorkflowProgram.svelte:44 <div>]
+- lib/components/features/workflows/WorkflowProgram.svelte:109 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.problems` rest: same [T lib/components/features/workflows/WorkflowProgram.svelte:50 <section> → now lib/components/features/workflows/WorkflowProgram.svelte:61 <section>]
+- lib/components/features/workflows/WorkflowProgram.svelte:121 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.problem` rest: same [T lib/components/features/workflows/WorkflowProgram.svelte:71 <p> → now lib/components/features/workflows/WorkflowProgram.svelte:83 <p>]
+- lib/components/features/workflows/WorkflowRunView.svelte:464 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.run-view` rest: same [T lib/components/features/workflows/WorkflowRunView.svelte:233 <div> → now lib/components/features/workflows/WorkflowRunView.svelte:234 <div>]
+- lib/components/features/workflows/WorkflowStatus.svelte:71 `background: var(--chip-bg)` (first pass: rendered: same)
+    - `.wf-status` rest: same [T lib/components/features/workflows/WorkflowStatus.svelte:53 <span> → now lib/components/features/workflows/WorkflowStatus.svelte:54 <span>]
+- lib/components/ui/fluid-tabs/TabItem.svelte:430 `background: transparent` (first pass: rendered: same)
+    - `.hit` rest: same [T lib/components/ui/fluid-tabs/TabItem.svelte:317 <svelte:element> → now lib/components/ui/fluid-tabs/TabItem.svelte:359 <svelte:element>]
+- lib/components/ui/fluid-tabs/TabsList.svelte:1172 `background: var(--muted)` (first pass: rendered: same)
+    - `.ff-tabs-list` rest: same [T lib/components/ui/fluid-tabs/TabsList.svelte:1111 <div> → now lib/components/ui/fluid-tabs/TabsList.svelte:1104 <div>]
+- lib/components/ui/fluid-tabs/TabsList.svelte:1242 `background: none` (first pass: rendered: same; not rendered: ancestor-state)
+    - `:global([data-variant="folder"]) .ff-tabs-list` rest: same [T lib/components/ui/fluid-tabs/TabsList.svelte:1111 <div> → now lib/components/ui/fluid-tabs/TabsList.svelte:1104 <div>]
+    - `:global([data-variant="folder"]) .ff-tabs-list` state (body [data-variant=folder]): same [T lib/components/ui/fluid-tabs/TabsList.svelte:1111 <div> → now lib/components/ui/fluid-tabs/TabsList.svelte:1104 <div>]
+- lib/components/ui/fluid-tabs/TabsList.svelte:1314 `background: var(--sheet)` (first pass: rendered: same)
+    - `.segment` rest: same [T lib/components/ui/fluid-tabs/TabsList.svelte:1137 <div> → now lib/components/ui/fluid-tabs/TabsList.svelte:1139 <div>]
+- lib/components/ui/machine-row/machine-row.svelte:105 `background: var(--neutral-8)` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/components/ui/machine-row/machine-row.svelte:37 <span> → now lib/components/ui/machine-row/machine-row.svelte:49 <span>]
+- lib/components/ui/machine-row/machine-row.svelte:108 `background: var(--hue-green-500)` (first pass: rendered: same)
+    - `.dot.online` rest: same [T lib/components/ui/machine-row/machine-row.svelte:37 <span> → now lib/components/ui/machine-row/machine-row.svelte:49 <span>]
+    - `.dot.online` state (.online): same [T lib/components/ui/machine-row/machine-row.svelte:37 <span> → now lib/components/ui/machine-row/machine-row.svelte:49 <span>]
+- lib/components/ui/machine-row/machine-row.svelte:111 `background: var(--hue-orange-500)` (first pass: rendered: same)
+    - `.dot.away` rest: same [T lib/components/ui/machine-row/machine-row.svelte:37 <span> → now lib/components/ui/machine-row/machine-row.svelte:49 <span>]
+    - `.dot.away` state (.away): same [T lib/components/ui/machine-row/machine-row.svelte:37 <span> → now lib/components/ui/machine-row/machine-row.svelte:49 <span>]
+- lib/components/ui/machine-row/machine-row.svelte:60 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.tile` rest: same [T lib/components/ui/machine-row/machine-row.svelte:31 <span> → now lib/components/ui/machine-row/machine-row.svelte:32 <span>]
+- lib/components/ui/machine-row/machine-row.svelte:64 `background: var(--ink-solid)` (first pass: rendered: same)
+    - `.tile.ink` rest: same [T lib/components/ui/machine-row/machine-row.svelte:31 <span> → now lib/components/ui/machine-row/machine-row.svelte:32 <span>]
+    - `.tile.ink` state (.ink): same [T lib/components/ui/machine-row/machine-row.svelte:31 <span> → now lib/components/ui/machine-row/machine-row.svelte:32 <span>]
+- lib/components/ui/thinking-steps/thinking-step.svelte:176 `background: currentColor` (first pass: rendered: same)
+    - `.dot` rest: same [T lib/components/ui/thinking-steps/thinking-step.svelte:99 <span> → now lib/components/ui/thinking-steps/thinking-step.svelte:120 <span>]
+- lib/components/ui/thinking-steps/thinking-step.svelte:181 `background: var(--border-hairline)` (first pass: rendered: same)
+    - `.connector` rest: same [T lib/components/ui/thinking-steps/thinking-step.svelte:105 <span> → now lib/components/ui/thinking-steps/thinking-step.svelte:130 <span>]
+- lib/components/ui/thinking-steps/thinking-step.svelte:255 `background: linear-gradient( 90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100% )` (first pass: rendered: same; rendered: differs)
+    - `.shimmer` rest: same [T lib/components/ui/thinking-steps/thinking-step.svelte:110 <span> → now lib/components/ui/thinking-steps/thinking-step.svelte:139 <span>]
+    - `.shimmer` rest: same [T lib/components/ui/thinking-steps/thinking-step.svelte:125 <span> → now lib/components/ui/thinking-steps/thinking-step.svelte:157 <span>]
+    - `.shimmer` state (.shimmer): same [T lib/components/ui/thinking-steps/thinking-step.svelte:110 <span> → now lib/components/ui/thinking-steps/thinking-step.svelte:139 <span>]
+    - `.shimmer` state (.shimmer): same [T lib/components/ui/thinking-steps/thinking-step.svelte:125 <span> → now lib/components/ui/thinking-steps/thinking-step.svelte:157 <span>]
+- lib/components/ui/thinking-steps/thinking-steps-header.svelte:43 `background: none` (first pass: rendered without its kit component's classes)
+    - `:global(.thinking-header)` rest: same [T lib/components/ui/thinking-steps/thinking-steps-header.svelte:17 <Collapsible.Trigger> → now lib/components/ui/thinking-steps/thinking-steps-header.svelte:18 <Collapsible.Trigger>]
+- routes/(app)/config/+layout.svelte:118 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.page` rest: same [T routes/(app)/config/+layout.svelte:79 <div> → now routes/(app)/config/+layout.svelte:84 <div>]
+- routes/(app)/config/+layout.svelte:91 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.config` rest: same [T routes/(app)/config/+layout.svelte:70 <div> → now routes/(app)/config/+layout.svelte:70 <div>]
+- routes/(app)/config/connections/+page.svelte:756 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.add` rest: same [T routes/(app)/config/connections/+page.svelte:428 <form> → now routes/(app)/config/connections/+page.svelte:429 <form>]
+- routes/(app)/config/connections/+page.svelte:822 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T routes/(app)/config/connections/+page.svelte:518 <button> → now routes/(app)/config/connections/+page.svelte:540 <button>]
+- routes/(app)/config/connections/+page.svelte:832 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `.card:hover` rest: same [T routes/(app)/config/connections/+page.svelte:518 <button> → now routes/(app)/config/connections/+page.svelte:540 <button>]
+    - `.card:hover` state (:hover): same [T routes/(app)/config/connections/+page.svelte:518 <button> → now routes/(app)/config/connections/+page.svelte:540 <button>]
+- routes/(app)/config/devices/+page.svelte:362 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.confirm` rest: same [T routes/(app)/config/devices/+page.svelte:139 <div> → now routes/(app)/config/devices/+page.svelte:146 <div>]
+    - `.confirm` rest: same [T routes/(app)/config/devices/+page.svelte:185 <div> → now routes/(app)/config/devices/+page.svelte:200 <div>]
+- routes/(app)/config/models/+page.svelte:634 `background: var(--ink-muted)` (first pass: rendered: same)
+    - `.dot` rest: same [T routes/(app)/config/models/+page.svelte:353 <span> → now routes/(app)/config/models/+page.svelte:362 <span>]
+    - `.dot` rest: same [T routes/(app)/config/models/+page.svelte:371 <span> → now routes/(app)/config/models/+page.svelte:394 <span>]
+    - `.dot` rest: same [T routes/(app)/config/models/+page.svelte:422 <span> → now routes/(app)/config/models/+page.svelte:464 <span>]
+    - `.dot` rest: same [T routes/(app)/config/models/+page.svelte:466 <span> → now routes/(app)/config/models/+page.svelte:526 <span>]
+- routes/(app)/config/models/+page.svelte:638 `background: var(--status-live-glyph)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `[data-tone="ok"] .dot` rest: same [T routes/(app)/config/models/+page.svelte:353 <span> → now routes/(app)/config/models/+page.svelte:362 <span>]
+    - `[data-tone="ok"] .dot` rest: same [T routes/(app)/config/models/+page.svelte:371 <span> → now routes/(app)/config/models/+page.svelte:394 <span>]
+    - `[data-tone="ok"] .dot` rest: same [T routes/(app)/config/models/+page.svelte:422 <span> → now routes/(app)/config/models/+page.svelte:464 <span>]
+    - `[data-tone="ok"] .dot` rest: same [T routes/(app)/config/models/+page.svelte:466 <span> → now routes/(app)/config/models/+page.svelte:526 <span>]
+    - `[data-tone="ok"] .dot` state (routes/(app)/config/models/+page.svelte:336 <p> [data-tone=ok]): same [T routes/(app)/config/models/+page.svelte:353 <span> → now routes/(app)/config/models/+page.svelte:362 <span>]
+    - `[data-tone="ok"] .dot` state (routes/(app)/config/models/+page.svelte:336 <p> [data-tone=ok]): same [T routes/(app)/config/models/+page.svelte:371 <span> → now routes/(app)/config/models/+page.svelte:394 <span>]
+    - `[data-tone="ok"] .dot` state (routes/(app)/config/models/+page.svelte:416 <p> [data-tone=ok]): same [T routes/(app)/config/models/+page.svelte:422 <span> → now routes/(app)/config/models/+page.svelte:464 <span>]
+    - `[data-tone="ok"] .dot` state (routes/(app)/config/models/+page.svelte:442 <p> [data-tone=ok]): same [T routes/(app)/config/models/+page.svelte:466 <span> → now routes/(app)/config/models/+page.svelte:526 <span>]
+- routes/(app)/config/phone/+page.svelte:248 `background: var(--ink-muted)` (first pass: rendered: same)
+    - `.dot` rest: same [T routes/(app)/config/phone/+page.svelte:159 <span> → now routes/(app)/config/phone/+page.svelte:168 <span>]
+- routes/(app)/config/phone/+page.svelte:252 `background: var(--status-live-glyph)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `[data-tone="ok"] .dot` rest: same [T routes/(app)/config/phone/+page.svelte:159 <span> → now routes/(app)/config/phone/+page.svelte:168 <span>]
+    - `[data-tone="ok"] .dot` state (routes/(app)/config/phone/+page.svelte:153 <p> [data-tone=ok]): same [T routes/(app)/config/phone/+page.svelte:159 <span> → now routes/(app)/config/phone/+page.svelte:168 <span>]
+- routes/(app)/config/phone/+page.svelte:256 `background: var(--status-attn-glyph)` (first pass: rendered: same; not rendered: ancestor-state)
+    - `[data-tone="bad"] .dot` rest: same [T routes/(app)/config/phone/+page.svelte:159 <span> → now routes/(app)/config/phone/+page.svelte:168 <span>]
+    - `[data-tone="bad"] .dot` state (routes/(app)/config/phone/+page.svelte:153 <p> [data-tone=bad]): same [T routes/(app)/config/phone/+page.svelte:159 <span> → now routes/(app)/config/phone/+page.svelte:168 <span>]
+- routes/(app)/config/rules/+page.svelte:224 `background: var(--status-attn-bg)` (first pass: rendered: same)
+    - `.waiting` rest: same [T routes/(app)/config/rules/+page.svelte:201 <span> → now routes/(app)/config/rules/+page.svelte:202 <span>]
+- routes/(app)/config/skills/+page.svelte:783 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.offer` rest: same [T routes/(app)/config/skills/+page.svelte:622 <li> → now routes/(app)/config/skills/+page.svelte:652 <li>]
+- routes/(app)/motion/caw-notices/+page.svelte:469 `background: var(--surface-page)` (first pass: rendered: same)
+    - `.phone` rest: same [T routes/(app)/motion/caw-notices/+page.svelte:427 <iframe> → now routes/(app)/motion/caw-notices/+page.svelte:435 <iframe>]
+- routes/(app)/motion/caw/+page.svelte:106 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `main` rest: same [T routes/(app)/motion/caw/+page.svelte:63 <main> → now routes/(app)/motion/caw/+page.svelte:64 <main>]
+- routes/(app)/motion/delegate-tray/+page.svelte:314 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.leaf` rest: same [T routes/(app)/motion/delegate-tray/+page.svelte:243 <div> → now routes/(app)/motion/delegate-tray/+page.svelte:250 <div>]
+- routes/(app)/motion/echo/+page.svelte:71 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `main` rest: same [T routes/(app)/motion/echo/+page.svelte:30 <main> → now routes/(app)/motion/echo/+page.svelte:31 <main>]
+- routes/(app)/motion/folder-proof/+page.svelte:389 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.proof` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:288 <div> → now routes/(app)/motion/folder-proof/+page.svelte:293 <div>]
+- routes/(app)/motion/folder-proof/+page.svelte:407 `background: var(--surface-shelf)` (first pass: rendered: same)
+    - `.group` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:299 <div> → now routes/(app)/motion/folder-proof/+page.svelte:305 <div>]
+    - `.group` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:309 <div> → now routes/(app)/motion/folder-proof/+page.svelte:315 <div>]
+- routes/(app)/motion/folder-proof/+page.svelte:411 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.group .page` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:306 <div> → now routes/(app)/motion/folder-proof/+page.svelte:312 <div>]
+    - `.group .page` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:316 <div> → now routes/(app)/motion/folder-proof/+page.svelte:322 <div>]
+- routes/(app)/motion/folder-proof/+page.svelte:419 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.dials` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:319 <div> → now routes/(app)/motion/folder-proof/+page.svelte:326 <div>]
+- routes/(app)/motion/folder-proof/+page.svelte:444 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.home` rest: same [T routes/(app)/motion/folder-proof/+page.svelte:372 <div> → now routes/(app)/motion/folder-proof/+page.svelte:397 <div>]
+- routes/(app)/motion/head-tint/+page.svelte:279 `background: var(--surface-shelf)` (first pass: rendered: same)
+    - `.proof` rest: same [T routes/(app)/motion/head-tint/+page.svelte:248 <div> → now routes/(app)/motion/head-tint/+page.svelte:249 <div>]
+- routes/(app)/motion/head-tint/+page.svelte:296 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.stack` rest: same [T routes/(app)/motion/head-tint/+page.svelte:250 <div> → now routes/(app)/motion/head-tint/+page.svelte:258 <div>]
+- routes/(app)/motion/lift/+page.svelte:284 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.view` rest: same [T routes/(app)/motion/lift/+page.svelte:254 <div> → now routes/(app)/motion/lift/+page.svelte:256 <div>]
+- routes/(app)/motion/overlays/+page.svelte:253 `background: none` (first pass: rendered: same)
+    - `.page` rest: same [T routes/(app)/motion/overlays/+page.svelte:208 <button> → now routes/(app)/motion/overlays/+page.svelte:231 <button>]
+- routes/(app)/motion/session-limit/+page.svelte:118 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.stats` rest: same [T routes/(app)/motion/session-limit/+page.svelte:74 <div> → now routes/(app)/motion/session-limit/+page.svelte:80 <div>]
+- routes/(app)/motion/traffic/+page.svelte:406 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.bench` rest: same [T routes/(app)/motion/traffic/+page.svelte:357 <div> → now routes/(app)/motion/traffic/+page.svelte:363 <div>]
+- routes/(app)/motion/traffic/+page.svelte:436 `background: transparent` (first pass: rendered: same)
+    - `button` rest: same [T routes/(app)/motion/traffic/+page.svelte:365 <button> → now routes/(app)/motion/traffic/+page.svelte:374 <button>]
+    - `button` rest: same [T routes/(app)/motion/traffic/+page.svelte:366 <button> → now routes/(app)/motion/traffic/+page.svelte:379 <button>]
+    - `button` rest: same [T routes/(app)/motion/traffic/+page.svelte:367 <button> → now routes/(app)/motion/traffic/+page.svelte:384 <button>]
+    - `button` rest: same [T routes/(app)/motion/traffic/+page.svelte:368 <button> → now routes/(app)/motion/traffic/+page.svelte:389 <button>]
+    - `button` rest: same [T routes/(app)/motion/traffic/+page.svelte:371 <button> → now routes/(app)/motion/traffic/+page.svelte:396 <button>]
+    - `button` rest: same [T routes/(app)/motion/traffic/+page.svelte:372 <button> → now routes/(app)/motion/traffic/+page.svelte:401 <button>]
+- routes/(app)/motion/traffic/+page.svelte:444 `background: var(--surface-hover)` (first pass: rendered: same)
+    - `button:hover` rest: same [T routes/(app)/motion/traffic/+page.svelte:365 <button> → now routes/(app)/motion/traffic/+page.svelte:374 <button>]
+    - `button:hover` rest: same [T routes/(app)/motion/traffic/+page.svelte:366 <button> → now routes/(app)/motion/traffic/+page.svelte:379 <button>]
+    - `button:hover` rest: same [T routes/(app)/motion/traffic/+page.svelte:367 <button> → now routes/(app)/motion/traffic/+page.svelte:384 <button>]
+    - `button:hover` rest: same [T routes/(app)/motion/traffic/+page.svelte:368 <button> → now routes/(app)/motion/traffic/+page.svelte:389 <button>]
+    - `button:hover` rest: same [T routes/(app)/motion/traffic/+page.svelte:371 <button> → now routes/(app)/motion/traffic/+page.svelte:396 <button>]
+    - `button:hover` rest: same [T routes/(app)/motion/traffic/+page.svelte:372 <button> → now routes/(app)/motion/traffic/+page.svelte:401 <button>]
+    - `button:hover` state (:hover): same [T routes/(app)/motion/traffic/+page.svelte:365 <button> → now routes/(app)/motion/traffic/+page.svelte:374 <button>]
+    - `button:hover` state (:hover): same [T routes/(app)/motion/traffic/+page.svelte:366 <button> → now routes/(app)/motion/traffic/+page.svelte:379 <button>]
+    - `button:hover` state (:hover): same [T routes/(app)/motion/traffic/+page.svelte:367 <button> → now routes/(app)/motion/traffic/+page.svelte:384 <button>]
+    - `button:hover` state (:hover): same [T routes/(app)/motion/traffic/+page.svelte:368 <button> → now routes/(app)/motion/traffic/+page.svelte:389 <button>]
+    - `button:hover` state (:hover): same [T routes/(app)/motion/traffic/+page.svelte:371 <button> → now routes/(app)/motion/traffic/+page.svelte:396 <button>]
+    - `button:hover` state (:hover): same [T routes/(app)/motion/traffic/+page.svelte:372 <button> → now routes/(app)/motion/traffic/+page.svelte:401 <button>]
+- routes/(app)/motion/updates/+page.svelte:378 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T routes/(app)/motion/updates/+page.svelte:299 <section> → now routes/(app)/motion/updates/+page.svelte:305 <section>]
+    - `.card` rest: same [T routes/(app)/motion/updates/+page.svelte:307 <section> → now routes/(app)/motion/updates/+page.svelte:315 <section>]
+    - `.card` rest: same [T routes/(app)/motion/updates/+page.svelte:317 <section> → now routes/(app)/motion/updates/+page.svelte:327 <section>]
+- routes/(app)/motion/usage-relay/+page.svelte:189 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.phone iframe` rest: same [T routes/(app)/motion/usage-relay/+page.svelte:151 <iframe> → now routes/(app)/motion/usage-relay/+page.svelte:155 <iframe>]
+- routes/(app)/project/[id]/+page.svelte:2088 `background: var(--border-hairline)` (first pass: rendered: same)
+    - `.rule` rest: same [T routes/(app)/project/[id]/+page.svelte:1402 <span> → now routes/(app)/project/[id]/+page.svelte:1415 <span>]
+- routes/(app)/project/[id]/+page.svelte:2142 `background: var(--surface-band)` (first pass: rendered: same)
+    - `.skeleton-column` rest: same [T routes/(app)/project/[id]/+page.svelte:1952 <div> → now routes/(app)/project/[id]/+page.svelte:2028 <div>]
+- routes/(app)/project/[id]/+page.svelte:2220 `background: var(--surface-band)` (first pass: rendered: same)
+    - `.draft-bar` rest: same [T routes/(app)/project/[id]/+page.svelte:1564 <div> → now routes/(app)/project/[id]/+page.svelte:1588 <div>]
+- routes/(app)/project/[id]/+page.svelte:2259 `background: none` (first pass: not rendered: unmapped)
+    - `:global(.kit-pop.view-ask-pop)` rest: same [T routes/(app)/project/[id]/+page.svelte:1981 <Popover.Content> → now routes/(app)/project/[id]/+page.svelte:2069 <Popover.Content>]
+- routes/(app)/project/[id]/+page.svelte:2286 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.table-new` rest: same [T routes/(app)/project/[id]/+page.svelte:1512 <div> → now routes/(app)/project/[id]/+page.svelte:1530 <div>]
+- routes/(app)/usage/+page.svelte:272 `background: var(--selected-bg)` (first pass: rendered without its kit component's classes)
+    - `.top :global(.project-chip[data-on])` rest: same [T routes/(app)/usage/+page.svelte:163 <Select.Trigger> → now routes/(app)/usage/+page.svelte:172 <Select.Trigger>]
+    - `.top :global(.project-chip[data-on])` state ([data-on]): same [T routes/(app)/usage/+page.svelte:163 <Select.Trigger> → now routes/(app)/usage/+page.svelte:172 <Select.Trigger>]
+- routes/(app)/workflows/+page.svelte:270 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.table` rest: same [T routes/(app)/workflows/+page.svelte:125 <table> → now routes/(app)/workflows/+page.svelte:138 <table>]
+    - `.table` rest: same [T routes/(app)/workflows/+page.svelte:169 <table> → now routes/(app)/workflows/+page.svelte:206 <table>]
+- routes/artifact/[id]/+page.svelte:112 `background: var(--surface-page)` (first pass: rendered: same)
+    - `.artifact-tab` rest: same [T routes/artifact/[id]/+page.svelte:72 <div> → now routes/artifact/[id]/+page.svelte:75 <div>]
+- routes/artifact/[id]/+page.svelte:118 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.opening` rest: same [T routes/artifact/[id]/+page.svelte:86 <div> → now routes/artifact/[id]/+page.svelte:93 <div>]
+- routes/dev/finder/+page.svelte:189 `background: var(--background)` (first pass: rendered: same)
+    - `.bench` rest: same [T routes/dev/finder/+page.svelte:100 <div> → now routes/dev/finder/+page.svelte:101 <div>]
+- routes/dev/finder/+page.svelte:201 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.bar` rest: same [T routes/dev/finder/+page.svelte:102 <header> → now routes/dev/finder/+page.svelte:107 <header>]
+- routes/dev/finder/+page.svelte:215 `background: none` (first pass: rendered: same)
+    - `.jump` rest: same [T routes/dev/finder/+page.svelte:104 <button> → now routes/dev/finder/+page.svelte:113 <button>]
+    - `.jump` rest: same [T routes/dev/finder/+page.svelte:141 <button> → now routes/dev/finder/+page.svelte:162 <button>]
+- routes/dev/finder/+page.svelte:258 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.composer` rest: same [T routes/dev/finder/+page.svelte:121 <div> → now routes/dev/finder/+page.svelte:131 <div>]
+- routes/dev/finder/+page.svelte:279 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.attach` rest: same [T routes/dev/finder/+page.svelte:130 <button> → now routes/dev/finder/+page.svelte:146 <button>]
+- routes/dev/finder/+page.svelte:284 `background: var(--action-solid)` (first pass: rendered: same)
+    - `.send` rest: same [T routes/dev/finder/+page.svelte:131 <button> → now routes/dev/finder/+page.svelte:151 <button>]
+- routes/dev/finder/+page.svelte:302 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.card` rest: same [T routes/dev/finder/+page.svelte:162 <div> → now routes/dev/finder/+page.svelte:199 <div>]
+- routes/dev/finder/+page.svelte:314 `background: var(--surface-raised)` (first pass: rendered: same)
+    - `.sheet` rest: same [T routes/dev/finder/+page.svelte:149 <div> → now routes/dev/finder/+page.svelte:174 <div>]
+- routes/dev/finder/+page.svelte:322 `background: var(--border-control)` (first pass: rendered: same)
+    - `.grabber` rest: same [T routes/dev/finder/+page.svelte:150 <div> → now routes/dev/finder/+page.svelte:180 <div>]
+- routes/project/[id]/view/[name]/+page.svelte:98 `background: var(--surface-recess)` (first pass: rendered: same)
+    - `.view-alone` rest: same [T routes/project/[id]/view/[name]/+page.svelte:82 <main> → now routes/project/[id]/view/[name]/+page.svelte:82 <main>]

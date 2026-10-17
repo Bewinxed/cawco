@@ -1,0 +1,5 @@
+      6 DIFFERS
+    466 same
+    101 same-as-rest
+      2 lib/cawco/lightbox/Lightbox.svelte:309
+      4 lib/cawco/spawn/NewSessionDialog.svelte:2187

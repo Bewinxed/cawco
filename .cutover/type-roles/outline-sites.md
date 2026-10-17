@@ -1,160 +1,174 @@
-43 outline sites
+# outline: every site, rendered as whole components (T against now)
 
-- lib/cawco/Sidebar.svelte:1242  `.brand-icon`  `outline: 1px solid var(--image-outline)`
-    head: lib/cawco/Sidebar.svelte:828 <img>, lib/cawco/Sidebar.svelte:1197 <img>
-    rest: same
-    focus-visible: same
-- lib/cawco/accounts/AccountListRow.svelte:86  `.link:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/accounts/AccountListRow.svelte:34 <a>
-    rest: same
-    focus-visible: same
-- lib/cawco/accounts/AccountSetup.svelte:963  `.choice:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/accounts/AccountSetup.svelte:603 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/accounts/OrderList.svelte:191  `.row:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/accounts/OrderList.svelte:135 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/accounts/StrategyPicker.svelte:259  `.card:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/accounts/StrategyPicker.svelte:136 <div>
-    rest: same
-    focus-visible: same
-- lib/cawco/accounts/Swatches.svelte:60  `.swatch:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/accounts/Swatches.svelte:16 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/blocks/Block.svelte:300  `.block[data-dragging]`  `outline: 1px dashed var(--border-control)`
-    head: lib/cawco/blocks/Block.svelte:106 <section>
-    rest: same
-    focus-visible: same
-- lib/cawco/canvas/CanvasStages.svelte:258  `.grab`  `outline: none`
-    head: lib/cawco/canvas/CanvasStages.svelte:168 <div>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/canvas/CanvasStages.svelte:262  `.grab:focus-visible .grabber, .grab:focus-visible .corner-grip`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/canvas/CanvasStages.svelte:199 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .grab:focus-visible; unrendered: T :186 state focus-visible: the state is on an ancestor (.grab:focus-visible)
-- lib/cawco/config/SectionRow.svelte:304  `.link, .label`  `outline: none`
-    head: lib/cawco/config/SectionRow.svelte:152 <a>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/config/SectionRow.svelte:315  `.link:focus-visible::after`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/find/FindRow.svelte:145  `.row`  `outline: none`
-    head: lib/cawco/find/FindRow.svelte:58 <button>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/find/Finder.svelte:909  `.field input`  `outline: none`
-    head: lib/cawco/find/Finder.svelte:465 <input>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/find/MentionField.svelte:764  `.editor`  `outline: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/home/CawPanel.svelte:428  `.empty`  `outline: none`
-    head: lib/cawco/home/CawPanel.svelte:331 <div>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/home/HomeRecent.svelte:272  `.search:has(input:focus-visible)`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/home/HomeRecent.svelte:140 <label>
-    rest: same
-    note: unrendered: T :126 state focus-visible: a :has() state is not rendered
-- lib/cawco/home/HomeRecent.svelte:282  `.search input`  `outline: none`
-    head: lib/cawco/home/HomeRecent.svelte:146 <input>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/join/AddMachineLink.svelte:42  `.add-link:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/join/AddMachineLink.svelte:13 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/lightbox/Lightbox.svelte:309  `:global(.doc-view)`  `outline: none`
-    head: lib/cawco/lightbox/Lightbox.svelte:222 <DialogPrimitive.Content>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-    note: component <DialogPrimitive.Content>: its own classes not included
-- lib/cawco/preview/PinList.svelte:252  `.pin-row:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/preview/PinList.svelte:73 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/preview/PreviewPane.svelte:1930  `:global(.preview-pane .side-well)`  `outline: var(--focus-ring-width) solid transparent`
-    note: css: the declaration is still CSS here
-- lib/cawco/project/CawThread.svelte:429  `button.name:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/project/CawThread.svelte:260 <button>, lib/cawco/project/CawThread.svelte:278 <span>
-    rest: same
-    focus-visible: same
-- lib/cawco/project/FolderFiles.svelte:80  `.file:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/project/FolderFiles.svelte:25 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/project/StarterCards.svelte:163  `.starter:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/project/StarterCards.svelte:96 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/side/SideSheet.svelte:408  `:global(.preview-sheet)`  `outline: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/spawn/EffortPips.svelte:310  `.track.focus`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/spawn/EffortPips.svelte:181 <div>
-    rest: same
-    focus-visible: same
-- lib/cawco/spawn/LocationSection.svelte:434  `input`  `outline: none`
-    head: lib/cawco/spawn/LocationSection.svelte:230 <input>, lib/cawco/spawn/LocationSection.svelte:495 <input>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/spawn/NewSessionDialog.svelte:2187  `:global(.session-card)`  `outline: none`
-    head: lib/cawco/spawn/NewSessionDialog.svelte:1757 <DrawerContent>, lib/cawco/spawn/NewSessionDialog.svelte:1804 <DialogPrimitive.Content>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-    note: component <DrawerContent>: its own classes not included; component <DialogPrimitive.Content>: its own classes not included
-- lib/cawco/spawn/ProjectChip.svelte:356  `.field input`  `outline: none`
-    head: lib/cawco/spawn/ProjectChip.svelte:140 <input>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/spawn/PromptEditor.svelte:373  `.editor`  `outline: none`
-    head: lib/cawco/spawn/PromptEditor.svelte:321 <div>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- lib/cawco/transcript/Composer.svelte:3696  `.cin.recalling, .cin.grown`  `outline: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/transcript/Peer.svelte:227  `.label :global(.peer-toggle):focus-visible`  `outline: none`
-    head: lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>
-    rest: same
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px; outlineStyle: none → solid
-    note: component <Collapsible.Trigger>: its own classes not included
-- lib/cawco/transcript/Peer.svelte:230  `.label :global(.peer-toggle):focus-visible::after`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    note: css: pseudo-element: stays a residual
-- lib/cawco/transcript/SystemLine.svelte:545  `.aname:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/transcript/SystemLine.svelte:343 <button>
-    rest: same
-    focus-visible: same
-- lib/cawco/transcript/ToolGroup.svelte:632  `.artifact-open:focus-visible`  `outline: none`
-    note: css: the declaration is still CSS here
-- lib/cawco/transcript/ToolGroup.svelte:636  `.preview-tool:has(> .artifact-open:focus-visible)`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/transcript/ToolGroup.svelte:394 <div>
-    rest: same
-    note: unrendered: T :369 state focus-visible: a :has() state is not rendered
-- lib/cawco/updates/ChannelCards.svelte:203  `.chooser :global(.ccard:focus-visible)`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>
-    rest: same
-    focus-visible: same
-    note: component <RadioGroup.Item>: its own classes not included
-- lib/cawco/views/ViewPipeline.svelte:177  `.row[data-kind="dropped"] .bar`  `outline: 1px dashed var(--border-control)`
-    head: lib/cawco/views/ViewPipeline.svelte:81 <span>
-    rest: same
-    note: ancestor-state: state on an ancestor: .row[data-kind="dropped"]; unrendered: T :54 state focus-visible: the state is on an ancestor (.row[data-kind="dropped"])
-- lib/cawco/workspace/PaneTabs.svelte:1849  `:global(.kit-pop.session-details-popover)`  `outline: none`
-    note: css: the declaration is still CSS here
-- lib/components/features/MarkdownEditor.svelte:268  `.crepe-host :global(.milkdown :focus-visible)`  `outline: var(--focus-ring-width) solid var(--focus-ring) !important`
-    note: unmapped: no element in this file carries the selector (a child component's DOM, or :global)
-- lib/components/features/workflows/WorkflowNodeCard.svelte:175  `.wf-node`  `outline: var(--focus-ring-width) solid transparent`
-    head: lib/components/features/workflows/WorkflowNodeCard.svelte:96 <article>
-    rest: same
-    focus-visible: same
-- lib/components/ui/fluid-tabs/TabItem.svelte:438  `.hit`  `outline: none`
-    head: lib/components/ui/fluid-tabs/TabItem.svelte:359 <svelte:element>
-    rest: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33)
-    focus-visible: outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px
-- routes/(app)/config/connections/+page.svelte:836  `.card:focus-visible`  `outline: var(--focus-ring-width) solid var(--focus-ring)`
-    head: routes/(app)/config/connections/+page.svelte:540 <button>
-    rest: same
-    focus-visible: same
+43 sites; 12 differ in a longhand the mapped utility leaves unwritten; every other site is the same in every state rendered.
+
+- lib/cawco/accounts/AccountListRow.svelte:86 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.link:focus-visible` rest: same [T lib/cawco/accounts/AccountListRow.svelte:28 <a> → now lib/cawco/accounts/AccountListRow.svelte:34 <a>]
+    - `.link:focus-visible` state (:focus-visible): same [T lib/cawco/accounts/AccountListRow.svelte:28 <a> → now lib/cawco/accounts/AccountListRow.svelte:34 <a>]
+    - `.link:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/accounts/AccountListRow.svelte:28 <a> → now lib/cawco/accounts/AccountListRow.svelte:34 <a>]
+- lib/cawco/accounts/AccountSetup.svelte:963 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.choice:focus-visible` rest: same [T lib/cawco/accounts/AccountSetup.svelte:552 <button> → now lib/cawco/accounts/AccountSetup.svelte:603 <button>]
+    - `.choice:focus-visible` state (:focus-visible): same [T lib/cawco/accounts/AccountSetup.svelte:552 <button> → now lib/cawco/accounts/AccountSetup.svelte:603 <button>]
+    - `.choice:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/accounts/AccountSetup.svelte:552 <button> → now lib/cawco/accounts/AccountSetup.svelte:603 <button>]
+- lib/cawco/accounts/OrderList.svelte:191 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.row:focus-visible` rest: same [T lib/cawco/accounts/OrderList.svelte:130 <button> → now lib/cawco/accounts/OrderList.svelte:135 <button>]
+    - `.row:focus-visible` state (:focus-visible): same [T lib/cawco/accounts/OrderList.svelte:130 <button> → now lib/cawco/accounts/OrderList.svelte:135 <button>]
+    - `.row:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/accounts/OrderList.svelte:130 <button> → now lib/cawco/accounts/OrderList.svelte:135 <button>]
+- lib/cawco/accounts/StrategyPicker.svelte:259 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.card:focus-visible` rest: same [T lib/cawco/accounts/StrategyPicker.svelte:125 <div> → now lib/cawco/accounts/StrategyPicker.svelte:136 <div>]
+    - `.card:focus-visible` state (:focus-visible): same [T lib/cawco/accounts/StrategyPicker.svelte:125 <div> → now lib/cawco/accounts/StrategyPicker.svelte:136 <div>]
+    - `.card:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/accounts/StrategyPicker.svelte:125 <div> → now lib/cawco/accounts/StrategyPicker.svelte:136 <div>]
+- lib/cawco/accounts/Swatches.svelte:60 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.swatch:focus-visible` rest: same [T lib/cawco/accounts/Swatches.svelte:15 <button> → now lib/cawco/accounts/Swatches.svelte:16 <button>]
+    - `.swatch:focus-visible` state (:focus-visible): same [T lib/cawco/accounts/Swatches.svelte:15 <button> → now lib/cawco/accounts/Swatches.svelte:16 <button>]
+    - `.swatch:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/accounts/Swatches.svelte:15 <button> → now lib/cawco/accounts/Swatches.svelte:16 <button>]
+- lib/cawco/blocks/Block.svelte:300 `outline: 1px dashed var(--border-control)` (first pass: rendered: same)
+    - `.block[data-dragging]` rest: same [T lib/cawco/blocks/Block.svelte:107 <section> → now lib/cawco/blocks/Block.svelte:106 <section>]
+    - `.block[data-dragging]` state ([data-dragging]): same [T lib/cawco/blocks/Block.svelte:107 <section> → now lib/cawco/blocks/Block.svelte:106 <section>]
+    - `.block[data-dragging]` focus-visible ([data-dragging], :focus-visible): same [T lib/cawco/blocks/Block.svelte:107 <section> → now lib/cawco/blocks/Block.svelte:106 <section>]
+- lib/cawco/canvas/CanvasStages.svelte:258 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.grab` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/canvas/CanvasStages.svelte:167 <div> → now lib/cawco/canvas/CanvasStages.svelte:168 <div>]
+    - `.grab` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/canvas/CanvasStages.svelte:167 <div> → now lib/cawco/canvas/CanvasStages.svelte:168 <div>]
+- lib/cawco/canvas/CanvasStages.svelte:262 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same; not rendered: ancestor-state; not rendered: unrendered)
+    - `.grab:focus-visible .grabber` rest: same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+    - `.grab:focus-visible .grabber` state (lib/cawco/canvas/CanvasStages.svelte:167 <div> :focus-visible, .grabber): same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+    - `.grab:focus-visible .grabber` focus-visible (lib/cawco/canvas/CanvasStages.svelte:167 <div> :focus-visible, .grabber, :focus-visible): same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+    - `.grab:focus-visible .corner-grip` rest: same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+    - `.grab:focus-visible .corner-grip` state (lib/cawco/canvas/CanvasStages.svelte:167 <div> :focus-visible, .corner-grip): same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+    - `.grab:focus-visible .corner-grip` focus-visible (lib/cawco/canvas/CanvasStages.svelte:167 <div> :focus-visible, .corner-grip, :focus-visible): same [T lib/cawco/canvas/CanvasStages.svelte:186 <span> → now lib/cawco/canvas/CanvasStages.svelte:199 <span>]
+- lib/cawco/config/SectionRow.svelte:304 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.link` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/config/SectionRow.svelte:131 <a> → now lib/cawco/config/SectionRow.svelte:152 <a>]
+    - `.link` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/config/SectionRow.svelte:131 <a> → now lib/cawco/config/SectionRow.svelte:152 <a>]
+    - `.label` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/config/SectionRow.svelte:138 <span> → now lib/cawco/config/SectionRow.svelte:160 <span>]
+    - `.label` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/config/SectionRow.svelte:138 <span> → now lib/cawco/config/SectionRow.svelte:160 <span>]
+- lib/cawco/config/SectionRow.svelte:315 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: not rendered: css)
+    - `.link:focus-visible::after` rest: same [T lib/cawco/config/SectionRow.svelte:131 <a> → now lib/cawco/config/SectionRow.svelte:152 <a>]
+    - `.link:focus-visible::after` state (:focus-visible): same [T lib/cawco/config/SectionRow.svelte:131 <a> → now lib/cawco/config/SectionRow.svelte:152 <a>]
+    - `.link:focus-visible::after` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/config/SectionRow.svelte:131 <a> → now lib/cawco/config/SectionRow.svelte:152 <a>]
+- lib/cawco/find/Finder.svelte:909 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.field input` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/find/Finder.svelte:455 <input> → now lib/cawco/find/Finder.svelte:465 <input>]
+    - `.field input` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/find/Finder.svelte:455 <input> → now lib/cawco/find/Finder.svelte:465 <input>]
+- lib/cawco/find/FindRow.svelte:145 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.row` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/find/FindRow.svelte:54 <button> → now lib/cawco/find/FindRow.svelte:58 <button>]
+    - `.row` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/find/FindRow.svelte:54 <button> → now lib/cawco/find/FindRow.svelte:58 <button>]
+- lib/cawco/find/MentionField.svelte:764 `outline: none` (first pass: not rendered: css)
+    - `.editor` rest: same [T lib/cawco/find/MentionField.svelte:700 <div> → now lib/cawco/find/MentionField.svelte:703 <div>]
+    - `.editor` focus-visible (:focus-visible): same [T lib/cawco/find/MentionField.svelte:700 <div> → now lib/cawco/find/MentionField.svelte:703 <div>]
+- lib/cawco/home/CawPanel.svelte:428 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.empty` rest: **differs** outlineColor: oklch(0.495 0.014 74) → oklch(0.55 0.165 33) [T lib/cawco/home/CawPanel.svelte:268 <div> → now lib/cawco/home/CawPanel.svelte:331 <div>]
+    - `.empty` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.495 0.014 74) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/home/CawPanel.svelte:268 <div> → now lib/cawco/home/CawPanel.svelte:331 <div>]
+- lib/cawco/home/HomeRecent.svelte:272 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same; not rendered: unrendered)
+    - `.search:has(input:focus-visible)` rest: same [T lib/cawco/home/HomeRecent.svelte:126 <label> → now lib/cawco/home/HomeRecent.svelte:140 <label>]
+    - `.search:has(input:focus-visible)` state (lib/cawco/home/HomeRecent.svelte:128 <input> :focus-visible): same [T lib/cawco/home/HomeRecent.svelte:126 <label> → now lib/cawco/home/HomeRecent.svelte:140 <label>]
+    - `.search:has(input:focus-visible)` focus-visible (lib/cawco/home/HomeRecent.svelte:128 <input> :focus-visible, :focus-visible): same [T lib/cawco/home/HomeRecent.svelte:126 <label> → now lib/cawco/home/HomeRecent.svelte:140 <label>]
+- lib/cawco/home/HomeRecent.svelte:282 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.search input` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/home/HomeRecent.svelte:128 <input> → now lib/cawco/home/HomeRecent.svelte:146 <input>]
+    - `.search input` focus-visible (:focus-visible): same [T lib/cawco/home/HomeRecent.svelte:128 <input> → now lib/cawco/home/HomeRecent.svelte:146 <input>]
+- lib/cawco/join/AddMachineLink.svelte:42 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.add-link:focus-visible` rest: same [T lib/cawco/join/AddMachineLink.svelte:12 <button> → now lib/cawco/join/AddMachineLink.svelte:13 <button>]
+    - `.add-link:focus-visible` state (:focus-visible): same [T lib/cawco/join/AddMachineLink.svelte:12 <button> → now lib/cawco/join/AddMachineLink.svelte:13 <button>]
+    - `.add-link:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/join/AddMachineLink.svelte:12 <button> → now lib/cawco/join/AddMachineLink.svelte:13 <button>]
+- lib/cawco/lightbox/Lightbox.svelte:309 `outline: none` — DIFFERS (first pass: rendered without its kit component's classes)
+    - `:global(.doc-view)` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/lightbox/Lightbox.svelte:222 <DialogPrimitive.Content> → now lib/cawco/lightbox/Lightbox.svelte:222 <DialogPrimitive.Content>]
+    - `:global(.doc-view)` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/lightbox/Lightbox.svelte:222 <DialogPrimitive.Content> → now lib/cawco/lightbox/Lightbox.svelte:222 <DialogPrimitive.Content>]
+- lib/cawco/preview/PinList.svelte:252 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.pin-row:focus-visible` rest: same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.pin-row:focus-visible` state (:focus-visible): same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+    - `.pin-row:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/preview/PinList.svelte:73 <button> → now lib/cawco/preview/PinList.svelte:73 <button>]
+- lib/cawco/preview/PreviewPane.svelte:1930 `outline: var(--focus-ring-width) solid transparent` (first pass: not rendered: css)
+    - `:global(.preview-pane .side-well)` rest: same [T lib/cawco/side/SideSurface.svelte:128 <div> → now lib/cawco/side/SideSurface.svelte:165 <div>]
+    - `:global(.preview-pane .side-well)` focus-visible (:focus-visible): same [T lib/cawco/side/SideSurface.svelte:128 <div> → now lib/cawco/side/SideSurface.svelte:165 <div>]
+- lib/cawco/project/CawThread.svelte:429 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `button.name:focus-visible` rest: same [T lib/cawco/project/CawThread.svelte:252 <button> → now lib/cawco/project/CawThread.svelte:260 <button>]
+    - `button.name:focus-visible` state (:focus-visible): same [T lib/cawco/project/CawThread.svelte:252 <button> → now lib/cawco/project/CawThread.svelte:260 <button>]
+    - `button.name:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/project/CawThread.svelte:252 <button> → now lib/cawco/project/CawThread.svelte:260 <button>]
+- lib/cawco/project/FolderFiles.svelte:80 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.file:focus-visible` rest: same [T lib/cawco/project/FolderFiles.svelte:24 <button> → now lib/cawco/project/FolderFiles.svelte:25 <button>]
+    - `.file:focus-visible` state (:focus-visible): same [T lib/cawco/project/FolderFiles.svelte:24 <button> → now lib/cawco/project/FolderFiles.svelte:25 <button>]
+    - `.file:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/project/FolderFiles.svelte:24 <button> → now lib/cawco/project/FolderFiles.svelte:25 <button>]
+- lib/cawco/project/StarterCards.svelte:163 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.starter:focus-visible` rest: same [T lib/cawco/project/StarterCards.svelte:90 <button> → now lib/cawco/project/StarterCards.svelte:96 <button>]
+    - `.starter:focus-visible` state (:focus-visible): same [T lib/cawco/project/StarterCards.svelte:90 <button> → now lib/cawco/project/StarterCards.svelte:96 <button>]
+    - `.starter:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/project/StarterCards.svelte:90 <button> → now lib/cawco/project/StarterCards.svelte:96 <button>]
+- lib/cawco/side/SideSheet.svelte:408 `outline: none` (first pass: not rendered: css)
+    - `:global(.preview-sheet)` rest: same [T lib/cawco/side/SideSheet.svelte:324 <Drawer.Content> → now lib/cawco/side/SideSheet.svelte:344 <Drawer.Content>]
+    - `:global(.preview-sheet)` focus-visible (:focus-visible): same [T lib/cawco/side/SideSheet.svelte:324 <Drawer.Content> → now lib/cawco/side/SideSheet.svelte:344 <Drawer.Content>]
+- lib/cawco/Sidebar.svelte:1242 `outline: 1px solid var(--image-outline)` (first pass: rendered: same)
+    - `.brand-icon` rest: same [T lib/cawco/Sidebar.svelte:822 <img> → now lib/cawco/Sidebar.svelte:828 <img>]
+    - `.brand-icon` rest: same [T lib/cawco/Sidebar.svelte:1174 <img> → now lib/cawco/Sidebar.svelte:1197 <img>]
+    - `.brand-icon` focus-visible (:focus-visible): same [T lib/cawco/Sidebar.svelte:822 <img> → now lib/cawco/Sidebar.svelte:828 <img>]
+    - `.brand-icon` focus-visible (:focus-visible): same [T lib/cawco/Sidebar.svelte:1174 <img> → now lib/cawco/Sidebar.svelte:1197 <img>]
+- lib/cawco/spawn/EffortPips.svelte:310 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.track.focus` rest: same [T lib/cawco/spawn/EffortPips.svelte:170 <div> → now lib/cawco/spawn/EffortPips.svelte:181 <div>]
+    - `.track.focus` state (.focus): same [T lib/cawco/spawn/EffortPips.svelte:170 <div> → now lib/cawco/spawn/EffortPips.svelte:181 <div>]
+    - `.track.focus` focus-visible (.focus, :focus-visible): same [T lib/cawco/spawn/EffortPips.svelte:170 <div> → now lib/cawco/spawn/EffortPips.svelte:181 <div>]
+- lib/cawco/spawn/LocationSection.svelte:434 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `input` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/LocationSection.svelte:210 <input> → now lib/cawco/spawn/LocationSection.svelte:230 <input>]
+    - `input` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/LocationSection.svelte:358 <input> → now lib/cawco/spawn/LocationSection.svelte:495 <input>]
+    - `input` focus-visible (:focus-visible): same [T lib/cawco/spawn/LocationSection.svelte:210 <input> → now lib/cawco/spawn/LocationSection.svelte:230 <input>]
+    - `input` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/spawn/LocationSection.svelte:358 <input> → now lib/cawco/spawn/LocationSection.svelte:495 <input>]
+- lib/cawco/spawn/NewSessionDialog.svelte:2187 `outline: none` — DIFFERS (first pass: rendered without its kit component's classes)
+    - `:global(.session-card)` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/NewSessionDialog.svelte:1759 <DrawerContent> → now lib/cawco/spawn/NewSessionDialog.svelte:1757 <DrawerContent>]
+    - `:global(.session-card)` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/NewSessionDialog.svelte:1797 <DialogPrimitive.Content> → now lib/cawco/spawn/NewSessionDialog.svelte:1804 <DialogPrimitive.Content>]
+    - `:global(.session-card)` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/spawn/NewSessionDialog.svelte:1759 <DrawerContent> → now lib/cawco/spawn/NewSessionDialog.svelte:1757 <DrawerContent>]
+    - `:global(.session-card)` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/spawn/NewSessionDialog.svelte:1797 <DialogPrimitive.Content> → now lib/cawco/spawn/NewSessionDialog.svelte:1804 <DialogPrimitive.Content>]
+- lib/cawco/spawn/ProjectChip.svelte:356 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.field input` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/ProjectChip.svelte:128 <input> → now lib/cawco/spawn/ProjectChip.svelte:140 <input>]
+    - `.field input` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/ProjectChip.svelte:139 <input> → now lib/cawco/spawn/ProjectChip.svelte:163 <input>]
+    - `.field input` focus-visible (:focus-visible): same [T lib/cawco/spawn/ProjectChip.svelte:128 <input> → now lib/cawco/spawn/ProjectChip.svelte:140 <input>]
+    - `.field input` focus-visible (:focus-visible): same [T lib/cawco/spawn/ProjectChip.svelte:139 <input> → now lib/cawco/spawn/ProjectChip.svelte:163 <input>]
+- lib/cawco/spawn/PromptEditor.svelte:373 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.editor` rest: **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33) [T lib/cawco/spawn/PromptEditor.svelte:314 <div> → now lib/cawco/spawn/PromptEditor.svelte:321 <div>]
+    - `.editor` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.295 0.01 70) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/cawco/spawn/PromptEditor.svelte:314 <div> → now lib/cawco/spawn/PromptEditor.svelte:321 <div>]
+- lib/cawco/transcript/Composer.svelte:3696 `outline: none` (first pass: not rendered: css)
+    - `.cin.recalling` rest: same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.recalling` state (.recalling): same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.recalling` focus-visible (.recalling, :focus-visible): same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.grown` rest: same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.grown` state (.grown): same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+    - `.cin.grown` focus-visible (.grown, :focus-visible): same [T lib/cawco/transcript/Composer.svelte:3215 <form> → now lib/cawco/transcript/Composer.svelte:3344 <form>]
+- lib/cawco/transcript/Peer.svelte:227 `outline: none` (first pass: rendered without its kit component's classes)
+    - `.label :global(.peer-toggle):focus-visible` rest: same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+    - `.label :global(.peer-toggle):focus-visible` state (:focus-visible): same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+    - `.label :global(.peer-toggle):focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+- lib/cawco/transcript/Peer.svelte:230 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: not rendered: css)
+    - `.label :global(.peer-toggle):focus-visible::after` rest: same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+    - `.label :global(.peer-toggle):focus-visible::after` state (:focus-visible): same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+    - `.label :global(.peer-toggle):focus-visible::after` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/transcript/Peer.svelte:155 <Collapsible.Trigger> → now lib/cawco/transcript/Peer.svelte:191 <Collapsible.Trigger>]
+- lib/cawco/transcript/SystemLine.svelte:545 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.aname:focus-visible` rest: same [T lib/cawco/transcript/SystemLine.svelte:277 <button> → now lib/cawco/transcript/SystemLine.svelte:343 <button>]
+    - `.aname:focus-visible` state (:focus-visible): same [T lib/cawco/transcript/SystemLine.svelte:277 <button> → now lib/cawco/transcript/SystemLine.svelte:343 <button>]
+    - `.aname:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/transcript/SystemLine.svelte:277 <button> → now lib/cawco/transcript/SystemLine.svelte:343 <button>]
+- lib/cawco/transcript/ToolGroup.svelte:632 `outline: none` (first pass: not rendered: css)
+    - `.artifact-open:focus-visible` rest: same [T lib/cawco/transcript/ToolGroup.svelte:376 <button> → now lib/cawco/transcript/ToolGroup.svelte:405 <button>]
+    - `.artifact-open:focus-visible` state (:focus-visible): same [T lib/cawco/transcript/ToolGroup.svelte:376 <button> → now lib/cawco/transcript/ToolGroup.svelte:405 <button>]
+    - `.artifact-open:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/transcript/ToolGroup.svelte:376 <button> → now lib/cawco/transcript/ToolGroup.svelte:405 <button>]
+- lib/cawco/transcript/ToolGroup.svelte:636 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same; not rendered: unrendered)
+    - `.preview-tool:has(> .artifact-open:focus-visible)` rest: same [T lib/cawco/transcript/ToolGroup.svelte:369 <div> → now lib/cawco/transcript/ToolGroup.svelte:394 <div>]
+    - `.preview-tool:has(> .artifact-open:focus-visible)` state (lib/cawco/transcript/ToolGroup.svelte:376 <button> :focus-visible): same [T lib/cawco/transcript/ToolGroup.svelte:369 <div> → now lib/cawco/transcript/ToolGroup.svelte:394 <div>]
+    - `.preview-tool:has(> .artifact-open:focus-visible)` focus-visible (lib/cawco/transcript/ToolGroup.svelte:376 <button> :focus-visible, :focus-visible): same [T lib/cawco/transcript/ToolGroup.svelte:369 <div> → now lib/cawco/transcript/ToolGroup.svelte:394 <div>]
+- lib/cawco/updates/ChannelCards.svelte:203 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered without its kit component's classes)
+    - `.chooser :global(.ccard:focus-visible)` rest: same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+    - `.chooser :global(.ccard:focus-visible)` state (:focus-visible): same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+    - `.chooser :global(.ccard:focus-visible)` focus-visible (:focus-visible, :focus-visible): same [T lib/cawco/updates/ChannelCards.svelte:105 <RadioGroup.Item> → now lib/cawco/updates/ChannelCards.svelte:112 <RadioGroup.Item>]
+- lib/cawco/views/ViewPipeline.svelte:177 `outline: 1px dashed var(--border-control)` (first pass: rendered: same; not rendered: ancestor-state; not rendered: unrendered)
+    - `.row[data-kind="dropped"] .bar` rest: same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+    - `.row[data-kind="dropped"] .bar` state (lib/cawco/views/ViewPipeline.svelte:43 <div> [data-kind=dropped]): same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+    - `.row[data-kind="dropped"] .bar` focus-visible (lib/cawco/views/ViewPipeline.svelte:43 <div> [data-kind=dropped], :focus-visible): same [T lib/cawco/views/ViewPipeline.svelte:54 <span> → now lib/cawco/views/ViewPipeline.svelte:81 <span>]
+- lib/cawco/workspace/PaneTabs.svelte:1849 `outline: none` (first pass: not rendered: css)
+    - `:global(.kit-pop.session-details-popover)` rest: same [T lib/cawco/workspace/PaneTabs.svelte:1762 <HangCard> → now lib/cawco/workspace/PaneTabs.svelte:1841 <HangCard>]
+    - `:global(.kit-pop.session-details-popover)` focus-visible (:focus-visible): same [T lib/cawco/workspace/PaneTabs.svelte:1762 <HangCard> → now lib/cawco/workspace/PaneTabs.svelte:1841 <HangCard>]
+- lib/components/features/MarkdownEditor.svelte:268 `outline: var(--focus-ring-width) solid var(--focus-ring) !important` (first pass: not rendered: unmapped)
+    - `.crepe-host :global(.milkdown :focus-visible)` rest: same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+    - `.crepe-host :global(.milkdown :focus-visible)` state (:focus-visible): same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+    - `.crepe-host :global(.milkdown :focus-visible)` focus-visible (:focus-visible, :focus-visible): same [T built (the library's DOM, from the selector) → now built (the library's DOM, from the selector)]
+- lib/components/features/workflows/WorkflowNodeCard.svelte:175 `outline: var(--focus-ring-width) solid transparent` (first pass: rendered: same)
+    - `.wf-node` rest: same [T lib/components/features/workflows/WorkflowNodeCard.svelte:90 <article> → now lib/components/features/workflows/WorkflowNodeCard.svelte:96 <article>]
+    - `.wf-node` focus-visible (:focus-visible): same [T lib/components/features/workflows/WorkflowNodeCard.svelte:90 <article> → now lib/components/features/workflows/WorkflowNodeCard.svelte:96 <article>]
+- lib/components/ui/fluid-tabs/TabItem.svelte:438 `outline: none` — DIFFERS (first pass: rendered: differs)
+    - `.hit` rest: **differs** outlineColor: oklch(0.495 0.014 74) → oklch(0.55 0.165 33) [T lib/components/ui/fluid-tabs/TabItem.svelte:317 <svelte:element> → now lib/components/ui/fluid-tabs/TabItem.svelte:359 <svelte:element>]
+    - `.hit` focus-visible (:focus-visible): **differs** outlineColor: oklch(0.495 0.014 74) → oklch(0.55 0.165 33); outlineWidth: 3px → 2px [T lib/components/ui/fluid-tabs/TabItem.svelte:317 <svelte:element> → now lib/components/ui/fluid-tabs/TabItem.svelte:359 <svelte:element>]
+- routes/(app)/config/connections/+page.svelte:836 `outline: var(--focus-ring-width) solid var(--focus-ring)` (first pass: rendered: same)
+    - `.card:focus-visible` rest: same [T routes/(app)/config/connections/+page.svelte:518 <button> → now routes/(app)/config/connections/+page.svelte:540 <button>]
+    - `.card:focus-visible` state (:focus-visible): same [T routes/(app)/config/connections/+page.svelte:518 <button> → now routes/(app)/config/connections/+page.svelte:540 <button>]
+    - `.card:focus-visible` focus-visible (:focus-visible, :focus-visible): same [T routes/(app)/config/connections/+page.svelte:518 <button> → now routes/(app)/config/connections/+page.svelte:540 <button>]
