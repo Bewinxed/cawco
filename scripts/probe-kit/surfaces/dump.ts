@@ -52,13 +52,19 @@ export function pageDump(): Dump {
       }
     }
     if (el instanceof HTMLImageElement) {
+      // A served image is named by its path: each run's servers have their own port.
+      const source = el.currentSrc.startsWith("http")
+        ? new URL(el.currentSrc).pathname
+        : el.currentSrc;
       return [
-        `img #${hash(el.currentSrc)} ${el.naturalWidth}x${el.naturalHeight} ${el.complete ? "complete" : "loading"}`,
+        `img #${hash(source)} ${el.naturalWidth}x${el.naturalHeight} ${el.complete ? "complete" : "loading"}`,
       ];
     }
     return [];
   };
+  const keys = new Map<Element, string>();
   const visit = (el: Element, key: string) => {
+    keys.set(el, key);
     const r = el.getBoundingClientRect();
     const style = el.getAttribute("style");
     const parts = [
@@ -82,5 +88,27 @@ export function pageDump(): Dump {
     }
   };
   visit(document.body, "body");
+  // What paints differently with the same document: a motion not yet at
+  // rest (its target, what it moves, how far along), and a face not loaded.
+  for (const run of document.getAnimations()) {
+    const effect = run.effect as KeyframeEffect | null;
+    const target = effect?.target ?? null;
+    let what = "script";
+    if (run instanceof CSSTransition) {
+      what = run.transitionProperty;
+    } else if (run instanceof CSSAnimation) {
+      what = run.animationName;
+    }
+    out.push([
+      `(animation) ${target ? (keys.get(target) ?? target.tagName) : "none"} ${what}`,
+      `${run.playState} at ${Math.round(Number(run.currentTime ?? 0))}`,
+    ]);
+  }
+  for (const face of document.fonts) {
+    out.push([
+      `(font) ${face.family} ${face.weight} ${face.style} ${face.unicodeRange}`,
+      face.status,
+    ]);
+  }
   return out;
 }
