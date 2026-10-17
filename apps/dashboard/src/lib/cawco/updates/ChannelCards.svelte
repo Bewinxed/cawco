@@ -68,11 +68,16 @@
   const release = (channel: Channel) => channels?.channels[channel];
 </script>
 
-<div class="chooser">
+<!-- Room above the cards for Caw's box, so nothing overlaps the header. -->
+<div
+  class="pt-(--caw-peek-rise)"
+  style:--cards-w="min(100%, calc(var(--channel-card-max) * 2 + var(--space-3)))"
+  style:--cols="repeat(2, minmax(0, var(--channel-card-max)))"
+>
   <RadioGroup.Root
     data-cards
     aria-label="Channel"
-    class="cards"
+    class="relative grid w-(--cards-w) grid-cols-(--cols) gap-space-3"
     onValueChange={(next) => {
       chosen = next as Channel;
     }}
@@ -81,19 +86,21 @@
   >
     {#if motionOk.current}
       <span
+        data-slot="frame"
         aria-hidden="true"
-        class="frame"
+        class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess"
         data-dir={index === 1 ? "end" : "start"}
-        style:inset-inline-end={index === 0 ? HALF : "0"}
-        style:inset-inline-start={index === 0 ? "0" : HALF}
+        style:--frame-end={index === 0 ? HALF : "0"}
+        style:--frame-start={index === 0 ? "0" : HALF}
       ></span>
     {:else}
       {#key chosen}
         <span
+          data-slot="frame"
           aria-hidden="true"
-          class="frame"
-          style:inset-inline-end={index === 0 ? HALF : "0"}
-          style:inset-inline-start={index === 0 ? "0" : HALF}
+          class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess"
+          style:--frame-end={index === 0 ? HALF : "0"}
+          style:--frame-start={index === 0 ? "0" : HALF}
           in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
           out:fade={{ duration: dur("--dur-exit") }}
         ></span>
@@ -102,23 +109,32 @@
 
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
-      <RadioGroup.Item class="ccard" value={card.channel}>
-        <span data-slot="name" class="name">{card.name}</span>
-        <span class="description">{card.description}</span>
-        <span class="release">
+      <RadioGroup.Item
+        class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-7 pb-space-4 type-meta text-start text-ink-strong transition-control cursor-pointer hover:bg-surface-hover active:bg-surface-fill hover:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+        value={card.channel}
+      >
+        <span
+          data-slot="name"
+          class="relative z-2 type-label text-ink-strong">{card.name}</span
+        >
+        <span class="relative z-2 mt-space-1 text-ink-muted"
+          >{card.description}</span
+        >
+        <span class="relative z-2 mt-space-2 text-ink-strong">
           {#if channels === null}
             —
           {:else if found}
-            <code data-slot="num" class="num"
+            <code data-slot="num" class="num font-mono text-size-code"
               >{displayVersion(found.version)}</code
             >
           {:else}
-            <span class="none">No release yet</span>
+            <span class="text-ink-muted">No release yet</span>
           {/if}
         </span>
         {#if card.channel === current}
+          <!-- literal: 8px -->
           <span
-            class="status mark-line"
+            class="mark-line relative z-2 mt-space-2 flex items-center gap-(--gap) text-ink-strong"
             in:blur={{
               duration: dur("--dur-panel"),
               easing: easeOut,
@@ -129,10 +145,24 @@
               easing: easeOut,
               amount: 2,
             }}
+            style:--gap="8px"
           >
-            <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
-              <circle cx="10" cy="10" r="10"></circle>
-              <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
+            <svg
+              data-slot="check"
+              aria-hidden="true"
+              class="size-icon-md flex-none self-center fill-none"
+              viewBox="0 0 20 20"
+            >
+              <circle
+                cx="10"
+                cy="10"
+                r="10"
+                class="fill-status-live-bg stroke-none"
+              ></circle>
+              <path
+                d="M6.2 10.4l2.5 2.5 5.1-5.6"
+                class="stroke-status-live-glyph"
+              ></path>
             </svg>
             <span>The fleet follows {card.name}</span>
           </span>
@@ -141,20 +171,25 @@
     {/each}
 
     {#key chosen}
+      <!-- Caw: his box stands on the chosen card, painted over it. -->
       <span
         aria-hidden="true"
-        class="caw"
-        style:left={index === 0
-          ? "calc((100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"
-          : "calc(100% - (100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"}
+        class="pointer-events-none absolute top-(--caw-top) left-(--caw-left) z-3 size-(--caw-peek)"
         in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
         out:fade={{ duration: dur("--dur-exit") }}
+        style:--caw-left={index === 0
+          ? "calc((100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"
+          : "calc(100% - (100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"}
+        style:--caw-top="calc(var(--caw-peek-rise) * -1)"
       >
+        <!-- literal: 50% 56.84% -->
         <img
           alt=""
+          class="absolute inset-0 size-full origin-(--origin) transform-(--scaled) select-none"
           draggable="false"
           src={dark ? PICTURES[chosen].dark : PICTURES[chosen].light}
-          style:transform="scale({PICTURES[chosen].scale})"
+          style:--origin="50% 56.84%"
+          style:--scaled="scale({PICTURES[chosen].scale})"
         />
       </span>
     {/key}
@@ -162,133 +197,34 @@
 </div>
 
 <style>
-  /* Room above the cards for Caw's box, so nothing overlaps the header. */
-  .chooser {
-    padding-top: var(--caw-peek-rise);
-  }
-  .chooser :global(.cards) {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, var(--channel-card-max)));
-    gap: var(--space-3);
-    inline-size: min(100%, calc(var(--channel-card-max) * 2 + var(--space-3)));
-  }
-  .chooser :global(.ccard) {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-7) var(--space-4) var(--space-4);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    background: none;
-    color: var(--ink-strong);
-    font: var(--type-meta);
-    text-align: start;
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .chooser :global(.ccard) > :global(*) {
-    position: relative;
-    z-index: 2;
-  }
-  .chooser :global(.ccard:active) {
-    background: var(--surface-fill);
-  }
-  @media (hover: hover) {
-    .chooser :global(.ccard:hover) {
-      background: var(--surface-hover);
-    }
-  }
-  .chooser :global(.ccard:focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: -2px;
-  }
-  .name {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .description {
-    margin-top: var(--space-1);
-    color: var(--ink-muted);
-  }
-  .release {
-    margin-top: var(--space-2);
-    color: var(--ink-strong);
-  }
-  .release code {
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-  }
-  .none {
-    color: var(--ink-muted);
-  }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: var(--space-2);
-    color: var(--ink-strong);
-  }
-  /* The one frame for the pair: drawn under the cards' text, it is what moves. */
-  .frame {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: 1;
-    border: 1px solid var(--brand-solid);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-    pointer-events: none;
-  }
-  /* The leading edge starts at once, the trailing edge after --dur-ghost. */
+  /* residual: unmapped — the frame's leading edge starts at once, the trailing edge after --dur-ghost (needs transition token: a different delay per property) */
   @media (prefers-reduced-motion: no-preference) {
-    .frame[data-dir="end"] {
+    [data-slot="frame"][data-dir="end"] {
       transition:
         inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms,
         inset-inline-start var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
     }
-    .frame[data-dir="start"] {
+    [data-slot="frame"][data-dir="start"] {
       transition:
         inset-inline-start var(--dur-fade) var(--ease-in-out) 0ms,
         inset-inline-end var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
     }
   }
-  /* Caw: his box stands on the chosen card, painted over it. */
-  .caw {
-    position: absolute;
-    top: calc(var(--caw-peek-rise) * -1);
-    z-index: 3;
-    inline-size: var(--caw-peek);
-    block-size: var(--caw-peek);
-    pointer-events: none;
-  }
-  .caw img {
-    position: absolute;
-    inset: 0;
-    inline-size: 100%;
-    block-size: 100%;
-    transform-origin: 50% 56.84%;
-    user-select: none;
-  }
-  .check {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    align-self: center;
-    fill: none;
+
+  /* residual: svg-paint */
+  [data-slot="check"] {
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  .check circle {
-    fill: var(--status-live-bg);
-    stroke: none;
-  }
-  .check path {
-    stroke: var(--status-live-glyph);
+  [data-slot="check"] path {
     stroke-width: 1.8;
     stroke-dasharray: 12;
     stroke-dashoffset: 0;
-    @media (prefers-reduced-motion: no-preference) {
+  }
+
+  /* residual: keyframes */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="check"] path {
       animation: draw var(--dur-toggle) var(--ease-out) var(--dur-ghost) both;
     }
   }
