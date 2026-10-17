@@ -777,14 +777,38 @@
        The box tweens as cards arrive and the head's words change (a stage
        moves under it). -->
   {@const filed = ids.flatMap((id) => tasks.filter((task) => task.id === id))}
-  <div class="thread-tasks" data-thread-tasks {@attach morph()}>
+  <div
+    class="has-data-tasks-head:pt-space-3"
+    data-thread-tasks
+    {@attach morph()}
+  >
     {#if filed.length > 0}
-      <p class="tasks-head" data-tasks-head>
+      <!-- What the cards are, in the kit's meta line over them. -->
+      <p
+        class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted"
+        data-tasks-head
+      >
         <MorphText text={filedWords(filed)} />
       </p>
-      <ul class="tasks-grid">
+      <!-- Each task is two tracks, its card's and what it needs of you, and
+           the card tracks are all one `1fr`: every card as tall as the
+           tallest in the block, whatever it has to say; a task's needs take
+           only their own track (`auto`, empty for a task that needs
+           nothing). -->
+      <!-- literal: 14rem -->
+      <ul
+        class="grid grid-cols-(--task-cols) auto-rows-(--task-rows) gap-x-space-2 gap-y-0 m-0 p-0 list-none"
+        style:--task-cols="repeat(auto-fill, minmax(14rem, 1fr))"
+        style:--task-rows="1fr auto"
+      >
         {#each filed as task (task.id)}
-          <li class="thread-task">
+          <!-- literal: 74ch -->
+          <li
+            data-slot="thread-pane-task"
+            class="grid row-start-(--task-span) grid-rows-subgrid min-w-0"
+            style:--task-span="span 2"
+            style:--needs-w="74ch"
+          >
             <TaskCard
               href={taskHref(task.id)}
               {kindOf}
@@ -806,7 +830,7 @@
           </li>
         {/each}
       </ul>
-      <div class="board-link">
+      <div class="mt-space-3">
         <Button
           class="pressable"
           href="/project/{encodeURIComponent(projectId)}"
@@ -828,7 +852,7 @@
     shown={openFile}
   />
   {#if messageId === boardAfter}
-    <div class="board-link">
+    <div class="mt-space-3">
       <Button
         class="pressable"
         href="/project/{encodeURIComponent(projectId)}"
@@ -855,7 +879,7 @@
   <!-- He lands here from wherever he stood (the empty board's 80px Caw). -->
   <div
     data-slot="seat"
-    class="seat"
+    class="w-(--seat)"
     style:--seat="{seatSize}px"
     {@attach land(() => (projectId ? `caw:${projectId}` : undefined), {
       uniform: true,
@@ -872,14 +896,32 @@
 {/snippet}
 
 {#snippet slide()}
-  <div class="transcript-slide">
+  <div
+    data-slot="thread-pane-slide"
+    class="relative flex flex-col flex-auto min-h-0 overflow-hidden isolate"
+  >
     {#if readProblem}
-      <p class="problem" role="alert" in:crossIn>
+      <!-- literal: 46ch -->
+      <p
+        class="m-auto max-w-(--problem-w) p-space-6 type-body text-ink-muted"
+        role="alert"
+        style:--problem-w="46ch"
+        in:crossIn
+      >
         The thread could not be read: {readProblem}
       </p>
     {:else if hero}
-      <div class="hero" data-thread-hero in:crossIn>
+      <!-- The hero: the empty board's (project page `.caw-empty`), centred
+           in the room over the composer, which it clears as the transcript
+           does. Its own stacking: what is raised inside it (an Earlier row's
+           mark) stays under the foot fade as it scrolls past the composer. -->
+      <div
+        class="flex flex-auto flex-col justify-center min-h-0 pt-space-6 px-space-5 pb-(--composer-clearance) overflow-y-auto isolate"
+        data-thread-hero
+        in:crossIn
+      >
         <EmptyState
+          class="items-center w-full max-w-c-starters-w mx-auto text-center"
           line={view && !view.on && !docked
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
@@ -888,7 +930,7 @@
           {#snippet mark()}
             <div
               data-slot="caw-80"
-              class="caw-80"
+              class="grid place-items-center mb-space-3"
               data-share={projectId ? `caw:${projectId}` : undefined}
               out:seatHim|global
             >
@@ -906,7 +948,10 @@
         </EmptyState>
       </div>
     {:else if messages !== null}
-      <div class="state">
+      <div
+        data-slot="thread-pane-state"
+        class="flex flex-col flex-auto min-h-0"
+      >
         <Transcript
           agentName="Caw"
           bare
@@ -932,21 +977,30 @@
       <FootFade solid={foot.stack ? fadeSolid : undefined} />
     {/if}
     {#if veiled}
-      <div class="veil" in:crossIn>
+      <div
+        class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
+        in:crossIn
+      >
         <TranscriptSkeleton />
       </div>
     {/if}
   </div>
 {/snippet}
 
-<div data-slot="pane" class="pane" bind:clientWidth={paneWidth}>
+<div
+  data-slot="pane"
+  class="@container flex flex-col flex-auto min-w-0 min-h-0 bg-surface-recess"
+  bind:clientWidth={paneWidth}
+>
   <div
     data-slot="body"
-    class="body"
+    class="relative flex flex-col flex-auto min-w-0 min-h-0"
     style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
   >
     {#if docked}
-      <div class="under-file" inert={openFile !== null}>
+      <!-- The transcript under a file in its place: laid out as it was, so
+           its scroll is where Close finds it. -->
+      <div class="contents" inert={openFile !== null}>
         {@render slide()}
       </div>
     {:else}
@@ -969,8 +1023,12 @@
     {/if}
     {#if docked && writable}
       <!-- No group lends this pane a composer: it draws its own, where the
-           group's stands (PaneLeaf `.dock`), from the same binding. -->
-      <div data-slot="composer-dock" class="composer-dock">
+           group's stands (PaneLeaf `.dock`), from the same binding: over the
+           pane, taking no press but the composer's own. -->
+      <div
+        data-slot="composer-dock"
+        class="absolute inset-0 z-1 pointer-events-none"
+      >
         <RegionBoundary kept="Your draft is kept." region="composer">
           <Composer
             agentName={binding.agentName}
@@ -999,7 +1057,12 @@
     {#if docked && openFile}
       <!-- No split to stand in: the file takes the thread's place, over
            its transcript and composer, until Close gives it back. -->
-      <div class="file-in-place" data-file-in-place in:crossIn out:crossOut>
+      <div
+        class="absolute inset-0 z-21 flex bg-surface-raised"
+        data-file-in-place
+        in:crossIn
+        out:crossOut
+      >
         <RegionBoundary region="file">
           {@render fileSurface(undefined)}
         </RegionBoundary>
@@ -1007,18 +1070,27 @@
     {/if}
     {#if view?.problem}
       <!-- No composer: Caw cannot start to read it. What is true, and the
-           one thing that changes it. -->
+           one thing that changes it, where the composer stands when there
+           is one, as it stands (Composer .dock and .cin): over the pane's
+           foot, in its column and at its lift, on its surface. The
+           transcript clears it as it clears the composer. Its lift reads
+           the screen's bottom inset off this box itself (--safe-bottom does
+           not inherit: data-safe-bottom sets it here). -->
       <div
-        class="off"
+        class="absolute inset-x-0 bottom-(--off-bottom) z-20 w-c-composer-w mx-auto"
         data-safe-bottom
+        style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
         bind:clientHeight={offHeight}
         in:crossIn
         out:crossOut
       >
-        <Alert class="off-line" role="status">
+        <Alert
+          class="items-center border border-border-control rounded-lg bg-surface-raised shadow-tile"
+          role="status"
+        >
           <AlertDescription>{view.problem}</AlertDescription>
           {#if noMachine}
-            <AlertAction>
+            <AlertAction class="inset-y-0 flex items-center">
               <Button
                 label="Check machines"
                 onclick={() => {
@@ -1063,192 +1135,50 @@
 {/snippet}
 
 <style>
-  .pane {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-recess);
-  }
-  .body {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-  }
-  .transcript-slide {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    isolation: isolate;
-    /* The transcript's scroll, in reach of its head blur (HeadFade). */
+  /* residual: unmapped — the transcript's scroll, in reach of its head blur
+     (HeadFade): timeline-scope has no utility. */
+  [data-slot="thread-pane-slide"] {
     timeline-scope: --transcript-head;
   }
-  .state {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  /* A thread has no tool rail: its rows are messages and event lines, so
-     the rail's column is the rows' own edge (app.css .tx-columns, as it is
-     on a narrow screen) and the answered question's card stands on it. */
-  .state :global(.tx-columns) {
+
+  /* residual: foreign-dom — DOM the children draw. A thread has no tool
+     rail: its rows are messages and event lines, so the rail's column is
+     the rows' own edge (app.css .tx-columns, as it is on a narrow screen)
+     and the answered question's card stands on it. */
+  [data-slot="thread-pane-state"] :global(.tx-columns) {
     --x-rail: 0px;
   }
   /* A not-woken note's reason and Try again under its title, at the text
      column (SystemLine `.note.unread`): muted, since nothing failed. */
-  .state :global(.not-woken) {
+  [data-slot="thread-pane-state"] :global(.not-woken) {
     --fault-ink: var(--ink-muted);
   }
-  .veil {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-recess);
-  }
-  .problem {
-    margin: auto;
-    max-inline-size: 46ch;
-    padding: var(--space-6);
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  /* Where the composer stands when there is one, as it stands (Composer
-     .dock and .cin): over the pane's foot, in its column and at its lift,
-     on its surface. The transcript clears it as it clears the composer. */
-  .off {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-end: calc(var(--space-4) + var(--safe-bottom));
-    z-index: 20;
-    inline-size: var(--c-composer-w);
-    margin-inline: auto;
-  }
-  .off :global(.off-line) {
-    align-items: center;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .off :global(.off-line [data-slot="alert-action"]) {
-    inset-block: 0;
-    display: flex;
-    align-items: center;
-  }
-  .seat {
-    inline-size: var(--seat);
-  }
-  /* The hero: the empty board's (project page `.caw-empty`), centred in the
-     room over the composer, which it clears as the transcript does. */
-  .hero {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    justify-content: center;
-    min-block-size: 0;
-    padding: var(--space-6) var(--space-5) var(--composer-clearance);
-    overflow-y: auto;
-    /* Its own stacking: what is raised inside it (an Earlier row's mark)
-       stays under the foot fade as it scrolls past the composer. */
-    isolation: isolate;
-  }
-  .hero :global(.kit-empty) {
-    align-items: center;
-    inline-size: 100%;
-    max-inline-size: var(--c-starters-w);
-    margin-inline: auto;
-    text-align: center;
-  }
-  .hero :global(.kit-empty-action) {
+  /* The hero's starters fill the column (EmptyState's action cell). */
+  [data-thread-hero] :global(.kit-empty-action) {
     align-self: stretch;
   }
-  .caw-80 {
-    display: grid;
-    place-items: center;
-    margin-block-end: var(--space-3);
-  }
-  /* The docked composer's layer, as the group's (PaneLeaf `.dock`): over
-     the pane, taking no press but the composer's own. */
-  .composer-dock {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-  }
-  /* The transcript under a file in its place: laid out as it was, so its
-     scroll is where Close finds it. */
-  .under-file {
-    display: contents;
-  }
-  /* A file in the thread's own place, over its transcript and composer. The
-     pane is already a card (the dock's), so the file's card draws no frame
-     of its own inside it: no second shadow, corner or ground. */
-  .file-in-place {
-    position: absolute;
-    inset: 0;
-    z-index: 21;
-    display: flex;
-    background: var(--surface-raised);
-  }
-  .file-in-place :global(.side-card) {
+  /* A file in the thread's own place, over its transcript and composer.
+     The pane is already a card (the dock's), so the file's card draws no
+     frame of its own inside it: no second shadow, corner or ground. */
+  [data-file-in-place] :global(.side-card) {
     flex: 1 1 auto;
     padding-inline: 0;
     border-radius: 0;
     box-shadow: none;
   }
-  .thread-tasks:has(.tasks-head) {
-    padding-block-start: var(--space-3);
-  }
-  /* What the cards are, in the kit's meta line over them. */
-  .tasks-head {
-    margin: 0 0 var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* Each task is two tracks, its card's and what it needs of you, and the
-     card tracks are all one `1fr`: every card as tall as the tallest in the
-     block, whatever it has to say; a task's needs take only their own track
-     (`auto`, empty for a task that needs nothing). */
-  .tasks-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-    grid-auto-rows: 1fr auto;
-    column-gap: var(--space-2);
-    row-gap: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .thread-task {
-    display: grid;
-    grid-row: span 2;
-    grid-template-rows: subgrid;
-    min-inline-size: 0;
-  }
-  .thread-task > :global(.task-card) {
+  /* A task's card and what it needs of you, each a step above the next
+     (TaskCard and TaskNeedsFor take no class). */
+  [data-slot="thread-pane-task"] > :global([data-slot="task-card"]) {
     margin-block-end: var(--space-2);
   }
-  .thread-task > :global(.needs-for) {
+  [data-slot="thread-pane-task"] > :global(.needs-for) {
     margin-block-end: var(--space-2);
   }
   /* A task that needs you takes the row: its card, then what it needs and
-     the way to act, collapsed to the deliverable's first lines. */
-  .thread-task:has(:global(.needs-stack)) {
+     the way to act, collapsed to the deliverable's first lines (TaskNeeds'
+     stack, inside TaskNeedsFor). */
+  [data-slot="thread-pane-task"]:has(:global(.needs-stack)) {
     grid-column: 1 / -1;
-    max-inline-size: 74ch;
-  }
-  .board-link {
-    margin-block-start: var(--space-3);
+    max-inline-size: var(--needs-w);
   }
 </style>

@@ -72,16 +72,37 @@
   <meta content={topColour} name="theme-color" />
 </svelte:head>
 
+<!-- The strips are fixed elements themselves, not a static element's
+     ::after: WebKit finds the colour to extend by hit-testing the middle of
+     each edge of the viewport (ignoring pointer-events) and walking up the
+     hit element's renderer lineage to the first fixed or sticky box, whose
+     own background it takes (LocalFrameView.cpp, fixedContainerEdges:
+     `midpointOnSide`, `findFixedContainer`). A pseudo-element hits as its
+     host, so a static host led the walk to <body> and <html>, found no fixed
+     box, and Safari fell back to the page's background (the body's, the
+     bottom edge): the status bar took the page's ground on the home and the
+     drawer's surface while it was open. Over every layer, toasts' (sonner,
+     1000) included: the strip is the colour of whatever stands on its edge,
+     so it is never seen as itself. -->
 <div
   data-slot="edge-top"
   aria-hidden="true"
-  class="edge-top"
+  class="fixed inset-x-0 -top-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-top-background)"
   ontransitionend={read}
+  style:--edge-h="max(var(--icon-sm), env(safe-area-inset-top))"
   bind:this={top}
 ></div>
-<div data-slot="edge-bottom" aria-hidden="true" class="edge-bottom"></div>
+<div
+  data-slot="edge-bottom"
+  aria-hidden="true"
+  class="fixed inset-x-0 -bottom-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background)"
+  style:--edge-h="max(var(--icon-sm), env(safe-area-inset-bottom))"
+></div>
 
 <style>
+  /* residual: foreign-dom — the document's own root and body, and the
+     states read off the page from its root (the Shell's bar, a scrim, a
+     sheet), which set the edges' colours and clocks. */
   /* css-scope: the screen's edges are the document's own, set on its root */
   :global(:root) {
     --edge-top-under: var(--surface-raised);
@@ -106,19 +127,44 @@
      bar, or the wide bar hosting them on their shelf. Under the narrow
      query the bar draws itself raised even while hosting (Shell). */
   /* The bar is read down its own line of parents, the page's root to the
-     Shell's (app.html's body div, Shell `.shell` > `.main` > `.top`): asked
-     as `:root:has(.top.floating)`, every style pass after anything went into
+     Shell's (app.html's body div, Shell's shell > main > top, by their
+     data-slot hooks, and the bar's state attributes): asked as
+     `:root:has(.top.floating)`, every style pass after anything went into
      the page searched the whole document for it, twice — every streamed
      message, every forced read in a tab switch. Down a line of children it
      is four elements, and it is answered in the page the server sends. */
   /* css-scope: reads the Shell's bar from the root to colour the top edge */
-  :global(:root:has(> body > div > .shell > .main > .top.floating)),
-  :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
+  :global(
+    :root:has(
+      > body
+        > div
+        > [data-slot="shell"]
+        > [data-slot="shell-main"]
+        > [data-slot="top"][data-floating]
+    )
+  ),
+  :global(
+    :root:has(
+      > body
+        > div
+        > [data-slot="shell"]
+        > [data-slot="shell-main"]
+        > [data-slot="top"][data-hosting]
+    )
+  ) {
     --edge-top-under: var(--surface-shelf);
   }
   @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
     /* css-scope: reads the Shell's bar from the root to colour the top edge */
-    :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
+    :global(
+      :root:has(
+        > body
+          > div
+          > [data-slot="shell"]
+          > [data-slot="shell-main"]
+          > [data-slot="top"][data-hosting]
+      )
+    ) {
       --edge-top-under: var(--surface-raised);
     }
   }
@@ -178,45 +224,21 @@
   /* css-scope: reads the Shell's sidebar sheet from the root */
   :global(
     :root:has(
-      > body > [data-slot="sheet-content"].rail-sheet[data-state="open"]
+      > body > [data-slot="sheet-content"][data-rail-sheet][data-state="open"]
     )
   ) {
     --edge-top-background: var(--sidebar);
     --edge-bottom-background: var(--sidebar);
   }
 
-  /* The strips are fixed elements themselves, not a static element's
-     ::after: WebKit finds the colour to extend by hit-testing the middle of
-     each edge of the viewport (ignoring pointer-events) and walking up the
-     hit element's renderer lineage to the first fixed or sticky box, whose
-     own background it takes (LocalFrameView.cpp, fixedContainerEdges:
-     `midpointOnSide`, `findFixedContainer`). A pseudo-element hits as its
-     host, so a static host led the walk to <body> and <html>, found no fixed
-     box, and Safari fell back to the page's background (the body's, the
-     bottom edge): the status bar took the page's ground on the home and the
-     drawer's surface while it was open. */
-  .edge-top,
-  .edge-bottom {
-    position: fixed;
-    inset-inline: 0;
-    /* Over every layer, toasts' (sonner, 1000) included: the strip is the
-       colour of whatever stands on its edge, so it is never seen as itself. */
-    z-index: 1001;
-    pointer-events: none;
-    opacity: var(--edge-shown);
-  }
-  .edge-top {
-    top: -7px;
-    block-size: max(12px, env(safe-area-inset-top));
-    background-color: var(--edge-top-background);
+  /* residual: unmapped — each strip's two clocks in one transition, its
+     colour's and its showing's (needs a transition token). */
+  [data-slot="edge-top"] {
     transition:
       background-color var(--edge-top-fade) var(--ease-out),
       opacity var(--edge-show-fade) var(--ease-out);
   }
-  .edge-bottom {
-    bottom: -7px;
-    block-size: max(12px, env(safe-area-inset-bottom));
-    background-color: var(--edge-bottom-background);
+  [data-slot="edge-bottom"] {
     transition:
       background-color var(--edge-bottom-fade) var(--ease-out),
       opacity var(--edge-show-fade) var(--ease-out);
