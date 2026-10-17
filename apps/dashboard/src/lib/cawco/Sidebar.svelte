@@ -169,13 +169,14 @@
    * rows ends up unreadable.
    *
    * Heights are the same two the rail always had: the nav band is tall because
-   * six destinations can afford to be, and a LIST row is 30px because a rail of
-   * 40px rows is a rail that fits eight things.
+   * six destinations can afford to be, and a LIST row is 30px (the rail's
+   * `--rail-list-row-h`) because a rail of 40px rows is a rail that fits
+   * eight things.
    */
-  const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
+  const NAV_ROW = "h-c-nav-h gap-2.5 px-2.5 text-body";
   /** A project's row: it ends where a session's does (`pr-2`), so the
    *  counts at the trailing edge stand in one column down the rail. */
-  const LIST_ROW = "h-[30px] gap-2.5 pl-2.5 pr-2 py-0";
+  const LIST_ROW = "h-(--rail-list-row-h) gap-2.5 pl-2.5 pr-2 py-0";
   /**
    * A row under a project that is no session ("N older", "No sessions"):
    * the compact session row's own measures (SessionRow), so its lead and its
@@ -184,17 +185,15 @@
   const SUB_ROW =
     "h-(--row-compact-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end)";
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: ".tree-mark" };
+  const TREE: BranchOptions = { glyph: '[data-slot="tree-mark"]' };
   /**
    * What stands in a row's lead slot under a project: a tree mark (a
    * session's, the "N older" row's), or the glyph of a row that is neither
    * ("No sessions"). The rail's arm ends there.
    */
-  const LEAD = ".tree-mark, .row-lead";
+  const LEAD = '[data-slot="tree-mark"], [data-slot="sidebar-row-lead"]';
   /** A project's rows: each hangs off the project's own mark. */
   const LEAD_TREE: BranchOptions = { glyph: LEAD };
-  /** The height the loading rows stand at: a list row's. */
-  const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
    *  24px of nothing between every section; the label already separates them. */
   const GROUP = "px-2 py-space-1";
@@ -253,7 +252,7 @@
    * varies; the column does not, which is the only reason every label in the
    * rail starts at the same x (10px of row padding + 18 + 10 of gap = 38px).
    */
-  const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
+  const SLOT = "inline-flex size-space-5 shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
   const SLOT_GLYPH = "size-icon-md";
 
@@ -678,17 +677,18 @@
   const fleetCount = $derived(cawco.blockedCount || cawco.runningRows.length);
 </script>
 
-{#snippet pending(rows: number, height: string)}
+{#snippet pending(rows: number)}
   <!-- Rows where the next groups will stand, while their read is out, at the
-       height of the rows that replace them. Each stage has its own, gone when
-       that stage's groups arrive, so nothing drawn is ever pushed down. -->
+       height of the rows that replace them (a list row's). Each stage has
+       its own, gone when that stage's groups arrive, so nothing drawn is
+       ever pushed down. -->
   <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
     <div class="flex h-space-8 items-center {GROUP_LABEL}">
       <Skeleton class="h-icon-sm w-20" />
     </div>
     <div class="flex flex-col gap-0.5">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
-        <Skeleton class="{height} w-full" />
+        <Skeleton class="h-(--rail-list-row-h) w-full" />
       {/each}
     </div>
   </Sidebar.Group>
@@ -778,7 +778,7 @@
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom(".tree-mark")}
+        {@attach nestFrom('[data-slot="tree-mark"]')}
       >
         {#each node.recent as child (child.row.id)}
           {@render subRow(child, list)}
@@ -796,8 +796,11 @@
   </li>
 {/snippet}
 
+<!-- literal: 30px (a list row, and the footer's avatar button) -->
 <div
   class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-page text-ink-strong"
+  style:--rail-list-row-h="30px"
+  style:--rail-avatar-size="30px"
   bind:this={railEl}
   {@attach highlight({ rows: ROWS })}
 >
@@ -807,7 +810,7 @@
     <!-- The wordmark, and in the header's corner what is started from
          anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
          the conversations it jumps between. -->
-    <div class="brand-row flex items-center gap-space-1">
+    <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
       <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
@@ -818,19 +821,25 @@
                 class="{props.class} mark-line no-underline"
               >
                 <!-- The app's own icon (the crow on spark), in the lead
-                     column every row's mark stands in. -->
+                     column every row's mark stands in: the column's 18px
+                     tile, on the tile's radius. Its edge is drawn inside it
+                     (a negative offset), so the box stays 18px and the icon
+                     keeps its shape on the rail in either theme. -->
                 <img
                   alt=""
-                  class="brand-icon"
+                  class="flex-none size-space-5 rounded-xs outline outline-image-outline -outline-offset-1"
                   height="18"
                   src={cawcoIcon}
                   width="18"
                 />
                 <!-- The wordmark is the logotype, set as a lockup with the
-                     icon in its own box (its face is Nunito, not a label's). -->
+                     icon in its own box (its face is Nunito, not a label's),
+                     a body line tall. -->
                 <span
-                  class="brand-wordmark min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
-                  data-box>Caw&amp;Co</span
+                  class="inline-flex items-center h-(--wordmark-h) font-wordmark text-size-body font-(--weight-wordmark) tracking-wordmark leading-kpi min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+                  data-box
+                  style:--wordmark-h="calc(var(--text-body) * var(--leading-body))"
+                  >Caw&amp;Co</span
                 >
               </a>
             {/snippet}
@@ -839,14 +848,16 @@
       </Sidebar.Menu>
       <Tip keys="⇧⌘N" label="Start session">
         {#snippet children(tip)}
+          <!-- The header's corner action: an icon button on the nav row's
+               height. -->
           <button
             {...tip}
             aria-label="Start session"
-            class="head-action focus-inset touch-hit"
+            class="focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none rounded-sm bg-transparent text-ink-muted cursor-pointer transition-control hover:bg-surface-hover hover:text-ink-strong"
             onclick={() => newSession()}
             type="button"
           >
-            <IconPlus />
+            <IconPlus class="size-space-5" />
           </button>
         {/snippet}
       </Tip>
@@ -866,18 +877,21 @@
   >
     {#if sheet && onsearch}
       <!-- The phone's search: the Jump palette's field, which opens Jump
-           hanging from the bar's glass. -->
+           hanging from the bar's glass, standing where the sheet starts; a
+           press closes the sheet and opens the palette. -->
       <div class="px-2 pb-space-1">
+        <!-- literal: 44px -->
         <button
           data-slot="search"
           aria-haspopup="dialog"
-          class="search mark-line press-tint focus-inset"
+          class="mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-(--search-h) px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
           data-share="jump"
           onclick={() => onsearch()}
+          style:--search-h="44px"
           type="button"
         >
-          <IconSearch />
-          <span>Search sessions, projects, machines</span>
+          <IconSearch class="flex-none size-icon-md" />
+          <span class="truncate">Search sessions, projects, machines</span>
         </button>
       </div>
     {/if}
@@ -909,9 +923,8 @@
                  the kit's active and hover inks are for a plain count, and
                  on the live fill the active one reads 3.3:1. -->
             <Sidebar.MenuBadge
-              class={cawco.blockedCount > 0
-                ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
-                : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!"}
+              class="bg-status-live-bg text-status-live-ink! data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink!"
+              data-blocked={cawco.blockedCount > 0 || undefined}
               data-flip="pop box"
             >
               <MorphText text={String(fleetCount)} />
@@ -1049,7 +1062,8 @@
                         {href}
                         {...props}
                         aria-current={here ? "page" : undefined}
-                        class="{props.class} mark-line [--mark-hit-gap:--spacing(2.5)]"
+                        class="{props.class} mark-line"
+                        style:--mark-hit-gap="calc(var(--spacing) * 2.5)"
                       >
                         <ProjectMark
                           count={runningCount}
@@ -1095,7 +1109,7 @@
                     data-slot="sidebar-menu-sub"
                     in:branch={LEAD_TREE}
                     out:branch={LEAD_TREE}
-                    {@attach nestFrom(".tree-mark", LEAD)}
+                    {@attach nestFrom('[data-slot="tree-mark"]', LEAD)}
                   >
                     {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
                       {@render subRow(node, "projects")}
@@ -1119,8 +1133,10 @@
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
                         >
-                          <span class="{SLOT} row-lead" data-box
-                            ><IconPlus class="size-icon-sm" /></span
+                          <span
+                            data-slot="sidebar-row-lead"
+                            class={SLOT}
+                            data-box><IconPlus class="size-icon-sm" /></span
                           >
                           <span>No sessions — start one</span>
                         </Sidebar.MenuSubButton>
@@ -1134,7 +1150,7 @@
         {/if}
       </Sidebar.Group>
     {:else}
-      {@render pending(6, LIST_ROW_H)}
+      {@render pending(6)}
     {/if}
     {#if !narrow}
       <!-- Everything else that can be opened, after the projects. -->
@@ -1146,7 +1162,7 @@
       <Sidebar.Group class={GROUP} data-flip>
         <Sidebar.GroupLabel class={GROUP_LABEL}>
           Machines
-          <span class="machines-count">{machinesOnline()} online</span>
+          <span class="ms-auto num">{machinesOnline()} online</span>
         </Sidebar.GroupLabel>
         <MachinesList />
       </Sidebar.Group>
@@ -1172,12 +1188,13 @@
               <Sidebar.MenuButton
                 {...tip}
                 aria-label="You"
-                class="touch-hit size-[30px] justify-center overflow-visible p-0"
+                class="touch-hit size-(--rail-avatar-size) justify-center overflow-visible p-0"
               >
-                <!-- No picture of the reader yet: Caw stands in. -->
+                <!-- No picture of the reader yet: Caw stands in, the brand
+                     icon as a round picture. -->
                 <img
                   alt=""
-                  class="brand-icon avatar"
+                  class="flex-none size-space-5 rounded-pill outline outline-image-outline -outline-offset-1"
                   height="18"
                   src={cawcoIcon}
                   width="18"
@@ -1188,7 +1205,10 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->
-      <div class="ms-auto flex items-center gap-space-1">
+      <div
+        data-slot="sidebar-settings"
+        class="ms-auto flex items-center gap-space-1"
+      >
         <Tip label="Configure">
           {#snippet children(tip)}
             <Button
@@ -1216,103 +1236,27 @@
 <!-- end flex column wrapper -->
 
 <style>
-  /* A forget's tray and its fault under a folder row, set in by the rail's
-     row padding so they sit inside the rail's column. */
-  :global(.rail-forget) {
+  /* residual: foreign-dom — child components' roots, named by the class
+     this file passes them. A forget's tray and its fault under a folder
+     row (ForgetProjectTray hands the class to its line, its RowFault and
+     its AskHere), set in by the rail's row padding so they sit inside the
+     rail's column. */
+  [data-slot="sidebar-menu-item"] :global(.rail-forget) {
     --ask-indent: var(--space-1);
     --ask-end: var(--space-1);
     --fault-indent: var(--space-2);
     --fault-end: var(--space-2);
   }
-  .brand-wordmark {
-    display: inline-flex;
-    align-items: center;
-    block-size: calc(var(--text-body) * var(--leading-body));
-    font-family: var(--font-wordmark);
-    font-size: var(--text-body);
-    font-weight: var(--weight-wordmark);
-    letter-spacing: var(--track-wordmark);
-    line-height: var(--leading-kpi);
-  }
-
-  /* The brand row's icon: the lead column's 18px tile, on the tile's radius.
-     Its edge is drawn inside it (a negative offset), so the box stays 18px
-     and the icon keeps its shape on the rail in either theme. */
-  .brand-icon {
-    flex: none;
-    inline-size: 18px;
-    block-size: 18px;
-    border-radius: var(--radius-xs);
-    outline: 1px solid var(--image-outline);
-    outline-offset: -1px;
-  }
-  /* The same picture as the reader's placeholder: a round one. */
-  .brand-icon.avatar {
-    border-radius: var(--radius-pill);
-  }
-  /* The phone's search: Jump's field, standing where the sheet starts; a
-     press closes the sheet and opens the palette, hanging from the bar's
-     glass. */
-  .search {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    min-block-size: 44px;
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-align: start;
-    cursor: text;
-  }
-  .search :global(svg) {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .search span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .machines-count {
-    margin-inline-start: auto;
-    font-variant-numeric: tabular-nums;
-  }
-  /* The header's corner actions: icon buttons on the nav row's height. */
-  .head-action {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    inline-size: var(--c-nav-h);
-    block-size: var(--c-nav-h);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .head-action :global(svg) {
-    inline-size: 18px;
-    block-size: 18px;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .head-action:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  /* Configure, while a /config page is open: the selected tint, crossing
-     over --dur-control like every control's colour. */
-  :global(.rail-configure[aria-current="page"]) {
+  /* Configure (the kit Button), while a /config page is open: the selected
+     tint, crossing over --dur-control like every control's colour. The
+     Button's own transition and press are an arbitrary property in its
+     recipe, which a utility here would not reliably replace; this rule
+     outranks them as it always has. */
+  [data-slot="sidebar-settings"] :global(.rail-configure[aria-current="page"]) {
     background: var(--selected-bg);
     color: var(--selected-ink);
   }
-  :global(.rail-configure) {
+  [data-slot="sidebar-settings"] :global(.rail-configure) {
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
