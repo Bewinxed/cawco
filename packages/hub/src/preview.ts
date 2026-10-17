@@ -15,7 +15,9 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import {
+  cachePreview,
   causeOf,
+  compressed,
   downResponse,
   folderKey,
   IMMUTABLE,
@@ -384,9 +386,19 @@ const appCookies = (header: string | null): string | null => {
   return kept.length > 0 ? kept.join("; ") : null;
 };
 
-/** What goes on to the machine: hop-by-hop headers off, and none of the dashboard's cookies. */
-const upstreamHeaders = (request: Request): Headers => {
+/**
+ * What goes on to the machine: hop-by-hop headers off, and none of the
+ * dashboard's cookies. On a host-mode name (`direct` false) every answer
+ * but an immutable one is `no-store` ({@link downstreamHeaders}), so nothing
+ * there is a copy to revalidate: a conditional request asks for bytes, never
+ * a 304 for a copy the browser was told not to keep.
+ */
+const upstreamHeaders = (request: Request, direct: boolean): Headers => {
   const headers = proxyHeaders(request.headers);
+  if (!direct) {
+    headers.delete("if-none-match");
+    headers.delete("if-modified-since");
+  }
   const cookies = appCookies(headers.get("cookie"));
   if (cookies) {
     headers.set("cookie", cookies);
@@ -396,14 +408,20 @@ const upstreamHeaders = (request: Request): Headers => {
   return headers;
 };
 
-/** What comes back to the browser: no cookie the app sets under one of the dashboard's names. */
-const downstreamHeaders = (response: Response): Headers => {
+/**
+ * What comes back to the browser: no cookie the app sets under one of the
+ * dashboard's names, and only the caching that is safe where it was asked
+ * (core `previewCache`): on a host-mode name (`direct` false) a CDN may stand
+ * in front, so a module the app would have revalidated is never stored.
+ */
+const downstreamHeaders = (response: Response, direct: boolean): Headers => {
   const headers = proxyHeaders(response.headers);
   // Same as the daemon hop: the body is already decoded here.
   if (headers.has("content-encoding")) {
     headers.delete("content-encoding");
     headers.delete("content-length");
   }
+  cachePreview(headers, response.status, direct);
   const set = headers.getSetCookie();
   if (set.length > 0) {
     headers.delete("set-cookie");
@@ -419,19 +437,21 @@ const downstreamHeaders = (response: Response): Headers => {
 /**
  * A preview's request on to its machine's listener, and the answer back. A
  * listener that does not answer is said in one line, and is forgotten: the
- * next request asks the machine where the preview is served now.
+ * next request asks the machine where the preview is served now. `direct`:
+ * the request came to a session's own port listener ({@link downstreamHeaders}).
  */
 async function relay(
   request: Request,
   server: Server<ListenerSocket>,
   instanceId: string,
   at: NonNullable<PreviewTarget["upstream"]>,
-  deps: PreviewListenerDeps
+  deps: PreviewListenerDeps,
+  direct: boolean
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
   const upstream = `${address}:${at.port}${url.pathname}${url.search}`;
-  const headers = upstreamHeaders(request);
+  const headers = upstreamHeaders(request, direct);
   // The listener's start token: it answers the hub's relay and nothing else.
   headers.set(RELAY_HEADER, at.token);
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
@@ -465,16 +485,17 @@ async function relay(
   }
   return new Response(response.body, {
     status: response.status,
-    headers: downstreamHeaders(response),
+    headers: downstreamHeaders(response, direct),
   });
 }
 
-/** One request to session `instanceId`'s preview origin, at its root. */
+/** One request to session `instanceId`'s preview origin, at its root; `direct` as {@link relay} takes it. */
 async function serveSession(
   request: Request,
   server: Server<ListenerSocket>,
   instanceId: string,
-  deps: PreviewListenerDeps
+  deps: PreviewListenerDeps,
+  direct: boolean
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -534,7 +555,7 @@ async function serveSession(
       reached.down === "reach" ? reached.error : undefined
     );
   }
-  return relay(request, server, instanceId, reached.upstream, deps);
+  return relay(request, server, instanceId, reached.upstream, deps, direct);
 }
 
 /**
@@ -767,8 +788,23 @@ export function createPreviewListeners(
           );
           return framedBy(downResponse("closed", 404));
         }
-        const answer = await serveSession(request, server, instanceId, deps);
-        return answer && framedBy(await withKeyedOverlay(answer));
+        // A session's own port has no CDN in front of it; host mode's names
+        // (the lock's) may.
+        const answer = await serveSession(
+          request,
+          server,
+          instanceId,
+          deps,
+          lock === undefined
+        );
+        // Gzipped here, once, after the overlay tag is keyed.
+        return (
+          answer &&
+          compressed(
+            framedBy(await withKeyedOverlay(answer)),
+            request.headers.get("accept-encoding")
+          )
+        );
       },
     });
 
