@@ -130,7 +130,7 @@
   {/if}
   <div class="flex flex-wrap items-center gap-3 pt-space-1">
     <Button
-      class="pressable"
+      press="pressable"
       failed={problem !== null}
       label="Use this place"
       pending={saving}

@@ -289,7 +289,7 @@
             <Button
               {...tip}
               aria-label="New thread"
-              class="pressable"
+              press="pressable"
               icon={IconPlus}
               onclick={() => choose(null)}
               size="icon-sm"
@@ -302,7 +302,7 @@
             <Button
               {...tip}
               aria-label="Open as a tab"
-              class="pressable"
+              press="pressable"
               href={threadHref(threadId ?? "")}
               icon={IconMaximize}
               size="icon-sm"

@@ -322,7 +322,6 @@
   }}
   landKey="preview:{viewId}"
   main={children}
-  mainClass="transcript-pane"
   onescape={(event) => previewPane?.parentEscape(event)}
   open={desktopOpen}
   side={bounded}

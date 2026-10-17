@@ -1,5 +1,4 @@
 <script lang="ts">
-  /* eslint-disable shadcn/no-inline-styles -- style:pointer-events overrides bits-ui's run-time inline pointer-events: auto, which no class can (floating-presence.ts pressable) */
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";

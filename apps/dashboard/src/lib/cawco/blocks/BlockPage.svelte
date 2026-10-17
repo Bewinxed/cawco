@@ -54,7 +54,6 @@
   import { MediaQuery } from "svelte/reactivity";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconChevronDown, IconEye, IconLayers } from "#lib/icons.js";
@@ -323,10 +322,9 @@
         {#if hidden.length > 0}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger
-              class="{buttonVariants({
-                variant: 'ghost',
-                size: 'sm',
-              })} mark-line touch-hit"
+              class="mark-line touch-hit"
+              size="sm"
+              variant="ghost"
             >
               <span
                 >Hidden <span data-slot="num" class="num">{hidden.length}</span

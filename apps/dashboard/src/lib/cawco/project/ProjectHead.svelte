@@ -480,7 +480,7 @@
       <!-- No checkout yet: a session needs a machine and folder, which the
            New Session dialog asks for. -->
       <Button
-        class="pressable max-phone:hidden"
+        class="max-phone:hidden" press="pressable"
         onclick={() => newSession({ projectId: project.id })}
         >New session</Button
       >
@@ -492,7 +492,7 @@
           }}
         >
           {#snippet child({ props })}
-            <Button {...props} class="pressable max-phone:hidden">New session</Button>
+            <Button {...props} class="max-phone:hidden" press="pressable">New session</Button>
           {/snippet}
         </Popover.Trigger>
         <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). Over
@@ -552,7 +552,7 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="pressable max-phone:hidden"
+        class="max-phone:hidden" press="pressable"
         data-share="session:new"
         data-share-ttl="8000"
         disabled={starting !== null && starting !== "spin"}

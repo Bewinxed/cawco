@@ -1,5 +1,4 @@
 <script lang="ts">
-  /* eslint-disable shadcn/no-inline-styles -- style:pointer-events overrides bits-ui's run-time inline pointer-events: auto, which no class can (floating-presence.ts pressable) */
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
@@ -21,6 +20,7 @@
     collisionPadding,
     portalProps,
     morphs,
+    bare = false,
     forceMount = false,
     child: callerChild,
     children,
@@ -29,6 +29,8 @@
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof PopoverPortal>>;
     /** How it tweens to a new size (motion/morph): across too, or held still. */
     morphs?: Morph;
+    /** It draws no surface (padding, edge, fill, shadow): what it holds is the surface. */
+    bare?: boolean;
   } = $props();
 
   // Never flush with the screen's edge: it keeps the pages' gutter from it,
@@ -56,6 +58,8 @@
     {align}
     class={cn(
       "kit-pop z-50 flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
+      bare &&
+        "border-none border-current bg-transparent bg-none p-0 shadow-none",
       className
     )}
     collisionPadding={inset}

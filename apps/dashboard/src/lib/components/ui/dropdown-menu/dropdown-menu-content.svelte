@@ -1,5 +1,4 @@
 <script lang="ts">
-  /* eslint-disable shadcn/no-inline-styles -- style:pointer-events overrides bits-ui's run-time inline pointer-events: auto, which no class can (floating-presence.ts pressable) */
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import {

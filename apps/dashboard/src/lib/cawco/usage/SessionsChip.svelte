@@ -28,10 +28,8 @@
    * goes to the first session and the house ring shows.
    */
   import { MediaQuery } from "svelte/reactivity";
-  import { badgeVariants } from "#lib/components/ui/badge/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { cn } from "#lib/utils.js";
   import { cawco, type InstanceRow } from "../client.svelte";
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";
   import { conversationHref } from "../links";
@@ -175,10 +173,8 @@
 <Popover.Root bind:open>
   <Popover.Trigger
     aria-label={label}
-    class={cn(
-      badgeVariants(),
-      "pressable touch-hit h-icon-md min-w-icon-md flex-none cursor-pointer overflow-visible px-space-1 font-body text-ink-row text-meta leading-none num"
-    )}
+    badge
+    class="pressable touch-hit h-icon-md min-w-icon-md flex-none cursor-pointer overflow-visible px-space-1 font-body text-ink-row text-meta leading-none num"
     data-sessions-chip
     onkeydown={() => {
       byPointer = false;

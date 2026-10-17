@@ -9,7 +9,7 @@
 <script lang="ts">
   /**
    * The machines, one click away in the wide bar's glass group rather than
-   * always on screen: an item of the group (Shell's `.bar-item`), its glyph
+   * always on screen: an item of the group (Shell's `[data-bar-item]`), its glyph
    * and the number of machines. The number is said once. Machines in
    * trouble (down, behind the hub, a stuck sync) tint the glyph in the
    * status hue, fail when any is down and attention otherwise; which ones
@@ -76,7 +76,7 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="bar-item mark-line touch-hit press-tint gap-space-2 ps-space-2 pe-(--machines-pe)"
+      class="mark-line touch-hit press-tint gap-space-2 ps-space-2 pe-(--machines-pe)"
       data-tone={tone}
       style:--machines-pe="calc(var(--space-2) - var(--c-bar-group-pad))"
       type="button"

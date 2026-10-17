@@ -35,7 +35,6 @@
     open,
     keys,
     backLabel,
-    mainClass,
     visible = true,
     active = true,
     defaultWidth = 45,
@@ -53,8 +52,6 @@
     keys: { expanded: string; width: string };
     /** What Expand's way back says: "Back to conversation", "Back to board". */
     backLabel: string;
-    /** The page's pane, by its class (`transcript-pane`, `board-pane`). */
-    mainClass: string;
     /** The page is on screen: a split sized off screen takes its size at once. */
     visible?: boolean;
     /** The page is its group's active tab: Esc is heard only there. */
@@ -351,7 +348,6 @@
          nothing in it takes a press or the keyboard. -->
     <Resizable.Pane
       class="flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer"
-      data-split-main-class={mainClass}
       collapsedSize={0}
       collapsible
       defaultSize={100 - sideSize}

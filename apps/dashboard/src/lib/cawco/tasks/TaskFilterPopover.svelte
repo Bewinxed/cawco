@@ -97,7 +97,7 @@
           data-filter-trigger
           {...props}
           aria-label={compact ? compactName : undefined}
-          class="pressable"
+          press="pressable"
           size={compact ? "icon-sm" : "sm"}
           title={find.problem ?? undefined}
           variant={active > 0 ? "secondary" : "ghost"}

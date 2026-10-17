@@ -832,7 +832,7 @@
       </ul>
       <div class="mt-space-3">
         <Button
-          class="pressable"
+          press="pressable"
           href="/project/{encodeURIComponent(projectId)}"
           label="Open the board"
           size="sm"
@@ -854,7 +854,7 @@
   {#if messageId === boardAfter}
     <div class="mt-space-3">
       <Button
-        class="pressable"
+        press="pressable"
         href="/project/{encodeURIComponent(projectId)}"
         label="Open the board"
         size="sm"

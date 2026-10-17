@@ -131,7 +131,7 @@
   } from "#lib/cawco/views-api.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -1446,7 +1446,7 @@
       {#if strippedNewTask}
         <Button
           data-wide
-          class="pressable max-phone:hidden"
+          class="max-phone:hidden" press="pressable"
           onclick={() => {
             if (current !== "table") {
               choose("board");
@@ -1463,7 +1463,7 @@
       {#if canTalk}
         <Button
           data-wide
-          class="pressable max-phone:hidden"
+          class="max-phone:hidden" press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
           variant="ghost"
@@ -1621,10 +1621,9 @@
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
                   aria-label="More for {viewLabel(view.name)}"
-                  class="{buttonVariants({
-                    variant: 'ghost',
-                    size: 'icon-sm',
-                  })} touch-hit"
+                  class="touch-hit"
+                  size="icon-sm"
+                  variant="ghost"
                 >
                   <IconMore />
                 </DropdownMenu.Trigger>
@@ -1905,7 +1904,6 @@
               expanded: `cawco.task.expanded.${projectId}`,
             }}
             main={viewPane}
-            mainClass="view-pane-side"
             open={!!openTask && !!stages}
             side={taskSide}
           />
@@ -2013,11 +2011,17 @@
 
 {#if project}
   <Popover.Root bind:open={askOpen}>
+    <!-- The ask is the session Composer floating under the menu: the
+         composer is the surface (its pill, edge and shadow), so the popover
+         draws none of its own (`bare`), and its box is as tall as what the
+         Composer stands (Composer's dock stands on its foot). -->
     <Popover.Content
       align="end"
-      class="view-ask-pop"
+      bare
+      class="w-(--ask-w)"
       customAnchor={askAnchor}
       side="bottom"
+      style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--space-3)))"
     >
       <div
         class="relative h-(--ask-h) w-full"
@@ -2079,19 +2083,6 @@
   }
   [data-slot="caw-empty"] :global(.kit-empty-action) {
     align-self: stretch;
-  }
-  /* residual: foreign-dom */
-  /* css-scope .view-ask-pop: the kit popover the ask stands in */
-  /* The ask is the session Composer floating under the menu: the composer
-     is the surface (its pill, edge and shadow), so the popover draws none
-     of its own, and its box is as tall as what the Composer stands
-     (Composer .dock stands on its foot). */
-  :global(.kit-pop.view-ask-pop) {
-    inline-size: min(var(--c-panel-w), calc(100vw - 2 * var(--space-3)));
-    padding: 0;
-    border: 0;
-    background: none;
-    box-shadow: none;
   }
   @media (max-width: 639px) {
     /* residual: foreign-dom */

@@ -123,7 +123,7 @@
   </form>
 {:else if primary}
   <Button
-    class="pressable"
+    press="pressable"
     onclick={() => {
       open = true;
     }}

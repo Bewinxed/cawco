@@ -594,6 +594,7 @@
             {/snippet}
             {#snippet trailing()}
               <Button
+                data-ghost
                 onclick={() => browse(row)}
                 size="sm"
                 title={`Read from ${row.source}`}

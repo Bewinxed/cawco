@@ -23,7 +23,6 @@
   import type { BlockWidth } from "@cawco/core";
   import type { Component, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -158,10 +157,9 @@
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           aria-label="More for {title}"
-          class="{buttonVariants({
-            variant: 'ghost',
-            size: 'icon-sm',
-          })} touch-hit"
+          class="touch-hit"
+          size="icon-sm"
+          variant="ghost"
         >
           <IconMore />
         </DropdownMenu.Trigger>

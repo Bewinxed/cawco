@@ -1244,7 +1244,7 @@
                     aria-expanded={barGlass.open === "jump"}
                     aria-haspopup="dialog"
                     aria-label="Jump to session"
-                    class="bar-item touch-hit press-tint"
+                    class="touch-hit press-tint"
                     data-share="jump"
                     onclick={() => {
                       barGlass.toggle("jump");
@@ -1588,7 +1588,7 @@
   }
 
   /* residual: foreign-dom — the group's items (MachinesButton's, NeedsCaw's
-     and this file's Jump, each `.bar-item`, its symbol `.bar-symbol`):
+     and this file's Jump, each `[data-bar-item]`, its symbol `.bar-symbol`):
      borderless (Apple HIG, Toolbars: "Borders… aren't necessary because the
      section provides a visible container"), on the glass itself, every one
      the same height with the same symbol size, in the bar's one ink. Hover
@@ -1597,7 +1597,7 @@
      past this hover. An item's symbol is named so: an item may draw more
      than its symbol (Caw's rim is an SVG too). On the phone's row Caw, the
      group's one item, is the glass's whole box. */
-  [data-slot="tools"] :global(.bar-item) {
+  [data-slot="tools"] :global([data-bar-item]) {
     position: relative;
     display: inline-flex;
     flex: none;
@@ -1618,12 +1618,12 @@
     color: var(--ink-muted);
   }
   @media (hover: hover) and (pointer: fine) {
-    [data-slot="tools"] :global(.bar-item:hover) {
+    [data-slot="tools"] :global([data-bar-item]:hover) {
       background: var(--surface-hover);
     }
   }
   @media (max-width: 899px) {
-    [data-slot="tools"] :global(.bar-item) {
+    [data-slot="tools"] :global([data-bar-item]) {
       inline-size: var(--c-bar-caw-glass-phone);
       min-inline-size: var(--c-bar-caw-glass-phone);
       block-size: var(--c-bar-caw-glass-phone);

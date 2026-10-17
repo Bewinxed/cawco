@@ -13,11 +13,14 @@
     variants: {
       /* The press, by size (app.css, press feedback): a compact button
          scales; one stretched full width, as a list row or a card's body,
-         tints instead. */
+         tints instead. `pressable` is the house's own compact press
+         (app.css .pressable): it scales, and eases only its transform and
+         shadow, so its colours change at once. */
       press: {
         scale:
           "[transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] motion-safe:active:not-disabled:not-aria-busy:[transform:scale(var(--press-scale))]",
         tint: "press-tint [transition:var(--transition-control)]",
+        pressable: "pressable",
       },
       variant: {
         default:

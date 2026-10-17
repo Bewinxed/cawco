@@ -290,7 +290,7 @@
         </button>
       {/if}
     </div>
-    <div class="panel" inert={!browsing} {@attach folds(() => browsing, PANEL)}>
+    <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
       <div class="min-h-0">
         <div class="border-t border-border-hairline bg-surface-recess">
           <!-- literal: 8px gap, 8px 8px 8px 10px padding -->
@@ -460,7 +460,7 @@
     </div>
   </div>
 
-  <div class="panel" {@attach folds(() => mode === "repo", PANEL)}>
+  <div {@attach folds(() => mode === "repo", PANEL)}>
     <div class="min-h-0">
       <!-- literal: 8px gap, -12px rise -->
       <div

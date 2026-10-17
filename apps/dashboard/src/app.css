@@ -720,6 +720,103 @@
       --fade-len: 16px;
     }
   }
+
+  /* The fluid tabs' track (ui/fluid-tabs TabsList), the kit's own recipe:
+     its size ladder is custom properties every tab reads, and hosts tune it
+     by selector on `.ff-tabs-list` (PaneTabs, WorkTabs), outranking it. The
+     pad and the item add up to the control height — 36px by default, 28px
+     compact — so the control lines up with the buttons, selects and inputs
+     beside it. `--shape` is the corner the overlays and items share;
+     `--sheet` is the chosen segment's surface. A finger needs more room
+     than a pointer: one step up the ladder on a coarse pointer — a 40px
+     control — its shape unchanged. A scrolling track hugs its items and
+     gives way — never grows — when the row it sits in is narrower than
+     they are; where tabs run past an edge, that edge fades them out
+     (.kit-edge-fade, on the track), and a chosen tab is brought clear of
+     each edge's fade (`inView`; a host whose fades differ sets its own). */
+  .ff-tabs-list {
+    --pad: 4px;
+    --item: 28px;
+    --gap: 2px;
+    --px: 12px;
+    --icon: 16px;
+    --text: var(--text-label);
+    --radius: var(--radius-sm);
+    --shape: calc(var(--radius) - var(--pad));
+    --sheet: var(--surface-raised);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: var(--gap);
+    padding: var(--pad);
+    border-radius: var(--radius);
+    background: var(--muted);
+    user-select: none;
+    -webkit-user-select: none;
+
+    @media (pointer: coarse) {
+      --item: 32px;
+    }
+
+    &.scrollable {
+      --edge-room-start: var(--fade-len);
+      --edge-room-end: var(--fade-len);
+      flex: 0 1 auto;
+      min-inline-size: 0;
+      max-inline-size: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+  }
+  /* Compact, with its own step up on a coarse pointer (24 → 28): this
+     rule outranks the bare class, so the ladder above would not move it. */
+  [data-size="compact"] .ff-tabs-list {
+    --pad: 2px;
+    --item: 24px;
+    --px: 10px;
+    --icon: 16px;
+    --text: var(--text-label);
+    --radius: var(--radius-xs);
+
+    @media (pointer: coarse) {
+      --item: 28px;
+    }
+  }
+  /* Folder tabs: no well. The items stand on the row's shelf — the row
+     draws that hairline along its own bottom edge — and the chosen one is a
+     sheet with a rounded top and no bottom, in the surface of what lies
+     below, so it opens into it. The chosen sheet flares outward at its foot
+     into the page below; the track keeps that much room at each end so a
+     scrolling track does not clip the first or last flare. Neighbouring
+     tabs overlap by the flare: a tucked edge lies exactly under the chosen
+     sheet's foot, and the gap between tabs is gone; the track's leading pad
+     takes the first tab's overlap back. The tabs' stacks meet in this one
+     (TabsList's script), kept in the track. The sides of every outline
+     bring their top corners in by `--slope-start` and `--slope-end` from the
+     foot (the owner's pick: 1px and 0px). A choice travels over
+     `--choose-dur` on `--choose-ease`, every part of it together (the
+     owner's pick, "Slow · 400ms"; DESIGN.md, Folder tabs). */
+  [data-variant="folder"] .ff-tabs-list {
+    --shape: var(--radius) var(--radius) 0 0;
+    --flare: var(--radius);
+    --overlap: var(--flare);
+    gap: 0;
+    padding-inline: calc(var(--flare) + var(--overlap)) var(--flare);
+    padding-block-end: 0;
+    border-radius: 0;
+    background: none;
+    isolation: isolate;
+    --slope-start: 1px;
+    --slope-end: 0px;
+    --choose-dur: var(--dur-settle);
+    --choose-ease: var(--ease-crossfade);
+  }
   @keyframes kit-edge-fade-start {
     from {
       --fade-start: 0px;

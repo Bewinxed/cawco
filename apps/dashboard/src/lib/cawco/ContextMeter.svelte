@@ -57,11 +57,6 @@
     critical: "bg-error-9",
   };
 
-  const TEXT: Record<string, string> = {
-    calm: "text-ink-muted",
-    warn: "text-warning-9",
-    critical: "text-error-9",
-  };
 
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
   const SWATCH = [
@@ -106,11 +101,16 @@
     aria-label={compacting
       ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
-    class="mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5
-           text-label tabular-nums
-           hover:bg-neutral-2
-           transition-[background-color,color] duration-(--dur-control) ease-out
-           {compacting ? 'text-ink-strong' : TEXT[band]}"
+    class={[
+      "mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5 text-label tabular-nums hover:bg-neutral-2 transition-[background-color,color] duration-(--dur-control) ease-out",
+      compacting
+        ? "text-ink-strong"
+        : band === "critical"
+          ? "text-error-9"
+          : band === "warn"
+            ? "text-warning-9"
+            : "text-ink-muted",
+    ]}
     title={meterTitle}
   >
     {#if compacting}
@@ -151,8 +151,15 @@
       <IconWindow class="size-icon-md text-ink-muted" />
       <span class="text-label font-medium">Context window</span>
       {#if usage}
-        <span class="ml-auto text-label tabular-nums {TEXT[band]}"
-          >{usage.percentage}%</span
+        <span
+          class={[
+            "ml-auto text-label tabular-nums",
+            band === "critical"
+              ? "text-error-9"
+              : band === "warn"
+                ? "text-warning-9"
+                : "text-ink-muted",
+          ]}>{usage.percentage}%</span
         >
       {/if}
     </div>

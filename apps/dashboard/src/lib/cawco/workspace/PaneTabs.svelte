@@ -1387,12 +1387,16 @@
 </script>
 
 <!-- `''` when the board is showing: a value no segment carries, so nothing
-     is drawn as chosen. -->
+     is drawn as chosen. Its literals ride custom properties the strip's
+     rules below read (a tab's height and inner pad, the coarse pointer's
+     reach past the track, the phone fade's run, an uncapped fade). -->
+<!-- literal: 12px, 32px, 10px, 16px, 100vw -->
 <Tabs
   data-session-tabs
   boxes={servedBoxes}
   class="session-tabs {hosted ? 'hosted' : ''}"
   data-strip={leaf.id}
+  style="--strip-px: 12px; --strip-item-rest: 32px; --strip-reach: 10px; --strip-fade: 16px; --strip-uncapped: 100vw"
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}
   value={leaf.active ?? ""}
@@ -1735,8 +1739,8 @@
             align="start"
             anchor={menuFor === tab.id ? anchorOf(tab.id) : null}
             as={ContextMenu.Content}
-            class="tab-menu"
             collisionPadding={12}
+            data-tab-menu
             folded={takeMenuFolded}
             held={() => menuHeld}
             onneck={(neck) => {
@@ -1744,7 +1748,7 @@
             }}
             side="bottom"
             sideOffset={0}
-            style="--hang-min: {menuMin}px"
+            style="--hang-min: {menuMin}px; --menu-min: max(12rem, var(--hang-min, 0px))"
             tab
             bind:joined={
               () => menuHung === tab.id,
@@ -1841,12 +1845,13 @@
       anchor={detailAnchor}
       aria-label="Session details"
       as={Popover.Content}
-      class="session-details-popover"
       collisionPadding={12}
       customAnchor={detailAnchor}
       data-safe-bottom
       folded={takeFolded}
-      style={cardPlace ? `--hang-width: ${cardPlace.width}px` : undefined}
+      style="--details-w: min(416px, calc(100vw - 24px)); --details-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh)); --details-max-h-phone: min(calc(100dvh - var(--c-top-bar-h) - 24px - var(--safe-bottom)), var(--bits-popover-content-available-height, 85dvh)){cardPlace
+        ? `; --hang-width: ${cardPlace.width}px`
+        : ''}"
       tab
       onCloseAutoFocus={(event) => {
         event.preventDefault();
@@ -1912,40 +1917,35 @@
 </Popover.Root>
 
 <style>
-  /* residual: unmapped — DEFERRED (delta Q contract), as the foundation had
-     it: the details card's own box (HangCard's portalled bits-ui content,
-     class `session-details-popover`), sized with literals that cannot ride
-     a custom property from this file (no element here is its ancestor). */
-  /* css-scope .session-details-popover: SessionDetails finds the card it stands in by it */
+  /* residual: foreign-dom — the details card's own box (HangCard's
+     portalled bits-ui content, `data-session-details-popover`), its sizes
+     set on the card (`--details-*`, the HangCard's style). */
+  /* css-scope: the details card, HangCard's portalled content, found by its data hook */
   /* The card is a HangCard on its tab (`tab`): one silhouette with it, its
      outline, its cast and its open and close the component's. Its content
      runs edge to edge; its head is its tab's surface. Its width is where
-     it is placed (`placeOf`): 416px, the screen less its margins at most. */
-  :global(.kit-pop.session-details-popover) {
+     it is placed (`placeOf`): 416px, the screen less its margins at most.
+     A phone's card stands a margin in from each side, under its tab, and
+     holds clear of the screen's foot. */
+  :global(.kit-pop[data-session-details-popover]) {
     display: flex;
     z-index: 60;
-    width: var(--hang-width, min(416px, calc(100vw - 24px)));
-    max-height: min(760px, var(--bits-popover-content-available-height, 85dvh));
+    width: var(--hang-width, var(--details-w));
+    max-height: var(--details-max-h);
     overflow: hidden;
     overscroll-behavior: contain;
     padding: 0;
     outline: none;
 
-    /* A phone's card stands a margin in from each side, under its tab,
-       and holds clear of the screen's foot. */
     @media (max-width: 640px) {
-      max-height: min(
-        calc(100dvh - var(--c-top-bar-h) - 24px - var(--safe-bottom)),
-        var(--bits-popover-content-available-height, 85dvh)
-      );
+      max-height: var(--details-max-h-phone);
     }
   }
-  /* residual: unmapped — DEFERRED (delta Q contract), as the foundation had
-     it: the strip's host rules on the kit's Tabs root (`session-tabs`,
-     `hosted`) and on TabsList's track, the other side of TabsList's
-     deferred size ladder (they override its custom properties and outrank
-     its folder padding by selector), with literals that cannot be
-     residuals. */
+  /* residual: foreign-dom — the strip's host rules on the kit's Tabs root
+     (`session-tabs`, `hosted`) and on TabsList's track (app.css
+     `.ff-tabs-list`): they override the track's size ladder and outrank its
+     folder padding by selector. Their literals ride the Tabs root's
+     custom properties (`--strip-*`). */
   /* The session track scrolls sideways, and a scroll container clips on both
      axes; its transparent padding grows into an equal negative margin on a
      coarse pointer, so the controls' touch areas above and below the 32px
@@ -1955,8 +1955,8 @@
      order than the build, and a tie would flip once the page hydrates. */
   :global(.session-tabs[data-slot="tabs"] .ff-tabs-list.scrollable) {
     @media (pointer: coarse) {
-      padding-block: calc(var(--pad) + 10px) 10px;
-      margin-block: -10px;
+      padding-block: calc(var(--pad) + var(--strip-reach)) var(--strip-reach);
+      margin-block: calc(-1 * var(--strip-reach));
     }
   }
   /* ── The row ──────────────────────────────────────────────────────
@@ -1967,16 +1967,16 @@
      shelf. (A tab switch is not a navigation at all — the segment
      simply slides.) */
   :global(.session-tabs) {
-    /* A tab's height, its inner pad and its flared foot's room at the
-       track's end, shared by the track and the "+" after it (`.strip-new`). */
-    --strip-item: 32px;
-    --strip-px: 12px;
+    /* A tab's height, its inner pad (`--strip-px`, on the root) and its
+       flared foot's room at the track's end, shared by the track and the
+       "+" after it (`.strip-new`). */
+    --strip-item: var(--strip-item-rest);
     --strip-flare: var(--radius-sm);
     display: flex;
     align-items: flex-end;
     flex: 0 0 auto;
     min-inline-size: 0;
-    padding-block: 4px 0;
+    padding-block: var(--space-1) 0;
     padding-inline: var(--space-7) var(--space-4);
     /* The shelf: two steps below the transcript, one below an unchosen
        tab, so the chosen tab — in the transcript's own surface — reads as
@@ -2064,7 +2064,7 @@
     ) {
       --item: var(--strip-item);
       --pad: 0px;
-      --fade-len: 16px;
+      --fade-len: var(--strip-fade);
       --edge-room-start: calc(var(--fade-len) * 1.5);
       --radius: var(--radius-lg);
       --overlap: var(--radius-sm);
@@ -2075,20 +2075,23 @@
          its length. */
       --fade-run-start: min(
         var(--fade-start),
-        calc(var(--fade-cap-start, 100vw) / 1.5)
+        calc(var(--fade-cap-start, var(--strip-uncapped)) / 1.5)
       );
-      --fade-run-end: min(var(--fade-end), var(--fade-cap-end, 100vw));
+      --fade-run-end: min(
+        var(--fade-end),
+        var(--fade-cap-end, var(--strip-uncapped))
+      );
       mask-image: linear-gradient(
         to right,
         transparent,
         transparent calc(var(--fade-run-start) * 0.375),
-        rgb(0 0 0 / 0.15) calc(var(--fade-run-start) * 0.75),
-        rgb(0 0 0 / 0.6) calc(var(--fade-run-start) * 1.125),
-        #000 calc(var(--fade-run-start) * 1.5),
-        #000 calc(100% - var(--fade-run-end)),
-        rgb(0 0 0 / 0.9) calc(100% - var(--fade-run-end) * 0.75),
-        rgb(0 0 0 / 0.5) calc(100% - var(--fade-run-end) * 0.5),
-        rgb(0 0 0 / 0.1) calc(100% - var(--fade-run-end) * 0.25),
+        var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
+        var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
+        var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
+        var(--mask-opaque) calc(100% - var(--fade-run-end)),
+        var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
+        var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
+        var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
         transparent
       );
     }
@@ -2137,14 +2140,13 @@
      side). Its rim's ink and strength (`--hang-rim`) is the outline's
      across the tab, running into the hang's edge down its flanks. (Its
      rule is in the residuals at the end.) */
-  /* residual: unmapped — DEFERRED (delta Q contract), as the foundation
-     had it: the tab's menu (HangCard's portalled context-menu content,
-     class `tab-menu`), its width floor a literal. The menu hanging from its
-     tab is on the tab's own surface, as the card's head is, so the two read
-     as one sheet; and it is as wide as the shape needs past the tab's span
-     (`menuMin`, `placeOf`). */
-  :global(.kit-pop.kit-hang.tab-menu) {
-    min-inline-size: max(12rem, var(--hang-min, 0px));
+  /* residual: foreign-dom — the tab's menu (HangCard's portalled
+     context-menu content, `data-tab-menu`), its width floor set on the menu
+     (`--menu-min`). The menu hanging from its tab is on the tab's own
+     surface, as the card's head is, so the two read as one sheet; and it is
+     as wide as the shape needs past the tab's span (`menuMin`, `placeOf`). */
+  :global(.kit-pop.kit-hang[data-tab-menu]) {
+    min-inline-size: var(--menu-min);
     --hang-surface: var(--surface-recess);
   }
 

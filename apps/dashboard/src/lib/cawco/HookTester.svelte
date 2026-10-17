@@ -32,11 +32,6 @@
     exact: "Exact match",
     regex: "Regular expression",
   };
-  const KIND_TONE: Record<HookMatcherKind, string> = {
-    all: "border-border text-ink-muted",
-    exact: "border-success-9 text-success-9",
-    regex: "border-warning-9 text-warning-9",
-  };
   const KIND_HOW: Record<HookMatcherKind, string> = {
     all: "An empty matcher or a bare * runs on every value this event carries.",
     exact:
@@ -54,7 +49,16 @@
   class="flex flex-col gap-2 rounded-md bg-surface-recess p-3"
 >
   <div class="flex flex-wrap items-center gap-2">
-    <Badge class="shrink-0 {KIND_TONE[kind]}" variant="outline"
+    <Badge
+      class={[
+        "shrink-0",
+        kind === "exact"
+          ? "border-success-9 text-success-9"
+          : kind === "regex"
+            ? "border-warning-9 text-warning-9"
+            : "border-border text-ink-muted",
+      ]}
+      variant="outline"
       ><span>{KIND_LABEL[kind]}</span></Badge
     >
     <span class="text-meta text-ink-muted">{KIND_HOW[kind]}</span>

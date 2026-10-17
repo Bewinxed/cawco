@@ -19,7 +19,7 @@
     "kit-item group/dropdown-menu-item relative flex",
     "cursor-default select-none items-center gap-2.5 text-label",
     "outline-hidden data-disabled:pointer-events-none",
-    "data-[inset]:pl-space-8 data-inset:pl-9.5",
+    "data-inset:pl-space-8",
     "data-[variant=destructive]:text-error-9",
     "data-disabled:opacity-50",
     "data-[variant=destructive]:focus:text-error-9",

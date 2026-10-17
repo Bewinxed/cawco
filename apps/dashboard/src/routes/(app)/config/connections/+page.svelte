@@ -480,7 +480,7 @@
         variant="ghost"
       />
       <Button
-        class="pressable"
+        press="pressable"
         label="Sign in"
         pending={addPending}
         pendingLabel="Signing in…"
@@ -606,7 +606,7 @@
                   bind:value={key}
                 />
                 <Button
-                  class="pressable"
+                  press="pressable"
                   label="Save key"
                   pending={keyPending}
                   pendingLabel="Saving…"
@@ -614,7 +614,7 @@
                   type="submit"
                 />
                 <Button
-                  class="pressable"
+                  press="pressable"
                   label="Cancel"
                   onclick={() => {
                     keying = null;
@@ -638,7 +638,7 @@
                   in again.</span
                 >
                 <Button
-                  class="pressable"
+                  press="pressable"
                   label="Remove connection"
                   onclick={() => remove(row)}
                   pending={removePending}
@@ -647,7 +647,7 @@
                   variant="destructive"
                 />
                 <Button
-                  class="pressable"
+                  press="pressable"
                   label="Cancel"
                   onclick={() => {
                     removing = null;
@@ -680,7 +680,7 @@
             {/if}
             {#if row.state !== "signed-in" && row.auth === "oauth"}
               <Button
-                class="pressable"
+                press="pressable"
                 label="Sign in"
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
@@ -690,7 +690,7 @@
               />
             {:else if row.state !== "signed-in" && takesKey(row) && keying !== row.name}
               <Button
-                class="pressable"
+                press="pressable"
                 label="Set key"
                 onclick={() => {
                   key = "";
