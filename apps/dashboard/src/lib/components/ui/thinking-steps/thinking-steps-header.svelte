@@ -36,7 +36,7 @@
 
 <style>
   /* residual: unmapped */
-  [data-slot="thinking-steps-header"] {
+  :global([data-slot="thinking-steps-header"]) {
     font: inherit;
   }
   /* A 44px target for a finger, without the header growing to it: the
@@ -45,7 +45,7 @@
      target reaches past the header instead of the header being taller. */
   /* residual: pseudo */
   @media (pointer: coarse) {
-    [data-slot="thinking-steps-header"]:not(:disabled)::before {
+    :global([data-slot="thinking-steps-header"]:not(:disabled))::before {
       content: "";
       position: absolute;
       inset-block: var(--hit-reach);

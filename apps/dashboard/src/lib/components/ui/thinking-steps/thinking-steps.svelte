@@ -44,7 +44,7 @@
 
 <style>
   /* residual: unmapped */
-  [data-slot="thinking-steps"] {
+  :global([data-slot="thinking-steps"]) {
     font-family: inherit;
   }
 </style>
