@@ -1,8 +1,8 @@
 /**
  * The checkout's dependencies, installed before anything that needs them
  * loads: by the rule a work item's landing gate uses (move.ts `depsScript`: the
- * root lockfile's install, run only when the lockfile changed since the
- * dependencies were installed).
+ * root lockfile's install, run only when none was installed from the
+ * lockfile as it stands).
  *
  * A fresh workspace clone has no node_modules, and a pull can bring a
  * package the installed ones lack. Bun resolves an entry's whole static
@@ -26,7 +26,7 @@ const ROOT = resolve(import.meta.dir, "..", "..");
 
 let installing: Promise<void> | undefined;
 
-/** Installs the dependencies when the lockfile changed (once per process); throws with the install's own output when it fails. */
+/** Installs the dependencies when none were installed from the lockfile as it stands (once per process); throws with the install's own output when it fails. */
 export const ensureDeps = (): Promise<void> => {
   installing ??= (async () => {
     const deps = await Bun.$`sh -c ${depsScript()}`.cwd(ROOT).nothrow().quiet();

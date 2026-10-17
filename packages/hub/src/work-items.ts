@@ -5113,9 +5113,10 @@ export const createWorkItems = ({
     const installs: InstallOutcome[] = [];
     /**
      * Installs the dependencies of the checkout at `path` on `machineId`,
-     * inside `bound`'s boundary, when its lockfile moved since they were
-     * installed ({@link depsScript}). Answers whether the gate can run
-     * there: false once its install failed. An install that ran is logged in
+     * inside `bound`'s boundary, when they were not installed from its
+     * lockfile (or manifest) as it stands ({@link depsScript}): a first
+     * hand-in, a clone cut again, a changed lockfile. Answers whether the
+     * gate can run there: false once its install failed. An install that ran is logged in
      * {@link installs}, with `where`. One a pause cancels throws
      * {@link PausedRun}: it runs again with its step.
      */

@@ -470,21 +470,34 @@ export const LOCKFILES = [
 ] as const;
 
 /**
- * Where a checkout's install records the lockfile it installed from: the
- * lockfile's git blob hash, next to the dependencies.
+ * Where a checkout's install records what it installed from: the git blob
+ * hash of its root lockfile, or of its `package.json` when it has none, next
+ * to the dependencies. Gone with them: a clone cut again has none.
  */
 const DEPS_STAMP = "node_modules/.cawco-lockfile";
+
+/**
+ * The install of a checkout with a root `package.json` and no lockfile:
+ * bun.com/docs/pm/cli/install, "If there is no lockfile at all,
+ * `--frozen-lockfile` installs from `package.json` without writing one", so
+ * the checkout gains no file to commit.
+ */
+const MANIFEST_INSTALL = "bun install --frozen-lockfile";
 
 /** What {@link depsScript} prints first when it installs, and only then. */
 export const DEPS_INSTALLING = "installing: ";
 
 /**
- * Installs a checkout's dependencies when its root lockfile no longer
- * matches the one they were installed from ({@link DEPS_STAMP}), by
- * {@link installFor}'s pick for that lockfile; then stamps it. No lockfile,
- * or a matching stamp: nothing runs and nothing is printed. Run in the
- * checkout's root: before a work item's landing gate (the hub's `runGate`) and
- * before a probe's scratch fleet starts from the checkout.
+ * Installs a checkout's dependencies when they were not installed from its
+ * root lockfile as it stands ({@link DEPS_STAMP}): none installed, or the
+ * lockfile changed since; by {@link installFor}'s pick for that lockfile.
+ * With no lockfile its `package.json` stands in for one, installed by
+ * {@link MANIFEST_INSTALL}. Then stamps it. Neither file, or a matching
+ * stamp: nothing runs and nothing is printed. The stamp, not the installer's
+ * own check, decides: `npm ci` removes a `node_modules` that is there before
+ * every install (docs.npmjs.com/cli/commands/npm-ci). Run in the checkout's
+ * root: before a work item's landing gate (the hub's `runGate`) and before a
+ * probe's scratch fleet starts from the checkout.
  */
 export const depsScript = (): string => {
   const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
@@ -493,9 +506,11 @@ export const depsScript = (): string => {
       `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; install=${word(installFor(lock)?.command ?? "")}`
   ).join("\n");
   return [
-    `${picks}\nelse exit 0\nfi`,
-    `[ "$(cat ${DEPS_STAMP} 2>/dev/null)" = "$(git hash-object "$lock")" ] && exit 0`,
-    `echo "${DEPS_INSTALLING}$install ($lock changed since the dependencies were installed)"`,
+    `${picks}\nelif [ -f package.json ]; then lock=package.json; install=${word(MANIFEST_INSTALL)}\nelse exit 0\nfi`,
+    `stamp="$(cat ${DEPS_STAMP} 2>/dev/null)"`,
+    `[ "$stamp" = "$(git hash-object "$lock")" ] && exit 0`,
+    `if [ -n "$stamp" ]; then why="$lock changed since the dependencies were installed"; else why="no dependencies installed from $lock"; fi`,
+    `echo "${DEPS_INSTALLING}$install ($why)"`,
     "$install 2>&1 || exit $?",
     `mkdir -p node_modules && git hash-object "$lock" > ${DEPS_STAMP}`,
   ].join("\n");
