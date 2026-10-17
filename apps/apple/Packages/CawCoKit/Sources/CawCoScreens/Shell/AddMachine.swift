@@ -340,7 +340,7 @@ final class AddMachineController: KitDialogController {
             form.addArrangedSubview(KitAlert(refused, tone: .destructive, glyph: .failed))
         } else if let job = join.job, job.state == .stopped {
             let text = Self.signedIn(job)
-                ? "Stopped the install on \(job.target). It ends there at its next step. Retry starts it again."
+                ? "Stopped the install on \(job.target). Retry starts it again."
                 : "Stopped before signing in to \(job.target). Nothing on that machine changed."
             form.addArrangedSubview(KitAlert(text, tone: .plain))
         }

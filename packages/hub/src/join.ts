@@ -272,7 +272,7 @@ const UNREACHED = /curl: \((?:6|7|28)\)/;
  */
 const SERVER_ALIVE_S = 10;
 
-/** The command a session runs once it has signed in: its step line, then the install. */
+/** The install, once signed in: its step line, then the script from the hub. */
 const installCommand = (hubUrl: string): string =>
   `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} ${hubUrl}/install.sh | sh`;
 
@@ -282,13 +282,10 @@ const installCommand = (hubUrl: string): string =>
  * missing (and left as they are when they exist), a final newline added to
  * the file when it lacks one, and the key appended only when the file does
  * not hold it already. It prints its step line first, so a failure is
- * named by it. It runs under `sh -c` whatever the account's login
- * shell is, quoted so that every login shell hands it over as it is: one
- * single-quoted word holding no quote or backslash (fish reads `\\` and
- * `\'` inside single quotes). Its apostrophe is printf's `\047`, which no
- * shell's single quotes touch. A key whose comment could not stand in that
- * word is added without the comment; a comment is a label, never part of
- * the key.
+ * named by it, and runs in a subshell so its umask stays its own. Its
+ * apostrophe is printf's `\047` ({@link remoteCommand} holds no single
+ * quote). A key whose comment could not stand in that command is added
+ * without the comment; a comment is a label, never part of the key.
  */
 const trustCommand = (key: string): string | null => {
   const [, blob, comment] = PUBLIC_KEY.exec(key) ?? [];
@@ -299,7 +296,30 @@ const trustCommand = (key: string): string | null => {
     comment && PLAIN_COMMENT.test(comment) ? `${blob} ${comment}` : blob;
   const file = '"$HOME/.ssh/authorized_keys"';
   const step = `${INSTALL_STEP_PREFIX}${TRUST_STEP}`.replace("'", "\\047");
-  return `sh -c 'printf "${step}\\n" && umask 077 && mkdir -p "$HOME/.ssh" && touch ${file} && { [ -z "$(tail -c 1 ${file})" ] || echo >> ${file}; } && { grep -qF "${blob}" ${file} || echo "${line}" >> ${file}; }'`;
+  return `( printf "${step}\\n" && umask 077 && mkdir -p "$HOME/.ssh" && touch ${file} && { [ -z "$(tail -c 1 ${file})" ] || echo >> ${file}; } && { grep -qF "${blob}" ${file} || echo "${line}" >> ${file}; } )`;
+};
+
+/**
+ * The one command an add hands `ssh`: `exec sh -c` and one single-quoted
+ * word, so every login shell (sh, bash, zsh, fish, csh) hands it over as it
+ * is (the word holds no quote or backslash: fish reads `\\` and `\'` inside
+ * single quotes) and `sh` takes the login shell's place under sshd's session
+ * process.
+ *
+ * sshd signals no command it started without a terminal when the connection
+ * closes (the install gets none: the script asks its questions on one), so a
+ * stopped add's install would run on until its next write. A watchdog sees
+ * to it: while sshd's session process (`sh`'s parent) lives it waits, and
+ * once it is gone it ends the command's whole process group. The command
+ * ends the watchdog when it finishes, and exits with the command's status.
+ * Measured against OpenSSH 10.2's sshd: a silent remote command outlived a
+ * killed `ssh`; under the watchdog it was gone within 4 s.
+ */
+const remoteCommand = (trust: string | null, hubUrl: string): string => {
+  const body = trust
+    ? `${trust} && ${installCommand(hubUrl)}`
+    : installCommand(hubUrl);
+  return `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; kill -TERM 0 ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
 };
 
 /** Everything the output says went wrong, most specific first. */
@@ -478,7 +498,6 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
     hubUrl: string,
     trust: { password: string; command: string } | null
   ) => {
-    const install = installCommand(hubUrl);
     const job: SshJoinJob = {
       id: crypto.randomUUID(),
       target,
@@ -514,7 +533,7 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
         ...(port === null ? [] : ["-p", String(port)]),
         "--",
         target,
-        trust ? `${trust.command} && ${install}` : install,
+        remoteCommand(trust?.command ?? null, hubUrl),
       ],
       {
         stdin: trust
@@ -559,10 +578,8 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
    * Stops an add that runs: its `ssh` group is asked to end (TERM, so `ssh`
    * closes the connection), then killed if it has not within
    * {@link STOP_GRACE_MS}. Answers once the run has ended and reads
-   * `stopped`. sshd sends a remote command started without a terminal no
-   * signal when the connection closes, so one that had signed in ends at its
-   * next write to the closed session; the install script writes a line per
-   * step. It gets no terminal because the script asks its questions on one.
+   * `stopped`. On the machine, the closed connection ends the remote
+   * command's watchdog's wait, and it ends the command ({@link remoteCommand}).
    */
   const stop = async (run: Run): Promise<void> => {
     run.stopped = true;

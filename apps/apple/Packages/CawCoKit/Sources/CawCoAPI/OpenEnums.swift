@@ -5501,6 +5501,7 @@ public enum OpenEnums {
         case done
         case failed
         case running
+        case stopped
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -5509,6 +5510,7 @@ public enum OpenEnums {
             case "done": self = .done
             case "failed": self = .failed
             case "running": self = .running
+            case "stopped": self = .stopped
             default: self = .unrecognized(rawValue)
             }
         }
@@ -5518,6 +5520,7 @@ public enum OpenEnums {
             case .done: "done"
             case .failed: "failed"
             case .running: "running"
+            case .stopped: "stopped"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -5526,7 +5529,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.done, .failed, .running]
+        public static let allCases: [Self] = [.done, .failed, .running, .stopped]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

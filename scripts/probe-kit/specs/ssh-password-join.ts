@@ -33,6 +33,10 @@
  *     it signed in, and Stop ends it.
  * (j) Left alone, that download ends within {@link DOWNLOAD_MS}, as the
  *     machine unable to reach the hub.
+ * (l) On a real OpenSSH sshd, Stop ends the command on the machine too
+ *     (sshd signals none started without a terminal), and an add that runs
+ *     to its end leaves no watchdog behind.
+ * (k) The dialog's password field, masked, with its show/hide toggle.
  * (f) The password is in no job's lines, the hub's log or its database.
  *
  * (b) and (h) are timed: a wrong password ends the add, it never spins.
@@ -149,6 +153,101 @@ const modesOf = (dir: string, file: string): string =>
     : "none";
 
 const OVER_SSH = /Over SSH/;
+
+/**
+ * (l) On a real OpenSSH sshd (this user's own, unprivileged: key sign-in
+ * only, the scratch target's `authorized_keys`, which holds the hub's key
+ * by now): Stop ends what the add runs on the machine, not only the hub's
+ * `ssh`, and an add that runs to its end leaves nothing behind.
+ */
+async function realSshd(
+  kit: Kit,
+  fleet: KitFleet,
+  dir: string,
+  authorized: string,
+  urls: { refused: string; holding: string }
+): Promise<void> {
+  const lease = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined },
+  });
+  const { port } = lease;
+  lease.stop(true);
+  const config = join(dir, "sshd_config");
+  await Bun.$`ssh-keygen -q -t ed25519 -N "" -f ${join(dir, "sshd_host_key")}`.quiet();
+  writeFileSync(
+    config,
+    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${join(dir, "sshd.pid")}\nAuthorizedKeysFile ${authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\n`
+  );
+  const sshd = Bun.spawn(
+    ["/usr/sbin/sshd", "-D", "-f", config, "-E", join(dir, "sshd.log")],
+    { stdout: "ignore", stderr: "ignore" }
+  );
+  const user = (await Bun.$`id -un`.text()).trim();
+  const begin = (hubUrl: string) =>
+    fleet.api<SshJoinJob>("/api/machines/ssh", {
+      target: `${user}@127.0.0.1`,
+      port,
+      hubUrl,
+    });
+  const read = (id: string) => fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
+  const remoteCurl = () =>
+    processes({ parts: ["curl", `${urls.holding}/install.sh`] });
+  const watchdogs = () => processes({ parts: ["while ps -p"] });
+  try {
+    await until(
+      "the real sshd listening",
+      () => existsSync(join(dir, "sshd.pid")) || undefined,
+      Boolean,
+      10_000
+    );
+    const held = await begin(urls.holding);
+    const curl = await until(
+      "the machine's curl holding the download",
+      () => remoteCurl().at(0),
+      Boolean,
+      20_000
+    ).catch(() => undefined);
+    const curlGroup = curl === undefined ? null : groupOf(curl);
+    const stopped = await stopAdd(fleet, held.id);
+    const gone = await until(
+      "the machine's curl and its group gone",
+      () =>
+        remoteCurl().length === 0 &&
+        processes({ group: curlGroup ?? -1 }).length === 0
+          ? true
+          : undefined,
+      Boolean,
+      10_000
+    ).catch(() => false);
+    kit.check(
+      "l: on a real sshd, Stop ends what the add runs on the machine: its curl and every process of that group are gone within 10 s",
+      stopped.job?.state === "stopped" && curl !== undefined && gone === true,
+      `stop answered ${stopped.said}; machine's curl ${curl} (group ${curlGroup}); left ${JSON.stringify(remoteCurl())} and in the group ${JSON.stringify(processes({ group: curlGroup ?? -1 }))}`
+    );
+    const ran = await begin(urls.refused);
+    const ended = await until(
+      "the add on the real sshd ended",
+      () => read(ran.id),
+      (job) => job.state !== "running",
+      30_000
+    ).catch(() => read(ran.id));
+    const strays = await until(
+      "no watchdog left on the machine",
+      () => (watchdogs().length === 0 ? true : undefined),
+      Boolean,
+      5000
+    ).catch(() => false);
+    kit.check(
+      "l: on a real sshd, an add that runs to its end exits with its own failure and leaves no watchdog behind",
+      ended.problem?.kind === "download" && strays === true,
+      `${seen(ended)}; watchdogs left ${JSON.stringify(watchdogs())}`
+    );
+  } finally {
+    sshd.kill();
+  }
+}
 
 /** (k) The dialog's password field: masked, and its toggle flips it. */
 async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
@@ -546,6 +645,10 @@ async function run(kit: Kit): Promise<void> {
         heldMs < DOWNLOAD_MS,
       `${seen(held2)}; ended after ${heldMs} ms`
     );
+    await realSshd(kit, fleet, dir, authorized, {
+      refused: hubUrl,
+      holding: holdingUrl,
+    });
     holding.stop(true);
 
     await passwordField(kit, fleet);

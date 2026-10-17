@@ -14866,6 +14866,53 @@
         }
       }
     },
+    "/api/machines/ssh/{id}/stop": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiMachinesSshByIdStop",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesSshByIdStop 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshJoinJob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesSshByIdStop 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiMachinesSshByIdStop 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/binary-updates/settings": {
       "get": {
         "operationId": "getApiBinaryUpdatesSettings",
@@ -38546,7 +38593,7 @@
             "type": "string"
           },
           "lines": {
-            "description": "Everything the SSH session printed, stdout and stderr in arrival order.",
+            "description": "Everything the SSH session printed, stdout and stderr in arrival order.\nA step line ({@link INSTALL_STEP_PREFIX}) means it has signed in: the\nremote command prints one before anything else it does.",
             "type": "array",
             "items": {
               "type": "string"
@@ -38685,7 +38732,7 @@
           },
           "state": {
             "$ref": "#/components/schemas/SshJoinJobState",
-            "description": "`done` means the script exited 0 and the hub has the machine online."
+            "description": "`done` means the script exited 0 and the hub has the machine online;\n`stopped`, that the person stopped it and its `ssh` is gone."
           },
           "target": {
             "type": "string"
@@ -52704,7 +52751,8 @@
         "enum": [
           "done",
           "failed",
-          "running"
+          "running",
+          "stopped"
         ]
       },
       "StageHooksBy": {

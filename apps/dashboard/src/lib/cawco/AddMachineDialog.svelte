@@ -221,7 +221,7 @@
       return null;
     }
     return signedIn
-      ? `Stopped the install on ${job.target}. It ends there at its next step. Retry starts it again.`
+      ? `Stopped the install on ${job.target}. Retry starts it again.`
       : `Stopped before signing in to ${job.target}. Nothing on that machine changed.`;
   });
 
