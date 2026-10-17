@@ -17,9 +17,9 @@
  *   its whole transcript at full price); or a fresh attempt starts, briefed
  *   with the task, the last failure and the comments since (dispatch.ts).
  *   Jev on: Jev says whether that session's history matters, and its cache
- *   decides attach or continue. Off, with no caller: attach only when it is
- *   warm, idle and on the same task, else fresh. A live attempt simply reads
- *   your comment.
+ *   decides attach or continue. Off, with no caller: idle and on the same
+ *   task stands in for "its history matters", so attach when warm, continue
+ *   when cold, else fresh. A live attempt simply reads your comment.
  * - **Phone requests** (choice + fill): a sentence from the phone about the
  *   project. Jev on: Jev picks the action and fills it (the task, the
  *   stage). Off: the lead reads the sentence. The push's own buttons are
@@ -71,7 +71,7 @@ export interface JevTasksDeps {
    */
   readonly continueAttempt: (
     row: SessionRow,
-    attempt: { item: string; task: string },
+    taskId: string,
     comment: string
   ) => Promise<{
     ended: Promise<string | undefined>;
@@ -111,6 +111,13 @@ export type DuplicateOutcome =
 
 const words = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** What the Jev-off rule's log line says each answer does. */
+const OFF_PLACED = {
+  attach: "its session continues",
+  continue: "it continues compressed",
+  fresh: "a fresh attempt starts",
+} as const;
 
 /** A task as Duplicates compares it. */
 const briefOf = (task: TaskView): DuplicateBrief => ({
@@ -385,13 +392,13 @@ export const createJevTasks = ({
     const jev = key();
     if (!jev) {
       // The newest attempt at the task is this task's: the same task.
-      const attach = attachByRule({ warm, idle, sameTask: true });
+      const placed = attachByRule({ warm, idle, sameTask: true });
       offLine(
         "attach",
         projectId,
-        `${task.id}'s last attempt ${newest.id.slice(0, 8)} is ${cache} and ${idle ? "idle" : "busy"}: ${attach ? "its session continues" : "a fresh attempt starts"}`
+        `${task.id}'s last attempt ${newest.id.slice(0, 8)} is ${cache} and ${idle ? "idle" : "busy"}: ${OFF_PLACED[placed]}`
       );
-      return attach ? "attach" : "fresh";
+      return placed;
     }
     try {
       return await placedByJev(jev, projectId, task, newest, row, text);
@@ -435,11 +442,7 @@ export const createJevTasks = ({
     };
     let started: Awaited<ReturnType<typeof continueAttempt>>;
     try {
-      started = await continueAttempt(
-        row,
-        { item: newest.id, task: task.id },
-        yours
-      );
+      started = await continueAttempt(row, task.id, yours);
     } catch (error) {
       await notStarted(words(error));
       return;

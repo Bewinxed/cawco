@@ -55,12 +55,6 @@ export interface ContinueRequest {
    */
   attachments?: SendAttachment[];
   images?: SendPayload["images"];
-  /**
-   * The ended work item the new session goes on with: an attempt's, whose
-   * session is continued for your comment on its task (jev-tasks.ts, Attach
-   * or spawn). The new session takes it before its opening.
-   */
-  item?: string;
   note?: string;
   /**
    * Who writes the summary; absent only with {@link asksOnly}, which writes

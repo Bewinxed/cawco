@@ -12765,13 +12765,37 @@ export const createServer = (
   };
 
   /**
+   * A source that holds a work item has its workspace's clone there before
+   * its continuation reads it (a retired one cut again): its new session
+   * takes the item on and starts in that clone ({@link startTarget}).
+   * Throws why there is none.
+   */
+  const cloneForContinuation = async (sourceId: string): Promise<void> => {
+    const itemId = db.getInstancesByIds([sourceId])[0]?.workItemId;
+    if (itemId) {
+      await workItems.continuable(itemId);
+    }
+  };
+
+  /**
    * Whether the chosen models fit, by the same rule the dashboard's pickers
-   * show: a refusal naming the model and why, or nothing.
+   * show, and whether a source holding a work item goes on where it runs (its
+   * workspace's clone): a refusal naming why, or nothing.
    */
   const continuationRefusal = async (
     prepared: PreparedContinuation,
     request: ContinueRequest
   ): Promise<string | undefined> => {
+    const itemId = db.getInstancesByIds([prepared.source.instanceId])[0]
+      ?.workItemId;
+    const { cwd: at, machineId: on } = request.target;
+    if (
+      itemId &&
+      ((at && at !== prepared.source.cwd) ||
+        (on && on !== prepared.source.machineId))
+    ) {
+      return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, in ${prepared.source.cwd} on ${machineName(prepared.source.machineId)}.`;
+    }
     if (prepared.prompt) {
       if (!request.summarizer) {
         return "Choose who summarises the session, or continue from your asks alone.";
@@ -13247,10 +13271,11 @@ export const createServer = (
       return false;
     }
     const ready = moveContinuation(row.id, { openItems: open }) ?? row;
-    // An attempt continued for your comment: its opening is the attempt's,
-    // and the publish below has its tools listed again with finish_item.
-    if (row.request.item) {
-      workItems.continuedIn(row.request.item, row.targetInstanceId);
+    // The source's own work item goes on in the new session, whoever asked:
+    // its opening is the item's, and the publish below has its tools
+    // listed again with finish_item.
+    if (source?.workItemId) {
+      workItems.continuedIn(source.workItemId, row.targetInstanceId);
     }
     adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(ready);
@@ -18720,25 +18745,25 @@ export const createServer = (
     }).taskChanged
   );
   /**
-   * Attach or spawn's cold branch (§5.3, jev-tasks.ts): an ended attempt's
-   * session `row`, its cache cold, compressed and continued in a new session
-   * in the attempt's own workspace, which takes on the attempt (item
-   * `attempt.item`) and opens on `comment` as its next step. The source is
-   * only read: it takes no filing turn. Our own call: the summary is written
-   * on the source's harness at its default model, and the new session runs
-   * on the source's harness and model, in its mode. Answers the new
-   * session's id and how the job ends (nothing once it started, else why
-   * not); throws why it could not begin.
+   * Attach or spawn's cold branch (§5.3, jev-tasks.ts): task `taskId`'s
+   * ended attempt's session `row`, its cache cold, compressed and continued
+   * in a new session in the attempt's own workspace, which takes on the
+   * attempt as every continuation takes on its source's item, and opens on
+   * `comment` as its next step. The source is only read: it takes no filing
+   * turn. Our own call: the summary is written on the source's harness at
+   * its default model, and the new session runs on the source's harness and
+   * model, in its mode. Answers the new session's id and how the job ends
+   * (nothing once it started, else why not); throws why it could not begin.
    */
   const continueAttempt = async (
     row: InstanceRow,
-    attempt: { item: string; task: string },
+    taskId: string,
     comment: string
   ): Promise<{
     ended: Promise<string | undefined>;
     targetInstanceId: string;
   }> => {
-    await workItems.continuable(attempt.item);
+    await cloneForContinuation(row.id);
     const prepared = await prepareContinuation(row.id, comment);
     const { harness } = prepared.source;
     const request: ContinueRequest = {
@@ -18751,7 +18776,6 @@ export const createServer = (
           : {}),
       },
       note: comment,
-      item: attempt.item,
     };
     const refusal = await continuationRefusal(prepared, request);
     if (refusal) {
@@ -18759,7 +18783,7 @@ export const createServer = (
     }
     const job = startContinuation(prepared, request, {
       kind: "task",
-      id: attempt.task,
+      id: taskId,
     });
     return {
       targetInstanceId: job.targetInstanceId,
@@ -21883,6 +21907,7 @@ export const createServer = (
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
           try {
+            await cloneForContinuation(params.id);
             prepared = await prepareContinuation(
               params.id,
               body.note,

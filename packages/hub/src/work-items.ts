@@ -6504,10 +6504,9 @@ export const createWorkItems = ({
     },
 
     /**
-     * Attach or spawn's cold branch (jev-tasks.ts): ended item `itemId`'s
-     * workspace with its clone there ({@link withClone}, a retired one cut
-     * again), the folder its session's continuation starts in. Throws why
-     * there is none.
+     * Item `itemId`'s workspace with its clone there ({@link withClone}, a
+     * retired one cut again): the folder a continuation of its session is
+     * read in and starts in. Throws why there is none.
      */
     async continuable(itemId: string): Promise<void> {
       const item = db.workItem(itemId);
@@ -6526,25 +6525,25 @@ export const createWorkItems = ({
     },
 
     /**
-     * Ended item `itemId` goes on in session `to`, the continuation of its
-     * session: the item and `to` name each other, its old session no longer
-     * does, and it runs again ({@link rerun}), so the continuation's opening
-     * and every turn after are the attempt's. Nothing when `to` holds it
-     * already (a restart in between); throws when it runs again in its old
-     * session.
+     * Item `itemId` goes on in session `to`, the continuation of its
+     * session, whoever asked for it: the item and `to` name each other, its
+     * old session no longer does, so `to` finishes it. A finished item runs
+     * again ({@link rerun}) and a live one loses an interrupt's hold, so the
+     * continuation's opening and every turn after are the item's. Nothing
+     * when `to` holds it already (a restart in between).
      */
     continuedIn(itemId: string, to: string): void {
       const item = db.workItem(itemId);
       if (!item || item.instanceId === to) {
         return;
       }
-      if (LIVE.has(item.state)) {
-        throw new Error(
-          `${item.title} (${item.id}) is ${item.state} in its own session again; its continuation does not take it`
-        );
-      }
       db.carryWorkItem(item.id, item.instanceId, to);
-      rerun(item);
+      quiet.delete(item.id);
+      if (LIVE.has(item.state)) {
+        update(item.id, { heldAt: null });
+      } else {
+        rerun(item);
+      }
       console.log(
         `[work-items] ${item.id}: goes on in ${to.slice(0, 8)}, the continuation of ${item.instanceId.slice(0, 8)}`
       );
