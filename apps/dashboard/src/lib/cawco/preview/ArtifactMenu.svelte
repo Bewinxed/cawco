@@ -212,7 +212,7 @@
   <DropdownMenu.Content
     data-artifact-list
     align="start"
-    class="w-64"
+    width="wide"
     bind:ref={list}
   >
     <div {@attach reflow()} {@attach keepFocus}>
@@ -230,9 +230,10 @@
           ]
             .filter(Boolean)
             .join(" ")}
-          class="group/artifact min-h-c-artifact-row-h aria-current:text-ink-strong aria-busy:opacity-50"
+          class="group/artifact min-h-c-artifact-row-h"
           data-artifact={artifact.id}
           data-flip
+          marks="current-busy"
           onkeydown={(event: KeyboardEvent) => {
             if (event.key === "Delete" || event.key === "Backspace") {
               event.preventDefault();

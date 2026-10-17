@@ -51,8 +51,9 @@
     <!-- The views bar's place (ViewBar): --space-3 in from each side,
          --space-4 over the foot and its safe area. -->
     <Drawer.Content
-      class="h-(--sheet-h) inset-x-space-3 p-0 pb-(--sheet-foot) vaul-drawer-direction-bottom:inset-x-space-3 vaul-drawer-direction-bottom:pb-(--sheet-foot)"
+      class="h-(--sheet-h) inset-x-space-3 vaul-drawer-direction-bottom:inset-x-space-3"
       data-caw-float-sheet
+      pad="sheet-foot"
       style="--drawer-max-height: 85dvh; --sheet-h: 85dvh; --sheet-foot: calc(var(--space-4) + var(--safe-bottom));"
     >
       <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
@@ -73,7 +74,8 @@
     <Popover.Content
       align="start"
       aria-label="Caw, lead of {projectName}"
-      class="flex h-(--pop-h) w-c-panel-w overflow-hidden p-0"
+      class="flex h-(--pop-h) w-c-panel-w overflow-hidden"
+      pad="none"
       style="--pop-h: min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px));"
       collisionPadding={12}
       customAnchor={lead.anchor}

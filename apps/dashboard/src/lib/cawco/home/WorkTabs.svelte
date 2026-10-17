@@ -727,10 +727,11 @@
   <div
     data-layer={layer || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-0 top-0 bottom-auto not-data-layer:top-full"
+    class="pointer-events-none absolute inset-x-0 top-0 bottom-auto not-data-layer:top-full [[data-slot=work-tabs-rows]:has([data-key])>&]:not-data-layer:top-(--leave-top)"
     data-leaving
     data-reflow
     inert
+    style:--leave-top="calc(100% + var(--tree-gap))"
   >
     <ul
       data-slot="work-tabs-session-tree"
@@ -776,7 +777,7 @@
         data-work-tabs
         boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
           .foldBoxes}
-        class="bg-transparent p-0"
+        fill="none"
         onValueChange={(id: string) => choose(id as WorkTab)}
         value={workTab.current}
         values={TAB_IDS}
@@ -785,6 +786,10 @@
         <TabsList aria-label="Sessions">
           {#each TABS as tab (tab.id)}
             {@const count = rowsOf(tab.id).length}
+            {@const countTone =
+              (tab.id === "finished" && finishedFailed && "fail") ||
+              (tab.id === "finished" && "done") ||
+              "live"}
             <TabItem label={tab.label} value={tab.id}>
               {#snippet trail()}
                 <!-- No count until it is read: a 0 here would be a claim. -->
@@ -803,14 +808,17 @@
                     <span
                       data-num
                       data-slot="count"
-                      class="pointer-events-none ms-space-1 me-(--count-end) inline-grid h-(--count-side) min-w-(--count-side) place-items-center rounded-xs px-(--count-pad) type-meta num text-ink-muted data-failed:text-(--ink)"
+                      class="pointer-events-none ms-space-1 me-(--count-end) inline-grid h-(--count-side) min-w-(--count-side) place-items-center rounded-xs bg-(--wash)/(--count-pick) px-(--count-pad) type-meta num text-ink-muted data-failed:text-(--ink)"
                       data-failed={(tab.id === "finished" && finishedFailed) ||
                         undefined}
                       data-flip="pop"
                       data-tab={tab.id}
                       style:--count-end="max(0px, 2px - var(--tight) * 0.06)"
+                      style:--count-pick="calc(var(--pick) * 100%)"
                       style:--count-pad="calc(3px - var(--tight) * 0.03)"
                       style:--count-side="18px"
+                      style:--ink="var(--status-{countTone}-ink)"
+                      style:--wash="var(--count-wash-{countTone})"
                       ><span class="col-start-1 row-start-1">{count}</span><span
                         aria-hidden="true"
                         class="col-start-1 row-start-1 text-(--ink) opacity-(--pick)"
@@ -863,7 +871,7 @@
         out:crossOut
       >
         {#each WAITING_ROWS as row (row)}
-          <Skeleton class="h-11 w-full" />
+          <Skeleton class="w-full" height="tabs" />
         {/each}
       </div>
     {:else}
@@ -901,14 +909,14 @@
               data-machine={id}
             >
               <hr
-                class="kit-seam absolute inset-x-0 top-0 bottom-auto opacity-0 transition-[opacity] dur-fade ease-out"
+                class="kit-seam absolute inset-x-0 top-0 bottom-auto opacity-0 transition-[opacity] dur-fade ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
               />
               {@render header(
                 entry.group,
                 headAnim(entry.kind, id),
                 headUnseen(entry.kind, id)
               )}
-              <div class="rows relative">
+              <div data-slot="work-tabs-rows" class="relative">
                 {#if plan?.layered.has(id) && entry.gone.length}
                   <!-- The rows this machine had, leaving in the places the new
                    ones take, each new one arriving as its place clears. -->
@@ -1094,36 +1102,5 @@
   [data-leaving] :global([data-slot="tree-node"])::before,
   [data-leaving] :global([data-slot="tree-node"])::after {
     animation: var(--leave, none);
-  }
-  /* residual: unmapped — the count's ink and wash switch with its tab and
-     with a failure (custom properties: no utility sets one), and its wash
-     is a mix by the tab's own clock (--pick); a group's seam shows only
-     after an earlier group with rows (a sibling rule); and leaving rows
-     with no successor stand a tree-gap under what stays when anything
-     stays (a run-time :has). */
-  [data-slot="count"] {
-    --ink: var(--status-live-ink);
-    --wash: var(--count-wash-live);
-    background: color-mix(
-      in oklab,
-      var(--wash) calc(var(--pick) * 100%),
-      transparent
-    );
-  }
-  [data-slot="count"][data-tab="finished"] {
-    --ink: var(--status-done-ink);
-    --wash: var(--count-wash-done);
-  }
-  /* Something listed as finished failed: the numeral says so, chosen or
-     not. */
-  [data-slot="count"][data-failed] {
-    --ink: var(--status-fail-ink);
-    --wash: var(--count-wash-fail);
-  }
-  [data-slot="group"][data-filled] ~ [data-slot="group"][data-filled] > hr {
-    opacity: 1;
-  }
-  .rows:has(:global([data-key])) > [data-leaving]:not([data-layer]) {
-    top: calc(100% + var(--tree-gap));
   }
 </style>

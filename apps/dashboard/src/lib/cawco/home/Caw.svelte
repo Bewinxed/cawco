@@ -720,31 +720,23 @@
   style:--top="{(-size * BOX.y) / BOX.side}px"
 >
   <!-- One per file, the slot's own box and never transformed, so a clip on it
-       holds its line while his canvas fades and scales inside. -->
+       holds its line while his canvas fades and scales inside. A status
+       file behind the edge (`data-behind`): his acting still reaches past
+       the box above and to the sides, and nothing of him draws below the
+       slot's bottom. peek.riv draws its own wing tips in front of the
+       edge. -->
   {#each layers as layer (layer.id)}
     <div
       data-slot="layer"
       data-behind={(ledge && layer.status !== "peek") || undefined}
-      class="absolute inset-0"
+      class="absolute inset-0 data-behind:clip-path-(--behind-clip)"
+      style:--behind-clip={"inset(calc(var(--artboard) * -1) calc(var(--artboard) * -1) 0)"}
     >
       <canvas
         data-caw-shown={layer.shown || undefined}
-        class="absolute top-(--top) left-(--left) size-(--artboard) opacity-0"
+        class="absolute top-(--top) left-(--left) size-(--artboard) opacity-0 data-caw-shown:opacity-100"
         {@attach mount(layer)}
       ></canvas>
     </div>
   {/each}
 </div>
-
-<style>
-  /* residual: unmapped */
-  /* A status file behind the edge: his acting still reaches past the box
-     above and to the sides, and nothing of him draws below the slot's
-     bottom. peek.riv draws its own wing tips in front of the edge. */
-  [data-slot="layer"][data-behind] {
-    clip-path: inset(calc(var(--artboard) * -1) calc(var(--artboard) * -1) 0);
-  }
-  canvas[data-caw-shown] {
-    opacity: 1;
-  }
-</style>

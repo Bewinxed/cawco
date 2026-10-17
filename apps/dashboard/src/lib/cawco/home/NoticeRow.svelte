@@ -82,7 +82,7 @@
       <button
         data-slot="x"
         aria-label={dismissLabel}
-        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted motion-safe:active:transform-(--tpress) hover:bg-surface-hover hover:text-ink-strong"
+        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) hover:bg-surface-hover hover:text-ink-strong"
         onclick={ondismiss}
         style:--box="24px"
         style:--tpress="scale(var(--press-scale))"
@@ -97,13 +97,6 @@
 </article>
 
 <style>
-  /* residual: unmapped */
-  [data-slot="x"] {
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      transform var(--dur-toggle) var(--ease-out);
-  }
   /* A finger's 44px area (`touch-hit`) stays whole and centred where the box
      stood before it hung: moved back inboard by `--x-ink`, it ends inside the
      list as it did, so the list never grows a sideways scroll for it. */

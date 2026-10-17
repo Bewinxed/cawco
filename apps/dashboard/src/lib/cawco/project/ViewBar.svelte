@@ -127,7 +127,7 @@
   <!-- literal: 10px -->
   <div
     data-slot="view-bar"
-    class="group kit-dock-shell flex items-center gap-space-2 p-c-composer-inset coarse:gap-(--coarse-gap)"
+    class="group kit-dock-shell flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-(--coarse-gap) coarse:hit-gap-x-(--coarse-gap)"
     data-bar
     style:--bar-control-radius="calc(var(--radius-lg) - var(--c-composer-inset))"
     style:--coarse-gap="10px"
@@ -144,7 +144,8 @@
     >
       <Select.Trigger
         aria-label="View: {label}"
-        class="group-data-bar:h-c-composer-field group-data-bar:min-w-0 group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto group-data-bar:overflow-clip group-data-bar:rounded-(--bar-control-radius)"
+        class="group-data-bar:shrink group-data-bar:grow-0 group-data-bar:basis-auto group-data-bar:overflow-clip group-data-bar:not-size-sm:h-c-composer-field group-data-bar:size-sm:h-c-composer-field"
+        look="in-bar"
         mark="chevron"
         bind:ref={pill}
       >
@@ -206,18 +207,6 @@
 </div>
 
 <style>
-  /* residual: unmapped */
-  /* The shell's 7px inset all round; its controls at the composer's field
-     height, concentric with it. On a coarse pointer the gap opens to 10px,
-     so each control's touch area reaches 44px before its neighbour's. */
-  [data-slot="view-bar"] {
-    --hit-gap-x: var(--space-2);
-  }
-  @media (pointer: coarse) {
-    [data-slot="view-bar"] {
-      --hit-gap-x: var(--coarse-gap);
-    }
-  }
   /* residual: foreign-dom */
   /* The word gives way to the chevron while the width runs; a name longer
      than the bar has room for ends in an ellipsis (the list and the pill's

@@ -76,7 +76,14 @@
   onsubmit={use}
   transition:appear
 >
-  <h2 class="type-title text-ink-strong">Pick a machine and folder</h2>
+  <!-- The title role without its tracking: the role was a `font`
+       shorthand, which sets none. -->
+  <h2
+    class="type-title tracking-(--title-track) text-ink-strong"
+    style:--title-track="normal"
+  >
+    Pick a machine and folder
+  </h2>
   <div class="flex flex-col gap-space-1">
     <span class="text-label text-ink-muted" id="place-machine-label"
       >Machine</span
@@ -84,8 +91,9 @@
     <Select.Root type="single" bind:value={machineId}>
       <Select.Trigger
         aria-labelledby="place-machine-label"
-        class="w-full text-ink-strong"
+        class="w-full"
         size="sm"
+        tone="strong"
       >
         {machine ? `${machine.hostname} · ${machine.os}` : "No machines online"}
       </Select.Trigger>
@@ -107,7 +115,7 @@
     <label class="text-label text-ink-muted" for="place-folder">Folder</label>
     <Input
       autocomplete="off"
-      class="font-mono"
+      face="mono"
       id="place-folder"
       oninput={() => {
         problem = null;

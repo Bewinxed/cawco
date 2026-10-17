@@ -1561,7 +1561,9 @@
     <Popover.Content
       data-pin-list-pop
       align="end"
-      class="w-(--pin-list-w) max-h-(--pin-list-h) p-space-2 gap-0"
+      class="w-(--pin-list-w) max-h-(--pin-list-h)"
+      gap="none"
+      pad="inset"
       bind:ref={listPanel}
       customAnchor={wellCorner}
       onEscapeKeydown={(event) => {
@@ -1666,8 +1668,8 @@
               variant="outline"
             />
             <Button
-              class="px-0"
               href="/config/previews"
+              pad="none"
               label="Preview settings"
               size="sm"
               variant="link"
@@ -1722,7 +1724,7 @@
       data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
-      class="absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] dur-control ease-out data-ready:opacity-0"
+      class="absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] dur-control ease-out data-ready:opacity-0 data-ready:[&_*]:animation-paused"
       role={stageWaiting ? "status" : undefined}
     >
       <!-- literal: 11px, 42% -->
@@ -1858,8 +1860,8 @@
               <!-- The session that serves the page, as the kit draws a link
                    (Button `link`, as Caw's panel offers its settings). -->
               <Button
-                class="px-0"
                 href={fleet.sessionHref(owner.id)}
+                pad="none"
                 label={`Open ${ownerName}`}
                 size="sm"
                 variant="link"
@@ -1947,11 +1949,21 @@
   /* residual: foreign-dom */
   /* The well is the card's (SideSurface). Comment and Draw turn the well's
      own border the accent, 2px, inside its box: never a second ring round
-     it. Interact leaves it as the page's own. */
+     it. Interact leaves it as the page's own. The ring eases in and out,
+     except while the split slides with motion: then the well's edges take
+     the slide's transition (SideSurface's own utilities), which this
+     rule's would otherwise outrank. */
   :global(.preview-pane [data-slot="side-well"]) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
+  }
+  :global(.preview-pane [data-slot="side-well"]:not([data-split-sliding] *)) {
     transition: outline-color var(--dur-control) var(--ease-in-out);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.preview-pane [data-slot="side-well"]) {
+      transition: outline-color var(--dur-control) var(--ease-in-out);
+    }
   }
   :global(.preview-pane:is(.mode-comment, .mode-draw) [data-slot="side-well"]) {
     outline-color: var(--accent);
@@ -1973,12 +1985,9 @@
   [data-slot="pin-room"] > :global(*) {
     pointer-events: auto;
   }
-  /* residual: unmapped */
-  /* A cover faded away is not loading: its sweep holds still. */
-  [data-slot="cover"][data-ready] :global(*) {
-    animation-play-state: paused;
-  }
   /* residual: pseudo */
+  /* A cover faded away is not loading: its sweep holds still (its
+     descendants too: `data-ready:[&_*]:animation-paused` on the cover). */
   [data-slot="cover"][data-ready] :global(*::after) {
     animation-play-state: paused;
   }

@@ -294,7 +294,7 @@
   data-sheet={sheet || undefined}
   data-slot="pin-card"
   aria-label={`Pin ${pin.number}`}
-  class="group/pin absolute z-2 flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline max-w-(--card-maxw) not-data-sheet:not-data-placed:top-space-2 not-data-sheet:not-data-placed:right-space-2 data-placed:top-(--card-top) data-placed:left-(--card-left) data-sheet:inset-x-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-(--sheet-max) data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
+  class="group/pin absolute z-2 flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline max-w-(--card-maxw) not-data-sheet:not-data-placed:top-space-2 not-data-sheet:not-data-placed:right-space-2 data-placed:top-(--card-top) data-placed:left-(--card-left) not-data-placed:data-sheet:start-0 data-sheet:end-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-(--sheet-max) data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
   data-pin-card={pin.number}
   data-placed={place ? "" : undefined}
   role="dialog"
@@ -330,7 +330,7 @@
         <!-- Cut from its start, so the file's name and line stay. -->
         <span
           data-slot="source"
-          class="truncate text-left text-ink-muted font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal)"
+          class="dir-rtl truncate text-left text-ink-muted font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal)"
           ><bdi>{source}</bdi></span
         >
       {/if}
@@ -451,7 +451,7 @@
       aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
       aria-invalid={problem ? true : undefined}
       aria-label={pin.thread.length > 0 ? "Reply" : "Comment"}
-      class="group-data-sheet/pin:text-(length:--field-fs)"
+      text="pin-field"
       onkeydown={(event: KeyboardEvent) => {
         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
@@ -506,10 +506,5 @@
     50% {
       opacity: 0.4;
     }
-  }
-  /* residual: unmapped */
-  /* rtl only to put the ellipsis at the start; the line stays at the left. */
-  [data-slot="source"] {
-    direction: rtl;
   }
 </style>

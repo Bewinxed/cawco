@@ -354,7 +354,8 @@
       data-caw-lead-card
       align="start"
       aria-label="Caw's session"
-      class="z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden p-0"
+      class="z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden"
+      pad="none"
       style="--lead-w: min(416px, calc(100vw - 24px)); --lead-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh))"
       collisionPadding={12}
       customAnchor={cardAnchor}

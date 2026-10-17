@@ -116,7 +116,8 @@
           data-toggle
           aria-controls="moved-done"
           aria-expanded={open}
-          class="me-(--hang) aria-expanded:bg-transparent hover:aria-expanded:bg-surface-hover"
+          class="me-(--hang)"
+          expanded="unfilled"
           onclick={() => {
             open = !open;
           }}
@@ -140,17 +141,22 @@
       <!-- The fold (UpdateCard's notes' recipe): the grid row is the track,
            the inner box clips, fades and cross-blurs; shutting is quicker than
            opening; the chevron flips with it. -->
+      <!-- literal: 0fr, 1fr -->
       <div
         data-slot="fold"
-        class="group grid transition-[grid-template-rows] dur-exit ease-out data-open:dur-panel motion-reduce:transition-none"
+        class="group grid grid-rows-(--fold-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--fold-open) data-open:dur-panel motion-reduce:transition-none"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
         ontransitionend={settled}
+        style:--fold-open="1fr"
+        style:--fold-shut="0fr"
       >
+        <!-- literal: 0 -->
         <div
           data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 transition-fold-fade group-data-open:opacity-100 group-data-open:dur-panel motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:dur-panel"
+          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:dur-panel"
+          style:--fold-clear="0"
         >
           <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
             {#each done as one (one.id)}
@@ -167,23 +173,5 @@
   /* residual: foreign-dom */
   [data-slot="more"] :global([data-chev] path) {
     vector-effect: non-scaling-stroke;
-  }
-  /* residual: unmapped */
-  [data-slot="fold"] {
-    grid-template-rows: 0fr;
-  }
-  [data-slot="fold"][data-open] {
-    grid-template-rows: 1fr;
-  }
-  [data-slot="fold-inner"] {
-    filter: blur(var(--fold-blur));
-  }
-  [data-slot="fold"][data-open] > [data-slot="fold-inner"] {
-    filter: blur(0);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    [data-slot="fold-inner"] {
-      filter: none;
-    }
   }
 </style>

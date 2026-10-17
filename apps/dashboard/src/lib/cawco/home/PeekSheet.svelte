@@ -45,7 +45,8 @@
   <!-- literal: 80dvh -->
   <Drawer.Content
     data-peek-sheet
-    class="vaul-drawer-direction-bottom:h-(--sheet-h) vaul-drawer-direction-bottom:pb-(--safe-bottom)"
+    class="vaul-drawer-direction-bottom:h-(--sheet-h)"
+    pad="sheet-safe-bottom"
     style="--sheet-h: 80dvh"
   >
     <Drawer.Title class="sr-only">Peek</Drawer.Title>
