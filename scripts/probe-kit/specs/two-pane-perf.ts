@@ -49,9 +49,13 @@
  *
  * A LEG COUNTS ONLY UNCONTENDED. Each phase is a leg, and it counts when the
  * spec's own cgroup's CPU pressure (Linux PSI, `cpu.pressure`, `some avg10`)
- * is under `PSI_LIMIT` at its start, middle and end; a leg over it is void
- * and measured again (`LEG_TRIES`), and each leg's note leads with its PSI,
- * the box's load average beside it for reference only. The pressure that
+ * is under `PSI_LIMIT` at its start, middle and end; a try over it is void
+ * and measured again, until `REPEATS` tries ran uncontended (at most
+ * `LEG_TRIES` more), and each try's note leads with its PSI, the box's load
+ * average beside it for reference only. A timed reading is the median of its
+ * leg's uncontended tries: one try's longest task moved by 1 to 15ms between
+ * runs of the same code. A leg with no uncontended try fails its timed
+ * checks as measured only under load. The pressure that
  * cannot be read stops the spec: there is no other gate. On a box shared
  * with the fleet the spec runs in a scope of its own weighted high, the
  * fleet's services low, so its legs get a CPU whenever they ask:
@@ -148,6 +152,16 @@ interface Reading {
   messages: number;
   /** Each switch's shown pane's row elements in view, the frame after it showed (switch phases). */
   onScreen: number[];
+  /**
+   * Its switches' style and layout passes, all told (switch phases): the
+   * median of its tries'. A try's count takes in whatever streamed work
+   * landed inside a switch's window (1.37x one run, 0.86x the next).
+   */
+  passes: number;
+  /** The main thread's CPU per hub message, ms: the median of its tries' own. */
+  perMessage: number;
+  /** Its tries ran uncontended (`quietTries`); false when every one waited for CPU. */
+  quiet: boolean;
   /** The longest task between a reach and its switch, CPU ms (switch phases). */
   reachCpu: number;
   /** What the longest task restyled, and its style and layout time. */
@@ -165,6 +179,23 @@ interface Reading {
   work: SwitchWork[];
   /** The longest animation frame's account of itself: what ran in it. */
   worstFrame: string;
+}
+
+/** One try of a phase, off its trace: its window on the page's clock and what its tasks took. */
+interface Span {
+  /** The main thread's CPU over the try, ms. */
+  cpu: number;
+  from: number;
+  /** Each switch's input on the page's clock (switch phases). */
+  madeAt: number[];
+  maxCpu: number;
+  /** Each switch's shown pane's row elements in view (switch phases). */
+  onScreen: number[];
+  reachCpu: number;
+  restyled: string;
+  switchCpu: number;
+  to: number;
+  work: SwitchWork[];
 }
 
 /** A long animation frame as the page tells it: its start, length, and what filled it. */
@@ -639,8 +670,13 @@ const composerAlone = (page: Page): Promise<string> =>
       document.body.getBoundingClientRect();
       return `${ms.toFixed(1)}ms`;
     };
-    const field = dock.querySelector<HTMLTextAreaElement>("textarea");
-    const draft = field?.value ?? "";
+    // The field is MentionField's editable box (kit `COMPOSER_FIELD`): its
+    // words swapped, and its own nodes put back as they were.
+    const field = dock.querySelector<HTMLElement>(
+      '[role="combobox"][contenteditable="true"]'
+    );
+    const kept = field ? [...field.childNodes] : [];
+    const draft = field?.textContent ?? "";
     const stack = dock.querySelector<HTMLElement>('[data-slot="stack"]');
     const height = stack?.style.blockSize ?? "";
     const trays = [...dock.querySelectorAll<HTMLElement>('[data-slot="tray"]')];
@@ -654,12 +690,12 @@ const composerAlone = (page: Page): Promise<string> =>
         field
           ? timed(
               () => {
-                field.value = draft
+                field.textContent = draft
                   ? ""
                   : "A draft of two lines, as long as a reply asked for";
               },
               () => {
-                field.value = draft;
+                field.replaceChildren(...kept);
               }
             )
           : "no field"
@@ -804,6 +840,13 @@ const PSI_WAIT_MS = 20 * 60_000;
 const LEG_SAMPLE_MS = 1000;
 /** How many times a leg the spec waited for CPU in is measured again. */
 const LEG_TRIES = 3;
+/**
+ * How many uncontended tries each leg keeps; its timed readings are their
+ * median. One try's longest task or CPU per message moved by 1 to 15ms, or
+ * 0.05x, between runs of the same code: a single try against a 1.1x share
+ * reads that spread as a pass or a fail. Our own call.
+ */
+const REPEATS = 3;
 
 /** This process's cgroup's `cpu.pressure` file, read off `/proc/self/cgroup` (v2's `0::` line). */
 function pressureFile(): string {
@@ -852,19 +895,27 @@ async function uncontended(file: string): Promise<string> {
 }
 
 /**
- * Runs a leg once the spec waits on no one for CPU, reading its pressure
- * each second while it runs, and again (up to `LEG_TRIES`) when its start,
- * middle or end reading was `PSI_LIMIT` or more: a contended leg is void.
- * Says the leg's readings: PSI at start, middle and end, the try kept, the
- * wait, and the load average beside them for reference.
+ * Runs a leg until `REPEATS` tries of it ran with the spec waiting on no one
+ * for CPU, each once the pressure has fallen, its pressure read each second
+ * while it runs: a try whose start, middle or end reading was `PSI_LIMIT` or
+ * more is void, never kept. At most `REPEATS + LEG_TRIES` tries. What it
+ * keeps is the uncontended tries; with none, every try, said contended.
+ * Says each try's readings: PSI at start, middle and end, the wait, and the
+ * load average beside them for reference.
  */
-async function quietLeg(
+async function quietTries<T>(
   name: string,
   file: string,
-  run: () => Promise<void>
-): Promise<string> {
-  let said = "";
-  for (let attempt = 1; attempt <= LEG_TRIES; attempt += 1) {
+  run: () => Promise<T>
+): Promise<{ kept: T[]; quiet: boolean; said: string }> {
+  const quiet: T[] = [];
+  const all: T[] = [];
+  const said: string[] = [];
+  for (
+    let attempt = 1;
+    attempt <= REPEATS + LEG_TRIES && quiet.length < REPEATS;
+    attempt += 1
+  ) {
     const waited = await uncontended(file);
     const readings: number[] = [cpuPressure(file)];
     const loadAt = oneMinuteLoad();
@@ -872,8 +923,9 @@ async function quietLeg(
       () => readings.push(cpuPressure(file)),
       LEG_SAMPLE_MS
     );
+    let got: T;
     try {
-      await run();
+      got = await run();
     } finally {
       clearInterval(sampler);
     }
@@ -883,14 +935,33 @@ async function quietLeg(
       readings[Math.floor(readings.length / 2)],
       readings.at(-1) ?? 0,
     ];
-    const quiet = marks.every((one) => one < PSI_LIMIT);
-    said = `PSI some avg10 ${marks.join(" / ")} (start / middle / end), try ${attempt} (${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${quiet ? "" : `, CONTENDED (PSI ${PSI_LIMIT} or more)`}`;
-    console.log(`  ${name}: ${said}`);
-    if (quiet) {
-      break;
+    const calm = marks.every((one) => one < PSI_LIMIT);
+    all.push(got);
+    if (calm) {
+      quiet.push(got);
     }
+    const line = `try ${attempt}: PSI some avg10 ${marks.join(" / ")} (start / middle / end, ${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${calm ? "" : `, CONTENDED (PSI ${PSI_LIMIT} or more), void`}`;
+    console.log(`  ${name}: ${line}`);
+    said.push(line);
   }
-  return said;
+  const kept = quiet.length > 0 ? quiet : all;
+  return {
+    kept,
+    quiet: quiet.length > 0,
+    said: `${quiet.length} of ${all.length} tries uncontended${quiet.length > 0 ? "" : ", so CONTENDED: measured only under load"}; ${said.join("; ")}`,
+  };
+}
+
+/** A copy of a phase's list as it stands now, empty when it has none. */
+const copyOf = (list: number[] | undefined): number[] => [...(list ?? [])];
+
+/** The middle value (the mean of the two middle ones for an even count). */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[mid] ?? 0)
+    : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 }
 
 /**
@@ -1286,18 +1357,10 @@ async function measure(
   await readOlder(page);
   kit.note(`${mode} pane(s), what each pane holds: ${await census(page)}`);
   const now = () => page.evaluate(() => performance.now());
-  const spans = {} as Record<
+  /** Each phase's uncontended tries (`quietTries`), and what its tries said. */
+  const tries = {} as Record<
     Phase,
-    {
-      cpu: number;
-      from: number;
-      maxCpu: number;
-      reachCpu: number;
-      restyled: string;
-      switchCpu: number;
-      to: number;
-      work: SwitchWork[];
-    }
+    { kept: Span[]; quiet: boolean; said: string }
   >;
   /** Each switch's input on the page's clock, by phase: where its Event Timing entries are read from. */
   const madeAts: Partial<Record<Phase, number[]>> = {};
@@ -1308,7 +1371,10 @@ async function measure(
   // itself (its marks, `two-pane:reach:<n>` and `two-pane:switch:<n>`); and
   // what the longest task (the longest switch's, in a switch phase)
   // restyled and laid out, and why.
-  const measurePhase = async (name: Phase, act: () => Promise<void>) => {
+  const measurePhase = async (
+    name: Phase,
+    act: () => Promise<void>
+  ): Promise<Span> => {
     let from = 0;
     let to = 0;
     const main = await traceMain(
@@ -1367,7 +1433,7 @@ async function measure(
     const longestSwitch = longestOf(switches);
     const whichTask = whichOf(longestSwitch, madeOf);
     const longest = longestSwitch ?? longestOf(own);
-    spans[name] = {
+    return {
       from,
       to,
       cpu: own.reduce((sum, task) => sum + task.cpu, 0),
@@ -1375,6 +1441,9 @@ async function measure(
       reachCpu: longestOf(reaches)?.cpu ?? 0,
       switchCpu: longestSwitch?.cpu ?? 0,
       work,
+      // This try's switches, read before the next try sets them again.
+      madeAt: copyOf(madeAts[name]),
+      onScreen: copyOf(onScreens[name]),
       restyled: longest
         ? `${whichTask}${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
             .filter((pass) => pass.ms >= 0.5)
@@ -1400,15 +1469,14 @@ async function measure(
         : "nothing",
     };
   };
-  // Each leg uncontended (`quietLeg`): measured again when the spec waited
-  // for CPU while it ran, its readings said with it.
+  // Each leg `REPEATS` times uncontended (`quietTries`): a try the spec
+  // waited for CPU in is void and run again, its readings said with it.
   const pressure = pressureFile();
   cpuPressure(pressure);
   const phase = async (name: Phase, act: () => Promise<void>) => {
-    const leg = await quietLeg(`${mode} pane(s), ${name}`, pressure, () =>
+    tries[name] = await quietTries(`${mode} pane(s), ${name}`, pressure, () =>
       measurePhase(name, act)
     );
-    spans[name].restyled = `${leg} | ${spans[name].restyled}`;
   };
   await phase("stream", () => page.waitForTimeout(20_000));
   await phase("type", async () => {
@@ -1901,9 +1969,21 @@ async function measure(
   await page.close();
   const readings = {} as Record<Phase, Reading>;
   for (const name of PHASES) {
-    const { from, to, cpu, maxCpu, reachCpu, restyled, switchCpu, work } =
-      spans[name];
-    const switchInputs = inputsOf(seen.events, madeAts[name]);
+    const { kept, quiet, said } = tries[name];
+    const within = (at: number, span: Span) => at >= span.from && at < span.to;
+    const heardIn = (span: Span) =>
+      seen.messages.filter(([at]) => within(at, span)).length;
+    const slowestIn = (span: Span) =>
+      Math.max(
+        0,
+        ...seen.events.filter(([at]) => within(at, span)).map(([, ms]) => ms)
+      );
+    // What is timed is the median of the tries; what is counted (passes,
+    // elements, rows in view) and noted is the try whose longest task is it.
+    const byLongest = [...kept].sort((a, b) => a.maxCpu - b.maxCpu);
+    const middle = byLongest[Math.floor((byLongest.length - 1) / 2)] as Span;
+    const { from, to, restyled, work } = middle;
+    const switchInputs = inputsOf(seen.events, middle.madeAt);
     const tasks = seen.tasks.filter(([at]) => at >= from && at < to);
     const events = seen.events.filter(([at]) => at >= from && at < to);
     const [worst] = seen.frames
@@ -1929,19 +2009,26 @@ async function measure(
           `${kind} ${s.n}x, ${Math.round(s.ms)}ms in all, the slowest ${Math.round(s.max)}ms`
       )
       .join("; ");
+    const middleOf = (read: (span: Span) => number) =>
+      Math.round(median(kept.map(read)));
     readings[name] = {
       longTasks: tasks.length,
-      maxCpu: Math.round(maxCpu),
+      maxCpu: middleOf((span) => span.maxCpu),
       interactions: events.length,
-      maxInput: Math.round(Math.max(0, ...events.map(([, ms]) => ms))),
-      cpuMs: Math.round(cpu),
-      messages: heard.length,
-      reachCpu: Math.round(reachCpu),
-      restyled,
-      switchCpu: Math.round(switchCpu),
+      maxInput: middleOf(slowestIn),
+      cpuMs: middleOf((span) => span.cpu),
+      messages: middleOf(heardIn),
+      passes: middleOf((span) => passesOf(span.work)),
+      perMessage: median(
+        kept.map((span) => span.cpu / Math.max(1, heardIn(span)))
+      ),
+      quiet,
+      reachCpu: middleOf((span) => span.reachCpu),
+      restyled: `${said} | ${restyled}`,
+      switchCpu: middleOf((span) => span.switchCpu),
       switchInputs,
       work,
-      onScreen: onScreens[name] ?? [],
+      onScreen: middle.onScreen,
       worstFrame: `${worst ? `${Math.round(worst[1])}ms frame: ${worst[2]}` : "no long frame"}; hub messages of 4ms or more: ${heavy || "none"}`,
     };
   }
@@ -2099,39 +2186,46 @@ const spec: Spec = {
     );
     const { two } = numbers;
     const { one } = numbers;
+    // A timed reading counts only off uncontended tries: one measured only
+    // under load says so and fails, never passes or fails on the load.
+    const loaded = (...rs: Reading[]) =>
+      rs.some((r) => !r.quiet)
+        ? "; MEASURED ONLY CONTENDED: no try ran uncontended"
+        : "";
+    const calm = (...rs: Reading[]) => rs.every((r) => r.quiet);
     for (const name of ["stream", "type"] as Phase[]) {
       kit.check(
-        `two panes, ${name}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
-        two[name].maxCpu * SLOWER <= 2 * LONG_TASK_MS,
-        `the longest task ${two[name].maxCpu}ms of CPU; the longest ${two[name].worstFrame}`
+        `two panes, ${name}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower (the median of ${REPEATS} uncontended tries)`,
+        calm(two[name]) && two[name].maxCpu * SLOWER <= 2 * LONG_TASK_MS,
+        `the longest task ${two[name].maxCpu}ms of CPU; the longest ${two[name].worstFrame}${loaded(two[name])}`
       );
     }
     // A streamed message's CPU is held to one pane's: what a second pane
     // adds is its own transcript's tail, not a pass over every row it holds.
-    const perMessage = (r: Reading) => r.cpuMs / Math.max(1, r.messages);
     kit.check(
-      `two panes, stream: the main thread's CPU per hub message within ${MESSAGE_SHARE}x one pane's`,
-      perMessage(two.stream) <= perMessage(one.stream) * MESSAGE_SHARE,
-      `${(perMessage(two.stream) / perMessage(one.stream)).toFixed(2)}x: two panes ${two.stream.cpuMs}ms over ${two.stream.messages}, one pane ${one.stream.cpuMs}ms over ${one.stream.messages}`
+      `two panes, stream: the main thread's CPU per hub message within ${MESSAGE_SHARE}x one pane's (the median of ${REPEATS} uncontended tries each)`,
+      calm(two.stream, one.stream) &&
+        two.stream.perMessage <= one.stream.perMessage * MESSAGE_SHARE,
+      `${(two.stream.perMessage / one.stream.perMessage).toFixed(2)}x: two panes ${two.stream.perMessage.toFixed(2)}ms a message (${two.stream.cpuMs}ms over ${two.stream.messages}), one pane ${one.stream.perMessage.toFixed(2)}ms (${one.stream.cpuMs}ms over ${one.stream.messages})${loaded(two.stream, one.stream)}`
     );
     kit.note(
-      `two panes, type: ${(perMessage(two.type) / perMessage(one.type)).toFixed(2)}x one pane's CPU per hub message (${two.type.cpuMs}ms over ${two.type.messages}, one pane ${one.type.cpuMs}ms over ${one.type.messages})`
+      `two panes, type: ${(two.type.perMessage / one.type.perMessage).toFixed(2)}x one pane's CPU per hub message (${two.type.cpuMs}ms over ${two.type.messages}, one pane ${one.type.cpuMs}ms over ${one.type.messages})`
     );
     kit.check(
-      `two panes, type: every key paints within ${INPUT_MS}ms`,
-      two.type.maxInput < INPUT_MS,
-      `${two.type.interactions} interactions, the slowest ${two.type.maxInput}ms`
+      `two panes, type: every key paints within ${INPUT_MS}ms (the median of ${REPEATS} uncontended tries' slowest)`,
+      calm(two.type) && two.type.maxInput < INPUT_MS,
+      `${two.type.interactions} interactions, the slowest ${two.type.maxInput}ms${loaded(two.type)}`
     );
     // A switch's work is counted, not timed: the style and layout passes
     // from its input to the frame that shows its pane. A second pane adds
     // none of them: what the owner felt was a switch's work multiplied.
     for (const how of SWITCHES) {
-      const twoPasses = passesOf(two[how].work);
-      const onePasses = passesOf(one[how].work);
+      const twoPasses = two[how].passes;
+      const onePasses = one[how].passes;
       const restyledOf = (r: Reading) =>
         r.work.reduce((sum, w) => sum + w.restyled, 0);
       kit.check(
-        `two panes, ${how}: a switch's style and layout passes within ${PASS_SHARE}x one pane's`,
+        `two panes, ${how}: a switch's style and layout passes within ${PASS_SHARE}x one pane's (the median of ${REPEATS} tries each)`,
         twoPasses <= onePasses * PASS_SHARE,
         `${(twoPasses / Math.max(1, onePasses)).toFixed(2)}x: two panes ${twoPasses} passes over ${two[how].work.length} switches, one pane ${onePasses} over ${one[how].work.length}; elements restyled ${restyledOf(two[how])} against ${restyledOf(one[how])}`
       );
@@ -2170,9 +2264,10 @@ const spec: Spec = {
     // A switch nobody reached for first lays its pane out in the switch:
     // held to one pane's.
     kit.check(
-      `two panes, cold: the switch's longest task within ${COLD_SHARE}x one pane's`,
-      two.cold.switchCpu <= one.cold.switchCpu * COLD_SHARE,
-      `two panes ${two.cold.switchCpu}ms of CPU, one pane ${one.cold.switchCpu}ms`
+      `two panes, cold: the switch's longest task within ${COLD_SHARE}x one pane's (the median of ${REPEATS} uncontended tries each)`,
+      calm(two.cold, one.cold) &&
+        two.cold.switchCpu <= one.cold.switchCpu * COLD_SHARE,
+      `two panes ${two.cold.switchCpu}ms of CPU, one pane ${one.cold.switchCpu}ms${loaded(two.cold, one.cold)}`
     );
   },
 };
