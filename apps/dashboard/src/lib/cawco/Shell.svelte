@@ -1752,6 +1752,12 @@
     .tools::before {
       border-inline-end-width: 0;
     }
+    /* Jump and the machines live in the phone's sidebar (`{#if railed}`): the
+       server draws the wide bar, so its first paint here goes without them,
+       as the rail's does, and nothing leaves the bar as it hydrates. */
+    .tools :global(:is(.jump, .machines)) {
+      display: none;
+    }
     /* Joined to a card (Caw's panel, or the Jump palette the sidebar
        opens), the same: its trailing side is the screen's edge, square and
        with no edge drawn, as the card's is below it. And it reaches on down
