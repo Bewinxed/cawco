@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
+import { extendTailwindMerge, validators } from "tailwind-merge";
 import { createTV } from "tailwind-variants";
 import theme from "./tokens/theme.css?raw";
 
@@ -14,6 +14,8 @@ const utilities = (prefix: string): string[] =>
     ...theme.matchAll(new RegExp(`^@utility ${prefix}-([a-z0-9-]+) \\{`, "gm")),
   ].map(([, name]) => name);
 const durations = keys("duration");
+/** A value written in brackets or parentheses (`clip-path-(--clip)`). */
+const arbitrary = [validators.isArbitraryVariable, validators.isArbitraryValue];
 
 /**
  * tailwind-merge keeps the later of two classes that set the same thing, so
@@ -58,6 +60,41 @@ const twMergeConfig = {
       "border-none-r": ["border-r-none"],
       "border-none-s": ["border-s-none"],
       "border-style-t": ["border-t-dashed"],
+      // app.css's utilities for declarations Tailwind writes none for. Those
+      // that set a property tailwind-merge has a group for join it, so they
+      // replace a rival as it would; the rest are a group each.
+      rounded: ["rounded-inherit"],
+      "font-family": ["font-family-inherit"],
+      gap: ["gap-inherit"],
+      "color-scheme": ["scheme-inherit"],
+      "pointer-events": ["pointer-events-all"],
+      "font-shorthand": ["font-inherit"],
+      // tailwind-merge's `break` group holds `break-words`, which Tailwind 4
+      // writes as overflow-wrap: word-break's value is a group of its own.
+      "word-break-word": ["break-word"],
+      "animation-play-state": ["animation-paused"],
+      "inks-strong": ["inks-strong"],
+      "tap-highlight": ["tap-highlight-none"],
+      "touch-callout": ["touch-callout-none"],
+      "content-visibility": ["content-visibility-hidden"],
+      "timeline-scope": ["timeline-scope-transcript-head"],
+      "writing-mode": ["writing-vertical-rl"],
+      direction: ["dir-rtl"],
+      "clip-path": [{ "clip-path": arbitrary }],
+      "grid-areas": [{ "grid-areas": arbitrary }],
+      "line-clamp-std": [{ "line-clamp-std": [validators.isInteger] }],
+      "ring-ground": [{ "ring-ground": [validators.isAny] }],
+      // The custom-property setters, one group to a property.
+      "hit-gap-x": [{ "hit-gap-x": [validators.isAny] }],
+      "hit-gap-y": [{ "hit-gap-y": arbitrary }],
+      "hit-gap-coarse": [{ "hit-gap-coarse": arbitrary }],
+      "join-radius": [{ "join-radius": arbitrary }],
+      "caw-neck": [{ "caw-neck": arbitrary }],
+      "press-by": [{ "press-by": arbitrary }],
+      "swap-away": [{ "swap-away": [validators.isInteger] }],
+      "rail-step": [{ "rail-step": arbitrary }],
+      "prompt-fs": [{ "prompt-fs": arbitrary }],
+      "fade-inset-end": [{ "fade-inset-end": arbitrary }],
     },
   },
 };
@@ -70,6 +107,30 @@ const twMerge = extendTailwindMerge<
   | "border-none-r"
   | "border-none-s"
   | "border-style-t"
+  | "font-shorthand"
+  | "word-break-word"
+  | "animation-play-state"
+  | "inks-strong"
+  | "tap-highlight"
+  | "touch-callout"
+  | "content-visibility"
+  | "timeline-scope"
+  | "writing-mode"
+  | "direction"
+  | "clip-path"
+  | "grid-areas"
+  | "line-clamp-std"
+  | "ring-ground"
+  | "hit-gap-x"
+  | "hit-gap-y"
+  | "hit-gap-coarse"
+  | "join-radius"
+  | "caw-neck"
+  | "press-by"
+  | "swap-away"
+  | "rail-step"
+  | "prompt-fs"
+  | "fade-inset-end"
 >(twMergeConfig);
 
 /** `tv` for kit recipes, merging with the same theme as `cn`. */

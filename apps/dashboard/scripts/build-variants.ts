@@ -165,11 +165,31 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /* A surface nobody can see (motion/rest.ts): a hidden tab, an element
    scrolled out of view, an inert surface parked behind the one in front. */
-@custom-variant at-rest (&:where(:root[data-at-rest] *, [data-offscreen], [data-offscreen] *, [inert]:not([data-leaving]) *));`;
+@custom-variant at-rest (&:where(:root[data-at-rest] *, [data-offscreen], [data-offscreen] *, [inert]:not([data-leaving]) *));
+
+/* A fluid tab held down by its own hit (components/ui/fluid-tabs TabItem):
+   the press tints the whole segment, its trailing controls included; a
+   press on a trailing control leaves it be. */
+@custom-variant hit-pressed (&:has([data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])));
+
+/* A fluid track's segment while another tab stands under the hover ghost
+   (TabsList): the ghost reads as the thing about to take over. */
+@custom-variant beside-ghost (:where([data-slot="ff-tabs-list"]:has([data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected]))) > &);
+
+/* A row whose link is held down (config SectionRow). */
+@custom-variant has-link-active (&:has([data-link]:active));
+
+/* Inside a tree mark whose own hit is held down (TreeMark): the tile gives
+   a little under it. */
+@custom-variant mark-pressed (&:is([data-slot="tree-mark"]:has([data-slot="hit"]:active) *));
+
+/* Inside a live tree mark while its dot beats (TreeMark). At the weight of
+   the selector it came from, so it outranks the mark's hole mask. */
+@custom-variant mark-beating (&:is([data-slot="tree-mark"][data-dot="live"]:has([data-beating]) *));`;
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|reduced-transparency|at-rest|workflow-cards|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|reduced-transparency|at-rest|workflow-cards|hit-pressed|beside-ghost|has-link-active|mark-pressed|mark-beating|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
 
 interface Pair {
   attr: string;

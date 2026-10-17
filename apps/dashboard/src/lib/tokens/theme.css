@@ -126,6 +126,7 @@
   --color-surface-tile: var(--surface-tile);
   --color-surface-fill: var(--surface-fill);
   --color-surface-fill-strong: var(--surface-fill-strong);
+  --color-press-fill: var(--press-fill);
   --color-surface-hover: var(--surface-hover);
   --color-well-edge: var(--well-edge);
   --color-seam: var(--seam);
@@ -175,6 +176,8 @@
   --color-selection: var(--selection);
   --color-status-live-bg: var(--status-live-bg);
   --color-status-attn-bg: var(--status-attn-bg);
+  --color-needs-ground: var(--needs-ground);
+  --color-strategy-card-picked: var(--strategy-card-picked);
   --color-status-done-bg: var(--status-done-bg);
   --color-status-fail-bg: var(--status-fail-bg);
   --color-status-idle-bg: var(--status-idle-bg);

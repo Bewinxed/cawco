@@ -151,6 +151,8 @@ public enum Palette {
     public static let surfaceFill = Palette.named("surface-fill")
     /// A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).
     public static let surfaceFillStrong = Palette.named("surface-fill-strong")
+    /// A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill.
+    public static let pressFill = Palette.named("press-fill")
     /// Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.
     public static let surfaceHover = Palette.named("surface-hover")
     /// The reader's well edge: darker than the well by day, the ink at 8% at night.
@@ -225,6 +227,10 @@ public enum Palette {
     /// Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person.
     public static let statusLiveBg = Palette.named("status-live-bg")
     public static let statusAttnBg = Palette.named("status-attn-bg")
+    /// A task's needs section (TaskNeeds): the attention tint at a little under half, laid on the raised surface the task stands on.
+    public static let needsGround = Palette.named("needs-ground")
+    /// The picked card among an account's routing strategies (StrategyPicker): the selection's tint at a little under half, laid on the raised surface.
+    public static let strategyCardPicked = Palette.named("strategy-card-picked")
     public static let statusDoneBg = Palette.named("status-done-bg")
     public static let statusFailBg = Palette.named("status-fail-bg")
     public static let statusIdleBg = Palette.named("status-idle-bg")

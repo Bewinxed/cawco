@@ -184,6 +184,8 @@
     --surface-fill: light-dark(var(--neutral-4), var(--neutral-5));
     /* A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open). */
     --surface-fill-strong: light-dark(var(--neutral-6), var(--neutral-7));
+    /* A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill. */
+    --press-fill: light-dark(var(--surface-fill-strong), var(--surface-fill));
     /* Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike. */
     --surface-hover: light-dark(var(--neutral-4), var(--neutral-4));
     /* The reader's well edge: darker than the well by day, the ink at 8% at night. */
@@ -300,6 +302,18 @@
     /* Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person. */
     --status-live-bg: color-mix(in oklab, var(--info-3) 76%, var(--info-9));
     --status-attn-bg: light-dark(oklch(91% 0.115 95), oklch(37% 0.07 92));
+    /* A task's needs section (TaskNeeds): the attention tint at a little under half, laid on the raised surface the task stands on. */
+    --needs-ground: color-mix(
+      in oklab,
+      var(--status-attn-bg) 45%,
+      var(--surface-raised)
+    );
+    /* The picked card among an account's routing strategies (StrategyPicker): the selection's tint at a little under half, laid on the raised surface. */
+    --strategy-card-picked: color-mix(
+      in oklab,
+      var(--selected-bg) 45%,
+      var(--surface-raised)
+    );
     --status-done-bg: color-mix(
       in oklab,
       var(--success-3) 76%,

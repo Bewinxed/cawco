@@ -1053,6 +1053,11 @@
       "$value": "{color.neutral-6}",
       "$description": "A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open)."
     },
+    "press-fill": {
+      "$type": "color",
+      "$value": "{color.surface-fill-strong}",
+      "$description": "A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill."
+    },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-4}",
@@ -1427,6 +1432,32 @@
       "$value": {
         "colorSpace": "oklch",
         "components": [0.91, 0.115, 95]
+      }
+    },
+    "needs-ground": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.95565, -0.004319, 0.053745]
+      },
+      "$description": "A task's needs section (TaskNeeds): the attention tint at a little under half, laid on the raised surface the task stands on.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.status-attn-bg} 45%, {color.surface-raised})"
+        }
+      }
+    },
+    "strategy-card-picked": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.9534, 0.01886, 0.022925]
+      },
+      "$description": "The picked card among an account's routing strategies (StrategyPicker): the selection's tint at a little under half, laid on the raised surface.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.selected-bg} 45%, {color.surface-raised})"
+        }
       }
     },
     "status-done-bg": {

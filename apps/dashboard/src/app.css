@@ -165,6 +165,34 @@
   inherits: false;
   initial-value: 0;
 }
+/* How chosen a folder tab is (components/ui/fluid-tabs TabItem, `--pick`),
+   typed so a choice interpolates the one number and everything drawn from
+   it follows on its clock. */
+@property --pick {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+/* The fluid track's come-forward clock (TabsList, `tab-come-forward`): a
+   number the run carries from 0 to 1, which nothing draws. And a tab's rank
+   in the stack (`--z`, the track's; `--z-rest`, from the order and the value
+   until the track ranks it), read only on the box that carries it. Not
+   inherited: as plain custom properties each new rank restyled everything
+   its tab holds, 430 elements a choice. No initial value (`*`), so a box the
+   track has not ranked yet still falls back to its rest rank. */
+@property --forward {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --z {
+  syntax: "*";
+  inherits: false;
+}
+@property --z-rest {
+  syntax: "*";
+  inherits: false;
+}
 
 @layer base {
   /* The theme class is the one switch: it picks the palette through
@@ -2293,6 +2321,124 @@
    leaves a duration and curve the element set elsewhere. */
 @utility transition-off {
   transition: none;
+}
+
+/* Declarations Tailwind writes no utility for, each as the source wrote it.
+   A box that takes a value from its parent as it stands (`inherit`): a
+   custom property cannot carry the keyword, which would make the property
+   inherit rather than the value. */
+@utility rounded-inherit {
+  border-radius: inherit;
+}
+@utility font-inherit {
+  font: inherit;
+}
+@utility font-family-inherit {
+  font-family: inherit;
+}
+@utility gap-inherit {
+  gap: inherit;
+}
+/* `word-break: break-word` (Tailwind's `wrap-break-word` is overflow-wrap,
+   another property). */
+@utility break-word {
+  word-break: break-word;
+}
+/* A running animation held where it stands. */
+@utility animation-paused {
+  animation-play-state: paused;
+}
+/* The muted and subtle inks gone strong inside a control (press-tint sets
+   these two and two more). */
+@utility inks-strong {
+  --ink-muted: var(--ink-strong);
+  --ink-subtle: var(--ink-strong);
+}
+/* Custom properties a component reads, each set from another under a
+   state (`coarse:hit-gap-coarse-(--row-gap)`). */
+@utility hit-gap-coarse-* {
+  --hit-gap-coarse: --value([*]);
+}
+@utility hit-gap-y-* {
+  --hit-gap-y: --value([*]);
+}
+@utility rail-step-* {
+  --rail-step: --value([*]);
+}
+@utility prompt-fs-* {
+  --prompt-fs: --value([*]);
+}
+@utility hit-gap-x-* {
+  --hit-gap-x: --value(--spacing-*, [*]);
+}
+/* The radius of a joined glass's corners (Shell's join, whose outline reads
+   `--r`). */
+@utility join-radius-* {
+  --r: --value([*]);
+}
+@utility caw-neck-* {
+  --caw-neck: --value([*]);
+}
+@utility press-by-* {
+  --press-by: --value([*]);
+}
+@utility swap-away-* {
+  --swap-away: --value(integer);
+}
+@utility fade-inset-end-* {
+  --fade-inset-end: --value([*]);
+}
+/* A scroll timeline in reach of a head that reads it (HeadFade's
+   `--transcript-head`). A timeline's name is a dashed ident, which a
+   custom property would hand over as its value, so the name is the
+   utility's. */
+@utility timeline-scope-transcript-head {
+  timeline-scope: --transcript-head;
+}
+/* What a press shows by itself on a phone: no tap flash, no callout. */
+@utility tap-highlight-none {
+  -webkit-tap-highlight-color: transparent;
+}
+@utility touch-callout-none {
+  -webkit-touch-callout: none;
+}
+@utility content-visibility-hidden {
+  content-visibility: hidden;
+}
+@utility scheme-inherit {
+  color-scheme: inherit;
+}
+@utility pointer-events-all {
+  pointer-events: all;
+}
+/* A clip path, from a custom property on the element
+   (`clip-path-(--fold-clip)`). */
+@utility clip-path-* {
+  clip-path: --value([*]);
+}
+/* A name set down a column (a folded board column's rail). */
+@utility writing-vertical-rl {
+  writing-mode: vertical-rl;
+}
+/* Named grid areas, the areas string in a custom property on the element
+   (`grid-areas-(--row-areas)`). */
+@utility grid-areas-* {
+  grid-template-areas: --value([*]);
+}
+/* Right to left as the property alone: the `dir` attribute also sets
+   unicode-bidi. */
+@utility dir-rtl {
+  direction: rtl;
+}
+/* The ground a ring is cut against, set from a colour token under a state
+   (`hover:ring-ground-surface-hover`). */
+@utility ring-ground-* {
+  --ring-ground: --value(--color-*);
+}
+/* The standard `line-clamp` property alone: Tailwind's `line-clamp-N` writes
+   the `-webkit-` form with its display and overflow. */
+@utility line-clamp-std-* {
+  line-clamp: --value(integer);
 }
 
 /* A field that frames a borderless editor with its own controls beside it

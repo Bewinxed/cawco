@@ -127,6 +127,26 @@
    scrolled out of view, an inert surface parked behind the one in front. */
 @custom-variant at-rest (&:where(:root[data-at-rest] *, [data-offscreen], [data-offscreen] *, [inert]:not([data-leaving]) *));
 
+/* A fluid tab held down by its own hit (components/ui/fluid-tabs TabItem):
+   the press tints the whole segment, its trailing controls included; a
+   press on a trailing control leaves it be. */
+@custom-variant hit-pressed (&:has([data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])));
+
+/* A fluid track's segment while another tab stands under the hover ghost
+   (TabsList): the ghost reads as the thing about to take over. */
+@custom-variant beside-ghost (:where([data-slot="ff-tabs-list"]:has([data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected]))) > &);
+
+/* A row whose link is held down (config SectionRow). */
+@custom-variant has-link-active (&:has([data-link]:active));
+
+/* Inside a tree mark whose own hit is held down (TreeMark): the tile gives
+   a little under it. */
+@custom-variant mark-pressed (&:is([data-slot="tree-mark"]:has([data-slot="hit"]:active) *));
+
+/* Inside a live tree mark while its dot beats (TreeMark). At the weight of
+   the selector it came from, so it outranks the mark's hole mask. */
+@custom-variant mark-beating (&:is([data-slot="tree-mark"][data-dot="live"]:has([data-beating]) *));
+
 /* One per attribute state a component styles: [data-tone="fail"] is
    tone-fail:, [aria-expanded="false"] is aria-expanded-false:. */
 @custom-variant act-dismiss (&[data-act="dismiss"]);

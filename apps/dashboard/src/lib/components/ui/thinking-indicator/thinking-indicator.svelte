@@ -48,7 +48,7 @@
 
 <span
   class={cn(
-    "flex items-center gap-space-2 px-space-3 py-space-2 font-normal text-ink-muted",
+    "flex items-center gap-space-2 px-space-3 py-space-2 font-family-inherit font-normal text-ink-muted",
     className
   )}
   bind:this={ref}
@@ -106,10 +106,13 @@
         <span class="motion-safe:relative motion-safe:inline-block"
           >{word}
           {#if motion.current}
-            <!-- literal: 300% (three words wide) -->
+            <!-- literal: 300% (three words wide). The band is the old
+                 gradient's geometry: ink-strong at its middle, fading to
+                 nothing 15% of its width either side. -->
             <span
-              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:w-(--sheen-width) motion-safe:text-ink-strong"
+              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:w-(--sheen-width) motion-safe:text-ink-strong motion-safe:mask-(--sheen-band)"
               data-slot="sheen"
+              style:--sheen-band={"linear-gradient(90deg, transparent 35%, var(--mask-opaque) 50%, transparent 65%)"}
               style:--sheen-width="300%"
               ><span class="motion-safe:inline-block" data-slot="sheen-word"
                 >{word}</span
@@ -123,25 +126,8 @@
 </span>
 
 <style>
-  /* residual: unmapped */
-  [data-slot="thinking-indicator"] {
-    font-family: inherit;
-  }
-  /* The band is the old gradient's geometry: three words wide, ink-strong
-     at its middle, fading to nothing 15% of its width either side. It
-     enters from the right and leaves on the left once a breath. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="sheen"] {
-      mask-image: linear-gradient(
-        90deg,
-        transparent 35%,
-        var(--mask-opaque) 50%,
-        transparent 65%
-      );
-    }
-  }
-
-  /* Every beat here is the breath (--breath): each word stands for two of
+  /* The band enters from the right and leaves on the left once a breath.
+     Every beat here is the breath (--breath): each word stands for two of
      them in an eight-breath cycle, the marks trade places on a three-breath
      loop, and the light crosses a word once a breath. */
   /* residual: keyframes */
