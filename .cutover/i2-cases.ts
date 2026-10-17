@@ -2,30 +2,40 @@
  * The cases i2-exact.ts renders twice, at ac7b79de8 and now. `t` is the
  * element as T's markup wrote it (with `{S0}` … where its component's own
  * scoped class went), `now` as the converted tree writes it. A kit part's
- * class is its own `cn(…)` over its recipe, called from that tree.
- * `only` limits the comparison to the properties a rule governs, where the
- * case does not reproduce the element's whole context.
+ * class is its own `cn(…)` over its recipe, called from that tree, and a
+ * component's element is read from its own source (`element`) with the
+ * ancestors and custom properties it renders under, so every computed
+ * property compares.
  */
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { T_DIR } from "./i2-tree";
+import { T, T_DIR } from "./i2-tree";
 
-export type State = {
+export interface State {
+  attrs?: { sel: string; name: string; value: string | null }[];
+  dark?: boolean;
+  force?: { sel: string; pseudo: string[] }[];
+  motion?: "reduce" | "no-preference";
   name: string;
   width?: number;
-  dark?: boolean;
-  motion?: "reduce" | "no-preference";
-  attrs?: { sel: string; name: string; value: string | null }[];
-  force?: { sel: string; pseudo: string[] }[];
-};
-export type Case = {
-  name: string;
+}
+export interface Case {
   files?: string[];
-  t: string;
+  name: string;
   now: string;
-  states?: State[];
-  only?: string[];
   show?: string[];
-};
+  states?: State[];
+  t: string;
+}
+
+const MAX_BUFFER = 64 * 1024 * 1024;
+const CLASS_TEXT = /\sclass="([^"]*)"/;
+const CLASS_ARRAY = /\sclass=\{\[\s*"([^"]*)"/;
+const STYLE_VAR = /style:(--[\w-]+)=(?:"([^"{]*)"|\{"([^"]*)"\})/g;
+const STYLE_TEXT = /\sstyle="([^"{}]*)"/;
+const SPACES = /\s+/g;
+const CN_BASE = /class=\{cn\(\s*"([^"]*)"/;
 
 const app = resolve(import.meta.dir, "../apps/dashboard/src");
 const tApp = join(T_DIR, "apps/dashboard/src");
@@ -36,6 +46,7 @@ const { cn } = await import(join(app, "lib/utils.ts"));
 const { cn: tcn } = await import(join(tApp, "lib/utils.ts"));
 const { tableHeadVariants } = await import(ui(app, "table/table-head.svelte"));
 const { tableRowVariants } = await import(ui(app, "table/table-row.svelte"));
+const { tableVariants } = await import(ui(app, "table/table.svelte"));
 const { tableCellVariants } = await import(ui(app, "table/table-cell.svelte"));
 const { spinnerVariants } = await import(ui(app, "spinner/spinner.svelte"));
 const { drawerContentVariants } = await import(
@@ -47,12 +58,86 @@ const { buttonVariants: tButtonVariants } = await import(
 );
 const { textareaVariants } = await import(ui(app, "textarea/textarea.svelte"));
 
+const repo = resolve(import.meta.dir, "..");
+const sources = new Map<string, string>();
+/** A component's text: at T (`git show`) or as it stands. */
+function source(file: string, at: "t" | "now"): string {
+  const key = `${at}:${file}`;
+  if (!sources.has(key)) {
+    sources.set(
+      key,
+      at === "t"
+        ? execFileSync(
+            "git",
+            ["-C", repo, "show", `${T}:apps/dashboard/${file}`],
+            {
+              encoding: "utf8",
+              maxBuffer: MAX_BUFFER,
+            }
+          )
+        : readFileSync(join(repo, "apps/dashboard", file), "utf8")
+    );
+  }
+  return sources.get(key) as string;
+}
+
+/** The start tag that holds `anchor`: from its `<` to its own `>`. */
+function startTag(text: string, anchor: string): string {
+  const at = text.indexOf(anchor);
+  if (at === -1) {
+    throw new Error(`no ${anchor}`);
+  }
+  const open = text.lastIndexOf("<", at);
+  let depth = 0;
+  let quote = "";
+  for (let i = open; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      quote = ch === quote ? "" : quote;
+    } else if (ch === '"' || ch === "`") {
+      quote = ch;
+    } else if (ch === "{") {
+      depth += 1;
+    } else if (ch === "}") {
+      depth -= 1;
+    } else if (ch === ">" && depth === 0) {
+      return text.slice(open, i + 1);
+    }
+  }
+  throw new Error(`no end for ${anchor}`);
+}
+
+/**
+ * An element as its source writes it: the static part of its class (the
+ * attribute's text, or the first string of a `class={[…]}`) and its
+ * literal custom properties as an inline style.
+ */
+export function element(file: string, at: "t" | "now", anchor: string) {
+  const tag = startTag(source(file, at), anchor);
+  const cls = tag.match(CLASS_TEXT)?.[1] ?? tag.match(CLASS_ARRAY)?.[1] ?? "";
+  const vars = [...tag.matchAll(STYLE_VAR)]
+    .map((m) => `${m[1]}:${m[2] ?? m[3]}`)
+    .concat(tag.match(STYLE_TEXT)?.[1] ?? [])
+    .join(";");
+  return { cls: cls.replace(SPACES, " ").trim(), style: vars };
+}
+
+/** `class="…" style="…"` for an element, with extra classes before it. */
+function attrs(
+  file: string,
+  at: "t" | "now",
+  anchor: string,
+  extra = ""
+): string {
+  const e = element(file, at, anchor);
+  return `class="${`${extra} ${e.cls}`.trim()}" style="${e.style}"`;
+}
+
 const REST: State = { name: "rest" };
 const focus = (sel = "[data-check]"): State => ({
   name: "focus-visible",
   force: [{ sel, pseudo: ["focus", "focus-visible"] }],
 });
-const OUTLINE = ["outline"];
 
 /** T's kit table parts, as their own `cn(…)` wrote them. */
 const T_ROW = "border-b transition-colors data-[state=selected]:bg-muted";
@@ -60,9 +145,24 @@ const T_HEAD =
   "h-12 whitespace-nowrap px-3 text-left align-middle text-foreground text-label [&:has([role=checkbox])]:pr-0";
 const T_CELL =
   "whitespace-nowrap p-3 align-middle [&:has([role=checkbox])]:pr-0";
-/** The current drawer's own classes, before its recipe. */
-const DRAWER_BASE =
-  "group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label";
+const FIND_ROW = "src/lib/cawco/find/FindRow.svelte";
+const FINDER = "src/lib/cawco/find/Finder.svelte";
+const HOME_RECENT = "src/lib/cawco/home/HomeRecent.svelte";
+const LOCATION = "src/lib/cawco/spawn/LocationSection.svelte";
+const SESSION_DIALOG = "src/lib/cawco/spawn/NewSessionDialog.svelte";
+const PROJECT_CHIP = "src/lib/cawco/spawn/ProjectChip.svelte";
+const PROMPT_EDITOR = "src/lib/cawco/spawn/PromptEditor.svelte";
+const COMPOSER = "src/lib/cawco/transcript/Composer.svelte";
+
+/** A kit part's own classes: the first string of its `class={cn(…)}`. */
+function cnBase(path: string): string {
+  const text = readFileSync(path, "utf8");
+  const found = text.match(CN_BASE)?.[1];
+  if (!found) {
+    throw new Error(`no cn base in ${path}`);
+  }
+  return found;
+}
 
 const outline = (
   name: string,
@@ -76,7 +176,6 @@ const outline = (
   t,
   now,
   states: [REST, focus(sel)],
-  only: OUTLINE,
 });
 
 export const CASES: Case[] = [
@@ -86,88 +185,104 @@ export const CASES: Case[] = [
     files: ["src/lib/cawco/views/openui/ViewTable.svelte"],
     t: `<div class="{S0} ledger"><table class="w-full caption-bottom text-body"><thead><tr class="${tcn(T_ROW, "band border-0")}"><th data-check="head" class="${tcn(T_HEAD)}" scope="col">When</th></tr></thead></table></div>`,
     now: `<div class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"><table class="w-full caption-bottom text-body"><thead><tr class="${cn(tableRowVariants({ variant: "band" }))}"><th data-check="head" class="${cn(tableHeadVariants({ variant: "caps" }), "h-c-toolbar-ctl")}" scope="col">When</th></tr></thead></table></div>`,
-    only: [
-      "font",
-      "letter-spacing",
-      "text-transform",
-      "color",
-      "padding",
-      "height",
-    ],
   },
   {
-    name: "table-row picks-stacks: picked over selected",
+    name: "TaskTable.svelte:307/:317 a picked row and its pick, title and created cells",
     files: ["src/lib/cawco/tasks/TaskTable.svelte"],
-    t: `<div class="{S0} ledger" data-pickable><table class="tasks"><tbody><tr data-check="row" class="${tcn(T_ROW, "row")}" data-picked data-state="selected"><td>a</td></tr></tbody></table></div>`,
-    now: `<div><table><tbody><tr data-check="row" class="${cn(tableRowVariants({ variant: "picks-stacks" }), "group/row relative")}" data-picked data-state="selected"><td>a</td></tr></tbody></table></div>`,
-    states: [
-      { name: "phone", width: 400 },
-      { name: "desk", width: 1280 },
-    ],
-    only: ["background-color"],
-  },
-  {
-    name: "TaskTable.svelte:317 created cell on a phone",
-    files: ["src/lib/cawco/tasks/TaskTable.svelte"],
-    t: `<div style="container-type:inline-size" class="{S0} ledger"><table class="tasks"><tbody><tr class="${tcn(T_ROW, "row")}"><td data-check="created" class="${tcn(T_CELL, "col-created")}">1d</td></tr></tbody></table></div>`,
-    now: `<div style="container-type:inline-size"><table><tbody><tr class="${cn(tableRowVariants({ variant: "picks-stacks" }), "group/row")}"><td data-check="created" class="${cn(tableCellVariants({ variant: "ledger-picks-stacks" }), "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:@max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto")}">1d</td></tr></tbody></table></div>`,
+    t: `<div data-slot="ledger" class="{S0} ledger" data-pickable><div class="relative w-full overflow-x-auto"><table data-tasks class="${tcn("w-full caption-bottom text-body", "tasks table-fixed")}"><tbody class="[&_tr:last-child]:border-0"><tr data-check="row" class="${tcn(T_ROW, "row")}" data-picked data-state="selected">${[
+      ["pick", "x"],
+      ["title", "A task"],
+      ["created", "1d"],
+    ]
+      .map(
+        ([id, text]) =>
+          `<td data-check="${id}" class="${tcn(T_CELL, `col-${id}`)}">${text}</td>`
+      )
+      .join("")}</tr></tbody></table></div></div>`,
+    now: `<div data-slot="ledger" ${attrs("src/lib/cawco/tasks/TaskTable.svelte", "now", 'data-slot="ledger"')} data-pickable><div class="${tableVariants({ spacing: "gap" }).container()}"><table data-tasks class="${cn(tableVariants({ spacing: "gap" }).table(), "table-fixed border-separate max-phone:block")}"><tbody class="${cn("[&_tr:last-child]:border-0", "max-phone:block")}"><tr data-check="row" class="${cn(tableRowVariants({ variant: "picks-stacks" }), "group/row relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:items-center group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick)")}" data-picked data-state="selected">${[
+      [
+        "pick",
+        "x",
+        "calc(1rem + 2 * var(--space-3))",
+        "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-(--pick-row) max-phone:col-start-1",
+      ],
+      [
+        "title",
+        "A task",
+        "",
+        "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
+      ],
+      [
+        "created",
+        "1d",
+        "7rem",
+        "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:@max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto",
+      ],
+    ]
+      .map(
+        ([id, text, w, cls]) =>
+          `<td data-check="${id}" class="${cn(tableCellVariants({ variant: "ledger-picks-stacks" }), cls)}" style="--col-w: ${w}">${text}</td>`
+      )
+      .join("")}</tr></tbody></table></div></div>`,
     states: [
       { name: "phone", width: 400 },
       { name: "tablet", width: 800 },
       { name: "desk", width: 1280 },
     ],
-    only: ["display"],
   },
   {
     name: "Spinner glyph-busy (RolloutChip's cell)",
     files: ["src/lib/cawco/config/RolloutChip.svelte"],
-    t: `<span class="{S0} glyph" data-glyph="busy"><svg data-check="spin" data-for="busy" class="size-4 animate-spin"></svg></span><span class="group"><span class="{S0} glyph" data-glyph="done"><svg data-check="spin-idle" data-for="busy" class="size-4 animate-spin"></svg></span></span>`,
-    now: `<span class="group inline-grid" data-slot="glyph" data-glyph="busy"><svg data-check="spin" data-for="busy" class="${cn("size-icon-md animate-spin", spinnerVariants({ reveal: "glyph-busy" }), "col-start-1 row-start-1 size-icon-sm flex-none")}"></svg></span><span class="group"><span class="group inline-grid" data-slot="glyph" data-glyph="done"><svg data-check="spin-idle" data-for="busy" class="${cn("size-icon-md animate-spin", spinnerVariants({ reveal: "glyph-busy" }), "col-start-1 row-start-1 size-icon-sm flex-none")}"></svg></span></span>`,
-    only: ["animation-play-state"],
+    t: ["busy", "done"]
+      .map(
+        (g) =>
+          `<span class="group"><button class="rollout-chip mark-line"><span class="{S0} glyph" data-glyph="${g}"><svg data-check="${g === "busy" ? "spin" : "spin-idle"}" data-for="busy" class="size-4 animate-spin"></svg></span></button></span>`
+      )
+      .join(""),
+    now: ["busy", "done"]
+      .map(
+        (g) =>
+          `<span class="group"><button ${attrs("src/lib/cawco/config/RolloutChip.svelte", "now", "<Popover.Trigger")}><span ${attrs("src/lib/cawco/config/RolloutChip.svelte", "now", 'data-slot="glyph"')} data-glyph="${g}"><svg data-check="${g === "busy" ? "spin" : "spin-idle"}" data-for="busy" class="${cn("size-icon-md animate-spin", spinnerVariants({ reveal: "glyph-busy" }), "col-start-1 row-start-1 size-icon-sm flex-none")}"></svg></span></button></span>`
+      )
+      .join(""),
     show: ["animation-play-state"],
   },
   {
     name: "TableCell between (ActionsTable's rows)",
     files: ["src/lib/cawco/routines/ActionsTable.svelte"],
     t: `<div class="{S0} actions-ledger"><table><tbody><tr class="${tcn(T_ROW, "action")}"><td data-check="first" class="${tcn(T_CELL)}">a</td></tr><tr class="${tcn(T_ROW, "action")}"><td data-check="second" class="${tcn(T_CELL)}">b</td></tr></tbody></table></div>`,
-    now: `<div><table><tbody><tr class="${cn(tableRowVariants({}), "group/row")}"><td data-check="first" class="${cn(tableCellVariants({ variant: "list", rule: "between" }), "h-c-btn-h-lg num align-middle")}">a</td></tr><tr class="${cn(tableRowVariants({}), "group/row")}"><td data-check="second" class="${cn(tableCellVariants({ variant: "list", rule: "between" }), "h-c-btn-h-lg num align-middle")}">b</td></tr></tbody></table></div>`,
-    only: ["border-top"],
+    now: `<div><table><tbody><tr class="${cn(tableRowVariants({}), "group/row")}"><td data-check="first" class="${cn(tableCellVariants({ variant: "list", rule: "between" }), "num h-c-btn-h-lg align-middle")}">a</td></tr><tr class="${cn(tableRowVariants({}), "group/row")}"><td data-check="second" class="${cn(tableCellVariants({ variant: "list", rule: "between" }), "num h-c-btn-h-lg align-middle")}">b</td></tr></tbody></table></div>`,
     show: ["border-top-width", "border-top-style"],
   },
   {
     name: "NeedsYouChip.svelte:44 count",
     files: ["src/lib/cawco/project/NeedsYouChip.svelte"],
-    t: `<button class="{S0} needs" aria-pressed="false"><span data-check="num" data-slot="num" class="{S0} num">12</span></button>`,
-    now: `<button aria-pressed="false"><span data-check="num" data-slot="num" class="num text-status-attn-ink">12</span></button>`,
-    only: ["font-variant-numeric", "color"],
+    t: `<button aria-pressed="false" ${attrs("src/lib/cawco/project/NeedsYouChip.svelte", "t", 'data-slot="needs"', "{S0}")}><svg class="{S0}"></svg><span class="{S0}">Needs you</span><span data-check="num" data-slot="num" class="{S0} num">12</span></button>`,
+    now: `<button aria-pressed="false" ${attrs("src/lib/cawco/project/NeedsYouChip.svelte", "now", 'data-slot="needs"')}><svg class="size-icon-md text-status-attn-glyph"></svg><span>Needs you</span><span data-check="num" data-slot="num" class="num text-status-attn-ink">12</span></button>`,
   },
   {
     name: "ProjectHead.svelte:372 title, no tracking of its own",
     files: ["src/lib/cawco/project/ProjectHead.svelte"],
     t: `<div style="letter-spacing:0.3px"><h1 data-check="title" class="{S0} title">Cockpit</h1></div>`,
     now: `<div style="letter-spacing:0.3px"><h1 data-check="title" data-slot="title" class="type-title wrap-anywhere text-ink-strong">Cockpit</h1></div>`,
-    only: ["font", "letter-spacing", "color", "overflow-wrap"],
   },
   {
     name: "PlacePick.svelte:79 title, no tracking of its own",
     files: ["src/lib/cawco/preview/PlacePick.svelte"],
     t: `<div style="letter-spacing:0.3px"><h2 data-check="title" class="{S0} pick-title">Pick a machine and folder</h2></div>`,
     now: `<div style="letter-spacing:0.3px"><h2 data-check="title" class="type-title text-ink-strong">Pick a machine and folder</h2></div>`,
-    only: ["font", "letter-spacing", "color"],
   },
   {
     name: "UsageMeter.svelte:547 the +N slot (type-roles on set 7)",
     files: ["src/lib/cawco/UsageMeter.svelte"],
-    t: `<div style="font-style:italic;font-variant-ligatures:none"><span data-check="more" class="{S0} slot more" data-more>+2</span></div>`,
-    now: `<div style="font-style:italic;font-variant-ligatures:none"><span data-check="more" data-slot="slot" data-more class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center type-meta leading-(--more-lh) num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off" style="--more-lh:16px">+2</span></div>`,
-    only: ["font", "line-height", "color"],
+    t: `<div style="font-style:italic;font-variant-ligatures:none"><span class="{S0} cell" data-cell="claude"><span class="{S0} l1"><span class="{S0} marks" data-strip-marks style="flex-basis:60px"><span data-check="more" data-slot="slot" data-more class="{S0} slot more" style="inset-inline-start:32px">+2</span></span></span></span></div>`,
+    now: `<div style="font-style:italic;font-variant-ligatures:none"><span ${attrs("src/lib/cawco/UsageMeter.svelte", "now", 'data-cell="claude"')} data-cell="claude"><span ${attrs("src/lib/cawco/UsageMeter.svelte", "now", "gap-(--l1-gap) whitespace-nowrap")}><span class="${element("src/lib/cawco/UsageMeter.svelte", "now", "data-strip-marks").cls}" data-strip-marks style="--mark-min:16px;--marks-basis:60px"><span data-check="more" data-slot="slot" data-more class="${element("src/lib/cawco/UsageMeter.svelte", "now", "data-strip-more").cls}" style="--more-lh:16px;--slot-at:32px">+2</span></span></span></span></div>`,
   },
   {
     name: "MentionField.svelte:711 editor and :766 tip handle (type-roles on set 9)",
     files: ["src/lib/cawco/find/MentionField.svelte"],
-    t: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" class="{S0} editor" contenteditable="true">hi</div><div class="{S0} tip"><span class="{S0} tip-handle" data-check="handle">@a</span></div></div>`,
-    now: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" class="relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 type-body text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off" style="--editor-fs:16px" contenteditable="true">hi</div><div data-slot="tip" class="type-meta"><span class="type-code opacity-80" data-check="handle">@a</span></div></div>`,
-    only: ["font", "line-height"],
+    t: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" data-slot="editor" class="{S0} editor" contenteditable="true">hi</div><div class="{S0} tip" style="left:40px;top:80px"><span class="{S0} tip-facts">Ada</span><span class="{S0} tip-handle" data-check="handle">@a</span></div></div>`,
+    now: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" data-slot="editor" ${attrs("src/lib/cawco/find/MentionField.svelte", "now", "data-editor")} contenteditable="true">hi</div><div data-slot="tip" class="${element("src/lib/cawco/find/MentionField.svelte", "now", 'data-slot="tip"').cls}" style="--tip-x:40px;--tip-y:80px;--tip-max-w:320px;--tip-pad-y:6px;--tip-pad-x:10px;--tip-shift-x:-50%;--tip-shift-y:calc(-100% - 8px)"><span>Ada</span><span class="type-code opacity-80" data-check="handle">@a</span></div></div>`,
   },
 
   // ------------------------------------- outline: none → outline-off (18)
@@ -185,21 +300,21 @@ export const CASES: Case[] = [
   ),
   outline(
     "FindRow.svelte:61 .row",
-    "src/lib/cawco/find/FindRow.svelte",
-    `<button data-check="row" class="{S0} row">r</button>`,
-    `<button data-check="row" class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-(--row-min) px-space-3 py-(--row-pad) border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-fill">r</button>`
+    FIND_ROW,
+    `<div ${attrs(FIND_ROW, "t", 'class={["slot"', "{S0}")}><button data-check="row" ${attrs(FIND_ROW, "t", '"row mark-line"', "{S0}")}>r</button></div>`,
+    `<div ${attrs(FIND_ROW, "now", 'data-slot="slot"')}><button data-check="row" ${attrs(FIND_ROW, "now", 'data-slot="row"')}>r</button></div>`
   ),
   outline(
     "Finder.svelte:469 .field input",
-    "src/lib/cawco/find/Finder.svelte",
-    `<div class="{S0} field"><input data-check="in" class="{S0}"></div>`,
-    `<div><input data-check="in" class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-off placeholder:text-ink-subtle placeholder:text-ellipsis"></div>`
+    FINDER,
+    `<div class="{S0} finder"><div data-slot="finder-field" ${attrs(FINDER, "t", 'data-slot="finder-field"', "{S0}")}><input data-check="in" class="{S0}"></div></div>`,
+    `<div data-slot="finder" ${attrs(FINDER, "now", 'data-slot="finder"')}><div data-slot="finder-field" ${attrs(FINDER, "now", 'data-slot="finder-field"')}><input data-check="in" ${attrs(FINDER, "now", "bind:this={field}")}></div></div>`
   ),
   outline(
     "MentionField.svelte:711 .editor",
     "src/lib/cawco/find/MentionField.svelte",
-    `<div data-check="editor" contenteditable="true" class="{S0} editor">x</div>`,
-    `<div data-check="editor" contenteditable="true" class="relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 type-body text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off">x</div>`
+    `<div data-check="editor" data-slot="editor" contenteditable="true" class="{S0} editor">x</div>`,
+    `<div data-check="editor" data-slot="editor" contenteditable="true" ${attrs("src/lib/cawco/find/MentionField.svelte", "now", "data-editor")}>x</div>`
   ),
   outline(
     "CawPanel.svelte:335 .empty",
@@ -209,9 +324,9 @@ export const CASES: Case[] = [
   ),
   outline(
     "HomeRecent.svelte:147 .search input",
-    "src/lib/cawco/home/HomeRecent.svelte",
-    `<label class="{S0} search"><input data-check="in" class="{S0}"></label>`,
-    `<label><input data-check="in" class="min-w-0 flex-auto border-none border-current bg-transparent type-body text-ink-strong outline-off"></label>`
+    HOME_RECENT,
+    `<label data-slot="search" ${attrs(HOME_RECENT, "t", 'data-slot="search"', "{S0}")}><input data-check="in" class="{S0}"></label>`,
+    `<label data-slot="search" ${attrs(HOME_RECENT, "now", 'data-slot="search"')}><input data-check="in" ${attrs(HOME_RECENT, "now", 'aria-label="Search recent sessions"')}></label>`
   ),
   outline(
     "Lightbox.svelte:223 .doc-view",
@@ -221,33 +336,33 @@ export const CASES: Case[] = [
   ),
   outline(
     "LocationSection.svelte:234/:500 input",
-    "src/lib/cawco/spawn/LocationSection.svelte",
-    `<input data-check="in" class="{S0}">`,
-    `<input data-check="in" class="min-h-(--min-h) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-off">`
+    LOCATION,
+    `<div data-slot="location-section-field" class="{S0} field field-shell"><div data-slot="row" class="{S0} row"><input data-check="in" id="session-dir" class="{S0}"></div></div>`,
+    `<div data-slot="location-section-field" ${attrs(LOCATION, "now", 'data-slot="location-section-field"')}><div data-slot="row" ${attrs(LOCATION, "now", 'data-slot="row"')}><input data-check="in" id="session-dir" ${attrs(LOCATION, "now", 'id="session-dir"')}></div></div>`
   ),
   outline(
     "NewSessionDialog.svelte:1808 .session-card (dialog)",
-    "src/lib/cawco/spawn/NewSessionDialog.svelte",
-    `<div data-check="card" tabindex="-1" class="session-card">c</div>`,
-    `<div data-check="card" tabindex="-1" class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit rounded-lg bg-surface-recess p-space-2 shadow-modal">c</div>`
+    SESSION_DIALOG,
+    `<div data-check="card" tabindex="-1" data-session-card data-ns-dialog data-state="open" class="session-card ns-theme">c</div>`,
+    `<div data-check="card" tabindex="-1" data-session-card data-ns-dialog data-state="open" ${attrs(SESSION_DIALOG, "now", 'class="ns-theme fixed z-81')}>c</div>`
   ),
   outline(
     "NewSessionDialog.svelte:1758 .session-card (drawer, DrawerContent look new-session)",
-    "src/lib/cawco/spawn/NewSessionDialog.svelte",
-    `<div data-check="card" tabindex="-1" class="session-card">c</div>`,
-    `<div data-check="card" tabindex="-1" class="${cn(DRAWER_BASE, drawerContentVariants({ look: "new-session" }), "fixed z-81 flex origin-center flex-col")}">c</div>`
+    SESSION_DIALOG,
+    `<div data-check="card" tabindex="-1" data-session-card data-ns-dialog data-state="open" data-vaul-drawer data-vaul-drawer-direction="bottom" data-slot="drawer-content" class="${tcn(cnBase(ui(tApp, "drawer/drawer-content.svelte")), "session-card ns-theme")}">c</div>`,
+    `<div data-check="card" tabindex="-1" data-session-card data-ns-dialog data-state="open" data-vaul-drawer data-vaul-drawer-direction="bottom" data-slot="drawer-content" class="${cn(cnBase(ui(app, "drawer/drawer-content.svelte")), drawerContentVariants({ look: "new-session" }), "fixed z-81 flex origin-center flex-col")}">c</div>`
   ),
   outline(
     "ProjectChip.svelte:143/:166 .field input",
-    "src/lib/cawco/spawn/ProjectChip.svelte",
-    `<label class="{S0} field"><input data-check="in" class="{S0}"></label>`,
-    `<label class="field-shell"><input data-check="in" class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong outline-off"></label>`
+    PROJECT_CHIP,
+    `<div class="ns-theme"><div class="{S0} ns-panel form"><label data-slot="project-chip-field" class="{S0} field field-shell"><input data-check="in" class="{S0}"></label></div></div>`,
+    `<div class="ns-theme"><div ${attrs(PROJECT_CHIP, "now", 'class="ns-panel grid')}><label data-slot="project-chip-field" ${attrs(PROJECT_CHIP, "now", 'data-slot="project-chip-field"')}><input data-check="in" ${attrs(PROJECT_CHIP, "now", 'aria-label="Project name"')}></label></div></div>`
   ),
   outline(
     "PromptEditor.svelte:325 .editor",
-    "src/lib/cawco/spawn/PromptEditor.svelte",
-    `<div data-check="editor" contenteditable="true" class="{S0} editor">p</div>`,
-    `<div data-check="editor" contenteditable="true" class="h-(--prompt-height) w-full overflow-auto rounded-t-lg bg-transparent font-body font-normal whitespace-pre-wrap text-ink-strong outline-off">p</div>`
+    PROMPT_EDITOR,
+    `<div class="ns-theme"><div class="{S0} editor-wrap" data-keeps-draft><div data-check="editor" data-slot="editor" contenteditable="true" ${attrs(PROMPT_EDITOR, "t", 'aria-label="First prompt"', "{S0}")}>p</div></div></div>`,
+    `<div class="ns-theme"><div data-keeps-draft ${attrs(PROMPT_EDITOR, "now", "data-keeps-draft")}><div data-check="editor" data-slot="editor" contenteditable="true" ${attrs(PROMPT_EDITOR, "now", 'aria-label="First prompt"')}>p</div></div></div>`
   ),
   outline(
     "ToolGroup.svelte:412 .artifact-open:focus-visible",
@@ -258,21 +373,25 @@ export const CASES: Case[] = [
   outline(
     "Peer.svelte:227 the trigger (residual, unchanged)",
     "src/lib/cawco/transcript/Peer.svelte",
-    `<p class="{S0} label"><button data-check="toggle" class="peer-toggle">t</button></p>`,
-    `<p data-slot="peer-label" class="{S0} relative min-h-(--label-min) m-0 type-label leading-ui text-ink-muted rail-line"><button data-check="toggle" data-slot="collapsible-trigger">t</button></p>`
+    `<p data-slot="peer-label" class="{S0} label rail-line"><button data-check="toggle" data-slot="collapsible-trigger" class="peer-toggle press-tint" data-box>t</button></p>`,
+    `<p data-slot="peer-label" ${attrs("src/lib/cawco/transcript/Peer.svelte", "now", 'data-slot="peer-label"', "{S0}")}><button data-check="toggle" data-slot="collapsible-trigger" ${attrs("src/lib/cawco/transcript/Peer.svelte", "now", 'class="group/toggle ms-auto')} data-box>t</button></p>`
   ),
   {
     name: "Composer.svelte:3365 the pill, recalling and grown",
     files: ["src/lib/cawco/transcript/Composer.svelte"],
-    t: `<form data-check="recalling" class="{S0} cin kit-dock-shell field-shell recalling"><textarea class="{S0}"></textarea></form><form data-check="grown" class="{S0} cin kit-dock-shell field-shell grown"><textarea class="{S0}"></textarea></form><form data-check="plain" class="{S0} cin kit-dock-shell field-shell"><textarea class="{S0}"></textarea></form>`,
+    t: ["recalling", "grown", "plain"]
+      .map(
+        (s) =>
+          `<form data-check="${s}" data-slot="cin" ${attrs(COMPOSER, "t", 'class="cin kit-dock-shell field-shell"', `{S0} ${s === "plain" ? "" : s}`)}><textarea class="{S0}"></textarea></form>`
+      )
+      .join(""),
     now: ["recalling", "grown", "plain"]
       .map(
         (s) =>
-          `<form data-check="${s}" ${s === "plain" ? "" : `data-${s}`} class="group/cin kit-dock-shell field-shell relative z-2 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off"><textarea></textarea></form>`
+          `<form data-check="${s}" data-slot="cin" ${s === "plain" ? "" : `data-${s}`} ${attrs(COMPOSER, "now", "aria-label={FIELD_LABEL}", "{S0}")}><textarea></textarea></form>`
       )
       .join(""),
     states: [REST, focus("textarea")],
-    only: OUTLINE,
   },
 
   // ------------- the sweep: global classes the conversion dropped from markup
@@ -280,8 +399,8 @@ export const CASES: Case[] = [
     [
       "DecisionNode.svelte:41 the dot",
       "src/lib/cawco/decisions/graph/DecisionNode.svelte",
-      `<div class="{S0} decision-node"><span aria-hidden="true" data-check="ring" class="{S0} ring"></span></div>`,
-      `<div class="group"><span aria-hidden="true" data-check="ring" class="ring size-icon-sm flex-none rounded-(--ring-r) border-(length:--ring-border) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph" style="--ring-border:1.5px;--ring-r:50%"></span></div>`,
+      `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "t", 'data-slot="decision-node"', "{S0}")}><span class="{S0} name">Ship it</span><span aria-hidden="true" data-check="ring" class="{S0} ring"></span></div>`,
+      `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'data-slot="decision-node"')}><span class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong">Ship it</span><span aria-hidden="true" data-check="ring" ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'class="ring size-icon-sm')}></span></div>`,
     ],
     [
       "DocThumb.svelte:92 the progress ring",
@@ -300,7 +419,6 @@ export const CASES: Case[] = [
     files: [file],
     t,
     now,
-    only: ["box-shadow"],
   })),
   {
     name: "thinking-indicator.svelte:120 the word",
@@ -310,50 +428,43 @@ export const CASES: Case[] = [
     t: `<span data-check="word" class="{S0} shimmer">Thinking</span>`,
     now: `<span data-check="word" class="{S0} shimmer motion-safe:relative motion-safe:inline-block">Thinking</span>`,
     states: [REST, { name: "reduced motion", motion: "reduce" }],
-    only: [
-      "background",
-      "-webkit-text-fill-color",
-      "animation",
-      "position",
-      "display",
-      "color",
-    ],
   },
   {
     name: "thinking-step.svelte:139 an active step's label",
     files: ["src/lib/components/ui/thinking-steps/thinking-step.svelte"],
     t: `<div class="{S0} copy"><span data-check="label" data-slot="thinking-step-label" class="{S0} label shimmer">Reading</span></div>`,
-    now: `<div><span data-check="label" data-slot="thinking-step-label" class="{S0} font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-repeat motion-safe:data-shimmer:bg-clip-text shimmer" data-shimmer data-status="active" style="--step-shimmer:linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%);--step-shimmer-size:300% 100%">Reading</span></div>`,
+    now: `<div class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2"><span data-check="label" data-slot="thinking-step-label" class="{S0} font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-repeat motion-safe:data-shimmer:bg-clip-text shimmer" data-shimmer data-status="active" style="--step-shimmer:linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%);--step-shimmer-size:300% 100%">Reading</span></div>`,
     states: [REST, { name: "reduced motion", motion: "reduce" }],
-    only: ["background", "-webkit-text-fill-color", "animation-name", "color"],
   },
   {
     name: "History.svelte:306/:421/:437 the figures",
     files: ["src/lib/cawco/usage/History.svelte"],
-    t: `<div class="{S0} pair"><span data-check="total" class="{S0} num total">$12</span></div><div class="{S0} figures"><table class="{S0}"><thead><tr class="{S0}"><th data-check="th" class="{S0} num" scope="col">Spend</th></tr></thead><tbody><tr class="{S0}"><td data-check="td" class="{S0} num">$1</td></tr></tbody></table></div>`,
-    now: `<div><span data-check="total" data-slot="num" class="type-label num text-ink-strong">$12</span></div><div><table><thead><tr><th data-check="th" data-slot="num" class="type-label num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted" scope="col">Spend</th></tr></thead><tbody><tr><td data-check="td" data-slot="num" class="num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong">$1</td></tr></tbody></table></div>`,
-    only: ["font-variant-numeric"],
+    t: `<div class="{S0} pair"><figure class="{S0} chart"><figcaption class="{S0} caption"><span class="{S0} name">Claude</span><span data-check="total" class="{S0} num total">$12</span></figcaption><table class="{S0} figures"><thead><tr class="{S0}"><th class="{S0}" scope="col">Day</th><th data-check="th" class="{S0} num" scope="col">Spend</th></tr></thead><tbody><tr class="{S0}"><td class="{S0}">Mon</td><td data-check="td" class="{S0} num">$1</td></tr></tbody></table></figure></div>`,
+    now: `<div class="grid grid-cols-2 gap-space-6 max-phone:grid-cols-1"><figure class="flex min-w-0 flex-col gap-space-2"><figcaption class="flex items-baseline justify-between gap-space-2"><span class="type-label text-ink-strong">Claude</span><span data-check="total" data-slot="num" class="type-label num text-ink-strong">$12</span></figcaption><table class="type-meta w-full border-collapse"><thead><tr><th class="type-label border-b border-b-border-hairline px-0 py-space-1 text-start text-ink-muted" scope="col">Day</th><th data-check="th" data-slot="num" class="type-label num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted" scope="col">Spend</th></tr></thead><tbody><tr><td class="border-b border-b-border-hairline px-0 py-space-1 text-ink-strong">Mon</td><td data-check="td" data-slot="num" class="num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong">$1</td></tr></tbody></table></figure></div>`,
+  },
+  {
+    name: "ProjectDetails.svelte:307 the place count",
+    files: ["src/lib/cawco/project/ProjectDetails.svelte"],
+    t: `<button class="{S0} disclose press-tint mark-line" type="button"><span data-check="num" data-slot="num" class="{S0} num">2 places</span></button>`,
+    now: `<button class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover" type="button"><span data-check="num" data-slot="num" class="num">2 places</span></button>`,
   },
   {
     name: "MoveWait.svelte:477/:511 the share",
     files: ["src/lib/cawco/move/MoveWait.svelte"],
     t: `<span data-check="meta" data-num data-slot="meta" class="{S0} meta num">40% · 2 of 5</span>`,
     now: `<span data-check="meta" data-num data-slot="meta" class="type-meta text-ink-muted num">40% · 2 of 5</span>`,
-    only: ["font", "color"],
   },
   {
     name: "PlanRing.svelte:36 the count",
     files: ["src/lib/cawco/plan/PlanRing.svelte"],
     t: `<span data-check="num" data-slot="num" class="{S0} num">2/5</span>`,
     now: `<span data-check="num" data-slot="num" class="num">2/5</span>`,
-    only: ["font-variant-numeric"],
   },
   {
     name: "TextSection.svelte:50 the Edit button in its section head",
     files: ["src/lib/cawco/tasks/TextSection.svelte"],
     t: `<section class="{S0} part"><h3 class="kit-section-head"><span>Notes</span><button data-check="edit" class="${tcn(tButtonVariants({ variant: "ghost", size: "xs" }), "count")}">Edit</button></h3></section>`,
     now: `<section class="flex flex-col gap-space-2"><h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0"><span>Notes</span><button data-check="edit" class="${cn(buttonVariants({ variant: "ghost", size: "xs", head: "count" }))}">Edit</button></h3></section>`,
-    only: ["margin", "font", "color", "line-height"],
   },
   {
     name: "MachinesEmpty.svelte:92 the card grid",
@@ -364,16 +475,6 @@ export const CASES: Case[] = [
       { name: "desk", width: 1280 },
       { name: "phone", width: 500 },
       { name: "narrow", width: 380 },
-    ],
-    only: [
-      "display",
-      "grid-template-columns",
-      "gap",
-      "row-gap",
-      "column-gap",
-      "position",
-      "margin-top",
-      "width",
     ],
   },
   ...[
@@ -398,13 +499,13 @@ export const CASES: Case[] = [
     [
       "RuleTester.svelte:96 the preview",
       "src/lib/cawco/RuleTester.svelte",
-      `<div data-check="m" class="{S0} preview relative grid max-h-40 overflow-y-auto font-mono text-label leading-relaxed">x</div>`,
+      `<div data-check="m" class="{S0} preview relative grid max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-background font-mono text-label leading-relaxed">x</div>`,
       `<div data-check="m" class="relative grid max-h-40 overflow-y-auto rounded-sm bg-surface-page font-mono text-label leading-relaxed">x</div>`,
     ],
     [
       "TaskPanel.svelte:100",
       "src/lib/cawco/TaskPanel.svelte",
-      `<span data-check="m" class="{S0} shrink-0 font-mono text-meta tabular-nums">x</span>`,
+      `<span data-check="m" class="{S0} shrink-0 font-mono text-meta text-muted-foreground tabular-nums">x</span>`,
       `<span data-check="m" class="shrink-0 font-mono text-meta text-ink-muted tabular-nums">x</span>`,
     ],
     [
@@ -434,7 +535,7 @@ export const CASES: Case[] = [
     [
       "ToolMatrix.svelte:184",
       "src/lib/cawco/ToolMatrix.svelte",
-      `<span data-check="m" class="{S0} ml-auto shrink-0 font-mono text-label">x</span>`,
+      `<span data-check="m" class="{S0} ml-auto shrink-0 font-mono text-label text-muted-foreground">x</span>`,
       `<span data-check="m" class="ml-auto shrink-0 font-mono text-label text-ink-muted">x</span>`,
     ],
     [
@@ -448,6 +549,5 @@ export const CASES: Case[] = [
     files: [file],
     t,
     now,
-    only: ["font-family", "font-variant-ligatures"],
   })),
 ];
