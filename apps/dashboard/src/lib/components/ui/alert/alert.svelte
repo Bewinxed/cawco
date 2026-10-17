@@ -12,6 +12,11 @@
         success: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
         info: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
       },
+      /** A notice on a card: the raised surface, the control's edge, the
+          card's corner and its tile shadow. */
+      surface: {
+        card: "rounded-lg border border-border-control bg-surface-raised shadow-tile",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -19,6 +24,7 @@
   });
 
   export type AlertVariant = VariantProps<typeof alertVariants>["variant"];
+  export type AlertSurface = VariantProps<typeof alertVariants>["surface"];
 </script>
 
 <script lang="ts">
@@ -29,15 +35,17 @@
     ref = $bindable(null),
     class: className,
     variant = "default",
+    surface,
     children,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
     variant?: AlertVariant;
+    surface?: AlertSurface;
   } = $props();
 </script>
 
 <div
-  class={cn(alertVariants({ variant }), className)}
+  class={cn(alertVariants({ variant, surface }), className)}
   data-slot="alert"
   role="alert"
   bind:this={ref}

@@ -1,4 +1,13 @@
 <script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a sheet whose content pads itself. */
+  export const sheetContentVariants = tv({
+    variants: { pad: { none: "p-0" } },
+  });
+
+  export type SheetContentLooks = VariantProps<typeof sheetContentVariants>;
   export type Side = "top" | "right" | "bottom" | "left";
   /** Where a sheet stands while it is away: out past the edge it comes in from. */
   const AWAY: Record<Side, string> = {
@@ -33,14 +42,16 @@
     preventOverflowTextSelection = false,
     restoreScrollDelay = 0,
     portalProps,
+    pad,
     children,
     ...restProps
-  }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> & {
-    portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
-    side?: Side;
-    showCloseButton?: boolean;
-    children: Snippet;
-  } = $props();
+  }: WithoutChildrenOrChild<SheetPrimitive.ContentProps> &
+    SheetContentLooks & {
+      portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
+      side?: Side;
+      showCloseButton?: boolean;
+      children: Snippet;
+    } = $props();
 
   /* A sheet goes back out the edge it came in from under the finger, its
      scrim fading with it (motion/drag.svelte.ts). */
@@ -60,6 +71,7 @@
   <SheetPrimitive.Content
     class={cn(
       "pointer-events-auto fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-ink-strong text-label shadow-[var(--shadow-drawer)] data-is-shut:pointer-events-none data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=left]:phone:max-w-96 data-[side=right]:phone:max-w-96 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l",
+      sheetContentVariants({ pad }),
       className
     )}
     data-side={side}
