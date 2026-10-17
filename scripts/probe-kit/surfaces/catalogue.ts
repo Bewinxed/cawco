@@ -260,6 +260,11 @@ const EDITORS: Record<string, State[]> = {
         ...(section === "hooks"
           ? [{ name: "hook", route: (s: Scene) => `/config/hooks/${s.hook}`, root: "body" }]
           : []),
+        // A sign-in's return to the dashboard with a code the hub never
+        // asked for: its refusal, on the page the provider sends you back to.
+        ...(section === "mcp"
+          ? [{ name: "oauth-return", route: () => "/oauth/mcp?code=probe-code&state=probe-state", root: "body" }]
+          : []),
       ],
     ])
   ),
@@ -649,13 +654,20 @@ export const SURFACES: Surface[] = [
       "view:week",
       "made",
       "canvas",
-    ].map(
-      (view): State => ({
-        name: view.replace("view:", ""),
-        route: (s) => `/project/${s.project}?view=${view}`,
-        root: MAIN,
-      })
-    ),
+    ]
+      .map(
+        (view): State => ({
+          name: view.replace("view:", ""),
+          route: (s) => `/project/${s.project}?view=${view}`,
+          root: MAIN,
+        })
+      )
+      .concat({
+        // The made view on its own page, as a link to it opens it (a bare route).
+        name: "week-page",
+        route: (s) => `/project/${s.project}/view/week`,
+        root: "body",
+      }),
   },
   {
     // Three linked decision pages: the list, one page, and their graph.
