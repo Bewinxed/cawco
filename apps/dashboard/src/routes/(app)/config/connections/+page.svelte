@@ -425,15 +425,19 @@
 <!-- The sign-in form opens where it was asked for: under the empty
      state's cards, or at the head of the list under its menu. -->
 {#snippet addForm(service: Service)}
+  <!-- literal: 72ch -->
   <form
     data-slot="add"
     aria-label="Sign in to {service.label}"
-    class="add"
+    class="mb-space-4 flex max-w-(--measure) flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
     onsubmit={add}
+    style:--measure="72ch"
     transition:unfold
   >
-    <p class="add-head mark-line">
-      <ProviderLogo provider={service.service} />
+    <p
+      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+    >
+      <ProviderLogo class="size-icon-md flex-none" provider={service.service} />
       <span>Sign in to {service.label}</span>
     </p>
     <Field
@@ -462,9 +466,9 @@
       </Field>
     {/if}
     {#if addProblem}
-      <p class="add-problem" role="alert" transition:unfold>{addProblem}</p>
+      <p class="type-meta wrap-anywhere text-status-fail-ink" role="alert" transition:unfold>{addProblem}</p>
     {/if}
-    <div class="buttons">
+    <div class="flex justify-end gap-space-2">
       <Button
         disabled={addPending}
         label="Cancel"
@@ -507,21 +511,36 @@
     <!-- The Empty Starts Work Rule, its by-hand branch: a sign-in is the
          service asking you, so Caw can't start it. The line says so, and
          each card signs in to one service, its row then saying how it goes. -->
-    <div data-slot="connections-page-empty" class="empty">
-      <p data-slot="empty-line" class="empty-line">
+    <!-- literal: 72ch -->
+    <div
+      data-slot="connections-page-empty"
+      class="@container flex flex-col gap-space-3"
+    >
+      <p
+        data-slot="empty-line"
+        class="type-body max-w-(--measure) text-pretty text-ink-muted"
+        style:--measure="72ch"
+      >
         Each service asks you, not Caw, to let the hub in, so signing in is
         yours. The projects you allow then read from it and act through it.
       </p>
-      <ul data-slot="cards" aria-label="Services" class="cards">
+      <ul
+        data-slot="cards"
+        aria-label="Services"
+        class="m-0 grid list-none gap-space-2 p-0"
+      >
         {#each SERVICES as service (service.service)}
           <li>
             <button
               data-slot="connections-page-card"
-              class="card mark-line press-tint"
+              class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-center gap-space-2 rounded-lg border-0 bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
               onclick={() => startAdding(service)}
               type="button"
             >
-              <ProviderLogo provider={service.service} />
+              <ProviderLogo
+                class="size-icon-md flex-none"
+                provider={service.service}
+              />
               <span>Sign in to {service.label}</span>
             </button>
           </li>
@@ -565,20 +584,22 @@
           {/snippet}
           {#snippet below()}
             {#if keying === row.name}
+              <!-- literal: 14rem, 24rem -->
               <form
                 data-slot="row-ask"
                 aria-label="{labelOf(row)} key"
-                class="row-ask"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-0 p-0 type-meta text-ink-strong"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveKey(row);
                 }}
+                style:--key-basis="14rem"
+                style:--key-max="24rem"
                 transition:unfold
               >
                 <Input
                   aria-label="{labelOf(row)} key for {row.account}"
                   autocomplete="off"
-                  class="key"
                   required
                   type="password"
                   {@attach focusOnOpen}
@@ -608,7 +629,7 @@
               <fieldset
                 data-slot="row-ask"
                 aria-label="Remove {labelOf(row)}"
-                class="row-ask"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-0 p-0 type-meta text-ink-strong"
                 transition:unfold
               >
                 <span
@@ -644,7 +665,7 @@
           {/snippet}
           {#snippet trailing()}
             {#if shown.chips.length > 0}
-              <span class="projects">
+              <span class="inline-flex flex-wrap items-center gap-space-1">
                 <span class="sr-only">Projects that may use it:</span>
                 {#each shown.chips as chip (chip)}
                   <Badge variant="secondary"><span>{chip}</span></Badge>
@@ -699,12 +720,14 @@
   <Popover.Content align="end" class="w-64" customAnchor={chooseAnchor}>
     {#if choosing}
       {@const row = choosing}
-      <p class="pick-head">Projects that may use {labelOf(row)}</p>
-      <ul class="checklist">
+      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">Projects that may use {labelOf(row)}</p>
+      <ul class="m-0 flex list-none flex-col p-0">
         {#each cawco.projects as project (project.id)}
           <li>
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Checkbox renders the control the label names -->
-            <label class="kit-item check">
+            <label
+              class="kit-item type-label flex w-full cursor-pointer items-center gap-space-2 px-space-2 text-ink-strong"
+            >
               <Checkbox
                 data-box
                 bind:checked={
@@ -722,140 +745,26 @@
 </Popover.Root>
 
 <style>
-  .projects {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .row-ask {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
+  /* residual: foreign-dom */
+  [data-slot="row-ask"] :global([data-slot="input"]) {
+    flex: 1 1 var(--key-basis);
     min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  .row-ask :global(.key) {
-    flex: 1 1 14rem;
-    min-inline-size: 0;
-    max-inline-size: 24rem;
-  }
-  .add {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    max-inline-size: 72ch;
-    margin-block-end: var(--space-4);
-    padding: var(--space-4);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-  }
-  .add-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .add-head :global(svg),
-  .card :global(svg) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .add-problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    overflow-wrap: anywhere;
-  }
-  .buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    container-type: inline-size;
-  }
-  .empty-line {
-    max-inline-size: 72ch;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-wrap: pretty;
+    max-inline-size: var(--key-max);
   }
   /* The starter cards' recipe (StarterCards.svelte): raised, the tile
      shadow, every card one height, one column when narrow. */
-  .cards {
-    display: grid;
+  /* residual: unmapped */
+  [data-slot="cards"] {
     grid-template-columns: minmax(0, 1fr);
     grid-auto-rows: 1fr;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
   }
   @container (min-width: 30rem) {
-    .cards {
+    /* residual: unmapped */
+    [data-slot="cards"] {
       grid-template-columns: repeat(
         auto-fill,
         minmax(min(100%, var(--c-starter-w)), 1fr)
       );
     }
-  }
-  .card {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    block-size: 100%;
-    min-block-size: var(--c-starter-h);
-    padding: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-align: start;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    .card:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .card:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-  .pick-head {
-    padding: var(--space-2) var(--space-2) var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .checklist {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    padding-inline: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
   }
 </style>
