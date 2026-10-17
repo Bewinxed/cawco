@@ -89,3 +89,14 @@ ToolChips.svelte
 - `ModelSection` rail custom properties (`--rail-step`, `--hit-gap-x/y`, `--rail-gap`) are computed on the picker and inherited by Rail's root; the media switch cannot be written without a custom property under a media query, hence the kind-5 line above.
 - `Segmented`: `.md .tab` kept the 30px height on a phone because its specificity beat the phone rule; the converted `--tab-h-phone` is 30px for `md` and 38px for `sm` for the same result. The phone knob rule in EffortPips (`font-weight: var(--weight-strong)`) equalled the base weight and was not written.
 - `LocationSection` `.crumb`'s `font: inherit` and `.crumb.current`'s weight stay residual so the current crumb keeps the strong weight over the shorthand.
+
+## Contracts
+contract: apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte:75 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) and apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:652 | `tool` is a hook the chip trigger carries into NsPopover's button; both sides move it to a data attribute together
+contract: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:293 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/motion/fold.svelte.ts (`folds` attach) | `panel` marks the folding panel; the fold action and the markup agree on a data-slot
+contract: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:461 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/motion/fold.svelte.ts (`folds` attach) | same `panel` hook
+contract: apps/dashboard/src/lib/cawco/spawn/NsPopover.svelte:183 shadcn/no-unknown-classes | no stylesheet selects `ns-pop-shell`; spawn/ns-theme.css and floating-ui wrappers may | `ns-pop-shell` wrapper hook; shared-sheets item names it or drops it
+contract: apps/dashboard/src/lib/cawco/spawn/NsPopoverGroup.svelte:163 shadcn/no-unknown-classes | no stylesheet selects `ns-measure` (its height is read by `bind:offsetHeight`) | `ns-measure` wrapper hook; shared-sheets item names it or drops it
+contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:125 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` and `off` modifiers on the chip button; both sides move them to attributes together
+contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:136 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` modifier
+contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:163 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` modifier
+contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:188 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` modifier
