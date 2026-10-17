@@ -29,8 +29,16 @@
  * - after {@link QUIET_MS} with no other ask for the project, so a burst
  *   of moves asks once;
  * - at most once per {@link GAP_MS} per project: a later ask waits its turn;
- * - asked again on read when the set is older than {@link STALE_MS},
- *   which also writes the first set of a project made before starters were;
+ * - checked again on a read when this hub has not checked the project's
+ *   inputs for {@link GAP_MS} (since it started, so after every upgrade),
+ *   which also writes the first set of a project made before starters were.
+ *   A set never contradicts what the project holds for longer than that:
+ *   inputs no ask follows (AGENTS.md and knowledge/ edited, a draft view
+ *   kept or dropped, a routine removed, days in a stage, commits pushed
+ *   outside CawCo, events and task kinds ageing out, an offer answered
+ *   before its rule existed, the hub's own rules changed) are read again.
+ *   On nightly 3944 ds-probe-design's set, written before Not now counted,
+ *   kept suggesting a design system after it for up to a day;
  * - not asked when the inputs hash as the stored set's did.
  *
  * Jev off: no starters anywhere, and the `[jev off]` line. Jev on but
@@ -87,8 +95,6 @@ const pace = (() => {
 export const QUIET_MS = pace.quiet;
 /** The least time between two of one project's asks of Jev: 10 min. */
 export const GAP_MS = pace.gap;
-/** A set older than this is asked again when it is read: 24 h. */
-export const STALE_MS = DAY_MS;
 /** The latest commits of the landed branch Jev reads (landed.ts). */
 const COMMITS_READ = 5;
 /** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */
@@ -105,7 +111,7 @@ export type StartersTrigger =
   | "routine made"
   | "event received"
   | "design offer declined"
-  | "stale";
+  | "read";
 
 /** Where a project's views Caw drafted wait (views.ts `DRAFTS`). */
 const DRAFTS_DIR = "views/drafts";
@@ -482,26 +488,23 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
 
     /**
      * The project's set for a place, for a read: none while Jev is off;
-     * otherwise the stored one, every place asked again when it is stale or
-     * there is none yet.
+     * otherwise the stored one, its inputs checked again ({@link touched},
+     * so after the quiet and within the gap) when this hub has not checked
+     * them for {@link GAP_MS}: since it started, after an upgrade. A set whose
+     * inputs no longer hash as they did is asked again; one whose do is not.
      */
     read(projectId: string, place: StarterPlace): ProjectStarter[] {
       if (!jevAccess(db)) {
         return [];
       }
-      const stored = db.starters.set(projectId, place);
-      const seen = Math.max(
-        stored?.generatedAt.getTime() ?? 0,
-        checked.get(projectId) ?? 0
-      );
       if (
-        Date.now() - seen > STALE_MS &&
+        Date.now() - (checked.get(projectId) ?? 0) > GAP_MS &&
         !waiting.has(projectId) &&
         !writing.has(projectId)
       ) {
-        touched(projectId, "stale");
+        touched(projectId, "read");
       }
-      return stored?.starters ?? [];
+      return db.starters.set(projectId, place)?.starters ?? [];
     },
 
     /** What the person did with a starter of a place's set: sent as it stood, or changed. */

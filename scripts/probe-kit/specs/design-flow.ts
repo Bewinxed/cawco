@@ -24,6 +24,9 @@
  *    design-system build after it
  *    (spec §5.7: "Not now is recorded and he does not ask that project
  *    again unless the person does").
+ * 8. A set written before Not now counted (nightly 3944's ds-probe-design,
+ *    answered before the deploy): past the starters' gap a read checks its
+ *    inputs again, and the set is written without the design starter.
  *
  * The send-back of a landed design build is design-approve's 3a and 3b.
  *
@@ -33,7 +36,13 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  type Fleet,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -98,11 +107,87 @@ interface Stage {
   name: string;
 }
 
+/** The pace the spec sets (`CAWCO_STARTERS_PACE`): quiet, then the gap between asks. */
+const PACE = { quiet: 1500, gap: 5000 };
+
+/**
+ * 8: a project whose offer was answered Not now before the starters counted
+ * it (nightly 3944's ds-probe-design): its stored set still suggests a
+ * design system. Past the gap, a read checks its inputs again, and the set
+ * is written again without it.
+ */
+const staleSet = async (fleet: Fleet, kit: Kit): Promise<void> => {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "ds-stale",
+    caw: true,
+    template: "design",
+  });
+  const stages = () =>
+    fleet.api<{ stages: Stage[]; starters: { text: string }[] }>(
+      `/api/projects/${project.id}/stages`
+    );
+  const active = (await stages()).stages.find(
+    (stage) => stage.kind === "active"
+  );
+  await fleet.api(`/api/projects/${project.id}/tasks`, {
+    title: "Tighten the hero on small screens",
+    stage: active?.name,
+    labels: ["ui"],
+  });
+  const builds = (texts: string[]) =>
+    texts.some((text) => text.startsWith("Build a design system"));
+  const starters = async () =>
+    (await stages()).starters.map((starter) => starter.text);
+  const offer = async () => {
+    const answer = await fetch(
+      `${fleet.base}/api/projects/${project.id}/design-offer`
+    );
+    return answer.ok ? ((await answer.json()) as { answer: string }) : null;
+  };
+  const before = await until(
+    "ds-stale's offer and its design-system starter",
+    async () => ({ offer: await offer(), starters: await starters() }),
+    (now) => now.offer?.answer === "open" && builds(now.starters),
+    60_000
+  ).catch(() => undefined);
+  // The asks the project's making and its task's filing left waiting run
+  // out first, so only a read can write the set again.
+  await Bun.sleep(PACE.gap + PACE.quiet + 1000);
+  // Not now as the hub kept it before the starters counted it: the offer's
+  // row answered, and no ask of the starters after it.
+  fleet.write(
+    "UPDATE design_offers SET answer = 'dismissed', answered_at = ? WHERE project_id = ?",
+    Date.now(),
+    project.id
+  );
+  const stale = await starters();
+  await Bun.sleep(PACE.gap + 1000);
+  const after = await until(
+    "ds-stale's starters checked again on read",
+    starters,
+    (texts) => !builds(texts),
+    60_000
+  ).catch(() => undefined);
+  const trigger =
+    fleet.query<{ trigger: string }>(
+      "SELECT trigger FROM project_starter_sets WHERE project_id = ? AND place = 'board'",
+      project.id
+    )[0]?.trigger ?? "";
+  kit.check(
+    "8: a starter set written before Not now counted still suggests a design system; past the gap a read checks its inputs again, and the set written for that read suggests none",
+    before !== undefined &&
+      builds(stale) &&
+      after !== undefined &&
+      trigger.includes("read"),
+    `before: offer ${JSON.stringify(before?.offer)}, starters ${before?.starters.join(" | ")}; stale set ${stale.join(" | ")}; after: [${after?.join(" | ") ?? "still offered"}]; trigger “${trigger}”`
+  );
+};
+
 const run = async (kit: Kit) => {
   const jev = jevMock();
   const fleet = await kit.fleet(respond);
   fleet.env.CAWCO_TYPESAFE_URL = jev.url;
-  fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
+  fleet.env.CAWCO_STARTERS_PACE = `${PACE.quiet}/${PACE.gap}`;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -269,6 +354,8 @@ const run = async (kit: Kit) => {
       !buildStarter(afterNotNow),
     `before: offer ${JSON.stringify(offeredFirst?.offer)}, starters ${offeredFirst?.starters.join(" | ")}; dismissed ${dismissed.answer}; written for Not now ${rewritten !== undefined}; after: [${afterNotNow.join(" | ")}]`
   );
+
+  await staleSet(fleet, kit);
 
   // A worker session in a project with a checkout: task_create and
   // design_write, as a session calls them.
