@@ -48,6 +48,7 @@
     tone,
     arrive = "pop",
     shake = 0,
+    falling = false,
   }: {
     /** "JWK-HDQ", or null while there is none to show. */
     code: string | null;
@@ -55,6 +56,11 @@
     arrive?: OtpArrival;
     /** Each rise replays the shake. */
     shake?: number;
+    /**
+     * A dead code: box by box, k × dur-stagger apart, each drops out of the
+     * row on the gravity curve and fades.
+     */
+    falling?: boolean;
   } = $props();
 
   const uid = $props.id();
@@ -145,7 +151,12 @@
   });
 </script>
 
-<div data-slot="otp" class="otp" data-tone={tone}>
+<div
+  data-slot="otp"
+  class="otp"
+  data-falling={falling || undefined}
+  data-tone={tone}
+>
   {#if spoken}
     <span class="sr-only">{spoken}</span>
   {/if}
@@ -335,6 +346,30 @@
     transition-duration: var(--dur-fade);
   }
 
+  /* A dead code falls apart: each box drops its own height on the gravity
+     curve (ease-glide-in) and fades, k × dur-stagger after the first. Its
+     row's place clips it, so nothing falls past the code. */
+  [data-falling] .cell {
+    animation: otp-fall var(--dur-settle) var(--ease-glide-in)
+      calc(var(--at) * var(--dur-stagger)) both;
+  }
+  @keyframes otp-fall {
+    to {
+      opacity: 0;
+      transform: translateY(var(--c-otp-cell-h));
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-falling] .cell {
+      animation-name: otp-fade-out;
+      animation-delay: 0s;
+    }
+  }
+  @keyframes otp-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
   /* Error state shake: legs of dur-ghost, dur-ghost, dur-stagger and
      dur-stagger on one clock, each on ease-out. */
   .row:global(.shaking) {
