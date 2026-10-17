@@ -31,7 +31,7 @@ const WEB_NAME =
   /fetch|scrape|crawl|search|browser|chrome|playwright|puppeteer|navigate|firecrawl|exa|web/i;
 const SEARCH_NAME = /search/i;
 /** CawCo's own tools as a harness names them: `mcp__cawco__<tool>` (Claude, pi), `cawco_<tool>` (OpenCode). */
-const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/;
+export const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/;
 /** A claude.ai connector's tool (Gmail, Drive, Slack, Notion…): an outside service. */
 const CONNECTOR = /^mcp__claude_ai_/;
 /** Claude's name for an MCP tool: `mcp__<server>__<tool>`. */

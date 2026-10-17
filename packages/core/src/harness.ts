@@ -1966,8 +1966,9 @@ export interface WorkspaceCommit {
 }
 
 /**
- * A gate workspace (the landing gate's iOS build on a Mac) at another
- * machine's commit: inside its boundary, it
+ * A workspace at another workspace's commit: a gate workspace (the landing
+ * gate's iOS build on a Mac), or a new one cut `from` another, whose hub
+ * then sets its branch there. Inside its boundary, it
  * fetches `origin/<base>`, then the bundle, and checks out `head` detached,
  * its tracked files as the commit has them and every untracked file gone
  * (ignored ones, a dependency install or a build, stay). Args

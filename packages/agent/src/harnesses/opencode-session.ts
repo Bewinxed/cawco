@@ -43,6 +43,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CODE_MODE_TOOL,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
@@ -99,7 +100,7 @@ import {
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
-import { CODE_MODE_TOOL, OPENCODE_DIR } from "./opencode-plugin";
+import { OPENCODE_DIR } from "./opencode-plugin";
 import {
   codeModeCalls,
   compactBoundary,

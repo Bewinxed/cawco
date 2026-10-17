@@ -693,6 +693,7 @@ import {
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
+  type Unlanded,
   WAIT_ITEM_LIMIT,
   WorkItemRefusal,
 } from "./work-items";
@@ -18483,10 +18484,53 @@ export const createServer = (
     };
   };
   /**
-   * Attach or fresh (§5.9) for a caller about to message `row`: asked only
-   * of a cold session, and only while Jev is on (off, the caller decides in
-   * its cold check). Jev's answer, its failure in words, or undefined when
-   * there is nothing to ask.
+   * What a cold session's workspace holds on no remote, for its cold check
+   * (`/api/followup-state`): the read, or why it could not be made.
+   */
+  const coldWork = async (
+    instanceId: string
+  ): Promise<Unlanded | { error: string } | null> => {
+    try {
+      return (await workItems.unlanded(instanceId)) ?? null;
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+  /**
+   * What `handoff`'s cold check needs beyond the session's turns: nothing
+   * for a warm session; for a cold one, what its workspace holds on no
+   * remote, which decides first, and Jev's answer only when it holds none.
+   */
+  const coldReading = async (
+    row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
+    state: { lastTurnAt: string | null; midTurn: boolean },
+    message: string | undefined
+  ): Promise<{
+    jev?: { attach: boolean; noul: number } | { error: string };
+    unlanded?: Unlanded | { error: string };
+  }> => {
+    const expires = promptCacheExpiresAt(row, state.lastTurnAt);
+    if (state.midTurn || expires === null || expires > Date.now()) {
+      return {};
+    }
+    const unlanded = await coldWork(row.id);
+    if (
+      unlanded &&
+      ("error" in unlanded || unlanded.changed > 0 || unlanded.ahead > 0)
+    ) {
+      return { unlanded };
+    }
+    const jev = await attachVerdict(row, message);
+    return {
+      ...(unlanded ? { unlanded } : {}),
+      ...(jev ? { jev } : {}),
+    };
+  };
+  /**
+   * Attach or fresh (§5.9) for a caller about to message a cold `row` whose
+   * workspace holds nothing unlanded: asked only while Jev is on (off, the
+   * caller decides in its cold check). Jev's answer, its failure in words,
+   * or undefined when there is nothing to ask.
    */
   const attachVerdict = async (
     row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
@@ -18494,11 +18538,8 @@ export const createServer = (
   ): Promise<
     { attach: boolean; noul: number } | { error: string } | undefined
   > => {
-    const { midTurn, lastTurnAt } = followupState(row);
-    const expires = promptCacheExpiresAt(row, lastTurnAt);
-    const cold = !(midTurn || expires === null || expires > Date.now());
     const access = jevAccess(db);
-    if (!(cold && access && message)) {
+    if (!(access && message)) {
       return;
     }
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
@@ -21759,16 +21800,14 @@ export const createServer = (
               activityBound: false,
             };
           }
-          const { midTurn, hasTurns, lastTurnAt, activityBound } =
-            followupState(row);
-          const jev = await attachVerdict(row, body.message);
+          const state = followupState(row);
           return {
             row,
-            midTurn,
-            hasTurns,
-            lastTurnAt,
-            activityBound,
-            ...(jev ? { jev } : {}),
+            midTurn: state.midTurn,
+            hasTurns: state.hasTurns,
+            lastTurnAt: state.lastTurnAt,
+            activityBound: state.activityBound,
+            ...(await coldReading(row, state, body.message)),
           };
         }
       )
@@ -24139,6 +24178,7 @@ export const createServer = (
             cwd: t.Optional(t.String()),
             machineId: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
+            from: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
             inputs: t.Optional(t.Array(t.String())),
             lands: t.Optional(LANDS),
@@ -27072,6 +27112,17 @@ export const createServer = (
                     LIMITED_PROVIDERS.includes(provider)
                   ) {
                     limitRefused.add(message.instanceId);
+                  }
+                }
+                // Every tool call the session's model makes, at the top of
+                // its turn or inside one (a Code Mode program's, a
+                // subagent's): work of its own ends a declared wait at rest.
+                if (neutral.type === "assistant") {
+                  const called = neutral.message.content.flatMap((block) =>
+                    block.type === "tool_use" ? [block.name] : []
+                  );
+                  if (called.length > 0) {
+                    workItems.worked(message.instanceId, called);
                   }
                 }
                 if (

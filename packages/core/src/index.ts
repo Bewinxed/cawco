@@ -712,6 +712,13 @@ export const unshownAskMessage = (question: boolean, why: string): string =>
 export const ASK_USER_QUESTION = "AskUserQuestion";
 
 /**
+ * OpenCode's Code Mode tool: MCP tools are reached through the programs it
+ * runs, each of a program's calls its own tool_use frame under the
+ * program's (`parent_tool_use_id`).
+ */
+export const CODE_MODE_TOOL = "execute";
+
+/**
  * `fs`: the machine's files, for the cwd picker and light markdown editing
  * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
  * `read` with the file's text, `write` with the byte count it wrote, `media`

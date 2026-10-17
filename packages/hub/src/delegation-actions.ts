@@ -45,6 +45,7 @@ import {
   type HeldWork,
   type QueuedDelegate,
   resolveSpawnType,
+  type Unlanded,
 } from "./work-items";
 
 // Every call this module makes is the hub calling its own routes, as itself
@@ -869,6 +870,8 @@ export interface HandoffActions {
       canDelegate?: boolean;
       /** An existing workspace's id: the new item is its follow-up. */
       workspace?: string;
+      /** A workspace of this session's delegates: the new workspace is cut at its branch's head. */
+      from?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
       /** Files on this session's machine copied into its `$TMPDIR/inputs/` before its brief. */
@@ -1197,11 +1200,47 @@ function jevVerdict(
 }
 
 /**
+ * Whether `caller`'s call about cold `row` is the repeat of one refused
+ * since that session's last turn: true once, and the refusal is spent;
+ * otherwise this refusal is recorded for the repeat to find.
+ */
+function repeatOfRefused(
+  row: KeepAliveRow,
+  caller: string,
+  lastTurnAt: string | null
+): boolean {
+  const key = `${row.id}:${caller}`;
+  const turn = `${row.lastRequestAt?.getTime() ?? ""}:${lastTurnAt ?? ""}`;
+  if (coldRefusals.get(key) === turn) {
+    coldRefusals.delete(key);
+    return true;
+  }
+  // Bound warnings in memory; a newer turn also invalidates an unused repeat.
+  if (coldRefusals.size >= 256) {
+    coldRefusals.delete(coldRefusals.keys().next().value as string);
+  }
+  coldRefusals.set(key, turn);
+  return false;
+}
+
+/** The refusal for a cold session whose clean workspace holds commits on no remote: `from` reaches them for a brief's price. */
+export function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
+  const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
+  const commits = `${unlanded.ahead} commit${unlanded.ahead === 1 ? "" : "s"}`;
+  const stop = unlanded.live ? "stop its item with stop_delegate, then " : "";
+  return `Refused: "${title}" (${row.id}) is cold, and its workspace ${unlanded.workspaceId} holds ${commits} on no remote with a clean tree. Waking it re-reads its whole transcript at full price; a fresh delegate cut from that workspace's branch starts with those commits for the price of a brief. Nothing was sent.\n\nTo finish that work, ${stop}delegate with from: "${unlanded.workspaceId}" and a brief that says what is left to do. If the work needs this session's own history, make the same call again and it will be delivered.`;
+}
+
+/**
  * Attach or fresh (§5.9) with a caller: a message to a session whose
- * prompt cache has expired. Jev on: the hub asks Jev whether that session's
- * history matters to `message`, and its answer stands (a Jev that does not
- * answer refuses, saying so). Jev off: the caller decides: the first call
- * is refused with the cost, and the same call again is delivered.
+ * prompt cache has expired. What its workspace holds on no remote decides
+ * first: uncommitted changes, which only its clone reaches, attach; commits
+ * with a clean tree are refused once naming `delegate` with `from`, and the
+ * same call again is delivered. A workspace holding none of that: Jev on,
+ * the hub asks Jev whether that session's history matters to `message`, and
+ * its answer stands (a Jev that does not answer refuses, saying so); Jev
+ * off, the first call is refused with the cost, and the same call again is
+ * delivered.
  */
 async function checkCold(
   instanceId: string | undefined,
@@ -1209,6 +1248,102 @@ async function checkCold(
   caller: string,
   message: string
 ): Promise<void> {
+  const { row, midTurn, hasTurns, lastTurnAt, activityBound, unlanded, jev } =
+    await readFollowupState(instanceId, workspace, message);
+  if (!row) {
+    return;
+  }
+  row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
+  if (warmNow(row, midTurn, lastTurnAt)) {
+    return;
+  }
+  if (unlanded) {
+    const decided = unlandedVerdict(row, caller, lastTurnAt, unlanded);
+    if (decided) {
+      return;
+    }
+  }
+  if (jev) {
+    jevVerdict(row, jev);
+    return;
+  }
+  if (repeatOfRefused(row, caller, lastTurnAt)) {
+    return;
+  }
+  if (row.contextTokens === null) {
+    row.contextTokens = await measuredContext(row.id);
+  }
+  throw new Error(
+    coldRefusalText(row, lastTurnAt as string, activityBound, hasTurns)
+  );
+}
+
+/**
+ * What a cold session's workspace holds on no remote decides first: true
+ * when it delivers (uncommitted changes, which only that clone reaches, or
+ * the repeat of a `from` refusal); thrown when it refuses (commits with a
+ * clean tree, naming `from`; a read that failed); false when it holds
+ * neither, and Jev or the caller decides.
+ */
+function unlandedVerdict(
+  row: KeepAliveRow,
+  caller: string,
+  lastTurnAt: string | null,
+  unlanded: Unlanded | { error: string }
+): boolean {
+  if ("error" in unlanded) {
+    const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
+    throw new Error(
+      `Refused: "${title}" (${row.id}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`
+    );
+  }
+  if (unlanded.changed > 0) {
+    return true;
+  }
+  if (unlanded.ahead === 0) {
+    return false;
+  }
+  if (repeatOfRefused(row, caller, lastTurnAt)) {
+    return true;
+  }
+  throw new Error(fromRefusalText(row, unlanded));
+}
+
+/** A session's context size, read once for a cold refusal; null when its machine does not say in time. */
+async function measuredContext(id: string): Promise<number | null> {
+  try {
+    const measured = await readWithin(CONTEXT_SIZE_MS, async (signal) => {
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(id)}/context-size`,
+        { method: "POST", signal }
+      );
+      return response.ok
+        ? ((await response.json()) as { tokens?: number | null })
+        : undefined;
+    });
+    switch (measured.kind) {
+      case "answered":
+        return measured.value?.tokens ?? null;
+      case "unanswered":
+        // The size stays unknown; the refusal says so as it always has.
+        return null;
+      default: {
+        const unhandled: never = measured;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  } catch {
+    // A context read cannot keep a cold-session refusal waiting on an offline machine.
+    return null;
+  }
+}
+
+/** What the hub reads of a session a message is about to reach (`/api/followup-state`); unknown is refused. */
+async function readFollowupState(
+  instanceId: string | undefined,
+  workspace: string | undefined,
+  message: string
+) {
   const read = await readWithin(FOLLOWUP_STATE_MS, async (signal) => {
     const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
       method: "POST",
@@ -1225,7 +1360,9 @@ async function checkCold(
       hasTurns: boolean;
       lastTurnAt: string | null;
       activityBound: boolean;
-      /** Jev's answer, when Jev is on and the hub found the session cold. */
+      /** What a cold session's workspace holds on no remote, or why that could not be read. */
+      unlanded?: Unlanded | { error: string };
+      /** Jev's answer, when Jev is on and the hub found the session cold with nothing unlanded. */
       jev?: { attach: boolean; noul: number } | { error: string };
     };
   });
@@ -1242,62 +1379,7 @@ async function checkCold(
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-  const { row, midTurn, hasTurns, lastTurnAt, activityBound, jev } = read.value;
-  if (!row) {
-    return;
-  }
-  row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
-  const prefix = `${row.id}:`;
-  if (warmNow(row, midTurn, lastTurnAt)) {
-    return;
-  }
-  if (jev) {
-    jevVerdict(row, jev);
-    return;
-  }
-  const key = `${prefix}${caller}`;
-  const turn = `${row.lastRequestAt?.getTime() ?? ""}:${lastTurnAt ?? ""}`;
-  if (coldRefusals.get(key) === turn) {
-    coldRefusals.delete(key);
-    return;
-  }
-  // Bound warnings in memory; a newer turn also invalidates an unused repeat.
-  if (coldRefusals.size >= 256) {
-    coldRefusals.delete(coldRefusals.keys().next().value as string);
-  }
-  coldRefusals.set(key, turn);
-  if (row.contextTokens === null) {
-    try {
-      const measured = await readWithin(CONTEXT_SIZE_MS, async (signal) => {
-        const response = await fetch(
-          `${hubHttpUrl()}/api/instances/${encodeURIComponent(row.id)}/context-size`,
-          { method: "POST", signal }
-        );
-        return response.ok
-          ? ((await response.json()) as { tokens?: number | null })
-          : undefined;
-      });
-      switch (measured.kind) {
-        case "answered":
-          if (measured.value) {
-            row.contextTokens = measured.value.tokens ?? null;
-          }
-          break;
-        case "unanswered":
-          // The size stays unknown; the refusal says so as it always has.
-          break;
-        default: {
-          const unhandled: never = measured;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
-    } catch {
-      // A context read cannot keep a cold-session refusal waiting on an offline machine.
-    }
-  }
-  throw new Error(
-    coldRefusalText(row, lastTurnAt as string, activityBound, hasTurns)
-  );
+  return read.value;
 }
 
 export function coldRefusalText(

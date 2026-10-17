@@ -583,7 +583,7 @@ export const workspaceAt = async (
     await rm(path, { force: true });
   }
   console.info(
-    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}, for its landing gate's step on this machine`
+    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}`
   );
 };
 
