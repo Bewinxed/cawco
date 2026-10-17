@@ -156,7 +156,7 @@ export async function heavySlot(): Promise<HeavySlot> {
 if (import.meta.main) {
   const [verb, pid, ...command] = process.argv.slice(2);
   if (verb === "count") {
-    process.stdout.write(`${heavyRunsSaid()}\n`);
+    process.stdout.write(`${await heavyRunsSaid()}\n`);
     process.exit(0);
   }
   if (verb !== "hold" || !pid || command.length === 0) {
