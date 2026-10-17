@@ -217,7 +217,9 @@ export interface Kit {
    * the run's dashboard is built; its `dashboard()` serves that build
    * against its hub once asked. Both go when the spec ends.
    */
-  fleet: (respond: (request: Seen) => Reply) => Promise<KitFleet>;
+  fleet: (
+    respond: (request: Seen) => Reply | Promise<Reply>
+  ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
   note: (line: string) => void;
   /** Where the spec writes what a reviewer reads after a failure. */
