@@ -152,7 +152,13 @@ const read = (url: string, headers: Record<string, string> = {}) =>
 
 /** The caching and encoding headers of an answer, as one line. */
 const said = (answer: Response): string =>
-  `${answer.status}; ${["cache-control", "etag", "last-modified", "content-encoding", "content-type"]
+  `${answer.status}; ${[
+    "cache-control",
+    "etag",
+    "last-modified",
+    "content-encoding",
+    "content-type",
+  ]
     .map((name) => `${name}: ${answer.headers.get(name) ?? "none"}`)
     .join("; ")}`;
 
@@ -289,10 +295,9 @@ const probe = async (kit: Kit) => {
     })
   ).json()) as PreviewTicket;
   const byHost = `http://127.0.0.1:${first}`;
-  const entered = await read(
-    previewEnterUrl(byHost, ticket, "/src/main.js"),
-    { host }
-  );
+  const entered = await read(previewEnterUrl(byHost, ticket, "/src/main.js"), {
+    host,
+  });
   const cookie = entered.headers.get("set-cookie")?.split(";")[0] ?? "";
   const named = { host, cookie };
   const hostModule = await read(`${byHost}/src/main.js`, named);
