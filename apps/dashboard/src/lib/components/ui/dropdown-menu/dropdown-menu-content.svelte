@@ -1,3 +1,21 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a width of its own instead of its trigger's, or a
+      least width under the kit's. */
+  export const dropdownMenuContentVariants = tv({
+    variants: {
+      width: { compact: "w-44", regular: "w-52", wide: "w-64" },
+      min: { compact: "min-w-40", regular: "min-w-44" },
+    },
+  });
+
+  export type DropdownMenuContentLooks = VariantProps<
+    typeof dropdownMenuContentVariants
+  >;
+</script>
+
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
@@ -17,14 +35,17 @@
     portalProps,
     class: className,
     forceMount = false,
+    width,
+    min,
     child: callerChild,
     children,
     ...restProps
-  }: DropdownMenuPrimitive.ContentProps & {
-    portalProps?: WithoutChildrenOrChild<
-      ComponentProps<typeof DropdownMenuPortal>
-    >;
-  } = $props();
+  }: DropdownMenuPrimitive.ContentProps &
+    DropdownMenuContentLooks & {
+      portalProps?: WithoutChildrenOrChild<
+        ComponentProps<typeof DropdownMenuPortal>
+      >;
+    } = $props();
 
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
@@ -43,6 +64,7 @@
     {align}
     class={cn(
       "kit-pop relative z-50 max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      dropdownMenuContentVariants({ width, min }),
       className
     )}
     data-slot="dropdown-menu-content"

@@ -1,3 +1,22 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a card's pick box, shown while its card is in
+      reach (under the pointer, focused, picked, its column picking, or under
+      a finger), fading over --dur-control. */
+  export const checkboxVariants = tv({
+    variants: {
+      reveal: {
+        "card-pick":
+          "dur-control coarse:opacity-100 opacity-0 transition-[opacity] ease-out group-focus-within/card:opacity-100 group-hover/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100",
+      },
+    },
+  });
+
+  export type CheckboxLooks = VariantProps<typeof checkboxVariants>;
+</script>
+
 <script lang="ts">
   import { Checkbox as CheckboxPrimitive } from "bits-ui";
   import { IconMinus, IconTick } from "#lib/icons.js";
@@ -8,8 +27,10 @@
     checked = $bindable(false),
     indeterminate = $bindable(false),
     class: className,
+    reveal,
     ...restProps
-  }: WithoutChildrenOrChild<CheckboxPrimitive.RootProps> = $props();
+  }: WithoutChildrenOrChild<CheckboxPrimitive.RootProps> &
+    CheckboxLooks = $props();
 </script>
 
 <CheckboxPrimitive.Root
@@ -25,6 +46,7 @@
     "data-checked:text-on-action dark:bg-input/30",
     "dark:data-checked:bg-action-solid",
     "dark:aria-invalid:border-error-9/50",
+    checkboxVariants({ reveal }),
     className
   )}
   data-slot="checkbox"

@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: set a hairline down, on its label's first line. */
+  export const switchVariants = tv({
+    variants: { align: { "first-line": "mt-px" } },
+  });
+
+  export type SwitchLooks = VariantProps<typeof switchVariants>;
+</script>
+
 <script lang="ts">
   import { Switch as SwitchPrimitive } from "bits-ui";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -7,10 +19,12 @@
     class: className,
     checked = $bindable(false),
     size = "default",
+    align,
     ...restProps
-  }: WithoutChildrenOrChild<SwitchPrimitive.RootProps> & {
-    size?: "sm" | "default";
-  } = $props();
+  }: WithoutChildrenOrChild<SwitchPrimitive.RootProps> &
+    SwitchLooks & {
+      size?: "sm" | "default";
+    } = $props();
 </script>
 
 <SwitchPrimitive.Root
@@ -25,6 +39,7 @@
     "data-unchecked:bg-input data-disabled:opacity-50",
     "dark:data-unchecked:bg-input/80",
     "dark:aria-invalid:border-error-9/50",
+    switchVariants({ align }),
     className
   )}
   data-size={size}

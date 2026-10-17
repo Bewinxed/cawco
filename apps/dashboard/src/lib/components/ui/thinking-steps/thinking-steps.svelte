@@ -28,7 +28,7 @@
 
 <Collapsible.Root
   {...rest}
-  class="min-w-0 max-w-full text-size-body font-normal leading-body text-ink-muted size-compact:text-size-meta {className}"
+  class="min-w-0 max-w-full font-family-inherit text-size-body font-normal leading-body text-ink-muted size-compact:text-size-meta {className}"
   data-size={resolvedSize}
   data-slot="thinking-steps"
   bind:open={
@@ -41,11 +41,3 @@
     }
   }
 />
-
-<style>
-  /* residual: unmapped */
-  /* css-scope: this file's own root (a Collapsible.Root, which takes no scoped class); only it sets this data-slot */
-  :global([data-slot="thinking-steps"]) {
-    font-family: inherit;
-  }
-</style>

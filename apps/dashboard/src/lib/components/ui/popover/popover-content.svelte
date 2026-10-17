@@ -1,3 +1,31 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks, each as they drew it: its width, a capped height,
+      its padding and the gap between what it holds, and a card's frame. */
+  export const popoverContentVariants = tv({
+    variants: {
+      width: { narrow: "w-64", wide: "w-80", widest: "w-96" },
+      height: { capped: "max-h-80" },
+      pad: { none: "p-0", inset: "p-space-2", form: "p-3" },
+      gap: {
+        none: "gap-0",
+        tight: "gap-space-1",
+        snug: "gap-space-2",
+        form: "gap-3",
+      },
+      frame: {
+        panel: "rounded-lg shadow-lg",
+        "panel-high": "rounded-lg shadow-xl",
+        raised: "shadow-raised",
+      },
+    },
+  });
+
+  export type PopoverContentLooks = VariantProps<typeof popoverContentVariants>;
+</script>
+
 <script lang="ts">
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
@@ -21,17 +49,25 @@
     portalProps,
     morphs,
     bare = false,
+    width,
+    height,
+    pad,
+    gap,
+    frame,
     forceMount = false,
     child: callerChild,
     children,
     ...restProps
-  }: PopoverPrimitive.ContentProps & {
-    portalProps?: WithoutChildrenOrChild<ComponentProps<typeof PopoverPortal>>;
-    /** How it tweens to a new size (motion/morph): across too, or held still. */
-    morphs?: Morph;
-    /** It draws no surface (padding, edge, fill, shadow): what it holds is the surface. */
-    bare?: boolean;
-  } = $props();
+  }: PopoverPrimitive.ContentProps &
+    PopoverContentLooks & {
+      portalProps?: WithoutChildrenOrChild<
+        ComponentProps<typeof PopoverPortal>
+      >;
+      /** How it tweens to a new size (motion/morph): across too, or held still. */
+      morphs?: Morph;
+      /** It draws no surface (padding, edge, fill, shadow): what it holds is the surface. */
+      bare?: boolean;
+    } = $props();
 
   // Never flush with the screen's edge: it keeps the pages' gutter from it,
   // pushed back in when its place would run it off a phone. The token is
@@ -60,6 +96,7 @@
       "kit-pop z-50 flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
       bare &&
         "border-current border-none bg-none bg-transparent p-0 shadow-none",
+      popoverContentVariants({ width, height, pad, gap, frame }),
       className
     )}
     collisionPadding={inset}

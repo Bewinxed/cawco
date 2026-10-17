@@ -1,20 +1,32 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: how wide it may run, shrinking below its words
+      or up to a field's cap. */
+  export const nativeSelectVariants = tv({
+    variants: { measure: { shrink: "min-w-0", "cap-md": "max-w-96" } },
+  });
+
+  export type NativeSelectLooks = VariantProps<typeof nativeSelectVariants>;
+</script>
+
 <script lang="ts">
   import type { HTMLSelectAttributes } from "svelte/elements";
   import { IconUnfold } from "#lib/icons.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
 
-  type NativeSelectProps = Omit<
-    WithElementRef<HTMLSelectAttributes>,
-    "size"
-  > & {
-    size?: "sm" | "default";
-  };
+  type NativeSelectProps = Omit<WithElementRef<HTMLSelectAttributes>, "size"> &
+    NativeSelectLooks & {
+      size?: "sm" | "default";
+    };
 
   let {
     ref = $bindable(null),
     value = $bindable(),
     class: className,
     size = "default",
+    measure,
     children,
     ...restProps
   }: NativeSelectProps = $props();
@@ -23,6 +35,7 @@
 <div
   class={cn(
     "group/native-select relative w-fit has-[select:disabled]:opacity-50",
+    nativeSelectVariants({ measure }),
     className
   )}
   data-size={size}

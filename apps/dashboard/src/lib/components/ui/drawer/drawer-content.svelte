@@ -1,3 +1,33 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks, each as they drew it. */
+  export const drawerContentVariants = tv({
+    variants: {
+      /** Its foot: a sheet with a footer of its own height (`--sheet-foot`)
+          and no other padding; or the safe area alone, on every sheet or a
+          bottom sheet only. */
+      pad: {
+        "sheet-foot":
+          "p-0 pb-(--sheet-foot) vaul-drawer-direction-bottom:pb-(--sheet-foot)",
+        "safe-bottom": "pb-(--safe-bottom)",
+        "sheet-safe-bottom": "vaul-drawer-direction-bottom:pb-(--safe-bottom)",
+      },
+      /** A sheet in a column that may shrink below its content. */
+      height: { shrink: "min-h-0" },
+      /** The new-session card: the dialog's theme, no outline or margin,
+          and no motion of its own under reduced motion (over vaul's). */
+      look: {
+        "new-session":
+          "ns-theme m-0 outline-none motion-reduce:animate-none! motion-reduce:transition-none!",
+      },
+    },
+  });
+
+  export type DrawerContentLooks = VariantProps<typeof drawerContentVariants>;
+</script>
+
 <script lang="ts">
   import type { ComponentProps } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
@@ -14,18 +44,22 @@
     portalProps,
     hosted = false,
     modal = true,
+    pad,
+    height,
+    look,
     children,
     ...restProps
-  }: DrawerPrimitive.ContentProps & {
-    portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
-    /**
-     * The sheet fills a host of its own (the preview standing on the
-     * composer): the host places it, and the kit leaves its place alone.
-     */
-    hosted?: boolean;
-    /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
-    modal?: boolean;
-  } = $props();
+  }: DrawerPrimitive.ContentProps &
+    DrawerContentLooks & {
+      portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
+      /**
+       * The sheet fills a host of its own (the preview standing on the
+       * composer): the host places it, and the kit leaves its place alone.
+       */
+      hosted?: boolean;
+      /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
+      modal?: boolean;
+    } = $props();
 
   /**
    * A sheet whose root is `modal={false}` is not modal to a screen reader
@@ -74,6 +108,7 @@
   <DrawerPrimitive.Content
     class={cn(
       "group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-10 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
+      drawerContentVariants({ pad, height, look }),
       className
     )}
     data-placed={hosted ? undefined : ""}

@@ -58,6 +58,13 @@
   /** What the icon slot draws: the step's icon, or its dot. */
   const glyph = $derived(showIcon && Icon ? Icon : null);
   const entering = untrack(() => enters);
+  /**
+   * The light over an active step's words: its muted ink, strong at the
+   * middle of a band three times the words' width, which the shimmer
+   * keyframes slide across them once a breath.
+   */
+  const SHIMMER =
+    "linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%)";
 
   /**
    * A step's glyph changing cross-fades in its cell (--dur-control), and the
@@ -109,7 +116,12 @@
               {@const Glyph = glyph}
               <Glyph class="size-icon-md" />
             {:else}
-              <span data-slot="dot" class="size-space-1 bg-current"></span>
+              <!-- literal: 50% -->
+              <span
+                data-slot="dot"
+                class="size-space-1 rounded-(--dot-round) bg-current"
+                style:--dot-round="50%"
+              ></span>
             {/if}</span
           >
         {/key}</span
@@ -122,12 +134,15 @@
       class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2"
       data-enters={entering || undefined}
     >
+      <!-- literal: 300% 100% (the sweep three times the words' width) -->
       {#if label}
         <span
           data-slot="thinking-step-label"
-          class="font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:data-shimmer:text-transparent"
+          class="font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-clip-text"
           data-shimmer={status === "active" || undefined}
-          data-status={status}>{label}</span
+          data-status={status}
+          style:--step-shimmer={SHIMMER}
+          style:--step-shimmer-size="300% 100%">{label}</span
         >
       {/if}
       {#if description && markdown}
@@ -140,9 +155,10 @@
         </div>
       {:else if description}
         <span
-          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent"
+          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-clip-text"
           data-shimmer={(!label && status === "active") || undefined}
-          >{description}</span
+          style:--step-shimmer={SHIMMER}
+          style:--step-shimmer-size="300% 100%">{description}</span
         >
       {/if}
       {@render children?.()}
@@ -151,22 +167,6 @@
 {/if}
 
 <style>
-  /* residual: unmapped */
-  [data-slot="dot"] {
-    border-radius: 50%;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-shimmer] {
-      background: linear-gradient(
-        90deg,
-        var(--ink-muted) 0% 35%,
-        var(--ink-strong) 50%,
-        var(--ink-muted) 65% 100%
-      );
-      background-size: 300% 100%;
-      background-clip: text;
-    }
-  }
   /* residual: foreign-dom */
   /* Markdown keeps the plain description's type: prose-sm restates its own
      size and colour on streamdown's root, so they are handed back here, and
