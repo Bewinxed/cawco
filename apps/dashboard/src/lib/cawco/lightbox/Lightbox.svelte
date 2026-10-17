@@ -220,7 +220,7 @@
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
-      class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-space-4 outline-none data-pressable:pointer-events-auto"
+      class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-space-4 outline-off data-pressable:pointer-events-auto"
       onEscapeKeydown={(event) => {
         event.preventDefault();
         dismiss();

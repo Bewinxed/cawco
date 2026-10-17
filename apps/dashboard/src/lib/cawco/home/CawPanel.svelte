@@ -332,7 +332,7 @@
     <!-- mark-line: Caw stands above the words, not beside them -->
     <div
       data-slot="caw-panel-empty"
-      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-5 type-label text-ink-muted outline-none"
+      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-5 type-label text-ink-muted outline-off"
       data-flip
       role="status"
       tabindex="-1"

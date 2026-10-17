@@ -231,7 +231,7 @@
         aria-invalid={reading && !informational ? true : undefined}
         aria-label="Directory"
         autocapitalize="off"
-        class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
+        class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-off"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
         onkeydown={commitOnEnter}
@@ -497,7 +497,7 @@
             <input
               aria-label="Repository"
               autocapitalize="off"
-              class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
+              class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-off"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}

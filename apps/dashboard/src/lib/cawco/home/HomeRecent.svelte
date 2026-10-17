@@ -144,7 +144,7 @@
         >
           <IconSearch aria-hidden="true" class="size-icon-md flex-none" />
           <input
-            class="min-w-0 flex-auto border-none border-current bg-transparent type-body text-ink-strong outline-none"
+            class="min-w-0 flex-auto border-none border-current bg-transparent type-body text-ink-strong outline-off"
             aria-label="Search recent sessions"
             oninput={() => {
               recentShown = RECENT_PAGE;

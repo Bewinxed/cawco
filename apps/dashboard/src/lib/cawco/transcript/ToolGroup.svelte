@@ -409,9 +409,8 @@
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--hit-min) focus-visible:outline-none focus-visible:outline-current focus-visible:outline-(length:--ring-off)"
+                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--hit-min) focus-visible:outline-off"
                 style:--hit-min="44px"
-                style:--ring-off="medium"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {

@@ -20,7 +20,7 @@
           and no motion of its own under reduced motion (over vaul's). */
       look: {
         "new-session":
-          "ns-theme m-0 outline-none motion-reduce:animate-none! motion-reduce:transition-none!",
+          "ns-theme m-0 outline-off motion-reduce:animate-none! motion-reduce:transition-none!",
       },
     },
   });

@@ -466,7 +466,7 @@
     />
     <input
       bind:this={field}
-      class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-none placeholder:text-ink-subtle placeholder:text-ellipsis group-data-phone/finder:text-(length:--field-fs-phone)"
+      class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-off placeholder:text-ink-subtle placeholder:text-ellipsis group-data-phone/finder:text-(length:--field-fs-phone)"
       aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
       aria-autocomplete="list"
       aria-controls={listId}

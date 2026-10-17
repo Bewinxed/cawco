@@ -150,7 +150,7 @@
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-none"
+            class="truncate text-inherit no-underline outline-off"
             data-link
             data-share="title:{href}"
             {href}
@@ -159,7 +159,7 @@
         {:else}
           <span
             data-slot="section-row-label"
-            class="truncate text-inherit no-underline outline-none"
+            class="truncate text-inherit no-underline outline-off"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
             })}>{name}</span

@@ -1805,7 +1805,7 @@
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="ns-theme fixed z-81 flex origin-center flex-col outline-none inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-none!"
+        class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-none!"
         data-ns-dialog
         onCloseAutoFocus={(event) => {
           event.preventDefault();

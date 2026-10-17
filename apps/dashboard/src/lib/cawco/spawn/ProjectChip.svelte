@@ -140,7 +140,7 @@
         <input
           aria-label="Project name"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong outline-none max-phone:text-(length:--fs-phone)"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong outline-off max-phone:text-(length:--fs-phone)"
           oninput={(event) => onName(event.currentTarget.value)}
           placeholder="Project name"
           spellcheck="false"
@@ -163,7 +163,7 @@
         <input
           aria-label="Project path"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-(--lh) font-normal text-ink-strong outline-none max-phone:text-(length:--fs-phone)"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-(--lh) font-normal text-ink-strong outline-off max-phone:text-(length:--fs-phone)"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };

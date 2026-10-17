@@ -178,7 +178,7 @@
       ? stage.grabValue.corner.text
       : undefined}
     class={[
-      "group/grab absolute flex touch-none outline-none outline-current",
+      "group/grab absolute flex touch-none outline-off",
       handle === "top" &&
         "start-(--grab-x) top-0 h-c-btn-h-lg w-(--grab-w) translate-x-(--grab-shift) cursor-ns-resize justify-center pt-space-1",
       handle === "top-left" &&

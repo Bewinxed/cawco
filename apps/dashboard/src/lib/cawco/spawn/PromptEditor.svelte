@@ -322,7 +322,7 @@
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="fai-scroll h-(--prompt-height) max-phone:h-(--prompt-height-phone) w-full overflow-auto rounded-t-lg bg-transparent px-(--pad-x) pt-(--pad-t) pb-(--pad-b) font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-none max-phone:overscroll-contain max-phone:transition-off motion-safe:phone:transition-[height] motion-safe:phone:duration-(--ns-prompt-ms) motion-safe:phone:ease-in-out"
+    class="fai-scroll h-(--prompt-height) max-phone:h-(--prompt-height-phone) w-full overflow-auto rounded-t-lg bg-transparent px-(--pad-x) pt-(--pad-t) pb-(--pad-b) font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain max-phone:transition-off motion-safe:phone:transition-[height] motion-safe:phone:duration-(--ns-prompt-ms) motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {
