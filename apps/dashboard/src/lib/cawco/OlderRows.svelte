@@ -202,9 +202,11 @@
        its words stand on its siblings' axes and the nesting line meets its
        mark as it meets theirs. -->
   <Sidebar.MenuSubButton
-    class="h-(--older-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end) data-tall:gap-space-2 data-tall:pl-space-3 data-tall:pr-space-3 text-ink-muted"
+    class="h-(--older-h)"
     data-branch-item
     data-tall={tall || undefined}
+    row="compact-tall"
+    tone="muted"
   >
     {#snippet child({ props })}
       <!-- Busy from the press until its rows are drawn: the glyph gives way
@@ -263,7 +265,7 @@
          attributes). -->
     <ul
       data-slot="older-rows-box"
-      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none data-more-above:mask-(--fade-above) data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
+      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
       data-flip-anchor
       style:--fade="var(--space-4)"
       style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}

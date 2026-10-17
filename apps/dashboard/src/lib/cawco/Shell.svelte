@@ -999,7 +999,8 @@
       <!-- literal: 284px, 46px -->
       <Sheet.Content
         data-rail-sheet
-        class="w-(--rail-sheet-w) p-0 min-[900px]:hidden"
+        class="w-(--rail-sheet-w) min-[900px]:hidden"
+        pad="none"
         style="--rail-sheet-w: 284px; --rail-sheet-close-room: 46px"
         onCloseAutoFocus={(event) => {
           if (barGlass.open === "jump") {
@@ -1207,11 +1208,13 @@
                rounded"). It tops with the tabs (the bar's height less a tab
                row's) and stands clear of the floor by the neck (--caw-neck),
                the transcript's top edge. His rim's arcs follow its outline
-               (NeedsCaw). -->
+               (NeedsCaw). How far each of its items reaches sideways under a
+               finger (--hit-gap-x, read by the kit's .touch-hit): the
+               group's padding, or a finger's gap on a coarse pointer. -->
           <!-- literal: 16px (the gap under a finger) -->
           <div
             data-slot="tools"
-            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill coarse:gap-(--tools-coarse-gap) max-[900px]:self-start max-[900px]:h-c-bar-caw-glass-phone max-[900px]:mt-(--tools-top) max-[900px]:p-0 max-[900px]:rounded-l-(--tools-round) max-[900px]:rounded-r-none"
+            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-(--c-bar-group-pad) coarse:gap-(--tools-coarse-gap) coarse:hit-gap-x-(--tools-coarse-gap) max-[900px]:self-start max-[900px]:h-c-bar-caw-glass-phone max-[900px]:mt-(--tools-top) max-[900px]:p-0 max-[900px]:rounded-l-(--tools-round) max-[900px]:rounded-r-none max-[900px]:caw-neck-(--tools-neck)"
             data-bar-group
             data-instant={barGlass.instant ? "" : undefined}
             data-joined={barGlass.joined ? "" : undefined}
@@ -1219,6 +1222,7 @@
             style:--tools-coarse-gap="16px"
             style:--tools-top="calc(var(--c-top-bar-h) - var(--c-tab-row-h))"
             style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
+            style:--tools-neck={"calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone))"}
           >
             <!-- The glass as one shape with the card hanging from it while
                  one does (bar-glass: Caw's panel, the machines, Jump), as a
@@ -1237,16 +1241,22 @@
                  as it folds, on the card's clock (`data-joined`: from the
                  growth's first frame to the fold's). On the phone's row it
                  reaches on down through the neck to the row's floor, where
-                 it flares out into the card's top edge. A card the keyboard
+                 it flares out into the card's top edge, and its trailing
+                 side is the screen's edge, square and with no edge drawn, as
+                 the card's is below it (--join-clip-phone). A card the keyboard
                  opened stands open and leaves at once (bar-glass `instant`),
                  and its join with it. -->
             <span
               data-slot="join"
               aria-hidden="true"
-              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out group-data-joined/tools:opacity-100 group-data-joined/tools:group-not-data-instant/tools:dur-pop group-data-instant/tools:transition-off max-[900px]:bottom-(--join-foot)"
+              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out join-radius-(--join-r) clip-path-(--join-clip) group-data-joined/tools:opacity-100 group-data-joined/tools:group-not-data-instant/tools:dur-pop group-data-instant/tools:transition-off max-[900px]:bottom-(--join-foot) max-[900px]:join-radius-(--join-r-phone) max-[900px]:clip-path-(--join-clip-phone)"
               style:--f="var(--flare)"
               style:--h="calc(100% - 1px)"
               style:--join-foot="calc(-1 * var(--caw-neck))"
+              style:--join-r="calc(var(--c-btn-h) / 2)"
+              style:--join-r-phone={"calc(var(--c-bar-caw-glass-phone) / 2)"}
+              style:--join-clip={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to calc(100% - var(--r)) 0, arc to 100% var(--r) of var(--r) cw, line to 100% 100%, line to 0 100%, close)"}
+              style:--join-clip-phone={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to 100% 0, line to 100% 100%, line to 0 100%, close)"}
             ></span>
             {#if railed}
               <Tip keys="⌘K" label="Jump to session">
@@ -1511,58 +1521,6 @@
         arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
         line to 100% 1px,
         line to 100% 100%,
-        close
-      );
-    }
-  }
-
-  /* residual: unmapped — the shapes the join is cut to (clip-path shape(),
-     needs shared: a clip-path utility), and the numbers that switch with the
-     pointer or the layout, which only a rule can set per case (needs shared:
-     a token or utility for each). */
-  /* How far each of the group's items reaches sideways under a finger (the
-     kit's .touch-hit reads it): the group's padding, a finger's gap. */
-  [data-slot="tools"] {
-    --hit-gap-x: var(--c-bar-group-pad);
-
-    @media (pointer: coarse) {
-      --hit-gap-x: var(--tools-coarse-gap);
-    }
-  }
-  /* The join's outline: the glass's top corners (its pill's end, --r), its
-     trailing flank straight down, its leading foot flared (--f). */
-  [data-slot="join"] {
-    --r: calc(var(--c-btn-h) / 2);
-    clip-path: shape(
-      from 0 var(--h),
-      arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,
-      line to var(--f) var(--r),
-      arc to calc(var(--f) + var(--r)) 0 of var(--r) cw,
-      line to calc(100% - var(--r)) 0,
-      arc to 100% var(--r) of var(--r) cw,
-      line to 100% 100%,
-      line to 0 100%,
-      close
-    );
-  }
-  @media (max-width: 899px) {
-    /* The neck Caw's phone panel hangs through (registered: NeedsCaw reads
-       it in px), what the row is taller than his glass. */
-    [data-slot="tools"] {
-      --caw-neck: calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone));
-    }
-    /* Joined, its trailing side is the screen's edge, square and with no
-       edge drawn, as the card's is below it. */
-    [data-slot="join"] {
-      --r: calc(var(--c-bar-caw-glass-phone) / 2);
-      clip-path: shape(
-        from 0 var(--h),
-        arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,
-        line to var(--f) var(--r),
-        arc to calc(var(--f) + var(--r)) 0 of var(--r) cw,
-        line to 100% 0,
-        line to 100% 100%,
-        line to 0 100%,
         close
       );
     }

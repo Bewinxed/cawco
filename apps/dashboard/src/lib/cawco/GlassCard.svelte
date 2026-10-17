@@ -513,7 +513,7 @@
     {#each faces as one (one.card)}
       <div
         data-slot="glass-face"
-        class="flex min-h-0 w-full flex-auto flex-col self-end"
+        class="flex min-h-0 w-full flex-auto flex-col self-end rounded-inherit"
         data-face={one.card}
         {@attach mountFace(one.card)}
       >
@@ -528,11 +528,3 @@
     {/each}
   </HangCard>
 </Popover.Root>
-
-<style>
-  /* residual: unmapped — border-radius: inherit (no utility; needs shared:
-     rounded-inherit) */
-  [data-slot="glass-face"] {
-    border-radius: inherit;
-  }
-</style>

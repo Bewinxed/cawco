@@ -667,7 +667,7 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0"
+      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none"
       data-needs-caw
       style:--caw-hit="44px"
       type="button"
@@ -740,10 +740,5 @@
     stroke-linecap: round;
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
-  }
-  /* residual: unmapped — the tap highlight has no utility (needs shared:
-     tap-highlight-none). */
-  [data-needs-caw] {
-    -webkit-tap-highlight-color: transparent;
   }
 </style>

@@ -456,7 +456,7 @@
            name settles or Escape puts it back. -->
       <form
         data-slot="row"
-        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-(--row-touch-h) py-space-1 pl-space-3 pr-space-3 text-inherit no-underline group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
+        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-(--row-touch-h) py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
         data-rail-row
         style:--mark-hit-max={compact
           ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
@@ -478,7 +478,7 @@
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
         class={cn(
-          "press-tint focus-inset flex coarse:min-h-(--row-touch-h) min-h-space-8 min-w-0 flex-auto items-center gap-space-2 py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
+          "press-tint focus-inset flex coarse:min-h-(--row-touch-h) min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
           trigger.class as string | undefined
         )}
         data-hover-session={instance?.id}
@@ -642,7 +642,7 @@
   >
     {act.pending}
     <button
-      class="cursor-pointer border-none border-current bg-transparent p-0 text-ink-strong underline underline-offset-2"
+      class="cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
       onclick={stopPending}
       type="button">{act.stop.label}</button
     >
@@ -650,12 +650,6 @@
 {/if}
 
 <style>
-  /* residual: unmapped — the row's corner is its item's (`border-radius:
-     inherit`, no utility; needs shared: rounded-inherit). */
-  [data-rail-row] {
-    border-radius: inherit;
-  }
-
   /* residual: foreign-dom — RowFault's and AskHere's roots under the row
      (`class="session-fault"`, `class="session-ask"`, this file's names):
      a row's fault and question start where its title does, past the row's
@@ -675,11 +669,5 @@
   :global(.session-ask) {
     --ask-indent: var(--fault-indent);
     --ask-end: var(--fault-end);
-  }
-
-  /* residual: unmapped — the Stop under a pending row takes the note's own
-     type (`font: inherit`, no utility; needs shared: font-inherit). */
-  [data-slot="session-row-note"] button {
-    font: inherit;
   }
 </style>

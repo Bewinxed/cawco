@@ -895,7 +895,7 @@
 {#snippet slide()}
   <div
     data-slot="thread-pane-slide"
-    class="relative flex flex-col flex-auto min-h-0 overflow-hidden isolate"
+    class="relative flex flex-col flex-auto min-h-0 overflow-hidden isolate timeline-scope-transcript-head"
   >
     {#if readProblem}
       <!-- literal: 46ch -->
@@ -1081,13 +1081,10 @@
         in:crossIn
         out:crossOut
       >
-        <Alert
-          class="items-center border border-border-control rounded-lg bg-surface-raised shadow-tile"
-          role="status"
-        >
+        <Alert class="items-center" role="status" surface="card">
           <AlertDescription>{view.problem}</AlertDescription>
           {#if noMachine}
-            <AlertAction class="inset-y-0 flex items-center">
+            <AlertAction class="flex items-center" place="full-height">
               <Button
                 label="Check machines"
                 onclick={() => {
@@ -1132,13 +1129,6 @@
 {/snippet}
 
 <style>
-  /* residual: unmapped — the transcript's scroll, in reach of its head blur
-     (HeadFade): timeline-scope has no utility (needs shared:
-     timeline-scope-transcript-head). */
-  [data-slot="thread-pane-slide"] {
-    timeline-scope: --transcript-head;
-  }
-
   /* residual: foreign-dom — DOM the children draw. A thread has no tool
      rail: its rows are messages and event lines, so the rail's column is
      the rows' own edge (app.css .tx-columns, as it is on a narrow screen)

@@ -544,7 +544,7 @@
        groups rather than being rebuilt on every visit. -->
   <div
     data-slot="board"
-    class="absolute inset-0 flex min-h-0 min-w-0 data-hidden:pointer-events-none"
+    class="absolute inset-0 flex min-h-0 min-w-0 data-hidden:pointer-events-none data-hidden:content-visibility-hidden"
     data-hidden={boardHidden || undefined}
     inert={!onBoard}
     bind:this={boardEl}
@@ -643,13 +643,3 @@
 
 <!-- One peek for every home: the page, the rail, and each iPad arrangement. -->
 <PeekSheet />
-
-<style>
-  /* residual: unmapped — the board under a conversation is skipped
-     outright: its style, layout and paint leave every frame, and its
-     rendering state is kept for its return (content-visibility has no
-     utility; needs shared: content-visibility-hidden). */
-  [data-slot="board"][data-hidden] {
-    content-visibility: hidden;
-  }
-</style>

@@ -161,29 +161,6 @@
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
 
-  /**
-   * The rail's steps, named once. Every size here comes from app.css's scale
-   * (`--text-body` 15px for the nav step, `--text-label` 13.5px for list rows,
-   * `--text-label` 12.5px for section labels) rather than Tailwind's own, which
-   * runs a step and a half smaller at every level and is how a rail of `text-meta`
-   * rows ends up unreadable.
-   *
-   * Heights are the same two the rail always had: the nav band is tall because
-   * six destinations can afford to be, and a LIST row is 30px (the rail's
-   * `--rail-list-row-h`) because a rail of 40px rows is a rail that fits
-   * eight things.
-   */
-  const NAV_ROW = "h-c-nav-h gap-2.5 px-2.5 text-body";
-  /** A project's row: it ends where a session's does (`pr-2`), so the
-   *  counts at the trailing edge stand in one column down the rail. */
-  const LIST_ROW = "h-(--rail-list-row-h) gap-2.5 pl-2.5 pr-2 py-0";
-  /**
-   * A row under a project that is no session ("N older", "No sessions"):
-   * the compact session row's own measures (SessionRow), so its lead and its
-   * words stand on the sessions' axes.
-   */
-  const SUB_ROW =
-    "h-(--row-compact-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end)";
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
   const TREE: BranchOptions = { glyph: '[data-slot="tree-mark"]' };
   /**
@@ -194,9 +171,6 @@
   const LEAD = '[data-slot="tree-mark"], [data-slot="sidebar-row-lead"]';
   /** A project's rows: each hangs off the project's own mark. */
   const LEAD_TREE: BranchOptions = { glyph: LEAD };
-  /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
-   *  24px of nothing between every section; the label already separates them. */
-  const GROUP = "px-2 py-space-1";
 
   /**
    * How far the fleet's first read has come: 1 workflow runs, 2 machines and
@@ -226,13 +200,6 @@
       stage = next;
     }
   });
-  const GROUP_LABEL = "px-2.5";
-  /** A label carrying a control (the sort, the delegates toggle): on a coarse
-   *  pointer it takes a 44px row, so the control's touch area stays inside
-   *  it, clear of the session row below. */
-  const CONTROL_LABEL = "pr-space-1 pointer-coarse:h-11";
-  /** 2px, not 4: these are rows of one list, not six unrelated buttons. */
-  const MENU = "gap-0.5";
   /**
    * Every row in the rail shares one hover ghost that glides from row to row
    * across the groups; the nav and each session list carry their own
@@ -682,9 +649,9 @@
        height of the rows that replace them (a list row's). Each stage has
        its own, gone when that stage's groups arrive, so nothing drawn is
        ever pushed down. -->
-  <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
-    <div class="flex h-space-8 items-center {GROUP_LABEL}">
-      <Skeleton class="h-icon-sm w-20" />
+  <Sidebar.Group aria-busy="true" aria-label="Loading" data-flip pad="rail">
+    <div class="flex h-space-8 items-center px-2.5">
+      <Skeleton class="h-icon-sm" width="label" />
     </div>
     <div class="flex flex-col gap-0.5">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
@@ -811,9 +778,9 @@
          anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
          the conversations it jumps between. -->
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
-      <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
+      <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
+          <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
             {#snippet child({ props })}
               <a
                 href="/session"
@@ -870,11 +837,7 @@
        session starting, a count moving. Every group, row, count and status
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
-  <Sidebar.Content
-    class="gap-0 py-space-1"
-    {@attach reflow()}
-    {@attach scroller}
-  >
+  <Sidebar.Content pad="rail" {@attach reflow()} {@attach scroller}>
     {#if sheet && onsearch}
       <!-- The phone's search: the Jump palette's field, which opens Jump
            hanging from the bar's glass, standing where the sheet starts; a
@@ -903,14 +866,15 @@
          projects; with no session open the session surface draws its own
          page of it too. -->
     <!-- The app's places, first: one compact block, no heading over it. -->
-    <Sidebar.Group class={GROUP}>
-      <Sidebar.Menu aria-label="Places" class={MENU} {@attach highlight(PILL)}>
+    <Sidebar.Group pad="rail">
+      <Sidebar.Menu aria-label="Places" gap="tight" {@attach highlight(PILL)}>
         <Sidebar.MenuItem>
           <!-- The board is the place while it is on screen; with a
                conversation open, its row is the one selection. -->
           <Sidebar.MenuButton
-            class={NAV_ROW}
+            class="h-c-nav-h"
             isActive={path.startsWith("/session") && activeSession === null}
+            row="nav"
           >
             {#snippet child({ props })}
               <a href="/session" {...props} class="{props.class} mark-line">
@@ -925,9 +889,9 @@
                  the kit's active and hover inks are for a plain count, and
                  on the live fill the active one reads 3.3:1. -->
             <Sidebar.MenuBadge
-              class="bg-status-live-bg text-status-live-ink! data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink!"
               data-blocked={cawco.blockedCount > 0 || undefined}
               data-flip="pop box"
+              tone="live"
             >
               <MorphText text={String(fleetCount)} />
             </Sidebar.MenuBadge>
@@ -936,8 +900,9 @@
 
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
-            class={NAV_ROW}
+            class="h-c-nav-h"
             isActive={path.startsWith("/workflows")}
+            row="nav"
           >
             {#snippet child({ props })}
               <a href="/workflows" {...props} class="{props.class} mark-line"
@@ -960,8 +925,8 @@
     {#if stage >= 3}
       <!-- Projects. Its working sessions echo in turn, top to bottom
            (motion/echo). -->
-      <Sidebar.Group class={GROUP} data-flip {@attach echoBeat()}>
-        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
+      <Sidebar.Group data-flip pad="rail" {@attach echoBeat()}>
+        <Sidebar.GroupLabel end="action" pad="rail">
           <span>Projects</span>
           <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
@@ -983,7 +948,7 @@
                   </Button>
                 {/snippet}
               </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="start" class="w-44">
+              <DropdownMenu.Content align="start" width="compact">
                 <DropdownMenu.Group>
                   <DropdownMenu.GroupHeading
                     >Sort sessions by</DropdownMenu.GroupHeading
@@ -1029,7 +994,7 @@
           </p>
         {:else}
           <Sidebar.Menu
-            class={MENU}
+            gap="tight"
             {@attach highlight(PILL)}
             {@attach holdWhileInside("rail:")}
           >
@@ -1050,7 +1015,11 @@
                   onnew={() => newSession({ projectId: project.id })}
                   {project}
                 >
-                  <Sidebar.MenuButton class={LIST_ROW} isActive={here}>
+                  <Sidebar.MenuButton
+                    class="h-(--rail-list-row-h)"
+                    isActive={here}
+                    row="list"
+                  >
                     {#snippet child({ props })}
                       <!-- The row is the link to the project's page. Its
                            mark says what is running in it, as a session's
@@ -1058,7 +1027,7 @@
                            its sessions, as a session's mark folds its
                            delegates; its press never reaches the link. Under
                            a finger the switch reaches sideways to the name,
-                           the row's own gap (LIST_ROW's), as a session
+                           the row's own gap (`row="list"`), as a session
                            row's does. -->
                       <a
                         {href}
@@ -1131,9 +1100,11 @@
                     {#if lists.older.length + lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
-                          class="{SUB_ROW} text-ink-muted"
+                          class="h-(--row-compact-h)"
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
+                          row="compact"
+                          tone="muted"
                         >
                           <span
                             data-slot="sidebar-row-lead"
@@ -1161,8 +1132,8 @@
     {#if sheet}
       <!-- The machines, where a phone keeps them: each with its status and
            its menu (a long press), then Add machine. -->
-      <Sidebar.Group class={GROUP} data-flip>
-        <Sidebar.GroupLabel class={GROUP_LABEL}>
+      <Sidebar.Group data-flip pad="rail">
+        <Sidebar.GroupLabel pad="rail">
           Machines
           <span class="ms-auto num">{machinesOnline()} online</span>
         </Sidebar.GroupLabel>
@@ -1190,7 +1161,8 @@
               <Sidebar.MenuButton
                 {...tip}
                 aria-label="You"
-                class="touch-hit size-(--rail-avatar-size) justify-center overflow-visible p-0"
+                class="touch-hit size-(--rail-avatar-size) justify-center overflow-visible"
+                row="avatar"
               >
                 <!-- No picture of the reader yet: Caw stands in, the brand
                      icon as a round picture. -->
@@ -1217,7 +1189,7 @@
               {...tip}
               aria-current={configuring ? "page" : undefined}
               aria-label="Configure"
-              class="rail-configure"
+              data-rail-configure
               href={configureHref}
               size="icon-sm"
               variant="ghost"
@@ -1254,11 +1226,12 @@
      Button's own transition and press are an arbitrary property in its
      recipe, which a utility here would not reliably replace; this rule
      outranks them as it always has. */
-  [data-slot="sidebar-settings"] :global(.rail-configure[aria-current="page"]) {
+  [data-slot="sidebar-settings"]
+    :global([data-rail-configure][aria-current="page"]) {
     background: var(--selected-bg);
     color: var(--selected-ink);
   }
-  [data-slot="sidebar-settings"] :global(.rail-configure) {
+  [data-slot="sidebar-settings"] :global([data-rail-configure]) {
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
