@@ -94,3 +94,12 @@ with `allow: ["pointer-events"]` for these 9 files. Then the 9 comment lines are
 - `shadcn/no-restyle` hits: none (the rule is off under components/ui, delta K).
 - `shadcn variant:` lines: none (no rule moved onto one of the eight shadcn variants).
 - STOPs: none.
+
+## Delta O (applied to every file in the lane)
+
+- O1, `needs colour token:` lines: none. No file in this lane has a `<style>`, so there
+  is no colour literal in a style rule.
+- O2, `cross-file hook:` lines: none. The only classes deleted are the `cn-*` registry
+  hooks. Nothing selects them: `git grep` outside `.cutover/` finds only a Swift doc
+  comment (apps/apple/…/JumpPalette.swift:984, prose). No other component-local class
+  had rules moved in this lane.
