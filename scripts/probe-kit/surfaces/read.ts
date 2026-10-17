@@ -600,17 +600,18 @@ export function installReader(props: readonly string[]): void {
   window.__ssReader = reader;
 }
 
+/** Two frames at 60 Hz, in real time. */
+const TWO_FRAMES_MS = 34;
+
 /** Holds every animation still until two frames pass with nothing left to hold (at most 8 rounds). */
 export async function holdStill(page: Page): Promise<void> {
   for (let round = 0; round < 8; round += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each round reads what the last one left
     const held = await page.evaluate(() => window.__ssReader?.still() ?? 0);
-    await page.evaluate(
-      () =>
-        new Promise<void>((done) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => done()))
-        )
-    );
+    // Two of the browser's own frames, in real time: the page's
+    // requestAnimationFrame is the walk's paused clock's (walk.ts passPage),
+    // and fires only when the walk runs it on.
+    await page.waitForTimeout(TWO_FRAMES_MS);
     if (held === 0) {
       return;
     }
