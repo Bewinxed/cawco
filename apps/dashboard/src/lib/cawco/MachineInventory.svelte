@@ -93,13 +93,22 @@
   }
 </script>
 
-<div class="inventory">
+<!-- literal: 8px, 6px, 10px, 44px, 72ch, 240px -->
+<div
+  class="flex flex-col gap-(--inv-gap) border-t border-border-hairline pt-space-5"
+  style:--inv-gap="8px"
+  style:--inv-head-h="44px"
+  style:--inv-measure="72ch"
+  style:--inv-pad="10px"
+  style:--inv-text-basis="240px"
+  style:--inv-tight="6px"
+>
   <SectionHeader
     hue="var(--hue-amber-500)"
     icon={IconLaptop}
     label="On each machine"
   />
-  <p data-slot="note" class="note">
+  <p data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">
     What each machine really has, whoever put it there — read live, never
     stored. Anything the fleet does not manage can be adopted into it.
   </p>
@@ -108,35 +117,38 @@
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">
       <AddMachineLink>No machines yet</AddMachineLink>
       — each one reports what it has once it registers.
     </p>
   {:else}
-    <ul data-slot="machines" class="machines">
+    <ul
+      data-slot="machines"
+      class="m-0 -mx-(--inv-gap) flex list-none flex-col gap-space-row p-0"
+    >
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows =
           kind === "mcp" ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
-        <li data-slot="machine" class="machine">
+        <li data-slot="machine" class="flex flex-col gap-(--inv-tight)">
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="head mark-line focus-inset press-tint"
+            class="mark-line focus-inset press-tint flex min-h-(--inv-head-h) items-center gap-(--inv-gap) rounded-sm px-(--inv-gap) py-(--inv-tight) text-left transition-control hover:enabled:bg-surface-hover"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
           >
             {#if open[machine.machineId]}
-              <IconChevronDown />
+              <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
             {:else}
-              <IconChevronRight />
+              <IconChevronRight class="size-icon-md flex-none text-ink-muted" />
             {/if}
-            <OsMark class="size-icon-md shrink-0" os={machine.os} />
-            <span data-slot="host" class="host"
+            <OsMark class="size-icon-md flex-none text-ink-muted" os={machine.os} />
+            <span data-slot="host" class="type-label text-ink-strong"
               >{machineLabel(machine.hostname)}</span
             >
-            <span data-slot="note" class="note">
+            <span data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">
               {#if open[machine.machineId]}
                 Hide
               {:else if machine.status === "online"}
@@ -148,7 +160,11 @@
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
-              <p data-slot="note" class="note busy mark-line" role="status">
+              <p
+                data-slot="note"
+                class="mark-line flex items-center gap-(--inv-gap) max-w-(--inv-measure) type-meta text-ink-muted"
+                role="status"
+              >
                 <Spinner class="size-icon-md shrink-0" /><span
                   >Asking this machine…</span
                 >
@@ -158,19 +174,30 @@
                 <AlertDescription>{unread[machine.machineId]}</AlertDescription>
               </Alert>
             {:else if rows.length === 0}
-              <p data-slot="note" class="note">
+              <p data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">
                 {kind === "mcp"
                   ? "This machine has no MCP servers at all."
                   : "This machine has no skills at all."}
               </p>
             {:else}
-              <ul class="found">
+              <ul
+                class="mt-0 mb-(--inv-tight) mx-(--inv-gap) flex list-none flex-col gap-space-row p-0"
+              >
                 {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
-                  <li data-slot="entry" class="entry">
-                    <span data-slot="text" class="text">
-                      <span class="line">
-                        <span data-slot="name" class="name">{row.name}</span>
+                  <li
+                    data-slot="entry"
+                    class="flex flex-wrap items-center gap-(--inv-gap) rounded-sm bg-surface-recess px-(--inv-pad) py-(--inv-gap)"
+                  >
+                    <span
+                      data-slot="text"
+                      class="flex min-w-0 grow basis-(--inv-text-basis) flex-col gap-space-row"
+                    >
+                      <span class="flex flex-wrap items-center gap-(--inv-tight)">
+                        <span
+                          data-slot="name"
+                          class="font-mono text-size-meta text-ink-strong"
+                          >{row.name}</span>
                         <Badge variant="outline"><span>{row.scope}</span></Badge
                         >
                         {#if row.managed}
@@ -183,7 +210,7 @@
                         {/if}
                       </span>
                       {#if "description" in row && row.description}
-                        <span data-slot="note" class="note clamp"
+                        <span data-slot="note" class="line-clamp-2 max-w-(--inv-measure) type-meta text-ink-muted"
                           >{row.description}</span
                         >
                       {/if}
@@ -202,9 +229,9 @@
                         variant="outline"
                       />
                     {:else if taken.includes(row.name) && !row.managed}
-                      <span data-slot="note" class="note">In the fleet</span>
+                      <span data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">In the fleet</span>
                     {/if}
-                    <RowFault class="adopt-fault" reason={adoptFailed[key]} />
+                    <RowFault class="basis-full" reason={adoptFailed[key]} />
                   </li>
                 {/each}
               </ul>
@@ -215,104 +242,3 @@
     </ul>
   {/if}
 </div>
-
-<style>
-  .inventory {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .machines,
-  .found {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .machines {
-    margin: 0 -8px;
-  }
-  .machine {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 44px;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    text-align: left;
-    transition: var(--transition-control);
-  }
-  .head:hover:not(:disabled) {
-    background: var(--surface-hover);
-  }
-  .head :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-muted);
-  }
-  .host {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .found {
-    margin: 0 8px 6px;
-  }
-  .entry {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  /* A refused adopt, on a line of its own under the entry's words. */
-  .entry > :global(.adopt-fault) {
-    flex-basis: 100%;
-  }
-  .text {
-    display: flex;
-    flex: 1 1 240px;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-  .name {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-  }
-  .clamp {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-</style>

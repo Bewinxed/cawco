@@ -186,20 +186,41 @@
 </script>
 
 {#if key}
+  <!-- Over a row of chips (`above`, the base): at its chip, pulled back inside
+       the row's end, and raised by --rise over whatever stands on the row
+       between them. Beside a list (`right`): level with its row, pulled back
+       inside the viewport by its own height (the 100%), --hover-panel-inset
+       clear of either edge; it grows from its row's centre, which is --origin
+       under the row's top (--y) wherever the panel's own top (--top) ends up.
+       The 4px bridge between the panel and its trigger is its ::after. -->
   <div
     {...rest}
-    class="panel {side}"
-    class:gliding
+    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-overlay side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-40 side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:dur-morph motion-safe:data-gliding:ease-drawer"
+    data-gliding={gliding || undefined}
+    data-side={side}
+    style:--panel-bottom="calc(100% + var(--space-1) + var(--rise, 0px))"
+    style:--panel-origin-above="var(--origin) 100%"
+    style:--panel-origin-right="0 calc(var(--y) + var(--origin) - var(--top))"
+    style:--panel-x="max(0px, min(var(--x), calc(var(--span) - 100%)))"
+    style:--top="clamp(var(--hover-panel-inset), var(--y), calc(100dvh - 100% - var(--hover-panel-inset)))"
     in:panelIn
     out:panelOut
     {@attach morph({ width: true })}
   >
-    <div class="cell">
+    <!-- The content's own width, capped at 440px or the room (less the
+         border): never the panel's, so the panel's size tween (morph, which
+         watches this box) does not resize what it is watching. -->
+    <!-- literal: 440px, 2px, 320px -->
+    <div
+      class="relative grid w-max max-w-(--cell-max) max-h-(--cell-room) overflow-y-auto overscroll-contain p-space-3"
+      style:--cell-max="calc(min(440px, var(--span, 440px)) - 2px)"
+      style:--cell-room="var(--room, 320px)"
+    >
       {#key key}
         <div
-          class="pbody"
-          style:block-size={pending && held ? `${held.h}px` : null}
-          style:inline-size={pending && held ? `${held.w}px` : null}
+          class="col-start-1 row-start-1 min-w-0 h-(--held-h) w-(--held-w)"
+          style:--held-h={pending && held ? `${held.h}px` : null}
+          style:--held-w={pending && held ? `${held.w}px` : null}
           in:swapIn
           out:swapOut
           {@attach measure}
@@ -211,82 +232,22 @@
   </div>
 {/if}
 
+
 <style>
-  .panel {
-    z-index: 2;
-    inline-size: max-content;
-    pointer-events: auto;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-
-    /* The 4px between the panel and its trigger, so the pointer crossing
-       it is still over the panel. */
-    &::after {
-      content: "";
-      position: absolute;
-    }
-  }
-  /* Over a row of chips: at its chip, pulled back inside the row's end, and
-     raised by --rise over whatever stands on the row between them. */
-  .panel.above {
+  /* residual: pseudo — the 4px between the panel and its trigger, so the
+     pointer crossing it is still over the panel. */
+  [data-side]::after {
+    content: "";
     position: absolute;
-    inset-block-end: calc(100% + 4px + var(--rise, 0px));
-    inset-inline-start: 0;
-    translate: max(0px, min(var(--x), calc(var(--span) - 100%))) 0;
-    transform-origin: var(--origin) 100%;
-
-    &::after {
-      inset-inline: 0;
-      inset-block-start: 100%;
-      block-size: 4px;
-    }
   }
-  /* Beside a list: level with its row, pulled back inside the viewport by
-     its own height (the 100%), --hover-panel-inset clear of either edge.
-     It grows from its row's centre, which is --origin under the row's top
-     (--y) wherever the panel's own top (--top) ends up. */
-  .panel.right {
-    --top: clamp(
-      var(--hover-panel-inset),
-      var(--y),
-      calc(100dvh - 100% - var(--hover-panel-inset))
-    );
-    position: fixed;
-    inset-block-start: 0;
-    inset-inline-start: var(--x);
-    translate: 0 var(--top);
-    transform-origin: 0 calc(var(--y) + var(--origin) - var(--top));
-    z-index: 40;
-
-    &::after {
-      inset-block: 0;
-      inset-inline-end: 100%;
-      inline-size: 4px;
-    }
+  [data-side="above"]::after {
+    inset-inline: 0;
+    inset-block-start: 100%;
+    block-size: var(--space-1);
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .panel.gliding {
-      transition: translate var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  /* The content's own width, capped at 440px or the room (less the
-     border): never the panel's, so the panel's size tween (morph, which
-     watches this box) does not resize what it is watching. */
-  .cell {
-    position: relative;
-    display: grid;
-    inline-size: max-content;
-    max-inline-size: calc(min(440px, var(--span, 440px)) - 2px);
-    max-block-size: var(--room, 320px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: var(--space-3);
-
-    & > .pbody {
-      grid-area: 1 / 1;
-      min-inline-size: 0;
-    }
+  [data-side="right"]::after {
+    inset-block: 0;
+    inset-inline-end: 100%;
+    inline-size: var(--space-1);
   }
 </style>

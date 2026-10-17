@@ -244,17 +244,48 @@
   });
 </script>
 
-<div class="fault" class:hub={group.origin === "hub"}>
-  <div data-slot="top" class="top mark-line">
+<!-- The alert recipe: a compact status-tinted row, status ink on its own
+     tint, no edge. A hub fault is not a machine's problem and does not wear a
+     machine's tint: nothing downstream of it can be fixed until it is. -->
+<!-- literal: 10px, 12px -->
+<div
+  class="flex min-w-0 flex-col rounded-md bg-(--tone-bg) px-(--fault-x) py-(--fault-y) type-body text-(color:--tone-ink)"
+  data-hub={group.origin === "hub" || undefined}
+  style:--fault-x="12px"
+  style:--fault-y="10px"
+  style:--tone-bg={group.origin === "hub"
+    ? "var(--status-fail-bg)"
+    : "var(--status-attn-bg)"}
+  style:--tone-ink={group.origin === "hub"
+    ? "var(--status-fail-ink)"
+    : "var(--status-attn-ink)"}
+>
+  <div
+    data-slot="top"
+    class="mark-line flex flex-wrap items-center gap-space-2"
+  >
     <IconWarningTriangle class="size-icon-md shrink-0" />
-    <span data-slot="title" class="title">{copy.title}</span>
+    <span
+      data-slot="title"
+      class="text-size-label font-medium text-(color:--tone-ink)"
+      >{copy.title}</span
+    >
     <!-- Where, never left implicit: the whole point of the investigation this
-         came out of was that a badge named no machine. -->
-    <span data-slot="where" class="where" data-box>
+         came out of was that a badge named no machine. The machine sits beside
+         the title, not pushed to the far edge: "what broke" and "where" read
+         as one fact and belong together. -->
+    <span data-slot="where" class="inline-flex" data-box>
       {#if group.origin === "hub"}
-        <span data-slot="tag" class="tag">at the hub</span>
+        <span
+          data-slot="tag"
+          class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+          >at the hub</span
+        >
       {:else if machine}
-        <span data-slot="tag" class="tag mark-line">
+        <span
+          data-slot="tag"
+          class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+        >
           <OsMark class="size-icon-md shrink-0" os={machine.os} />
           <span
             >{machineLabel(machine.hostname)}
@@ -263,20 +294,30 @@
           >
         </span>
       {:else}
-        <span data-slot="tag" class="tag">{group.machineId}</span>
+        <span
+          data-slot="tag"
+          class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+          >{group.machineId}</span
+        >
       {/if}
     </span>
     {#if compact}
+      <!-- literal: 24px (min-height: 24px, below that the target is under the
+           WCAG 2.5.8 (AA) minimum; measured at 14.6px). The margin keeps the
+           label optically flush with the text above it. -->
       <button
         aria-expanded={expanded}
-        class="disclose more-toggle mark-line touch-hit"
+        class="group/disclose mark-line touch-hit inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 ms-auto hover:opacity-100"
         data-box
         onclick={() => {
           expanded = !expanded;
         }}
+        style:--disclose-min="24px"
         type="button"
       >
-        <IconChevronRight class="fault-chevron size-icon-md shrink-0" />
+        <IconChevronRight
+          class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+        />
         <span>{expanded ? "Hide" : "Details"}</span>
       </button>
     {/if}
@@ -284,48 +325,79 @@
 
   <div
     data-slot="body"
-    class="body"
     inert={!whole}
     {@attach disclose(() => whole)}
   >
-    <div data-slot="inner" class="inner">
-      <p class="rows">
-        <span class="noun"
+    <!-- The body folds as one piece under the title line; its own gap to the
+         line sits inside it, so a shut body leaves nothing behind. -->
+    <div data-slot="inner" class="flex flex-col gap-space-2 pt-space-2">
+      <p class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1">
+        <span
+          class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
           >{SCOPE_NOUN[group.scope]}
           {group.faults.length === 1 ? "" : "s"}:</span
         >
         {#each shown as fault (fault.scope + fault.key)}
-          <code>{faultLabel(fault)}</code>
+          <code
+            class="font-mono text-size-meta wrap-anywhere text-(color:--tone-ink)"
+            >{faultLabel(fault)}</code
+          >
         {/each}
         {#if extra > 0}
-          <span data-slot="more" class="more">and {extra} more</span>
+          <span
+            data-slot="more"
+            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            >and {extra} more</span
+          >
         {/if}
       </p>
 
-      <p data-slot="why" class="why">{copy.why}</p>
+      <!-- literal: 68ch -->
+      <p
+        data-slot="why"
+        class="max-w-(--measure) text-size-body font-normal text-(color:--tone-ink)"
+        style:--measure="68ch"
+      >{copy.why}</p>
 
       {#if copy.toolchain && toolchain}
         <!-- The attribution that was missing: which binary said it, and whether a
          newer one is sitting on the same machine behind it. -->
-        <div data-slot="tool" class="tool">
-          <span class="k">claude on this machine</span>
+        <div
+          data-slot="tool"
+          class="flex flex-col gap-space-row rounded-sm border border-border-hairline bg-surface-recess p-space-2"
+        >
+          <span class="text-size-meta font-normal text-ink-muted"
+            >claude on this machine</span
+          >
           {#if toolchain.used}
-            <span class="line used">
-              <code>{toolchain.used.path}</code>
-              <span class="v"
+            <span class="flex flex-wrap items-baseline gap-space-2">
+              <code
+                class="font-mono text-size-meta font-medium wrap-anywhere text-ink-strong"
+                >{toolchain.used.path}</code
+              >
+              <span
+                class="num text-size-meta font-normal text-ink-muted"
                 >{toolchain.used.version ?? "version unknown"}</span
               >
-              <span class="badge">ran this sync</span>
+              <span
+                class="rounded-pill bg-surface-raised px-space-2 py-0 text-size-meta font-normal text-ink-muted"
+                >ran this sync</span
+              >
             </span>
           {/if}
           {#each toolchain.others as other (other.path)}
-            <span class="line">
-              <code>{other.path}</code>
-              <span class="v">{other.version ?? "version unknown"}</span>
+            <span class="flex flex-wrap items-baseline gap-space-2">
+              <code
+                class="font-mono text-size-meta wrap-anywhere text-ink-strong"
+                >{other.path}</code
+              >
+              <span class="num text-size-meta font-normal text-ink-muted"
+                >{other.version ?? "version unknown"}</span
+              >
             </span>
           {/each}
           {#if toolchain.shadowed}
-            <p class="shadow">
+            <p class="pt-space-1 text-size-meta font-normal text-ink-strong">
               A newer claude is installed on this machine and is not the one
               PATH resolves first. Until that changes, updating again will not
               help.
@@ -336,27 +408,38 @@
 
       {#if group.faults[0]?.detail}
         {#if group.cause === "unknown"}
-          <pre class="said">{group.faults[0].detail}</pre>
+          <!-- literal: 10rem -->
+          <pre
+            class="max-h-(--said-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"
+            style:--said-max="10rem">{group.faults[0].detail}</pre>
         {:else}
+          <!-- literal: 24px -->
           <button
             aria-expanded={disclosureOpen}
-            class="disclose mark-line touch-hit"
+            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 hover:opacity-100"
             onclick={() => {
               disclosureOpen = !disclosureOpen;
             }}
+            style:--disclose-min="24px"
             type="button"
           >
-            <IconChevronRight class="fault-chevron size-icon-md shrink-0" />
+            <IconChevronRight
+              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+            />
             <span>What it said</span>
           </button>
           <div
-            class="saids"
+            class="flex flex-col gap-space-2"
             inert={!disclosureOpen}
             {@attach disclose(() => disclosureOpen, 7)}
           >
             {#each shown as fault (fault.scope + fault.key)}
               {#if fault.detail}
-                <pre class="said"><span class="for">{faultLabel(fault)}</span
+                <!-- literal: 10rem -->
+                <pre
+                  class="max-h-(--said-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"
+                  style:--said-max="10rem"><span class="block text-ink-muted"
+                    >{faultLabel(fault)}</span
                   >{fault.detail}</pre>
               {/if}
             {/each}
@@ -364,9 +447,16 @@
         {/if}
       {/if}
 
-      <p class="fix">{copy.fix}</p>
+      <!-- literal: 68ch -->
+      <p
+        class="max-w-(--measure) text-size-body font-normal text-(color:--tone-ink)"
+        style:--measure="68ch"
+      >{copy.fix}</p>
 
-      <div data-slot="acts" class="acts">
+      <div
+        data-slot="acts"
+        class="flex flex-wrap items-center gap-space-2"
+      >
         {#if copy.action === "resync"}
           <Button
             disabled={!online}
@@ -379,7 +469,7 @@
             size="xs"
             variant="outline"
           />
-          <span class="hint"
+          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
             >{online
               ? actionHint
               : "It syncs on its own the moment it comes back."}</span
@@ -397,11 +487,14 @@
             size="xs"
             variant="outline"
           />
-          <span class="hint">{actionHint}</span>
+          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80">{actionHint}</span>
         {:else if copy.action === "settle" && group.scope === "skills"}
           {#each shown as fault (fault.key)}
             {#if group.faults.length > 1}
-              <code>{fault.key}</code>
+              <code
+                class="font-mono text-size-meta wrap-anywhere text-(color:--tone-ink)"
+                >{fault.key}</code
+              >
             {/if}
             <Button
               disabled={!online || settling[fault.key] === "push"}
@@ -424,7 +517,7 @@
               variant="outline"
             />
           {/each}
-          <span class="hint"
+          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >
@@ -432,7 +525,7 @@
           <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
             >Compare the two copies</Button
           >
-          <span class="hint"
+          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >
@@ -445,7 +538,7 @@
       {#if result}
         <p
           data-slot="result"
-          class="result"
+          class="text-size-meta font-normal wrap-anywhere text-(color:--tone-ink) tone-fail:text-status-fail-ink"
           data-flip
           data-tone={result.tone}
           role={result.tone === "fail" ? "alert" : "status"}
@@ -457,214 +550,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  /* The alert recipe: a compact status-tinted row, status ink on its own
-     tint, no edge. */
-  .fault {
-    --tone-bg: var(--status-attn-bg);
-    --tone-ink: var(--status-attn-ink);
-    display: flex;
-    flex-direction: column;
-    border-radius: var(--radius-md);
-    background: var(--tone-bg);
-    color: var(--tone-ink);
-    padding: 10px 12px;
-    font: var(--type-body);
-    min-width: 0;
-  }
-  /* A hub fault is not a machine's problem and does not wear a machine's tint:
-     nothing downstream of it can be fixed until it is. */
-  .fault.hub {
-    --tone-bg: var(--status-fail-bg);
-    --tone-ink: var(--status-fail-ink);
-  }
-  /* The body folds as one piece under the title line; its own gap to the
-     line sits inside it, so a shut body leaves nothing behind. */
-  .inner {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block-start: var(--space-2);
-  }
-  .saids {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  /* The chevron turns with the disclosure it opens. Its own name: as the
-     bare `.chevron` this reached every chevron on the page. */
-  :global(.fault-chevron) {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-  }
-  [aria-expanded="true"] > :global(.fault-chevron) {
-    rotate: 90deg;
-  }
-  .result {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--tone-ink);
-    overflow-wrap: anywhere;
-
-    &[data-tone="fail"] {
-      color: var(--status-fail-ink);
-    }
-  }
-  .top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .title {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--tone-ink);
-  }
-  /* The machine sits beside the title, not pushed to the far edge. Measured:
-     `margin-left: auto` opened a 717px gap between the two halves of one
-     sentence — "what broke" and "where" read as one fact and belong together. */
-  .where {
-    display: inline-flex;
-  }
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-    padding: 1px var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .rows {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-1) var(--space-2);
-    min-width: 0;
-  }
-  .noun,
-  .more,
-  .hint {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--tone-ink);
-    opacity: 0.8;
-  }
-  code {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--tone-ink);
-    overflow-wrap: anywhere;
-  }
-  .why,
-  .fix {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    color: var(--tone-ink);
-    max-width: 68ch;
-  }
-  .tool {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    padding: var(--space-2);
-  }
-  .tool .k {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .tool .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-2);
-  }
-  .tool .v {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-  }
-  .tool .badge {
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-    padding: 0 var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .shadow {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-strong);
-    padding-top: var(--space-1);
-  }
-  /* The well and the quoted output sit on --surface-recess, a neutral ground, so
-     they keep neutral ink rather than inheriting the callout's tone. */
-  .tool code,
-  .said {
-    color: var(--ink-strong);
-  }
-  .tool .line.used code {
-    font-weight: var(--weight-strong);
-  }
-  /* min-height 24px: measured at 14.6px, below the 24px WCAG 2.5.8 (AA)
-     minimum target size. The negative inline margin keeps the label optically
-     flush with the text above it while the target itself stays full size. */
-  .disclose {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    align-self: flex-start;
-    min-height: 24px;
-    margin-inline-start: calc(var(--space-2) * -1);
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  .disclose {
-    color: var(--tone-ink);
-    opacity: 0.8;
-  }
-  .disclose:hover {
-    opacity: 1;
-  }
-  .more-toggle {
-    margin-inline-start: auto;
-  }
-  .said {
-    max-height: 10rem;
-    overflow: auto;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    padding: var(--space-2);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .said .for {
-    display: block;
-    color: var(--ink-muted);
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-</style>

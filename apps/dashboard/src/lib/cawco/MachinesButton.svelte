@@ -76,34 +76,25 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="bar-item machines mark-line touch-hit press-tint"
+      class="bar-item mark-line touch-hit press-tint gap-space-2 ps-space-2 pe-(--machines-pe)"
       data-tone={tone}
+      style:--machines-pe="calc(var(--space-2) - var(--c-bar-group-pad))"
       type="button"
     >
       <IconServer aria-hidden="true" class="bar-symbol" />
-      <span data-slot="num" class="num">{count}</span>
+      <span data-slot="num" class="type-label num">{count}</span>
     </button>
   {/snippet}
 </Tip>
 
+
 <style>
-  /* The number reads beside its glyph, --space-2 apart; the group's next
-     item (Caw's circle, his ring on its edge) stands the same --space-2 past
-     the number, the group's gap and this trailing pad together, so the
-     group reads at one spacing. */
-  .machines {
-    gap: var(--space-2);
-    padding-inline: var(--space-2) calc(var(--space-2) - var(--c-bar-group-pad));
-  }
-  /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
-  .machines[data-tone="attn"] :global(.bar-symbol) {
+  /* residual: unmapped — outranks Shell's unlayered `.tools .bar-symbol` ink,
+     which a utility on the glyph cannot; clears when Shell's lane moves it. */
+  [data-machines][data-tone="attn"] :global(.bar-symbol) {
     color: var(--status-attn-glyph);
   }
-  .machines[data-tone="fail"] :global(.bar-symbol) {
+  [data-machines][data-tone="fail"] :global(.bar-symbol) {
     color: var(--status-fail-glyph);
-  }
-  .num {
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
   }
 </style>

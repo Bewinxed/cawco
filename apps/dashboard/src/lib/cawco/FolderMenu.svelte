@@ -48,9 +48,6 @@
 
   const pickedHue = $derived(folderPrefs.chosenHue(cwd));
 
-  /** A swatch shows the colour it would apply, at the ink lightness it lands on. */
-  const swatch = (hue: number) => `--identity-h: ${hue}`;
-
   const pinned = $derived(project ? rail.isPinned(project.id) : false);
 
   let open = $state(false);
@@ -135,7 +132,7 @@
         <span>Customize</span>
       </ContextMenu.SubTrigger>
       <ContextMenu.SubContent
-        class="w-64 rounded-[var(--radius-lg)] p-3 shadow-xl"
+        class="w-64 rounded-lg p-3 shadow-xl"
       >
         <div class="flex items-center justify-between pb-2 pl-space-1">
           <span class="text-label font-medium text-ink-muted">Colour</span>
@@ -161,9 +158,9 @@
               aria-pressed={on}
               class="focus-inset flex size-space-8 items-center justify-center rounded-full transition-colors
                      duration-(--dur-control)
-                     aria-pressed:outline-solid aria-pressed:outline-[length:var(--focus-ring-width)]
-                     aria-pressed:outline-offset-[var(--focus-ring-inset)] aria-pressed:outline-[var(--ink-strong)]
-                     aria-pressed:focus-visible:outline-[var(--focus-ring)]"
+                     aria-pressed:outline-solid aria-pressed:outline-(length:--focus-ring-width)
+                     aria-pressed:outline-offset-(--focus-ring-inset) aria-pressed:outline-ink-strong
+                     aria-pressed:focus-visible:outline-focus-ring"
               onclick={() => folderPrefs.setHue(cwd, hue)}
               title="Hue {hue}{pickedHue === undefined && on
                 ? ' (automatic)'
@@ -171,11 +168,11 @@
               type="button"
             >
               <!-- The chosen hue is ringed where the focus ring would be, in
-                   ink; focus on it recolours that one ring. -->
+                   ink; focus on it recolours that one ring. A swatch shows the
+                   colour it would apply, at the ink lightness it lands on. -->
               <span
                 class="identity-ink size-icon-lg rounded-full bg-current"
-                style={swatch(hue)}
-              ></span>
+                style:--identity-h={hue}              ></span>
             </button>
           {/each}
         </div>

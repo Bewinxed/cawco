@@ -32,7 +32,11 @@
   });
 </script>
 
-<div bind:this={shelf} class="laws-broken" popover="manual">
+<div
+  bind:this={shelf}
+  class="mx-auto my-0 hidden max-w-(--c-composer-w) flex-col gap-space-2 border-0 bg-transparent p-0 inset-x-space-3 top-space-3 bottom-auto open:flex"
+  popover="manual"
+>
   {#each broken as law (law.law)}
     <Alert variant="destructive">
       <IconError />
@@ -47,21 +51,3 @@
     </Alert>
   {/each}
 </div>
-
-<style>
-  .laws-broken {
-    inset: var(--space-3) var(--space-3) auto;
-    margin: 0 auto;
-    max-width: var(--c-composer-w);
-    padding: 0;
-    border: 0;
-    background: transparent;
-    display: none;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .laws-broken:popover-open {
-    display: flex;
-  }
-</style>

@@ -106,10 +106,19 @@
 
 {#if hubAuth.waiting.length > 0}
   <!-- Machines waiting to be admitted (hub hub-auth.ts): first, as they wait on you. -->
-  <ul data-slot="list" class="list waiting">
+  <ul
+    data-slot="list"
+    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-row border-b border-seam px-0 pt-0 pb-space-1"
+  >
     {#each hubAuth.waiting as machine (machine.machineId)}
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
-      <li data-slot="row" class="row waits" data-waiting={machine.machineId}>
+      <!-- literal: 44px -->
+      <li
+        data-slot="row"
+        class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-0 bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-default"
+        data-waiting={machine.machineId}
+        style:--row-touch="44px"
+      >
         <MachineRow
           hue={machineHue(0, false)}
           icon={machineIcon(machine.platform ?? "")}
@@ -119,7 +128,7 @@
           {name}
           presence="away"
         />
-        <span class="answers">
+        <span class="ms-auto flex flex-none gap-space-1">
           <Button
             aria-label="Deny {name}"
             disabled={answering !== null}
@@ -142,48 +151,69 @@
     {/each}
   </ul>
   {#if admitRefused}
-    <RowFault class="machine-fault" reason={admitRefused} />
+    <RowFault reason={admitRefused} />
   {/if}
 {/if}
 {#if cawco.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
-  <p class="none">Connect a machine to run sessions</p>
-  <ul data-slot="list" class="list">
+  <p class="m-0 px-space-2 pt-space-1 pb-space-2 type-meta text-ink-muted">Connect a machine to run sessions</p>
+  <ul
+    data-slot="list"
+    class="m-0 flex list-none flex-col gap-space-row p-0"
+  >
     {#each JOIN_WAYS as way (way.way)}
       {@const Icon = way.icon}
       <li>
+        <!-- literal: 44px -->
         <button
           data-slot="row"
           aria-haspopup="dialog"
-          class="row way press-tint focus-inset"
+          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-0 bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-pointer press-tint focus-inset"
           onclick={() => {
             onleave?.();
             addMachine.show(way.way);
           }}
+          style:--row-touch="44px"
           type="button"
         >
-          <span data-slot="glyph" class="glyph" style:color={way.hue}
-            ><Icon /></span
+          <span
+            data-slot="glyph"
+            class="inline-grid w-icon-md flex-none place-items-center text-(color:--glyph-ink)"
+            style:--glyph-ink={way.hue}
+            ><Icon class="size-icon-md" /></span
           >
-          <span data-slot="words" class="words">
-            <span data-slot="name" class="name">{way.name}</span>
-            <span data-slot="meta" class="meta">{way.meta}</span>
+          <span data-slot="words" class="flex min-w-0 flex-col">
+            <span data-slot="name" class="type-label text-ink-strong">{way.name}</span>
+            <span data-slot="meta" class="type-meta text-ink-muted">{way.meta}</span>
           </span>
         </button>
       </li>
     {/each}
   </ul>
 {:else}
-  <ul data-slot="list" class="list">
+  <ul
+    data-slot="list"
+    class="m-0 flex list-none flex-col gap-space-row p-0"
+  >
     {#each cawco.machines as machine, index (machine.machineId)}
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
       {@const fault = faultOf(machine.machineId)}
       {@const update = updateOf(machine)}
       {@const updateFailed = updateFault(machine)}
-      <li data-machine={machine.machineId}>
+      <li
+        data-machine={machine.machineId}
+        style:--fault-end="var(--space-2)"
+        style:--fault-indent="calc(var(--space-2) * 2 + var(--icon-md))"
+      >
         <MachineMenu {machine}>
-          <div data-slot="row" class="row press-tint focus-inset" tabindex="-1">
+          <!-- literal: 44px -->
+          <div
+            data-slot="row"
+            class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-0 bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover press-tint focus-inset"
+            style:--row-touch="44px"
+            tabindex="-1"
+          >
             <MachineRow
               hue={machineHue(index, up)}
               icon={machineIcon(machine.os ?? "")}
@@ -202,128 +232,24 @@
         </MachineMenu>
         <RowFault
           again={updateFailed?.again}
-          class="machine-fault"
           reason={updateFailed?.reason}
         />
       </li>
     {/each}
   </ul>
+  <!-- literal: 44px -->
   <button
     data-slot="row"
     data-add
-    class="row add mark-line press-tint focus-inset"
+    class="mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 cursor-pointer items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-seam bg-transparent px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover"
+    style:--row-touch="44px"
     onclick={() => {
       onleave?.();
       addMachine.show();
     }}
     type="button"
   >
-    <IconPlus aria-hidden="true" />
+    <IconPlus aria-hidden="true" class="size-icon-md" />
     <span>Add machine</span>
   </button>
 {/if}
-
-<style>
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* The session rows' row: compact at a desk, 44px under a finger. */
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    min-height: var(--space-8);
-    padding: var(--space-1) var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    text-align: start;
-    transition: var(--transition-control);
-
-    @media (pointer: coarse) {
-      min-height: 44px;
-    }
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-  }
-  /* Under the machine's name: past the row's padding, its 16px glyph and gap. */
-  .list :global(.machine-fault) {
-    --fault-indent: calc(var(--space-2) * 2 + 16px);
-    --fault-end: var(--space-2);
-  }
-  /* A question about the machine, under its row, inside the list's edges. */
-  .list :global(.machine-ask) {
-    --ask-indent: var(--space-2);
-    --ask-end: var(--space-2);
-  }
-  /* A waiting machine: its row, then Deny and Admit at its end. */
-  .waiting {
-    margin-bottom: var(--space-1);
-    padding-bottom: var(--space-1);
-    border-bottom: 1px solid var(--seam);
-  }
-  .waits {
-    cursor: default;
-  }
-  .answers {
-    display: flex;
-    flex: none;
-    gap: var(--space-1);
-    margin-inline-start: auto;
-  }
-  .none {
-    margin: 0;
-    padding: var(--space-1) var(--space-2) var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .way {
-    cursor: pointer;
-  }
-  /* The row's glyph in its way's hue, at the machine rows' 16px. */
-  .glyph {
-    display: inline-grid;
-    place-items: center;
-    flex: none;
-    inline-size: 16px;
-  }
-  .glyph :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .name {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .add {
-    margin-top: var(--space-1);
-    border-top: 1px solid var(--seam);
-    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  .add :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-</style>

@@ -51,7 +51,7 @@
 </script>
 
 <div
-  class="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--surface-recess)] p-3"
+  class="flex flex-col gap-2 rounded-md bg-surface-recess p-3"
 >
   <div class="flex flex-wrap items-center gap-2">
     <Badge class="shrink-0 {KIND_TONE[kind]}" variant="outline"
@@ -65,7 +65,7 @@
       <span class="text-label text-ink-muted">Real values:</span>
       {#each info.suggests as suggestion (suggestion)}
         <button
-          class="pointer-hit pressable rounded-[var(--radius-sm)] border border-border px-2 py-0.5 font-mono text-label text-ink-strong transition-colors hover:bg-accent"
+          class="pointer-hit pressable rounded-sm border border-border px-2 py-0.5 font-mono text-label text-ink-strong transition-colors hover:bg-accent"
           onclick={() => {
             matcher = suggestion;
           }}
@@ -94,7 +94,7 @@
   {#if sample.trim()}
     <p
       aria-live="polite"
-      class="verdict text-label"
+      class="relative flex flex-col text-label"
       role="status"
       in:unfold
       out:unfold
@@ -112,11 +112,3 @@
     </p>
   {/if}
 </div>
-
-<style>
-  .verdict {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-</style>

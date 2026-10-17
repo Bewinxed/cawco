@@ -49,7 +49,8 @@
       <Input
         aria-label="{legend} value"
         autocomplete="off"
-        class="h-space-8 flex-[2] font-mono text-meta"
+        class="h-space-8 grow-(--value-grow) basis-(--value-basis) font-mono text-meta"
+        style="--value-basis: 0%; --value-grow: 2"
         oninput={settle}
         placeholder={valuePlaceholder}
         spellcheck="false"
