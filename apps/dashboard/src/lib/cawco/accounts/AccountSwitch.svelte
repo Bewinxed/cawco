@@ -54,7 +54,7 @@
     style:--dot="8px"
     style:--dot-r="50%"
   ></span>
-  <span data-slot="chip-label" class="chip-label" data-account-chip>{name}</span
+  <span data-slot="chip-label" data-account-chip>{name}</span
   >
 {/snippet}
 
@@ -74,7 +74,7 @@
     >
       {#snippet trigger()}
         {@render face()}
-        <Down class="chevron" />
+        <Down data-slot="account-switch-chevron" />
       {/snippet}
       <div
         data-slot="list"
@@ -131,7 +131,7 @@
     <span
       data-tool
       data-slot="ns-chip-btn"
-      class="ns-chip-btn tool static account-chip max-w-full min-w-0"
+      class="static max-w-full min-w-0"
     >
       <span class="sr-only">Account:</span>
       {@render face()}

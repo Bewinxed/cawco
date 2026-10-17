@@ -40,8 +40,11 @@ none (none of the eight carried variants used).
 - AccountSubmenu.svelte:32 `<ContextMenuSubContent>` `min-w-52` (existing class)
 - AtLimitBlock.svelte:69, 86, 105 `<Input>` `px-space-2`
 
-## Other eslint errors left (not no-restyle)
-AccountSwitch.svelte `no-unknown-classes` on `chip-label` (57), `ns-chip-btn`/`tool`/`account-chip` (72, 134), `chevron` (77). They are hooks styled by other files (`spawn/ns-theme.css`, `workspace/SessionDetails.svelte`), so they stay.
+## cross-file hooks (delta O2)
+- cross-file hook: AccountSwitch.svelte:57 .chip-label → [data-slot="chip-label"]; selected by spawn/ns-theme.css:238 (`.ns-chip-btn .chip-label`)
+- cross-file hook: AccountSwitch.svelte:77 svg.chevron → [data-slot="account-switch-chevron"]; selected by spawn/ns-theme.css:233 and spawn/ToolChips.svelte:262 (`svg.chevron`)
+- cross-file hook: AccountSwitch.svelte:134 `.ns-chip-btn.tool.account-chip` on the static chip → [data-slot="ns-chip-btn"] (already on the element) and [data-tool]; selected by spawn/ns-theme.css:202 and workspace/SessionDetails.svelte:1092 (`.ns-chip-btn:not(.account-chip) > svg.chevron`)
+- NOT hookable here: AccountSwitch.svelte:72 `triggerClass="ns-chip-btn tool account-chip max-w-full min-w-0"`. NsPopover builds the trigger button and takes only a class string, so the three classes stay and eslint reports three no-unknown-classes errors on that line. Integration clears them when it declares the classes or gives NsPopover a hook.
 
 ## Notes
 - AccountSetup: selector strings `.choice:not(...)` and `.ptile` switched to `[data-choice]:not(...)` and `[data-slot="ptile"]` (new `data-slot="ptile"` on both ptile spans).
