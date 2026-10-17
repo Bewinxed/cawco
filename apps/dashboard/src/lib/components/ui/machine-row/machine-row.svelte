@@ -49,7 +49,7 @@
     ><!-- literal: 6px --><span
       data-slot="dot"
       data-machine-row-away={presence === "away" || undefined}
-      class="size-(--dot) flex-none rounded-pill bg-neutral-8 data-is-away:bg-hue-orange-500 data-is-online:bg-hue-green-500"
+      class="size-(--dot) flex-none rounded-pill bg-neutral-8 data-is-away:bg-hue-orange-500 not-data-is-away:data-is-online:bg-hue-green-500"
       data-box
       data-is-away={presence === "away" || undefined}
       data-is-online={presence === "online" || undefined}
