@@ -221,10 +221,18 @@ function forcedProp(props: string[], code: string): string {
 
 const RECT = ["rect.x", "rect.y", "rect.width", "rect.height"];
 
-/** How often the compare's one equality rule held two unlike strings equal. */
+/** How often the compare's equality rules held two unlike strings equal. */
 export interface Tally {
   /** box-shadow values equal once their transparent zero layers are set aside. */
   shadowLayers: number;
+  /** A transition's duration, timing function, delay or behavior equal once each side's list is laid against its own transition-property. */
+  transitionLists: number;
+}
+
+/** Each side's transition-property, where a value's element (or pseudo-element) has one. */
+interface Spans {
+  x: string | undefined;
+  y: string | undefined;
 }
 
 /**
@@ -235,8 +243,8 @@ export interface Tally {
  */
 const BLANK_LAYER = /^rgba\(0, 0, 0, 0\) 0px 0px 0px 0px( inset)?$/;
 
-/** A box-shadow's layers, split at its top-level commas. */
-function shadowLayers(value: string): string[] {
+/** A comma-separated list's items (a box-shadow's layers, a transition's values), split at its top-level commas. */
+function listItems(value: string): string[] {
   const layers: string[] = [];
   let depth = 0;
   let start = 0;
@@ -257,31 +265,70 @@ function shadowLayers(value: string): string[] {
 
 /** A box-shadow with its blank layers set aside: `none` when nothing is left. */
 function drawnShadow(value: string): string {
-  const kept = shadowLayers(value).filter((layer) => !BLANK_LAYER.test(layer));
+  const kept = listItems(value).filter((layer) => !BLANK_LAYER.test(layer));
   return kept.length > 0 ? kept.join(", ") : "none";
 }
 
 /**
+ * A transition's lists other than its properties, compared as the
+ * transition they make: "If one of the other properties doesn't have
+ * enough comma-separated values to match the number of values of
+ * transition-property, the user agent must calculate its used value by
+ * repeating the list of values until there are enough. This truncation or
+ * repetition does not affect the computed value." (CSS Transitions Level 1,
+ * §2, https://drafts.csswg.org/css-transitions-1/). Tailwind's
+ * `transition-[a,b] duration-200` computes `0.2s` where a `<style>`
+ * shorthand computed `0.2s, 0.2s`: one transition.
+ */
+const TRANSITION_LISTS = new Set([
+  "transition-duration",
+  "transition-timing-function",
+  "transition-delay",
+  "transition-behavior",
+]);
+
+/** A transition list as used: repeated, or cut, to its transition-property's length. */
+function laidAgainst(value: string, properties: string): string {
+  const items = listItems(value);
+  return Array.from(
+    { length: listItems(properties).length },
+    (_, i) => items[i % items.length]
+  ).join(", ");
+}
+
+/**
  * Whether two values of `property` read the same. Strings are equal only as
- * written, but for one rule: two box-shadows whose layers match once the
- * blank ones are set aside, each such hold counted in `tally`.
+ * written, but for two rules, each hold counted in `tally`: two box-shadows
+ * whose layers match once the blank ones are set aside, and two transition
+ * lists that match once each is laid against its own side's
+ * transition-property (`spans`). Nothing else is normalised.
  */
 function same(
   property: string,
   x: string | number | undefined,
   y: string | number | undefined,
-  tally: Tally
+  tally: Tally,
+  spans?: Spans
 ): boolean {
   if (x === y) {
     return true;
   }
-  if (
-    typeof x === "string" &&
-    typeof y === "string" &&
-    property.endsWith("box-shadow") &&
-    drawnShadow(x) === drawnShadow(y)
-  ) {
+  if (!(typeof x === "string" && typeof y === "string")) {
+    return false;
+  }
+  if (property.endsWith("box-shadow") && drawnShadow(x) === drawnShadow(y)) {
     tally.shadowLayers += 1;
+    return true;
+  }
+  // A pseudo-element's property is named `::before <property>`.
+  const longhand = property.slice(property.lastIndexOf(" ") + 1);
+  if (
+    TRANSITION_LISTS.has(longhand) &&
+    spans?.x !== undefined &&
+    spans.y !== undefined &&
+    laidAgainst(x, spans.x) === laidAgainst(y, spans.y)
+  ) {
+    tally.transitionLists += 1;
     return true;
   }
   return false;
@@ -290,12 +337,12 @@ function same(
 /**
  * Every difference between `before` and `after` for one surface, one line
  * each: `<read> · <element key> [<data-slot>] · <property> · <before> → <after>`.
- * `tally` counts what the one equality rule (`same`) held equal.
+ * `tally` counts what the equality rules (`same`) held equal.
  */
 export function differences(
   before: Snapshot,
   after: Snapshot,
-  tally: Tally = { shadowLayers: 0 }
+  tally: Tally = { shadowLayers: 0, transitionLists: 0 }
 ): string[] {
   if (before.props.join() !== after.props.join()) {
     return [
@@ -345,7 +392,7 @@ function readDifferences(
     const other = b.get(key);
     const at = `${name} · ${labelOf(row)}`;
     if (other) {
-      lines.push(...elementDifferences(at, props, row, other, tally));
+      lines.push(...elementDifferences(at, props, row, other, tally, [a, b]));
     } else {
       lines.push(`${at} · (element) · present → absent`);
     }
@@ -364,13 +411,24 @@ const unlike = (
   names: readonly string[],
   x: readonly (string | number)[],
   y: readonly (string | number)[],
-  tally: Tally
+  tally: Tally,
+  spans?: Spans
 ): string[] =>
   x.flatMap((v, p) =>
-    same(names[p] ?? "", v, y[p], tally)
+    same(names[p] ?? "", v, y[p], tally, spans)
       ? []
       : [`${at} · ${names[p]} · ${v} → ${y[p]}`]
   );
+
+/** Each side's transition-property in two looks read in `props` order. */
+const spansOf = (
+  props: readonly string[],
+  x: readonly string[] | null | undefined,
+  y: readonly string[] | null | undefined
+): Spans => {
+  const at = props.indexOf("transition-property");
+  return { x: x?.[at], y: y?.[at] };
+};
 
 /** One element's differences: its look, its box, its overflow, its pseudo-elements and its forced states. */
 function elementDifferences(
@@ -378,10 +436,18 @@ function elementDifferences(
   props: string[],
   row: Row,
   other: Row,
-  tally: Tally
+  tally: Tally,
+  sides: readonly [Map<string, Row>, Map<string, Row>]
 ): string[] {
   const lines = [
-    ...unlike(at, props, row.values, other.values, tally),
+    ...unlike(
+      at,
+      props,
+      row.values,
+      other.values,
+      tally,
+      spansOf(props, row.values, other.values)
+    ),
     ...unlike(at, RECT, row.rect, other.rect, tally),
   ];
   if (row.flags !== other.flags) {
@@ -403,7 +469,8 @@ function elementDifferences(
         state,
         row[state],
         other[state],
-        tally
+        tally,
+        sides
       )
     );
   }
@@ -431,8 +498,39 @@ function pseudoDifferences(
     props.map((p) => `::${which} ${p}`),
     x,
     y,
-    tally
+    tally,
+    spansOf(props, x, y)
   );
+}
+
+/**
+ * The transition-property a forced state's change sits under, on each
+ * side: the state's own change to it, else the element's (or its
+ * pseudo-element's) at rest.
+ */
+function forcedSpans(
+  props: string[],
+  on: string,
+  code: string,
+  changes: readonly [Record<string, string>, Record<string, string>],
+  sides: readonly [Map<string, Row>, Map<string, Row>]
+): Spans {
+  const n = Number(code);
+  const at = props.indexOf("transition-property");
+  // A forced change's code: the property's place, +1000 on ::before, +2000 on ::after.
+  let base = 0;
+  let atRest = (row: Row | undefined) => row?.values;
+  if (n >= 2000) {
+    base = 2000;
+    atRest = (row) => row?.after ?? undefined;
+  } else if (n >= 1000) {
+    base = 1000;
+    atRest = (row) => row?.before ?? undefined;
+  }
+  const [x, y] = sides.map(
+    (side, i) => changes[i]?.[base + at] ?? atRest(side.get(on))?.[at]
+  );
+  return { x, y };
 }
 
 /** A forced state's changes against the other's, on the element or what it holds. */
@@ -443,7 +541,8 @@ function forcedDifferences(
   state: "hover" | "focus",
   was: Row["hover"],
   now: Row["hover"],
-  tally: Tally
+  tally: Tally,
+  sides: readonly [Map<string, Row>, Map<string, Row>]
 ): string[] {
   const x = was ?? {};
   const y = now ?? {};
@@ -454,7 +553,8 @@ function forcedDifferences(
     const cy = y[on] ?? {};
     const where = on === key ? "" : ` on ${on.slice(key.length + 3) || on}`;
     for (const code of new Set([...Object.keys(cx), ...Object.keys(cy)])) {
-      if (!same(forcedProp(props, code), cx[code], cy[code], tally)) {
+      const spans = forcedSpans(props, on, code, [cx, cy], sides);
+      if (!same(forcedProp(props, code), cx[code], cy[code], tally, spans)) {
         lines.push(
           `${at} · ${named}${where} ${forcedProp(props, code)} · ${cx[code] ?? "(as at rest)"} → ${cy[code] ?? "(as at rest)"}`
         );
