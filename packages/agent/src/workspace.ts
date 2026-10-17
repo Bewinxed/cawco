@@ -17,7 +17,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import type {
   CommandResult,
   WorkspaceArchive,
@@ -56,6 +56,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { cloneDenies } from "@cawco/core/workspace-policy";
 import {
   addAccount,
   closeBoundary,
@@ -82,6 +83,7 @@ import {
   LFS_FILTERS,
   withoutCredential,
 } from "./move";
+import { placedMemoryDir } from "./placed-memory";
 import { finishInstall, seedDependencies } from "./seed-deps";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
@@ -667,11 +669,16 @@ const NOTHING_HELD: Held = { ahead: 0, dirty: 0, stashes: 0 };
  * never followed: a delegate can point one at any folder it can name) or
  * when its git directory names another or its config holds a key past the
  * allowlist (`repositoryConfigProblem`). Answers git's stdout, trimmed, for
- * an argv; its stderr is the error.
+ * an argv, `input` on its stdin; an exit past `exits` throws its stderr.
  */
 const closedCloneGit = async (
   workspace: WorkspaceRef
-): Promise<(args: readonly string[]) => Promise<string>> => {
+): Promise<
+  (
+    args: readonly string[],
+    given?: { exits?: readonly number[]; input?: string }
+  ) => Promise<string>
+> => {
   const dotGit = join(workspace.path, ".git");
   const found = await lstat(dotGit);
   if (!found.isDirectory()) {
@@ -685,12 +692,16 @@ const closedCloneGit = async (
       `Workspace ${workspace.id} was not archived: ${problem}, so nothing was deleted.`
     );
   }
-  return async (args) => {
-    const ran = await Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
+  return async (args, { exits = [0], input } = {}) => {
+    const command =
+      input === undefined
+        ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
+        : Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args} < ${Buffer.from(input)}`;
+    const ran = await command
       .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
       .quiet()
       .nothrow();
-    if (ran.exitCode !== 0) {
+    if (!exits.includes(ran.exitCode)) {
       throw new Error(
         `git ${args[0]} failed in workspace ${workspace.id}: ${ran.stderr.toString().trim() || `exit ${ran.exitCode}`}`
       );
@@ -729,11 +740,88 @@ const ownObjects = async (workspace: WorkspaceRef): Promise<void> => {
   );
 };
 
+type ClosedGit = Awaited<ReturnType<typeof closedCloneGit>>;
+
+const TRAILING_SLASH = /\/$/;
+
+/**
+ * What CawCo writes into a clone and keeps out of its status itself, by path
+ * in the clone: its deny paths, which no delegate writes (the stand-ins CawCo
+ * made there, the placed skills and their store: core workspace-policy.ts
+ * `cloneDenies`), the project's memory documents as the fleet places them
+ * (placed-memory.ts), and its stage's host (stage.ts `writeHost`).
+ */
+const cawcoWritten = (clone: string): string[] =>
+  [
+    ...cloneDenies(clone).map((deny) => deny.path),
+    placedMemoryDir(clone),
+    join(clone, ".cawco"),
+  ].map((path) => relative(clone, path));
+
+/**
+ * The untracked paths in the clone kept out of git by no `.gitignore` the
+ * repository tracks ({@link WorkspaceHolding} `excluded`): each path `git
+ * status --ignored=matching` names (a folder a rule matches whole, as one),
+ * the source of its rule read by `git check-ignore -v`. A path a tracked
+ * `.gitignore` covers goes with the clone, as does one the owner's global
+ * excludes file covers (an absolute source, outside every clone: no clone's
+ * config may name one, safe-git.ts `repositoryConfigProblem`). The clone's
+ * `.git/info/exclude` and an untracked `.gitignore` are its delegate's to
+ * write. What CawCo wrote there ({@link cawcoWritten}) is CawCo's, and goes.
+ */
+const excludedIn = async (
+  clone: string,
+  git: ClosedGit,
+  pathspec: readonly string[]
+): Promise<string[]> => {
+  const own = cawcoWritten(clone);
+  const ignored = (
+    await git([
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--ignored=matching",
+      "--untracked-files=all",
+      ...pathspec,
+    ])
+  )
+    .split("\0")
+    .filter((entry) => entry.startsWith("!! "))
+    .map((entry) => entry.slice("!! ".length))
+    .filter((path) => {
+      const bare = path.replace(TRAILING_SLASH, "");
+      return !own.some((one) => bare === one || bare.startsWith(`${one}/`));
+    });
+  if (ignored.length === 0) {
+    return [];
+  }
+  const [tracked, rules] = await Promise.all([
+    git(["ls-files", "-z", "--", ":(glob)**/.gitignore"]),
+    // Exit 1: none of them ignored, which a path listed a moment ago and
+    // gone since can be.
+    git(["check-ignore", "-v", "-z", "--stdin"], {
+      input: `${ignored.join("\0")}\0`,
+      exits: [0, 1],
+    }),
+  ]);
+  const committed = new Set(tracked.split("\0").filter(Boolean));
+  // `-v -z`: source, line, pattern and path, each ended by a NUL.
+  const fields = rules.split("\0");
+  const excluded: string[] = [];
+  for (let at = 0; at + 3 < fields.length; at += 4) {
+    const source = fields[at] as string;
+    if (!(committed.has(source) || isAbsolute(source))) {
+      excluded.push(fields[at + 3] as string);
+    }
+  }
+  return excluded;
+};
+
 /**
  * What the workspace holds that is nowhere else ({@link WorkspaceHolding}),
  * read by git on this host once its boundary is closed
  * ({@link closedCloneGit}); `skip` are paths `git status` passes over. Files
- * git ignores are not read: they go with the clone.
+ * a tracked `.gitignore` covers are not read: they go with the clone.
  */
 const holding = async (
   workspace: WorkspaceRef,
@@ -761,9 +849,12 @@ const holding = async (
     };
   }
   const git = await closedCloneGit(workspace);
-  const excluded = skip.map((path) => `:(exclude,literal)${path}`);
+  const pathspec =
+    skip.length > 0
+      ? ["--", ".", ...skip.map((path) => `:(exclude,literal)${path}`)]
+      : [];
   const lines = (out: string): number => out.split("\n").filter(Boolean).length;
-  const [ahead, status, stashes] = await Promise.all([
+  const [ahead, status, stashes, excluded] = await Promise.all([
     git([
       "rev-list",
       "--count",
@@ -772,17 +863,15 @@ const holding = async (
       "--not",
       "--remotes=origin",
     ]),
-    git([
-      "status",
-      "--porcelain",
-      ...(excluded.length > 0 ? ["--", ".", ...excluded] : []),
-    ]),
+    git(["status", "--porcelain", ...pathspec]),
     git(["stash", "list"]),
+    excludedIn(workspace.path, git, pathspec),
   ]);
   return {
     ahead: Number(ahead),
     dirty: lines(status),
     stashes: lines(stashes),
+    ...(excluded.length > 0 ? { excluded } : {}),
   };
 };
 
@@ -923,17 +1012,18 @@ const cacheOfClone = async (clone: string): Promise<string[]> => {
 /**
  * Writes what a workspace holds that is nowhere else into a new carry folder
  * in `~/.cawco/carries` (carry.ts), git running on this host once its
- * boundary is closed ({@link closedCloneGit}'s checks first), and answers
- * that folder; `skip`, its items' handed-over outputs, left out of the
- * uncommitted diff. A carry that cannot be written whole, or that holds
- * anything but folders and files of its own, is taken away again and
- * nothing is deleted.
+ * boundary is closed ({@link closedCloneGit}'s checks first), its excluded
+ * files copied as they are into its `excluded/` (carry.ts `copyStrays`),
+ * and answers that folder and the excluded entries not copied; `skip`, its
+ * items' handed-over outputs, left out of the uncommitted diff. A carry
+ * that cannot be written whole, or that holds anything but folders and
+ * files of its own, is taken away again and nothing is deleted.
  */
 const writeCarry = async (
   workspace: WorkspaceRef,
   held: Held,
   skip: readonly string[]
-): Promise<string> => {
+): Promise<{ carry: string; left: string[] }> => {
   await closedCloneGit(workspace);
   const carry = carryFolder(workspace.id);
   await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
@@ -947,7 +1037,16 @@ const writeCarry = async (
     if (ran.exitCode !== 0) {
       throw new Error(ran.stderr.toString().trim() || `exit ${ran.exitCode}`);
     }
+    // A folder's entry without its slash: a link named as one is never followed.
+    const left = held.excluded?.length
+      ? await copyStrays(
+          workspace.path,
+          held.excluded.map((path) => path.replace(TRAILING_SLASH, "")),
+          join(carry, "excluded")
+        )
+      : [];
     await ownFilesOnly(carry);
+    return { carry, left };
   } catch (error) {
     await rm(carry, { recursive: true, force: true });
     throw new Error(
@@ -955,7 +1054,6 @@ const writeCarry = async (
       { cause: error }
     );
   }
-  return carry;
 };
 
 /**
@@ -991,7 +1089,8 @@ const carryStrays = async (
  * ({@link holding}, {@link WorkspaceUnlanded}). Anything there keeps the
  * clone, its state and scratch dirs, and answers `held`: nothing is
  * deleted. Holding nothing, the clone is deleted with what it owns in the
- * workspaces' cache ({@link cacheOfClone}), its files git ignores with it;
+ * workspaces' cache ({@link cacheOfClone}), the files a tracked
+ * `.gitignore` covers with it;
  * `closeBoundary` takes its state and scratch dirs.
  */
 export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
@@ -999,8 +1098,8 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
 
 /**
  * {@link CONTROL_WORKSPACE_DISCARD}: as {@link archiveWorkspace}, but what
- * the clone holds that is nowhere else (its unlanded commits, changes and
- * stashes) is written to a carry in `~/.cawco/carries` (carry.ts), git on
+ * the clone holds that is nowhere else (its unlanded commits, changes,
+ * stashes and excluded files) is written to a carry in `~/.cawco/carries` (carry.ts), git on
  * this host, which must be whole before anything is deleted. A folder that
  * is no git clone any more has its own entries copied there as they are
  * (carry.ts `copyStrays`).
@@ -1062,11 +1161,9 @@ const closeClone = async (
     // its carry; its own entries are copied.
     const folder = held.strays !== undefined;
     let left: string[] = [];
-    if (folder) {
-      ({ carry, left } = await carryStrays(request.id, path));
-    } else {
-      carry = await writeCarry(workspace, held, skip);
-    }
+    ({ carry, left } = folder
+      ? await carryStrays(request.id, path)
+      : await writeCarry(workspace, held, skip));
     await writeFile(
       join(carry, "README.md"),
       await carryReadme({

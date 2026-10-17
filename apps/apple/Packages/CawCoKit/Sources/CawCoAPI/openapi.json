@@ -46094,6 +46094,13 @@
           "dirty": {
             "type": "number"
           },
+          "excluded": {
+            "description": "The untracked paths git ignores through no `.gitignore` the repository\ntracks: by a line of the clone's `.git/info/exclude`, or a `.gitignore`\nthat is itself untracked, each as `git status --ignored=matching` names\nit, relative to the clone (a folder ends in `/`). The paths `skip`\nnames, and what CawCo writes into a clone and lists there itself (its\ndeny paths' stand-ins, the placed skills and memory, its stage), are not\namong them. On 2026-10-17 a delegate kept a design page's source out of\nits landing this way, and retirement deleted it. Absent when none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "stashes": {
             "type": "number"
           },
@@ -46126,7 +46133,7 @@
         ]
       },
       "WorkspaceHolding": {
-        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
+        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), stash entries, and the files kept out of\ngit only by the clone's own excludes (`excluded`). Files a committed\n`.gitignore` covers (dependencies, builds, caches) are none of it: they go\nwith the clone. `bytes` is the clone's size on disk.",
         "type": "object",
         "properties": {
           "ahead": {
@@ -46137,6 +46144,13 @@
           },
           "dirty": {
             "type": "number"
+          },
+          "excluded": {
+            "description": "The untracked paths git ignores through no `.gitignore` the repository\ntracks: by a line of the clone's `.git/info/exclude`, or a `.gitignore`\nthat is itself untracked, each as `git status --ignored=matching` names\nit, relative to the clone (a folder ends in `/`). The paths `skip`\nnames, and what CawCo writes into a clone and lists there itself (its\ndeny paths' stand-ins, the placed skills and memory, its stage), are not\namong them. On 2026-10-17 a delegate kept a design page's source out of\nits landing this way, and retirement deleted it. Absent when none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "stashes": {
             "type": "number"

@@ -1857,7 +1857,9 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
  * the host ({@link WorkspaceHolding}), and the clone is deleted with
  * everything else of its own on that machine (its state and scratch dirs,
  * its Apple build root, its DerivedData and SwiftPM build dirs). The files
- * git ignores go with it. Args `[WorkspaceArchive]`; answers
+ * a committed `.gitignore` covers go with it; a file kept out of git only
+ * by the clone's own excludes is work, and keeps it
+ * ({@link WorkspaceHolding} `excluded`). Args `[WorkspaceArchive]`; answers
  * {@link WorkspaceArchived}. Only the hub sends it: a dashboard's control
  * naming it is refused at the relay.
  */
@@ -1867,7 +1869,8 @@ export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
  * {@link CONTROL_WORKSPACE_ARCHIVE} for a workspace whose unlanded work a
  * person chose to let go: the machine first writes that work to a carry
  * (`~/.cawco/carries/<id>-<time>`: a bundle and patch series of the
- * commits, the uncommitted diff, each stash as a patch; agent carry.ts),
+ * commits, the uncommitted diff, each stash as a patch, the excluded files
+ * as they are; agent carry.ts),
  * which must be whole before anything is deleted. A control of its own, so
  * an agent that cannot write a carry refuses it as a method it does not
  * know, and deletes nothing. Args `[WorkspaceArchive]` (`unlanded` not
@@ -1922,14 +1925,26 @@ export interface WorkspaceArchived {
  * was pushed, whether onto the base or to a branch of its own, and a cut
  * again fetches it from `origin`), entries of `git status
  * --porcelain` (untracked files included; the paths `skip` names, the outputs
- * its items handed over, left out), and stash entries. Files git ignores are
- * none of it: they go with the clone, and a delegate keeps one by handing it
- * in as an output. `bytes` is the clone's size on disk.
+ * its items handed over, left out), stash entries, and the files kept out of
+ * git only by the clone's own excludes (`excluded`). Files a committed
+ * `.gitignore` covers (dependencies, builds, caches) are none of it: they go
+ * with the clone. `bytes` is the clone's size on disk.
  */
 export interface WorkspaceHolding {
   ahead: number;
   bytes: number;
   dirty: number;
+  /**
+   * The untracked paths git ignores through no `.gitignore` the repository
+   * tracks: by a line of the clone's `.git/info/exclude`, or a `.gitignore`
+   * that is itself untracked, each as `git status --ignored=matching` names
+   * it, relative to the clone (a folder ends in `/`). The paths `skip`
+   * names, and what CawCo writes into a clone and lists there itself (its
+   * deny paths' stand-ins, the placed skills and memory, its stage), are not
+   * among them. On 2026-10-17 a delegate kept a design page's source out of
+   * its landing this way, and retirement deleted it. Absent when none.
+   */
+  excluded?: string[];
   stashes: number;
   /**
    * Set when the clone's folder is there and its `.git` is no repository
@@ -1950,24 +1965,33 @@ export const holdsNothing = (holding: WorkspaceHolding): boolean =>
   holding.ahead === 0 &&
   holding.dirty === 0 &&
   holding.stashes === 0 &&
-  !holding.strays;
+  !holding.strays &&
+  !holding.excluded?.length;
 
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
 
-/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash". */
-export const holdingWords = (holding: WorkspaceHolding): string =>
-  [
-    holding.ahead > 0 &&
-      counted(holding.ahead, "commit on no remote", "commits on no remote"),
-    holding.dirty > 0 &&
-      counted(holding.dirty, "changed file", "changed files"),
-    holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
-    holding.strays &&
-      `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
-  ]
-    .filter(Boolean)
-    .join(", ") || "nothing unlanded";
+/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash, 2 excluded files". */
+export const holdingWords = (holding: WorkspaceHolding): string => {
+  const excluded = holding.excluded ?? [];
+  const folders = excluded.filter((path) => path.endsWith("/")).length;
+  const files = excluded.length - folders;
+  return (
+    [
+      holding.ahead > 0 &&
+        counted(holding.ahead, "commit on no remote", "commits on no remote"),
+      holding.dirty > 0 &&
+        counted(holding.dirty, "changed file", "changed files"),
+      holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
+      files > 0 && counted(files, "excluded file", "excluded files"),
+      folders > 0 && counted(folders, "excluded folder", "excluded folders"),
+      holding.strays &&
+        `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
+    ]
+      .filter(Boolean)
+      .join(", ") || "nothing unlanded"
+  );
+};
 
 /** A size on disk in words: "1.4 GB", "312 MB", "18 KB". */
 export const sizeWords = (bytes: number): string => {

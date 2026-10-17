@@ -330,18 +330,26 @@ export interface ArchivedWorkspace {
   workspace: WorkspaceRow;
 }
 
+/** How many of a held workspace's excluded paths its refusal names; its held entry lists them all. */
+const EXCLUDED_NAMED = 20;
+
 /**
  * An archive refused because the clone holds work that is nowhere else: it
  * names what, the workspace is held, and nothing is deleted. `discard`
- * archives it anyway, its unlanded commits, changes and stashes saved to a
- * carry first.
+ * archives it anyway, its unlanded commits, changes, stashes and excluded
+ * files saved to a carry first.
  */
 export class WorkspaceHoldsWork extends WorkItemRefusal {
   readonly held: HeldWork;
   constructor(held: HeldWork) {
+    const excluded = held.excluded ?? [];
+    const named =
+      excluded.length > EXCLUDED_NAMED
+        ? `${excluded.slice(0, EXCLUDED_NAMED).join(", ")} and ${excluded.length - EXCLUDED_NAMED} more`
+        : excluded.join(", ");
     super(
       409,
-      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held. Continue its work, or pass discard: true to archive it with its unlanded commits, changes and stashes saved to a carry in ~/.cawco/carries on ${held.machine}.`
+      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
     );
     this.held = held;
   }
@@ -2994,15 +3002,59 @@ export const createWorkItems = ({
   ]);
 
   /**
+   * What the hub knows that points into a workspace's clone or its scratch
+   * dir (its commands' `TMPDIR`, which goes with it), in words, or nothing:
+   * an artifact, any session's, showing what it serves (db artifacts.ts
+   * `previewing`: a port preview naming it, a folder preview inside either),
+   * or a project's place inside either, other than the workspace's own. On
+   * 2026-10-15 a workspace was retired while it served the owner's two open
+   * previews; on 2026-10-17 one was retired with two live test projects'
+   * folders in its scratch dir, and they went with it.
+   */
+  const pointedAt = (workspace: WorkspaceRow): string | undefined => {
+    const roots = [workspace.path, ...(workspace.tmp ? [workspace.tmp] : [])];
+    const shown = [
+      ...new Set(
+        roots.flatMap((path) =>
+          db.artifacts
+            .previewing({
+              id: workspace.id,
+              machineId: workspace.machineId,
+              path,
+            })
+            .map((one) => one.name)
+        )
+      ),
+    ];
+    if (shown.length > 0) {
+      return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
+    }
+    const inside = (path: string): boolean =>
+      roots.some((root) => path === root || path.startsWith(`${root}/`));
+    const places = db
+      .listProjects()
+      .flatMap((project) =>
+        project.places
+          .filter(
+            (place) =>
+              place.kind !== "workspace" &&
+              place.machineId === workspace.machineId &&
+              inside(place.path)
+          )
+          .map((place) => `${project.name} at ${place.path}`)
+      );
+    if (places.length > 0) {
+      return `${places.length === 1 ? "a project's folder is" : "projects' folders are"} inside it: ${places.join(", ")}`;
+    }
+  };
+
+  /**
    * What holds a workspace whose items have all ended, in words, or nothing:
    * the landing of one of its items still running (its run settles the
    * workspace again as it ends, {@link settleLanding}), a session of its
-   * items whose process may still run there (one asleep,
-   * stopped or failed has none), or an artifact, any session's, showing what
-   * it serves (db artifacts.ts `previewing`: a port preview naming it, a
-   * folder preview inside its clone). On 2026-10-15 a workspace was retired
-   * while it served the owner's two open previews; a hold defers retirement
-   * until it goes, never cancels it.
+   * items whose process may still run there (one asleep, stopped or failed
+   * has none), or what points into it ({@link pointedAt}). A hold defers
+   * retirement until it goes, never cancels it.
    */
   const holdOn = (
     workspace: WorkspaceRow,
@@ -3022,10 +3074,7 @@ export const createWorkItems = ({
     if (attached) {
       return `its session ${attached.id} is ${attached.status === "stopping" ? "stopping" : "attached"}`;
     }
-    const shown = db.artifacts.previewing(workspace).map((one) => one.name);
-    if (shown.length > 0) {
-      return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
-    }
+    return pointedAt(workspace);
   };
 
   /** What one {@link settle} came to. */
@@ -3235,6 +3284,15 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(
         409,
         `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
+      );
+    }
+    // Even with `discard`: a discard lets go of the clone's own work, never
+    // what an artifact or a project still reads there.
+    const pointer = pointedAt(workspace);
+    if (pointer) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} was not archived and nothing was deleted: ${pointer}. Delete or move that, then archive it again.`
       );
     }
     const skip = handedOver(workspace);

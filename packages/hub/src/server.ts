@@ -25107,9 +25107,11 @@ export const createServer = (
       // Refused (409, in words naming what and how big) when its clone holds
       // work that is nowhere else: nothing is deleted, and the workspace is
       // held. `discard: true` is a person letting that work go: its machine
-      // writes its unlanded commits, changes and stashes to a carry first,
-      // whose folder the answer names as `carry`. Files git ignores go with
-      // the clone either way.
+      // writes its unlanded commits, changes, stashes and excluded files to a
+      // carry first, whose folder the answer names as `carry`. Files a
+      // tracked `.gitignore` covers go with the clone either way. Refused
+      // (409) whatever `discard` says while an artifact or a project's
+      // folder points into its clone or scratch dir.
       .post(
         "/api/workspaces/:id/archive",
         { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },

@@ -16,11 +16,14 @@
  *   own is untouched;
  * - `stashes/<n>.patch`: each stash entry with its untracked files (a
  *   clone's; a worktree shares its repository's stash, which outlives it);
+ * - `excluded/`: a clone's files kept out of git only by its own excludes
+ *   (core harness.ts `WorkspaceHolding` `excluded`), each at its path in it,
+ *   copied as they are ({@link copyStrays});
  * - `head` and `branch`: the commit and branch it was on;
  * - `README.md`: what it is and how to take each part back.
  *
- * Files git ignores are no part of one: they go with the checkout. A
- * delegate keeps such a file by handing it in as its item's output.
+ * Files a tracked `.gitignore` covers are no part of one: they go with the
+ * checkout.
  *
  * A workspace whose folder is no git clone any more (its clone deleted by
  * hand) has no git to read: archived with `discard`, its own entries are
@@ -68,9 +71,10 @@ export type CarryCheckout = "clone" | "worktree";
 export type CarrySource = CarryCheckout | "folder";
 
 /**
- * Copies `entries` (paths in the folder `from`, which is no git clone) into
- * the new carry folder `folder`, each at the path it had there, on this host:
- * no git and no boundary run in a folder that is no clone. A dir is walked
+ * Copies `entries` (paths in the folder `from`: one that is no git clone, or
+ * a clone's excluded files, which git does not carry) into the new carry
+ * folder `folder`, each at the path it had there, on this host: no git and
+ * no boundary run in a folder that is no clone. A dir is walked
  * and a regular file copied; anything else (a link, a socket) is not, being
  * no file of the carry's own ({@link ownFilesOnly}), and is answered by its
  * path and what it is, for the README. An entry gone since it was listed
@@ -252,8 +256,14 @@ export const carryReadme = async ({
       () => true,
       () => false
     );
-  const [bundle, commits, uncommitted, stashes] = await Promise.all(
-    ["commits.bundle", "commits", "uncommitted.patch", "stashes"].map(has)
+  const [bundle, commits, uncommitted, stashes, excluded] = await Promise.all(
+    [
+      "commits.bundle",
+      "commits",
+      "uncommitted.patch",
+      "stashes",
+      "excluded",
+    ].map(has)
   );
   return [
     `# ${title}`,
@@ -268,6 +278,8 @@ export const carryReadme = async ({
       `- \`uncommitted.patch\`: every changed, deleted and untracked file against ${head || "HEAD"}: \`git apply ${folder}/uncommitted.patch\` at that commit.`,
     stashes &&
       "- `stashes/<n>.patch`: stash entry n, untracked files included: `git apply`.",
+    excluded &&
+      `- \`excluded/\`: the files the ${checkout}'s own excludes kept out of git, each at its path in it: \`cp -a ${folder}/excluded/. <a clone>\`.`,
     ...(left.length > 0
       ? ["", "Not copied:", ...left.map((one) => `- ${one}`)]
       : []),
