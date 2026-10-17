@@ -317,20 +317,44 @@ const dashboardAddress = (): { host: string; port: string } => {
  * this computer's loopback at the dashboard's loopback port (core
  * `localDashboardPort`), so `http://localhost:3455` is the dashboard here as
  * it is on every computer whose agent carries it (agent hub-loopback.ts).
- * The loopback port is left out when it is the network port already.
+ * The loopback port is left out when it is the network port already, and
+ * `::1` on a computer that has no IPv6 loopback ({@link hasIpv6Loopback}).
  */
 export const dashboardListens = (): { host: string; port: string }[] => {
   const local = String(localDashboardPort());
   const network = dashboardAddress();
+  if (local === network.port) {
+    return [network];
+  }
   return [
     network,
-    ...(local === network.port
-      ? []
-      : [
-          { host: "127.0.0.1", port: local },
-          { host: "::1", port: local },
-        ]),
+    { host: "127.0.0.1", port: local },
+    ...(hasIpv6Loopback() ? [{ host: "::1", port: local }] : []),
   ];
+};
+
+/**
+ * Whether this computer can listen on `::1` now. A container or host with no
+ * IPv6 loopback (`::1` absent, or no IPv6 at all) gets no `[::1]` listen:
+ * systemd fails a whole socket unit on one address it cannot open, closing
+ * the rest (src/core/socket.c `socket_open_fds`: `p->fd =
+ * socket_address_listen_in_cgroup(…); if (p->fd < 0) return p->fd;`, then
+ * "Failed to listen on sockets"), and the dashboard requires its socket. Every
+ * update writes the socket again (`refreshServices`), so one that gains `::1`
+ * listens there from its next update.
+ */
+const hasIpv6Loopback = (): boolean => {
+  try {
+    Bun.serve({
+      hostname: "::1",
+      port: 0,
+      fetch: () => new Response(null),
+    }).stop(true);
+    return true;
+  } catch {
+    // EADDRNOTAVAIL (no `::1`) or EAFNOSUPPORT (no IPv6): none here.
+    return false;
+  }
 };
 
 /**
@@ -1264,6 +1288,12 @@ const listenAddress = ({ host, port }: { host: string; port: string }) =>
  * address's listener beside the wildcard one only when both sockets set
  * SO_REUSEPORT, and gives that address's connections to it. None of these
  * addresses is a tailnet one, so none shares the HTTPS listener's.
+ * `FreeBind=` because they name specific IP addresses, and one missing at a
+ * start (the loopback's) would fail the whole socket: systemd.socket(5), "For
+ * robustness reasons it is recommended to use this option whenever you bind
+ * a socket to a specific IP address"; systemd sets it before `bind()`
+ * (src/shared/socket-label.c). It cannot help a host with no IPv6 at all,
+ * whose `socket()` fails first: `dashboardListens` names no `::1` there.
  */
 const socketUnit = (
   spec: ServiceSpec,
@@ -1275,6 +1305,7 @@ Description=${spec.description} socket
 ${socket.listens.map((listen) => `ListenStream=${listenAddress(listen)}`).join("\n")}
 FileDescriptorName=${socket.name}
 NoDelay=true
+FreeBind=true
 ReusePort=true
 
 [Install]

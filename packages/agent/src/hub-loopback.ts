@@ -132,6 +132,51 @@ const listen = (
   });
 
 /**
+ * Every pair of `all` (a loopback port, the hub's port it is carried to) on
+ * each of `hosts`: what opened, the ports another listener holds, and the
+ * loopback addresses this computer does not have (a container with no IPv6
+ * has no `::1`). Anything else that fails a bind stops what opened and throws.
+ */
+async function listenAll(
+  hubHost: string,
+  hosts: string[],
+  all: [local: number, hub: number][]
+): Promise<{
+  absent: string[];
+  held: Map<string, number[]>;
+  servers: Server<PreviewSocket>[];
+}> {
+  const servers: Server<PreviewSocket>[] = [];
+  const held = new Map<string, number[]>();
+  const absent: string[] = [];
+  try {
+    for (const hostname of hosts) {
+      for (const [local, port] of all) {
+        try {
+          servers.push(listen(hubHost, hostname, local, port));
+        } catch (error) {
+          const { code } = error as { code?: unknown };
+          if (code === "EADDRINUSE") {
+            held.set(hostname, [...(held.get(hostname) ?? []), local]);
+            continue;
+          }
+          if (code === "EADDRNOTAVAIL" || code === "EAFNOSUPPORT") {
+            absent.push(hostname);
+            break;
+          }
+          throw error;
+        }
+      }
+    }
+  } catch (error) {
+    // What did open goes with the start that failed.
+    await Promise.all(servers.map((server) => server.stop(true)));
+    throw error;
+  }
+  return { servers, held, absent };
+}
+
+/**
  * Serves the hub at `hubUrl` (the address the agent is connected to it on)
  * on this computer's loopback: the dashboard's loopback port, carried to its
  * port on the hub, and every preview port, each to its own. An address the hub itself is reached at is never bound: the hub is
@@ -167,25 +212,11 @@ export async function startHubLoopback(
   ) {
     all.push([port, port]);
   }
-  const servers: Server<PreviewSocket>[] = [];
-  const held = new Map<string, number[]>();
-  try {
-    for (const hostname of hosts) {
-      for (const [local, port] of all) {
-        try {
-          servers.push(listen(hubHost, hostname, local, port));
-        } catch (error) {
-          if ((error as { code?: unknown }).code !== "EADDRINUSE") {
-            throw error;
-          }
-          held.set(hostname, [...(held.get(hostname) ?? []), local]);
-        }
-      }
-    }
-  } catch (error) {
-    // What did open goes with the start that failed.
-    await Promise.all(servers.map((server) => server.stop(true)));
-    throw error;
+  const { servers, held, absent } = await listenAll(hubHost, hosts, all);
+  for (const hostname of absent) {
+    console.info(
+      `[${HOP}] this computer has no ${hostname}, so localhost is served without it`
+    );
   }
   for (const [hostname, taken] of held) {
     console.info(
@@ -193,7 +224,7 @@ export async function startHubLoopback(
     );
   }
   console.info(
-    `[${HOP}] the hub at ${hubHost} is served on ${hosts.join(" and ")}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
+    `[${HOP}] the hub at ${hubHost} is served on ${hosts.filter((host) => !absent.includes(host)).join(" and ")}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
   );
   return {
     stop: async () => {

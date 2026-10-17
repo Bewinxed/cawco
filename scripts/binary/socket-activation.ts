@@ -1,16 +1,34 @@
 import { dlopen, FFIType, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 
+/** The first descriptor systemd passes (sd_listen_fds(3) `SD_LISTEN_FDS_START`). */
+const SD_LISTEN_FDS_START = 3;
+
+/**
+ * Every listening socket the service manager passed under `name`, in the
+ * order its unit names them: one per address the dashboard's socket listens
+ * on (cli service.ts `dashboardListens`). systemd passes `LISTEN_FDS`
+ * descriptors from 3, each named in `LISTEN_FDNAMES` (sd_listen_fds(3));
+ * launchd returns a socket entry's descriptors from launch_activate_socket(3).
+ */
 function collect(name: string): number[] {
   if (process.platform === "linux") {
-    if (
-      Number(process.env.LISTEN_PID) !== process.pid ||
-      Number(process.env.LISTEN_FDS) !== 1
-    ) {
+    const count = Number(process.env.LISTEN_FDS);
+    if (Number(process.env.LISTEN_PID) !== process.pid || !(count > 0)) {
       throw new Error(
-        "Dashboard requires one socket inherited from its service manager"
+        "Dashboard requires the sockets its service manager passes it, and was passed none"
       );
     }
-    return [3];
+    const names = process.env.LISTEN_FDNAMES?.split(":");
+    const fds = Array.from(
+      { length: count },
+      (_, index) => SD_LISTEN_FDS_START + index
+    ).filter((_, index) => names === undefined || names[index] === name);
+    if (fds.length === 0) {
+      throw new Error(
+        `Dashboard was passed no socket named ${name} (LISTEN_FDNAMES=${process.env.LISTEN_FDNAMES})`
+      );
+    }
+    return fds;
   }
   if (process.platform !== "darwin") {
     throw new Error("Socket activation requires Linux or macOS");
@@ -37,10 +55,8 @@ function collect(name: string): number[] {
     const result = [
       ...new Int32Array(toArrayBuffer(address, 0, Number(count[0]) * 4)),
     ];
-    if (result.length !== 1) {
-      throw new Error(
-        `Dashboard requires exactly one inherited socket; got ${result.length}`
-      );
+    if (result.length === 0) {
+      throw new Error(`launchd passed no socket named ${name}`);
     }
     return result;
   } finally {

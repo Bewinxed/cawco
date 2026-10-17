@@ -871,6 +871,8 @@ has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
 apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
+# The machine has an IPv6 loopback (`::1` on lo), as the installer judges before it names [::1] in the dashboard socket.
+has_ipv6_loopback() { as_user "$1" grep -q '^00000000000000000000000000000001 ' /proc/net/if_inet6; }
 # A keeper that exits before it answers did not start: the handover gives it up at its first exit, not after systemd
 # has started it again every RestartSec= while the handover waited (run-3: build 6's keeper started every 2 s from
 # 23:08:31 until the handover gave up at 23:09:16).
@@ -893,7 +895,7 @@ export -f diagnose as_user put_executable user_exec proof_runner run_script need
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
   end_all_sessions keeper_dropin keeper_link current_link has_file has_version custody_of apply_log_count \
-  started_at_most_twice stub_when_staged settled
+  has_ipv6_loopback started_at_most_twice stub_when_staged settled
 
 # ---------------------------------------------------------------- a rig's machines
 
@@ -960,6 +962,14 @@ install_hub() {
   as_user "$hubc" sh /shared/installer.sh
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
+  # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
+  # machine has it (the socket names it there alone).
+  as_user "$hubc" curl -fsS http://127.0.0.1:3455/ | grep -q _app/immutable \
+    || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
+  if has_ipv6_loopback "$hubc"; then
+    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  fi
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$version" ]]
   as_user "$hubc" sh -c 'for tool in git bun node; do if command -v $tool > /dev/null; then echo "$tool appeared"; exit 1; fi; done; echo still-none'
@@ -1413,11 +1423,17 @@ units_carried() {
   as_user "$hubc" cat "$u/cawco-dashboard.socket"
   as_user "$hubc" grep -qx 'ListenStream=127\.0\.0\.1:3455' "$u/cawco-dashboard.socket" \
     || { echo "ASSERTION FAILED: the socket names no 127.0.0.1:3455"; return 1; }
-  as_user "$hubc" grep -qx 'ListenStream=\[::1\]:3455' "$u/cawco-dashboard.socket" \
-    || { echo "ASSERTION FAILED: the socket names no [::1]:3455"; return 1; }
   wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/ | grep -q _app/immutable'
-  as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/' | grep -q _app/immutable \
-    || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  # [::1]:3455 exactly where the machine has an IPv6 loopback (cli service.ts `hasIpv6Loopback`).
+  if has_ipv6_loopback "$hubc"; then
+    as_user "$hubc" grep -qx 'ListenStream=\[::1\]:3455' "$u/cawco-dashboard.socket" \
+      || { echo "ASSERTION FAILED: the machine has ::1, and the socket names no [::1]:3455"; return 1; }
+    as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  elif as_user "$hubc" grep -q '^ListenStream=\[::1\]' "$u/cawco-dashboard.socket"; then
+    echo "ASSERTION FAILED: the machine has no ::1, and the socket names one"
+    return 1
+  fi
   local hub_diff
   hub_diff=$(as_user "$hubc" sh -c "diff /tmp/hub-before.service $u/cawco-hub.service || true")
   echo "== the hub's unit, before and after"
@@ -1437,7 +1453,7 @@ rig_hubself() {
   setup_done
   check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
   check "a child held by the session keeper survives the update on that keeper, untouched, while the new build's keeper becomes the machine's" held_survives
-  check "the update rewrites the units from the build it installs: the dashboard socket gains 127.0.0.1:3455 and [::1]:3455 and localhost:3455 answers, the hub's unit gains its loopback port alone, the agent's is untouched, no service install run" units_carried
+  check "the update rewrites the units from the build it installs: the dashboard socket gains 127.0.0.1:3455 (and [::1]:3455 where the machine has ::1) and localhost:3455 answers, the hub's unit gains its loopback port alone, the agent's is untouched, no service install run" units_carried
 }
 
 # ---------------------------------------------------------------- rollbacks, each on a hub of its own
