@@ -19,6 +19,7 @@
  *   await app.stop();
  */
 import type { Subprocess } from "bun";
+import { readWithin } from "../../packages/core/src/bounded";
 
 /**
  * A compact line's stamp, process and `[subsystem:category]` tag, up to what
@@ -28,6 +29,8 @@ import type { Subprocess } from "bun";
 const HEAD = /^.*?\[[\w-]+(?:\.[\w-]+)+:[\w.-]+\] /;
 /** `log stream`'s own first line, once it is attached: `Filtering the log data using …`. */
 const ATTACHED = "Filtering the log data";
+/** How long `log stream` has to attach before the run gives up on it. */
+const ATTACH_MS = 30_000;
 const BACKSLASH = /\\/g;
 const QUOTE = /"/g;
 
@@ -141,7 +144,21 @@ export async function macApp(
     },
     ATTACHED
   );
-  await attached;
+  const attaching = await readWithin(ATTACH_MS, () => attached);
+  switch (attaching.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      stream.kill();
+      await stream.exited;
+      throw new Error(
+        `log stream for ${binary} did not attach within ${attaching.after} ms (${attaching.reason})`
+      );
+    default: {
+      const unhandled: never = attaching;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const app = Bun.spawn([binary, ...args], {
     stdout: "ignore",
     stderr: "ignore",
