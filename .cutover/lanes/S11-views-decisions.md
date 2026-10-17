@@ -154,3 +154,9 @@ none. Searched `src` for `querySelector`/`closest`/`:global(.x)` naming any clas
 - views/openui/ViewTable.svelte:80:22 <TableCell> "type-label"
 - views/openui/ViewTable.svelte:80:22 <TableCell> "text-ink-muted"
 - views/openui/ViewTable.svelte:82:19 <TableCell> "py-space-2"
+
+## Contracts
+none. (`shadcn/no-restyle` is off in the lane ESLint check; its hits are listed above for integration.)
+
+## Important kept
+none (no `!important` in the sources).
