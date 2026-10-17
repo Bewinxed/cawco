@@ -45,9 +45,10 @@
   import type { SVGAttributes } from "svelte/elements";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  // The one glyph, not the barrel: every button would load every icon.
+  import IconTick from "#lib/components/icons/Tick.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconTick } from "#lib/icons.js";
 
   let {
     label,

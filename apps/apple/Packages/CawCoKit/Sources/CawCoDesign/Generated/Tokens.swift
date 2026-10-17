@@ -250,6 +250,10 @@ public enum Palette {
     public static let presenceOff = Palette.named("presence-off")
     /// Every scrollbar's thumb, inherited from the root.
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
+    /// A pairing QR's card, in both schemes: the day's neutral-1, never flipped. Drawn light on dark, the code is a reversed QR, which a reader without an inverted pass does not read (ZXing with tryInvert off read nothing from the night card); dark modules on a light field are the symbol ISO/IEC 18004 defines, so the card is the one surface that keeps its day colours at night.
+    public static let qrPaper = Palette.named("qr-paper")
+    /// A pairing QR's modules, in both schemes: the day's neutral-12 on qr-paper.
+    public static let qrInk = Palette.named("qr-ink")
     /// The band of raised surface that crosses a skeleton once per loop.
     public static let skeletonSheen = Palette.named("skeleton-sheen")
     /// List bullets in rendered markdown.
@@ -532,6 +536,12 @@ public enum Size {
     public static let cBadgeH: Double = 20
     /// A stat tile's height.
     public static let cStatH: Double = 90
+    /// One cell of the pairing code's display: a stat well holding one letter at the KPI role in the mono face. Six of them in two groups of three, space-2 between cells and space-5 between groups, stand 286px wide.
+    public static let cOtpCellW: Double = 40
+    /// The pairing code cell's height.
+    public static let cOtpCellH: Double = 52
+    /// The pairing screen's one width: the code's six cells in two groups of three (space-2 between cells, space-5 at the hyphen), and the QR card above them, square, its edges on the cells' edges. Made from the cell's width, so the two never drift apart.
+    public static let cPairW: Double = 286
     /// A ledger's toolbar zone, holding 32px controls 11px in.
     public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32
@@ -868,4 +878,18 @@ public enum Motion {
     public static let popRise: Double = 8
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
     public static let foldBlur: Double = 2
+    /// How far a refused answer's shake swings each way (the pairing code's cells, denied or not matched): transitions-dev Error state shake, on one clock of dur-panel with legs of dur-ghost, dur-ghost, dur-stagger, dur-stagger.
+    public static let shakeDistance: Double = 6
+    /// The shake's last swing before it comes to rest.
+    public static let shakeOvershoot: Double = 4
+    /// A spinning reel's vertical motion streak at its fastest (the pairing code's letters spun into place), decaying to nothing as the reel settles: transitions-dev Spinning counter, an SVG blur along the reel only, since CSS blur() smears sideways too.
+    public static let reelBlur: Double = 3
+    /// How far words travel as they swap in place (transitions-dev Text states swap): the old leave up by it, the new arrive from below by it, over dur-morph on ease-in-out, soft by fold-blur.
+    public static let swapRise: Double = 4
+    /// Degrees a done check turns through as it arrives (transitions-dev Success check): upright from check-turn, rising pop-rise, sharpening from fold-blur, over dur-pop, its stroke drawn after dur-ghost.
+    public static let checkTurn: Double = 80
+    /// A pairing QR that can no longer be scanned (denied, expired): its modules stay, this faint, so the card still reads as the code that was, not as one that failed to load.
+    public static let qrVoidOpacity: Double = 0.12
+    /// Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out.
+    public static let checkScale: Double = 0.6
 }

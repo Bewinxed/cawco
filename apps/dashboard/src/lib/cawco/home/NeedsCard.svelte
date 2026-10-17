@@ -447,7 +447,16 @@
       </Tip>
     </span>
   {/if}
-  <span data-slot="want" class="want">{want}</span>
+  {#if item.kind === "pairing"}
+    <!-- The code in the mono face, as the device asking shows it. -->
+    <span data-slot="want" class="want"
+      >Wants to run your fleet with code <span class="code"
+        >{item.request.userCode}</span
+      >. Approve only if it's the code on that device.</span
+    >
+  {:else}
+    <span data-slot="want" class="want">{want}</span>
+  {/if}
   {#if item.kind === "ask" && item.request.presentation.command}
     <!-- What runs, under why: its first line, so Approve here is made on
          the command as much as on the card. -->
@@ -855,6 +864,16 @@
     font: var(--type-body);
     color: var(--ink-strong);
     overflow-wrap: anywhere;
+  }
+  .want > .code {
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+  /* A pairing's line is read whole: the code, and the check it asks for. */
+  .row[data-kind="pairing"] > .want {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: none;
   }
   .meta {
     grid-row: 3;

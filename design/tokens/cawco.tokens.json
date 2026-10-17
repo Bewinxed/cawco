@@ -1615,6 +1615,22 @@
         }
       }
     },
+    "qr-paper": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 85]
+      },
+      "$description": "A pairing QR's card, in both schemes: the day's neutral-1, never flipped. Drawn light on dark, the code is a reversed QR, which a reader without an inverted pass does not read (ZXing with tryInvert off read nothing from the night card); dark modules on a light field are the symbol ISO/IEC 18004 defines, so the card is the one surface that keeps its day colours at night."
+    },
+    "qr-ink": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.295, 0.01, 70]
+      },
+      "$description": "A pairing QR's modules, in both schemes: the day's neutral-12 on qr-paper."
+    },
     "skeleton-sheen": {
       "$type": "color",
       "$value": {
@@ -3947,6 +3963,35 @@
       },
       "$description": "A stat tile's height."
     },
+    "c-otp-cell-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "One cell of the pairing code's display: a stat well holding one letter at the KPI role in the mono face. Six of them in two groups of three, space-2 between cells and space-5 between groups, stand 286px wide."
+    },
+    "c-otp-cell-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "The pairing code cell's height."
+    },
+    "c-pair-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 286,
+        "unit": "px"
+      },
+      "$description": "The pairing screen's one width: the code's six cells in two groups of three (space-2 between cells, space-5 at the hyphen), and the QR card above them, square, its edges on the cells' edges. Made from the cell's width, so the two never drift apart.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(6 * {size.c-otp-cell-w} + 4 * {space.space-2} + {space.space-5})"
+        }
+      }
+    },
     "c-toolbar-zone": {
       "$type": "dimension",
       "$value": {
@@ -5224,6 +5269,53 @@
         "unit": "px"
       },
       "$description": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
+    },
+    "shake-distance": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "How far a refused answer's shake swings each way (the pairing code's cells, denied or not matched): transitions-dev Error state shake, on one clock of dur-panel with legs of dur-ghost, dur-ghost, dur-stagger, dur-stagger."
+    },
+    "shake-overshoot": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "The shake's last swing before it comes to rest."
+    },
+    "reel-blur": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
+      "$description": "A spinning reel's vertical motion streak at its fastest (the pairing code's letters spun into place), decaying to nothing as the reel settles: transitions-dev Spinning counter, an SVG blur along the reel only, since CSS blur() smears sideways too."
+    },
+    "swap-rise": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "How far words travel as they swap in place (transitions-dev Text states swap): the old leave up by it, the new arrive from below by it, over dur-morph on ease-in-out, soft by fold-blur."
+    },
+    "check-turn": {
+      "$type": "number",
+      "$value": 80,
+      "$description": "Degrees a done check turns through as it arrives (transitions-dev Success check): upright from check-turn, rising pop-rise, sharpening from fold-blur, over dur-pop, its stroke drawn after dur-ghost."
+    },
+    "qr-void-opacity": {
+      "$type": "number",
+      "$value": 0.12,
+      "$description": "A pairing QR that can no longer be scanned (denied, expired): its modules stay, this faint, so the card still reads as the code that was, not as one that failed to load."
+    },
+    "check-scale": {
+      "$type": "number",
+      "$value": 0.6,
+      "$description": "Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out."
     },
     "transition-control": {
       "$type": "transition",

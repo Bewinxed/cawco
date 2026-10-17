@@ -171,6 +171,8 @@ export { default as IconPlain } from "~icons/solar/plain-bold-duotone";
 export { default as IconPlanet } from "~icons/solar/planet-bold-duotone";
 export { default as IconPlay } from "~icons/solar/play-bold-duotone";
 export { default as IconToolMcp } from "~icons/solar/plug-circle-bold-duotone";
+/** A pairing code another device shows: Scan code, in Needs you's head. */
+export { default as IconQrCode } from "~icons/solar/qr-code-bold-duotone";
 export {
   default as IconAsk,
   default as IconToolQuestion,

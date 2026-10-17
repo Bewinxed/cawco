@@ -23,9 +23,12 @@ import type {
   WaitingMachine,
 } from "@cawco/core";
 import { failureWords } from "./hub-read";
-import { leaveThePage } from "./leaving";
 
-/** Where pairing stands for this browser. */
+/**
+ * Where pairing stands for this browser. An answered or expired code is
+ * kept, with the hub that gave it: the pairing screen's cells go on showing
+ * it, tinted by the answer, and its QR fades where it stood.
+ */
 export type PairingStage =
   | { kind: "idle" }
   | { kind: "asking" }
@@ -36,7 +39,11 @@ export type PairingStage =
       /** What a QR beside the code carries (core `PairingStart`). */
       verificationUriComplete: string;
     }
-  | { kind: "denied" | "expired" }
+  | {
+      kind: "approved" | "denied" | "expired";
+      userCode: string;
+      verificationUriComplete: string;
+    }
   | { kind: "failed"; message: string };
 
 export const hubAuth = $state<{
@@ -117,11 +124,12 @@ export async function startPairing(): Promise<void> {
     hubAuth.pairing = { kind: "failed", message: failureWords(error) };
     return;
   }
+  const { userCode, verificationUriComplete } = started;
   hubAuth.pairing = {
     kind: "waiting",
-    userCode: started.userCode,
+    userCode,
     expiresAt: Date.now() + started.expiresIn * 1000,
-    verificationUriComplete: started.verificationUriComplete,
+    verificationUriComplete,
   };
   let interval = started.interval * 1000;
   const poll = async () => {
@@ -140,14 +148,19 @@ export async function startPairing(): Promise<void> {
     }
     switch (answer.status) {
       case "approved":
-        // The cookie came with this answer: the app opens as this device.
-        leaveThePage(() => location.reload());
+        // The cookie came with this answer: the screen draws the moment,
+        // then the app opens as this device (PairingScreen).
+        hubAuth.pairing = {
+          kind: "approved",
+          userCode,
+          verificationUriComplete,
+        };
         return;
       case "access_denied":
-        hubAuth.pairing = { kind: "denied" };
+        hubAuth.pairing = { kind: "denied", userCode, verificationUriComplete };
         return;
       case "expired_token":
-        hubAuth.pairing = { kind: "expired" };
+        hubAuth.pairing = { kind: "expired", userCode, verificationUriComplete };
         return;
       case "slow_down":
         interval += 5000;

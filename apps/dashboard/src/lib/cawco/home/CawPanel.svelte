@@ -21,7 +21,7 @@
    */
   import { damagedHubRecordWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconNeedsYou, IconNotices } from "#lib/icons.js";
+  import { IconNeedsYou, IconNotices, IconQrCode } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { reflow } from "../motion/rows.svelte";
@@ -36,12 +36,19 @@
     feed,
     quiet,
     onchoose,
+    onscan,
   }: {
     feed: CawFeed;
     /** What he says with nothing to count (NeedsCaw `quiet`). */
     quiet: string;
     /** A row was chosen: the panel closes as it opens. */
     onchoose: () => void;
+    /**
+     * Scan code, at Needs you's trailing edge: where a camera can read
+     * another device's pairing QR (the app on an iPhone or iPad) while the
+     * hub requires paired devices. Unset, the head has none.
+     */
+    onscan?: () => void;
   } = $props();
 
   /**
@@ -170,6 +177,18 @@
         >
         <span data-slot="title" class="title" id="caw-needs">Needs you</span>
         <span data-slot="count" class="count">{needs.length}</span>
+        {#if onscan}
+          <Button
+            data-scan
+            data-box
+            class="clear text-[var(--ink-muted)] hover:text-[var(--ink-strong)]"
+            icon={IconQrCode}
+            label="Scan code"
+            onclick={onscan}
+            size="xs"
+            variant="ghost"
+          />
+        {/if}
       </div>
       <ul class="rows" {@attach echoBeat()}>
         {#each needs as item (item.key)}
