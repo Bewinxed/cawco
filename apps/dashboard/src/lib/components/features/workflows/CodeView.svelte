@@ -137,6 +137,15 @@
     },
   });
   const editing = new Compartment();
+  /**
+   * The active line, only while the program can be edited: a read-only
+   * program has no caret, so an active line would mark a row the operator
+   * never put anything on. Reconfigured with `editing`, so it follows
+   * `editable` whenever that arrives, before the editor mounts or after.
+   */
+  const activeLine = new Compartment();
+  const activeLineFor = (writable: boolean) =>
+    writable ? [highlightActiveLine(), highlightActiveLineGutter()] : [];
   let host = $state<HTMLElement>();
   let view: EditorView | undefined;
 
@@ -172,11 +181,7 @@
           history(),
           indentOnInput(),
           bracketMatching(),
-          // A read-only program has no caret, so an active line would mark a
-          // row the operator never put anything on.
-          ...(editable
-            ? [highlightActiveLine(), highlightActiveLineGutter()]
-            : []),
+          activeLine.of(activeLineFor(editable)),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           javascript({ typescript: true }),
           syntaxHighlighting(highlight),
@@ -204,20 +209,29 @@
   $effect(() => {
     const writable = editable;
     view?.dispatch({
-      effects: editing.reconfigure([
-        EditorState.readOnly.of(!writable),
-        EditorView.editable.of(writable),
-      ]),
+      effects: [
+        editing.reconfigure([
+          EditorState.readOnly.of(!writable),
+          EditorView.editable.of(writable),
+        ]),
+        activeLine.reconfigure(activeLineFor(writable)),
+      ],
     });
   });
   // The document is owned outside when it is read-only (a recompile on save)
   // and inside while it is being typed, so only a genuine divergence is pushed.
+  // The text that lands after the editor mounts reads as it would had it
+  // landed first: the caret where it stood (a whole-text replacement would
+  // map it to the text's end), and the problems marked on the new lines.
   $effect(() => {
     const next = value;
     if (view && untrack(() => view?.state.doc.toString()) !== next) {
+      const { head } = view.state.selection.main;
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: next },
+        selection: { anchor: Math.min(head, next.length) },
       });
+      view.dispatch(setDiagnostics(view.state, marks(view.state)));
     }
   });
   $effect(() => {
