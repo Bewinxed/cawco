@@ -82,6 +82,7 @@ import {
   machineLabel,
   PREVIEW_START,
   PREVIEW_STOP,
+  PREVIEW_WEIGHT,
   promptCacheUsage,
   RATE_LIMIT_READ,
   READ_FLEET_HOLDINGS,
@@ -139,7 +140,12 @@ import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
-import { startPreview, stopPreview, stopPreviews } from "./preview";
+import {
+  previewWeight,
+  startPreview,
+  stopPreview,
+  stopPreviews,
+} from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
@@ -947,6 +953,7 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) =>
       stopPreview(options as Parameters<typeof stopPreview>[0]),
+    [PREVIEW_WEIGHT]: (dir) => previewWeight(dir),
     [AGENT_BUSY]: () => this.busyNow(),
   };
 

@@ -33046,6 +33046,10 @@
             "$ref": "#/components/schemas/StageState",
             "description": "A sheet's stage, or a served preview's server, as it stands once started."
           },
+          "weight": {
+            "$ref": "#/components/schemas/FolderWeight",
+            "description": "A folder preview's: what it loads at most, from its folder's files."
+          },
           "why": {
             "description": "Why it is not on screen, one sentence; only with `opened: false`.",
             "type": "string"
@@ -33351,6 +33355,30 @@
           "waking"
         ]
       },
+      "FolderWeight": {
+        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's.",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "files": {
+            "type": "number"
+          },
+          "js": {
+            "type": "number"
+          },
+          "wasm": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "bytes",
+          "files",
+          "js",
+          "wasm"
+        ]
+      },
       "ArtifactStatus": {
         "description": "One artifact as `artifact_list` answers it.",
         "type": "object",
@@ -33567,6 +33595,10 @@
             "type": "object",
             "description": "Every key, or with `since` only those changed after it."
           },
+          "weight": {
+            "description": "What a sheet loads, from its stage's module graph; null until a view has loaded it.",
+            "$ref": "#/components/schemas/SheetWeight"
+          },
           "workspace": {
             "description": "A port preview's workspace, whose dev server it is.",
             "type": "string"
@@ -33588,6 +33620,84 @@
           "sentAt",
           "seq",
           "state"
+        ]
+      },
+      "SheetWeight": {
+        "description": "What a sheet loads, read from the stage's Vite module graph from its story\nfile: the project's modules (its source and any package Vite serves file\nby file) and Vite's prebundled deps apart, which the browser keeps by\ntheir `?v=` address. `heaviest` is the story file's imports that bring\nthe most project code, each with all it brings that no earlier import\ndid: the import to cut. Vite transforms a module when a page asks for it,\nso a sheet has a weight once a view has loaded it.",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "description": "Project code: its modules and their transformed bytes.",
+            "type": "number"
+          },
+          "deps": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "number"
+              },
+              "modules": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "bytes",
+              "modules"
+            ]
+          },
+          "heaviest": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SheetImport"
+            }
+          },
+          "measuredAt": {
+            "type": "string"
+          },
+          "modules": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "bytes",
+          "deps",
+          "heaviest",
+          "measuredAt",
+          "modules"
+        ]
+      },
+      "SheetImport": {
+        "description": "One of a story file's imports, as its sheet's weight names it.",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "file": {
+            "description": "The module it resolves to, from the toolchain root.",
+            "type": "string"
+          },
+          "modules": {
+            "type": "number"
+          },
+          "specifier": {
+            "description": "As the story file writes it, like `#lib/cawco/client.svelte`.",
+            "type": "string"
+          },
+          "via": {
+            "description": "The modules under it where most of its weight enters, from the toolchain\nroot, each bringing at least half of the one before: a fixture's\n`home/CawPanel.svelte`, then what that brings. Empty when it is its own\nweight or spreads it evenly.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "bytes",
+          "file",
+          "modules",
+          "specifier",
+          "via"
         ]
       },
       "Removed": {

@@ -55,12 +55,13 @@ import {
   type ThreadEntry,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
-import { pageHash } from "@cawco/core/preview-proxy";
+import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
   type Found,
   type ServeSpec,
   SHEET_PATH,
   type SheetRead,
+  type SheetWeight,
   type SheetWrite,
   type SheetWritten,
   type StageError,
@@ -278,6 +279,8 @@ export interface ArtifactRead {
   stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
+  /** What a sheet loads, from its stage's module graph; null until a view has loaded it. */
+  weight?: SheetWeight | null;
   /** A port preview's workspace, whose dev server it is. */
   workspace?: string;
   /** The element ids an update wrote. */
@@ -339,6 +342,8 @@ export interface Created {
   sheet?: SheetRead;
   /** A sheet's stage, or a served preview's server, as it stands once started. */
   stage?: StageState;
+  /** A folder preview's: what it loads at most, from its folder's files. */
+  weight?: FolderWeight;
   /** Why it is not on screen, one sentence; only with `opened: false`. */
   why?: string;
   /** The element ids a canvas's create wrote. */
@@ -653,6 +658,8 @@ export interface ArtifactServiceDeps {
   docs: ArtifactDocs;
   /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
+  /** What a folder preview of `dir` loads, weighed on machine `machineId` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
+  folderWeight: (machineId: string, dir: string) => Promise<FolderWeight>;
   /**
    * Tells `parent` once that its delegate `maker` put `artifact` in its
    * panel (core `artifactHandedNotice`), on the channel the person's picks
@@ -2187,6 +2194,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): Promise<ArtifactRead> => {
     const sheet = sheetOf(row);
     let failure: string | null = null;
+    let weight: SheetWeight | null | undefined;
     if (sheet) {
       try {
         const { opened } = await deps.stage(
@@ -2194,6 +2202,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           join(sheet.dir, sheet.file)
         );
         writeStage(row, opened.state, opened.sheet);
+        ({ weight } = opened);
       } catch (error) {
         failure = error instanceof Error ? error.message : String(error);
       }
@@ -2204,6 +2213,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return {
       ...read(row, since, ownersRead),
       ...(sheetNow ? { sheet: sheetNow } : {}),
+      ...(weight === undefined ? {} : { weight }),
       ...(stage
         ? {
             stage: failure
@@ -2420,6 +2430,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       } else {
         ({ machineId, source } = previewSource(instance, input));
       }
+      const weight =
+        "dir" in source && machineId
+          ? await deps.folderWeight(machineId, source.dir)
+          : undefined;
       const stage = await serveFirst(source, machineId);
       const { before, row } = placed(making, input, { source, machineId });
       if (html !== null) {
@@ -2442,6 +2456,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         route: routeOf(row.id),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
+        ...(weight ? { weight } : {}),
       };
     },
 

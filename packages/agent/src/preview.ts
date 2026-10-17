@@ -6,7 +6,9 @@ import {
   cachePreview,
   causeOf,
   downResponse,
+  type FolderWeight,
   folderKey,
+  folderWeight,
   IMMUTABLE,
   injectOverlay,
   type PreviewSocket,
@@ -284,6 +286,26 @@ const portSource = (
   ...(parts.serve === undefined ? {} : { serve: parts.serve }),
 });
 
+/** A folder preview's folder, its links resolved; refused when it is no absolute path to a folder. */
+async function folderRoot(dir: string): Promise<string> {
+  if (!isAbsolute(dir)) {
+    throw new Error("Directory must be an absolute path.");
+  }
+  const root = await realpath(dir);
+  if (!(await stat(root)).isDirectory()) {
+    throw new Error("Directory does not exist.");
+  }
+  return root;
+}
+
+/** What a folder preview of `dir` loads at most (core `folderWeight`). */
+export async function previewWeight(dir: unknown): Promise<FolderWeight> {
+  if (typeof dir !== "string") {
+    throw new Error("previewWeight takes a folder's absolute path.");
+  }
+  return folderWeight(await folderRoot(dir));
+}
+
 export function startPreview(options: {
   instanceId: string;
   port?: number;
@@ -323,13 +345,7 @@ async function start(
   ) {
     throw new Error("Port must be an integer from 1 to 65535.");
   }
-  if (dir !== undefined && !isAbsolute(dir)) {
-    throw new Error("Directory must be an absolute path.");
-  }
-  const root = dir === undefined ? undefined : await realpath(dir);
-  if (root && !(await stat(root)).isDirectory()) {
-    throw new Error("Directory does not exist.");
-  }
+  const root = dir === undefined ? undefined : await folderRoot(dir);
   const source: Exclude<PreviewSource, { page: string }> =
     port === undefined
       ? { dir: root as string }

@@ -248,6 +248,7 @@ import {
   type PlacementStrategy,
   PREVIEW_START,
   PREVIEW_STOP,
+  PREVIEW_WEIGHT,
   PROVIDER_ACCOUNT_KINDS,
   PROVIDER_RETRY,
   type ProviderAccountReading,
@@ -332,7 +333,7 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
-import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import { DOWN_WORDS, type FolderWeight } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type Found,
@@ -10516,6 +10517,39 @@ export const createServer = (
         );
       }
       return answer.result as StageState;
+    },
+    // A folder preview's weight, from its folder on the machine that serves it.
+    folderWeight: async (machineId, dir) => {
+      const asked = await callAgent(
+        machineId,
+        PREVIEW_WEIGHT,
+        [dir],
+        BUSY_TIMEOUT_MS
+      );
+      switch (asked.kind) {
+        case "unanswered":
+          throw asked.reason === "dead"
+            ? new ArtifactRefusal(
+                503,
+                "The folder's machine isn't connected to the hub, so its folder can't be read."
+              )
+            : new ArtifactRefusal(
+                504,
+                `The folder's machine didn't answer within ${Math.round(asked.after / 1000)}s.`
+              );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      const answer = asked.value;
+      if (!answer.ok) {
+        throw new ArtifactRefusal(
+          422,
+          answer.error ?? "The folder couldn't be read."
+        );
+      }
+      return answer.result as FolderWeight;
     },
     unserve: (machineId, workspace, port) => {
       detach(

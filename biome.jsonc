@@ -125,6 +125,50 @@
       },
     },
     {
+      // A sheet mounts the piece, not the app around it (design-explore
+      // skill): a story, a sheet's fixture folder (`<piece>/preview/`) and a
+      // folder preview's source import none of the live shell. The
+      // dashboard's own preview pane (lib/cawco/preview) is the shell, and
+      // only its stories are held to this.
+      "includes": [
+        "apps/dashboard/src/**/preview/**",
+        "!apps/dashboard/src/lib/cawco/preview/**",
+        "apps/dashboard/src/**/*.stories.ts",
+        "scripts/**/preview/**",
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                // The fleet store by any of its names: `#lib/cawco/client.svelte(.js)`, `../client.svelte.js`.
+                "patterns": [
+                  {
+                    "group": [
+                      "**/cawco/client.svelte",
+                      "**/cawco/client.svelte.js",
+                      "./client.svelte",
+                      "./client.svelte.js",
+                      "../client.svelte",
+                      "../client.svelte.js",
+                    ],
+                    "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
+                  },
+                ],
+                "paths": {
+                  "$app/navigation": "The stage stubs $app/navigation; a story never needs it.",
+                  "$app/state": "The stage stubs $app/state; a story never needs it.",
+                  "$app/stores": "The stage stubs $app/stores; a story never needs it.",
+                  "@cawco/core": "@cawco/core is every module of core; import the subpath you need, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
       "includes": ["**/*.svelte"],
       "linter": {
         "rules": {

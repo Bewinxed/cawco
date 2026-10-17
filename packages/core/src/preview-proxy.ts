@@ -460,20 +460,55 @@ export function compressed(
 export const versionedFile = (pathname: string): string | null =>
   pathname.match(VERSIONED)?.[2] ?? null;
 
-/** The key of `root`'s files as they are now: each one's path, size and change time, hashed. */
-export async function folderKey(root: string): Promise<string> {
+/** Each file under `root` as it is now, by its path from `root`, in path order. */
+async function folderFiles(
+  root: string
+): Promise<{ mtimeMs: number; name: string; size: number }[]> {
   const names = (await readdir(root, { recursive: true })).sort();
-  const hasher = new Bun.CryptoHasher("sha256");
   const stats = await Promise.all(
     names.map((name) => stat(join(root, name)).catch(() => null))
   );
-  for (const [index, name] of names.entries()) {
+  return names.flatMap((name, index) => {
     const one = stats[index];
-    if (one?.isFile()) {
-      hasher.update(`${name}\0${one.size}\0${one.mtimeMs}\n`);
-    }
+    return one?.isFile()
+      ? [{ name, size: one.size, mtimeMs: one.mtimeMs }]
+      : [];
+  });
+}
+
+/** The key of `root`'s files as they are now: each one's path, size and change time, hashed. */
+export async function folderKey(root: string): Promise<string> {
+  const hasher = new Bun.CryptoHasher("sha256");
+  for (const { name, size, mtimeMs } of await folderFiles(root)) {
+    hasher.update(`${name}\0${size}\0${mtimeMs}\n`);
   }
   return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
+}
+
+/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's. */
+export interface FolderWeight {
+  bytes: number;
+  files: number;
+  js: number;
+  wasm: number;
+}
+
+const JS_FILE = /\.[cm]?js$/;
+const WASM_FILE = /\.wasm$/;
+
+/** `root`'s weight, from the same walk as its {@link folderKey}. */
+export async function folderWeight(root: string): Promise<FolderWeight> {
+  const weight: FolderWeight = { files: 0, bytes: 0, js: 0, wasm: 0 };
+  for (const { name, size } of await folderFiles(root)) {
+    weight.files += 1;
+    weight.bytes += size;
+    if (JS_FILE.test(name)) {
+      weight.js += size;
+    } else if (WASM_FILE.test(name)) {
+      weight.wasm += size;
+    }
+  }
+  return weight;
 }
 
 /** The attributes that name one of the page's files, by the elements that carry them. */
