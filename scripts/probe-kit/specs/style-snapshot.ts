@@ -39,6 +39,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { player, readTape, recorder, type Tape, writeTape } from "../hub-tape";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -249,49 +250,48 @@ function styled(): string[] {
   return out.sort();
 }
 
-/** A component's `<style>` block, its CSS captured. */
-const STYLE_BLOCK = /<style[^>]*>([\s\S]*?)<\/style>/;
-const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
-/** A `:global(…)` group, its parentheses balanced one deep. */
-const GLOBAL_GROUP = /:global\((?:[^()]|\([^()]*\))*\)/g;
-/** What a selector holds once its globals are gone that names no element: pseudo-classes and -elements, combinators, nesting's `&`. */
-const NO_ELEMENT = /::?[a-z-]+(\((?:[^()]|\([^()]*\))*\))?|[\s>+~&,]/g;
+/** What coverage asks of the Svelte compiler: one file compiled, its CSS. */
+interface SvelteCompiler {
+  compile: (
+    source: string,
+    options: {
+      css: "external";
+      cssHash: () => string;
+      dev: boolean;
+      filename: string;
+      generate: "client";
+    }
+  ) => { css: { code: string } | null };
+}
+/** The class every scoped rule carries when a file is compiled here. */
+const SCOPE_MARK = "svelte-coverage-scope";
 
 /**
- * Whether a file's `<style>` holds a rule Svelte scopes to its own elements:
- * a selector that still names something once its `:global(…)` groups are
- * gone. A `:global { … }` block, keyframes and at-rules' preludes are not.
+ * The files whose `<style>` holds a rule Svelte scopes to their own
+ * elements, as the compiler decides it (the dashboard's own, as its build
+ * resolves it: the kit has no svelte of its own). Compiled with one fixed
+ * scoping class, a scoped rule carries it and a `:global` one does not, and
+ * a selector nothing in the template can match is gone (`css_unused_selector`).
  */
-function scoped(file: string): boolean {
-  const source = readFileSync(join(ROOT, file), "utf8");
-  const css = (source.match(STYLE_BLOCK)?.[1] ?? "").replace(CSS_COMMENT, "");
-  let prelude = "";
-  /** Depth inside a block whose insides are no selectors (keyframes, `:global { }`); 0 outside one. */
-  let skip = 0;
-  for (const ch of css) {
-    if (ch === "{") {
-      const head = prelude.trim();
-      prelude = "";
-      if (skip > 0) {
-        skip += 1;
-      } else if (head.startsWith("@keyframes") || head === ":global") {
-        skip = 1;
-      } else if (
-        !head.startsWith("@") &&
-        head.replace(GLOBAL_GROUP, "").replace(NO_ELEMENT, "") !== ""
-      ) {
-        return true;
-      }
-    } else if (ch === "}") {
-      prelude = "";
-      skip = Math.max(0, skip - 1);
-    } else if (ch === ";") {
-      prelude = "";
-    } else {
-      prelude += ch;
-    }
-  }
-  return false;
+async function scopedFiles(files: string[]): Promise<Set<string>> {
+  const { compile } = (await import(
+    createRequire(join(ROOT, "apps", "dashboard", "package.json")).resolve(
+      "svelte/compiler"
+    )
+  )) as SvelteCompiler;
+  return new Set(
+    files.filter((file) => {
+      const path = join(ROOT, file);
+      const { css } = compile(readFileSync(path, "utf8"), {
+        filename: path,
+        css: "external",
+        cssHash: () => SCOPE_MARK,
+        generate: "client",
+        dev: true,
+      });
+      return (css?.code ?? "").includes(SCOPE_MARK);
+    })
+  );
 }
 
 /**
@@ -374,10 +374,12 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   }
   const map: Record<string, string[]> = {};
   const uncovered: string[] = [];
-  for (const file of styled()) {
+  const files = styled();
+  const scoped = await scopedFiles(files);
+  for (const file of files) {
     // Rendered through a child alone, a file proves only its unscoped rules:
     // a scoped one matches its own elements, none of which stood there.
-    const through = scoped(file) ? [] : [...(chained.get(file) ?? [])];
+    const through = scoped.has(file) ? [] : [...(chained.get(file) ?? [])];
     const by = [...new Set([...(seen.get(file) ?? []), ...through])].sort();
     map[file] = by;
     if (by.length === 0) {
@@ -385,9 +387,8 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
     }
   }
   await writeFile(COVERAGE, `${JSON.stringify(map, null, 2)}\n`);
-  const files = Object.keys(map).length;
   kit.note(
-    `coverage: ${files - uncovered.length} of ${files} files with a <style> are rendered by a surface (${relative(ROOT, COVERAGE)})`
+    `coverage: ${files.length - uncovered.length} of ${files.length} files with a <style> are rendered by a surface (${relative(ROOT, COVERAGE)})`
   );
   if (uncovered.length > 0) {
     console.log(

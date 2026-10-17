@@ -119,8 +119,13 @@ const ADD_MACHINE = /^Add machine$/;
 const FILL_FIRST = /^Fill first/;
 /** The project's ⋯ menu. */
 const MORE_FOR_CAWCO = /More for cawco/;
-/** A session row's Peek (a wide layout's; the phone has none). */
-const PEEK = "[data-session-row-peek]";
+/**
+ * An ask's Peek on its needs card (NeedsCard's). A session row's own is
+ * nowhere in this scene: the page's Home is the phone's (SessionSurface
+ * `homePage`), where Peek is off, and a wide rail lists its sessions in the
+ * tree, whose rows have none (Sidebar `peek={false}`).
+ */
+const ASK_PEEK = "[data-needs-card-peek]";
 /** The note pasted beside your words in Caw's thread: its DocThumb's open. */
 const THREAD_NOTE = "Open phone-notes.txt";
 
@@ -421,23 +426,6 @@ export const SURFACES: Surface[] = [
           await press(MACHINES)(page);
           await press(ADD_MACHINE)(page);
           await page.getByRole("tab", { name: "With one command" }).click();
-        },
-        root: "body",
-      },
-      {
-        // Home's first session row's Peek (the rail's project rows have
-        // none): the tail of it in the peek sheet.
-        name: "peek",
-        widths: ["desk", "tablet"],
-        act: async (page) => {
-          await openRail(page);
-          // Its own click: a pointer hover on it timed out at desk and
-          // tablet alike (the record of 2026-10-17).
-          await page
-            .locator(PEEK)
-            .filter({ visible: true })
-            .first()
-            .dispatchEvent("click");
         },
         root: "body",
       },
@@ -922,6 +910,18 @@ export const SURFACES: Surface[] = [
         name: "open",
         act: (page) => page.click("[data-needs-caw]"),
         root: LAYER,
+      },
+      {
+        // An ask's Peek on its card, the panel giving way to the peek sheet:
+        // the tail of the session. The desk's alone: under 900px is the
+        // drawer layout, which has no Peek (peek.svelte.ts `peekable`).
+        name: "peek",
+        widths: ["desk"],
+        act: async (page) => {
+          await page.click("[data-needs-caw]");
+          await page.locator(ASK_PEEK).filter({ visible: true }).first().click();
+        },
+        root: "body",
       },
     ],
   },

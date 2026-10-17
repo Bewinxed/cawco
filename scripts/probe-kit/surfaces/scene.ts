@@ -35,6 +35,7 @@
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
  * by the tool results the conversation holds since (artifacts.ts's shape).
  */
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -46,6 +47,7 @@ import type { Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet } from "../kit";
+import { type McpOauthMock, mcpOauthMock, signIn } from "../mcp-oauth-mock";
 
 const DAY = 24 * 60 * 60 * 1000;
 const MINUTE = 60_000;
@@ -122,9 +124,9 @@ const BRIEF = `# The tray's brief
 /** The note pasted beside your picture in the thread. */
 const PHONE_NOTES =
   "At 390px the badge is cut after the second chip.\nThe branch name was 40 characters.";
-/** The picture your thread message carried: a 4×2 PNG, the tray's two chips in its two hues. */
+/** The picture your thread message carried, base64: a 4×2 PNG, the tray's two chips in its two hues. */
 const TRAY_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAGElEQVR4nGOwaPlv0fL//yqN/6s0GJA5ALfCDjHN4/54AAAAAElFTkSuQmCC";
+  "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAGElEQVR4nGOwaPlv0fL//yqN/6s0GJA5ALfCDjHN4/54AAAAAElFTkSuQmCC";
 /** Caw's words in the cawco project's thread, over the two tasks that wait on you. */
 const CAW_SAYS =
   "The push probe audit is ready for your review, and the token sheet's attempt failed: it needs you to say whether to try again.";
@@ -654,17 +656,28 @@ export interface Scene {
   [name: string]: string;
 }
 
+/** The MCP server behind OAuth the scene signs the hub in to, standing while the scene's hub does (`sceneHub`). */
+let trayDocs: McpOauthMock | null = null;
+
 /**
  * What the hub must hear before it starts: Jev's stand-in (jev-mock.ts, on
  * `CAWCO_TYPESAFE_URL`), which the scene turns on for the Caw project's
- * starters, and caw-dock.ts's short starters pace (1.5 s quiet, 5 s gap).
- * Returns its stop.
+ * starters, and caw-dock.ts's short starters pace (1.5 s quiet, 5 s gap);
+ * and, beside it, the MCP server the scene signs the hub in to
+ * (mcp-oauth-mock.ts), which the hub reads whenever it likes. Returns their
+ * stop.
  */
 export function sceneHub(fleet: KitFleet): () => void {
   const jev = jevMock();
   fleet.env.CAWCO_TYPESAFE_URL = jev.url;
   fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
-  return jev.stop;
+  const mcp = mcpOauthMock();
+  trayDocs = mcp;
+  return () => {
+    jev.stop();
+    mcp.stop();
+    trayDocs = null;
+  };
 }
 
 /**
@@ -1029,11 +1042,22 @@ export async function seedScene(
     (status) => status === "pending",
     180_000
   );
-  await Bun.sleep(3000);
   await until(
-    "the TODO session's answer to its rule done",
-    () => fleet.instance(todo),
-    (row) => row?.status === "running" && row.turn_open_at === null,
+    "the TODO session's answer to its rule's reply, at rest",
+    async () => {
+      const { blocks } = await fleet.api<{ blocks: { type: string }[] }>(
+        `/api/instances/${todo}/transcript`
+      );
+      const reply = blocks.findIndex((block) => block.type === "user.rule");
+      const row = await fleet.instance(todo);
+      return (
+        reply !== -1 &&
+        blocks.slice(reply + 1).some((block) => block.type === "assistant") &&
+        row?.status === "running" &&
+        row.turn_open_at === null
+      );
+    },
+    Boolean,
     180_000
   );
   const artifact = await until(
@@ -1160,16 +1184,24 @@ export async function seedScene(
     now - 4 * MINUTE
   );
   // Before that: your words with a picture and a pasted note riding on them
-  // (the row's chips, the picture's lightbox), Caw's reply naming the file
+  // (the row's chips, the note's document view), Caw's reply naming the file
   // he wrote in the folder (FolderFiles), and the notes of a routine made
-  // and of his design-system offer (their actions under the line).
+  // and of his design-system offer (their actions under the line). The
+  // picture is in the hub's media store, as a sent one is kept: by its
+  // bytes' hash beside the database, named by its address (hub media.ts).
   await put(project.id, BRIEF_FILE, BRIEF);
+  const picture = Buffer.from(TRAY_PNG, "base64");
+  const pictureName = `${createHash("sha256").update(picture).digest("hex")}.png`;
+  await mkdir(join(fleet.sandbox, "hub", "media"), { recursive: true });
+  await writeFile(join(fleet.sandbox, "hub", "media", pictureName), picture);
   fleet.write(
     "INSERT INTO thread_messages (id, thread_id, author, body, images, attachments, created_at) VALUES (?, ?, 'you', ?, ?, ?, ?)",
     crypto.randomUUID(),
     thread,
     "Here is the tray at 390px, and my notes from the phone.",
-    JSON.stringify([{ mediaType: "image/png", src: TRAY_PNG }]),
+    JSON.stringify([
+      { mediaType: "image/png", src: `/api/media/${pictureName}` },
+    ]),
     JSON.stringify([
       { kind: "text", name: "phone-notes.txt", content: PHONE_NOTES },
     ]),
@@ -1382,23 +1414,36 @@ export async function seedScene(
   // session runs under it: the memory saved twice (a version behind it) and
   // a model's document, an MCP server the hub signs in to (McpSignIn), a
   // hook saved twice (its previous version), and a rule.
+  /** The scratch machine's own last word on the model's document (its fleet report, as the hub keeps it). */
+  const machineDoc = () => {
+    const [row] = fleet.query<{ fleet: string | null }>(
+      "SELECT fleet FROM agents WHERE machine_id = ?",
+      MACHINE
+    );
+    const report = row?.fleet
+      ? (JSON.parse(row.fleet) as {
+          memoryDocs?: Record<string, { state: string }>;
+        })
+      : null;
+    return report?.memoryDocs?.[MODEL_DOC]?.state;
+  };
   await send("/api/fleet/memory", "PUT", { content: MEMORY_V1 });
   await send("/api/fleet/memory", "PUT", { content: MEMORY_V2 });
   await send("/api/fleet/memory/docs", "PUT", {
     path: MODEL_DOC,
     content: "# Opus\n\nKeep each brief under a page.\n",
   });
+  // Its server asks for OAuth (the hub learns so on reading it, fleet-mcp.ts
+  // `probe`), and the hub is signed in to it as Configure's Sign in does.
+  if (!trayDocs) {
+    throw new Error("the scene's MCP server is not standing: sceneHub first");
+  }
   await send(`/api/fleet/mcp/${MCP_NAME}`, "PUT", {
-    config: { type: "http", url: "https://mcp.tray-docs.test/mcp" },
+    config: { type: "http", url: trayDocs.url },
     enabled: true,
     projectId: null,
   });
-  // Its server asks for OAuth, as the hub learns on its first read of it
-  // (fleet-mcp.ts): signed in by no one yet.
-  fleet.write(
-    "UPDATE mcp_servers SET auth_mode = 'oauth' WHERE name = ?",
-    MCP_NAME
-  );
+  await signIn(fleet.base, MCP_NAME);
   for (const command of ["bunx biome check --write", "bunx biome check"]) {
     // biome-ignore lint/performance/noAwaitInLoops: the second save keeps the first as a version
     await send(`/api/fleet/hooks/${HOOK_ID}`, "PUT", {
@@ -1409,30 +1454,37 @@ export async function seedScene(
       handler: { type: "command", command },
     });
   }
-  // A second machine, a Mac, offline since its last report: its keychain
-  // locked Claude Code's login (`unreadable-credentials`, the machine
-  // menu's Unlock keychain…), and its last converge failed to write the
-  // memory, the model's document and the MCP server (each row's fault).
-  const denied = (path: string) =>
-    `EACCES: permission denied, open '/Users/owner/${path}'`;
+  // The model's document edited on the machine, then saved again on the
+  // hub: the machine keeps its own copy and says so (agent fleet.ts
+  // `syncMemoryDocs`, drift), the document's row's fault.
+  await until(
+    "the machine holding the model's document",
+    () => machineDoc(),
+    (state) => state === "applied",
+    120_000
+  );
+  await writeFile(
+    join(fleet.home, CLAUDE_DIR_NAME, "memories", MODEL_DOC),
+    "# Opus\n\nKeep each brief under a page, and say which page.\n"
+  );
+  await send("/api/fleet/memory/docs", "PUT", {
+    path: MODEL_DOC,
+    content: "# Opus\n\nKeep each brief under half a page.\n",
+  });
+  await until(
+    "the machine refusing the model's document over its own edit",
+    () => machineDoc(),
+    (state) => state === "failed",
+    120_000
+  );
+  // A second machine, a Mac, offline since it last registered: its
+  // keychain locked Claude Code's login (`unreadable-credentials`, the
+  // machine menu's Unlock keychain…), as the hub keeps a machine that went
+  // away (agents: its os and auth as it last said them).
   fleet.write(
-    "INSERT INTO agents (machine_id, hostname, home, os, status, auth, fleet, last_seen_at, created_at) VALUES (?, ?, '/Users/owner', 'darwin', 'offline', 'unreadable-credentials', ?, ?, ?)",
+    "INSERT INTO agents (machine_id, hostname, home, os, status, auth, last_seen_at, created_at) VALUES (?, ?, '/Users/owner', 'darwin', 'offline', 'unreadable-credentials', ?, ?)",
     STUDIO_MACHINE,
     STUDIO_HOST,
-    JSON.stringify({
-      at: now - 2 * 60 * MINUTE,
-      marketplaces: {},
-      mcp: {
-        [MCP_NAME]: { state: "failed", detail: denied(".claude.json") },
-      },
-      memory: { state: "failed", detail: denied(".claude/CLAUDE.md") },
-      memoryDocs: {
-        [MODEL_DOC]: {
-          state: "failed",
-          detail: denied(`.claude/memories/${MODEL_DOC}`),
-        },
-      },
-    }),
     now - 2 * 60 * MINUTE,
     now - 30 * DAY
   );
