@@ -1,0 +1,38 @@
+/* tailwindcss 4.3.3; rules in emitted order, offset into the built CSS */
+/* @6093 */
+.type-kpi {
+  font: var(--type-kpi);
+  font-variant-numeric: tabular-nums;
+}
+/* @6178 */
+.type-body {
+  font: var(--type-body);
+}
+/* @6225 */
+.type-button {
+  font: var(--type-button);
+}
+/* @6276 */
+.type-caps {
+  font: var(--type-caps);
+}
+/* @6323 */
+.type-code {
+  font: var(--type-code);
+}
+/* @6370 */
+.type-label {
+  font: var(--type-label);
+}
+/* @6419 */
+.type-meta {
+  font: var(--type-meta);
+}
+/* @6466 */
+.type-prose {
+  font: var(--type-prose);
+}
+/* @6515 */
+.type-title {
+  font: var(--type-title);
+}

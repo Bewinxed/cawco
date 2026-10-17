@@ -768,21 +768,26 @@ function themeUtilities(
 }
 
 /**
- * The inline block: a key per token, then the literal weights, the defaults
- * and the keyframes they name. A key named as a token must read that token:
- * Tailwind writes the key into :root as well, before tokens.css, whose own
- * declaration must stay the one that holds.
+ * A key per token, of the keys named as their token (`--radius-sm` reads
+ * `--radius-sm`) or of the rest. A key named as a token must read that
+ * token.
  */
-function inlineLines(
+function keyLines(
   keys: Map<string, ThemeKey[]>,
   switched: Set<string>,
   names: Set<string>,
-  options: TailwindThemeOptions
+  ownName: boolean
 ): string[] {
-  const inline: string[] = [];
+  const lines: string[] = [];
   for (const [ns, list] of keys) {
-    inline.push("");
-    for (const { key, token } of list) {
+    const own = list.filter(
+      ({ key, token }) => (`${ns}-${key}` === token.name) === ownName
+    );
+    if (own.length === 0) {
+      continue;
+    }
+    lines.push("");
+    for (const { key, token } of own) {
       const name = `${ns}-${key}`;
       if (names.has(name) && name !== token.name) {
         throw new Error(
@@ -790,13 +795,25 @@ function inlineLines(
         );
       }
       if (switched.has(token.name)) {
-        inline.push(
-          "  /* Switches with its context: no literal maps to it. */"
-        );
+        lines.push("  /* Switches with its context: no literal maps to it. */");
       }
-      inline.push(`  --${name}: var(--${token.name});`);
+      lines.push(`  --${name}: var(--${token.name});`);
     }
   }
+  return lines.slice(1);
+}
+
+/**
+ * The inline block: a key per token named otherwise than its token, then
+ * the literal weights, the defaults and the keyframes they name.
+ */
+function inlineLines(
+  keys: Map<string, ThemeKey[]>,
+  switched: Set<string>,
+  names: Set<string>,
+  options: TailwindThemeOptions
+): string[] {
+  const inline: string[] = ["", ...keyLines(keys, switched, names, false)];
   const literalWeights = Object.entries(options.literalWeights);
   if (literalWeights.length > 0) {
     inline.push("");
@@ -858,11 +875,13 @@ function plainLines(literals: Map<string, [string, string][]>): string[] {
  * compiles to the token's own custom property and its contexts (dark, a
  * coarse pointer) switch it where tokens.css does. What a media or
  * container query reads is a literal in a plain `@theme`. Composite tokens
- * become `@utility` rules: a type role as longhands, a gradient as a
- * background image, a transition as itself. A key that shares a token's
- * name reads that token (Tailwind writes the key into `:root` too, and the
- * token's own declaration, later in the theme layer, must stay the one
- * that holds).
+ * become `@utility` rules: a type role as the `font` shorthand, a gradient
+ * as a background image, a transition as itself. A key that shares a
+ * token's name (`--shadow-tile: var(--shadow-tile)`) goes in an `@theme
+ * inline reference` block: its utility compiles the same, and Tailwind
+ * writes none of those keys into `:root`, where `--x: var(--x)` held only
+ * while tokens.css's own declaration came later in the theme layer, and
+ * was a cycle (the variable invalid, a shadow `none`) wherever it didn't.
  */
 export function tailwindThemeCss(
   view: TokenView,
@@ -886,6 +905,10 @@ export function tailwindThemeCss(
     "",
     "@theme inline {",
     ...inlineLines(keys, switched, names, options),
+    "}",
+    "",
+    "@theme inline reference {",
+    ...keyLines(keys, switched, names, true),
     "}",
     ...utilities.flatMap(([name, body]) => [
       "",

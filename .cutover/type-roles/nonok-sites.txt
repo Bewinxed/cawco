@@ -1,0 +1,384 @@
+# The 577 sites that were not ok before the site fixes
+
+As found at f0e6dcf29, before d1bc87e3c fixed them: each site at T (ac7b79de8) with its rule's font declarations in order (T: line:declaration) and the element's classes then (now: line class). changes.md has what each became.
+
+unmapped apps/dashboard/src/lib/cawco/AddMachineDialog.svelte:615 type-body
+  .steps li {
+  T: 615:font: var(--type-body);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/AddMachineDialog.svelte:635 type-label
+  .output summary {
+  T: 635:font: var(--type-label);
+  now: 
+partial apps/dashboard/src/lib/cawco/MachinesList.svelte:354 type-label
+  .add {
+  T: 354:font: var(--type-label);
+  now: :149 flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start tex | :200 flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-
+longhands apps/dashboard/src/lib/cawco/PairingScreen.svelte:137 type-kpi
+  .code {
+  T: 137:font: var(--type-kpi);  138:font-family: var(--font-mono);
+  now: :79 num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 font-(family-name:--font-mono) text-size-kpi leading-none font-medium text-ink-
+partial apps/dashboard/src/lib/cawco/Shell.svelte:1450 type-label
+  .back {
+  T: 1450:font: var(--type-label);
+  now: :1152 mark-line pressable inline-flex items-center gap-space-row min-h-(--back-h) ps-space-1 pe-(--back-end) rounded-sm type-label text-ink-strong | :1169 min-w-0 truncate ps-space-7 me-space-3 max-[900px]:ps-0 coarse:portrait:ps-0
+partial apps/dashboard/src/lib/cawco/StatTile.svelte:80 type-kpi
+  .st-value {
+  T: 80:font: var(--type-kpi);
+  now: :42 num min-h-(--line-min) type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text | :49 num type-meta text-ink-muted
+partial apps/dashboard/src/lib/cawco/StatTile.svelte:102 type-meta
+  .st-unit {
+  T: 102:font: var(--type-meta);
+  now: :42 num min-h-(--line-min) type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text | :49 num type-meta text-ink-muted
+partial apps/dashboard/src/lib/cawco/StatTile.svelte:107 type-title
+  @media (max-width: 900px) { > .st-value {
+  T: 107:font: var(--type-title);
+  now: :42 num min-h-(--line-min) type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text | :49 num type-meta text-ink-muted
+longhands apps/dashboard/src/lib/cawco/TreeMark.svelte:383 type-meta
+  .num {
+  T: 383:font: var(--type-meta);  384:font-variant-numeric: tabular-nums;  385:line-height: 1;
+  now: :204 num inline-grid place-items-center w-(--num-w) h-(--num-h) font-body text-size-meta font-normal leading-none contain-layout contain-size
+partial apps/dashboard/src/lib/cawco/UsageMeter.svelte:1061 type-meta
+  .slot.more {
+  T: 1061:font: var(--type-meta);  1062:font-variant-numeric: tabular-nums;  1063:line-height: 16px;
+  now: :498 inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full | :517 absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none | :533 absolute start-(--slot-a
+partial apps/dashboard/src/lib/cawco/accounts/AccountListRow.svelte:115 type-meta
+  .problem {
+  T: 115:font: var(--type-meta);
+  now: :34 link grid min-w-0 flex-auto grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underli | :59 mark-line flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] dur-panel e
+unmapped apps/dashboard/src/lib/cawco/accounts/AccountName.svelte:61 type-label
+  b {
+  T: 61:font: var(--type-label);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/accounts/AccountName.svelte:65 type-meta
+  small {
+  T: 65:font: var(--type-meta);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/accounts/AccountSetup.svelte:907 type-title
+  .sec h2 {
+  T: 907:font: var(--type-title);  908:letter-spacing: var(--track-title);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/accounts/StrategyPicker.svelte:308 type-meta
+  .words small {
+  T: 308:font: var(--type-meta);
+  now: 
+longhands apps/dashboard/src/lib/cawco/config/ConfigRail.svelte:237 type-meta
+  .fault {
+  T: 237:font: var(--type-meta);  238:line-height: 18px;
+  now: :116 flex-none min-w-space-5 h-space-5 px-(--fault-pad) rounded-xs bg-status-attn-bg font-body text-size-meta font-normal leading-(--fault-h) tex
+partial apps/dashboard/src/lib/cawco/config/PickerChip.svelte:153 type-label
+  .item {
+  T: 153:font: var(--type-label);
+  now: :65 flex flex-col | :86 kit-item flex items-center gap-(--opt-gap) w-full px-(--opt-pad) text-left type-label text-ink-strong focus-inset
+longhands apps/dashboard/src/lib/cawco/config/editors/MemoryEditor.svelte:841 type-title
+  .title {
+  T: 841:font: var(--type-title);  842:font-family: var(--font-mono);  843:letter-spacing: -0.01em;
+  now: :515 text-size-title leading-ui font-medium font-(family-name:--font-mono) tracking-title wrap-anywhere text-ink-strong
+longhands apps/dashboard/src/lib/cawco/config/editors/SubagentEditor.svelte:197 type-title
+  .title {
+  T: 197:font: var(--type-title);  198:font-family: var(--font-mono);
+  now: :162 text-size-title leading-ui font-medium font-(family-name:--font-mono) wrap-anywhere text-ink-strong
+longhands apps/dashboard/src/lib/cawco/find/FindPeek.svelte:143 type-meta
+  .peek {
+  T: 143:font: var(--type-meta);  144:line-height: 20px;
+  now: :57 group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pr-0 pl-space-3 border-s bor
+longhands apps/dashboard/src/lib/cawco/find/FindPeek.svelte:224 type-label
+  .phone {
+  T: 224:font: var(--type-label);  225:font-weight: 400;  226:line-height: 28px;
+  now: :57 group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pr-0 pl-space-3 border-s bor
+longhands apps/dashboard/src/lib/cawco/find/FindRow.svelte:197 type-label
+  .title {
+  T: 197:font: var(--type-label);  198:line-height: var(--line-1);
+  now: :100 row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-body text-size-label font-medium leading-(--line-1) text-
+longhands apps/dashboard/src/lib/cawco/find/FindRow.svelte:210 type-meta
+  .age {
+  T: 210:font: var(--type-meta);  211:line-height: var(--line-1);  213:font-variant-numeric: tabular-nums;
+  now: :106 num row-start-1 col-start-3 font-body text-size-meta font-normal leading-(--line-1) text-ink-muted group-data-phone/row:self-start
+longhands apps/dashboard/src/lib/cawco/find/FindRow.svelte:224 type-meta
+  .meta {
+  T: 224:font: var(--type-meta);  225:line-height: var(--line-meta);
+  now: :112 row-start-2 col-start-2 col-end-4 line-clamp-2 font-body text-size-meta font-normal leading-(--line-meta) text-ink-muted group-data-phone/ro
+longhands apps/dashboard/src/lib/cawco/find/FindRow.svelte:251 type-meta
+  .reason {
+  T: 251:font: var(--type-meta);  252:line-height: var(--line-reason);
+  now: :127 row-start-3 col-start-2 col-end-4 flex min-w-0 font-body text-size-meta font-normal leading-(--line-reason) text-ink-subtle group-data-phone
+missing apps/dashboard/src/lib/cawco/find/FindRow.svelte:277 type-body
+  .row.phone { > & .title {
+  T: 277:font: var(--type-body);  278:font-size: 16px;  279:line-height: var(--line-1);  280:font-weight: var(--weight-strong);
+  now: :100 row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-body text-size-label font-medium leading-(--line-1) text-
+longhands apps/dashboard/src/lib/cawco/find/FindRow.svelte:298 type-label
+  .row.phone { > & .reason {
+  T: 298:font: var(--type-label);  299:font-weight: 400;  300:line-height: var(--line-meta);
+  now: :127 row-start-3 col-start-2 col-end-4 flex min-w-0 font-body text-size-meta font-normal leading-(--line-reason) text-ink-subtle group-data-phone
+unmapped apps/dashboard/src/lib/cawco/find/Finder.svelte:906 type-body
+  .field { > & input {
+  T: 906:font: var(--type-body);
+  now: 
+missing apps/dashboard/src/lib/cawco/find/Finder.svelte:982 type-caps
+  .head {
+  T: 982:font: var(--type-caps);  983:line-height: 28px;  985:letter-spacing: var(--track-caps);
+  now: :712 flex-none h-(--head-h) px-space-3 font-body font-medium text-(length:--caps-fs) leading-(--head-h) uppercase tracking-caps text-ink-muted tr
+missing apps/dashboard/src/lib/cawco/find/MentionField.svelte:757 type-body
+  .editor {
+  T: 757:font: var(--type-body);  758:font-size: 16px;  759:line-height: 1.25;
+  now: :703 [
+longhands apps/dashboard/src/lib/cawco/find/MentionField.svelte:844 type-code
+  .tip-handle {
+  T: 844:font: var(--type-code);
+  now: :769 font-(family-name:--font-mono) text-size-code font-normal leading-code opacity-80
+missing apps/dashboard/src/lib/cawco/find/MentionMenu.svelte:156 type-label
+  .line {
+  T: 156:font: var(--type-label);  157:font-weight: 400;
+  now: :111 m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/men | :123 m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(lengt
+unmapped apps/dashboard/src/lib/cawco/home/Home.svelte:279 type-body
+  .caw figcaption {
+  T: 279:font: var(--type-body);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/home/HomeRecent.svelte:280 type-body
+  .search input {
+  T: 280:font: var(--type-body);
+  now: 
+missing apps/dashboard/src/lib/cawco/home/NeedsCard.svelte:1044 type-meta
+  .peers > :global(.refusal) {
+  T: 1044:font: var(--type-meta);
+  now: :705  | :752  | :789  | :824 
+partial apps/dashboard/src/lib/cawco/home/UpdateCard.svelte:415 type-body
+  .notes {
+  T: 415:font: var(--type-body);
+  now: :335 type-body text-ink-row | :371 [
+partial apps/dashboard/src/lib/cawco/home/WorkTabs.svelte:1177 type-meta
+  .machine {
+  T: 1177:font: var(--type-meta);
+  now: :621 [
+missing apps/dashboard/src/lib/cawco/plan/PlanPane.svelte:375 type-body
+  .part-head {
+  T: 375:font: var(--type-body);  376:font-weight: var(--weight-strong);
+  now: :225 m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairlin | :235 m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs n
+unmapped apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte:2069 type-code
+  .sheet-error-title { > & code {
+  T: 2069:font: var(--type-code);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/preview/SheetInspector.svelte:601 type-meta
+  .code span {
+  T: 601:font: var(--type-meta);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/preview/SheetInspector.svelte:607 type-code
+  .note code {
+  T: 607:font: var(--type-code);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/project/CawThread.svelte:460 type-meta
+  .earlier h3 {
+  T: 460:font: var(--type-meta);  461:font-weight: var(--weight-strong);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:148 type-label
+  .actions-ledger :global(tr.band th) {
+  T: 148:font: var(--type-label);  149:letter-spacing: var(--track-caps);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:157 type-meta
+  .actions-ledger :global(tr.action > td) {
+  T: 157:font: var(--type-meta);  158:font-variant-numeric: tabular-nums;
+  now: 
+unmapped apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:286 type-label
+  .runs-ledger :global(tr.band th) {
+  T: 286:font: var(--type-label);  287:letter-spacing: var(--track-caps);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:296 type-meta
+  .runs-ledger :global(tr.run td) {
+  T: 296:font: var(--type-meta);  297:font-variant-numeric: tabular-nums;
+  now: 
+partial apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte:171 type-label
+  .option.auto {
+  T: 171:font: var(--type-label);
+  now: :101 group type-label grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-curren | :121 group grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm bor
+unmapped apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:686 type-meta
+  .note span {
+  T: 686:font: var(--type-meta);
+  now: 
+partial apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:743 type-meta
+  .meta {
+  T: 743:font: var(--type-meta);
+  now: :493 block truncate font-(family-name:--font-mono) text-size-meta leading-meta font-normal text-ink-muted | :606 type-meta block truncate text-ink-muted | :612 type-meta block truncate text-ink-subtle
+missing apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte:420 type-meta
+  .ref-id {
+  T: 420:font: var(--type-meta);  421:font-family: var(--font-mono);  422:font-variant-ligatures: none;
+  now: :291 flex-none text-meta font-(family-name:--font-mono) liga-none text-ink-muted
+missing apps/dashboard/src/lib/cawco/tasks/PostCard.svelte:191 type-meta
+  .mark {
+  T: 191:font: var(--type-meta);  192:font-weight: var(--weight-strong);
+  now: :89 grid size-(--mark) flex-none place-items-center rounded-(--mark-r) bg-surface-fill text-meta font-medium text-ink-strong
+partial apps/dashboard/src/lib/cawco/tasks/PostCard.svelte:205 type-meta
+  .part {
+  T: 205:font: var(--type-meta);
+  now: :79 relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-c | :102 num ms-auto type-meta text-ink-muted
+unmapped apps/dashboard/src/lib/cawco/tasks/PostCard.svelte:246 type-meta
+  dt {
+  T: 246:font: var(--type-meta);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/tasks/PostCard.svelte:253 type-meta
+  dd {
+  T: 253:font: var(--type-meta);
+  now: 
+missing apps/dashboard/src/lib/cawco/tasks/TaskActivity.svelte:380 type-label
+  .who {
+  T: 380:font: var(--type-label);  381:font-size: inherit;
+  now: :208 font-body leading-label font-medium text-ink-strong | :237 font-body leading-label font-medium text-ink-strong
+missing apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte:232 type-meta
+  .id {
+  T: 232:font: var(--type-meta);  233:font-family: var(--font-mono);  234:font-variant-ligatures: none;
+  now: :124 text-meta font-(family-name:--font-mono) liga-none text-ink-subtle
+partial apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte:161 type-meta
+  .moving {
+  T: 161:font: var(--type-meta);
+  now: :127 group/card data-pickable:relative | :159 mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted
+partial apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte:266 type-code
+  .kind {
+  T: 266:font: var(--type-code);  267:font-variant-ligatures: none;
+  now: :82 group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out  | :113 flex-none type-code whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink
+partial apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte:236 type-body
+  .field {
+  T: 236:font: var(--type-body);
+  now: :84 h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 type-body text-ink-strong | :138 h-c-btn-h-sm min-w-0 shrink grow-0 basis-(--basis) rounded-sm border border-border-control bg-surface-raised px-space-2 typ
+partial apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte:247 type-code
+  .key-in {
+  T: 247:font: var(--type-code);
+  now: :84 h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 type-body text-ink-strong | :138 h-c-btn-h-sm min-w-0 shrink grow-0 basis-(--basis) rounded-sm border border-border-control bg-surface-raised px-space-2 typ
+missing apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte:352 type-meta
+  .args {
+  T: 352:font: var(--type-meta);  353:font-family: var(--font-mono);  354:font-variant-ligatures: none;
+  now: :199 max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well text-meta font-mono liga-non
+missing apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte:398 type-meta
+  .ref-id {
+  T: 398:font: var(--type-meta);  399:font-family: var(--font-mono);  400:font-variant-ligatures: none;
+  now: :321 flex-none text-meta font-mono liga-none text-ink-muted
+missing apps/dashboard/src/lib/cawco/tasks/TaskPane.svelte:737 type-meta
+  .page-id {
+  T: 737:font: var(--type-meta);  738:font-family: var(--font-mono);  739:font-variant-ligatures: none;
+  now: :742 ms-auto text-meta font-mono liga-none text-ink-subtle
+missing apps/dashboard/src/lib/cawco/tasks/TaskRelations.svelte:240 type-meta
+  .ref-id {
+  T: 240:font: var(--type-meta);  241:font-family: var(--font-mono);  242:font-variant-ligatures: none;
+  now: :75 flex-none text-meta font-mono liga-none text-ink-muted | :166 flex-none text-meta font-mono liga-none text-ink-muted
+missing apps/dashboard/src/lib/cawco/tasks/TaskReview.svelte:576 type-label
+  .open {
+  T: 576:font: var(--type-label);
+  now: :371 group/words flex flex-col @task-frame/task-frame:not-data-compact:hidden
+partial apps/dashboard/src/lib/cawco/tasks/TaskReview.svelte:639 type-label
+  .more {
+  T: 639:font: var(--type-label);
+  now: :371 group/words flex flex-col @task-frame/task-frame:not-data-compact:hidden | :396 flex-none ms-auto px-space-2 py-0 rounded-sm type-label text-ink-strong underline underline-offset-2 hover:bg-surface-hover hover:text-ink-s
+unmapped apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:365 type-label
+  .ledger :global(tr.band th) {
+  T: 365:font: var(--type-label);  366:letter-spacing: var(--track-caps);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte:378 type-meta
+  .ledger :global(tr.row td) {
+  T: 378:font: var(--type-meta);
+  now: 
+missing apps/dashboard/src/lib/cawco/tasks/TodoList.svelte:310 type-meta
+  .promoted {
+  T: 310:font: var(--type-meta);  311:font-family: var(--font-mono);  312:font-variant-ligatures: none;
+  now: :230 flex-none text-meta font-mono liga-none text-ink-muted
+longhands apps/dashboard/src/lib/cawco/transcript/Peer.svelte:184 type-label
+  .label {
+  T: 184:font: var(--type-label);  185:line-height: var(--leading-ui);
+  now: :122 relative min-h-(--label-min) m-0 font-body text-size-label font-medium leading-ui text-ink-muted rail-line
+partial apps/dashboard/src/lib/cawco/usage/History.svelte:460 type-label
+  .total {
+  T: 460:font: var(--type-label);
+  now: :306 type-label text-ink-strong | :420 type-label border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted | :436 border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong
+unmapped apps/dashboard/src/lib/cawco/usage/History.svelte:522 type-label
+  .figures th {
+  T: 522:font: var(--type-label);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:442 type-meta
+  .figure { > & small {
+  T: 442:font: var(--type-meta);
+  now: 
+missing apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:462 type-meta
+  .heading {
+  T: 462:font: var(--type-meta);  463:font-weight: var(--weight-strong);
+  now: :115 font-body text-meta font-medium text-ink-muted
+unmapped apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:630 type-label
+  .ledger :global(tr.band th) {
+  T: 630:font: var(--type-label);  631:letter-spacing: var(--track-caps);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:643 type-meta
+  .ledger :global(tr.row td) {
+  T: 643:font: var(--type-meta);
+  now: 
+missing apps/dashboard/src/lib/cawco/usage/SessionsChip.svelte:246 type-meta
+  :global(.sessions-chip) {
+  T: 246:font: var(--type-meta);  247:line-height: 1;  248:font-variant-numeric: tabular-nums;
+  now: :174 pressable touch-hit h-icon-md min-w-icon-md flex-none cursor-pointer overflow-visible px-space-1 font-body text-ink-row text-meta leading-no
+missing apps/dashboard/src/lib/cawco/usage/SessionsChip.svelte:266 type-meta
+  .head {
+  T: 266:font: var(--type-meta);  267:font-weight: var(--weight-strong);
+  now: :206 px-space-3 pt-space-2 pb-space-1 font-body text-ink-strong text-meta font-medium
+partial apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte:747 type-label
+  .machine {
+  T: 747:font: var(--type-label);
+  now: :574 relative flex flex-col not-first:pt-space-2 | :583 mark-line type-label m-0 flex animate-(--swap-anim) items-center gap-space-2 py-space-1 text-ink-muted opacity-(--head-opacity) | :620 flex flex-col items-start pt-space-2 kind-gone:pt-0
+missing apps/dashboard/src/lib/cawco/views/ViewMade.svelte:125 type-meta
+  .id {
+  T: 125:font: var(--type-meta);  126:font-family: var(--font-mono);  127:font-variant-ligatures: none;
+  now: :70 text-meta font-mono liga-none text-ink-muted
+partial apps/dashboard/src/lib/cawco/views/ViewPipeline.svelte:131 type-code
+  .kind {
+  T: 131:font: var(--type-code);  132:font-variant-ligatures: none;
+  now: :44 group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-i | :68 type-code text-ink-subtle max-phone:hidden
+unmapped apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:1097 type-meta
+  .ledger :global(tr.row > td) {
+  T: 1097:font: var(--type-meta);
+  now: 
+partial apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:1178 type-meta
+  .sub {
+  T: 1178:font: var(--type-meta);
+  now: :749 block truncate type-meta text-ink-muted | :1008 block truncate type-code text-ink-muted | :1055 block truncate type-meta text-ink-muted | :1058 type-code
+unmapped apps/dashboard/src/lib/cawco/views/openui/ViewTable.svelte:118 type-label
+  .ledger :global(tr.band th) {
+  T: 118:font: var(--type-label);  119:letter-spacing: var(--track-caps);
+  now: 
+unmapped apps/dashboard/src/lib/cawco/views/openui/ViewTable.svelte:127 type-label
+  .ledger :global(tr.row td) {
+  T: 127:font: var(--type-label);
+  now: 
+unmapped apps/dashboard/src/lib/components/ui/section-header/section-header.svelte:51 type-label
+  .left span {
+  T: 51:font: var(--type-label);
+  now: 
+partial apps/dashboard/src/routes/(app)/config/models/+page.svelte:616 type-meta
+  .facts {
+  T: 616:font: var(--type-meta);
+  now: :345 num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong | :489 num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong | :584 num type-meta m-0 flex list-none flex-col g
+partial apps/dashboard/src/routes/(app)/config/models/+page.svelte:623 type-body
+  .status {
+  T: 623:font: var(--type-body);
+  now: :345 num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong | :489 num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong | :584 num type-meta m-0 flex list-none flex-col g
+unmapped apps/dashboard/src/routes/(app)/motion/caw-notices/+page.svelte:447 type-title
+  h1 {
+  T: 447:font: var(--type-title);
+  now: 
+unmapped apps/dashboard/src/routes/(app)/motion/caw/+page.svelte:108 type-body
+  main {
+  T: 108:font: var(--type-body);
+  now: 
+unmapped apps/dashboard/src/routes/(app)/motion/echo/+page.svelte:73 type-body
+  main {
+  T: 73:font: var(--type-body);
+  now: 
+unmapped apps/dashboard/src/routes/(app)/motion/overlays/+page.svelte:226 type-body
+  main {
+  T: 226:font: var(--type-body);
+  now: 
+unmapped apps/dashboard/src/routes/(app)/motion/updates/+page.svelte:373 type-title
+  h1 {
+  T: 373:font: var(--type-title);
+  now: 
+unmapped apps/dashboard/src/routes/(app)/motion/updates/+page.svelte:383 type-meta
+  .card p {
+  T: 383:font: var(--type-meta);
+  now: 
+unmapped apps/dashboard/src/routes/dev/finder/+page.svelte:220 type-meta
+  .jump { > & kbd {
+  T: 220:font: var(--type-meta);
+  now: 

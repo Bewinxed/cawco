@@ -1,0 +1,2 @@
+rule fragments only in the previous build: 1; only in the new: 1
+self-referencing --x:var(--x) in previous build: 50; in new build: 0

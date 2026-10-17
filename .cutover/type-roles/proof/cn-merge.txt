@@ -1,0 +1,7 @@
+["group/badge h-icon-lg text-label leading-none px-1.5","font-body text-ink-row type-meta leading-none num"] → group/badge h-icon-lg px-1.5 text-ink-row type-meta leading-none num
+["text-label font-medium","type-meta"] → type-meta
+["type-meta","font-medium leading-none tracking-title"] → type-meta font-medium leading-none tracking-title
+["type-label","type-meta"] → type-meta
+["font-inherit","type-meta"] → type-meta
+["type-meta","font-inherit"] → font-inherit
+["text-size-label leading-ui","type-code liga-none"] → type-code liga-none

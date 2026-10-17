@@ -1,0 +1,100 @@
+/* tailwindcss 4.3.3; rules in emitted order, offset into the built CSS */
+/* @6093 */
+.type-kpi {
+  font: var(--type-kpi);
+  font-variant-numeric: tabular-nums;
+}
+/* @6178 */
+.type-caps {
+  font: var(--type-caps);
+}
+/* @6225 */
+.type-code {
+  font: var(--type-code);
+}
+/* @6272 */
+.type-meta {
+  font: var(--type-meta);
+}
+/* @6319 */
+.type-title {
+  font: var(--type-title);
+}
+/* @6368 */
+.mono-figure {
+  font-family: var(--font-mono);
+  font-size-adjust: cap-height var(--mono-figure-cap);
+  font-variant-ligatures: none;
+  font-variant-numeric: tabular-nums;
+}
+/* @6555 */
+.font-\(family-name\:--font-mono\) {
+  font-family: var(--font-mono);
+}
+/* @6633 */
+.font-mono {
+  font-family: var(--font-mono);
+}
+/* @6687 */
+.text-size-label {
+  font-size: var(--text-label);
+}
+/* @6746 */
+.text-size-meta {
+  font-size: var(--text-meta);
+}
+/* @6803 */
+.leading-meta {
+  --tw-leading: var(--leading-meta);
+  line-height: var(--leading-meta);
+}
+/* @6902 */
+.leading-none {
+  --tw-leading: 1;
+  line-height: 1;
+}
+/* @6965 */
+.leading-tight {
+  --tw-leading: var(--leading-tight);
+  line-height: var(--leading-tight);
+}
+/* @7067 */
+.font-medium {
+  --tw-font-weight: var(--weight-strong);
+  font-weight: var(--weight-strong);
+}
+/* @7171 */
+.font-normal {
+  --tw-font-weight: var(--weight-body);
+  font-weight: var(--weight-body);
+}
+/* @7271 */
+.tracking-caps {
+  --tw-tracking: var(--track-caps);
+  letter-spacing: var(--track-caps);
+}
+/* @7371 */
+.tracking-title {
+  --tw-tracking: var(--track-title);
+  letter-spacing: var(--track-title);
+}
+/* @7474 */
+.num {
+  font-variant-numeric: tabular-nums !important;
+}
+/* @7538 */
+.liga-none {
+  font-variant-ligatures: none;
+}
+/* @7620 */
+.max-desk\:type-title {
+  font: var(--type-title);
+}
+/* @7685 */
+.max-desk\:text-size-meta {
+  font-size: var(--text-meta);
+}
+/* @7758 */
+.max-desk\:num {
+  font-variant-numeric: tabular-nums !important;
+}

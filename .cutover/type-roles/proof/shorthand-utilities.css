@@ -1,0 +1,108 @@
+/* tailwindcss 4.3.3; rules in emitted order, offset into the built CSS */
+/* @6093 */
+.inset-0 {
+  inset: 0px;
+}
+/* @6126 */
+.inset-x-0 {
+  inset-inline: 0px;
+}
+/* @6168 */
+.flex-1 {
+  flex: 1;
+}
+/* @6197 */
+.flex-auto {
+  flex: auto;
+}
+/* @6232 */
+.flex-none {
+  flex: none;
+}
+/* @6267 */
+.animate-none {
+  animation: none;
+}
+/* @6310 */
+.list-decimal {
+  list-style-type: decimal;
+}
+/* @6362 */
+.list-disc {
+  list-style-type: disc;
+}
+/* @6408 */
+.list-none {
+  list-style-type: none;
+}
+/* @6454 */
+.columns-2 {
+  columns: 2;
+}
+/* @6489 */
+.place-items-center {
+  place-items: center;
+}
+/* @6542 */
+.gap-space-2 {
+  gap: var(--space-2);
+}
+/* @6588 */
+.gap-x-space-1 {
+  column-gap: var(--space-1);
+}
+/* @6643 */
+.overflow-hidden {
+  overflow: hidden;
+}
+/* @6690 */
+.overflow-x-hidden {
+  overflow-x: hidden;
+}
+/* @6741 */
+.bg-surface-raised {
+  background-color: var(--surface-raised);
+}
+/* @6813 */
+.bg-transparent {
+  background-color: transparent;
+}
+/* @6872 */
+.bg-action-surface {
+  background-image: var(--action-surface);
+}
+/* @6944 */
+.line-through {
+  text-decoration-line: line-through;
+}
+/* @7006 */
+.no-underline {
+  text-decoration-line: none;
+}
+/* @7060 */
+.underline {
+  text-decoration-line: underline;
+}
+/* @7116 */
+.decoration-dotted {
+  text-decoration-style: dotted;
+}
+/* @7178 */
+.outline-\(length\:--focus-ring-width\) {
+  outline-style: var(--tw-outline-style);
+  outline-width: var(--focus-ring-width);
+}
+/* @7314 */
+.outline-focus-ring {
+  outline-color: var(--focus-ring);
+}
+/* @7380 */
+.outline-none {
+  --tw-outline-style: none;
+  outline-style: none;
+}
+/* @7457 */
+.outline-solid {
+  --tw-outline-style: solid;
+  outline-style: solid;
+}
