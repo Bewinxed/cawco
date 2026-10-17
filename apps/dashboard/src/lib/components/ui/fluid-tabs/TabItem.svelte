@@ -497,9 +497,12 @@
         color var(--dur-ghost) var(--ease-out),
         --pick var(--choose-dur) var(--choose-ease);
     }
-    :global([data-ride]) & {
-      transition: none;
-    }
+  }
+  /* The list (TabsList) carries `data-ride` inside the folder root: said in
+     that order, so the rule holds whether or not a tool lowers the nesting
+     (folder-ride spec). */
+  :global([data-variant="folder"] [data-ride]) .ff-tab {
+    transition: none;
   }
   .ff-tab > .fold {
     position: absolute;
