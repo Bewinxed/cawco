@@ -550,9 +550,23 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             snapshot.appendSections([part])
             snapshot.appendItems(items, toSection: part)
         }
-        // Rows that stay are drawn again from the task as it now is.
-        snapshot.reconfigureItems(snapshot.itemIdentifiers.filter { dataSource.indexPath(for: $0) != nil })
+        // Rows that stay are drawn again from the task as it now is. One that
+        // holds a view the sheet keeps (a field, the activity) is drawn in
+        // place, so typing and focus stay; every other row's view is made
+        // anew, and its cell is reloaded after, without motion: assistive
+        // tech reads a cell's elements once until the list reuses it, so a
+        // view swapped in place left VoiceOver on the old one's elements
+        // (off screen, 0×0) and the new one's out of reach (after Deny, the
+        // other card's Approve).
+        let standing = snapshot.itemIdentifiers.filter { dataSource.indexPath(for: $0) != nil }
+        snapshot.reconfigureItems(standing.filter(holdsKeptView))
         dataSource.apply(snapshot, animatingDifferences: collection.window != nil && !UIAccessibility.isReduceMotionEnabled)
+        let rebuilt = standing.filter { !holdsKeptView($0) }
+        if !rebuilt.isEmpty {
+            var again = dataSource.snapshot()
+            again.reloadItems(rebuilt.filter { again.indexOfItem($0) != nil })
+            dataSource.apply(again, animatingDifferences: false)
+        }
         // What it needs from you is drawn anew on each render: when that
         // changed (an action decided, an ask answered), assistive tech reads
         // the screen again, or it keeps the cards that left and misses those that came.
@@ -560,6 +574,16 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         if needs != shownNeeds {
             shownNeeds = needs
             UIAccessibility.post(notification: .layoutChanged, argument: nil)
+        }
+    }
+
+    /// A row whose view the sheet keeps across renders: the text parts, the
+    /// labels, fields and activity, an add field, and the to-do being edited.
+    private func holdsKeptView(_ item: Item) -> Bool {
+        switch item {
+        case .description, .acceptance, .labels, .fields, .activity, .todoAdd: true
+        case let .todo(path): editingTodo != nil && task?.todos.first { $0.path == path }?.ref == editingTodo
+        default: false
         }
     }
 
