@@ -33,7 +33,6 @@
 - MovedLogins.svelte group-data-open: on fold-inner (opacity, dur-panel); these resolve the `data-open` attribute
 
 ## Other
-- CawFace.svelte:54 keeps `class="face"`: NeedsCaw.svelte:775 (`.face.covered > :global(.face)`) selects it cross-file; eslint no-unknown-classes errors on it. Integration: give CawFace `data-slot="face"` and switch NeedsCaw's selector, then drop the class.
-- CawMark.svelte keeps `.mark > :global(.face)` rules (foreign-dom): CawFace root is a child component; NeedsCard/TranscriptSkeleton also select `.mark` cross-file.
 - MovedLogins: `aria-expanded:bg-transparent` + `hover:aria-expanded:bg-surface-hover` replace `.toggle[aria-expanded=true]:not(:hover)`; hover specificity to confirm in compare. Reduced-motion fold-inner transition-duration under open kept via `motion-reduce:group-data-open:dur-panel`.
 - StatusLine foreign-dom rule uses `var(--icon-sm)` (=12px) selected by `[role="status"]`.
+- cross-file hook: CawFace root .face → [data-slot="caw-face"]; selected by NeedsCaw.svelte:775 (O6) and CawMark.svelte:116,120

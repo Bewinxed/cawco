@@ -111,11 +111,11 @@
 
 <style>
   /* residual: foreign-dom */
-  .mark > :global(.face) {
+  .mark > :global([data-slot="caw-face"]) {
     display: block;
   }
   /* His face is drawn and ready under the clip, unseen until it lands. */
-  .mark.playing > :global(.face) {
+  .mark.playing > :global([data-slot="caw-face"]) {
     visibility: hidden;
   }
 </style>

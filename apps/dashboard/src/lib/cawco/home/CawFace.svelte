@@ -51,7 +51,8 @@
 
 <span
   aria-hidden="true"
-  class="face relative inline-block flex-none size-(--side) pointer-events-none select-none"
+  data-slot="caw-face"
+  class="relative inline-block flex-none size-(--side) pointer-events-none select-none"
   data-box
   style:--bleed="{CAW_STILL_BLEED}px"
   style:--side="{size}px"
