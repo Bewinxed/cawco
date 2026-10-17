@@ -1,71 +1,60 @@
 <script lang="ts" module>
   /**
-   * How the display stands: a skeleton while the hub is asked, the code
-   * while it waits, its letters in the done or fail ink once answered,
-   * dimmed once it expired (stale), and boxes with nothing in them (empty).
+   * How the code's letters stand: a skeleton while the hub is asked, the
+   * code while it waits, the done or fail ink once answered, dimmed once it
+   * expired (stale), and boxes with nothing in them (empty).
    */
   export type OtpTone =
     "skeleton" | "code" | "done" | "fail" | "stale" | "empty";
-  /** How a new code's letters arrive: popped in, or spun into place on a reel. */
-  export type OtpArrival = "pop" | "reel";
 </script>
 
 <script lang="ts">
   /**
-   * The pairing code as a display: six boxes in two groups of three (the
-   * code's hyphen is the gap between them), each holding one letter at the
-   * KPI role in the mono face, the row c-pair-w wide, the width of the QR
-   * or camera above it. The display stands from the moment its screen
-   * does, so a new code lands in the same boxes (round-2 design §2). It
-   * reads out as one element, letter by letter.
+   * The key's letters: six boxes in two groups of three (the code's hyphen
+   * is the gap between them), each holding one letter at the KPI role in
+   * the mono face, the row c-pair-w wide, the width of the QR or camera
+   * above it. Every box is drawn in every state: the stat well's recess
+   * fill and a 1px field edge (`input`). It reads out as one element,
+   * letter by letter.
    *
-   * Every box is drawn in every state: the stat well's recess fill and a
-   * 1px field edge (`input`), as an OTP field's boxes are (Trip.com,
-   * GoFundMe, Polestar). An answer changes the letters' ink, never the box.
+   * ANIMATION STORYBOARD (CSS animations on transform and opacity)
    *
-   * Motion, each from its transitions-dev recipe in the house's tokens:
-   * Number pop-in for a code arriving (each letter up from pop-rise and
-   * sharpening from fold-blur over dur-pop, box k after k × dur-stagger);
-   * Spinning counter for the reel (dur-settle, k × dur-ghost); Text states
-   * swap's exit for letters leaving (up by swap-rise over dur-morph, all at
-   * once); the done ink crossing the boxes k × dur-stagger apart; Error
-   * state shake on the row (legs of dur-ghost, dur-ghost, dur-stagger,
-   * dur-stagger). Nothing moves a box. Without motion, letters and inks
-   * only fade.
+   *   type in  each letter up from pop-rise and sharp from fold-blur over
+   *            dur-pop, box k at k × dur-ghost: the last lands as the key's
+   *            dots lock (Number pop-in, on the key's beat)
+   *   pulse    the letters breathe once a breath while the person checks
+   *            them against their phone
+   *   leave    letters go up by swap-rise over dur-morph, all at once
+   *            (Text states swap's exit)
+   *   fall     box by box, k × dur-stagger apart, each drops its height on
+   *            the gravity curve and fades (a dead code)
+   *   done     the done ink crosses the boxes k × dur-stagger apart
+   *   shake    Error state shake on the row
+   *
+   * Without motion, letters and inks only fade.
    */
   import type { TransitionConfig } from "svelte/transition";
-  import {
-    dur,
-    ease,
-    easeInOut,
-    easeOut,
-    motionOk,
-    numberOf,
-  } from "../motion/curves.svelte";
+  import { dur, easeInOut, motionOk, numberOf } from "../motion/curves.svelte";
 
   let {
     code,
     tone,
-    arrive = "pop",
     shake = 0,
+    pulsing = false,
     falling = false,
   }: {
     /** "JWK-HDQ", or null while there is none to show. */
     code: string | null;
     tone: OtpTone;
-    arrive?: OtpArrival;
     /** Each rise replays the shake. */
     shake?: number;
-    /**
-     * A dead code: box by box, k × dur-stagger apart, each drops out of the
-     * row on the gravity curve and fades.
-     */
+    /** The person is checking these against their phone. */
+    pulsing?: boolean;
+    /** A dead code: the boxes fall apart. */
     falling?: boolean;
   } = $props();
 
-  const uid = $props.id();
   const CELLS = [0, 1, 2, 3, 4, 5] as const;
-  const REEL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const letters = $derived(code ? code.replace(/[^A-Z]/gi, "").split("") : []);
   const spoken = $derived(
     letters.length === 6
@@ -73,7 +62,7 @@
       : ""
   );
 
-  /** Mounted: letters pop or spin only for a code that arrives, never on first paint. */
+  /** Mounted: letters type in only for a code that arrives, never on first paint. */
   let settled = false;
   $effect(() => {
     settled = true;
@@ -94,45 +83,6 @@
         `opacity: ${t}; transform: translateY(${-u * rise}px); filter: blur(${u * blur}px)`,
     };
   }
-
-  /** The reel: two turns of the alphabet, landing on the letter in the second. */
-  const spin = (at: number, letter: string) => (strip: HTMLElement) => {
-    if (!settled) {
-      return;
-    }
-    if (!motionOk.current) {
-      strip.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-fade"),
-        easing: ease("--ease-out"),
-      });
-      return;
-    }
-    const cell = strip.parentElement?.clientHeight ?? 0;
-    const delay = at * dur("--dur-ghost");
-    const duration = dur("--dur-settle");
-    strip.animate(
-      [
-        { transform: "translateY(0)" },
-        {
-          transform: `translateY(${-(REEL.length + REEL.indexOf(letter)) * cell}px)`,
-        },
-      ],
-      { delay, duration, easing: ease("--ease-out"), fill: "backwards" }
-    );
-    // The streak runs along the reel only, at its fastest as the spin
-    // starts and gone as it settles, the speed the curve gives it.
-    const streak = strip.parentElement?.querySelector("feGaussianBlur");
-    const most = numberOf("--reel-blur");
-    const start = performance.now() + delay;
-    const step = (time: number) => {
-      const p = Math.min(1, Math.max(0, (time - start) / duration));
-      streak?.setAttribute("stdDeviation", `0 ${most * (1 - easeOut(p))}`);
-      if (p < 1) {
-        requestAnimationFrame(step);
-      }
-    };
-    requestAnimationFrame(step);
-  };
 
   /* Error state shake: the class comes off, a reflow, and it goes on again,
      so every rise replays it from rest. */
@@ -155,6 +105,7 @@
   data-slot="otp"
   class="otp"
   data-falling={falling || undefined}
+  data-pulsing={pulsing || undefined}
   data-tone={tone}
 >
   {#if spoken}
@@ -176,33 +127,9 @@
         <!-- The glyph stands directly in the code's block: transitions are
              local, so a new code (or none) plays its arrival and its leave. -->
         {#key code}
-          {@const reeling = arrive === "reel" && !!letters[at]}
-          <!-- mark-line: the svg is the reel's blur filter, drawn nowhere -->
-          <span
-            class={["glyph", reeling && "reel"]}
-            out:leave
-            {@attach arriving}
+          <span class="glyph" out:leave {@attach arriving}
+            >{letters[at] ?? ""}</span
           >
-            {#if reeling}
-              <svg aria-hidden="true" class="streak" height="0" width="0">
-                <filter id="{uid}-reel-{at}">
-                  <feGaussianBlur stdDeviation="0 0" />
-                </filter>
-              </svg>
-              <span
-                style:filter="url(#{uid}-reel-{at})"
-                class="strip"
-                style:--stop={REEL.length + REEL.indexOf(letters[at])}
-                {@attach spin(at, letters[at])}
-              >
-                {#each [...REEL, ...REEL] as one, place (place)}
-                  <span class="letter">{one}</span>
-                {/each}
-              </span>
-            {:else}
-              {letters[at] ?? ""}
-            {/if}
-          </span>
         {/key}
       </span>
     {/each}
@@ -239,8 +166,7 @@
     box-sizing: border-box;
     overflow: hidden;
     /* A field's edge (`input`): a border, which stays in forced colours as
-       a shadow would not. The control edge reads 1.26:1 on the screen by
-       day; a field's edge reads. */
+       a shadow would not. */
     border: 1px solid var(--input);
     border-radius: var(--radius-well);
     background: var(--surface-recess);
@@ -256,11 +182,30 @@
   .glyph {
     grid-area: 1 / 1;
   }
-  /* Number pop-in: up from pop-rise, sharpening from fold-blur, box k after
-     k × dur-stagger. */
-  .glyph:global(.arriving):not(.reel) {
-    animation: otp-pop var(--dur-pop) var(--ease-out)
-      calc(var(--at) * var(--dur-stagger)) both;
+  @media (prefers-reduced-motion: no-preference) {
+    /* Type in, on the key's beat. */
+    .glyph:global(.arriving) {
+      animation: otp-pop var(--dur-pop) var(--ease-out)
+        calc(var(--at) * var(--dur-ghost)) both;
+    }
+    /* Checking: the letters breathe, box by box. */
+    [data-pulsing] .glyph {
+      animation: otp-pulse var(--breath) var(--ease-in-out)
+        calc(var(--at) * var(--dur-stagger)) infinite;
+    }
+    /* A dead code: box by box, each drops out of the row and fades. */
+    [data-falling] .cell {
+      animation: otp-fall var(--dur-settle) var(--ease-glide-in)
+        calc(var(--at) * var(--dur-stagger)) both;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .glyph:global(.arriving) {
+      animation: otp-fade var(--dur-fade) var(--ease-out) both;
+    }
+    [data-falling] .cell {
+      animation: otp-fade var(--dur-fade) var(--ease-out) reverse both;
+    }
   }
   @keyframes otp-pop {
     from {
@@ -269,38 +214,29 @@
       filter: blur(var(--fold-blur));
     }
   }
-  /* The reel: its window (the box inside its border) a letter tall, its
-     window's edges soft. */
-  .reel {
-    align-self: stretch;
-    container-type: size;
-    inline-size: 100%;
-    overflow: hidden;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      #000 22%,
-      #000 78%,
-      transparent
-    );
+  @keyframes otp-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    15% {
+      transform: scale(var(--qr-pulse-scale));
+    }
   }
-  .streak {
-    position: absolute;
+  @keyframes otp-fall {
+    to {
+      opacity: 0;
+      transform: translateY(var(--c-otp-cell-h));
+    }
   }
-  .strip {
-    display: flex;
-    flex-direction: column;
-    transform: translateY(calc(-1 * var(--stop) * 100cqb));
-  }
-  .letter {
-    display: grid;
-    place-items: center;
-    block-size: 100cqb;
+  @keyframes otp-fade {
+    from {
+      opacity: 0;
+    }
   }
 
-  /* Asking: the skeleton's band of the raised surface crossing all six as
-     one sweep (each box's band is the row's width, set back by the box's
-     own place), over the box's own fill and edge. */
+  /* Asking the hub: the skeleton's band crossing all six as one sweep over
+     the boxes' own fill and edge. */
   .band {
     position: absolute;
     inset-block: 0;
@@ -331,9 +267,7 @@
     }
   }
 
-  /* An answer is in the letters' ink: approved, the done ink crossing left
-     to right, box k after k × dur-stagger; refused, the fail ink at once;
-     expired, subdued. */
+  /* An answer is in the letters' ink, never the box. */
   [data-tone="done"] .cell {
     color: var(--status-done-ink);
     transition-delay: calc(var(--at) * var(--dur-stagger));
@@ -345,36 +279,21 @@
     color: var(--ink-subtle);
     transition-duration: var(--dur-fade);
   }
-
-  /* A dead code falls apart: each box drops its own height on the gravity
-     curve (ease-glide-in) and fades, k × dur-stagger after the first. Its
-     row's place clips it, so nothing falls past the code. */
-  [data-falling] .cell {
-    animation: otp-fall var(--dur-settle) var(--ease-glide-in)
-      calc(var(--at) * var(--dur-stagger)) both;
-  }
-  @keyframes otp-fall {
-    to {
-      opacity: 0;
-      transform: translateY(var(--c-otp-cell-h));
-    }
-  }
   @media (prefers-reduced-motion: reduce) {
-    [data-falling] .cell {
-      animation-name: otp-fade-out;
-      animation-delay: 0s;
+    .cell,
+    [data-tone] .cell {
+      transition-duration: var(--dur-fade);
+      transition-delay: 0s;
     }
   }
-  @keyframes otp-fade-out {
-    to {
-      opacity: 0;
-    }
-  }
+
   /* Error state shake: legs of dur-ghost, dur-ghost, dur-stagger and
      dur-stagger on one clock, each on ease-out. */
-  .row:global(.shaking) {
-    animation: otp-shake calc(var(--dur-ghost) * 2 + var(--dur-stagger) * 2)
-      linear;
+  @media (prefers-reduced-motion: no-preference) {
+    .row:global(.shaking) {
+      animation: otp-shake calc(var(--dur-ghost) * 2 + var(--dur-stagger) * 2)
+        linear;
+    }
   }
   @keyframes otp-shake {
     0% {
@@ -395,26 +314,6 @@
     }
     100% {
       transform: translateX(0);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .row:global(.shaking) {
-      animation: none;
-    }
-    .glyph:global(.arriving):not(.reel) {
-      animation-name: otp-fade;
-      animation-duration: var(--dur-fade);
-      animation-delay: 0s;
-    }
-    .cell,
-    [data-tone] .cell {
-      transition-duration: var(--dur-fade);
-      transition-delay: 0s;
-    }
-  }
-  @keyframes otp-fade {
-    from {
-      opacity: 0;
     }
   }
 </style>

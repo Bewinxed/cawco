@@ -45,11 +45,8 @@
   const steps = timeline();
   onDestroy(steps.stop);
 
-  /** How long a code takes to land in all six cells, by how it arrives. */
-  const landed = () =>
-    picks.arrive === "reel"
-      ? dur("--dur-settle") + 5 * dur("--dur-ghost")
-      : dur("--dur-pop") + 5 * dur("--dur-stagger");
+  /** How long the letters take to type into all six boxes. */
+  const landed = () => dur("--dur-pop") + 5 * dur("--dur-ghost");
 
   /** Back at rest, the sheet open, a beat after a storyboard ends. */
   function backToRest(): void {
@@ -149,7 +146,6 @@
     <div class="slide" data-open={open || undefined}>
       {#key run}
         <ScanSheet
-          arrive={picks.arrive}
           ask={picks.scan === "ask"}
           {code}
           device={FIXTURE.device}
