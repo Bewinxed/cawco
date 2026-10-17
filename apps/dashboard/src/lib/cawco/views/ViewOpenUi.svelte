@@ -85,7 +85,12 @@
       toolProvider={tools}
     >
       {#snippet pending()}
-        <Skeleton class="h-40 w-full rounded-lg" data-view-pending />
+        <Skeleton
+          class="w-full"
+          data-view-pending
+          height="view"
+          radius="card"
+        />
       {/snippet}
     </OpenUiRenderer>
     {#snippet failed(thrown)}

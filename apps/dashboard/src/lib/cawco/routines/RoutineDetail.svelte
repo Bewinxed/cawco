@@ -179,27 +179,30 @@
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
-          class="table-fixed border-separate border-spacing-(--none)"
+          class="table-fixed border-separate"
+          spacing="flush"
         >
           <Table.Header>
-            <Table.Row class="border-0 bg-surface-band">
+            <Table.Row variant="band">
               <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
-                scope="col">When</Table.Head
+                class="h-c-toolbar-ctl w-(--when-w) @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
+                scope="col"
+                variant="caps">When</Table.Head
               >
               <Table.Head
-                class="h-c-toolbar-ctl w-(--outcome-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
-                scope="col">Outcome</Table.Head
+                class="h-c-toolbar-ctl w-(--outcome-w) @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
+                scope="col"
+                variant="caps">Outcome</Table.Head
               >
               <Table.Head
-                class="h-c-toolbar-ctl w-(--took-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:hidden"
-                scope="col">Took</Table.Head
+                class="h-c-toolbar-ctl w-(--took-w) @max-routines-ledger-399px/routines-ledger:hidden"
+                scope="col"
+                variant="caps">Took</Table.Head
               >
-              <Table.Head
-                class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
-                scope="col">Result</Table.Head
+              <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+                >Result</Table.Head
               >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
             </Table.Row>
@@ -215,8 +218,10 @@
                 data-outcome={outcome.status}
               >
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--when-w) border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
+                  class="h-c-btn-h-lg w-(--when-w) num @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
                   data-cell="when"
+                  rule="top"
+                  variant="ledger"
                 >
                   <time
                     data-slot="num"
@@ -226,26 +231,32 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--outcome-w) border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
+                  class="h-c-btn-h-lg w-(--outcome-w) num @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
                   data-cell="outcome"
+                  rule="top"
+                  variant="ledger"
                 >
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--took-w) border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:hidden"
+                  class="h-c-btn-h-lg w-(--took-w) num @max-routines-ledger-399px/routines-ledger:hidden"
                   data-cell="took"
+                  rule="top"
+                  variant="ledger"
                 >
                   <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num"
+                  class="h-c-btn-h-lg num"
                   data-cell="result"
+                  rule="top"
+                  variant="ledger"
                 >
                   {#if href}
                     <!-- literal: 3px -->
                     <a
                       data-slot="result"
-                      class="block truncate text-ink-row no-underline underline-offset-(--offset) group-outcome-failed/run:text-status-fail-ink hover:text-link-ink hover:underline hover:group-outcome-failed/run:text-status-fail-ink"
+                      class="block truncate text-ink-row no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-(--offset) hover:group-not-outcome-failed/run:text-link-ink"
                       {href}
                       style:--offset="3px"
                       title={result || undefined}>{result || "Read the run"}</a

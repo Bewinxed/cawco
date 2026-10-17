@@ -53,8 +53,9 @@
   {#if status === "running"}
     <Spinner
       aria-hidden="true"
-      class="size-icon-sm flex-none group-status-running/time:text-status-live-glyph"
+      class="size-icon-sm flex-none"
       role="presentation"
+      tone="live-running"
     />
   {:else}
     {@const Glyph = GLYPH[status]}

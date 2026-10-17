@@ -86,28 +86,31 @@
   <Table.Root
     data-actions
     aria-label={label}
-    class="table-fixed border-separate border-spacing-(--none)"
+    class="table-fixed border-separate"
+    spacing="flush"
   >
     <Table.Header>
-      <Table.Row class="border-0 bg-surface-band">
+      <Table.Row variant="band">
         <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
-          class="h-c-toolbar-ctl w-(--lead-w) px-space-3 pe-0 type-label tracking-caps text-ink-muted uppercase"
-          scope="col"><span class="sr-only">Service</span></Table.Head
+          class="h-c-toolbar-ctl w-(--lead-w)"
+          scope="col"
+          variant="caps-lead"><span class="sr-only">Service</span></Table.Head
         >
-        <Table.Head
-          class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
-          scope="col">Action</Table.Head
+        <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+          >Action</Table.Head
         >
         <Table.Head
           data-slot="actions-table-col-status"
-          class="h-c-toolbar-ctl w-c-routine-time-w px-space-3 type-label tracking-caps text-ink-muted uppercase"
-          scope="col">Status</Table.Head
+          class="h-c-toolbar-ctl w-c-routine-time-w"
+          scope="col"
+          variant="caps">Status</Table.Head
         >
         <Table.Head
           data-slot="actions-table-col-when"
-          class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase"
-          scope="col">When</Table.Head
+          class="h-c-toolbar-ctl w-(--when-w)"
+          scope="col"
+          variant="caps">When</Table.Head
         >
         <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
       </Table.Row>
@@ -122,7 +125,9 @@
           data-status={said.status}
         >
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 pe-0 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
+            class="h-c-btn-h-lg num align-middle"
+            rule="between"
+            variant="list-lead"
             ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
               ><ProviderLogo
                 class="size-icon-md"
@@ -131,7 +136,9 @@
             ></Table.Cell
           >
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
+            class="h-c-btn-h-lg num align-middle"
+            rule="between"
+            variant="list"
           >
             <span
               data-slot="what"
@@ -147,14 +154,18 @@
             {/if}
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
+            class="h-c-btn-h-lg num align-middle"
             data-cell="status"
+            rule="between"
+            variant="list"
           >
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
+            class="h-c-btn-h-lg num align-middle"
             data-cell="when"
+            rule="between"
+            variant="list"
           >
             {#if said.at !== null}
               <time

@@ -694,8 +694,7 @@
 {/snippet}
 
 {#snippet routineRows(routine: Routine)}
-  {@const rule =
-    sorted[0]?.id === routine.id ? "" : "border-t border-t-border-hairline"}
+  {@const rule = sorted[0]?.id === routine.id ? undefined : "top"}
   {@const lead = LEAD[leadOf(routine)]}
   {@const line = scheduleLine(routine)}
   {@const last = lastOf(routine)}
@@ -721,9 +720,11 @@
         data-routine={routine.id}
         data-zone={routine.timeZone}
       >
-        <Table.Row data-view-routines-row class="relative border-b-none">
+        <Table.Row data-view-routines-row class="relative" variant="unruled">
           <Table.Cell
-            class="h-c-btn-h-lg w-(--col-state) px-space-3 py-space-2 type-meta text-ink-muted group-state-open:bg-surface-well {rule}"
+            class="h-c-btn-h-lg w-(--col-state)"
+            {rule}
+            variant="list-opens"
           >
             <span
               data-slot="lead"
@@ -733,9 +734,7 @@
               role="img"><lead.glyph /></span
             >
           </Table.Cell>
-          <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted group-state-open:bg-surface-well {rule}"
-          >
+          <Table.Cell class="h-c-btn-h-lg" {rule} variant="list-opens">
             <Collapsible.Trigger
               data-opener
               class="focus-inset block max-w-full cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit"
@@ -777,8 +776,10 @@
           </Table.Cell>
           <Table.Cell
             data-col-last
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted group-state-open:bg-surface-well @max-routines-ledger-34rem/routines-ledger:hidden {rule}"
+            class="h-c-btn-h-lg @max-routines-ledger-34rem/routines-ledger:hidden"
             data-cell="last"
+            {rule}
+            variant="list-opens"
           >
             <RunStatus
               said={last.said}
@@ -788,8 +789,10 @@
             />
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted group-state-open:bg-surface-well @max-routines-ledger-34rem/routines-ledger:hidden {rule}"
+            class="h-c-btn-h-lg @max-routines-ledger-34rem/routines-ledger:hidden"
             data-cell="next"
+            {rule}
+            variant="list-opens"
           >
             <span
               data-slot="time"
@@ -800,7 +803,9 @@
             >
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-end text-ink-muted group-state-open:bg-surface-well {rule}"
+            class="h-c-btn-h-lg text-end"
+            {rule}
+            variant="list-opens"
           >
             <span class="relative z-1 inline-flex"
               ><RowMenu actions={menuOf(routine)} label={routine.name} /></span
@@ -919,24 +924,32 @@
         ghostRows="tr[data-view-routines-row]"
       >
         <Table.Header>
-          <Table.Row class="band border-0">
+          <Table.Row variant="band">
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="w-(--col-state)" scope="col"
-              ><span class="sr-only">State</span></Table.Head
+            <Table.Head
+              class="h-c-toolbar-ctl w-(--col-state)"
+              scope="col"
+              variant="caps"><span class="sr-only">State</span></Table.Head
             >
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head scope="col">Routine</Table.Head>
+            <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+              >Routine</Table.Head
+            >
             <Table.Head
               data-col-last
-              class="w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
-              scope="col">Last run</Table.Head
+              class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
+              scope="col"
+              variant="caps">Last run</Table.Head
             >
             <Table.Head
-              class="w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
-              scope="col">Next run</Table.Head
+              class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
+              scope="col"
+              variant="caps">Next run</Table.Head
             >
-            <Table.Head class="w-(--col-menu)" scope="col"
-              ><span class="sr-only">Actions</span></Table.Head
+            <Table.Head
+              class="h-c-toolbar-ctl w-(--col-menu)"
+              scope="col"
+              variant="caps"><span class="sr-only">Actions</span></Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
           </Table.Row>
@@ -971,34 +984,41 @@
         class="table-fixed border-separate"
       >
         <Table.Header>
-          <Table.Row class="band border-0">
+          <Table.Row variant="band">
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="w-(--col-state)" scope="col"
-              ><span class="sr-only">Service</span></Table.Head
+            <Table.Head
+              class="h-c-toolbar-ctl w-(--col-state)"
+              scope="col"
+              variant="caps"><span class="sr-only">Service</span></Table.Head
             >
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head scope="col">Source</Table.Head>
+            <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+              >Source</Table.Head
+            >
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head data-col-last class="w-c-routine-time-w" scope="col"
-              >Last read</Table.Head
+            <Table.Head
+              data-col-last
+              class="h-c-toolbar-ctl w-c-routine-time-w"
+              scope="col"
+              variant="caps">Last read</Table.Head
             >
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {#each routes as route, index (route.id)}
-            {@const rule = index > 0 ? "border-t border-t-border-hairline" : ""}
-            <Table.Row data-view-routines-row class="relative border-b-none">
+            {@const rule = index > 0 ? "top" : undefined}
+            <Table.Row data-view-routines-row class="relative" variant="unruled">
               <Table.Cell
-                class="h-c-btn-h-lg w-(--col-state) px-space-3 py-space-2 type-meta text-ink-muted {rule}"
+                class="h-c-btn-h-lg w-(--col-state)"
+                {rule}
+                variant="list"
                 ><span
                   data-slot="lead"
                   class="grid w-c-row-lead place-items-center text-ink-muted"
                   ><ProviderLogo provider={route.service} /></span
                 ></Table.Cell
               >
-              <Table.Cell
-                class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted {rule}"
-              >
+              <Table.Cell class="h-c-btn-h-lg" {rule} variant="list">
                 <span
                   data-slot="name"
                   class="block truncate type-label text-ink-row"
@@ -1014,8 +1034,10 @@
               </Table.Cell>
               <Table.Cell
                 data-col-last
-                class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted {rule}"
+                class="h-c-btn-h-lg"
                 data-cell="last"
+                {rule}
+                variant="list"
               >
                 {#if route.lastDeliveryAt === null}
                   <RunStatus status="neutral" text="No events yet" />
@@ -1031,22 +1053,19 @@
             </Table.Row>
           {/each}
           {#each polls as poll, index (poll.id)}
-            {@const rule =
-              routes.length > 0 || index > 0
-                ? "border-t border-t-border-hairline"
-                : ""}
-            <Table.Row data-view-routines-row class="relative border-b-none">
+            {@const rule = routes.length > 0 || index > 0 ? "top" : undefined}
+            <Table.Row data-view-routines-row class="relative" variant="unruled">
               <Table.Cell
-                class="h-c-btn-h-lg w-(--col-state) px-space-3 py-space-2 type-meta text-ink-muted {rule}"
+                class="h-c-btn-h-lg w-(--col-state)"
+                {rule}
+                variant="list"
                 ><span
                   data-slot="lead"
                   class="grid w-c-row-lead place-items-center text-ink-muted"
                   ><ProviderLogo provider={poll.service.toLowerCase()} /></span
                 ></Table.Cell
               >
-              <Table.Cell
-                class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted {rule}"
-              >
+              <Table.Cell class="h-c-btn-h-lg" {rule} variant="list">
                 <span
                   data-slot="name"
                   class="block truncate type-label text-ink-row"
@@ -1062,8 +1081,10 @@
               </Table.Cell>
               <Table.Cell
                 data-col-last
-                class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted {rule}"
+                class="h-c-btn-h-lg"
                 data-cell="last"
+                {rule}
+                variant="list"
               >
                 {#if poll.polledAt === null}
                   <RunStatus status="neutral" text="Not read yet" />
@@ -1129,7 +1150,7 @@
       </EmptyState>
     </div>
   {:else if page === null}
-    <Skeleton class="h-64 w-full rounded-lg" />
+    <Skeleton class="w-full" height="board" radius="card" />
   {:else}
     <div>
       <BlockPage {blocks} {items} page="routines" />
@@ -1145,17 +1166,6 @@
     inset-block-start: 0;
     z-index: 2;
     background: var(--surface-band);
-  }
-  [data-slot="ledger"] :global(tr.band) {
-    background: var(--surface-band);
-  }
-  [data-slot="ledger"] :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
   }
   [data-slot="ledger"] :global(th[data-slot="actions-table-col-status"]) {
     inline-size: var(--c-routine-time-w);

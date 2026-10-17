@@ -41,10 +41,12 @@
   {@const count = counts.get(stage.name) ?? 0}
   <li>
     <!-- literal: minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem; 1fr auto -->
+    <!-- A narrow row: its name and count over the bar's own line. -->
     <div
       data-slot="row"
-      class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted kind-you:bg-brand-wash max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2"
+      class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted kind-you:bg-brand-wash max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:grid-areas-(--row-areas)"
       data-kind={stage.kind}
+      style:--row-areas={'"name count" "track track"'}
       style:--row-cols="minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem"
       style:--row-cols-narrow="1fr auto"
     >
@@ -111,13 +113,3 @@
     </ol>
   {/if}
 </div>
-
-<style>
-  /* residual: unmapped */
-  /* A narrow row: its name and count over the bar's own line. */
-  @media (max-width: 639px) {
-    [data-slot="row"] {
-      grid-template-areas: "name count" "track track";
-    }
-  }
-</style>
