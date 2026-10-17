@@ -232,7 +232,7 @@
     if (!at) {
       return null;
     }
-    const ff = at.querySelector<HTMLElement>(".ff-tab") ?? at;
+    const ff = at.querySelector<HTMLElement>('[data-slot="ff-tab"]') ?? at;
     const t = ff.getBoundingClientRect();
     const style = getComputedStyle(ff);
     const px = (name: string) =>
@@ -268,7 +268,7 @@
       const now = hangAt(shape, p);
       const box = node.getBoundingClientRect();
       node.style.clipPath = `path("${hangClip(now, { x: box.left, y: box.top })}")`;
-      const ff = tabOf()?.querySelector<HTMLElement>(".ff-tab");
+      const ff = tabOf()?.querySelector<HTMLElement>('[data-slot="ff-tab"]');
       layer.draw(
         now,
         ff ? getComputedStyle(ff).getPropertyValue("--hang-rim").trim() : ""
