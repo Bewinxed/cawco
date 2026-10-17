@@ -74,9 +74,13 @@ export interface Stopped {
   kind: "stopped";
 }
 
-/** What a landing came to. `F` is how the caller describes a failed gate. */
+/**
+ * What a landing came to. `F` is how the caller describes a failed gate. A
+ * landing put `onto..sha` on the branch: `onto` the branch's commit its
+ * commits were rebased onto.
+ */
 export type LandingOutcome<F> =
-  | { kind: "landed"; sha: string; rebased: boolean }
+  | { kind: "landed"; sha: string; onto: string; rebased: boolean }
   | { kind: "nothing" }
   | { kind: "no-remote" }
   | Stopped
@@ -430,7 +434,7 @@ async function onBase<F>(
   deps: LandingDeps<F>,
   inTurn: boolean
 ): Promise<
-  | { kind: "on-base"; head: string; rebased: boolean }
+  | { kind: "on-base"; head: string; onto: string; rebased: boolean }
   | Exclude<LandingOutcome<F>, { kind: "landed" | "dirty" | "no-remote" }>
 > {
   const run = (cmd: string, timeoutMs: number) =>
@@ -465,10 +469,15 @@ async function onBase<F>(
     };
   }
   const head = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
+  const onto = await run(`git rev-parse ${target}`, LOCAL_MS);
+  if (onto.exitCode !== 0) {
+    return refusal("read", onto);
+  }
   return (
     (await deps.check(inTurn)) ?? {
       kind: "on-base",
       head,
+      onto: onto.stdout.trim(),
       rebased: head !== before,
     }
   );
@@ -513,7 +522,7 @@ async function holds(
  * is that push landed, not nothing to land.
  */
 interface CutOff {
-  push?: { rebased: boolean; sha: string };
+  push?: { onto: string; rebased: boolean; sha: string };
 }
 
 /**
@@ -543,7 +552,7 @@ async function attempt<F>(
   if (deps.stopped?.()) {
     return { kind: "stopped" };
   }
-  const { head: after, rebased } = gated;
+  const { head: after, onto, rebased } = gated;
   const pushed = await run(
     `git push origin ${quote(`HEAD:refs/heads/${base}`)}`,
     NETWORK_MS
@@ -552,10 +561,14 @@ async function attempt<F>(
     pushed.exitCode === 0 ||
     (await holds(run, `refs/heads/${base}`, after))
   ) {
-    return { kind: "landed", sha: after, rebased };
+    return { kind: "landed", sha: after, onto, rebased };
   }
   if (pushed.exitCode === CUT_OFF) {
-    cut.push = { sha: after, rebased: rebased || (cut.push?.rebased ?? false) };
+    cut.push = {
+      sha: after,
+      onto,
+      rebased: rebased || (cut.push?.rebased ?? false),
+    };
     return n < ATTEMPTS
       ? await attempt(base, deps, n + 1, cut)
       : refusal("push", pushed);

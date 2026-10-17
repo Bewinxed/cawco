@@ -23,9 +23,17 @@
  *    comment and the move back to ready, as the review does). The pin's
  *    words reach the builder's session as one message.
  * 3. T2 (lands main): the builder writes design/ and commits it; the
- *    attempt lands; the task waits in review. Approve goes (review →
- *    approved), the task reads approved, and `git log origin/main -1`
- *    names the builder's commit.
+ *    attempt lands; the task waits in review. Then the person sends it back
+ *    over its Foundations page (nightly 3944, Caw's send-back), which
+ *    reopens the done item in the same session:
+ *    a. the builder's design_write to the system its own task landed is
+ *       written at once in its workspace, not a proposal (hub
+ *       design-system.ts `ownLandings`);
+ *    b. it commits and ends blocked: the item stays done with the block as
+ *       its error, the task goes back to review with it in a comment, and
+ *       the attempt reads done, not failed (work-items.ts `finish`).
+ *    Approve goes (review → approved), the task reads approved, and
+ *    `git log origin/main -1` names the builder's landed commit.
  *
  * Then Harbour has a design system on main, and T3 (lands main) is design
  * work in it (hub design-system.ts proposals, design-verify.ts checks):
@@ -50,7 +58,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame } from "playwright-core";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  type Fleet,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
 
@@ -165,6 +179,13 @@ const SYSTEM = [
       '<!doctype html><html><head><link rel="stylesheet" href="../tokens.css"></head><body><h1>Harbour foundations</h1></body></html>\n',
   },
 ];
+/** The person's send-back of T2's landed build, as Caw's was on nightly 3944. */
+const SEND_BACK =
+  "PROBE-SENDBACK: the Foundations page has four style-order warnings; clear them without changing how it looks.";
+/** T2's Foundations page as its follow-up writes it again. */
+const SPECIMEN_FIX =
+  '<!doctype html><html><head><link rel="stylesheet" href="../tokens.css"></head><body><h1 class="title">Harbour foundations</h1></body></html>\n';
+const BLOCKED_ERROR = "PROBE-BLOCKED: waiting on the person";
 const FOUNDATIONS = `<!doctype html><html><body style="margin:0;font:18px/1.6 system-ui">
 <main style="padding:24px"><h1 id="title">Harbour foundations</h1>
 <p id="ink" style="padding:24px;background:oklch(0.984 0.004 85);color:oklch(0.264 0.022 265)">Ink on paper, the body role.</p></main></body></html>`;
@@ -229,7 +250,37 @@ const attempts = new Map<string, Call[]>([
       },
     ],
   ],
+  [
+    `${T2}:sendback`,
+    [
+      {
+        name: DESIGN_WRITE,
+        input: {
+          files: [{ path: "specimens/index.html", content: SPECIMEN_FIX }],
+          why: "Clear the Foundations page's style-order warnings",
+        },
+      },
+      {
+        name: BASH,
+        input: {
+          command:
+            "git add design && git commit -qm 'Foundations page: style order'; git status --porcelain",
+          description: "Commit the page",
+        },
+      },
+      {
+        name: FINISH,
+        input: {
+          headline: "The page fix waits on the person.",
+          summary: "Fixed the page; blocked.",
+          blocked: { command: "probe", error: BLOCKED_ERROR },
+        },
+      },
+    ],
+  ],
 ]);
+/** T2's builder's script: its brief's, then the send-back's once that wakes it. */
+let t2Key = T2;
 /** tokens.json with the ink at lightness `l`: a change to the system T2 put on main. */
 const tokensWithInk = (l: number) => ({
   path: "tokens.json",
@@ -505,6 +556,12 @@ const respond = (request: Seen): Reply => {
     // The newest work item the session runs: its brief's first line names
     // its task (a session may carry more than one item).
     const own = [...request.all.matchAll(OWN_TASK)].at(-1)?.[1];
+    if (own === T2) {
+      if (!request.afterTool && request.last.includes(SEND_BACK)) {
+        t2Key = `${T2}:sendback`;
+      }
+      return next(request, t2Key);
+    }
     if (own !== T3) {
       return next(request, own);
     }
@@ -580,6 +637,79 @@ const pinWith = async (
     10_000
   );
   await on.page.keyboard.press("Escape");
+};
+
+/** What the send-back legs read and call, from {@link run}. */
+interface SendBackOn {
+  builderOf: (id: string) => string;
+  fleet: Fleet;
+  kit: Kit;
+  projectId: string;
+  proposalsOpen: () => Promise<Ask[]>;
+  read: (id: string) => Promise<TaskRead>;
+  stalled: (
+    error: unknown,
+    marker: string,
+    title: string,
+    id: string
+  ) => Promise<Error>;
+  workspaceOf: (id: string) => string;
+}
+
+/**
+ * 3a and 3b: T2's landed build, waiting in review, sent back by the person
+ * (as Caw sent one back on nightly 3944): its follow-up writes the system
+ * its own task landed at once, then ends blocked, and the landed attempt
+ * stays done with the task back in review.
+ */
+const sentBack = async (on: SendBackOn, t2: string): Promise<void> => {
+  const { fleet, kit } = on;
+  const key = `${T2}:sendback`;
+  await fleet.send(on.builderOf(t2), SEND_BACK);
+  /** T2's newest attempt as its row stands: its end and why. */
+  const item = () =>
+    fleet.query<{ error: string | null; state: string }>(
+      "SELECT state, error FROM work_items WHERE project_id = ? AND task_id = ? ORDER BY created_at DESC",
+      on.projectId,
+      t2
+    )[0];
+  const after = await until(
+    "T2's follow-up ended blocked",
+    async () => ({ item: item(), task: await on.read(t2) }),
+    (now) =>
+      (now.item?.error ?? "").includes(BLOCKED_ERROR) &&
+      now.task.stage !== "working",
+    300_000
+  ).catch(async (unended: unknown) => {
+    throw await on.stalled(unended, "T2", key, t2);
+  });
+  const rewrote = (answers.get(key) ?? [])[0] ?? "";
+  const specimen = await Bun.file(
+    join(on.workspaceOf(t2), "design/specimens/index.html")
+  )
+    .text()
+    .catch(() => "(gone)");
+  const waiting = (await on.proposalsOpen()).length;
+  kit.check(
+    "3a: the builder's follow-up after the person sent its landed build back writes the system its own task landed at once, in its workspace: no proposal",
+    rewrote.includes('"written"') &&
+      rewrote.includes("design/specimens/index.html") &&
+      !rewrote.includes('"proposal"') &&
+      waiting === 0,
+    `design_write answered “${rewrote.slice(0, 300)}”; specimen ${specimen === SPECIMEN_FIX ? "is the fix" : `“${specimen.slice(0, 80)}”`}; ${waiting} proposal(s) waiting`
+  );
+  const said = JSON.stringify(after.task);
+  const error = after.item?.error ?? "";
+  kit.check(
+    "3b: the follow-up ending blocked leaves the landed attempt done, the block as its error, and the task back in review with the block noted",
+    after.item?.state === "done" &&
+      error.startsWith("Blocked:") &&
+      after.task.stage === "review" &&
+      after.task.attempts[0]?.state === "done" &&
+      said.includes("stays landed") &&
+      said.includes(BLOCKED_ERROR),
+    `item ${after.item?.state} “${error.slice(0, 120)}”; task ${after.task.stage}, attempt ${after.task.attempts[0]?.state}; block noted ${said.includes("stays landed")}`
+  );
 };
 
 const run = async (kit: Kit) => {
@@ -891,6 +1021,20 @@ const run = async (kit: Kit) => {
 
   // ── 3. Approve on a committed system: the commit landed, the task approved ─
   const t2 = await reviewed("T2", T2, "main");
+
+  await sentBack(
+    {
+      fleet,
+      kit,
+      projectId: project.id,
+      read,
+      builderOf,
+      workspaceOf,
+      proposalsOpen,
+      stalled,
+    },
+    t2
+  );
   const approved = await approve(t2);
   const after = await read(t2);
   // The place's origin is the hub's remote of the project; its `main` is

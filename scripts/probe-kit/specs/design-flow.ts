@@ -19,6 +19,12 @@
  *    refused by design_write's DTCG check.
  * 6. A 307 KB asset reaches design/ whole: through `cawco tool design_write -`
  *    on stdin, and through `from`, a file where the session works.
+ * 7. Not now on Caw's design-system offer (nightly 3944): the project's
+ *    starters are asked again and suggest no design-system build after it
+ *    (spec §5.7: "Not now is recorded and he does not ask that project
+ *    again unless the person does").
+ *
+ * The send-back of a landed design build is design-approve's 3a and 3b.
  *
  *   bun scripts/probe-kit/run.ts design-flow
  */
@@ -201,6 +207,62 @@ const run = async (kit: Kit) => {
     designInput(folderAsk) === false &&
       folderStarters.some((text) => text.startsWith("Build a design system")),
     `has_design_system ${JSON.stringify(designInput(folderAsk))}; starters ${folderStarters.join(" | ")}`
+  );
+
+  // ── 7. Not now ends the design-system starter ───────────────────────
+  const declined = await fleet.api<{ id: string }>("/api/projects", {
+    name: "ds-declined",
+    caw: true,
+    template: "design",
+  });
+  const declinedActive = (await stagesOf(declined.id)).stages.find(
+    (stage) => stage.kind === "active"
+  );
+  await fleet.api(`/api/projects/${declined.id}/tasks`, {
+    title: "Rework the pricing cards",
+    stage: declinedActive?.name,
+    labels: ["ui"],
+  });
+  const buildStarter = (texts: string[]) =>
+    texts.some((text) => text.startsWith("Build a design system"));
+  const declinedStarters = async () =>
+    (await stagesOf(declined.id)).starters.map((starter) => starter.text);
+  const declinedOffer = async () => {
+    const answer = await fetch(
+      `${fleet.base}/api/projects/${declined.id}/design-offer`
+    );
+    return answer.ok ? ((await answer.json()) as { answer: string }) : null;
+  };
+  const offeredFirst = await until(
+    "ds-declined's offer and its design-system starter",
+    async () => ({
+      offer: await declinedOffer(),
+      starters: await declinedStarters(),
+    }),
+    (now) => now.offer?.answer === "open" && buildStarter(now.starters),
+    60_000
+  ).catch(() => undefined);
+  const dismissedAt = Date.now();
+  const dismissed = await fleet.api<{ answer: string }>(
+    `/api/projects/${declined.id}/design-offer/dismiss`,
+    {}
+  );
+  const askedAfter = await until(
+    "a starters ask for ds-declined after Not now",
+    async () =>
+      jev.starterCalls("ds-declined").find((each) => each.at > dismissedAt),
+    (asked) => asked !== undefined,
+    60_000
+  ).catch(() => undefined);
+  await quietly(3000);
+  const afterNotNow = await declinedStarters();
+  kit.check(
+    "7: after Not now on Caw's design-system offer, the project's starters are asked again and no longer suggest building a design system",
+    offeredFirst !== undefined &&
+      dismissed.answer === "dismissed" &&
+      askedAfter !== undefined &&
+      !buildStarter(afterNotNow),
+    `before: offer ${JSON.stringify(offeredFirst?.offer)}, starters ${offeredFirst?.starters.join(" | ")}; dismissed ${dismissed.answer}; asked again ${askedAfter !== undefined}; after: ${afterNotNow.join(" | ")}`
   );
 
   // A worker session in a project with a checkout: task_create and

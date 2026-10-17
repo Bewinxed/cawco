@@ -96,6 +96,8 @@ export interface StarterInputs {
   /** Its repository's default branch, when a checkout was read. */
   branch: string | null;
   commits: { sha: string; subject: string }[];
+  /** The person said Not now to Caw's offer of a design system (design-offers.ts): none is suggested again unless they ask. */
+  designDeclined: boolean;
   /** Its work is design work: its template's (design, brand, launch, social), or an open task's labels or outputs (design-offers.ts `designShaped`). */
   designWork: boolean;
   /** Its draft views, by path (`views/drafts/<name>.oui`): views Caw drafted that no one has kept. */
@@ -157,6 +159,7 @@ export const boundStarterInputs = (raw: StarterInputs): StarterInputs => {
       sha: commit.sha,
       subject: within(commit.subject, b.subject),
     })),
+    designDeclined: raw.designDeclined,
     designWork: raw.designWork,
     hasDesign: raw.hasDesign,
     failures: raw.failures.slice(0, b.failures).map((failure) => ({
@@ -447,10 +450,16 @@ const commitSubject = (
 
 /**
  * Design work with no design system (no design/, slice 2's signal): build
- * one. The signal only; Jev decides whether it is worth saying now.
+ * one. The signal only; Jev decides whether it is worth saying now. Never
+ * once the person said Not now to Caw's offer (spec §5.7: "Not now is
+ * recorded and he does not ask that project again unless the person does"):
+ * a starter is Caw suggesting, and the person can still ask in a thread.
  */
 const designSubject = (inputs: StarterInputs): Subject | undefined => {
-  if (!(inputs.hasDesign === false && inputs.designWork)) {
+  if (
+    !(inputs.hasDesign === false && inputs.designWork) ||
+    inputs.designDeclined
+  ) {
     return;
   }
   const designTasks = inputs.tasks.filter((task) => task.design);

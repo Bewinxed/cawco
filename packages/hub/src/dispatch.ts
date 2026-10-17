@@ -78,6 +78,7 @@
  * again as a safety net and starts nothing when nothing is ready.
  */
 import {
+  artifactName,
   deliverableKind,
   type InstanceRow,
   type LandsMode,
@@ -296,6 +297,38 @@ const refuse = (code: FolderRefusalStatus, message: string): never => {
 };
 
 const short = (id: string): string => id.slice(0, 8);
+
+/**
+ * What an attempt's acceptance criteria are judged over: its finish_item
+ * report with how it landed, then its hand-in on the task (task_result: what
+ * it did, what to check, what it made), last so a report cut to its end
+ * keeps it. Before, Jev read the finish_item report alone and found none of
+ * a design build's four criteria shown (0.07 to 0.32, nightly 3944): the
+ * sourced tokens and DESIGN.md's answers were said only in its task_result.
+ */
+const attemptReport = (item: WorkItemRow): string => {
+  const report = (item.digest ?? item.result ?? "").trim();
+  const handIn = item.taskResult;
+  if (!handIn) {
+    return report;
+  }
+  return [
+    report,
+    `The attempt's hand-in on the task:\n\n${handIn.summary.trim()}`,
+    ...(handIn.check.length > 0
+      ? [
+          `What to check:\n${handIn.check.map((line) => `- ${line}`).join("\n")}`,
+        ]
+      : []),
+    ...(handIn.artifacts.length > 0
+      ? [
+          `What it made:\n${handIn.artifacts.map((each) => `- ${artifactName(each)}`).join("\n")}`,
+        ]
+      : []),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
 
 /** How a session is named in a sentence. */
 const named = (row: InstanceRow): string =>
@@ -1513,14 +1546,15 @@ export const createDispatcher = ({
 
   /**
    * The stage kind an attempt that ended sends its task to: done, or `you`
-   * while the pull request it opened waits for review; back to todo when it
-   * failed or was cancelled.
+   * while the pull request it opened waits for review, or while the
+   * follow-up of its landed work ended without landing (its `error`,
+   * work-items.ts `finish`); back to todo when it failed or was cancelled.
    */
   const kindAfter = (item: WorkItemRow): "done" | "todo" | "you" => {
     if (item.state !== "done") {
       return "todo";
     }
-    return item.lands === "pr" && item.prUrl ? "you" : "done";
+    return item.error || (item.lands === "pr" && item.prUrl) ? "you" : "done";
   };
 
   /**
@@ -1531,6 +1565,26 @@ export const createDispatcher = ({
   const reviewsFirst = (stages: { stages: readonly Stage[] }): boolean =>
     stages.stages.find((each) => each.kind === "done")?.hooks.by === "you" &&
     stages.stages.some((each) => each.kind === "you");
+
+  /**
+   * Landed work whose follow-up ended without landing (a done item's
+   * `error`, work-items.ts `finish`): the reason, noted on its task, which
+   * waits for you with it ({@link kindAfter}).
+   */
+  const noteFollowUp = async (
+    projectId: string,
+    taskId: string,
+    item: WorkItemRow
+  ): Promise<void> => {
+    if (item.state === "done" && item.error) {
+      await tasks.comment(
+        projectId,
+        taskId,
+        `Attempt ${short(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
+        hubActor(`attempt ${short(item.id)}'s follow-up ended`)
+      );
+    }
+  };
 
   /**
    * The hub's move of a task after its attempt ended: done to the first done
@@ -1561,6 +1615,7 @@ export const createDispatcher = ({
     if (task.kind === "done" || task.kind === "dropped") {
       return;
     }
+    await noteFollowUp(projectId, taskId, item);
     const criteria = criteriaOf(task.acceptance);
     const judged = await kindAfterJudged(projectId, task, criteria, item);
     // The lead judges: the task stays where it is until he moves it.
@@ -1617,6 +1672,9 @@ export const createDispatcher = ({
     if (judged === "done" && kind === "you") {
       return `attempt ${short(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
     }
+    if (kind === "you" && item.state === "done" && item.error) {
+      return `attempt ${short(item.id)}'s work stays landed; its follow-up ended without landing, so it waits for you`;
+    }
     if (kind === "you" && item.prUrl && item.lands === "pr") {
       return `attempt ${short(item.id)} opened ${item.prUrl}`;
     }
@@ -1643,7 +1701,7 @@ export const createDispatcher = ({
     criteria: string[],
     item: WorkItemRow
   ): Promise<"done" | "lead" | "you"> => {
-    const report = item.digest ?? item.result ?? "";
+    const report = attemptReport(item);
     const access = placement.access();
     const about = hubActor(`attempt ${short(item.id)} judged`);
     if (access) {

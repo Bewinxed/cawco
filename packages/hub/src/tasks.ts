@@ -943,7 +943,11 @@ const stopperWords = (by: EndedBy): string => {
   }
 };
 
-/** How an attempt ended when it did not land ({@link TaskAttempt.endedHow}). */
+/**
+ * How an attempt ended when it did not land, or how the follow-up of one
+ * that landed ended without landing (a done item's `error`, work-items.ts
+ * `finish`) ({@link TaskAttempt.endedHow}).
+ */
 const endedHowOf = (
   item: ReturnType<TaskStore["attempts"]>[number]
 ): string | null => {
@@ -952,7 +956,10 @@ const endedHowOf = (
       ? `Stopped by ${stopperWords(item.stoppedBy)}`
       : "Stopped";
   }
-  if (item.state !== "failed") {
+  if (item.state === "done" && item.error && item.stoppedBy) {
+    return `Its follow-up was stopped by ${stopperWords(item.stoppedBy)}`;
+  }
+  if (item.state !== "failed" && !(item.state === "done" && item.error)) {
     return null;
   }
   const why = item.error?.trim().split("\n")[0]?.trim();

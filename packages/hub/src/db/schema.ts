@@ -1318,6 +1318,13 @@ export type WorkOrigin = Origin | "kept";
 export type WorkItemState =
   "starting" | "running" | "done" | "failed" | "cancelled";
 
+/** What a work item's landing put where ({@link workItems} `landed`). */
+export interface WorkLanding {
+  /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
+  onto: string | null;
+  sha: string;
+}
+
 /** What a delegate hands in with `finish_item`. */
 export interface WorkItemSubmission {
   blocked?: { command: string; error: string };
@@ -1461,7 +1468,19 @@ export const workItems = sqliteTable(
      * until then.
      */
     headline: text("headline"),
-    /** Why it failed. */
+    /**
+     * What its landing put where, kept when it runs again: the commit pushed,
+     * and the base commit it was rebased onto (`onto..sha` landed on its base
+     * branch), null for a push to a branch of its own. Set, its work is landed,
+     * and a follow-up that ends without landing leaves it done (work-items.ts
+     * `finish`). Null: nothing of it landed.
+     */
+    landed: text("landed", { mode: "json" }).$type<WorkLanding>(),
+    /**
+     * Why it failed; on a done item, why the follow-up of its landed work
+     * ended without landing (blocked, stopped, failed), what its task's
+     * review shows.
+     */
     error: text("error"),
     createdAt: timestamp("created_at")
       .notNull()

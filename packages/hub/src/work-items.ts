@@ -118,6 +118,7 @@ import type {
   Origin,
   WorkBudget,
   WorkItemSubmission,
+  WorkLanding,
   WorkOrigin,
 } from "./db/schema";
 import { leafOf, sessionLabel } from "./labels";
@@ -1122,6 +1123,9 @@ const reopens = (
     (origin.fromSession === parentInstanceId ||
       (!!leadInstanceId && origin.fromSession === leadInstanceId)));
 
+/** Why a landed item's follow-up ended, when a stop ended it ({@link WorkItemRow} `error`). */
+const FOLLOW_UP_STOPPED = "Its follow-up was stopped before it landed.";
+
 /** What anyone else's message to finished work is answered with. */
 const finishedText = (item: WorkItemRow): string =>
   `${item.title} (${item.id}) is ${item.state}. Only the reader, the session that delegated it, or its project's lead can continue it.`;
@@ -1682,11 +1686,28 @@ type Landed =
       kind: "done";
       line: string;
       gate: GateRun;
+      /** What it put where, when it pushed (the item's `landed`). */
+      landed?: WorkLanding;
       prUrl?: string;
     }
   | { kind: "refused"; line: string; gate: GateRun; prUrl?: string }
   | { kind: "retry"; text: string }
   | { kind: "stopped"; text: string };
+
+/**
+ * What a landing that went writes on its item: what it put where and the
+ * pull request it opened. A follow-up with nothing new to land keeps what
+ * the item landed before.
+ */
+const landedFields = (
+  landing: Landed
+): { landed?: WorkLanding; prUrl?: string } =>
+  landing.kind === "done"
+    ? {
+        ...(landing.landed ? { landed: landing.landed } : {}),
+        ...(landing.prUrl ? { prUrl: landing.prUrl } : {}),
+      }
+    : {};
 
 /** A landing its item's stop ended before it pushed (landing.ts `Stopped`): nothing landed, nothing reported. */
 const stoppedLanding = (item: WorkItemRow): Landed => ({
@@ -2317,10 +2338,10 @@ export const createWorkItems = ({
       return;
     }
     const [row] = db.getInstancesByIds([item.instanceId]);
-    const failed = finish(item, { state: "failed", error: reason });
+    const ended = finish(item, { state: "failed", error: reason });
     console.log(`[work-items] ${item.id}: ${reason}`);
     if (row) {
-      report(row, `${reason}${reportLine(failed)}`, true);
+      report(row, `${reason}${reportLine(ended)}`, ended.state === "failed");
     }
     end(item.instanceId).catch((error: unknown) =>
       console.warn(
@@ -2362,9 +2383,9 @@ export const createWorkItems = ({
     }
     quiet.delete(item.id);
     clearWait(item);
-    const failed = finish(item, { state: "failed", error: reason });
+    const ended = finish(item, { state: "failed", error: reason });
     console.log(`[work-items] ${item.id}: its session failed: ${reason}`);
-    report(row, `${reason}${reportLine(failed)}`, true);
+    report(row, `${reason}${reportLine(ended)}`, ended.state === "failed");
   };
 
   /**
@@ -2410,17 +2431,18 @@ export const createWorkItems = ({
         continue;
       }
       quiet.delete(item.id);
-      const failed = finish(item, {
+      const ended = finish(item, {
         state: "failed",
         error: SESSION_GONE,
         landingSince: null,
         submission: null,
       });
+      const failed = ended.state === "failed";
       console.log(`[work-items] ${item.id}: ${SESSION_GONE}`);
       report(
         standIn(item),
-        `${item.title} failed: ${SESSION_GONE}. The hub has no row for its session ${item.instanceId.slice(0, 8)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${failed.id} is ${failed.state} in workspace ${failed.workspaceId}.]`,
-        true
+        `${failed ? `${item.title} failed` : `${item.title}'s follow-up ended; its landed work stays`}: ${SESSION_GONE}. The hub has no row for its session ${item.instanceId.slice(0, 8)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${ended.id} is ${ended.state} in workspace ${ended.workspaceId}.]`,
+        failed
       );
     }
   };
@@ -4630,6 +4652,16 @@ export const createWorkItems = ({
    * Its workspace is settled next ({@link settleSoon}): retired or held once
    * nothing holds it, which its session, still in the turn that ended it,
    * does until it sleeps.
+   *
+   * An item whose work landed (its `landed`) and that runs again (a word
+   * from the reader, its parent or its project's lead, {@link reopen}; a
+   * continuation of its session, `continuedIn`; work found since its landing,
+   * {@link finishable}) stays done however its follow-up ends without
+   * landing: blocked, a failed or third quiet turn, its session failing or
+   * gone, its budget, a stop. The reason is its `error`, and its task goes to
+   * review with it (dispatch.ts `settle`). On nightly 3944 Caw's send-back
+   * of a landed design build ended blocked and failed the attempt that had
+   * landed it, its task back in its first stage.
    */
   const finish = (
     item: WorkItemRow,
@@ -4639,7 +4671,16 @@ export const createWorkItems = ({
     if (!LIVE.has(item.state)) {
       return item;
     }
-    const ended = update(item.id, { ...change, endedAt: new Date() }) ?? item;
+    const { landed } = db.workItem(item.id) ?? item;
+    const kept =
+      landed && (change.state === "failed" || change.state === "cancelled")
+        ? {
+            state: "done" as const,
+            error: change.error ?? FOLLOW_UP_STOPPED,
+          }
+        : {};
+    const ended =
+      update(item.id, { ...change, ...kept, endedAt: new Date() }) ?? item;
     settleSoon(item.workspaceId);
     return ended;
   };
@@ -4679,7 +4720,10 @@ export const createWorkItems = ({
     }
     const ended = finish(item, { state: "failed", error });
     console.log(`[work-items] ${item.id}: its turn failed: ${error}`);
-    return { body: `${error}${reportLine(ended)}`, failed: true };
+    return {
+      body: `${error}${reportLine(ended)}`,
+      failed: ended.state === "failed",
+    };
   };
 
   /**
@@ -4694,9 +4738,12 @@ export const createWorkItems = ({
     const turns = (quiet.get(item.id) ?? 0) + 1;
     if (turns >= QUIET_TURNS) {
       quiet.delete(item.id);
-      const failed = finish(item, { state: "failed", error: QUIET_ERROR });
+      const ended = finish(item, { state: "failed", error: QUIET_ERROR });
       console.log(`[work-items] ${item.id}: ${QUIET_ERROR}`);
-      return { body: `${QUIET_ERROR}${reportLine(failed)}`, failed: true };
+      return {
+        body: `${QUIET_ERROR}${reportLine(ended)}`,
+        failed: ended.state === "failed",
+      };
     }
     quiet.set(item.id, turns);
     tell(
@@ -4859,6 +4906,7 @@ export const createWorkItems = ({
         state: "running",
         result: null,
         error: null,
+        stoppedBy: null,
         endedAt: null,
         dismissedAt: null,
         heldAt: null,
@@ -5582,6 +5630,7 @@ export const createWorkItems = ({
         return {
           kind: "done",
           gate,
+          landed: { sha: outcome.sha, onto: outcome.onto },
           line: landedLine(base, outcome, runs.turn, stepped),
         };
       case "nothing":
@@ -5707,14 +5756,16 @@ export const createWorkItems = ({
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
+    const landed: WorkLanding = { sha: pushed.sha, onto: null };
     if (item.lands !== "pr") {
       return {
         kind: "done",
         gate,
+        landed,
         line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
       };
     }
-    return pullRequestFor(workspace, item, summary, gate, at);
+    return pullRequestFor(workspace, item, summary, gate, at, landed);
   };
 
   /** Opens the pull request for an item's pushed branch, or finds the open one. */
@@ -5723,7 +5774,8 @@ export const createWorkItems = ({
     item: WorkItemRow,
     summary: string,
     gate: GateRun,
-    at: string
+    at: string,
+    landed: WorkLanding
   ): Promise<Landed> => {
     const { base } = workspace;
     const branch = landingBranch(item);
@@ -5749,6 +5801,7 @@ export const createWorkItems = ({
     return {
       kind: "done",
       gate,
+      landed,
       prUrl: pr.url,
       line:
         pr.kind === "opened"
@@ -5927,9 +5980,7 @@ export const createWorkItems = ({
       summary: submission.summary,
       headline: submission.headline,
       digest: `${submission.summary.trim()}\n${landing.line}${collected.line}`,
-      ...(landing.kind === "done" && landing.prUrl
-        ? { prUrl: landing.prUrl }
-        : {}),
+      ...landedFields(landing),
       ...settled,
     });
     const held = reportOrHold(row, ended, body, submission.headline);
@@ -6813,19 +6864,22 @@ export const createWorkItems = ({
 
       if (request.blocked) {
         const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;
-        const failed = finish(item, {
+        const ended = finish(item, {
           state: "failed",
           error,
           headline: request.headline,
         });
+        const failed = ended.state === "failed";
         report(
           row,
-          `${request.summary}\n\n${error}${findingsBlock(request.findings)}${reportLine(failed)}`,
-          true,
+          `${request.summary}\n\n${error}${findingsBlock(request.findings)}${reportLine(ended)}`,
+          failed,
           false,
           request.headline
         );
-        return "The item failed as blocked; your parent has the command and the error. End your turn.";
+        return failed
+          ? "The item failed as blocked; your parent has the command and the error. End your turn."
+          : "Your earlier work stays landed, and the item is done with this block noted: its task goes to review with it, and your parent has the command and the error. End your turn.";
       }
 
       // The task's to-dos first: unticked ones are listed once, to tick or

@@ -104,6 +104,7 @@ export type StartersTrigger =
   | "routine failed"
   | "routine made"
   | "event received"
+  | "design offer declined"
   | "stale";
 
 /** Where a project's views Caw drafted wait (views.ts `DRAFTS`). */
@@ -303,6 +304,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       })),
       branch: repo?.branch ?? null,
       commits: repo?.commits ?? [],
+      designDeclined: db.designOffers.of(projectId)?.answer === "dismissed",
       designWork:
         designShaped(template, { labels: [], outputs: [] }) ||
         starterTasks.some((task) => task.design),
@@ -471,6 +473,11 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     /** An event from outside landed for the project (ingress.ts `ingest`). */
     eventLanded(projectId: string): void {
       touched(projectId, "event received");
+    },
+
+    /** The person said Not now to Caw's design-system offer: its starter goes. */
+    designDeclined(projectId: string): void {
+      touched(projectId, "design offer declined");
     },
 
     /**

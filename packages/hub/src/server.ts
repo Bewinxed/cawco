@@ -18740,6 +18740,8 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     notice: (projectId, threadId, note) =>
       caw.notice(projectId, threadId, note),
+    // Called on a person's answer, long after both are made.
+    declined: (projectId) => projectStarters.designDeclined(projectId),
   });
   tasks.listen(designOffers.taskChanged);
   // A project's starters, written for it by Jev from what it holds now, on
@@ -19332,6 +19334,10 @@ export const createServer = (
         task.title === BUILD_TITLE ||
         designShaped(db.project(projectId)?.template ?? null, task)
       );
+    },
+    taskOpen: async (projectId, taskId) => {
+      const { kind } = await tasks.get(projectId, taskId);
+      return kind !== "done" && kind !== "dropped";
     },
     // An agent's change to a system its project had is the person's ask,
     // as a memory proposal is, answered below with the rest.

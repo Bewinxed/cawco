@@ -51,7 +51,7 @@ import type {
   WorkItemSubmission,
 } from "./db/schema";
 import { designShaped } from "./design-offers";
-import { designOnBase, type Run } from "./design-system";
+import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
 import { quote } from "./landing";
 import { hubActor, type Tasks } from "./tasks";
@@ -103,7 +103,11 @@ export interface DesignVerifyDeps {
   ) => { html: string | null; kind: string; name: string } | undefined;
   readonly db: Pick<
     DbShape,
-    "designChecks" | "project" | "workItem" | "workspacesNamed"
+    | "designChecks"
+    | "project"
+    | "projectAttempts"
+    | "workItem"
+    | "workspacesNamed"
   >;
   /** Runs a command, inside the named workspace's boundary (design-system.ts `Run`). */
   readonly run: Run;
@@ -349,7 +353,8 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   /**
    * Whether an attempt's result is judged against its project's system:
    * design work, in a workspace whose base branch holds a system (one only
-   * its own commits hold is its build, the person's to judge in review).
+   * its own commits hold, or its own open task landed, is its build, the
+   * person's to judge in review).
    * Its task and workspace when it is.
    */
   const judged = async (item: WorkItemRow) => {
@@ -363,7 +368,15 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     if (!(workspace && designShaped(project.template ?? null, task))) {
       return;
     }
-    const onBase = await designOnBase(deps.run, workspace);
+    const onBase = await designOnBase(
+      deps.run,
+      workspace,
+      ownLandings(
+        db.projectAttempts(projectId),
+        item,
+        task.kind !== "done" && task.kind !== "dropped"
+      )
+    );
     return onBase ? { projectId, taskId, workspace } : undefined;
   };
 

@@ -503,6 +503,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
     return { read, page };
   };
 
+  /**
+   * Whether a page is a decision page: its built page has cards (the kit's
+   * choice groups, {@link readPage}), or a record was made from it. A page
+   * artifact without them, a design system's Foundations specimen
+   * ("Caw&Co foundations", nightly 3944), is no decision: it is not listed,
+   * read, sent on, or a session's open question.
+   */
+  const decisionPage = (read: DecisionPageRead, page: ReadPage): boolean =>
+    page.cards.length > 0 || read.record !== null;
+
   /** A record with each card's tasks as the task list has them now. */
   const withTasks = (
     record: StoredRecord,
@@ -528,18 +538,21 @@ export const createDecisions = (deps: DecisionsDeps) => {
     const found = (await pageNames(projectId)).find(
       (page) => page.name === name
     );
-    if (!found) {
+    const one = found
+      ? await readOne(
+          projectId,
+          name,
+          found.artifact,
+          await deps.tasks(projectId)
+        )
+      : undefined;
+    if (!(one && decisionPage(one.read, one.page))) {
       throw new DecisionRefusal(
         404,
         `This project has no decision page ${name}.`
       );
     }
-    return readOne(
-      projectId,
-      name,
-      found.artifact,
-      await deps.tasks(projectId)
-    );
+    return one;
   };
 
   /** Who hears a page's send or its Make tasks: its session while it stands, else Caw. */
@@ -613,7 +626,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
       for (const { name, artifact } of names) {
         try {
           // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
-          const { read } = await readOne(projectId, name, artifact, tasks);
+          const { read, page } = await readOne(
+            projectId,
+            name,
+            artifact,
+            tasks
+          );
+          if (!decisionPage(read, page)) {
+            continue;
+          }
           const { record: _record, sentAt: _sentAt, ...summary } = read;
           pages.push(summary);
         } catch (error) {
@@ -654,7 +675,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
         const { read, page } = await readOne(projectId, name, artifact, tasks);
         if (
           read.writer?.instanceId === instanceId &&
-          read.state !== "decided"
+          read.state !== "decided" &&
+          decisionPage(read, page)
         ) {
           pages.push({ read, cards: page.cards });
         }

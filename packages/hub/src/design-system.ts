@@ -43,8 +43,9 @@
  * proposal's card), kept in `design_proposals` and parked again when the hub
  * starts. Approve writes it through `design_write` where it was proposed and
  * commits it as the person; Deny leaves design/ as it was. The proposing
- * session is told either way. A system the session is building itself is
- * written at once, and the person judges it in the task's review. The
+ * session is told either way. A system the session is building itself, or
+ * that its own open task landed ({@link ownLandings}), is written at once,
+ * and the person judges it in the task's review. The
  * person's own edits are theirs, never proposals; Caw's folder_write refuses
  * design/ (memory.ts `personsTier`).
  */
@@ -61,7 +62,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
-import type { DbShape } from "./db";
+import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { DesignProposalFile } from "./db/schema";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
@@ -676,24 +677,73 @@ const writeTemporary = async (
   }
 };
 
+/** What an attempt at a task landed on its base: `onto..sha` (work-items.ts `landed`). */
+export interface OwnLanding {
+  onto: string;
+  sha: string;
+}
+
+/**
+ * What `item`'s task landed on its base while the task is open: each of its
+ * attempts' landings. A system one of them put there is still that task's
+ * build, not the project's: its builder's follow-up while the task waits in
+ * review writes at once and lands as its first hand-in did, unchecked by a
+ * verifier. On nightly 3944 Caw sent a landed build back over its
+ * Foundations page's lint warnings, the fix became a proposal against the
+ * builder's own system, and its attempt failed. Another task's system, the
+ * person's, or one whose task the person closed has none here: changing it
+ * stays a proposal and design work on it is verified (b613bafc8: "design_write
+ * to the project's system (on the workspace's base branch, …) writes
+ * nothing: it parks the person's ask").
+ */
+export const ownLandings = (
+  attempts: Pick<WorkItemRow, "landed" | "taskId">[],
+  item: Pick<WorkItemRow, "taskId">,
+  taskOpen: boolean
+): OwnLanding[] =>
+  taskOpen && item.taskId
+    ? attempts.flatMap((attempt) =>
+        attempt.taskId === item.taskId && attempt.landed?.onto
+          ? [{ onto: attempt.landed.onto, sha: attempt.landed.sha }]
+          : []
+      )
+    : [];
+
+/**
+ * Whether the newest commit that added design/'s manifest on `base` (in
+ * `$add`) lies inside one of `own`'s landings: on its pushed commit, not on
+ * the commit it was rebased onto. A landing the clone lacks holds none of it.
+ */
+const ownTest = (own: OwnLanding[]): string =>
+  own.length === 0
+    ? "false"
+    : own
+        .map(
+          ({ onto, sha }) =>
+            `{ git cat-file -e ${quote(`${sha}^{commit}`)} 2>/dev/null && git merge-base --is-ancestor "$add" ${quote(sha)} && ! git merge-base --is-ancestor "$add" ${quote(onto)}; }`
+        )
+        .join(" || ");
+
 /**
  * A system at a repository's root on a machine, read and written with its
  * shell, inside its workspace's boundary when it is one, git run the safe
  * way (core `SAFE_GIT_SHELL`). `base` is the commit a system must be on to
  * be the project's: a workspace's base branch on origin, else the
- * checkout's HEAD.
+ * checkout's HEAD. One that `own` landed is not ({@link ownLandings}).
  */
 const repositoryStore = (
   run: Run,
   at: RepositoryAt,
-  base = "HEAD"
+  base = "HEAD",
+  own: OwnLanding[] = []
 ): DesignStore => {
   const sh = runIn(run, at);
   return {
     where: `${at.root}/${DESIGN_DIR}`,
     theirs: async () => {
+      const manifest = `${DESIGN_DIR}/${MANIFEST}`;
       const result = await sh(
-        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${DESIGN_DIR}/${MANIFEST}`)} 2>/dev/null; then echo yes; else echo no; fi`
+        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${manifest}`)} 2>/dev/null; then add=$(git log -1 --diff-filter=A --format=%H ${quote(base)} -- ${quote(manifest)}); if [ -n "$add" ] && { ${ownTest(own)}; }; then echo own; else echo yes; fi; else echo no; fi`
       );
       if (result.exitCode !== 0) {
         throw failed("design/'s history could not be read", result);
@@ -889,11 +939,13 @@ export const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
  * Whether the workspace clone at `root` on `machineId` holds a design
  * system on its base branch (`base`): the project's, which its session
  * changes only through proposals and whose work is judged against it. One
- * the session's own commits made is its build.
+ * the session's own commits made, or its own task landed (`own`,
+ * {@link ownLandings}), is its build.
  */
 export const designOnBase = (
   run: Run,
-  workspace: { base: string; id: string; machineId: string; path: string }
+  workspace: { base: string; id: string; machineId: string; path: string },
+  own: OwnLanding[]
 ): Promise<boolean> =>
   repositoryStore(
     run,
@@ -902,7 +954,8 @@ export const designOnBase = (
       root: workspace.path,
       workspace: { id: workspace.id, path: workspace.path },
     },
-    baseRef(workspace.base)
+    baseRef(workspace.base),
+    own
   ).theirs();
 
 /** What an attempt reads first of the system, and what it fetches on demand (spec §5.7, "Use"; Open Design's order). */
@@ -954,6 +1007,8 @@ const WHY_LIMIT = 500;
  */
 interface ProposalPlace {
   base?: string;
+  /** What the session's own task landed on `base` ({@link ownLandings}). */
+  own?: OwnLanding[];
   repo: RepositoryAt | null;
 }
 
@@ -974,6 +1029,8 @@ export const createDesignSystem = (deps: {
   online: (machineId: string) => boolean;
   /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself). */
   designTask: (projectId: string, taskId: string) => Promise<boolean>;
+  /** Whether a task is open: neither done nor dropped. */
+  taskOpen: (projectId: string, taskId: string) => Promise<boolean>;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   park: (envelope: Envelope) => void;
   /** Takes a settled ask off the pending ledger. */
@@ -1063,8 +1120,8 @@ export const createDesignSystem = (deps: {
     // A work item's session works in its workspace's clone, read inside its
     // boundary; the project's system there is what its base branch holds on
     // origin, never its own commits.
-    const own = workspaceOfSession(actor.id);
-    const workspace = own && !own.ended ? own.workspace : undefined;
+    const mine = workspaceOfSession(actor.id);
+    const workspace = mine && !mine.ended ? mine.workspace : undefined;
     const top = await deps.run(
       actor.machineId,
       actor.cwd,
@@ -1087,9 +1144,27 @@ export const createDesignSystem = (deps: {
           ? { workspace: { id: inClone.id, path: inClone.path } }
           : {}),
       },
-      ...(inClone ? { base: baseRef(inClone.base) } : {}),
+      ...(inClone && mine
+        ? {
+            base: baseRef(inClone.base),
+            own: await ownOf(actor.projectId, mine.item),
+          }
+        : {}),
     };
   };
+
+  /** What `item`'s own task landed while it is open ({@link ownLandings}). */
+  const ownOf = async (
+    projectId: string,
+    item: WorkItemRow
+  ): Promise<OwnLanding[]> =>
+    item.taskId
+      ? ownLandings(
+          deps.db.projectAttempts(projectId),
+          item,
+          await deps.taskOpen(projectId, item.taskId)
+        )
+      : [];
 
   /**
    * The workspace a session's work item runs in, while that item is live:
@@ -1102,7 +1177,7 @@ export const createDesignSystem = (deps: {
     const item = row?.workItemId ? deps.db.workItem(row.workItemId) : undefined;
     const [workspace] = item ? deps.db.workspacesNamed(item.workspaceId) : [];
     return workspace && item
-      ? { workspace, ended: !isLive(item.state) }
+      ? { workspace, item, ended: !isLive(item.state) }
       : undefined;
   };
 
@@ -1118,7 +1193,7 @@ export const createDesignSystem = (deps: {
     message?: string
   ): DesignStore =>
     place.repo
-      ? repositoryStore(deps.run, place.repo, place.base)
+      ? repositoryStore(deps.run, place.repo, place.base, place.own)
       : folderStore(projectId, author, deps.folderChanged, session, message);
 
   /** The proposal as the person's ask: drawn as its diff, answered by Approve or Deny, where it was made too. */
