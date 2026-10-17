@@ -218,13 +218,16 @@ const POINTER_BEAT_MS = 250;
  * The page time an act is given: its clock stands this far past where the
  * act began, whatever the act took. Past any act's own run (one that runs
  * longer is extended, and says so), and short of what a state waits on: the
- * jump fires every timer due before it, and at 60s a state that shows a
- * wait was read after its wait gave up (home/unlocking: a machine control's
- * 15s CONTROL_TIMEOUT_MS fired, and the keychain dialog read its error, not
- * the unlock under way). With the walk's settling after it, a state is read
- * some 12s past its act. Our call: eight seconds.
+ * jump fires every timer due before it, and a state that shows a wait was
+ * read after its wait gave up (home/unlocking: a machine control's 15s
+ * CONTROL_TIMEOUT_MS fired, and the keychain dialog read its error, not the
+ * unlock under way). After the mark the walk runs some 10s of page time of
+ * its own (`arrive`: two settles round a nudge), so what an act's last step
+ * sets off is read 11 to 14s later: at 8s it was 15.5s, past the wait. Our
+ * call: four seconds, past an act's own run (one that runs longer is
+ * extended from its end, and says so).
  */
-const ACT_MS = 8000;
+const ACT_MS = 4000;
 
 /**
  * Where each page's fake clock stands (`now`), the walk's own count: Date
