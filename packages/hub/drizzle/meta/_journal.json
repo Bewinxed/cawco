@@ -1562,6 +1562,27 @@
       "when": 1792182000000,
       "tag": "0222_work_item_landing",
       "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "6",
+      "when": 1792192047658,
+      "tag": "0223_fleet_memory_doc_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "6",
+      "when": 1792212683519,
+      "tag": "0224_compact_after_move",
+      "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "6",
+      "when": 1792216273579,
+      "tag": "0225_rule_trash",
+      "breakpoints": true
     }
   ]
 }

@@ -60,6 +60,7 @@ import {
   type RelayView,
   readEnv,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
 import { Elysia, status, t } from "elysia";
@@ -544,25 +545,42 @@ export const createRelay = ({
 
   // --- GitHub ----------------------------------------------------------------------
 
-  const github = async (
+  /** One GitHub request within {@link GITHUB_MS}, its body read inside the same time. */
+  const github = (
     token: string,
     method: "POST" | "DELETE",
     path: string,
     body?: unknown
-  ): Promise<Response> =>
-    fetch(`${new URL(api).origin}${path}`, {
-      method,
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "User-Agent": "CawCo-hub",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      redirect: "error",
-      signal: AbortSignal.timeout(GITHUB_MS),
+  ): Promise<Bounded<Response>> =>
+    readWithin(GITHUB_MS, async (signal) => {
+      const response = await fetch(`${new URL(api).origin}${path}`, {
+        method,
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "User-Agent": "CawCo-hub",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        redirect: "error",
+        signal,
+      });
+      return new Response(
+        [204, 205, 304].includes(response.status)
+          ? null
+          : await response.arrayBuffer(),
+        {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        }
+      );
     });
+
+  /** "GitHub did not answer within N s". */
+  const githubSilent = (after: number): string =>
+    `GitHub did not answer within ${Math.round(after / 1000)} s`;
 
   const saidBy = async (response: Response): Promise<string> => {
     const said = await response
@@ -607,7 +625,7 @@ export const createRelay = ({
       };
     }
     try {
-      const response = await github(token, "POST", `/repos/${repo}/hooks`, {
+      const asked = await github(token, "POST", `/repos/${repo}/hooks`, {
         name: "web",
         active: true,
         events: GITHUB_EVENTS,
@@ -618,6 +636,22 @@ export const createRelay = ({
           insecure_ssl: "0",
         },
       });
+      switch (asked.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          // Paces the next try, as a failure to reach it does.
+          refusedAt.set(row.id, Date.now());
+          return {
+            state: "wanted",
+            reason: `${githubSilent(asked.after)} to register the webhook, so it may or may not be there. The hub tries again.`,
+          };
+        default: {
+          const unhandled: never = asked;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+      const response = asked.value;
       if (response.ok) {
         const { id } = (await response.json()) as { id?: unknown };
         console.log(
@@ -652,11 +686,22 @@ export const createRelay = ({
     }
     try {
       const token = connections.githubToken(row.connection);
-      const response = await github(
+      const asked = await github(
         token,
         "DELETE",
         `/repos/${repo}/hooks/${row.hookId}`
       );
+      switch (asked.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          return `${githubSilent(asked.after)} to delete webhook ${row.hookId}, so it may still be there; delete it at https://github.com/${repo}/settings/hooks`;
+        default: {
+          const unhandled: never = asked;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+      const response = asked.value;
       if (response.ok || response.status === 404) {
         console.log(
           `[relay] ${row.id}: GitHub webhook ${row.hookId} on ${repo} deleted`

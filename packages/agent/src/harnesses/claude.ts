@@ -1106,8 +1106,7 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
 
 /**
  * The CLI child's environment: the agent's own as a session gets it (core
- * `sessionEnvironment`), the spec's over it, and the session's model as
- * `CAWCO_MODEL`.
+ * `sessionEnvironment`), the spec's over it, and the session's own identity.
  *
  * Claude in Chrome follows the session's mode, like every other tool. The
  * CLI's server-side gate `tengu_cowork_chrome_automode_default` (the
@@ -1123,7 +1122,6 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
  */
 const sessionEnv = (
   specEnv: Record<string, string | undefined> | undefined,
-  model: string | undefined,
   ctx: HarnessContext
 ): Record<string, string | undefined> => ({
   // The fleet's MCP connect window (mcp-status.ts), under the agent's own env.
@@ -1133,7 +1131,6 @@ const sessionEnv = (
   ...specEnv,
   // The session's git reaches the hub's remote as this session (git-credential.ts).
   ...sessionGitEnv({ ...process.env, ...specEnv }),
-  ...(model && { CAWCO_MODEL: model }),
   // The session's shell acts as this session and no other: `cawco tool`
   // there sends the credential its CawCo MCP sends.
   [CAWCO_ENV.instanceId]: ctx.instanceId,
@@ -1467,12 +1464,12 @@ const instructionsBlock = (
   instructions
     .map(
       ({ path, content }) =>
-        `Contents of the fleet's memory document ${path} (CawCo loads it for this session's role):\n\n${content.trim()}`
+        `Contents of the fleet's memory document ${path} (CawCo loads it for sessions like this one):\n\n${content.trim()}`
     )
     .join("\n\n");
 
 /**
- * The session's system prompt with its role's memory documents after
+ * The session's system prompt with its scoped memory documents after
  * whatever the caller gave: Claude Code's own prompt with them appended
  * when the caller gave none, or after the caller's own append or prompt.
  */
@@ -1733,7 +1730,7 @@ class ClaudeSession implements HarnessSession {
      * How the hub marked the spawn: a project's Caw ({@link SpawnPayload.lead})
      * asks the hub before each shell and edit call; a fenced session
      * ({@link SpawnPayload.fence}) has CawCo's MCP server alone, from no
-     * source but this launch. `instructions` are the role's memory documents
+     * source but this launch. `instructions` are the scoped memory documents
      * it launches with ({@link SpawnPayload.instructions}); an attach
      * launches nothing and passes none.
      */
@@ -1781,7 +1778,6 @@ class ClaudeSession implements HarnessSession {
     const env = sessionEnv(
       (options as { env?: Record<string, string | undefined> } | undefined)
         ?.env,
-      model,
       ctx
     );
     this.#claudeJson = configDirClaudeJson(env.CLAUDE_CONFIG_DIR);
@@ -1856,7 +1852,7 @@ class ClaudeSession implements HarnessSession {
         ...(persistSession === false ? { persistSession: false } : {}),
         ...(cliMode ? { permissionMode: cliMode } : {}),
         ...(model && { model }),
-        // Its role's memory documents (SpawnPayload.instructions), after
+        // Its scoped memory documents (SpawnPayload.instructions), after
         // Claude Code's own prompt: "`{ type: 'preset', preset: 'claude_code',
         // append: '...' }` - Use default prompt with appended instructions"
         // (sdk.d.ts 0.3.296).

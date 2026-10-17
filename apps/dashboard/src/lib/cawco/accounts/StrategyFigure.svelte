@@ -140,12 +140,6 @@
   style:--fig-chip="10px"
   style:--fig-chip-r="3px"
   style:--fig-ring="1.5px"
-  style:--fig-doc-w="10px"
-  style:--fig-doc-h="13px"
-  style:--fig-doc-blur="8px"
-  style:--fig-doc-top="3px"
-  style:--fig-doc-line-h="5px"
-  style:--fig-doc-line-gap="2.5px"
   style:--fig-tag-fs="11px"
   style:--fig-cap-inset="12px"
   style:--fig-cap-bottom="8px"
@@ -258,28 +252,6 @@
     box-shadow:
       inset 0 0 0 var(--fig-ring) var(--c),
       0 0 0 var(--fig-ring) var(--surface-recess);
-  }
-  [data-slot="stage"] :global(.doc) {
-    width: var(--fig-doc-w);
-    height: var(--fig-doc-h);
-    border-radius: var(--radius-hair);
-    background: var(--warning-9);
-    box-shadow: 0 1px var(--fig-doc-blur)
-      color-mix(in oklab, var(--warning-9) 55%, transparent);
-  }
-  /* residual: pseudo */
-  [data-slot="stage"] :global(.doc::after) {
-    content: "";
-    position: absolute;
-    left: 2px;
-    right: 2px;
-    top: var(--fig-doc-top);
-    height: var(--fig-doc-line-h);
-    background: repeating-linear-gradient(
-      var(--surface-recess) 0 1px,
-      transparent 1px var(--fig-doc-line-gap)
-    );
-    opacity: 0.55;
   }
   /* residual: foreign-dom */
   [data-slot="stage"] :global(.tag) {

@@ -33,12 +33,14 @@ import {
 import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
+import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
 import { socketPathProblem } from "../packages/core/src/paths";
 import { ensureDeps } from "./lib/deps";
 import { type HeavySlot, heavySlot } from "./lib/heavy-run";
+import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 
 /**
@@ -1341,7 +1343,10 @@ async function standUp(
   };
   /** What sessiond holds: each live process's proc id and PID. */
   const heldProcs = async (): Promise<{ procId: string; pid: number }[]> => {
-    const client = await SessiondClient.connect(sessiondSocket);
+    const client = welcomed(
+      sessiondSocket,
+      await SessiondClient.connect(sessiondSocket)
+    );
     try {
       return client.procs
         .filter((proc) => proc.alive)
@@ -1354,7 +1359,10 @@ async function standUp(
   const sessionPid = async (
     instanceId: string
   ): Promise<number | undefined> => {
-    const client = await SessiondClient.connect(sessiondSocket);
+    const client = welcomed(
+      sessiondSocket,
+      await SessiondClient.connect(sessiondSocket)
+    );
     try {
       return client.procs.find((proc) => {
         const id = parseProcId(proc.procId);
@@ -1384,20 +1392,34 @@ async function standUp(
     socket = undefined;
   };
   const api = async <T>(path: string, body?: unknown): Promise<T> => {
-    const response = await fetch(`${base}${path}`, {
-      method: body === undefined ? "GET" : "POST",
-      headers: {
-        ...ownerHeaders(),
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(30_000),
+    const read = await readWithin(30_000, async (signal) => {
+      const response = await fetch(`${base}${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          ...ownerHeaders(),
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`${path}: ${response.status} ${text}`);
+      }
+      return JSON.parse(text) as T;
     });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`${path}: ${response.status} ${text}`);
+    switch (read.kind) {
+      case "answered":
+        return read.value;
+      case "unanswered":
+        throw new Error(
+          `${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return JSON.parse(text) as T;
   };
   let socket: WebSocket | undefined;
   const dashboard = async (): Promise<WebSocket> => {
@@ -1434,38 +1456,42 @@ async function standUp(
     ms = 300_000
   ): Promise<T> => {
     const ws = await dashboard();
-    return await new Promise<T>((land, reject) => {
-      const done = () => {
-        clearTimeout(timer);
-        ws.removeEventListener("message", heard);
+    const landing = Promise.withResolvers<T>();
+    const heard = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as {
+        payload?: { kind?: string };
+        verb?: string;
       };
-      const timer = setTimeout(() => {
-        done();
-        reject(new Error(`no fleet.fetch frame landed in ${ms / 1000}s`));
-      }, ms);
-      const heard = (event: MessageEvent) => {
-        const message = JSON.parse(String(event.data)) as {
-          payload?: { kind?: string };
-          verb?: string;
-        };
-        if (
-          message.verb !== "frames" ||
-          message.payload?.kind !== "fleet.fetch"
-        ) {
-          return;
+      if (
+        message.verb !== "frames" ||
+        message.payload?.kind !== "fleet.fetch"
+      ) {
+        return;
+      }
+      const row = pick(message.payload as FleetFetchFrame);
+      if (row && !row.fetching) {
+        landing.resolve(row);
+      }
+    };
+    ws.addEventListener("message", heard);
+    ask().catch((error: unknown) => landing.reject(error));
+    try {
+      const landed = await readWithin(ms, () => landing.promise);
+      switch (landed.kind) {
+        case "answered":
+          return landed.value;
+        case "unanswered":
+          throw new Error(
+            `no fleet.fetch frame landed within ${landed.after} ms`
+          );
+        default: {
+          const unhandled: never = landed;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
         }
-        const row = pick(message.payload as FleetFetchFrame);
-        if (row && !row.fetching) {
-          done();
-          land(row);
-        }
-      };
-      ws.addEventListener("message", heard);
-      ask().catch((error: unknown) => {
-        done();
-        reject(error);
-      });
-    });
+      }
+    } finally {
+      ws.removeEventListener("message", heard);
+    }
   };
   const query = <T>(sql: string, ...params: (string | number)[]): T[] => {
     const db = new Database(dbPath, { readonly: true });

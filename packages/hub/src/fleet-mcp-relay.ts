@@ -1,3 +1,4 @@
+import { readWithin } from "@cawco/core/bounded";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -178,24 +179,37 @@ interface ServerState {
   until: number;
 }
 
+/**
+ * The upstream did not answer, within its time, a request the hub made for
+ * every session: said to whoever asked as its own answer (504), never as the
+ * upstream's refusal.
+ */
+class NoAnswer extends Error {
+  constructor(after: number) {
+    super(
+      `The upstream MCP server did not answer within ${Math.round(after / 1000)} s. Retry the request.`
+    );
+  }
+}
+
+/** An answer the gate let through, or the 429 that held it. */
+type Attempted<T> = { taken: T } | { limited: Headers };
+
 const encoder = new TextEncoder();
 
-const waitFor = (ms: number, signal?: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason);
-      return;
+/** Statuses whose Response carries no body (Fetch: "null body status"). */
+const NULL_BODY = new Set([101, 103, 204, 205, 304]);
+
+/** A response with its body read whole, so it can be read again later. */
+const whole = async (response: Response): Promise<Response> =>
+  new Response(
+    NULL_BODY.has(response.status) ? null : await response.arrayBuffer(),
+    {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
     }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", aborted);
-      resolve();
-    }, ms);
-    const aborted = () => {
-      clearTimeout(timer);
-      reject(signal?.reason);
-    };
-    signal?.addEventListener("abort", aborted, { once: true });
-  });
+  );
 
 /** The wait a 429 names: `Retry-After` (seconds or a date), else `RateLimit-Reset` (seconds). */
 const namedWait = (headers: Headers): number | undefined => {
@@ -353,28 +367,46 @@ export class FleetMcpRelay {
    * the wait it named has passed, until one is answered and none is queued:
    * a herd released at once would only be refused again.
    */
-  async #send(
+  #send(
+    name: string,
+    state: ServerState,
+    upstream: Upstream,
+    exchange: Exchange
+  ): Promise<Response> {
+    return this.#sendTaking(name, state, upstream, exchange, (response) =>
+      Promise.resolve(response)
+    );
+  }
+
+  /**
+   * {@link #send}, with what is wanted of the answer read by `take` as part
+   * of each attempt: inside `ms` when given, so an answer whose reply never
+   * comes within it is {@link NoAnswer}.
+   */
+  async #sendTaking<T>(
     name: string,
     state: ServerState,
     upstream: Upstream,
     exchange: Exchange,
-    timeout?: number
-  ): Promise<Response> {
+    take: (response: Response) => Promise<T>,
+    ms?: number
+  ): Promise<T> {
     if (!state.limited) {
-      const response = await this.#attempt(
+      const taken = await this.#attempt(
         name,
         state,
         upstream,
         exchange,
-        timeout
+        take,
+        ms
       );
-      if (response) {
-        return response;
+      if (taken) {
+        return taken.taken;
       }
     }
     state.queued += 1;
     const turn = state.queue.then(() =>
-      this.#held(name, state, upstream, exchange, timeout)
+      this.#held(name, state, upstream, exchange, take, ms)
     );
     state.queue = turn.then(
       () => undefined,
@@ -391,59 +423,87 @@ export class FleetMcpRelay {
   }
 
   /** A held request's turn: sent after the wait, again after each 429. */
-  async #held(
+  async #held<T>(
     name: string,
     state: ServerState,
     upstream: Upstream,
     exchange: Exchange,
-    timeout?: number
-  ): Promise<Response> {
+    take: (response: Response) => Promise<T>,
+    ms?: number
+  ): Promise<T> {
     for (;;) {
+      exchange.signal?.throwIfAborted();
       const wait = state.until - Date.now();
       if (wait > 0) {
+        // Pacing, not a read: the gate's own wait, then the asker is looked at again.
         // biome-ignore lint/performance/noAwaitInLoops: the gate holds each request until the upstream's own wait has passed
-        await waitFor(wait, exchange.signal);
+        await Bun.sleep(wait);
+        exchange.signal?.throwIfAborted();
       }
-      const response = await this.#attempt(
+      const taken = await this.#attempt(
         name,
         state,
         upstream,
         exchange,
-        timeout
+        take,
+        ms
       );
-      if (response) {
-        return response;
+      if (taken) {
+        return taken.taken;
       }
     }
   }
 
-  /** One send; undefined when the upstream answered 429, the gate then holding its requests for the wait it named. */
-  async #attempt(
+  /**
+   * One send, its answer taken by `take` (inside `ms` when given); undefined
+   * when the upstream answered 429, the gate then holding its requests for
+   * the wait it named.
+   */
+  async #attempt<T>(
     name: string,
     state: ServerState,
     upstream: Upstream,
     exchange: Exchange,
-    timeout?: number
-  ): Promise<Response | undefined> {
-    const response = await upstream(
-      timeout === undefined
-        ? exchange
-        : {
-            ...exchange,
-            signal: exchange.signal
-              ? AbortSignal.any([exchange.signal, AbortSignal.timeout(timeout)])
-              : AbortSignal.timeout(timeout),
-          }
-    );
-    if (response.status !== 429) {
+    take: (response: Response) => Promise<T>,
+    ms?: number
+  ): Promise<{ taken: T } | undefined> {
+    const once = async (signal?: AbortSignal): Promise<Attempted<T>> => {
+      const response = await upstream(
+        signal ? { ...exchange, signal } : exchange
+      );
+      if (response.status === 429) {
+        await response.body?.cancel();
+        return { limited: response.headers };
+      }
       if (response.ok) {
         state.misses = 0;
       }
-      return response;
+      return { taken: await take(response) };
+    };
+    let attempted: Attempted<T>;
+    if (ms === undefined) {
+      attempted = await once();
+    } else {
+      const outcome = await readWithin(ms, once, {
+        ...(exchange.signal ? { signal: exchange.signal } : {}),
+      });
+      switch (outcome.kind) {
+        case "answered":
+          attempted = outcome.value;
+          break;
+        case "unanswered":
+          throw new NoAnswer(outcome.after);
+        default: {
+          const unhandled: never = outcome;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     }
-    await response.body?.cancel();
+    if ("taken" in attempted) {
+      return attempted;
+    }
     state.limited = true;
-    const named = namedWait(response.headers);
+    const named = namedWait(attempted.limited);
     const hold =
       named ?? Math.min(BACKOFF_FIRST_MS * 2 ** state.misses, BACKOFF_MAX_MS);
     if (named === undefined) {
@@ -462,7 +522,8 @@ export class FleetMcpRelay {
   /**
    * A JSON-RPC request the hub makes for every session, and the upstream's
    * answer to it: read off a JSON body or the event stream it opened, which
-   * may also carry list changes.
+   * may also carry list changes. Each attempt, its reply read included, has
+   * {@link LISTER_TIMEOUT_MS}; none in that time is {@link NoAnswer}.
    */
   async #rpc(
     name: string,
@@ -481,27 +542,34 @@ export class FleetMcpRelay {
     if (lister.protocol) {
       headers.set("MCP-Protocol-Version", lister.protocol);
     }
-    const response = await this.#send(
+    return await this.#sendTaking(
       name,
       state,
       upstream,
       { method: "POST", headers, body: JSON.stringify(message) },
+      async (response) => {
+        if (message.id === undefined) {
+          await response.body?.cancel();
+          return { response };
+        }
+        if (!response.ok) {
+          // Its refusal is read later (`refused`): read whole now, inside the time.
+          return { response: await whole(response) };
+        }
+        if (!(
+          response.headers.get("Content-Type")?.includes("text/event-stream") &&
+          response.body
+        )) {
+          const reply = parse(await response.text());
+          return { response, reply: Array.isArray(reply) ? undefined : reply };
+        }
+        return {
+          response,
+          reply: await this.#replyOn(name, state, response.body, message.id),
+        };
+      },
       LISTER_TIMEOUT_MS
     );
-    if (message.id === undefined || !response.ok) {
-      return { response };
-    }
-    if (!(
-      response.headers.get("Content-Type")?.includes("text/event-stream") &&
-      response.body
-    )) {
-      const reply = parse(await response.text());
-      return { response, reply: Array.isArray(reply) ? undefined : reply };
-    }
-    return {
-      response,
-      reply: await this.#replyOn(name, state, response.body, message.id),
-    };
   }
 
   /** The message answering `id` on an event stream, read until it comes; the stream's notifications heard on the way. */
@@ -1103,8 +1171,11 @@ export class FleetMcpRelay {
         });
   }
 
-  /** The upstream's own refusal of a request made for every session, answered to this one. */
+  /** The upstream's own refusal of a request made for every session, or its silence, answered to this one. */
   #refusal(error: unknown, id: Message["id"]): Response {
+    if (error instanceof NoAnswer) {
+      return new Response(error.message, { status: 504 });
+    }
     if (error instanceof Refused) {
       return new Response(error.text, {
         status: error.status,

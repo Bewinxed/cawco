@@ -146,7 +146,8 @@ export function lookUp(label: string, handle: string): Promise<Chip | null> {
     return known;
   }
   const title = label.split(" · ")[0]?.trim() ?? label;
-  const asked = findNames(title, { limit: 12 }).then((read) => {
+  const asked = findNames(title, { limit: 12 }).then((answer) => {
+    const read = answer.kind === "answered" ? answer.read : null;
     const result = read?.ok
       ? read.value.results.find((r) => r.handle === handle)
       : undefined;
@@ -282,14 +283,15 @@ export class MentionState {
     if (this.answer.state !== "ok") {
       this.answer = { state: "asking", for: words, since: Date.now() };
     }
-    const read = await findNames(words, {
+    const asked = await findNames(words, {
       limit: 12,
       kinds: this.kindNamed ? undefined : NAMED,
       signal: abort.signal,
     });
-    if (read === null || n !== this.#ask) {
+    if (asked.kind === "superseded" || n !== this.#ask) {
       return;
     }
+    const { read } = asked;
     if (read.ok) {
       this.answer = { state: "ok", for: words, value: read.value };
     } else if (read.unreached) {

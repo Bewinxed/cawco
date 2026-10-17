@@ -329,9 +329,22 @@ async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
   while (Date.now() < end) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: a poll
-      const client = await SessiondClient.connect(endpoint);
-      client.close();
-      return;
+      const read = await SessiondClient.connect(endpoint);
+      switch (read.kind) {
+        case "answered":
+          read.value.close();
+          return;
+        case "unanswered":
+          last =
+            read.reason === "timeout"
+              ? `no welcome within ${read.after} ms`
+              : "its connection ended before its welcome";
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     } catch (error) {
       last = message(error);
     }
@@ -414,13 +427,31 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
       `No service manager CawCo installs into runs here (${process.platform})`
     );
   }
-  const running = await answers(endpoint);
+  const listening = await answers(endpoint);
+  // Whether a failed start may take this keeper's job away: only when the
+  // endpoint answered that nothing listens on it.
+  let keepJob: boolean;
+  switch (listening.kind) {
+    case "answered":
+      keepJob = listening.value;
+      break;
+    case "unanswered":
+      await say(
+        `keeper ${to}: ${endpoint} did not answer a connect within ${listening.after} ms; its job is kept if this start fails`
+      );
+      keepJob = true;
+      break;
+    default: {
+      const unhandled: never = listening;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   try {
     await say(`keeper ${to}: units: ${await writeKeeperUnits(to, job.file)}`);
     await job.start();
     await awaitWelcome(endpoint, job);
   } catch (error) {
-    if (!running) {
+    if (!keepJob) {
       await job
         .remove()
         .catch((removing: unknown) =>

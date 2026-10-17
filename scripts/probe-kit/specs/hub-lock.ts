@@ -17,6 +17,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { freePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -78,19 +79,29 @@ const spec: Spec = {
       stdout: "ignore",
       stderr: "pipe",
     });
-    const ended = await Promise.race([
-      second.exited,
-      Bun.sleep(60_000).then(() => undefined),
-    ]);
-    if (ended === undefined) {
-      second.kill("SIGKILL");
+    const ended = await readWithin(60_000, () => second.exited);
+    switch (ended.kind) {
+      case "answered":
+        kit.check(
+          "a second hub on the same database exits 1",
+          ended.value === 1,
+          `exit ${ended.value}`
+        );
+        break;
+      case "unanswered":
+        second.kill("SIGKILL");
+        kit.check(
+          "a second hub on the same database exits 1",
+          false,
+          `it did not exit within ${ended.after} ms`
+        );
+        break;
+      default: {
+        const unhandled: never = ended;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     const said = await new Response(second.stderr).text();
-    kit.check(
-      "a second hub on the same database exits 1",
-      ended === 1,
-      `exit ${ended ?? "none in 60s"}`
-    );
     kit.check(
       "its refusal names the holding hub's pid and CAWCO_DB_PATH",
       said.includes(`is held by the hub in process ${first.pid}`) &&

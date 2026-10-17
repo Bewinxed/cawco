@@ -21,6 +21,7 @@
  * in parallel"). Plain `fetch`, no SDK.
  */
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   JevAnswer,
   JevQuestion,
@@ -90,68 +91,74 @@ interface SystemOneResponse {
   usage: { input_tokens: number; output_tokens: number; cost: number };
 }
 
+/** "Jev did not answer within N s": an unanswered ask, in every caller's words. */
+export const jevUnanswered = (after: number): string =>
+  `Jev did not answer within ${Math.round(after / 1000)} s`;
+
 /**
- * Asks every question in one request on `access`'s route. A 429 or 529 is
- * asked again with exponential backoff until `timeoutMs` runs out — the
- * API's documented answer to both ("retry the request with exponential
- * backoff instead of retrying immediately", https://docs.typesafe.ai/api.md).
- * Every other failure throws with the route, the status and the body as the
- * API wrote them.
+ * Asks every question in one request on `access`'s route, within
+ * `timeoutMs`. A 429 or 529 is asked again with exponential backoff inside
+ * that time — the API's documented answer to both ("retry the request with
+ * exponential backoff instead of retrying immediately",
+ * https://docs.typesafe.ai/api.md); still throttled when it runs out is
+ * unanswered. Every other failure throws with the route, the status and the
+ * body as the API wrote them.
  */
-export async function askJev<
+export function askJev<
   const Questions extends Readonly<Record<string, JevQuestion>>,
 >(
   access: JevAccess,
   state: JevText,
   questions: Questions,
   options: { model?: string; timeoutMs: number }
-): Promise<JevResult<Questions>> {
-  const deadline = AbortSignal.timeout(options.timeoutMs);
+): Promise<Bounded<JevResult<Questions>>> {
   const body = JSON.stringify({
     model: options.model ?? "jev-latest",
     state,
     questions,
   });
-  for (let wait = BACKOFF_MS; ; wait *= 2) {
-    // biome-ignore lint/performance/noAwaitInLoops: a throttled request is asked again only after the previous one answered
-    const response = await fetch(ENDPOINT[access.route], {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${access.key}`,
-        "Content-Type": "application/json",
-        ...ROUTE_HEADERS[access.route],
-      },
-      body,
-      signal: deadline,
-    });
-    if (response.ok) {
-      const parsed = (await response.json()) as SystemOneResponse;
-      return {
-        model: parsed.model,
-        answers: parsed.answers as JevResult<Questions>["answers"],
-        usage: {
-          inputTokens: parsed.usage.input_tokens,
-          outputTokens: parsed.usage.output_tokens,
-          costUsd: parsed.usage.cost,
+  return readWithin(options.timeoutMs, async (deadline) => {
+    for (let wait = BACKOFF_MS; ; wait *= 2) {
+      // biome-ignore lint/performance/noAwaitInLoops: a throttled request is asked again only after the previous one answered
+      const response = await fetch(ENDPOINT[access.route], {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${access.key}`,
+          "Content-Type": "application/json",
+          ...ROUTE_HEADERS[access.route],
         },
-      };
+        body,
+        signal: deadline,
+      });
+      if (response.ok) {
+        const parsed = (await response.json()) as SystemOneResponse;
+        return {
+          model: parsed.model,
+          answers: parsed.answers as JevResult<Questions>["answers"],
+          usage: {
+            inputTokens: parsed.usage.input_tokens,
+            outputTokens: parsed.usage.output_tokens,
+            costUsd: parsed.usage.cost,
+          },
+        };
+      }
+      const failure = `${ROUTE_NAME[access.route]} answered ${response.status}: ${await response.text()}`;
+      if (response.status !== 429 && response.status !== 529) {
+        throw new Error(failure);
+      }
+      await new Promise<void>((resolve, reject) => {
+        // Not on the hub's lifetime (lifetime.ts): a wait inside one request,
+        // ended by the request's own deadline, like the fetch it sits between.
+        const timer = setTimeout(resolve, wait);
+        deadline.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(deadline.reason);
+          },
+          { once: true }
+        );
+      });
     }
-    const failure = `${ROUTE_NAME[access.route]} answered ${response.status}: ${await response.text()}`;
-    if (response.status !== 429 && response.status !== 529) {
-      throw new Error(failure);
-    }
-    await new Promise<void>((resolve, reject) => {
-      // Not on the hub's lifetime (lifetime.ts): a wait inside one request,
-      // ended by the request's own deadline, like the fetch it sits between.
-      const timer = setTimeout(resolve, wait);
-      deadline.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          reject(new Error(`${failure} (still throttled when time ran out)`));
-        },
-        { once: true }
-      );
-    });
-  }
+  });
 }

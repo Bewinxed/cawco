@@ -38,6 +38,7 @@
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 import type {
+  BriefTarget,
   CommandResult,
   DelegateType,
   EndedBy,
@@ -66,6 +67,7 @@ import type {
 } from "@cawco/core";
 import {
   byPerson,
+  CODE_MODE_TOOL,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -81,11 +83,13 @@ import {
   holdingWords,
   machineCalled,
   sizeWords,
+  WORK_ITEM_ORIGIN,
   type WorkspaceLanding,
   withInputsLine,
   withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import {
   isMachinePath,
   type MachinePath,
@@ -104,6 +108,7 @@ import {
   diffPaths,
   lastMac,
 } from "./apple-gate";
+import { briefingFor } from "./briefings";
 import type {
   DbShape,
   QueuedWorkItemRow,
@@ -145,6 +150,7 @@ import { placesChanged } from "./project-placements";
 import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
+import { CAWCO_TOOL } from "./web-reads";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -297,6 +303,20 @@ export interface HeldWork extends WorkspaceHolding {
   path: string;
   /** The clone's size on disk, in words. */
   size: string;
+  workspaceId: string;
+}
+
+/**
+ * What a session's workspace holds that is on no remote, for a message about
+ * to wake that session cold (delegation-actions.ts `checkCold`): `changed`,
+ * its uncommitted changes and stashes, which only that clone can reach;
+ * `ahead`, its commits on no remote, which a fresh delegate cut from its
+ * branch reaches too (`delegate` with `from`). `live`: its item still runs.
+ */
+export interface Unlanded {
+  ahead: number;
+  changed: number;
+  live: boolean;
   workspaceId: string;
 }
 
@@ -591,6 +611,12 @@ export interface WorkItemRequest {
    * Always a new workspace.
    */
   fork?: boolean;
+  /**
+   * A workspace of the caller's, with no live item: the new workspace's
+   * branch is cut at that workspace's head, its commits carried in a
+   * bundle, on its machine and from its repository.
+   */
+  from?: string;
   /** Its group under its parent: one combined report once every item of it has ended. */
   group?: string;
   harness?: HarnessKind;
@@ -921,7 +947,7 @@ const FINISH_LINE =
   "Finish the work and call finish_item with a report that quotes the output of every command that proves it, or call it with `blocked` and the exact command and error.";
 
 /** Whose word the sweep's wake is: the hub's about an item, as the quiet-turn word is. */
-const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: "work-item" };
+const WAKE_ORIGIN: NeutralOrigin = { kind: "system", name: WORK_ITEM_ORIGIN };
 
 /**
  * How long archiving waits on a running session's machine to confirm its
@@ -1130,6 +1156,32 @@ const QUIET_TURNS = 3;
 
 const QUIET_ERROR = "ended three turns in a row without finish_item";
 
+/** Runs of whitespace between the counts a git read prints. */
+const SPACES = /\s+/;
+
+/** A CawCo read by its name, the harness's prefix off: `list_*`, `*_list`, `*_read`. */
+const CAWCO_READ = /^list_|_list$|_read$/;
+/** The CawCo tools that say themselves what becomes of a wait. */
+const WAIT_TOOLS: ReadonlySet<string> = new Set(["wait_item", "finish_item"]);
+
+/**
+ * Whether a tool call leaves a declared wait on: a CawCo read, wait_item or
+ * finish_item (each settles the wait itself), Claude's ToolSearch, which
+ * only loads a deferred tool, or OpenCode's Code Mode program, whose own
+ * calls are judged one by one as their frames come (server.ts). Any other
+ * call is the session's own work.
+ */
+const restsInWait = (tool: string): boolean => {
+  if (tool === "ToolSearch" || tool === CODE_MODE_TOOL) {
+    return true;
+  }
+  if (!CAWCO_TOOL.test(tool)) {
+    return false;
+  }
+  const name = tool.replace(CAWCO_TOOL, "");
+  return WAIT_TOOLS.has(name) || CAWCO_READ.test(name);
+};
+
 /** A harness gets one minute after its declared deadline to start a turn. */
 const WAIT_RESUME_GRACE_MS = 60_000;
 const waitClock = (at: Date): string =>
@@ -1142,8 +1194,28 @@ const waitClock = (at: Date): string =>
 export const WAIT_ITEM_LIMIT =
   "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason for waiting on a command you started.";
 
-/** Why a request's title, owned files, budget or group cannot stand; nothing when they can. */
+/** A `from` request with what it cannot go with: a new workspace, cut where its source's repository is. */
+const fromProblem = (request: WorkItemRequest): string | undefined => {
+  if (request.from === undefined) {
+    return;
+  }
+  if (!request.from.trim()) {
+    return "from is blank: name a workspace id from one of your delegates.";
+  }
+  const clashes = [
+    request.workspace && "workspace",
+    request.cwd && "cwd",
+    request.machineId && "machine",
+    request.reuse && "reuse",
+  ].filter(Boolean);
+  return clashes.length > 0
+    ? `from cuts a new workspace on its source's machine, from its repository; drop ${clashes.join(" and ")}.`
+    : undefined;
+};
+
+/** Why a request's title, owned files, budget, group or `from` cannot stand; nothing when they can. */
 const requestProblem = (request: WorkItemRequest): string | undefined =>
+  fromProblem(request) ??
   titleProblem(request.title) ??
   (request.owns ? ownsProblem(request.owns) : undefined) ??
   (request.budget ? budgetProblem(request.budget) : undefined) ??
@@ -1773,7 +1845,15 @@ export const createWorkItems = ({
    */
   const woken = new Map<string, { count: number; turns: number }>();
   const waitTimers = new Map<string, HubTimer>();
-  /** Waits whose declaring turn ended: the next busy transition resumes them. */
+  /**
+   * Waits whose declaring turn ended. From then on a tool call of the
+   * session's own ends the wait ({@link restsInWait} says which are not);
+   * a turn a word to it started (a proposal's answer, a verifier's findings,
+   * a delegate's report, a handoff) leaves it on, so that turn ends as a
+   * waiting turn and counts toward no quiet-turn failure. Before
+   * 2026-10-17 any busy transition ended it, and a builder waiting on two
+   * proposal answers failed on the quiet turns that followed the first.
+   */
   const waitsAtRest = new Set<string>();
   const disarmWait = (id: string): void => {
     lifetime.cancel(waitTimers.get(id));
@@ -2969,39 +3049,186 @@ export const createWorkItems = ({
     }
   };
 
-  /** Each workspace's settle under way, and whether one was asked for meanwhile. */
-  const settling = new Map<string, { again: boolean }>();
+  /** The last step queued in each workspace's turn ({@link inWorkspaceTurn}); it only resolves. */
+  const workspaceTurns = new Map<string, Promise<void>>();
 
   /**
-   * {@link settle} soon, off the caller's step, once at a time per
-   * workspace: one asked for while one runs runs again after it. Never
-   * throws.
+   * Runs `work` in workspace `id`'s turn: after every step queued before it,
+   * before any queued after. A step is anything that closes the workspace's
+   * boundary on its machine or reads its clone through it: its settle, its
+   * archive, the bundle a `from` cut takes of it, a read of what it holds
+   * on no remote ({@link unlandedOf}). On 2026-10-17 a read ran git through
+   * a boundary that the workspace's settle was closing, and failed. A step
+   * never takes its own workspace's turn again.
    */
-  const settleSoon = (id: string): void => {
-    const running = settling.get(id);
-    if (running) {
-      running.again = true;
-      return;
+  const inWorkspaceTurn = async <T>(
+    id: string,
+    work: () => Promise<T>
+  ): Promise<T> => {
+    const before = workspaceTurns.get(id);
+    const { promise: mine, resolve } = Promise.withResolvers<void>();
+    workspaceTurns.set(id, mine);
+    try {
+      await before;
+      return await work();
+    } finally {
+      resolve();
+      if (workspaceTurns.get(id) === mine) {
+        workspaceTurns.delete(id);
+      }
     }
-    settling.set(id, { again: false });
-    const run = (): void => {
-      settle(id)
-        .catch((error: unknown) =>
-          console.warn(
-            `[workspaces] ${id}: its settle failed: ${error instanceof Error ? error.message : String(error)}`
-          )
-        )
-        .finally(() => {
-          const asked = settling.get(id);
-          if (asked?.again) {
-            asked.again = false;
-            run();
-          } else {
-            settling.delete(id);
-          }
-        });
-    };
-    queueMicrotask(run);
+  };
+
+  /** A settle queued in its workspace's turn and not yet begun: every caller meanwhile shares it. */
+  const settleQueued = new Map<string, Promise<Settled>>();
+
+  /**
+   * THE way a workspace is settled ({@link settle}), in its turn: asked while
+   * one runs, one more runs after it, shared by every caller asking before
+   * it begins. The events, the sweep and a read of what the workspace holds
+   * all come here. Never rejects.
+   */
+  const settleNow = (id: string): Promise<Settled> => {
+    const queued = settleQueued.get(id);
+    if (queued !== undefined) {
+      return queued;
+    }
+    const run = inWorkspaceTurn(id, () => {
+      settleQueued.delete(id);
+      return settle(id);
+    }).catch((error: unknown): Settled => {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[workspaces] ${id}: its settle failed: ${reason}`);
+      return { kind: "failed", reason };
+    });
+    settleQueued.set(id, run);
+    return run;
+  };
+
+  /** {@link settleNow}, off the caller's step. */
+  const settleSoon = (id: string): void => {
+    queueMicrotask(() => detach(settleNow(id), `settle ${id}`));
+  };
+
+  /**
+   * What workspace `id` holds on no remote, in its turn
+   * ({@link inWorkspaceTurn}), so no close of its boundary runs meanwhile.
+   * Its settle comes first ({@link settle}): a workspace nothing holds any
+   * more is closed there and read as the settle recorded it, held with what
+   * it holds, or archived, holding nothing anywhere but its remote. Only one
+   * something still holds (a live item, an attached session, a preview) is
+   * read now, by git inside its boundary, which that hold keeps up; never
+   * waiting (a paused machine or a busy folder throws {@link WouldWait}).
+   * Undefined for one archived, gone, or a landing gate's. Throws the
+   * machine's words when git cannot say.
+   */
+  const unlandedOf = (
+    id: string
+  ): Promise<Omit<Unlanded, "live"> | undefined> =>
+    inWorkspaceTurn(id, async () => {
+      await settle(id);
+      const [workspace] = db.workspacesNamed(id);
+      if (!workspace || workspace.state === "archived" || workspace.checksFor) {
+        return;
+      }
+      if (isHeld(workspace)) {
+        const { dirty, stashes, ahead } = workspace.holding;
+        return { workspaceId: id, changed: dirty + stashes, ahead };
+      }
+      const skip = handedOver(workspace).map(
+        (path) => ` ${quote(`:(exclude,literal)${path}`)}`
+      );
+      const lines = (name: string): string =>
+        `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
+      const read = await command(
+        workspace.machineId,
+        workspace.path,
+        `${SAFE_GIT_SHELL}a=$(git rev-list --count HEAD --branches --not --remotes) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
+        GIT_TIMEOUT_MS,
+        refOf(workspace),
+        { noWait: true }
+      );
+      const [ahead, dirty, stashes] = read.stdout
+        .trim()
+        .split(SPACES)
+        .map(Number);
+      if (
+        read.exitCode !== 0 ||
+        [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
+      ) {
+        throw new Error(
+          `git in workspace ${id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+        );
+      }
+      return {
+        workspaceId: id,
+        changed: (dirty as number) + (stashes as number),
+        ahead: ahead as number,
+      };
+    });
+
+  /** The `archive` method's work, in the workspace's turn: the workspace read as it stands then. */
+  const archiveNow = async (
+    needle: string,
+    discard: boolean
+  ): Promise<ArchivedWorkspace> => {
+    const workspace = namedWorkspace(needle);
+    if (workspace.state === "archived") {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} is already archived.`
+      );
+    }
+    if (workspace.checksFor) {
+      return closeWorkspace(workspace, "check");
+    }
+    const live = db
+      .workItemsIn(workspace.id)
+      .find((item) => LIVE.has(item.state));
+    if (live) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
+      );
+    }
+    const skip = handedOver(workspace);
+    // Bounded well inside the HTTP call's own idle timeout: a machine that
+    // never confirms leaves the workspace active, and the answer says so.
+    const stops = await Promise.allSettled(
+      [
+        ...new Set(db.workItemsIn(workspace.id).map((item) => item.instanceId)),
+      ].map((instanceId) => end(instanceId, ARCHIVE_STOP_WAIT_MS))
+    );
+    const unconfirmed = stops.flatMap((stop) =>
+      stop.status === "rejected"
+        ? [
+            stop.reason instanceof Error
+              ? stop.reason.message
+              : String(stop.reason),
+          ]
+        : []
+    );
+    if (unconfirmed.length > 0) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
+      );
+    }
+    const closed = await closeWorkspace(
+      workspace,
+      discard ? "discard" : "keep",
+      skip
+    );
+    if (closed.held) {
+      throw new WorkspaceHoldsWork(closed.held);
+    }
+    // Its gate workspaces on other machines go with it: none outlives it.
+    await Promise.all(
+      db
+        .checkWorkspacesOf(workspace.id)
+        .map((check) => closeWorkspace(check, "check"))
+    );
+    return closed;
   };
 
   /**
@@ -3304,6 +3531,119 @@ export const createWorkItems = ({
     });
   };
 
+  /**
+   * The workspace a `delegate` call's `from` names: one of the caller's
+   * (its own delegates' workspace), with no live item, whose clone is still
+   * on its machine. Refused in a sentence naming what to do otherwise.
+   */
+  const fromSource = (needle: string, parent: Parent): WorkspaceRow => {
+    const named = db.workspacesNamed(needle.trim());
+    if (named.length !== 1) {
+      throw new WorkItemRefusal(
+        404,
+        named.length
+          ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id as from.`
+          : `No workspace "${needle}". Pass as from a workspace id from one of your delegates' results or reports.`
+      );
+    }
+    const [source] = named as [WorkspaceRow];
+    const items = db.workItemsIn(source.id);
+    if (
+      source.createdByInstanceId !== parent.id &&
+      !items.some((item) => item.parentInstanceId === parent.id)
+    ) {
+      throw new WorkItemRefusal(
+        403,
+        `Workspace ${source.id} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
+      );
+    }
+    if (source.state === "archived" || source.checksFor) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${source.id} has no branch to cut from: ${source.checksFor ? "it runs a landing gate's build" : "it is archived, its clone gone"}. Delegate without from.`
+      );
+    }
+    const live = items.find((item) => LIVE.has(item.state));
+    if (live) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${source.id} has a live work item, ${live.title} (${live.id}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`
+      );
+    }
+    return source;
+  };
+
+  /**
+   * A workspace's HEAD and its commits past its base, bundled inside its
+   * boundary ({@link CONTROL_WORKSPACE_BUNDLE}). A held one's boundary,
+   * started for that, is closed again however the bundle went, and the
+   * workspace stays held.
+   */
+  const bundleOf = (id: string): Promise<WorkspaceCommit> =>
+    inWorkspaceTurn(id, async () => {
+      // As it stands in its turn: a settle before it may have closed it.
+      const [source] = db.workspacesNamed(id);
+      if (!source || source.state === "archived") {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${id} was archived before its branch could be read: its clone is gone. Delegate without from.`
+        );
+      }
+      try {
+        return (await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
+          refOf(source),
+          source.base,
+        ])) as WorkspaceCommit;
+      } finally {
+        if (source.state === "held") {
+          await closeWorkspace(source, "keep", handedOver(source));
+        }
+      }
+    });
+
+  /**
+   * A new workspace's branch moved to `source`'s head: the source's HEAD
+   * and its commits past its base bundled inside the source's boundary
+   * ({@link CONTROL_WORKSPACE_BUNDLE}), taken inside the new workspace's
+   * own ({@link CONTROL_WORKSPACE_AT}), and its branch set there, still
+   * tracking the default branch. Every git step runs inside a boundary,
+   * as the landing gate's own transfer does. A move that fails archives the
+   * new workspace, unworked, and throws why.
+   */
+  const cutFrom = async (
+    workspace: WorkspaceRow,
+    source: WorkspaceRow
+  ): Promise<void> => {
+    try {
+      const made = await bundleOf(source.id);
+      await call(workspace.machineId, CONTROL_WORKSPACE_AT, [
+        refOf(workspace),
+        workspace.base,
+        made,
+        source.id,
+      ]);
+      const branch = quote(workspace.branch);
+      const set = await command(
+        workspace.machineId,
+        workspace.path,
+        `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${quote(`origin/${workspace.base}`)} ${branch}`,
+        GIT_TIMEOUT_MS,
+        refOf(workspace)
+      );
+      if (set.exitCode !== 0) {
+        throw new Error(
+          (set.stderr || set.stdout).trim() || `exit ${set.exitCode}`
+        );
+      }
+    } catch (error) {
+      await closeWorkspace(workspace, "unmade");
+      const words = `Workspace ${workspace.id} could not be cut from workspace ${source.id}, so it was archived: ${error instanceof Error ? error.message : String(error)}`;
+      throw error instanceof WorkItemRefusal
+        ? new WorkItemRefusal(error.status, words, { cause: error })
+        : new Error(words, { cause: error });
+    }
+  };
+
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
   const targetMachine = (request: WorkItemRequest, parent: Parent): string => {
     const machineId = request.machineId ?? parent.machineId;
@@ -3341,6 +3681,47 @@ export const createWorkItems = ({
     return request.fork
       ? { ...settings, ...forkOf(request, parent) }
       : settings;
+  };
+
+  /**
+   * The delegate a `delegate` call briefs: a follow-up's, the session its
+   * workspace continues; any other's, the type and model it starts on.
+   */
+  const briefTarget = (
+    request: WorkItemRequest,
+    parent: Parent
+  ): BriefTarget => {
+    if (request.workspace) {
+      const [named] = db.workspacesNamed(request.workspace.trim());
+      const previous = named ? db.workItemsIn(named.id)[0] : undefined;
+      const [session] = previous
+        ? db.getInstancesByIds([previous.instanceId])
+        : [];
+      if (session) {
+        return {
+          delegateType: session.delegateType ?? null,
+          model: session.model ?? "",
+        };
+      }
+    }
+    const settings = settingsOf(request, parent);
+    return {
+      delegateType: settings.type?.name ?? null,
+      model: settings.model ?? "",
+    };
+  };
+
+  /**
+   * The briefing guidance a `delegate` call's caller has yet to read for its
+   * delegate (briefings.ts), recorded as handed; nothing when it has read
+   * it, or when the call is one {@link start} refuses in its own words.
+   */
+  const briefingOf = (request: WorkItemRequest): string | undefined => {
+    const [parent] = db.getInstancesByIds([request.parentInstanceId]);
+    if (!parent || parent.canDelegate === false) {
+      return undefined;
+    }
+    return briefingFor(db, parent.id, briefTarget(request, parent));
   };
 
   /**
@@ -3761,55 +4142,78 @@ export const createWorkItems = ({
         );
       }
     }
-    if (!request.workspace) {
-      const machineId = targetMachine(request, parent);
-      // Before anything reaches the machine: a paused one cuts no clone.
-      notPaused(machineId);
-      const settings = settingsOf(request, parent);
-      // Before the clone is cut: a model the machine does not run starts nothing.
-      modelOffered(machineId, settings);
-      // Placed before the clone is cut: the boundary starts with the account
-      // the session launches on, and the session opens on that same account.
-      const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
-      const placement = placeAhead(
-        machineId,
-        sessionOf(instanceId, request.title.trim(), parent, settings),
-        { projectId, taskId: request.task?.id }
-      );
-      const workspace = await openWorkspace(
-        parent.id,
-        cwdOn(machineId, request.cwd ?? parent.cwd),
-        machineId,
-        projectId,
-        { account: placement.launchesOn }
-      );
-      if (projectId) {
-        recordRepository(projectId, workspace);
-      }
-      // While it lives, the clone is one of the parent's project's places;
-      // archiving the workspace removes it.
-      if (parent.projectId) {
-        projectStands(parent.projectId);
-        db.addPlace({
-          projectId: parent.projectId,
-          machineId,
-          path: workspace.path,
-          kind: "workspace",
-        });
-        placesChanged(machineId, parent.projectId);
-      }
-      // In its scratch dir before its session starts.
-      await handIn(workspace, inputs);
-      return spawnIn(
-        workspace,
-        settings,
-        parent,
-        await briefedFrom(request, workspace),
-        inputs,
-        { instanceId, placement }
-      );
+    return request.workspace
+      ? await startFollowUp(request.workspace, request, parent, inputs)
+      : await startFresh(request, parent, projectId, inputs);
+  };
+
+  /**
+   * An item in a new workspace: cut from the request's repository (the
+   * parent's directory by default) at its default branch's tip, or, with
+   * `from`, on that workspace's machine from its repository and moved to
+   * its head ({@link cutFrom}); then its session spawned there.
+   */
+  const startFresh = async (
+    request: WorkItemRequest,
+    parent: Parent,
+    projectId: string | null,
+    inputs: InputFile[]
+  ): Promise<WorkItemStart> => {
+    const source = request.from ? fromSource(request.from, parent) : undefined;
+    const machineId = targetMachine(
+      source
+        ? { ...request, machineId: source.machineId, cwd: source.repoRoot }
+        : request,
+      parent
+    );
+    // Before anything reaches the machine: a paused one cuts no clone.
+    notPaused(machineId);
+    const settings = settingsOf(request, parent);
+    // Before the clone is cut: a model the machine does not run starts nothing.
+    modelOffered(machineId, settings);
+    // Placed before the clone is cut: the boundary starts with the account
+    // the session launches on, and the session opens on that same account.
+    const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
+    const placement = placeAhead(
+      machineId,
+      sessionOf(instanceId, request.title.trim(), parent, settings),
+      { projectId, taskId: request.task?.id }
+    );
+    const workspace = await openWorkspace(
+      parent.id,
+      cwdOn(machineId, source?.repoRoot ?? request.cwd ?? parent.cwd),
+      machineId,
+      projectId,
+      { account: placement.launchesOn }
+    );
+    if (source) {
+      await cutFrom(workspace, source);
     }
-    return await startFollowUp(request.workspace, request, parent, inputs);
+    if (projectId) {
+      recordRepository(projectId, workspace);
+    }
+    // While it lives, the clone is one of the parent's project's places;
+    // archiving the workspace removes it.
+    if (parent.projectId) {
+      projectStands(parent.projectId);
+      db.addPlace({
+        projectId: parent.projectId,
+        machineId,
+        path: workspace.path,
+        kind: "workspace",
+      });
+      placesChanged(machineId, parent.projectId);
+    }
+    // In its scratch dir before its session starts.
+    await handIn(workspace, inputs);
+    return spawnIn(
+      workspace,
+      settings,
+      parent,
+      await briefedFrom(request, workspace),
+      inputs,
+      { instanceId, placement }
+    );
   };
 
   /** The request with its brief written from its clone, when it asks for that ({@link WorkItemRequest.briefFromClone}). */
@@ -4124,27 +4528,43 @@ export const createWorkItems = ({
           uuid: crypto.randomUUID(),
           message: { role: "user", content },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: "work-item" },
+          origin: WAKE_ORIGIN,
         },
       },
     });
   };
 
-  /** One expiry path for a live timer, an overdue startup wait, or a turn reaching its deadline. */
-  const endWait = (id: string): void => {
+  /**
+   * The one expiry path for a wait whose time has passed: a live timer, an
+   * overdue startup wait, or a turn ending past the deadline (`turnOver`).
+   * A turn under way at the deadline is never the session's own work (its
+   * first call of its own ended the wait, {@link worked}): it is a word that
+   * reached it, or the turn that declared the wait. That turn's end settles
+   * the wait ({@link waitingTurn}, `turnState` going idle), and a re-check
+   * stands meanwhile, so a turn whose end never comes holds no wait for
+   * ever. Otherwise the wait ends and the session is told so, with a minute
+   * to resume before its parent hears it did not.
+   */
+  const endWait = (id: string, turnOver = false): void => {
     const item = db.workItem(id);
     if (!item?.waitUntil) {
       disarmWait(id);
       return;
     }
-    const reason = item.waitReason;
-    const resumeBy = new Date(item.waitUntil.getTime() + WAIT_RESUME_GRACE_MS);
-    clearWait(item);
     const [row] = db.getInstancesByIds([item.instanceId]);
-    if (row && LIVE.has(item.state)) {
-      if (inTurn(row)) {
-        return;
-      }
+    const live = !!row && LIVE.has(item.state);
+    if (live && !turnOver && inTurn(row)) {
+      lifetime.cancel(waitTimers.get(id));
+      waitTimers.set(
+        id,
+        lifetime.after(WAIT_RESUME_GRACE_MS, () => endWait(id))
+      );
+      return;
+    }
+    const reason = item.waitReason;
+    clearWait(item);
+    if (row && live) {
+      const resumeBy = new Date(Date.now() + WAIT_RESUME_GRACE_MS);
       const resuming = update(id, { waitResumeBy: resumeBy }) as WorkItemRow;
       armWait(resuming);
       tell(
@@ -4167,7 +4587,7 @@ export const createWorkItems = ({
         if (row && !inTurn(row)) {
           report(
             row,
-            `${item.title}: the delegate did not resume within 60 seconds of its wait deadline.`,
+            `${item.title}: the delegate did not resume within 60 seconds of being told its wait was over.`,
             false,
             true
           );
@@ -4195,13 +4615,18 @@ export const createWorkItems = ({
       lifetime.after(remaining, () => endWait(item.id))
     );
   };
+  /**
+   * A turn that ended with its item's wait still declared: a waiting turn,
+   * which counts toward no quiet-turn failure, whatever started it. Its time
+   * passed, the wait ends here and the session is told ({@link endWait}).
+   */
   const waitingTurn = (item: WorkItemRow): boolean => {
     if (!item.waitUntil) {
       return false;
     }
     quiet.delete(item.id);
     if (item.waitUntil.getTime() <= Date.now()) {
-      endWait(item.id);
+      endWait(item.id, true);
     }
     return true;
   };
@@ -5483,6 +5908,13 @@ export const createWorkItems = ({
     ): Promise<WorkItemStart | { queued: string; text: string }> {
       // A role is the hub's to give (a curator run's), never a caller's.
       const { role: _role, ...asked } = called;
+      // The fleet's guidance for briefing this delegate, before anything
+      // starts, when the caller has not read it since its start or its
+      // last compaction (briefings.ts).
+      const guide = briefingOf(asked);
+      if (guide) {
+        throw new WorkItemRefusal(409, guide);
+      }
       try {
         return await start(asked);
       } catch (error) {
@@ -5647,15 +6079,40 @@ export const createWorkItems = ({
       }
     },
 
-    /** The live idle/busy transition, even while turn-end rules are still deciding. */
+    /**
+     * The live idle/busy transition, even while turn-end rules are still
+     * deciding. Idle after the declaring turn puts its wait at rest; busy
+     * after the wait's time passed is the session resuming, which ends the
+     * resume grace and its missed-resume notice. Busy during the wait's time
+     * ends nothing: the word that woke it is not work ({@link worked}).
+     */
     turnState(instanceId: string, busy: boolean): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
       if (!busy && item?.waitUntil) {
         waitsAtRest.add(item.id);
-      } else if (
-        busy &&
-        (item?.waitResumeBy || (item?.waitUntil && waitsAtRest.has(item.id)))
+        // A turn that ran past the deadline ended: the wait ends now.
+        if (item.waitUntil.getTime() <= Date.now()) {
+          endWait(item.id, true);
+        }
+      } else if (busy && item?.waitResumeBy) {
+        clearWait(item);
+      }
+    },
+
+    /**
+     * The tools a session's model called in one message: one that is work of
+     * its own ({@link restsInWait} is false for it) ends a wait at rest, so
+     * a session working again is not shown waiting and its turns count
+     * again. The declaring turn's own calls end nothing.
+     */
+    worked(instanceId: string, tools: readonly string[]): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (
+        item?.waitUntil &&
+        waitsAtRest.has(item.id) &&
+        tools.some((tool) => !restsInWait(tool))
       ) {
         clearWait(item);
       }
@@ -6191,6 +6648,21 @@ export const createWorkItems = ({
       return heldWork(workspace);
     },
 
+    /**
+     * What the workspace of session `instanceId`'s item holds that is on no
+     * remote ({@link Unlanded}, read by {@link unlandedOf}); undefined for a
+     * session with no item. Throws the machine's words when git cannot say.
+     */
+    async unlanded(instanceId: string): Promise<Unlanded | undefined> {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (!item) {
+        return;
+      }
+      const read = await unlandedOf(item.workspaceId);
+      return read && { ...read, live: LIVE.has(item.state) };
+    },
+
     /** Every held workspace, with what it holds and where ({@link HeldWork}), newest first. */
     heldWorkspaces: (): HeldWork[] =>
       db.heldWorkspaces().filter(isHeld).map(heldWork),
@@ -6205,11 +6677,12 @@ export const createWorkItems = ({
     ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> {
       const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
       for (const workspace of db.activeWorkspacesOn(machineId)) {
-        if (settling.has(workspace.id)) {
+        // Something runs in its turn now: the sweep's next look settles it.
+        if (workspaceTurns.has(workspace.id)) {
           continue;
         }
         // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, so a sweep never loads a machine with many archives at once
-        done.push({ workspace, outcome: await settle(workspace.id) });
+        done.push({ workspace, outcome: await settleNow(workspace.id) });
       }
       return done;
     },
@@ -6250,69 +6723,14 @@ export const createWorkItems = ({
      * person chose to let it go, and its machine saves it to a carry before
      * deleting anything.
      */
-    async archive(
+    archive(
       needle: string,
       { discard = false }: { discard?: boolean } = {}
     ): Promise<ArchivedWorkspace> {
-      const workspace = namedWorkspace(needle);
-      if (workspace.state === "archived") {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${workspace.id} is already archived.`
-        );
-      }
-      if (workspace.checksFor) {
-        return closeWorkspace(workspace, "check");
-      }
-      const live = db
-        .workItemsIn(workspace.id)
-        .find((item) => LIVE.has(item.state));
-      if (live) {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
-        );
-      }
-      const skip = handedOver(workspace);
-      // Bounded well inside the HTTP call's own idle timeout: a machine that
-      // never confirms leaves the workspace active, and the answer says so.
-      const stops = await Promise.allSettled(
-        [
-          ...new Set(
-            db.workItemsIn(workspace.id).map((item) => item.instanceId)
-          ),
-        ].map((instanceId) => end(instanceId, ARCHIVE_STOP_WAIT_MS))
+      // In its turn: no settle, bundle or read meets this close.
+      return inWorkspaceTurn(namedWorkspace(needle).id, () =>
+        archiveNow(needle, discard)
       );
-      const unconfirmed = stops.flatMap((stop) =>
-        stop.status === "rejected"
-          ? [
-              stop.reason instanceof Error
-                ? stop.reason.message
-                : String(stop.reason),
-            ]
-          : []
-      );
-      if (unconfirmed.length > 0) {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
-        );
-      }
-      const closed = await closeWorkspace(
-        workspace,
-        discard ? "discard" : "keep",
-        skip
-      );
-      if (closed.held) {
-        throw new WorkspaceHoldsWork(closed.held);
-      }
-      // Its gate workspaces on other machines go with it: none outlives it.
-      await Promise.all(
-        db
-          .checkWorkspacesOf(workspace.id)
-          .map((check) => closeWorkspace(check, "check"))
-      );
-      return closed;
     },
 
     /**

@@ -157,10 +157,38 @@ import type { Tasks } from "./tasks";
  * (worker 24,991 → 24,278, delegate 7,291 → 7,239, lead 16,199 → 15,487,
  * web-facing 2,837 → 2,784, curator 1,121 → 1,069 measured). The same
  * budgets.
+ * 2026-10-16: a memory document's scope takes `delegateTypes`, `model` and
+ * `briefer`, and a rule's `role` and `delegateType` (memory-scopes.ts,
+ * briefings.ts): guidance for briefing a model reached the model instead of
+ * the session writing the brief, and the model-keyed SessionStart hook's
+ * text was summarized away at each compaction. About 150 tokens for the
+ * worker alone, the memory group's words and the rule scope's cut to a
+ * clause each (worker 24,278 → 24,426 measured). Within the same budgets.
+ * 2026-10-16: native compaction (open-items.ts): `open_items`, a session's
+ * open items built from its records, the one reader the fleet's SessionStart
+ * hook on Claude Code's `compact` source calls (`cawco tool open_items`), so
+ * every compaction lists them; and todo_write's one clause saying so, so
+ * sessions file what is open there rather than only in chat (the
+ * continuation evaluation: 16% with native compaction alone, 47% with open
+ * items filed). continue_session's words cut to its one mode. About 55
+ * tokens for the worker, the delegate and the lead (worker 24,445, delegate
+ * 7,325, lead 15,574 measured). Raised deliberately for the delegate; the
+ * worker's and the lead's fit as they stand.
+ * 2026-10-17: a declared wait ends on work of the session's own, not on any
+ * turn (work-items.ts `worked`), and a cold hand-off goes by what the
+ * target's workspace holds on no remote before Jev (delegation-actions.ts
+ * `unlandedVerdict`), with delegate's `from` to finish committed work in a
+ * fresh session. wait_item says what ends a wait and what leaves it on;
+ * handoff says the cold rule with Jev on and off, its old one sentence cut
+ * to that, and delegate points to it. Both are behaviour a leaf acts on
+ * (two waiting builders and five refused hand-offs stranded work on
+ * 2026-10-16/17). About 60 tokens for the delegate (7,392 measured), the
+ * words already cut twice. Raised deliberately for the delegate; the
+ * worker's and the lead's fit as they stand.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,
-  delegate: 7310,
+  delegate: 7400,
   lead: 16_220,
   overseer: 770,
   "web-facing": 3400,

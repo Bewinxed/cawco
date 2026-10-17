@@ -1,13 +1,23 @@
 /**
- * Which of the fleet's role-scoped memory documents a session launches with
- * (core fleet.ts `MemoryScope`). The hub picks them as it grants a launch
+ * Which of the fleet's scoped memory documents a session launches with
+ * (core fleet.ts `MemoryScope`): by its role, the delegate type it started
+ * as, its model and its project. The hub picks them as it grants a launch
  * (server.ts `grantLaunch`), so every launch, restore and relaunch carries
  * what the fleet says now; the harness puts them in the session's own
- * instructions. A document scoped to a project alone is placed in the
- * project's folders instead (project-placements.ts) and is not picked here.
+ * instructions, which a compaction keeps. A document scoped to projects
+ * alone is placed in the projects' folders instead (project-placements.ts),
+ * and a briefer's reaches the session that delegates (briefings.ts); neither
+ * is picked here.
  */
-import type { MemoryRole, MemoryScope, SessionInstruction } from "@cawco/core";
+import type {
+  DocumentFacts,
+  InstanceRow,
+  MemoryScope,
+  SessionInstruction,
+} from "@cawco/core";
+import { sessionTakes } from "@cawco/core";
 import type { PlacementPlace } from "./project-placements";
+import { memoryRoleOf } from "./roles";
 
 /** A document as the picking needs it. */
 interface ScopedDoc {
@@ -57,19 +67,25 @@ export const sessionProject = (
   session.projectId || placesHolding(session, places)[0]?.projectId;
 
 /**
- * The documents scoped to `role` that a session of it in `projectId` loads:
- * each with that role and no projects, and each with that role whose
- * projects include this one. In path order, as the fleet lists them.
+ * The documents a session launches with: each whose scope picks sessions by
+ * role, delegate type or model, and whose every field this session meets
+ * (core fleet.ts `sessionTakes`). In path order, as the fleet lists them.
  */
-export const roleInstructions = (
+export const sessionInstructions = (
   docs: readonly ScopedDoc[],
-  role: MemoryRole,
-  projectId: string | undefined
+  facts: DocumentFacts
 ): SessionInstruction[] =>
   docs.flatMap(({ path, content, scope }) =>
-    scope?.role === role &&
-    (!scope.projectIds ||
-      (projectId !== undefined && scope.projectIds.includes(projectId)))
-      ? [{ path, content }]
-      : []
+    sessionTakes(scope, facts) ? [{ path, content }] : []
   );
+
+/** What a launching session's row says about it, as a document's scope reads it. */
+export const documentFacts = (
+  row: InstanceRow,
+  places: readonly PlacementPlace[]
+): DocumentFacts => ({
+  role: memoryRoleOf(row),
+  delegateType: row.delegateType ?? null,
+  model: row.model ?? null,
+  projectId: sessionProject(row, places),
+});

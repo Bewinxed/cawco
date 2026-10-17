@@ -39,7 +39,7 @@ import type {
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
-import { askJev, jevAccess } from "../jev";
+import { askJev, jevAccess, jevUnanswered } from "../jev";
 import type { HubLifetimeShape } from "../lifetime";
 import { WorkItemRefusal } from "../work-items";
 import { createWorkflowEngine, type Outcome } from "./engine";
@@ -1189,6 +1189,17 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     return askJev(access, state, spec.questions, {
       model: spec.model,
       timeoutMs: WORKFLOW_JEV_TIMEOUT_MS,
+    }).then((asking) => {
+      switch (asking.kind) {
+        case "answered":
+          return asking.value;
+        case "unanswered":
+          throw new Error(jevUnanswered(asking.after));
+        default: {
+          const unhandled: never = asking;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     });
   };
 

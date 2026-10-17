@@ -627,6 +627,10 @@ const knownOf = async (projectId: string): Promise<string> =>
     ...(await knowledgeOf(projectId)).map((file) => file.content),
   ].join("\n\n");
 
+/** The notes still in a project's inbox, oldest first: what its sessions noted and the curator has not sorted. */
+export const inboxNotes = (projectId: string): Promise<Note[]> =>
+  notesIn(projectId, INBOX_DIR);
+
 /** The notes in one of memory/'s folders, oldest first. */
 const notesIn = async (projectId: string, dir: string): Promise<Note[]> => {
   const names = (await folderFileNames(projectId, dir))

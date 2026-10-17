@@ -8,6 +8,7 @@
  * after a restart.
  */
 import type { FleetMarketplace, SourceFacts } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { parseSkillSource } from "./skills";
 
 /** How long one registry read may take before the card says it did not answer. Our call. */
@@ -70,23 +71,25 @@ const marketplaceOrigin = (source: string): Origin => {
   };
 };
 
-const read = async (url: string): Promise<unknown> => {
-  const response = await fetch(url, {
-    headers: { accept: "application/json", "user-agent": "cawco-hub" },
-    signal: AbortSignal.timeout(READ_MS),
+/** One JSON read within {@link READ_MS}, its body included. */
+const read = (url: string): Promise<Bounded<unknown>> =>
+  readWithin(READ_MS, async (signal) => {
+    const response = await fetch(url, {
+      headers: { accept: "application/json", "user-agent": "cawco-hub" },
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`${new URL(url).host} answered ${response.status}`);
+    }
+    return (await response.json()) as unknown;
   });
-  if (!response.ok) {
-    throw new Error(`${new URL(url).host} answered ${response.status}`);
-  }
-  return response.json();
-};
 
-const said = (error: unknown): string => {
-  if (error instanceof DOMException && error.name === "TimeoutError") {
-    return `the registry didn't answer within ${READ_MS / 1000} s`;
-  }
-  return error instanceof Error ? error.message : String(error);
-};
+/** The words for a read the registry did not answer in time. */
+const unanswered = (after: number): string =>
+  `the registry didn't answer within ${Math.round(after / 1000)} s`;
+
+const said = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const githubFacts = async (
   owner: string,
@@ -94,9 +97,23 @@ const githubFacts = async (
 ): Promise<SourceFacts> => {
   const at = `github.com/${owner}/${repo}`;
   try {
-    const found = (await read(
+    const asked = await read(
       `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
-    )) as { created_at?: string; stargazers_count?: number };
+    );
+    switch (asked.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        return { at, unknown: unanswered(asked.after) };
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const found = asked.value as {
+      created_at?: string;
+      stargazers_count?: number;
+    };
     return {
       at,
       ...(found.created_at ? { since: found.created_at } : {}),
@@ -113,16 +130,32 @@ const npmFacts = async (pkg: string): Promise<SourceFacts> => {
   const at = `npm ${pkg}`;
   const name = pkg.replace("/", "%2f");
   try {
-    const [document, downloads] = await Promise.all([
-      read(`https://registry.npmjs.org/${name}`) as Promise<{
-        time?: { created?: string };
-      }>,
-      read(
-        `https://api.npmjs.org/downloads/point/last-week/${pkg}`
-      ) as Promise<{
-        downloads?: number;
-      }>,
+    const [documentRead, downloadsRead] = await Promise.all([
+      read(`https://registry.npmjs.org/${name}`),
+      read(`https://api.npmjs.org/downloads/point/last-week/${pkg}`),
     ]);
+    switch (documentRead.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        return { at, unknown: unanswered(documentRead.after) };
+      default: {
+        const unhandled: never = documentRead;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    switch (downloadsRead.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        return { at, unknown: unanswered(downloadsRead.after) };
+      default: {
+        const unhandled: never = downloadsRead;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const document = documentRead.value as { time?: { created?: string } };
+    const downloads = downloadsRead.value as { downloads?: number };
     return {
       at,
       ...(document.time?.created ? { since: document.time.created } : {}),

@@ -6,9 +6,11 @@
  *
  * A failed read is said as one of two things and never turned into an empty
  * answer (The Claim Of Nothing Rule): the hub did not answer (`unreached`),
- * or it answered and refused (`refused`, its own words). An aborted read
- * (a newer keystroke took its place) resolves `null` and is dropped by the
- * caller.
+ * or it answered and refused (`refused`, its own words). A read whose signal
+ * aborted (a newer keystroke took its place) is neither: it is `superseded`,
+ * its own kind (the shape of core's `Bounded`, bounded.ts), whether the abort
+ * landed before the hub answered or while its body was still arriving, and
+ * the caller drops it.
  */
 import type { FindAnswer, FindBy, FindKind, WaitingAnswer } from "@cawco/core";
 import { hubFailure, unreachable, unreachedAnswer } from "../hub-read";
@@ -41,24 +43,32 @@ export type Read<T> =
   | { ok: false; unreached: true }
   | { ok: false; unreached: false; detail: string };
 
-async function read<T>(
-  url: string,
-  signal?: AbortSignal
-): Promise<Read<T> | null> {
+/** A read the caller asked: it ran to an end, or a newer one took its place. */
+export type Asked<T> =
+  { kind: "answered"; read: Read<T> } | { kind: "superseded" };
+
+async function read<T>(url: string, signal?: AbortSignal): Promise<Asked<T>> {
+  try {
+    return { kind: "answered", read: await answer<T>(url, signal) };
+  } catch (error) {
+    // The abort rejects the fetch, or the body read after it (Firefox: "The
+    // operation was aborted."); either way it is the caller letting go.
+    if (signal?.aborted) {
+      return { kind: "superseded" };
+    }
+    throw error;
+  }
+}
+
+async function answer<T>(url: string, signal?: AbortSignal): Promise<Read<T>> {
   let response: Response;
   try {
     response = await fetch(url, { signal });
   } catch (error) {
-    if (signal?.aborted) {
-      return null;
-    }
-    if (unreachable(error)) {
+    if (!signal?.aborted && unreachable(error)) {
       return { ok: false, unreached: true };
     }
     throw error;
-  }
-  if (signal?.aborted) {
-    return null;
   }
   if (unreachedAnswer(response)) {
     return { ok: false, unreached: true };

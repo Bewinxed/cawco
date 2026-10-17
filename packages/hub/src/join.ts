@@ -25,6 +25,7 @@ import {
 } from "@cawco/core";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
+import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { generateInstallScript } from "@cawco/core/install-script";
 import { LineSplitter } from "@cawco/core/lines";
@@ -33,19 +34,41 @@ import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
 import type { HubLifetimeShape } from "./lifetime";
 
-/** Runs a short command and answers its stdout, or undefined when it failed or hung. */
+/** How long a short command gets to answer. Our choice. */
+const OUTPUT_MS = 3000;
+
+/**
+ * Runs a short command and answers its stdout, or undefined when it failed.
+ * One that did not answer in time is said once in the log, apart from a
+ * failure, and its rows are not listed.
+ */
 const output = async (argv: string[]): Promise<string | undefined> => {
-  const child = Bun.spawn(argv, {
-    stdout: "pipe",
-    stderr: "ignore",
-    stdin: "ignore",
-    timeout: 3000,
+  const ran = await readWithin(OUTPUT_MS, async (signal) => {
+    const child = Bun.spawn(argv, {
+      stdout: "pipe",
+      stderr: "ignore",
+      stdin: "ignore",
+      signal,
+    });
+    const [text, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    return code === 0 ? text.trim() : undefined;
   });
-  const [text, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    child.exited,
-  ]);
-  return code === 0 ? text.trim() : undefined;
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      console.warn(
+        `[join] ${argv.join(" ")} did not answer within ${Math.round(ran.after / 1000)} s; what it would list is not listed`
+      );
+      return;
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 const TRAILING_DOT = /\.$/;

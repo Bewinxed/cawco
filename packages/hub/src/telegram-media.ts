@@ -1,6 +1,11 @@
 import type { SendPayload } from "@cawco/core";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+
+/** "<who> did not answer within N s". */
+const silent = (who: string, after: number): string =>
+  `${who} did not answer within ${Math.round(after / 1000)} s`;
 
 /** Telegram's own ceiling on what a bot may fetch, and how long fetching may take. */
 const FILE_LIMIT = 20 * 1024 * 1024;
@@ -85,11 +90,16 @@ export type Intake =
       images?: SendPayload["images"];
       attachments?: SendPayload["attachments"];
     }
-  | { kind: "refused"; reason: string };
+  | { kind: "refused"; reason: string }
+  /** Telegram or the router did not answer in time: the words say which. */
+  | { kind: "unanswered"; reason: string };
 
 export interface MediaServices {
   /** The bridge's own Bot API caller, for `getFile`. */
-  readonly call: <T>(method: string, body: unknown) => Promise<T | undefined>;
+  readonly call: <T>(
+    method: string,
+    body: unknown
+  ) => Promise<Bounded<T | undefined>>;
   /** The bridge's logger for a transport failure, which keeps the token out of the log. */
   readonly failed: (what: string, error: unknown) => void;
   /** Where a `file_path` is fetched from, bot token already in it. */
@@ -138,50 +148,112 @@ export const createMediaIntake = ({
 
   const fetched = async (
     file: TelegramFile
-  ): Promise<{ bytes: Uint8Array; path: string } | { error: string }> => {
+  ): Promise<
+    | { bytes: Uint8Array; path: string }
+    | { error: string }
+    | { unanswered: string }
+  > => {
     if ((file.file_size ?? 0) > FILE_LIMIT) {
       return { error: TOO_BIG };
     }
-    const found = await call<{ file_path?: string }>("getFile", {
+    const asked = await call<{ file_path?: string }>("getFile", {
       file_id: file.file_id,
     });
-    if (!found?.file_path) {
+    let found: { file_path?: string } | undefined;
+    switch (asked.kind) {
+      case "answered":
+        found = asked.value;
+        break;
+      case "unanswered":
+        return { unanswered: `${silent("Telegram", asked.after)}.` };
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const path = found?.file_path;
+    if (!path) {
       return { error: "Telegram would not hand that file over." };
     }
-    let bytes: Uint8Array;
+    let read: Bounded<Uint8Array | { error: string }>;
     try {
-      const response = await fetch(`${filesBase}/${found.file_path}`, {
-        signal: AbortSignal.timeout(FILE_TIMEOUT_MS),
+      read = await readWithin(FILE_TIMEOUT_MS, async (signal) => {
+        const response = await fetch(`${filesBase}/${path}`, { signal });
+        if (!response.ok) {
+          return {
+            error: `Telegram would not hand that file over (${response.status}).`,
+          };
+        }
+        return new Uint8Array(await response.arrayBuffer());
       });
-      if (!response.ok) {
-        return {
-          error: `Telegram would not hand that file over (${response.status}).`,
-        };
-      }
-      bytes = new Uint8Array(await response.arrayBuffer());
     } catch (error) {
       failed("file download", error);
-      return { error: "Telegram did not answer while sending that file over." };
+      return { error: "Telegram could not be reached for that file." };
+    }
+    let bytes: Uint8Array;
+    switch (read.kind) {
+      case "answered":
+        if (!(read.value instanceof Uint8Array)) {
+          return read.value;
+        }
+        bytes = read.value;
+        break;
+      case "unanswered":
+        return {
+          unanswered: `${silent("Telegram", read.after)} while sending that file over.`,
+        };
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     if (bytes.byteLength > FILE_LIMIT) {
       return { error: TOO_BIG };
     }
-    return { bytes, path: found.file_path };
+    return { bytes, path };
   };
 
+  /** A file not handed over: Telegram's refusal, or its silence, each as its own intake. */
+  const withheld = (
+    file: { error: string } | { unanswered: string }
+  ): Intake =>
+    "unanswered" in file
+      ? { kind: "unanswered", reason: file.unanswered }
+      : { kind: "refused", reason: file.error };
+
+  /** The router's models; answered [] when it refused or could not be reached. */
   const catalog = async (
     url: string
-  ): Promise<{ id: string; aliases?: string[] }[]> => {
-    const response = await fetch(`${url}/v1/models`, {
-      signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
-    }).catch(() => undefined);
-    if (!response?.ok) {
-      return [];
+  ): Promise<Bounded<{ id: string; aliases?: string[] }[]>> => {
+    try {
+      return await readWithin(ROUTER_TIMEOUT_MS, async (signal) => {
+        const response = await fetch(`${url}/v1/models`, { signal });
+        if (!response.ok) {
+          return [];
+        }
+        const { data } = (await response.json().catch(() => ({}))) as {
+          data?: { id: string; aliases?: string[] }[];
+        };
+        return data ?? [];
+      });
+    } catch {
+      return { kind: "answered", value: [] };
     }
-    const { data } = (await response.json().catch(() => ({}))) as {
-      data?: { id: string; aliases?: string[] }[];
-    };
-    return data ?? [];
+  };
+
+  /** The models a router offers, in words; its silence said as such. */
+  const offered = async (url: string): Promise<string> => {
+    const listed = await catalog(url);
+    switch (listed.kind) {
+      case "answered":
+        return `it offers ${catalogued(listed.value)}`;
+      case "unanswered":
+        return `its list of models did not come within ${Math.round(listed.after / 1000)} s`;
+      default: {
+        const unhandled: never = listed;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   };
 
   /**
@@ -192,14 +264,28 @@ export const createMediaIntake = ({
   const named = async (
     url: string,
     handle: string
-  ): Promise<string | { error: string }> => {
+  ): Promise<string | { error: string } | { unanswered: string }> => {
     if (
       resolved?.handle === handle &&
       Date.now() - resolved.at < MODEL_TTL_MS
     ) {
       return resolved.name;
     }
-    const listed = await catalog(url);
+    const asked = await catalog(url);
+    let listed: { id: string; aliases?: string[] }[];
+    switch (asked.kind) {
+      case "answered":
+        listed = asked.value;
+        break;
+      case "unanswered":
+        return {
+          unanswered: `${silent(`The router at ${url}`, asked.after)}.`,
+        };
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     if (listed.length === 0) {
       return { error: `The router at ${url} is not answering.` };
     }
@@ -223,7 +309,7 @@ export const createMediaIntake = ({
   ): Promise<string> => {
     if (response.status === 404) {
       resolved = undefined;
-      return `The router has no "${name}" — it offers ${catalogued(await catalog(url))}.`;
+      return `The router has no "${name}" — ${await offered(url)}.`;
     }
     if (response.status === 507) {
       return `The router has no VRAM left for "${name}".`;
@@ -255,16 +341,15 @@ export const createMediaIntake = ({
     // Watched, not awaited: the poll loop below is what reports readiness, so
     // a start call that never answers is left to it.
     detach(
-      fetch(`${url}/manager/start/${encodeURIComponent(name)}`, {
-        method: "POST",
-        signal: AbortSignal.timeout(WARM_LIMIT_MS),
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            refused = await refusal(url, response, name);
-          }
-        })
-        .catch(() => undefined),
+      readWithin(WARM_LIMIT_MS, async (signal) => {
+        const response = await fetch(
+          `${url}/manager/start/${encodeURIComponent(name)}`,
+          { method: "POST", signal }
+        );
+        if (!response.ok) {
+          refused = await refusal(url, response, name);
+        }
+      }).catch(() => undefined),
       "transcription warm-up"
     );
 
@@ -274,16 +359,26 @@ export const createMediaIntake = ({
         return refused;
       }
       // biome-ignore lint/performance/noAwaitInLoops: polls until the model loads or the deadline passes; each check depends on the previous sleep
-      const status = await fetch(`${url}/manager/status`, {
-        signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
-      })
-        .then(
-          (response) =>
-            response.json() as Promise<{
-              models?: { name: string; status: string }[];
-            }>
-        )
-        .catch(() => undefined);
+      const asked = await readWithin(ROUTER_TIMEOUT_MS, async (signal) => {
+        const response = await fetch(`${url}/manager/status`, { signal });
+        return (await response.json()) as {
+          models?: { name: string; status: string }[];
+        };
+      }).catch(() => undefined);
+      let status: { models?: { name: string; status: string }[] } | undefined;
+      switch (asked?.kind) {
+        case "answered":
+          status = asked.value;
+          break;
+        case "unanswered":
+        case undefined:
+          // No word on its status this round: the poll waits on.
+          break;
+        default: {
+          const unhandled: never = asked;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       const model = status?.models?.find((entry) => entry.name === name);
       if (model && LOADED.has(model.status)) {
         return undefined;
@@ -312,15 +407,26 @@ export const createMediaIntake = ({
 
     const name = await named(url, handle);
     if (typeof name !== "string") {
-      return { kind: "refused", reason: name.error };
+      return "unanswered" in name
+        ? { kind: "unanswered", reason: name.unanswered }
+        : { kind: "refused", reason: name.error };
     }
     const cold = await warm(url, name);
     if (cold) {
       return { kind: "refused", reason: cold };
     }
+    return await heard(url, name, bytes, filename);
+  };
 
+  /** The loaded model's transcript of `bytes`, within {@link TRANSCRIBE_TIMEOUT_MS}. */
+  const heard = async (
+    url: string,
+    name: string,
+    bytes: Uint8Array,
+    filename: string
+  ): Promise<Intake> => {
     const chat = readEnv(CAWCO_ENV.telegramAsrMode) === "chat";
-    const response = await (
+    const post = (signal: AbortSignal): Promise<Response> =>
       chat
         ? // An audio-capable LLM has no transcription API — it is asked to
           // transcribe the way it is asked anything, with the audio attached.
@@ -355,7 +461,7 @@ export const createMediaIntake = ({
                 },
               ],
             }),
-            signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+            signal,
           })
         : (() => {
             const form = new FormData();
@@ -377,21 +483,57 @@ export const createMediaIntake = ({
             return fetch(`${url}/v1/audio/transcriptions`, {
               method: "POST",
               body: form,
-              signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+              signal,
             });
-          })()
-    ).catch(() => undefined);
-    if (!response) {
-      return { kind: "refused", reason: "The router took too long to answer." };
+          })();
+    let asked: Bounded<
+      | { refused: string }
+      | {
+          body: {
+            text?: string;
+            choices?: { message?: { content?: string } }[];
+          };
+        }
+    >;
+    try {
+      asked = await readWithin(TRANSCRIBE_TIMEOUT_MS, async (signal) => {
+        const response = await post(signal);
+        if (!response.ok) {
+          return { refused: await refusal(url, response, name) };
+        }
+        return {
+          body: (await response.json().catch(() => ({}))) as {
+            text?: string;
+            choices?: { message?: { content?: string } }[];
+          },
+        };
+      });
+    } catch {
+      return { kind: "refused", reason: "The router could not be reached." };
     }
-    if (!response.ok) {
-      return { kind: "refused", reason: await refusal(url, response, name) };
-    }
-
-    const body = (await response.json().catch(() => ({}))) as {
+    let body: {
       text?: string;
       choices?: { message?: { content?: string } }[];
     };
+    switch (asked.kind) {
+      case "answered": {
+        const { value } = asked;
+        if ("refused" in value) {
+          return { kind: "refused", reason: value.refused };
+        }
+        ({ body } = value);
+        break;
+      }
+      case "unanswered":
+        return {
+          kind: "unanswered",
+          reason: `${silent("The router", asked.after)} with the transcript.`,
+        };
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     const said = (
       chat ? body.choices?.[0]?.message?.content : body.text
     )?.trim();
@@ -410,8 +552,8 @@ export const createMediaIntake = ({
     const spoken = message.voice ?? message.audio ?? message.video_note;
     if (spoken) {
       const file = await fetched(spoken);
-      if ("error" in file) {
-        return { kind: "refused", reason: file.error };
+      if (!("bytes" in file)) {
+        return withheld(file);
       }
       // Named for what it holds: a decoder is picked off the extension.
       return transcribe(file.bytes, `voice.${extensionOf(file.path) || "ogg"}`);
@@ -419,8 +561,8 @@ export const createMediaIntake = ({
 
     if (message.photo?.length) {
       const file = await fetched(largest(message.photo));
-      if ("error" in file) {
-        return { kind: "refused", reason: file.error };
+      if (!("bytes" in file)) {
+        return withheld(file);
       }
       return {
         kind: "media",
@@ -443,8 +585,8 @@ export const createMediaIntake = ({
 
     if (mime.startsWith("image/")) {
       const file = await fetched(document);
-      if ("error" in file) {
-        return { kind: "refused", reason: file.error };
+      if (!("bytes" in file)) {
+        return withheld(file);
       }
       return {
         kind: "media",
@@ -460,8 +602,8 @@ export const createMediaIntake = ({
         return { kind: "refused", reason: TOO_MUCH_TEXT };
       }
       const file = await fetched(document);
-      if ("error" in file) {
-        return { kind: "refused", reason: file.error };
+      if (!("bytes" in file)) {
+        return withheld(file);
       }
       if (file.bytes.byteLength > TEXT_LIMIT) {
         return { kind: "refused", reason: TOO_MUCH_TEXT };

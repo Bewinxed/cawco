@@ -26,6 +26,7 @@
  * address that stops answering later still decides it.
  */
 
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { readConfig, writeConfig } from "./config";
 import { delegationHubUrl } from "./delegation";
 
@@ -37,16 +38,38 @@ const originOf = (url: string): string =>
 /** How long a hub that did not say its id is left before it is asked again. */
 const ASK_AGAIN_MS = 5000;
 
-/** A hub's id, off its `/health`; undefined when it does not answer. */
+/** How long one ask of a hub's id may take. */
+const ID_MS = 3000;
+
+/**
+ * A hub's id, off its `/health`; undefined while it has not said one (it did
+ * not answer within {@link ID_MS}, could not be reached, or answered with
+ * none): {@link decide} keeps asking, and never decides on it.
+ */
 const idAt = async (origin: string): Promise<string | undefined> => {
-  const answer = await fetch(`${origin}/health`, {
-    signal: AbortSignal.timeout(3000),
-  })
-    .then((response) => response.json() as Promise<{ hubId?: unknown }>)
-    .catch(() => undefined);
-  return typeof answer?.hubId === "string" && answer.hubId
-    ? answer.hubId
-    : undefined;
+  let read: Bounded<{ hubId?: unknown }>;
+  try {
+    read = await readWithin(ID_MS, async (signal) => {
+      const response = await fetch(`${origin}/health`, { signal });
+      return (await response.json()) as { hubId?: unknown };
+    });
+  } catch {
+    // Could not be reached: not said yet.
+    return undefined;
+  }
+  switch (read.kind) {
+    case "answered":
+      return typeof read.value.hubId === "string" && read.value.hubId
+        ? read.value.hubId
+        : undefined;
+    case "unanswered":
+      // Not said within ID_MS: asked again, never decided on.
+      return undefined;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /** The hubs that have not said their ids yet, in words. */

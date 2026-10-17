@@ -21,6 +21,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CODE_MODE_TOOL,
   MCP_NOT_CONNECTED,
   REPEATED_FAILURE,
 } from "@cawco/core";
@@ -32,7 +33,6 @@ import type {
   ToolContent1,
 } from "@opencode/client";
 import { errorText } from "./opencode-client";
-import { CODE_MODE_TOOL } from "./opencode-plugin";
 
 type ToolUseBlock = Extract<NeutralContentBlock, { type: "tool_use" }>;
 type ToolResultBlock = Extract<NeutralContentBlock, { type: "tool_result" }>;

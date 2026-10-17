@@ -25,6 +25,7 @@ import { chmod, copyFile, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readWithin } from "../packages/core/src/bounded";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -458,6 +459,7 @@ await Bun.write(secret, "not for the workspace\n");
 const { SessiondServer } = await import("../packages/sessiond/src/server");
 const { SessiondClient } =
   await import("../packages/agent/src/sessiond-client");
+const { welcomed } = await import("./lib/keeper-dial");
 const { BOUNDARY_RELAUNCH, mcpGatewayPort, CAWCO_ENV } =
   await import("../packages/core/src/index");
 const { gateForm } = await import("../packages/agent/src/gate-form");
@@ -474,7 +476,7 @@ type Session = import("../packages/agent/src/harness").HarnessSession;
 
 const sessiond = new SessiondServer();
 await sessiond.listen(endpoint);
-const keeper = await SessiondClient.connect(endpoint);
+const keeper = welcomed(endpoint, await SessiondClient.connect(endpoint));
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 const waiters = new Set<() => void>();
@@ -484,23 +486,33 @@ const wake = () => {
   }
 };
 setInterval(wake, 250).unref();
-const until = <T>(read: () => T | undefined, ms: number, what: string) =>
-  new Promise<T>((resolve, reject) => {
-    const check = () => {
-      const value = read();
-      if (value !== undefined && value !== false) {
-        waiters.delete(check);
-        clearTimeout(timer);
-        resolve(value);
-      }
-    };
-    const timer = setTimeout(() => {
-      waiters.delete(check);
-      reject(new Error(`Timed out waiting for ${what}`));
-    }, ms);
-    waiters.add(check);
-    check();
-  });
+const until = async <T>(
+  read: () => T | undefined,
+  ms: number,
+  what: string
+): Promise<T> => {
+  const found = Promise.withResolvers<T>();
+  const check = () => {
+    const value = read();
+    if (value !== undefined && value !== false) {
+      found.resolve(value);
+    }
+  };
+  waiters.add(check);
+  check();
+  const seen = await readWithin(ms, () => found.promise);
+  waiters.delete(check);
+  switch (seen.kind) {
+    case "answered":
+      return seen.value;
+    case "unanswered":
+      throw new Error(`${what} did not come within ${seen.after} ms`);
+    default: {
+      const unhandled: never = seen;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 interface Watch {
   busy: boolean;
@@ -598,7 +610,10 @@ try {
     model: "mock/mock-model",
     permissionMode: "bypassPermissions" as const,
   };
-  const earlierAgent = await SessiondClient.connect(endpoint);
+  const earlierAgent = welcomed(
+    endpoint,
+    await SessiondClient.connect(endpoint)
+  );
   await earlierAgent.spawnProc(procIdFor("pi", PI), {
     command: process.execPath,
     args: [join(ROOT, "packages", "agent", "src", "harnesses", "pi-host.ts")],

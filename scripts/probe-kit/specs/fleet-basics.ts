@@ -16,6 +16,7 @@
  *
  *   bun scripts/probe-kit/run.ts fleet-basics
  */
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
@@ -83,17 +84,32 @@ const spec: Spec = {
         },
       })
     );
-    const said = await Promise.race([
-      refused,
-      Bun.sleep(30_000).then(() => ""),
-    ]);
+    const said = await readWithin(30_000, () => refused);
     socket.close();
-    const named = REFUSAL.exec(said)?.[1];
-    check(
-      "(a) a Claude start on a machine with no CawCo account is refused in the hub's sentence, naming the machine",
-      named !== undefined && row?.hostname.startsWith(named) === true,
-      `said: ${said || "(nothing in 30 s)"}; the machine's hostname: ${row?.hostname}`
-    );
+    const refusedLabel =
+      "(a) a Claude start on a machine with no CawCo account is refused in the hub's sentence, naming the machine";
+    switch (said.kind) {
+      case "answered": {
+        const named = REFUSAL.exec(said.value)?.[1];
+        check(
+          refusedLabel,
+          named !== undefined && row?.hostname.startsWith(named) === true,
+          `said: ${said.value}; the machine's hostname: ${row?.hostname}`
+        );
+        break;
+      }
+      case "unanswered":
+        check(
+          refusedLabel,
+          false,
+          `the hub did not answer the start within ${said.after} ms`
+        );
+        break;
+      default: {
+        const unhandled: never = said;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
     const held = (await fleet.heldProcs()).filter(({ procId }) =>
       procId.includes(instanceId)
     );

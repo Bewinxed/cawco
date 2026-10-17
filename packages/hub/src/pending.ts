@@ -1,4 +1,4 @@
-import type { Envelope, PermissionResult } from "@cawco/core";
+import type { AskAnswer, Envelope, PermissionResult } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
 
@@ -41,22 +41,30 @@ export interface PendingShape {
     envelope: Envelope,
     outlivesHub?: boolean
   ) => boolean;
-  /**
-   * `why` is said with a cancellation the hub can explain: an ask it could
-   * not show anyone (`askRefusal` in server.ts).
-   */
+  /** `said`: what the hub can say of how the ask ended ({@link Settlement}). */
   readonly resolve: (
     requestId: string,
     outcome?: "answered" | "cancelled",
-    why?: string
+    said?: Settlement
   ) => boolean;
 }
 
-/** Hears every parked ask that leaves, with why when the hub could say. */
+/** What the hub can say of how an ask ended, beyond answered or cancelled. */
+export interface Settlement {
+  /** An answered ask: what won and where it came from. */
+  answer?: AskAnswer;
+  /**
+   * A cancellation the hub can explain: an ask it could not show anyone
+   * (`askRefusal` in server.ts).
+   */
+  why?: string;
+}
+
+/** Hears every parked ask that leaves, with what the hub could say of it. */
 export type SettledListener = (
   envelope: Envelope,
   outcome: "answered" | "cancelled",
-  why?: string
+  said?: Settlement
 ) => void;
 
 /** Stamps a parked ask's presentation onto its payload. */
@@ -89,11 +97,15 @@ export const answerWorkflow = (
   result: PermissionResult
 ): boolean => workflowAnswers.get(pending)?.(id, result) ?? false;
 
+/** `from`: where the answer was given, said with the ask's end to every screen. */
 type AnswerHandler = (
   instanceId: string,
   requestId: string,
-  result: PermissionResult
+  result: PermissionResult,
+  from: AnswerFrom
 ) => Promise<void>;
+/** Where an answer was given: an {@link AskAnswer} without its behaviour, which the answer itself carries. */
+export type AnswerFrom = Omit<AskAnswer, "behavior">;
 const permissionAnswers = new WeakMap<PendingShape, AnswerHandler>();
 export const onPermissionAnswer = (
   pending: PendingShape,
@@ -104,13 +116,14 @@ export const answerPermission = (
   pending: PendingShape,
   instanceId: string,
   requestId: string,
-  result: PermissionResult
+  result: PermissionResult,
+  from: AnswerFrom
 ): Promise<void> => {
   const handler = permissionAnswers.get(pending);
   if (!handler) {
     return Promise.reject(new Error("Permission answering is not ready."));
   }
-  return handler(instanceId, requestId, result);
+  return handler(instanceId, requestId, result, from);
 };
 
 /**
@@ -143,7 +156,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
   const settledIds = new Set<string>();
   let settled: SettledListener | undefined;
   let present: Presenter | undefined;
-  const resolve: PendingShape["resolve"] = (requestId, outcome, why) => {
+  const resolve: PendingShape["resolve"] = (requestId, outcome, said) => {
     const envelope = requests.get(requestId);
     if (!envelope) {
       return false;
@@ -151,7 +164,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     requests.delete(requestId);
     kept.drop(requestId);
     settledIds.add(requestId);
-    settled?.(envelope, outcome ?? "answered", why);
+    settled?.(envelope, outcome ?? "answered", said);
     return true;
   };
 

@@ -56,8 +56,11 @@ export const roleOf = (row: InstanceRow): SessionRole => {
     : "worker";
 };
 
-/** What a session that only reads, reports and finishes always has. */
-const CORE = ["handoff", "send_to_user", "set_title"] as const;
+/**
+ * What a session that only reads, reports and finishes always has: its open
+ * items too, which every compaction lists after its summary (open-items.ts).
+ */
+const CORE = ["handoff", "send_to_user", "set_title", "open_items"] as const;
 
 /** The task tools every role but the worker's and the lead's is limited to. */
 const TASK_READ = ["task_read", "todo_write", "task_comment"] as const;

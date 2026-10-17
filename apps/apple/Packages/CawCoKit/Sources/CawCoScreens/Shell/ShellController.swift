@@ -108,6 +108,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             open: { [weak self] id in self?.openSession(id) },
             continueInNewSession: panes.continueHandler.map { _ in { [weak self] id in self?.panes.continueInNewSession(id) } },
             continueStored: { [weak self] source in self?.newSession.continueSession(source) },
+            cancelContinuation: { [weak self] row in self?.newSession.cancelDetached(row: row) },
             asks: sessionAsks
         )
     }

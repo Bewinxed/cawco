@@ -37,8 +37,10 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   RoutineMadeEvent,
+  Rule,
   RuleMatchKind,
   RuleScope,
+  RuleState,
   RuleTiming,
   RuleWatch,
   SendAttachment,
@@ -1913,10 +1915,61 @@ export const fleetMemoryDocs = sqliteTable("fleet_memory_docs", {
    * `~/.claude/memories/`, read on purpose.
    */
   role: text("role").$type<MemoryRole>(),
+  /**
+   * Part of a model id: the sessions whose model contains it, in any case
+   * (`MemoryScope.model`). Null for any model.
+   */
+  model: text("model"),
+  /**
+   * Guidance for writing a brief (`MemoryScope.briefer`): it reaches the
+   * session that calls `delegate`, and its delegate types and model name
+   * the delegates it is about.
+   */
+  briefer: integer("briefer", { mode: "boolean" }).notNull().default(false),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * The delegate types a fleet memory document is scoped to, one row each
+ * (`MemoryScope.delegateTypes`): the sessions started as one of them, or,
+ * on a briefer's, the delegates it is about. By name, as a session's row
+ * keeps its type.
+ */
+export const fleetMemoryDocTypes = sqliteTable(
+  "fleet_memory_doc_types",
+  {
+    path: text("path")
+      .notNull()
+      .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
+    typeName: text("type_name").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.path, table.typeName] })]
+);
+
+/**
+ * The briefer documents a session has been handed (hub briefings.ts), each
+ * at the hash it read: its next `delegate` call that one is about goes out
+ * without it. A compaction of the session clears its rows, so the next such
+ * call hands it again; an edit to the document hands the new text.
+ */
+export const memoryBriefings = sqliteTable(
+  "memory_briefings",
+  {
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    path: text("path")
+      .notNull()
+      .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    handedAt: timestamp("handed_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.path] })]
+);
 
 /**
  * The projects a fleet memory document is scoped to, one row each: the
@@ -2263,6 +2316,13 @@ export const limitHolds = sqliteTable("limit_holds", {
   instanceId: text("instance_id").primaryKey(),
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
+  /**
+   * The hub's word to the session's live work item its limit refused, sent
+   * again once at `until`; such a hold never moves the session (core
+   * `DelegateWork` `resume`). Null for a hold that moves it once an account
+   * has room.
+   */
+  nudge: text("nudge"),
   until: timestamp("until"),
   createdAt: timestamp("created_at")
     .notNull()
@@ -2270,32 +2330,25 @@ export const limitHolds = sqliteTable("limit_holds", {
 });
 
 /**
- * A summary of a session at its account's limit: what continuing it on
- * another account starts from. Written ahead of the limit while its account
- * still had room (`percent`), or at a move (`percent` null), and kept while
- * it stays on that account, so a retry after a failed continuation starts
- * from it again. It answers for the conversation up to `covers` only: once
- * the session's summarised part ends elsewhere, a fresh one replaces it.
- * Discarded when the window resets, or the session ends or leaves the
- * account. `summary` and `covers` null: the summariser is still writing it.
+ * A session moved at its account's limit that compacts once there (core
+ * `AccountMove` `moved` with `compact`), from the move until its compaction
+ * has ended (server.ts `compactions`): its filing turn (`filing`, the send
+ * `filingUuid`), then Claude Code's `/compact` (`compacting`, the send
+ * `compactUuid`). Everything else sent to it waits at the hub meanwhile. Kept
+ * here so a hub restart carries it on from where its sends stand.
  */
-export const limitSummaries = sqliteTable("limit_summaries", {
+export const limitCompactions = sqliteTable("limit_compactions", {
   instanceId: text("instance_id").primaryKey(),
-  /** The account the session is on, at its limit. */
-  accountId: text("account_id").notNull(),
-  /** The account whose summariser wrote it. */
-  writtenOn: text("written_on").notNull(),
-  /** The reset of the window it was written against (ISO). */
-  resetsAt: text("resets_at").notNull(),
-  /** That window's percent when a summary written ahead of the limit was started; null: written at a move. */
-  percent: integer("percent"),
-  /**
-   * The last transcript entry the summary covers: the end of the part of
-   * the conversation a continuation summarises (the rest goes verbatim).
-   */
-  covers: text("covers"),
-  summary: text("summary"),
-  preparedAt: timestamp("prepared_at")
+  stage: text("stage").$type<"filing" | "compacting">().notNull(),
+  /** The `limit_events` id of the move's line, said again as the compaction goes. */
+  lineId: text("line_id").notNull(),
+  /** The move's line as written, which each stage restates. */
+  move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+  filingUuid: text("filing_uuid").notNull(),
+  compactUuid: text("compact_uuid").notNull(),
+  /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
+  compacted: integer("compacted", { mode: "boolean" }).notNull().default(false),
+  createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
@@ -2454,6 +2507,10 @@ export const rules = sqliteTable("rules", {
     text("scope_harness").$type<NonNullable<RuleScope["harness"]>>(),
   /** A model name it fires on, matched as a substring in any case. */
   scopeModel: text("scope_model"),
+  /** The role of the sessions it fires on: `orchestrator` or `leaf` (roles.ts `memoryRoleOf`). */
+  scopeRole: text("scope_role").$type<NonNullable<RuleScope["role"]>>(),
+  /** The delegate type the sessions it fires on were started as, by name. */
+  scopeDelegateType: text("scope_delegate_type"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2495,6 +2552,22 @@ export const ruleState = sqliteTable(
     index("rule_state_instance_idx").on(table.instanceId),
   ]
 );
+
+/**
+ * A deleted rule, kept whole for its undo window (rules-trash.ts): the rule
+ * and every session's standing with it, as they stood. Out of `rules` and
+ * `rule_state`, so nothing that reads them sees it while it waits. It goes
+ * with its project, as the rule itself does.
+ */
+export const ruleTrash = sqliteTable("rule_trash", {
+  ruleId: text("rule_id").primaryKey(),
+  scopeProjectId: text("scope_project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  rule: text("rule", { mode: "json" }).$type<Rule>().notNull(),
+  states: text("states", { mode: "json" }).$type<RuleState[]>().notNull(),
+  deletedAt: timestamp("deleted_at").notNull(),
+});
 
 /**
  * Hooks the fleet keeps (NEW.md §11): one row per hook, registered on every
@@ -2790,6 +2863,8 @@ export const continuations = sqliteTable("continuations", {
   openingUuid: text("opening_uuid").notNull(),
   /** The summariser's answer, kept once read so a restart never asks again. */
   summary: text("summary"),
+  /** The source's Open items section (open-items.ts), read from its records once before the opening goes. */
+  openItems: text("open_items"),
   stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
   error: text("error"),
   createdAt: timestamp("created_at").notNull(),
@@ -3311,7 +3386,7 @@ export const artifacts = sqliteTable(
     sourceWorkspace: text("source_workspace").references(() => workspaces.id, {
       onDelete: "set null",
     }),
-    /** A sheet's: the stage's Vite root and its story file, from the clone's root. */
+    /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
     sourceStageDir: text("source_stage_dir"),
     sourceStageFile: text("source_stage_file"),
     /** A workspace preview's: the command the workspace's stage runs and keeps up on the port, and its folder from the clone's root. */

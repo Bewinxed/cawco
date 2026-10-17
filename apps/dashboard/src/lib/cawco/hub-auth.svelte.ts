@@ -23,6 +23,7 @@ import type {
   WaitingMachine,
 } from "@cawco/core";
 import { failureWords } from "./hub-read";
+import { leaveThePage } from "./leaving";
 
 /** Where pairing stands for this browser. */
 export type PairingStage =
@@ -133,7 +134,7 @@ export async function startPairing(): Promise<void> {
     switch (answer.status) {
       case "approved":
         // The cookie came with this answer: the app opens as this device.
-        location.reload();
+        leaveThePage(() => location.reload());
         return;
       case "access_denied":
         hubAuth.pairing = { kind: "denied" };

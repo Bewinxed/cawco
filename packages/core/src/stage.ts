@@ -12,7 +12,7 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
-/** Where a stage serves a sheet: `?file=<story file, from the Vite root>`. Outside the hub's own `/__cawco/`, after Vite's `/@vite/`. */
+/** Where a stage serves a sheet: `?file=<story file, from the toolchain root>`. Outside the hub's own `/__cawco/`, after Vite's `/@vite/`. */
 export const SHEET_PATH = "/@cawco/sheet";
 
 /** Where the daemon reads a sheet's stories next to the stage; never through the hub. */
@@ -27,7 +27,7 @@ export const COMPONENTS_PATH = "/__cawco/components";
 /** The daemon's control method that writes a sheet's story file through its stage ({@link SheetWrite}). */
 export const STAGE_WRITE = "stageWrite";
 
-/** The daemon's control method that lists a Vite root's components through its stage. */
+/** The daemon's control method that lists a toolchain root's components through its stage. */
 export const STAGE_COMPONENTS = "stageComponents";
 
 /** The stage's own answer that it serves; read every {@link STAGE_HEALTH_MS} by the daemon next to it. */
@@ -72,6 +72,17 @@ export const STAGE_IDLE_MS = 30 * 60_000;
 /** Starts a failed stage gets before it stays in `error`. The spec's number. */
 export const STAGE_RESTARTS = 3;
 
+/**
+ * The dev toolchains a stage runs (spec §2): the project's own Vite, or
+ * Astro's or Nuxt's, each started by its programmatic API with the stage's
+ * plugins added.
+ */
+export type StageToolchain = "vite" | "astro" | "nuxt";
+
+/** The words for a project or component no stage shows: the owner's decision, an HTML page on the project's CSS (spec §10). */
+export const AS_PAGE =
+  "Show its components as an HTML page artifact (artifact_create kind page) that loads the project's built CSS.";
+
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
 
@@ -84,7 +95,7 @@ export type StageStatus = "starting" | "waking" | "live" | "error" | "asleep";
 
 /**
  * A compile error the stage's Vite sent its pages, as the plugin keeps it
- * until the module compiles again: the module's file from the Vite root,
+ * until the module compiles again: the module's file from the toolchain root,
  * 1-based line and column when Vite's payload has them, Vite's message and
  * code frame, and the story files that import the module, which the hub
  * files it under.
@@ -95,7 +106,7 @@ export interface StageError {
   frame: string | null;
   line: number | null;
   message: string;
-  /** The story files (from the Vite root) whose sheet imports the module. */
+  /** The story files (from the toolchain root) whose sheet imports the module. */
   sheets: string[];
 }
 
@@ -111,7 +122,7 @@ export interface Story {
   /** Args whose value is code, not a literal: their source text. */
   code: Record<string, string>;
   column: number;
-  /** The story's own component, from the Vite root, when it names one apart from the meta's. */
+  /** The story's own component, from the toolchain root, when it names one apart from the meta's. */
   component: string | null;
   line: number;
   name: string;
@@ -121,7 +132,7 @@ export interface Story {
 export interface SheetMeta {
   args: Record<string, unknown>;
   code: Record<string, string>;
-  /** The component, from the Vite root; null when the meta names none the stage could resolve. */
+  /** The component, from the toolchain root; null when the meta names none the stage could resolve. */
   component: string | null;
 }
 
@@ -187,7 +198,7 @@ export interface PropMeta {
  * nothing could read them, with `note` saying why.
  */
 export interface ComponentDoc {
-  /** From the Vite root. */
+  /** From the toolchain root. */
   file: string;
   name: string;
   note?: string;
@@ -242,12 +253,12 @@ export interface Found {
 
 /**
  * A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):
- * where it is, the Vite root it runs (from the clone's root), why it failed
+ * where it is, the toolchain root it runs (from the clone's root), why it failed
  * when it did, and the compile errors standing now.
  */
 export interface StageState {
   at: string;
-  /** The Vite root, from the clone's root ("." for the root itself). */
+  /** The toolchain root, from the clone's root ("." for the root itself). */
   dir: string;
   errors: StageError[];
   /** Why it is in `error`, one sentence; none otherwise. */
@@ -266,9 +277,9 @@ export interface StageFrame {
 
 /** The daemon's answer to {@link STAGE_ENSURE}: the stage's port, root and state, and the sheet as it reads. */
 export interface StageOpened {
-  /** The Vite root, from the clone's root. */
+  /** The toolchain root, from the clone's root. */
   dir: string;
-  /** The sheet's story file, from the Vite root. */
+  /** The sheet's story file, from the toolchain root. */
   file: string;
   port: number;
   sheet: SheetRead;

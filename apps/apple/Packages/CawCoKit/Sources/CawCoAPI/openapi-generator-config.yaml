@@ -15,11 +15,14 @@ typeOverrides:
     AgentRowAuth: OpenEnums.AgentRowAuth
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
+    AskAnswerBehavior: OpenEnums.AskAnswerBehavior
+    AskAnswerVia: OpenEnums.AskAnswerVia
     AuthState: OpenEnums.AuthState
     BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase
     BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
     BlockMetadataAction: OpenEnums.BlockMetadataAction
+    BlockMetadataCompact: OpenEnums.BlockMetadataCompact
     BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
     BlockMetadataHandoffKind: OpenEnums.BlockMetadataHandoffKind
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
@@ -48,6 +51,7 @@ typeOverrides:
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
     DelegateTypeRole: OpenEnums.DelegateTypeRole
+    DelegateWork: OpenEnums.DelegateWork
     DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
     DesignOfferStateAnswer: OpenEnums.DesignOfferStateAnswer
     DeviceKind: OpenEnums.DeviceKind

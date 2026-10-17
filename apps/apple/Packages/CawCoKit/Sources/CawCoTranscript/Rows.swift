@@ -196,18 +196,18 @@ nonisolated enum Fold {
                 boundary != nil && brief != nil ? 2 : 1)
     }
 
-    /// rows.ts `continuedAt` (AccountMoveDivider): a continuation from a
-    /// summary, as the compaction row draws it — its "Summarising for …"
-    /// line while the summary is written, nothing to open yet; then, under
-    /// the same key, its "Continued on …" line with the message its fresh
-    /// conversation opened on folded under it as the brief.
+    /// rows.ts `continuedAt` (AccountMoveDivider): a `continued` line a hub
+    /// stored before it compacted natively, as the compaction row draws it —
+    /// its "Continued on …" line with the message its fresh conversation
+    /// opened on folded under it as the brief. History only: the hub writes
+    /// none now.
     static func continuation(_ blocks: [Block], at i: Int) -> (row: Row, span: Int)? {
         let line = blocks[i]
         guard line.type == "system.account_move",
               let move = line.meta["accountMove"] as? [String: Any],
-              let kind = move["kind"] as? String, kind == "continuing" || kind == "continued" else { return nil }
+              let kind = move["kind"] as? String, kind == "continued" else { return nil }
         let next = i + 1 < blocks.count ? blocks[i + 1] : nil
-        let opening = kind == "continued" && (next?.meta["continuation"] as? Bool) == true ? next : nil
+        let opening = (next?.meta["continuation"] as? Bool) == true ? next : nil
         let words = opening.flatMap { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0.content }
         let parts = line.content.components(separatedBy: " · ")
         let key = "c:\(line.id)"

@@ -546,7 +546,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build and how); returns your plan. A task's to-dos: tick, untick, add or reword them by id (td-3) or position (2.1) on your work item's task (a session the operator started names any); all land together.",
+      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build and how, decisions and why); returns your plan. A task's to-dos: tick, untick, add or reword them by id (td-3) or position (2.1) on your work item's task (a session the operator started names any); all land together. Every compaction lists them.",
       {
         steps: z
           .array(stepParameter())

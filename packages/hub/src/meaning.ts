@@ -1,5 +1,6 @@
 import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
 import { ruleInScope } from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
 import type { JevResult } from "@cawco/core/workflow-program";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
@@ -40,7 +41,10 @@ const SUBJECT = {
 export class MeaningJudge {
   readonly #db: DbShape;
   /** One answer per turn frame, however many engines ask about it. */
-  readonly #turns = new WeakMap<NeutralMessage, Promise<Set<string>>>();
+  readonly #turns = new WeakMap<
+    NeutralMessage,
+    Promise<Bounded<Set<string>>>
+  >();
 
   constructor(db: DbShape) {
     this.#db = db;
@@ -56,7 +60,7 @@ export class MeaningJudge {
     instanceId: string,
     facts: RuleFacts,
     text: string
-  ): Promise<Set<string>> {
+  ): Promise<Bounded<Set<string>>> {
     const asked = this.#turns.get(frame);
     if (asked !== undefined) {
       return asked;
@@ -94,7 +98,7 @@ export class MeaningJudge {
     rules: Rule[],
     said: string,
     thinking: string
-  ): Promise<Set<string>> {
+  ): Promise<Bounded<Set<string>>> {
     const asked = rules
       .filter((rule) => ruleInScope(rule.scope, facts))
       .filter((rule) => {
@@ -110,7 +114,7 @@ export class MeaningJudge {
     // Every assistant frame comes through here; the state is built only for
     // a frame some rule is asked about.
     if (asked.length === 0) {
-      return Promise.resolve(new Set());
+      return Promise.resolve({ kind: "answered", value: new Set() });
     }
     const state: Record<string, string> = {
       live_delegated_work: this.#liveDelegatedWork(instanceId),
@@ -134,16 +138,16 @@ export class MeaningJudge {
     instanceId: string,
     asked: { rule: Rule; subject: string }[],
     state: Record<string, string>
-  ): Promise<Set<string>> {
+  ): Promise<Bounded<Set<string>>> {
     if (asked.length === 0) {
-      return new Set();
+      return { kind: "answered", value: new Set() };
     }
     const access = jevAccess(this.#db);
     if (!access) {
       console.log(
         `[meaning] ${instanceId}: meaning rules skipped: Jev is off (no TypeSafe key, OpenRouter not connected)`
       );
-      return new Set();
+      return { kind: "answered", value: new Set() };
     }
     const questions: Record<string, { type: "noul"; instructions: string }> =
       Object.fromEntries(
@@ -157,16 +161,27 @@ export class MeaningJudge {
       );
     let result: JevResult<typeof questions>;
     try {
-      result = await askJev(access, state, questions, {
+      const asking = await askJev(access, state, questions, {
         timeoutMs: MEANING_TIMEOUT_MS,
       });
+      switch (asking.kind) {
+        case "answered":
+          result = asking.value;
+          break;
+        case "unanswered":
+          return asking;
+        default: {
+          const unhandled: never = asking;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     } catch (error) {
       console.error(
         `[meaning] ${instanceId}: Jev (route=${access.route}) failed for rules ${asked
           .map(({ rule }) => rule.id)
           .join(", ")}: ${error instanceof Error ? error.message : error}`
       );
-      return new Set();
+      return { kind: "answered", value: new Set() };
     }
     const yes = new Set<string>();
     for (const { rule } of asked) {
@@ -180,6 +195,6 @@ export class MeaningJudge {
         yes.add(rule.id);
       }
     }
-    return yes;
+    return { kind: "answered", value: yes };
   }
 }

@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
    * What a running session does when its account runs out and another is
-   * free: wait for a reset that is close, move a small conversation whole,
-   * or continue a large one from a summary written while the cache is warm.
-   * The figure under the numbers plays that policy, rebuilt as they change.
-   * Off, the numbers fold away with the figure and the terms.
+   * free: wait for a reset that is close, or move whole, a large
+   * conversation then compacted there by Claude Code's own /compact after it
+   * files its open items. The figure under the numbers plays that policy,
+   * rebuilt as they change. Off, the numbers fold away with the figure and
+   * the terms.
    */
   import { type Account, type AtLimit, accountsWords } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -36,14 +37,13 @@
   );
   const policy = $derived({
     wait: atLimit.waitMinutes,
-    under: atLimit.moveWholeUnderK,
-    at: atLimit.prepareAtPct,
+    over: atLimit.moveWholeUnderK,
   });
 
-  /** A field's number: whole, at least 0, at most `max`; empty reads as 0. */
-  function whole(value: string, max = Number.POSITIVE_INFINITY): number {
+  /** A field's number: whole, at least 0; empty reads as 0. */
+  function whole(value: string): number {
     const n = Math.round(Number(value));
-    return Number.isFinite(n) ? Math.min(max, Math.max(0, n)) : 0;
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
   }
 </script>
 
@@ -79,12 +79,12 @@
         <span>{words.minutes}</span>
       </p>
       <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
-        <label for="{id}-under">{words.under}</label>
+        <label for="{id}-over">{words.over}</label>
         <Input
           data-num
           data-field
           class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
-          id="{id}-under"
+          id="{id}-over"
           inputmode="numeric"
           min="0"
           oninput={(event) => {
@@ -94,27 +94,7 @@
           value={atLimit.moveWholeUnderK}
         />
         <span>{words.kTokens}</span>
-        <span class="type-meta text-ink-muted">{words.rereads}</span>
-      </p>
-      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">{words.otherwise}</p>
-      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
-        <label for="{id}-at">{words.early}</label>
-        <Input
-          data-num
-          data-field
-          class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
-          id="{id}-at"
-          inputmode="numeric"
-          max="100"
-          min="0"
-          oninput={(event) => {
-            atLimit.prepareAtPct = whole(event.currentTarget.value, 100);
-          }}
-          type="number"
-          value={atLimit.prepareAtPct}
-        />
-        <span>{words.percent}</span>
-        <span class="type-meta text-ink-muted">{words.warm}</span>
+        <span class="type-meta text-ink-muted">{words.compacts}</span>
       </p>
       <div class="my-space-3">
         <StrategyFigure board="limit" {lanes} playing {policy} />

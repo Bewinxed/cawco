@@ -25,6 +25,7 @@ import type {
   WorkflowFailure,
 } from "@cawco/core";
 import { workflowNoticeMarker, workflowStepMarker } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { StepSpecJson } from "@cawco/core/workflow-program";
 import Ajv from "ajv";
@@ -35,7 +36,7 @@ import type {
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
-import type { HubLifetimeShape, HubTimer } from "../lifetime";
+import type { HubLifetimeShape } from "../lifetime";
 import { unwatchedMode } from "../unwatched-mode";
 import { failureText, receiptOf } from "./refs";
 
@@ -54,7 +55,7 @@ export interface StepContext {
     hold: number,
     ms: number
   ) => void;
-  /** Runs each attempt's deadline until the hub closes. */
+  /** Lets go of each attempt's wait when the hub closes. */
   readonly lifetime: HubLifetimeShape;
   readonly nameOf: (run: WorkflowRunRow) => string;
   readonly notify: (run: WorkflowRunRow, body: string) => void;
@@ -147,8 +148,9 @@ export function createSteps(ctx: StepContext) {
   const heldStops = (run: WorkflowRunRow): Record<string, WorkflowHeldStop> =>
     db.workflowHeldStops(run.id);
   const ajv = new Ajv({ allErrors: true, strict: false });
-  const timers = new Map<string, HubTimer>();
-  /** Each armed attempt's deadline (ms epoch), by step, beside its timer. */
+  /** Each armed attempt's wait for its end, by step: calling it ends the wait. */
+  const waits = new Map<string, () => void>();
+  /** Each armed attempt's deadline (ms epoch), by step, beside its wait. */
   const deadlines = new Map<string, number>();
 
   const runOf = (id: string): WorkflowRunRow => {
@@ -174,8 +176,8 @@ export function createSteps(ctx: StepContext) {
   const latest = (step: WorkflowStepRow) =>
     db.listWorkflowAttempts(step.id).at(-1);
   const clearTimer = (id: string) => {
-    ctx.lifetime.cancel(timers.get(id));
-    timers.delete(id);
+    waits.get(id)?.();
+    waits.delete(id);
     deadlines.delete(id);
   };
   const denied = (run: WorkflowRunRow, spec: StepSpecJson) =>
@@ -320,7 +322,11 @@ export function createSteps(ctx: StepContext) {
     arm(run, step, Date.now() + (spec.timeoutMinutes ?? 60) * 60_000);
   };
 
-  /** The attempt's deadline: past it the session is halted and the attempt ends. */
+  /**
+   * The attempt's deadline: the attempt's end is waited for until then, and
+   * one that did not finish within it has its session halted and ends
+   * `attempt-timeout`.
+   */
   const arm = (
     run: WorkflowRunRow,
     step: WorkflowStepRow,
@@ -328,34 +334,58 @@ export function createSteps(ctx: StepContext) {
   ) => {
     clearTimer(step.id);
     deadlines.set(step.id, deadline);
-    timers.set(
-      step.id,
-      ctx.lifetime.after(Math.max(1, deadline - Date.now()), () => {
-        ctx
-          .serial(run.id, async () => {
-            const current = runOf(run.id);
-            const currentStep = stepOf(step.id);
-            if (!(active(current) && currentStep.status === "running")) {
-              return;
-            }
-            if (currentStep.instanceId) {
-              await haltAttempt(
-                current,
-                currentStep,
-                deadline,
-                "attempt-timeout"
-              );
-              return;
-            }
-            await ended(current, currentStep, "attempt-timeout");
-          })
-          .catch((error) => {
-            console.error(
-              `[workflows] step ${step.id} timeout: ${reason(error)}`
+    const watch = async (): Promise<void> => {
+      let outcome: Bounded<void>;
+      try {
+        outcome = await readWithin(
+          Math.max(1, deadline - Date.now()),
+          (signal) =>
+            new Promise<void>((resolve, reject) => {
+              waits.set(step.id, resolve);
+              signal.addEventListener("abort", () => reject(signal.reason), {
+                once: true,
+              });
+            }),
+          { signal: ctx.lifetime.signal }
+        );
+      } catch {
+        // The hub closed: nothing it would decide runs.
+        return;
+      }
+      switch (outcome.kind) {
+        case "answered":
+          // The attempt ended its own way (clearTimer).
+          return;
+        case "unanswered":
+          break;
+        default: {
+          const unhandled: never = outcome;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+      try {
+        await ctx.serial(run.id, async () => {
+          const current = runOf(run.id);
+          const currentStep = stepOf(step.id);
+          if (!(active(current) && currentStep.status === "running")) {
+            return;
+          }
+          if (currentStep.instanceId) {
+            await haltAttempt(
+              current,
+              currentStep,
+              deadline,
+              "attempt-timeout"
             );
-          });
-      })
-    );
+            return;
+          }
+          await ended(current, currentStep, "attempt-timeout");
+        });
+      } catch (error) {
+        console.error(`[workflows] step ${step.id} timeout: ${reason(error)}`);
+      }
+    };
+    detach(watch(), "workflow step deadline");
   };
 
   /** Retires a step timer; session end is awaited through the run's halt transaction. */

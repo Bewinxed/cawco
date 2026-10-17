@@ -5,6 +5,7 @@ import {
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { hubAnswer } from "./hub-away";
 
 export const MCP_SERVER_NAME = "cawco";
@@ -84,43 +85,61 @@ export async function callDelegationTool(
   args: unknown,
   credential?: string
 ) {
-  const response = await fetch(
-    harnessMcpUrl(`/api/delegation/call/${encodeURIComponent(instanceId)}`),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
-      },
-      body: JSON.stringify({ name, arguments: args }),
-      // Workspace creation, continuation and checks may take minutes without a response byte.
-      ...(name === "continue_session" ||
-      name === "finish_item" ||
-      name === "delegate"
-        ? { timeout: false }
-        : {
-            signal: AbortSignal.timeout(
-              name === "generate_image"
-                ? IMAGE_GENERATION_TIMEOUT_MS + 60_000
-                : 30_000
-            ),
-          }),
-    }
+  const url = harnessMcpUrl(
+    `/api/delegation/call/${encodeURIComponent(instanceId)}`
   );
-  if (!response.ok) {
-    // A refusal says why in its body (a restarting agent: not started, retry), and the model reads it.
-    const why = await response.text().catch(() => "");
-    throw new Error(
-      `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
-    );
-  }
-  const result = (await response.json()) as {
-    content: { type: "text"; text: string }[];
-    structuredContent?: Record<string, unknown>;
-    isError?: boolean;
+  const init = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+    },
+    body: JSON.stringify({ name, arguments: args }),
   };
-  if (result.isError) {
-    throw new Error(result.content.map((part) => part.text).join("\n"));
+  const take = async (response: Response) => {
+    if (!response.ok) {
+      // A refusal says why in its body (a restarting agent: not started, retry), and the model reads it.
+      const why = await response.text().catch(() => "");
+      throw new Error(
+        `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
+      );
+    }
+    const result = (await response.json()) as {
+      content: { type: "text"; text: string }[];
+      structuredContent?: Record<string, unknown>;
+      isError?: boolean;
+    };
+    if (result.isError) {
+      throw new Error(result.content.map((part) => part.text).join("\n"));
+    }
+    return {
+      content: result.content,
+      details: result.structuredContent ?? {},
+    };
+  };
+  // Workspace creation, continuation and checks may take minutes without a response byte.
+  if (
+    name === "continue_session" ||
+    name === "finish_item" ||
+    name === "delegate"
+  ) {
+    return take(await fetch(url, { ...init, timeout: false }));
   }
-  return { content: result.content, details: result.structuredContent ?? {} };
+  const ms =
+    name === "generate_image" ? IMAGE_GENERATION_TIMEOUT_MS + 60_000 : 30_000;
+  const read = await readWithin(ms, async (signal) =>
+    take(await fetch(url, { ...init, signal }))
+  );
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `CawCo tool ${name}: the hub did not answer within ${ms / 1000} s`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }

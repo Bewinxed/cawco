@@ -38,6 +38,7 @@ import {
 import { Socket } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "./binary-installation";
+import { type Bounded, readWithin } from "./bounded";
 import { sessiondEndpoint } from "./sessiond";
 
 /** The machine's endpoint's own name: what names the current keeper. */
@@ -95,20 +96,32 @@ export const keeperService = (keeper: KeeperName): string =>
     ? `sessiond-${keeper.version.replace(NOT_IN_A_JOB_NAME, "_")}`
     : "sessiond";
 
-/** Whether something accepts a connection on `path` within `timeoutMs`. */
-export const answers = (path: string, timeoutMs = 2000): Promise<boolean> =>
-  new Promise((resolve) => {
-    const socket = new Socket();
-    const settle = (answer: boolean): void => {
-      clearTimeout(timer);
-      socket.destroy();
-      resolve(answer);
-    };
-    const timer = setTimeout(() => settle(false), timeoutMs);
-    socket.once("connect", () => settle(true));
-    socket.once("error", () => settle(false));
-    socket.connect(path);
-  });
+/**
+ * Whether something accepts a connection on `path`: answered true when one
+ * did, answered false when the connect was refused (nothing listens, no
+ * file), unanswered when it did not complete within `timeoutMs`.
+ */
+export const answers = (
+  path: string,
+  timeoutMs = 2000
+): Promise<Bounded<boolean>> =>
+  readWithin(
+    timeoutMs,
+    (signal) =>
+      new Promise<boolean>((resolve) => {
+        const socket = new Socket();
+        const settle = (answer: boolean): void => {
+          socket.destroy();
+          resolve(answer);
+        };
+        signal.addEventListener("abort", () => socket.destroy(), {
+          once: true,
+        });
+        socket.once("connect", () => settle(true));
+        socket.once("error", () => settle(false));
+        socket.connect(path);
+      })
+  );
 
 /**
  * The current keeper's own endpoint, as the machine's endpoint names it now:
@@ -213,8 +226,23 @@ export async function publishKeeper(
     return;
   }
   const there = await lstat(machine).catch(() => undefined);
-  const legacy =
-    there?.isSocket() && (await answers(machine)) ? machine : undefined;
+  let legacy: string | undefined;
+  if (there?.isSocket()) {
+    const live = await answers(machine);
+    switch (live.kind) {
+      case "answered":
+        legacy = live.value ? machine : undefined;
+        break;
+      case "unanswered":
+        throw new Error(
+          `${machine} did not answer a connect within ${live.after} ms: whether a keeper still holds it is not known, so it is neither replaced nor set aside`
+        );
+      default: {
+        const unhandled: never = live;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  }
   if (legacy && legacyVersion === undefined) {
     throw new Error(
       `${machine} is the socket of a keeper started before keepers ran side by side; it is set aside by the handover that names its build`

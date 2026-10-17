@@ -63,6 +63,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     response = new Response(resolved.body, resolved);
     response.headers.set("origin-agent-cluster", "?1");
   }
+  // A policy that restricts images keeps `data:` allowed: the read gate asks
+  // the browser whether the page is going by loading a data image
+  // (lib/cawco/leaving.ts, `loadsRefused`), and a refused ask holds the read.
   response.headers.set("content-security-policy", "frame-ancestors 'self'");
   return response;
 };

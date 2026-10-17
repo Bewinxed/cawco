@@ -20,6 +20,7 @@
     answeredOr,
     cawco,
     latestCommandFor,
+    machineConnected,
     refreshContext,
     relaunchSession,
     submitCommand,
@@ -179,8 +180,8 @@
       : []
   );
   const editable = $derived(
-    cawco.status === "connected" &&
-      !!machineId &&
+    !!machineId &&
+      machineConnected(machineId) &&
       cawco.runningInstances.some((item) => item.id === sessionId)
   );
   const harnessNames: Record<HarnessKind, string> = {

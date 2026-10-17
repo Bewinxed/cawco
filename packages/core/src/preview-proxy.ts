@@ -1,3 +1,5 @@
+import { readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { Server, WebSocketHandler } from "bun";
 import { PREVIEW_DOWN_META, PREVIEW_WHY_META, type PreviewDown } from "./index";
 import { embeddedFile, standalone } from "./runtime";
@@ -56,23 +58,82 @@ let zipped: { text: string; body: Uint8Array<ArrayBuffer> } | undefined;
 const GZIP = /\bgzip\b/i;
 
 /**
- * The overlay as a response to {@link OVERLAY_PATH}, the origins a host may
- * frame it from (`parents`, the dashboards the hub is reached from) frozen
- * on the window before it runs: its hello is heard from those alone, so a
- * page of another site that frames the preview can't take its picks.
- * Gzipped for a browser that takes it (`accepts`, the request's
- * Accept-Encoding): it is loaded into every preview, uncached, and was most
- * of an artifact's own tab's JS (220 KB of its 640).
+ * The overlay's whole text: the origins a host may frame it from
+ * (`parents`, the dashboards the hub is reached from) frozen on the window
+ * before it runs, so its hello is heard from those alone and a page of
+ * another site that frames the preview can't take its picks; then its build.
+ */
+async function overlayText(parents: readonly string[]): Promise<string> {
+  const named = `Object.defineProperty(window,${JSON.stringify(PARENTS_GLOBAL)},{value:Object.freeze(${JSON.stringify(parents).replaceAll("<", "\\u003c")})});`;
+  return `${named}\n${await loadOverlay()}`;
+}
+
+/** The query parameter that names the overlay's key on {@link OVERLAY_PATH}. */
+export const OVERLAY_KEY = "k";
+/** The last key made, by the text it was made from. */
+let keyed: { key: string; text: string } | undefined;
+
+/**
+ * The overlay's key now: its whole text hashed, so a new build or a new
+ * parent origin is a new key. The hub writes it into every page's overlay
+ * tag ({@link keyOverlay}), and serves the overlay at it for good.
+ */
+export async function overlayKey(parents: readonly string[]): Promise<string> {
+  const text = await overlayText(parents);
+  if (keyed?.text !== text) {
+    const hex = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    keyed = { text, key: BigInt(`0x${hex.slice(0, 24)}`).toString(36) };
+  }
+  return keyed.key;
+}
+
+/**
+ * `answer`, a page on a preview origin (the hub's own, or one a machine's
+ * listener made: neither knows the hub's parents), with its overlay tag at
+ * the overlay's key now, streamed through as it is read.
+ */
+export async function keyOverlay(
+  answer: Response,
+  parents: readonly string[]
+): Promise<Response> {
+  const at = `${OVERLAY_PATH}?${OVERLAY_KEY}=${await overlayKey(parents)}`;
+  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
+  const rewritten = new HTMLRewriter()
+    .on(`script[src="${OVERLAY_PATH}"]`, {
+      element(element) {
+        element.setAttribute("src", at);
+      },
+    })
+    .transform(answer);
+  const headers = new Headers(rewritten.headers);
+  // The tag's new address is longer than the old.
+  headers.delete("content-length");
+  return new Response(rewritten.body, {
+    status: rewritten.status,
+    statusText: rewritten.statusText,
+    headers,
+  });
+}
+
+/**
+ * The overlay as a response to {@link OVERLAY_PATH} (overlay.ts, its text
+ * {@link overlayText}). At its key now (`asked`, the request's `k`), it is
+ * kept for good ({@link IMMUTABLE}): any change to its text is a new key,
+ * which every page's tag names from then on. At any other address it is
+ * the overlay as it is now, never kept. Gzipped for a browser that takes
+ * it (`accepts`, the request's Accept-Encoding): it is loaded into every
+ * preview, and was most of an artifact's own tab's JS (220 KB of its 640).
  */
 export async function overlayResponse(
   parents: readonly string[],
-  accepts: string | null
+  accepts: string | null,
+  asked: string | null
 ): Promise<Response> {
-  const named = `Object.defineProperty(window,${JSON.stringify(PARENTS_GLOBAL)},{value:Object.freeze(${JSON.stringify(parents).replaceAll("<", "\\u003c")})});`;
-  const text = `${named}\n${await loadOverlay()}`;
+  const text = await overlayText(parents);
+  const current = asked !== null && asked === (await overlayKey(parents));
   const headers = {
     "content-type": "text/javascript",
-    "cache-control": "no-store",
+    "cache-control": current ? IMMUTABLE : "no-store",
     vary: "accept-encoding",
   };
   if (!(accepts && GZIP.test(accepts))) {
@@ -231,6 +292,133 @@ export function injectOverlay(
     return html.replace(BODY, (match) => script + match);
   }
   return html + script;
+}
+
+/*
+ * A static folder's files at one state of the folder: `/__cawco/v/<key>/<path>`
+ * under the page's mount, `key` naming every file's path, size and change
+ * time. The page's document stays where it is, uncached (`no-store`), and its
+ * own references to its files are written to these addresses
+ * ({@link versionAssets}); what a file loads relative to its own address
+ * (a module's imports, a script's `new URL(…, import.meta.url)`, a sheet's
+ * `url(…)`) is at the same key. So a file is served for good
+ * ({@link IMMUTABLE}): a change to any file of the folder is a new key and
+ * a new address for every file, and no cache can hand an old file to a
+ * page that asked for the new one. A frame loaded again (a reload, a tab
+ * back from parked) asks the network for its document alone.
+ *
+ * What a script builds from a root path or the document's base
+ * (`fetch("/x.riv")`, `new URL(x, document.baseURI)`) is not at the key, and
+ * stays `no-store`: only a key makes a kept file safe. Kept by validation
+ * instead (`no-cache` and an ETag), a file is what Cloudflare's Browser
+ * Cache TTL rewrote to `max-age=14400` and served four hours stale.
+ *
+ * `immutable` with a year's `max-age`, `public`: Cloudflare in front of a
+ * dashboard rewrites a `Cache-Control` shorter than its Browser Cache TTL
+ * ("Cloudflare overrides any Cache-Control or Expires headers with values set
+ * via the Browser Cache TTL option … if the value of the Cache-Control header
+ * from the origin web server is less than the Browser Cache TTL setting",
+ * developers.cloudflare.com/cache/how-to/edge-browser-cache-ttl/set-browser-ttl/),
+ * which turned a dev server's `no-cache` into four hours stale; a year is
+ * longer than any TTL it sets, and an address that never changes its bytes
+ * may be kept anywhere. `immutable` "has no effect on public caches like
+ * Cloudflare, but does change browser behavior": no revalidation, even on a
+ * reload (developers.cloudflare.com/cache/concepts/cache-control/).
+ */
+export const IMMUTABLE = "public, max-age=31536000, immutable";
+const VERSIONED = /^\/__cawco\/v\/([0-9a-z]+)(\/.*)$/;
+const BASE_TAG = /<base[\s>]/i;
+const LEADING_SLASH = /^\//;
+/** The overlay's own and the hub's: never one of the page's files. */
+const RESERVED_PATH = "/__cawco/";
+
+/** A versioned address's file, its path under the mount; null when `pathname` is not one. */
+export const versionedFile = (pathname: string): string | null =>
+  pathname.match(VERSIONED)?.[2] ?? null;
+
+/** The key of `root`'s files as they are now: each one's path, size and change time, hashed. */
+export async function folderKey(root: string): Promise<string> {
+  const names = (await readdir(root, { recursive: true })).sort();
+  const hasher = new Bun.CryptoHasher("sha256");
+  const stats = await Promise.all(
+    names.map((name) => stat(join(root, name)).catch(() => null))
+  );
+  for (const [index, name] of names.entries()) {
+    const one = stats[index];
+    if (one?.isFile()) {
+      hasher.update(`${name}\0${one.size}\0${one.mtimeMs}\n`);
+    }
+  }
+  return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
+}
+
+/** The attributes that name one of the page's files, by the elements that carry them. */
+const FILE_ATTRIBUTES: [selector: string, attribute: string][] = [
+  ["script[src]", "src"],
+  ["link[href]", "href"],
+  ["img[src]", "src"],
+  ["source[src]", "src"],
+  ["video[src]", "src"],
+  ["video[poster]", "poster"],
+  ["audio[src]", "src"],
+  ["track[src]", "src"],
+  ["input[src]", "src"],
+];
+
+/**
+ * `html`, served at `documentPath` under `mount` (the page's root, `/` on its
+ * own origin), with each reference to one of its own files written to that
+ * file's address at `key`. A reference elsewhere (another origin, a data URL,
+ * the overlay's own `/__cawco/`) stays as it is, and so does a document with
+ * a `<base>` of its own, whose references resolve against that.
+ */
+export function versionAssets(
+  html: string,
+  key: string,
+  mount: string,
+  documentPath: string
+): string {
+  if (BASE_TAG.test(html)) {
+    return html;
+  }
+  const document = new URL(
+    `${mount}${documentPath.replace(LEADING_SLASH, "")}`,
+    "http://page.invalid"
+  );
+  const versioned = (reference: string): string | null => {
+    const trimmed = reference.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return null;
+    }
+    let url: URL;
+    try {
+      url = new URL(trimmed, document);
+    } catch {
+      return null;
+    }
+    const inside = url.pathname.slice(mount.length - 1);
+    if (
+      url.origin !== document.origin ||
+      !url.pathname.startsWith(mount) ||
+      inside.startsWith(RESERVED_PATH)
+    ) {
+      return null;
+    }
+    return `${mount}__cawco/v/${key}${inside}${url.search}${url.hash}`;
+  };
+  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
+  let rewriter = new HTMLRewriter();
+  for (const [selector, attribute] of FILE_ATTRIBUTES) {
+    rewriter = rewriter.on(selector, {
+      element(element) {
+        const at = versioned(element.getAttribute(attribute) ?? "");
+        if (at) {
+          element.setAttribute(attribute, at);
+        }
+      },
+    });
+  }
+  return rewriter.transform(html);
 }
 
 /**

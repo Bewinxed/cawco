@@ -48,6 +48,7 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
 import { httpProof } from "../../../packages/core/src/machine-key";
@@ -134,15 +135,26 @@ const ask = async (
   url: string,
   init: RequestInit = {}
 ): Promise<{ headers: Headers; status: number; text: string }> => {
-  const response = await fetch(url, {
-    ...init,
-    signal: AbortSignal.timeout(60_000),
+  const read = await readWithin(60_000, async (signal) => {
+    const response = await fetch(url, { ...init, signal });
+    return {
+      status: response.status,
+      text: await response.text(),
+      headers: response.headers,
+    };
   });
-  return {
-    status: response.status,
-    text: await response.text(),
-    headers: response.headers,
-  };
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${init.method ?? "GET"} ${url} did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 const json = (body: unknown, headers: Record<string, string> = {}) => ({
@@ -355,7 +367,7 @@ const spec: Spec = {
       const lines = [];
       const run = (mdns) => rediscoverHub({
         readCachedHubUrl: async () => "http://127.0.0.1:9",
-        browseMdns: async () => mdns,
+        browseMdns: async () => ({ kind: "answered", value: mdns }),
         tailscaleCandidates: async () => [],
         repin: async () => {},
         log: (line) => lines.push(line),

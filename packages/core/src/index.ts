@@ -712,6 +712,13 @@ export const unshownAskMessage = (question: boolean, why: string): string =>
 export const ASK_USER_QUESTION = "AskUserQuestion";
 
 /**
+ * OpenCode's Code Mode tool: MCP tools are reached through the programs it
+ * runs, each of a program's calls its own tool_use frame under the
+ * program's (`parent_tool_use_id`).
+ */
+export const CODE_MODE_TOOL = "execute";
+
+/**
  * `fs`: the machine's files, for the cwd picker and light markdown editing
  * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
  * `read` with the file's text, `write` with the byte count it wrote, `media`
@@ -1101,24 +1108,29 @@ export const relaunchOf = (row: {
 };
 
 /**
- * A continuation from a summary the hub is carrying, as every dashboard
- * follows it: summarise the source, then start a conversation seeded with the
- * summary. The hub owns it from the POST that starts it to its end; only a
- * Cancel (`DELETE /api/continuations/:id`) stops it.
+ * A continuation in a new session the hub is carrying, as every dashboard
+ * follows it: the source files its open items (a person's Continue), is
+ * summarised, then a new session starts seeded with the summary and those
+ * items. The hub owns it from the POST that starts it to its end; its Cancel
+ * (`DELETE /api/continuations/:id`) stops it in any stage before `started`.
  */
 export interface ContinuationJob {
   error?: string;
   id: string;
   /**
-   * The session goes on itself, in a fresh conversation (its account at its
-   * limit, or it asked with `continue_session`): `targetInstanceId` is
-   * `sourceInstanceId`, one session throughout. Absent: "Continue in new
-   * session", whose target is a new session and whose source is only read.
+   * Never sent: no job goes on in place now. Declared only because the
+   * TestFlight builds 20261015 and 20261015.3 read it, which the hub's wire
+   * check holds to (packages/hub/scripts/openapi.ts); it goes in the change
+   * that expires them.
    */
   inPlace?: true;
   sourceInstanceId: string;
-  /** `starting`: the new conversation (in place) or new session is starting. */
-  stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
+  /**
+   * `filing`: the source's turn filing its open items (a person's Continue);
+   * `starting`: the new session is starting.
+   */
+  stage:
+    "filing" | "summarising" | "starting" | "started" | "failed" | "cancelled";
   /** Absent when the source is short enough that nothing is summarised. */
   summariserInstanceId?: string;
   targetInstanceId: string;
@@ -1515,7 +1527,7 @@ export type PreviewSource =
       path?: string;
       /**
        * A sheet's: the workspace's stage serves the port (core `stage.ts`),
-       * its Vite root `dir` from the clone's root and the sheet's story file
+       * its toolchain root `dir` from the clone's root and the sheet's story file
        * `file` from that root. A request for it wakes the stage when it sleeps.
        */
       stage?: { dir: string; file: string };

@@ -59,17 +59,16 @@ public enum FleetAccounts {
         }
     }
 
-    /// What a running session does at its limit (core `AtLimit`).
+    /// What a running session does at its limit (core `AtLimit`): wait for a
+    /// close reset, or move whole, compacted there at `moveWholeUnderK` or more.
     public struct AtLimit: Codable, Equatable, Sendable {
         public var move: Bool
         public var waitMinutes: Int
         public var moveWholeUnderK: Int
-        public var prepareAtPct: Int
 
         /// core `DEFAULT_AT_LIMIT`.
         public static let standard = AtLimit(move: Words.Accounts.Rules.AtLimit.move, waitMinutes: Words.Accounts.Rules.AtLimit.waitMinutes,
-                                             moveWholeUnderK: Words.Accounts.Rules.AtLimit.moveWholeUnderK,
-                                             prepareAtPct: Words.Accounts.Rules.AtLimit.prepareAtPct)
+                                             moveWholeUnderK: Words.Accounts.Rules.AtLimit.moveWholeUnderK)
     }
 
     /// One provider's routing (core `ProviderRouting`).
@@ -413,7 +412,7 @@ public extension HubConnection {
             return out
         }
         let limit: [String: Any] = ["move": atLimit.move, "waitMinutes": atLimit.waitMinutes,
-                                    "moveWholeUnderK": atLimit.moveWholeUnderK, "prepareAtPct": atLimit.prepareAtPct]
+                                    "moveWholeUnderK": atLimit.moveWholeUnderK]
         _ = try await accountsWrite("api/accounts/routing/\(Self.part(provider))", method: "PUT",
                                     body: ["yours": choice(yours), "delegates": choice(delegates), "atLimit": limit])
     }

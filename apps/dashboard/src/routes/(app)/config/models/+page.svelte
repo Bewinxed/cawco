@@ -7,6 +7,7 @@
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import { leaveThePage } from "#lib/cawco/leaving.js";
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import {
@@ -158,7 +159,9 @@
       return;
     }
     const { authUrl } = (await response.json()) as { authUrl: string };
-    location.href = authUrl;
+    leaveThePage(() => {
+      location.href = authUrl;
+    });
   }
 
   async function exchange(code: string) {

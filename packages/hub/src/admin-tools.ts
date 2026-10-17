@@ -14,7 +14,9 @@ import {
   MCP_PLATFORMS,
   MEMORY_ROLES,
   type MemoryScope,
+  scopeKey,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { landedFetch } from "./fleet-fetches";
@@ -50,25 +52,41 @@ const api = async (
   body?: unknown
 ): Promise<unknown> => {
   const url = `${hubHttpUrl()}${path}`;
-  // The hub calling its own route, as itself (hub-self.ts).
-  const response = await selfFetch(url, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+  const asked = await readWithin(TIMEOUT_MS, async (signal) => {
+    // The hub calling its own route, as itself (hub-self.ts).
+    const response = await selfFetch(url, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(
+        `${method} ${path} → ${response.status}: ${text.slice(0, 500)}`
+      );
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    return (await (contentType.includes("json")
+      ? response.json()
+      : response.text())) as unknown;
   });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `${method} ${path} → ${response.status}: ${text.slice(0, 500)}`
-    );
+  switch (asked.kind) {
+    case "answered":
+      return asked.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${Math.round(asked.after / 1000)} s`
+      );
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  const contentType = response.headers.get("content-type") ?? "";
-  return contentType.includes("json") ? response.json() : response.text();
 };
 
 /** The fields a call gave: none undefined, no empty list. */
@@ -711,11 +729,11 @@ export function adminTools() {
             projectId: z.string().optional(),
             harness: z.string().optional(),
             model: z.string().optional(),
+            role: z.enum(MEMORY_ROLES).optional(),
+            delegateType: z.string().optional(),
           })
           .optional()
-          .describe(
-            "Narrow the rule to specific machines, projects, harnesses or models."
-          ),
+          .describe("Narrow the rule; every field given must match."),
       },
       async (args) => {
         const { action } = args;
@@ -881,8 +899,9 @@ export function adminTools() {
       "memory",
       "the fleet's CLAUDE.md, loaded into every session, and its documents: " +
         `unscoped, linked under ${userLayerLabel("memories")}/; scoped, loaded into the ` +
-        "sessions of a `role` (orchestrator: has delegate; else leaf), `projectIds`, or " +
-        "both. 'get': CLAUDE.md; 'list_docs': the documents.",
+        "sessions matching every `scope` field (role: orchestrator has delegate, else leaf; " +
+        "model: substring). `briefer`: handed to the delegate's caller instead. " +
+        "'get': CLAUDE.md; 'list_docs': the documents.",
       ["get", "list_docs"],
       ["set", "set_doc", "remove_doc"],
       {
@@ -902,7 +921,10 @@ export function adminTools() {
         scope: z
           .object({
             role: z.enum(MEMORY_ROLES).optional(),
+            delegateTypes: z.array(z.string()).min(1).optional(),
+            model: z.string().min(1).optional(),
             projectIds: z.array(z.string()).min(1).optional(),
+            briefer: z.literal(true).optional(),
           })
           .optional()
           .describe(
@@ -931,12 +953,7 @@ export function adminTools() {
           const docs = fleet.memoryDocs ?? [];
           return ok({
             docs: scope
-              ? docs.filter(
-                  (doc) =>
-                    doc.scope?.role === scope.role &&
-                    [...(doc.scope?.projectIds ?? [])].sort().join() ===
-                      [...(scope.projectIds ?? [])].sort().join()
-                )
+              ? docs.filter((doc) => scopeKey(doc.scope) === scopeKey(scope))
               : docs,
           });
         }

@@ -7,9 +7,10 @@
  *    “should work” is sent the rule's reply (the model is asked with it).
  *  - The person edits its reply and saves: the hub holds the new words, and
  *    the next session that says it is sent them.
- *  - The person deletes it: the hub no longer holds it, its row is gone.
- *    Then undo: Flow 5 requires “an undo affordance after the fact rather
- *    than a confirm dialog before it”; undone, the hub holds the rule again.
+ *  - The person deletes it, one gesture with nothing asked first: the hub no
+ *    longer holds it, its row is gone. Then undo: Flow 5 requires “an undo
+ *    affordance after the fact rather than a confirm dialog before it”;
+ *    undone, the hub holds the rule again.
  */
 import type { Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
@@ -158,7 +159,6 @@ async function walk(leg: Leg): Promise<void> {
       });
       await page.getByRole("button", { name: `More for ${name}` }).click();
       await page.getByRole("menuitem", { name: "Delete rule" }).click();
-      await page.getByRole("button", { name: "Delete rule" }).click();
     },
     async () => {
       await eventually(

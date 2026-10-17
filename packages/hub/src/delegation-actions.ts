@@ -34,6 +34,7 @@ import {
   relaunchOf,
   withInputsLine,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
@@ -44,6 +45,7 @@ import {
   type HeldWork,
   type QueuedDelegate,
   resolveSpawnType,
+  type Unlanded,
 } from "./work-items";
 
 // Every call this module makes is the hub calling its own routes, as itself
@@ -56,8 +58,8 @@ const fetch = selfFetch;
  * and skills) — a daemon fetches this directly from the hub it already knows
  * the address of, right before it builds the `delegate` tool's description,
  * and the caller freezes what comes back for the session's whole life.
- * Failures are logged and passed to the caller for its startup instructions.
- * A valid empty catalog remains distinct from a failed fetch.
+ * Failures, and a hub that did not answer in time, are logged and thrown in
+ * their own words: a valid empty catalog remains distinct from both.
  * Descriptions take a startup snapshot. Catalog reads and named dispatch fetch
  * again so saved routing changes apply to sessions already running.
  *
@@ -66,32 +68,45 @@ const fetch = selfFetch;
  * the same name (project-delegate-types.ts).
  */
 export async function fetchDelegateTypes(
-  onError?: (message: string) => void,
   projectId?: string
 ): Promise<DelegateType[]> {
+  const path = projectId
+    ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
+    : "/api/delegate-types";
+  let read: Bounded<DelegateType[]>;
   try {
-    const path = projectId
-      ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
-      : "/api/delegate-types";
-    const res = await fetch(`${hubHttpUrl()}${path}`, {
-      signal: AbortSignal.timeout(5000),
+    read = await readWithin(DELEGATE_TYPES_MS, async (signal) => {
+      const res = await fetch(`${hubHttpUrl()}${path}`, { signal });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const body = (await res.json()) as { types?: DelegateType[] } | null;
+      if (
+        !Array.isArray(body?.types) ||
+        body.types.some((type) => !type || delegateTypeProblem(type))
+      ) {
+        throw new Error("Invalid delegate catalog response");
+      }
+      return body.types;
     });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const body = (await res.json()) as { types?: DelegateType[] } | null;
-    if (
-      !Array.isArray(body?.types) ||
-      body.types.some((type) => !type || delegateTypeProblem(type))
-    ) {
-      throw new Error("Invalid delegate catalog response");
-    }
-    return body.types;
   } catch (error) {
     const message = `Could not load delegate types: ${error instanceof Error ? error.message : String(error)}`;
     console.warn(`[cawco] ${message}`);
-    onError?.(message);
-    return [];
+    throw new Error(message, { cause: error });
+  }
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered": {
+      // Not answered is never an empty catalog.
+      const message = `Could not load delegate types: the hub did not answer within ${Math.round(read.after / 1000)} s`;
+      console.warn(`[cawco] ${message}`);
+      throw new Error(message);
+    }
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -808,18 +823,8 @@ export interface HandoffActions {
     path: string,
     body?: unknown
   ) => Promise<unknown>;
-  /**
-   * Summarises a session with the chosen summariser through the hub's own
-   * continuation. Another session (`session`): a new session starts seeded
-   * with the summary, and that one is only read. This one (`session`
-   * omitted): it goes on itself, in place, in a fresh conversation seeded
-   * with the summary once the turn that asked ends — same id, row, parent
-   * and children. `from: "asks"`: nothing is summarised, and the new
-   * conversation opens on the person's own messages alone, verbatim and in
-   * order.
-   */
   readonly continueSession: (input: {
-    session?: string;
+    session: string;
     from?: "summary" | "asks";
     summarizer_harness?: "claude" | "opencode" | "pi";
     summarizer_model?: string;
@@ -865,6 +870,8 @@ export interface HandoffActions {
       canDelegate?: boolean;
       /** An existing workspace's id: the new item is its follow-up. */
       workspace?: string;
+      /** A workspace of this session's delegates: the new workspace is cut at its branch's head. */
+      from?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
       /** Files on this session's machine copied into its `$TMPDIR/inputs/` before its brief. */
@@ -921,6 +928,16 @@ export interface HandoffActions {
     minutes?: number,
     resume?: boolean
   ) => Promise<string>;
+  /**
+   * Summarises another session with the chosen summariser through the hub's
+   * own continuation: a new session starts seeded with the summary and that
+   * session's open items, and takes over its delegates; that one is only
+   * read. Never the calling session itself. `from: "asks"`: nothing is
+   * summarised, and the new session opens on the person's own messages
+   * alone, verbatim and in order, and the open items.
+   */
+  /** This session's Open items section, built by the hub from its records (open-items.ts). */
+  readonly openItems: () => Promise<string>;
   /** A window into one result of a run this session supervises. */
   readonly readWorkflow: (
     runId: string,
@@ -1133,6 +1150,10 @@ const coldRefusals = new Map<string, string>();
 
 /** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
 const FOLLOWUP_STATE_MS = 30_000;
+/** A cold refusal's context-size read: short, as it cannot hold the refusal on an offline machine. */
+const CONTEXT_SIZE_MS = 3000;
+/** The delegate catalog, read from the hub. */
+const DELEGATE_TYPES_MS = 5000;
 
 /**
  * Whether a session's prompt cache is warm now (mid-turn, unmeasured, or
@@ -1179,11 +1200,47 @@ function jevVerdict(
 }
 
 /**
+ * Whether `caller`'s call about cold `row` is the repeat of one refused
+ * since that session's last turn: true once, and the refusal is spent;
+ * otherwise this refusal is recorded for the repeat to find.
+ */
+function repeatOfRefused(
+  row: KeepAliveRow,
+  caller: string,
+  lastTurnAt: string | null
+): boolean {
+  const key = `${row.id}:${caller}`;
+  const turn = `${row.lastRequestAt?.getTime() ?? ""}:${lastTurnAt ?? ""}`;
+  if (coldRefusals.get(key) === turn) {
+    coldRefusals.delete(key);
+    return true;
+  }
+  // Bound warnings in memory; a newer turn also invalidates an unused repeat.
+  if (coldRefusals.size >= 256) {
+    coldRefusals.delete(coldRefusals.keys().next().value as string);
+  }
+  coldRefusals.set(key, turn);
+  return false;
+}
+
+/** The refusal for a cold session whose clean workspace holds commits on no remote: `from` reaches them for a brief's price. */
+export function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
+  const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
+  const commits = `${unlanded.ahead} commit${unlanded.ahead === 1 ? "" : "s"}`;
+  const stop = unlanded.live ? "stop its item with stop_delegate, then " : "";
+  return `Refused: "${title}" (${row.id}) is cold, and its workspace ${unlanded.workspaceId} holds ${commits} on no remote with a clean tree. Waking it re-reads its whole transcript at full price; a fresh delegate cut from that workspace's branch starts with those commits for the price of a brief. Nothing was sent.\n\nTo finish that work, ${stop}delegate with from: "${unlanded.workspaceId}" and a brief that says what is left to do. If the work needs this session's own history, make the same call again and it will be delivered.`;
+}
+
+/**
  * Attach or fresh (§5.9) with a caller: a message to a session whose
- * prompt cache has expired. Jev on: the hub asks Jev whether that session's
- * history matters to `message`, and its answer stands (a Jev that does not
- * answer refuses, saying so). Jev off: the caller decides: the first call
- * is refused with the cost, and the same call again is delivered.
+ * prompt cache has expired. What its workspace holds on no remote decides
+ * first: uncommitted changes, which only its clone reaches, attach; commits
+ * with a clean tree are refused once naming `delegate` with `from`, and the
+ * same call again is delivered. A workspace holding none of that: Jev on,
+ * the hub asks Jev whether that session's history matters to `message`, and
+ * its answer stands (a Jev that does not answer refuses, saying so); Jev
+ * off, the first call is refused with the cost, and the same call again is
+ * delivered.
  */
 async function checkCold(
   instanceId: string | undefined,
@@ -1191,65 +1248,138 @@ async function checkCold(
   caller: string,
   message: string
 ): Promise<void> {
-  const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ instanceId, workspace, message }),
-    signal: AbortSignal.timeout(FOLLOWUP_STATE_MS),
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  const { row, midTurn, hasTurns, lastTurnAt, activityBound, jev } =
-    (await response.json()) as {
-      row: KeepAliveRow | null;
-      midTurn: boolean;
-      hasTurns: boolean;
-      lastTurnAt: string | null;
-      activityBound: boolean;
-      /** Jev's answer, when Jev is on and the hub found the session cold. */
-      jev?: { attach: boolean; noul: number } | { error: string };
-    };
+  const { row, midTurn, hasTurns, lastTurnAt, activityBound, unlanded, jev } =
+    await readFollowupState(instanceId, workspace, message);
   if (!row) {
     return;
   }
   row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
-  const prefix = `${row.id}:`;
   if (warmNow(row, midTurn, lastTurnAt)) {
     return;
+  }
+  if (unlanded) {
+    const decided = unlandedVerdict(row, caller, lastTurnAt, unlanded);
+    if (decided) {
+      return;
+    }
   }
   if (jev) {
     jevVerdict(row, jev);
     return;
   }
-  const key = `${prefix}${caller}`;
-  const turn = `${row.lastRequestAt?.getTime() ?? ""}:${lastTurnAt ?? ""}`;
-  if (coldRefusals.get(key) === turn) {
-    coldRefusals.delete(key);
+  if (repeatOfRefused(row, caller, lastTurnAt)) {
     return;
   }
-  // Bound warnings in memory; a newer turn also invalidates an unused repeat.
-  if (coldRefusals.size >= 256) {
-    coldRefusals.delete(coldRefusals.keys().next().value as string);
-  }
-  coldRefusals.set(key, turn);
   if (row.contextTokens === null) {
-    try {
-      const measured = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(row.id)}/context-size`,
-        { method: "POST", signal: AbortSignal.timeout(3000) }
-      );
-      if (measured.ok) {
-        const reading = (await measured.json()) as { tokens?: number | null };
-        row.contextTokens = reading.tokens ?? null;
-      }
-    } catch {
-      // A context read cannot keep a cold-session refusal waiting on an offline machine.
-    }
+    row.contextTokens = await measuredContext(row.id);
   }
   throw new Error(
     coldRefusalText(row, lastTurnAt as string, activityBound, hasTurns)
   );
+}
+
+/**
+ * What a cold session's workspace holds on no remote decides first: true
+ * when it delivers (uncommitted changes, which only that clone reaches, or
+ * the repeat of a `from` refusal); thrown when it refuses (commits with a
+ * clean tree, naming `from`; a read that failed); false when it holds
+ * neither, and Jev or the caller decides.
+ */
+function unlandedVerdict(
+  row: KeepAliveRow,
+  caller: string,
+  lastTurnAt: string | null,
+  unlanded: Unlanded | { error: string }
+): boolean {
+  if ("error" in unlanded) {
+    const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
+    throw new Error(
+      `Refused: "${title}" (${row.id}) is cold, and what its workspace holds on no remote could not be read: ${unlanded.error} Nothing was sent. Retry once its machine answers.`
+    );
+  }
+  if (unlanded.changed > 0) {
+    return true;
+  }
+  if (unlanded.ahead === 0) {
+    return false;
+  }
+  if (repeatOfRefused(row, caller, lastTurnAt)) {
+    return true;
+  }
+  throw new Error(fromRefusalText(row, unlanded));
+}
+
+/** A session's context size, read once for a cold refusal; null when its machine does not say in time. */
+async function measuredContext(id: string): Promise<number | null> {
+  try {
+    const measured = await readWithin(CONTEXT_SIZE_MS, async (signal) => {
+      const response = await fetch(
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(id)}/context-size`,
+        { method: "POST", signal }
+      );
+      return response.ok
+        ? ((await response.json()) as { tokens?: number | null })
+        : undefined;
+    });
+    switch (measured.kind) {
+      case "answered":
+        return measured.value?.tokens ?? null;
+      case "unanswered":
+        // The size stays unknown; the refusal says so as it always has.
+        return null;
+      default: {
+        const unhandled: never = measured;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  } catch {
+    // A context read cannot keep a cold-session refusal waiting on an offline machine.
+    return null;
+  }
+}
+
+/** What the hub reads of a session a message is about to reach (`/api/followup-state`); unknown is refused. */
+async function readFollowupState(
+  instanceId: string | undefined,
+  workspace: string | undefined,
+  message: string
+) {
+  const read = await readWithin(FOLLOWUP_STATE_MS, async (signal) => {
+    const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ instanceId, workspace, message }),
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return (await response.json()) as {
+      row: KeepAliveRow | null;
+      midTurn: boolean;
+      hasTurns: boolean;
+      lastTurnAt: string | null;
+      activityBound: boolean;
+      /** What a cold session's workspace holds on no remote, or why that could not be read. */
+      unlanded?: Unlanded | { error: string };
+      /** Jev's answer, when Jev is on and the hub found the session cold with nothing unlanded. */
+      jev?: { attach: boolean; noul: number } | { error: string };
+    };
+  });
+  switch (read.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      // Its state is unknown: never read as cold or warm.
+      throw new Error(
+        `The hub did not answer within ${Math.round(read.after / 1000)} s whether that session's cache is warm, so nothing was sent. Retry.`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  return read.value;
 }
 
 export function coldRefusalText(
@@ -1372,23 +1502,30 @@ export const handoffActions = ({
     const { held } = (await spent.json()) as { held: HeldWork[] };
     return { delegates, held, queued };
   },
+  async openItems() {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items`
+    );
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
+  },
   async continueSession(input) {
     const { rows, hosts } = fleetInstances(fleet);
-    const target = input.session
-      ? (formerOf(formerIds(), input.session)?.now ?? input.session)
-      : undefined;
-    const source = target
-      ? resolve(
-          rows.map((row) => toPeer(row, hosts)),
-          target
-        ).row.id
-      : instanceId;
-    const inPlace = source === instanceId;
-    // The new conversation or session answers permissions as the caller
-    // does, where its harness has modes; the hub settles it, never the
-    // machine's default.
+    const target = formerOf(formerIds(), input.session)?.now ?? input.session;
+    const source = resolve(
+      rows.map((row) => toPeer(row, hosts)),
+      target
+    ).row.id;
+    if (source === instanceId) {
+      throw new Error(
+        "continue_session continues another session, never this one. If your context is too big, say so in one line: the person compacts it with Claude Code's own /compact."
+      );
+    }
+    // The new session answers permissions as the caller does, where its
+    // harness has modes; the hub settles it, never the machine's default.
     const fallbackPermissionMode = callerMode(rows, instanceId);
-    const asks = input.from === "asks";
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
       {
@@ -1401,7 +1538,6 @@ export const handoffActions = ({
             model: input.target_model,
             ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
-          ...(inPlace ? { inPlace: true } : {}),
           askedBy: instanceId,
           ...(input.note ? { note: input.note } : {}),
         }),
@@ -1410,26 +1546,9 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const { continuationId, summariserInstanceId } =
-      (await response.json()) as {
-        continuationId: string;
-        summariserInstanceId: string | null;
-      };
-    // In place, this process is the one the fresh conversation replaces: the
-    // job waits for this turn to end, so nothing here waits on it.
-    if (inPlace) {
-      return {
-        summariserInstanceId,
-        targetInstanceId: instanceId,
-        text:
-          `This session goes on as itself, in a fresh ${input.target_harness} conversation on ${input.target_model}, ` +
-          (asks
-            ? "once this turn ends: nothing is summarised, and the new conversation opens on the person's own messages alone, verbatim and in order. "
-            : `once this turn ends: ${summariserOf(input)} summarises it then, and the new conversation opens on that summary, the artifact index and your last turns. `) +
-          'Same id, parent, delegates and work item; your transcript reads on through a "Continued" line. ' +
-          `End your turn now. (continuation ${continuationId})`,
-      };
-    }
+    const { continuationId } = (await response.json()) as {
+      continuationId: string;
+    };
     // The hub runs the continuation as its own job; this waits for its report.
     const outcome = await fetch(
       `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
@@ -1561,19 +1680,36 @@ export const handoffActions = ({
     return response.json();
   },
   async generateImage(request) {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS + 60_000),
+    const read = await readWithin(
+      IMAGE_GENERATION_TIMEOUT_MS + 60_000,
+      async (signal) => {
+        const response = await fetch(
+          `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/generate-image`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request),
+            signal,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        return (await response.json()) as GeneratedImage;
       }
     );
-    if (!response.ok) {
-      throw new Error(await response.text());
+    switch (read.kind) {
+      case "answered":
+        return read.value;
+      case "unanswered":
+        throw new Error(
+          `The hub did not answer within ${Math.round(read.after / 1000)} s with the image.`
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return (await response.json()) as GeneratedImage;
   },
   async artifactCall(method, path, body) {
     const response = await fetch(
@@ -1594,9 +1730,7 @@ export const handoffActions = ({
     return response.json();
   },
   async listDelegateTypes() {
-    const types = await fetchDelegateTypes((message) => {
-      throw new Error(message);
-    }, projectId);
+    const types = await fetchDelegateTypes(projectId);
     return { types };
   },
   listSessions(): string {
@@ -1755,9 +1889,7 @@ export const handoffActions = ({
     // Nothing is left to the machine's defaults: the type (or `medium`) says
     // what runs, and the caller's own mode is how it answers permissions.
     // The caller's project's catalog: its own types shadow the fleet's.
-    const types = await fetchDelegateTypes((message) => {
-      throw new Error(message);
-    }, projectId);
+    const types = await fetchDelegateTypes(projectId);
     const { rows } = fleetInstances(fleet);
     const { type, harness, model } = resolveSpawnType(types, {
       type: typeName,

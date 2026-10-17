@@ -1240,6 +1240,7 @@
                 {#snippet children(tip)}
                   <button
                     data-bar-item
+                    data-jump
                     {...tip}
                     aria-expanded={barGlass.open === "jump"}
                     aria-haspopup="dialog"
@@ -1623,6 +1624,13 @@
     }
   }
   @media (max-width: 899px) {
+    /* Jump and the machines live in the phone's sidebar (`{#if railed}`): the
+       server draws the wide bar, so its first paint here goes without them,
+       as the rail's does, and nothing leaves the bar as it hydrates. */
+    [data-slot="tools"] :global(:is([data-jump], [data-machines])) {
+      display: none;
+    }
+    /* Caw, the group's one item, is the glass's whole box. */
     [data-slot="tools"] :global([data-bar-item]) {
       inline-size: var(--c-bar-caw-glass-phone);
       min-inline-size: var(--c-bar-caw-glass-phone);

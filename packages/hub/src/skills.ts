@@ -9,6 +9,7 @@ import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { SkillFile } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -164,8 +165,37 @@ const describe = (source: SkillSource): string => {
   return `${source.owner}/${source.repo}`;
 };
 
-export const get = (url: string): Promise<Response> =>
-  fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+/**
+ * One GET within {@link FETCH_TIMEOUT_MS}, its body read inside the same
+ * time. Not answered in time throws so, as every failure here is a sentence.
+ */
+export const get = async (url: string): Promise<Response> => {
+  const asked = await readWithin(FETCH_TIMEOUT_MS, async (signal) => {
+    const response = await fetch(url, { signal });
+    return new Response(
+      [204, 205, 304].includes(response.status)
+        ? null
+        : await response.arrayBuffer(),
+      {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      }
+    );
+  });
+  switch (asked.kind) {
+    case "answered":
+      return asked.value;
+    case "unanswered":
+      throw new Error(
+        `${url} did not answer within ${Math.round(asked.after / 1000)} s`
+      );
+    default: {
+      const unhandled: never = asked;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /**
  * The downloaded archive, extracted, with the one directory both tarball kinds
@@ -235,26 +265,39 @@ export const downloadRepo = async (
   const slug = `${owner}/${repo}`;
   const store = join(work, "repo.git");
   const git = async (step: string, args: string[]): Promise<void> => {
-    const child = Bun.spawn(
-      safeGitArgv([`--git-dir=${store}`, step, ...args]),
-      {
-        env: { ...process.env, ...SAFE_GIT_ENV },
-        stdout: "ignore",
-        stderr: "pipe",
-        timeout: GIT_TIMEOUT_MS,
+    const ran = await readWithin(GIT_TIMEOUT_MS, async (signal) => {
+      const child = Bun.spawn(
+        safeGitArgv([`--git-dir=${store}`, step, ...args]),
+        {
+          env: { ...process.env, ...SAFE_GIT_ENV },
+          stdout: "ignore",
+          stderr: "pipe",
+          signal,
+        }
+      );
+      const [code, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      return { code, stderr };
+    });
+    switch (ran.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Error(
+          `git ${step} for ${slug} did not finish within ${Math.round(ran.after / 1000)} s`
+        );
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-    );
-    const [code, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stderr).text(),
-    ]);
+    }
+    const { code, stderr } = ran.value;
     if (code !== 0) {
-      const why =
-        stderr.trim() ||
-        (child.signalCode
-          ? `timed out after ${GIT_TIMEOUT_MS / 1000}s`
-          : `exit ${code}`);
-      throw new Error(`git ${step} failed for ${slug}: ${why}`);
+      throw new Error(
+        `git ${step} failed for ${slug}: ${stderr.trim() || `exit ${code}`}`
+      );
     }
   };
 

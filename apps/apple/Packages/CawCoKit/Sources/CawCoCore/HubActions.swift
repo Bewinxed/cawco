@@ -125,7 +125,7 @@ extension HubConnection {
                                            path: String, content: String? = nil) async throws -> T {
         let requestId = UUID().uuidString.lowercased()
         let payload = Components.Schemas.FsPayload(content: content, op: op, path: path, requestId: requestId)
-        return try await Self.decodeResult(await request(machineId: machineId, verb: .fs, requestId: requestId, payload: payload))
+        return try await Self.decodeResult(await request(machineId: machineId, verb: .fs, requestId: requestId, payload: payload).result)
     }
 
     /// Typed escape hatch for the machine's other neutral controls. The
@@ -167,10 +167,21 @@ extension HubConnection {
         try await sessionControl(instanceId: instanceId, machineId: machineId, method: "reloadSkills")
     }
 
+    /// A machine's stored sessions, with the harnesses the listing left out:
+    /// those that gave no answer in time and those whose listing threw. Their
+    /// sessions are absent from `sessions`, which says nothing about them.
+    public struct SessionListing: Sendable {
+        public var sessions: [Components.Schemas.NeutralSessionInfo]
+        public var unanswered: [Components.Schemas.HarnessUnanswered]
+        public var failed: [Components.Schemas.HarnessFailed]
+    }
+
     public func listSessions(machineId: String, limit: Int? = nil,
-        harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws -> [Components.Schemas.NeutralSessionInfo] {
+        harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws -> SessionListing {
         let options: [String: (any Sendable)?] = limit.map { ["limit": $0] } ?? [:]
-        return try await Self.decodeResult(await control(machineId, harness: harness, method: "listSessions", args: [options]))
+        let frame = try await controlFrame(machineId, harness: harness, method: "listSessions", args: [options])
+        let sessions: [Components.Schemas.NeutralSessionInfo] = try await Self.decodeResult(frame.result)
+        return SessionListing(sessions: sessions, unanswered: frame.unanswered ?? [], failed: frame.failed ?? [])
     }
     public func renameSession(machineId: String, sessionKey: String, title: String, dir: String? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {

@@ -21,7 +21,8 @@
    * - A task: its project with its sheet open (`?task=`); a routine: open
    *   in its project's Routines tab (a fleet routine has none, and ↵
    *   stays); a project: its page.
-   * - A machine: "Start a session here" opens the new-session dialog on it;
+   * - A machine: the machines, opened onto it (bar-glass `showMachine`);
+   *   "Start a session here" opens the new-session dialog on it;
    *   "See what runs here" asks the finder for its name, which every session
    *   on it answers to.
    * - An artifact or a decision: brought to the front of its session's panel,
@@ -30,6 +31,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { showArtifact } from "../artifact-api";
+  import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
   import { conversationHref } from "../links";
   import { routineHref, threadHref } from "../thread-tabs";
@@ -105,8 +107,16 @@
     await goto(href);
   }
 
-  const opened = async ({ result, moment }: Opening) =>
-    go(await hrefOf(result, moment));
+  async function opened({ result, moment }: Opening) {
+    if (result.kind === "machine") {
+      // The machines, opened onto this one, where "Check machines" opens
+      // them: the glass's card swaps Jump for them (the phone's sidebar, on
+      // a phone; Shell).
+      barGlass.showMachine(result.id);
+      return;
+    }
+    await go(await hrefOf(result, moment));
+  }
 
   async function openedWaiting(item: WaitingItem) {
     switch (item.kind) {

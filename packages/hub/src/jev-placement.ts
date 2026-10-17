@@ -22,13 +22,14 @@ import {
   STARTER_PLACES,
   type StarterPlace,
 } from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
 import type {
   JevChoiceAnswer,
   JevQuestion,
   JevResult,
   JevText,
 } from "@cawco/core/workflow-program";
-import { askJev, type JevAccess } from "./jev";
+import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import {
   PLACE_QUESTION,
   reasonRefusal,
@@ -93,14 +94,11 @@ export async function askRow<
   const named = (Array.isArray(rows) ? rows : [rows])
     .map((row) => ROWS[row])
     .join(" + ");
+  let asking: Bounded<JevResult<Questions>>;
   try {
-    const result = await askJev(access, state, questions, {
+    asking = await askJev(access, state, questions, {
       timeoutMs: PLACEMENT_TIMEOUT_MS,
     });
-    console.log(
-      `[jev] ${named} project=${projectId ?? "none"} route=${access.route} questions=${Object.keys(questions).length} cost=$${result.usage.costUsd}`
-    );
-    return result;
   } catch (error) {
     console.warn(
       `[jev] ${named} project=${projectId ?? "none"} route=${access.route} failed: ${words(error)}`
@@ -108,6 +106,25 @@ export async function askRow<
     throw new JevFailed(`Jev did not answer (${named}): ${words(error)}`, {
       cause: error,
     });
+  }
+  switch (asking.kind) {
+    case "answered":
+      console.log(
+        `[jev] ${named} project=${projectId ?? "none"} route=${access.route} questions=${Object.keys(questions).length} cost=$${asking.value.usage.costUsd}`
+      );
+      return asking.value;
+    case "unanswered": {
+      // Not answered is not a decision: the caller's JevFailed arm waits or hands it to you.
+      const said = jevUnanswered(asking.after);
+      console.warn(
+        `[jev] ${named} project=${projectId ?? "none"} route=${access.route}: ${said}`
+      );
+      throw new JevFailed(`${said} (${named}).`);
+    }
+    default: {
+      const unhandled: never = asking;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

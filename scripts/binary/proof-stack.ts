@@ -4,6 +4,7 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { readWithin } from "../../packages/core/src/bounded";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -88,22 +89,29 @@ function dashboard() {
   void Bun.write(join(home, `dashboard-${child.pid}.err.log`), child.stderr);
   return child;
 }
-function openDashboard() {
-  return new Promise<WebSocket>((resolve, reject) => {
-    const ws = new WebSocket("ws://127.0.0.1:43458/ws/dashboard");
-    const timer = setTimeout(() => {
-      ws.close();
-      reject(new Error("Dashboard websocket timeout"));
-    }, 5000);
-    ws.onmessage = () => {
-      clearTimeout(timer);
-      resolve(ws);
-    };
-    ws.onerror = () => {
-      clearTimeout(timer);
-      reject(new Error("Dashboard websocket failed"));
-    };
-  });
+async function openDashboard() {
+  const opened = await readWithin(
+    5000,
+    (signal) =>
+      new Promise<WebSocket>((resolve, reject) => {
+        const ws = new WebSocket("ws://127.0.0.1:43458/ws/dashboard");
+        signal.addEventListener("abort", () => ws.close(), { once: true });
+        ws.onmessage = () => resolve(ws);
+        ws.onerror = () => reject(new Error("Dashboard websocket failed"));
+      })
+  );
+  switch (opened.kind) {
+    case "answered":
+      return opened.value;
+    case "unanswered":
+      throw new Error(
+        `Dashboard websocket did not answer within ${opened.after} ms (${opened.reason})`
+      );
+    default: {
+      const unhandled: never = opened;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 async function until(what: string, ready: () => boolean, ms = 15_000) {
   for (const end = Date.now() + ms; Date.now() < end;) {
@@ -402,46 +410,78 @@ try {
       }
       await Bun.sleep(20);
     }
-    const response = fetch("http://127.0.0.1:43458/_app/running-version.json", {
-      signal: AbortSignal.timeout(10_000),
+    const response = readWithin(10_000, async (signal) => {
+      const res = await fetch(
+        "http://127.0.0.1:43458/_app/running-version.json",
+        { signal }
+      );
+      return { ok: res.ok, status: res.status, text: await res.text() };
     });
     if ((await restarting.exited) !== 0) {
       throw new Error(await new Response(restarting.stderr).text());
     }
     const res = await response;
-    if (!res.ok) {
+    switch (res.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Error(
+          `Request during real service restart did not answer within ${res.after} ms (${res.reason})`
+        );
+      default: {
+        const unhandled: never = res;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    if (!res.value.ok) {
       throw new Error(
-        `Request during real service restart failed ${res.status}`
+        `Request during real service restart failed ${res.value.status}`
       );
     }
     console.log(
-      `real systemd socket activation: request during restart answered ${await res.text()}`
+      `real systemd socket activation: request during restart answered ${res.value.text}`
     );
   } else {
     worker?.kill("SIGTERM");
     await worker?.exited;
-    const response = fetch("http://127.0.0.1:43458/_app/running-version.json", {
-      signal: AbortSignal.timeout(5000),
-    });
+    const response = readWithin(5000, (signal) =>
+      fetch("http://127.0.0.1:43458/_app/running-version.json", { signal })
+    );
     await Bun.sleep(100);
     worker = dashboard();
     const res = await response;
-    if (!res.ok) {
+    switch (res.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Error(
+          `Queued restart request did not answer within ${res.after} ms (${res.reason})`
+        );
+      default: {
+        const unhandled: never = res;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    if (!res.value.ok) {
       throw new Error("Queued restart request failed");
     }
     console.log(
       "held supervisor socket: queued request answered after worker replacement"
     );
   }
-  await Promise.race([
-    closed,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Old worker websocket did not drain")),
-        5000
-      )
-    ),
-  ]);
+  const drained = await readWithin(5000, () => closed);
+  switch (drained.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      throw new Error(
+        `Old worker websocket did not drain within ${drained.after} ms`
+      );
+    default: {
+      const unhandled: never = drained;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const replacement = await openDashboard();
   replacement.close();
   console.log("old websocket drained; replacement websocket delivers a frame");
@@ -470,18 +510,24 @@ try {
     }
   }
   await Promise.all(
-    children.map((child) =>
-      Promise.race([
-        child.exited,
-        Bun.sleep(5000).then(() => {
+    children.map(async (child) => {
+      const exited = await readWithin(5000, () => child.exited);
+      switch (exited.kind) {
+        case "answered":
+          break;
+        case "unanswered":
           try {
             child.kill("SIGKILL");
           } catch {
             /* The child exited during the grace period. */
           }
-        }),
-      ])
-    )
+          break;
+        default: {
+          const unhandled: never = exited;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    })
   );
   if (listener >= 0) {
     libc.symbols.close(listener);

@@ -89,6 +89,7 @@
  */
 import { join } from "node:path";
 import type { Frame, Locator } from "playwright-core";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
@@ -713,7 +714,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         await rowsOf(on)
       )
         .locator(
-          ':is([data-task-card-live], [data-slot="live"], [data-account-move-divider-live], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+          ':is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
         )
         .count()) > 0
     ) {
@@ -740,7 +741,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     () =>
       on.page
         .locator(
-          '[data-pin-list-pop] :is([data-task-card-live], [data-slot="live"], [data-account-move-divider-live], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+          '[data-pin-list-pop] :is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
         )
         .count(),
     (count) => count === 0,
@@ -876,28 +877,45 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
  */
 const hostChecks = async (on: On, frame: Frame, one: string) => {
   const iframe = await frame.frameElement();
-  const ask = (message: object, type: string) =>
-    on.page.evaluate(
-      ([el, sent, answer]) =>
-        new Promise<Record<string, unknown> | null>((resolve) => {
-          const win = (el as HTMLIFrameElement).contentWindow;
-          if (!win) {
-            resolve(null);
-            return;
-          }
-          const listen = (event: MessageEvent) => {
-            if (event.source === win && event.data?.type === answer) {
-              removeEventListener("message", listen);
-              resolve(event.data);
+  const ask = async (message: object, type: string) => {
+    const read = await readWithin(5000, () =>
+      on.page.evaluate(
+        ([el, sent, answer]) =>
+          new Promise<Record<string, unknown> | null>((resolve) => {
+            const win = (el as HTMLIFrameElement).contentWindow;
+            if (!win) {
+              resolve(null);
+              return;
             }
-          };
-          addEventListener("message", listen);
-          // The page's own origin: a preview is never the dashboard's.
-          win.postMessage(sent, new URL((el as HTMLIFrameElement).src).origin);
-          setTimeout(() => resolve(null), 5000);
-        }),
-      [iframe, message, type] as const
+            const listen = (event: MessageEvent) => {
+              if (event.source === win && event.data?.type === answer) {
+                removeEventListener("message", listen);
+                resolve(event.data);
+              }
+            };
+            addEventListener("message", listen);
+            // The page's own origin: a preview is never the dashboard's.
+            win.postMessage(
+              sent,
+              new URL((el as HTMLIFrameElement).src).origin
+            );
+          }),
+        [iframe, message, type] as const
+      )
     );
+    switch (read.kind) {
+      case "answered":
+        return read.value;
+      case "unanswered":
+        throw new Error(
+          `the page did not answer ${type} within ${read.after} ms`
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  };
   type Thread = { by: string; text: string }[];
   const pinNow = async () =>
     ((await docOf(frame)).pins[one] ?? {}) as {
@@ -2453,7 +2471,7 @@ const mapPressChecks = async (on: On) => {
     const pin = id
       ? (pins[id] as { anchor: { selector: string }; number: number })
       : undefined;
-    const names = pin
+    const names: { intro: boolean; tag: string } = pin
       ? await frame.evaluate((selector) => {
           const el = document.querySelector(selector);
           return {

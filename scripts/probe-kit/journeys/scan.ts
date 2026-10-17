@@ -218,8 +218,51 @@ export function scan(): string[] {
 
   // The page never scrolls sideways.
   if (root.scrollWidth > width + TOLERANCE) {
+    // What reaches past the screen's edge and past its own parent's box,
+    // farthest first: the box to mend. A box that only fills a parent
+    // something else widened (the body's every block, Sonner's region)
+    // stands inside that parent, and a fixed box spanning the screen
+    // (ScreenEdges' strips) only follows the page, so neither is named. A
+    // box's positioned ::before or ::after (a `touch-hit` area) reaches with it: no
+    // query finds a pseudo-element, and one past the edge widens the page
+    // as its host would.
+    const afterReach = (el: Element): number | null => {
+      const reaches = (["::before", "::after"] as const).flatMap((which) => {
+        const pseudo = getComputedStyle(el, which);
+        if (pseudo.content === "none" || pseudo.position !== "absolute") {
+          return [];
+        }
+        const inset = Number.parseFloat(pseudo.right);
+        return Number.isNaN(inset)
+          ? []
+          : [el.getBoundingClientRect().right - inset];
+      });
+      return reaches.length > 0 ? Math.max(...reaches) : null;
+    };
+    const reach = (el: Element) =>
+      Math.max(el.getBoundingClientRect().right, afterReach(el) ?? 0);
+    const past = (el: Element) =>
+      reach(el) > width + TOLERANCE &&
+      !(style(el).position === "fixed" && el.getBoundingClientRect().left <= 0);
+    const byAfter = (el: Element) =>
+      (afterReach(el) ?? 0) > el.getBoundingClientRect().right;
+    const outOfParent = (el: Element) =>
+      reach(el) >
+      (el.parentElement?.getBoundingClientRect().right ?? width) + TOLERANCE;
+    const spills = [...document.body.querySelectorAll("*")]
+      .filter((el) => past(el) && outOfParent(el))
+      .sort(
+        (a, b) => reach(b) - reach(a) || Number(byAfter(b)) - Number(byAfter(a))
+      )
+      .slice(0, 3)
+      .map((el) => {
+        const slot = el.getAttribute("data-slot");
+        const cls = [...el.classList].slice(0, 2).join(".");
+        const label = el.getAttribute("aria-label");
+        return `${el.tagName.toLowerCase()}${slot ? `[data-slot=${slot}]` : ""}${cls ? `.${cls}` : ""}${label ? ` “${label.slice(0, 40)}”` : ""}${byAfter(el) ? ` (its ::before or ::after; its box ${Math.round(el.getBoundingClientRect().left)}–${Math.round(el.getBoundingClientRect().right)}px)` : ""} to ${Math.round(reach(el))}px`;
+      });
     say(
-      `the page scrolls sideways: ${root.scrollWidth}px of content in a ${width}px screen`
+      `the page scrolls sideways: ${root.scrollWidth}px of content in a ${width}px screen${spills.length ? ` (past the edge: ${spills.join(", ")})` : ""}`
     );
   }
 

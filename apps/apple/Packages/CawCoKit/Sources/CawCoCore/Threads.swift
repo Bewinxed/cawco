@@ -194,9 +194,10 @@ public final class ThreadsStore {
     public private(set) var read = false
     /// Each thread as the transcript's session (ThreadPane.svelte `session`).
     @ObservationIgnored private var transcripts: [String: SessionTranscript] = [:]
-    /// His questions withdrawn before they were answered, by thread: each
+    /// His asks that ended with no answer from this device, by thread
+    /// (withdrawn before they were answered, or answered elsewhere): each
     /// leaves its quiet line where it was asked (ThreadPane.svelte `withdrawn`).
-    private var withdrawn: [String: [[String: Any]]] = [:]
+    private var askEnds: [String: [[String: Any]]] = [:]
     /// The fleet lists the threads as rows (thread-tabs.ts `threadRowOf`).
     @ObservationIgnored var onThreads: () -> Void = {}
 
@@ -221,7 +222,7 @@ public final class ThreadsStore {
         byProject = [:]
         byId = [:]
         messages = [:]
-        withdrawn = [:]
+        askEnds = [:]
         transcripts = [:]
         retried = []
         read = false
@@ -352,16 +353,15 @@ public final class ThreadsStore {
         return said.thread
     }
 
-    /// His question in this thread was withdrawn before it was answered: its quiet line, where it was asked.
-    func withdraw(_ ask: ParkedAsk, reason: String?) {
+    /// His ask in this thread ended with no answer from this device, withdrawn
+    /// or answered elsewhere (AskEnd): its quiet line, where it was asked.
+    func ended(_ ask: ParkedAsk, line: String) {
         guard let threadId = ask.threadId else { return }
-        let line = ask.isQuestion ? "Question withdrawn" : "Permission request withdrawn"
         let note: [String: Any] = [
-            "id": "withdrawn:\(ask.requestId)", "instanceId": ThreadTabs.tabId(threadId), "type": "ui.system_note",
-            "content": reason.map { "\(line): it couldn't be shown (\($0))" } ?? line,
-            "timestamp": ThreadNote.stamp(Date.now.timeIntervalSince1970 * 1000),
+            "id": "ended:\(ask.requestId)", "instanceId": ThreadTabs.tabId(threadId), "type": "ui.system_note",
+            "content": line, "timestamp": ThreadNote.stamp(Date.now.timeIntervalSince1970 * 1000),
         ]
-        withdrawn[threadId, default: []].append(note)
+        askEnds[threadId, default: []].append(note)
         draw(threadId, history: false)
     }
 
@@ -462,8 +462,8 @@ public final class ThreadsStore {
         guard let transcript = transcripts[threadId] else { return }
         let viewId = ThreadTabs.tabId(threadId)
         var raws = (messages[threadId] ?? []).map { $0.block(in: viewId) }
-        // A withdrawn question's line stands after what was said before it went.
-        for note in withdrawn[threadId] ?? [] {
+        // An ended ask's line stands after what was said before it went.
+        for note in askEnds[threadId] ?? [] {
             let at = raws.lastIndex { ($0["timestamp"] as? String ?? "") <= (note["timestamp"] as? String ?? "") }
             raws.insert(note, at: (at ?? -1) + 1)
         }

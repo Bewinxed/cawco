@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   MachineCapabilities,
   MachineCapability,
@@ -95,40 +96,58 @@ const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/;
  * synchronous spawn holds the agent's whole loop for it, long enough for every
  * keeper dial and HTTP timeout pending meanwhile to fire before its answer is
  * read (and under Bun, spawnSync's private loop misplaces the agent's own
- * polls: oven-sh/bun#34069).
+ * polls: oven-sh/bun#34069). Answered with what it said (undefined when its
+ * command failed), or unanswered when it said nothing within
+ * {@link TOOL_VERSION_MS}: its version is then not known, never "none".
  */
-async function toolVersion(path: string): Promise<string | undefined> {
-  const child = Bun.spawn([path, "--version"], {
-    // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
-    env: hostEnvironment(),
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 5000,
+function toolVersion(path: string): Promise<Bounded<string | undefined>> {
+  return readWithin(TOOL_VERSION_MS, async (signal) => {
+    const child = Bun.spawn([path, "--version"], {
+      // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
+      env: hostEnvironment(),
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [stdout, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    const text = stdout.trim();
+    return exitCode === 0 ? (VERSION.exec(text)?.[0] ?? text) : undefined;
   });
-  const [stdout, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    child.exited,
-  ]);
-  const text = stdout.trim();
-  return exitCode === 0 ? (VERSION.exec(text)?.[0] ?? text) : undefined;
 }
 
-/** Claude Code's version is the version gate's own read (claude-version.ts), so the two never disagree. */
-const claudeVersion = async (): Promise<string | undefined> => {
-  const said = await claudeHostVersion();
-  return said.kind === "answered" ? said.value : undefined;
-};
+/** How long a tool's `--version` may take to answer. */
+const TOOL_VERSION_MS = 5000;
 
 async function readVersion(item: MachineCapability): Promise<void> {
   if (!(item.available && item.path && VERSIONED.includes(item.id))) {
     return;
   }
-  const version =
-    item.id === "claude" ? await claudeVersion() : await toolVersion(item.path);
-  if (version) {
-    item.version = version;
-  } else {
-    item.reason = "Installed tool did not answer its version command";
+  // Claude Code's version is the version gate's own read (claude-version.ts), so the two never disagree.
+  const read =
+    item.id === "claude"
+      ? await claudeHostVersion()
+      : await toolVersion(item.path);
+  switch (read.kind) {
+    case "answered":
+      if (read.value) {
+        item.version = read.value;
+      } else {
+        item.reason = "Installed tool did not answer its version command";
+      }
+      break;
+    case "unanswered":
+      console.info(
+        `[capabilities] ${item.path} --version did not answer within ${read.after / 1000} s; its version is not known`
+      );
+      item.reason = `Installed tool did not answer its version command within ${Math.round(read.after / 1000)} s; its version is not known`;
+      break;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

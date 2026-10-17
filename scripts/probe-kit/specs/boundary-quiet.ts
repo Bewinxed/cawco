@@ -58,6 +58,7 @@ import {
 import { join } from "node:path";
 import { QUIET_CLOSE_MS } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf, isJudgeOf } from "../../../packages/agent/src/proc-id";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -358,17 +359,30 @@ const serving = async (
         { method: "POST" }
       );
       const { port } = (await address.json()) as { port?: number };
-      const response = await fetch(`http://127.0.0.1:${port}/`, {
-        signal: AbortSignal.timeout(5000),
+      const read = await readWithin(5000, async (signal) => {
+        const response = await fetch(`http://127.0.0.1:${port}/`, { signal });
+        return { status: response.status, body: await response.text() };
       });
-      const body = await response.text();
-      last = `${response.status}: ${body.replace(WHITESPACE, " ").slice(0, 160)}`;
-      if (
-        response.status === 200 &&
-        body.includes(`<title>${titleOf(tag)}</title>`) &&
-        body.includes(`src="${OVERLAY_PATH}"`)
-      ) {
-        return { ok: true, last };
+      switch (read.kind) {
+        case "answered": {
+          const { status, body } = read.value;
+          last = `${status}: ${body.replace(WHITESPACE, " ").slice(0, 160)}`;
+          if (
+            status === 200 &&
+            body.includes(`<title>${titleOf(tag)}</title>`) &&
+            body.includes(`src="${OVERLAY_PATH}"`)
+          ) {
+            return { ok: true, last };
+          }
+          break;
+        }
+        case "unanswered":
+          last = `the preview's origin did not answer within ${read.after} ms`;
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
     } catch (error) {
       last = (error as Error).message;

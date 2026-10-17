@@ -12,11 +12,11 @@
  * a change as it lands.
  */
 import {
+  BLOCK_BUILT_INS,
   BLOCK_PAGES,
   type BlockArrangement,
   type BlockPage,
   type BlockPlace,
-  type BlockWidth,
   viewBlock,
   viewOfBlock,
 } from "@cawco/core";
@@ -25,28 +25,6 @@ import { json, send } from "../project-tasks";
 
 const blocksPath = (projectId: string) =>
   `/api/projects/${encodeURIComponent(projectId)}/blocks`;
-
-/** A block a page holds by itself: its id and the width it starts at. */
-export interface BuiltIn {
-  block: string;
-  width: BlockWidth;
-}
-
-/**
- * Each page's own blocks, in their own order: what a page the person has
- * not arranged lays out. A task view's page holds the view; the Routines
- * page its three parts, side by side on a wide screen.
- */
-export const BUILT_INS: Record<BlockPage, BuiltIn[]> = {
-  board: [{ block: "board", width: "wide" }],
-  table: [{ block: "table", width: "wide" }],
-  pipeline: [{ block: "pipeline", width: "wide" }],
-  routines: [
-    { block: "routines", width: "narrow" },
-    { block: "sources", width: "narrow" },
-    { block: "actions", width: "narrow" },
-  ],
-};
 
 export const isBlockPage = (value: string): value is BlockPage =>
   (BLOCK_PAGES as readonly string[]).includes(value);
@@ -84,7 +62,8 @@ export class ProjectBlocks {
   /**
    * A page's blocks in order: as the person arranged them, then any of the
    * page's own the record lacks (one a later build added), at its own
-   * width. A view no longer kept is left out; a block this build does not
+   * width. The page's own are core's (`BLOCK_BUILT_INS`), the list the hub
+   * counts a proposed block's place among, so both count it alike. A view no longer kept is left out; a block this build does not
    * know keeps its place.
    */
   placesOf(page: BlockPage): BlockPlace[] {
@@ -96,7 +75,7 @@ export class ProjectBlocks {
     const named = new Set(stored.map((place) => place.block));
     return [
       ...stored,
-      ...BUILT_INS[page]
+      ...BLOCK_BUILT_INS[page]
         .filter((own) => !named.has(own.block))
         .map((own) => ({ block: own.block, width: own.width, hidden: false })),
     ];

@@ -27,10 +27,8 @@ export interface Lane {
 
 /** The at-limit numbers the limit figure is driven by. */
 export interface Policy {
-  /** Summary written at this % of the window. */
-  at: number;
-  /** Move the whole conversation under this many k tokens. */
-  under: number;
+  /** Compact it after the move at this many k tokens or more. */
+  over: number;
   /** Wait if the window resets within this many minutes. */
   wait: number;
 }
@@ -731,15 +729,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       return F;
     },
     limit(stage, { lanes, policy }) {
-      const {
-        wait: Wm,
-        under: K,
-        at: Ap,
-      } = policy ?? {
-        wait: 15,
-        under: 200,
-        at: 90,
-      };
+      const { wait: Wm, over: K } = policy ?? { wait: 15, over: 200 };
       const [Wa, Pa] = lanes;
       const F = layout(stage, "limit", [
         { lane: Wa, fill: 0.85, clock: resets(12) },
@@ -747,35 +737,28 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       ]);
       const { tl, mk, eo, rc } = F;
       const [Wk, Pe] = F.L;
-      const tc = Math.min(
-        1.5,
-        Math.max(0.1, ((Math.min(Ap, 100) / 100 - 0.85) / 0.15) * 1.6)
-      );
       Wk.tf.to(0, "scaleX(1)", 1.6, "linear");
       Wk.f = 1;
       F.pulse(0, 1.6);
-      F.cap(tc, 1.95, words.summaryEarly);
       const scenes = [
         { t0: 2.0, t1: 3.4, w: 12, tok: 180 },
         { t0: 3.4, t1: 5.2, w: 120, tok: 180 },
         { t0: 5.2, t1: 7.0, w: 120, tok: 412 },
       ];
       const s0 = F.slot(0, 0);
-      const s1 = F.slot(0, 1);
       const p0 = F.slot(1, 0);
-      const p1 = F.slot(1, 1);
       const dyY = p0.y - s0.y;
       const clocks: [number, number, (t: number) => string][] = [
         [0, 2.0, () => resets(12)],
       ];
       const at = (x: number, y: number, more = "") =>
         `translate(${x}px,${y}px)${more ? ` ${more}` : ""}`;
-      /** What the policy does with a scene: a reset close enough is waited for, a small conversation moves whole. */
+      /** What the policy does with a scene: a reset close enough is waited for; else it moves whole, compacted there when large. */
       const branchOf = (q: (typeof scenes)[number]) => {
         if (q.w <= Wm) {
           return "wait";
         }
-        return q.tok <= K ? "move" : "summary";
+        return q.tok >= K ? "compact" : "move";
       };
       scenes.forEach((q, qi) => {
         const { t0, t1 } = q;
@@ -791,7 +774,6 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         );
         const tg = F.el("tag", `transform:${at(s0.x - 8, s0.y + 8)}`, wrap);
         tg.textContent = words.tokens(q.tok);
-        const dc = F.el("doc", `transform:${at(s1.x - 5, s1.y - 6)}`, wrap);
         // Each branch's pieces show for its window; the last branch is the
         // still frame, so it stays.
         const op = tl.tr(wrap, "opacity", first ? "1" : "0");
@@ -802,16 +784,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           op.to(t1 - 0.2, "0", 0.2, "ease-out");
         }
         const tch = tl.tr(ch, "transform", at(s0.x - 5, s0.y - 5));
-        const tdc = tl.tr(
-          dc,
-          "transform",
-          at(s1.x - 5, s1.y - 6, `scale(${first ? 0.4 : 1})`)
-        );
-        const odc = tl.tr(dc, "opacity", first ? "0" : "1");
-        if (first) {
-          odc.to(tc, "1", 0.3, "ease-out");
-          tdc.to(tc, at(s1.x - 5, s1.y - 6, "scale(1)"), 0.5, mk);
-        } else {
+        if (!first) {
           Wk.tf.to(t0 - 0.05, "scaleX(1)", 0.25, mk);
           Pe.tf.to(t0 - 0.05, "scaleX(.2)", 0.25, mk);
         }
@@ -833,55 +806,49 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           tch
             .to(t0 + 1.0, at(s0.x - 5, s0.y - 5, "scale(1.25)"), 0.15, mk)
             .to(t0 + 1.15, at(s0.x - 5, s0.y - 5, "scale(1)"), 0.3, mk);
-          odc.to(t0 + 1.0, "0", 0.3, "ease-out");
-        } else if (branch === "move") {
-          F.cap(t0 + 0.1, capEnd, words.movesWhole);
-          clocks.push([t0, t1, () => resets(q.w)]);
-          tch.to(t0 + 0.2, at(s0.x - 5, s0.y - 5 + dyY), 0.7, mk);
-          tl.tr(ch, "backgroundColor", rc(Wa.color)).to(
-            t0 + 0.5,
-            rc(Pa.color),
-            0.3,
-            "ease-out"
-          );
-          tdc.to(t0 + 0.26, at(s1.x - 5, s1.y - 6 + dyY), 0.7, mk);
-          const tg2 = F.el(
-            "tag",
-            `transform:${at(s0.x - 8, s0.y + 8 + dyY)}`,
-            wrap
-          );
-          tg2.textContent = words.reread(q.tok);
-          tl.tr(tg, "opacity", "1").to(t0 + 0.15, "0", 0.2, "ease-out");
-          tl.tr(tg2, "opacity", "0").to(t0 + 0.8, "1", 0.3, "ease-out");
-          Pe.tf.to(
-            t0 + 0.85,
-            `scaleX(${Math.min(1, 0.2 + q.tok * 0.0016)})`,
-            0.5,
-            mk
-          );
-        } else {
-          F.cap(t0 + 0.1, capEnd, words.continues);
-          clocks.push([t0, t1, () => resets(q.w)]);
-          tdc.to(t0 + 0.2, at(p0.x - 5, p0.y - 6), 0.7, mk);
-          const nc = F.el(
-            "chip",
-            `--c:${Pa.color};transform:${at(p1.x - 5, p1.y - 5, "scale(.4)")}`,
-            wrap
-          );
-          tl.tr(nc, "opacity", "0").to(t0 + 0.8, "1", 0.25, "ease-out");
-          tl.tr(nc, "transform", at(p0.x - 5, p0.y - 5, "scale(.4)")).to(
-            t0 + 0.8,
-            at(p1.x - 5, p1.y - 5, "scale(1)"),
-            0.6,
-            mk
-          );
-          tl.tr(ch, "opacity", "1").to(t0 + 0.8, ".35", 0.3, "ease-out");
-          const tg2 = F.el("tag", `transform:${at(s0.x - 8, s0.y + 8)}`, wrap);
-          tg2.textContent = words.staysOn(q.tok, Wa.name);
-          tl.tr(tg, "opacity", "1").to(t0 + 0.75, "0", 0.2, "ease-out");
-          tl.tr(tg2, "opacity", "0").to(t0 + 0.9, "1", 0.3, "ease-out");
-          Pe.tf.to(t0 + 0.95, "scaleX(.28)", 0.5, mk);
+          return;
         }
+        // Moved whole: the chip crosses to the free account, which re-reads
+        // it; a large one is then compacted there, the chip shrinking.
+        const compact = branch === "compact";
+        F.cap(t0 + 0.1, capEnd, compact ? words.compacts : words.movesWhole);
+        clocks.push([t0, t1, () => resets(q.w)]);
+        const moved = tch.to(t0 + 0.2, at(s0.x - 5, s0.y - 5 + dyY), 0.7, mk);
+        if (compact) {
+          moved.to(
+            t0 + 1.0,
+            at(s0.x - 5, s0.y - 5 + dyY, "scale(.6)"),
+            0.4,
+            mk
+          );
+        }
+        tl.tr(ch, "backgroundColor", rc(Wa.color)).to(
+          t0 + 0.5,
+          rc(Pa.color),
+          0.3,
+          "ease-out"
+        );
+        const tg2 = F.el(
+          "tag",
+          `transform:${at(s0.x - 8, s0.y + 8 + dyY)}`,
+          wrap
+        );
+        tg2.textContent = compact
+          ? words.compacted(q.tok)
+          : words.reread(q.tok);
+        tl.tr(tg, "opacity", "1").to(t0 + 0.15, "0", 0.2, "ease-out");
+        tl.tr(tg2, "opacity", "0").to(
+          t0 + (compact ? 1.1 : 0.8),
+          "1",
+          0.3,
+          "ease-out"
+        );
+        Pe.tf.to(
+          t0 + 0.85,
+          `scaleX(${Math.min(1, 0.2 + q.tok * 0.0016)})`,
+          0.5,
+          mk
+        );
       });
       Wk.f0 = 0.85;
       Pe.f0 = 0.2;

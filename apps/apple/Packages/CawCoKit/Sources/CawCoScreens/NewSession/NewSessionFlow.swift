@@ -73,6 +73,21 @@ final class NewSessionFlow {
         settle()
     }
 
+    /// Cancels the continuation detached from `row`, in any stage before its
+    /// new session starts; the hub's table then says it cancelled, and the
+    /// row clears. A refusal stays on the row in the hub's words.
+    func cancelDetached(row: String) {
+        guard let id = detached.first(where: { $0.value.row == row })?.key else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await hub.cancelContinuation(id: id)
+            } catch {
+                hub.acts.refuse(row, error.localizedDescription, status: hub.fleet.byId[row]?.status.rawValue)
+            }
+        }
+    }
+
     /// Each detached continuation, as the hub's table moves.
     private func settle() {
         let table = withObservationTracking {
@@ -98,7 +113,7 @@ final class NewSessionFlow {
             case .cancelled:
                 detached[id] = nil
                 hub.acts.clear(entry.row)
-            case .starting, .summarising, .unrecognized:
+            case .filing, .starting, .summarising, .unrecognized:
                 break
             }
         }

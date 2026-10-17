@@ -7,6 +7,7 @@ import {
   accountsWords,
   sameIdentity,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { accountIds, accountsRoot } from "@cawco/core/paths";
 import {
   bootId,
@@ -183,29 +184,45 @@ export const endOrphanedSignIns = async (): Promise<void> => {
 const said = (signIn: SignIn, from = 0) =>
   Bun.stripANSI(signIn.output.slice(from)).trim();
 
-/** Resolves true once `done` holds, false once the CLI exits or `ms` passes. */
-const until = (signIn: SignIn, done: () => boolean, ms: number) =>
-  new Promise<boolean>((resolve) => {
-    let settled = false;
-    const settle = (answer: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      signIn.heard = undefined;
-      resolve(answer);
-    };
-    const timer = setTimeout(() => settle(done()), ms);
-    signIn.heard = () => {
-      if (done()) {
-        settle(true);
-      }
-    };
-    // biome-ignore lint/complexity/noVoid: the exit only settles the wait; its value is read from the process
-    void signIn.child.exited.then(() => settle(done()));
-    signIn.heard();
-  });
+/**
+ * Answered true once `done` holds, answered with `done()` once the CLI
+ * exits; unanswered when neither happened within `ms`.
+ */
+const until = (
+  signIn: SignIn,
+  done: () => boolean,
+  ms: number
+): Promise<Bounded<boolean>> =>
+  readWithin(
+    ms,
+    (signal) =>
+      new Promise<boolean>((resolve) => {
+        let settled = false;
+        const settle = (answer: boolean) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          signIn.heard = undefined;
+          resolve(answer);
+        };
+        signal.addEventListener(
+          "abort",
+          () => {
+            signIn.heard = undefined;
+          },
+          { once: true }
+        );
+        signIn.heard = () => {
+          if (done()) {
+            settle(true);
+          }
+        };
+        // biome-ignore lint/complexity/noVoid: the exit only settles the wait; its value is read from the process
+        void signIn.child.exited.then(() => settle(done()));
+        signIn.heard();
+      })
+  );
 
 /**
  * Starts `claude auth login` in an account's config dir and hands back the
@@ -265,14 +282,28 @@ const beginSignIn = async (
     LINK_TIMEOUT_MS
   );
   const url = said(current).match(LINK)?.[0];
-  if (!(prompted && url)) {
+  let failure: string | undefined;
+  switch (prompted.kind) {
+    case "answered":
+      if (!(prompted.value && url)) {
+        failure =
+          said(current) || "`claude auth login` printed no sign-in link.";
+      }
+      break;
+    case "unanswered":
+      failure = `\`claude auth login\` printed no sign-in link within ${LINK_TIMEOUT_MS / 1000} s.${said(current) ? ` It said: ${said(current)}` : ""}`;
+      break;
+    default: {
+      const unhandled: never = prompted;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  if (failure !== undefined || !url) {
     end(current);
     if (inFlight.get(account) === current) {
       inFlight.delete(account);
     }
-    throw new Error(
-      said(current) || "`claude auth login` printed no sign-in link."
-    );
+    throw new Error(failure ?? "`claude auth login` printed no sign-in link.");
   }
   return { url };
 };
@@ -313,13 +344,24 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
   );
   const { exitCode } = signIn.child;
   end(signIn);
-  if (!exited || exitCode !== 0) {
-    throw new Error(
-      said(signIn, from) ||
-        (exited
-          ? `\`claude auth login\` exited with code ${exitCode}.`
-          : "`claude auth login` did not finish signing in.")
-    );
+  switch (exited.kind) {
+    case "answered":
+      if (exitCode !== 0) {
+        throw new Error(
+          said(signIn, from) ||
+            `\`claude auth login\` exited with code ${exitCode}.`
+        );
+      }
+      return;
+    case "unanswered":
+      throw new Error(
+        said(signIn, from) ||
+          `\`claude auth login\` did not finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s.`
+      );
+    default: {
+      const unhandled: never = exited;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 
@@ -351,18 +393,35 @@ const logout = async (account: string): Promise<void> => {
     }
     throw error;
   }
-  const child = Bun.spawn([executable, "auth", "logout"], {
-    env: { ...bareEnv(), ...accountEnv(account) },
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "pipe",
-    timeout: 30_000,
+  const ran = await readWithin(LOGOUT_MS, async (signal) => {
+    const child = Bun.spawn([executable, "auth", "logout"], {
+      env: { ...bareEnv(), ...accountEnv(account) },
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+      signal,
+    });
+    if ((await child.exited) !== 0) {
+      const why = Bun.stripANSI(await new Response(child.stderr).text()).trim();
+      throw new Error(why || "`claude auth logout` did not finish.");
+    }
   });
-  if ((await child.exited) !== 0) {
-    const why = Bun.stripANSI(await new Response(child.stderr).text()).trim();
-    throw new Error(why || "`claude auth logout` did not finish.");
+  switch (ran.kind) {
+    case "answered":
+      return;
+    case "unanswered":
+      throw new Error(
+        `\`claude auth logout\` did not answer within ${LOGOUT_MS / 1000} s; whether the account signed out is not known.`
+      );
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
+
+/** How long `claude auth logout` may take to answer. */
+const LOGOUT_MS = 30_000;
 
 /**
  * Finishes an account's sign-in, then asks the dir's Claude Code who it is

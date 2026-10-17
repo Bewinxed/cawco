@@ -51,6 +51,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import {
   CLAUDE_DIR_NAME,
   projectClaudeRelative,
@@ -512,20 +513,42 @@ const spec: Spec = {
         ),
     });
     const put = async (name: string, extra: object = {}) => {
-      const response = await fetch(`${fleet.base}/api/fleet/skills/${name}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
-          ...extra,
-        }),
-        signal: AbortSignal.timeout(120_000),
+      const read = await readWithin(120_000, async (signal) => {
+        const response = await fetch(`${fleet.base}/api/fleet/skills/${name}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
+            ...extra,
+          }),
+          signal,
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          text: await response.text(),
+        };
       });
-      check(
-        `the hub takes ${name}`,
-        response.ok,
-        `${response.status} ${await response.text()}`
-      );
+      switch (read.kind) {
+        case "answered":
+          check(
+            `the hub takes ${name}`,
+            read.value.ok,
+            `${read.value.status} ${read.value.text}`
+          );
+          break;
+        case "unanswered":
+          check(
+            `the hub takes ${name}`,
+            false,
+            `the hub did not answer within ${read.after} ms (${read.reason})`
+          );
+          break;
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     };
     const boot = async () => {
       fleet.launch("sessiond");

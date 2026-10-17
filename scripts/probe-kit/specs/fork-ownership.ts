@@ -30,6 +30,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import {
   MACHINE,
   MODEL,
@@ -468,13 +469,27 @@ const run = async (kit: Kit) => {
     `/api/instances/${two.parent}/continue`,
     { target: { harness: "claude", model: MODEL.claude }, asksOnly: true }
   );
-  const outcome = await fetch(
-    `${fleet.base}/api/continuations/${continuationId}/outcome`,
-    { signal: AbortSignal.timeout(300_000) }
-  );
-  const { targetInstanceId: continued } = (await outcome.json()) as {
-    targetInstanceId: string;
-  };
+  const outcome = await readWithin(300_000, async (signal) => {
+    const response = await fetch(
+      `${fleet.base}/api/continuations/${continuationId}/outcome`,
+      { signal }
+    );
+    return (await response.json()) as { targetInstanceId: string };
+  });
+  let continued: string;
+  switch (outcome.kind) {
+    case "answered":
+      continued = outcome.value.targetInstanceId;
+      break;
+    case "unanswered":
+      throw new Error(
+        `continuation ${continuationId}: the hub did not report its outcome within ${outcome.after} ms (${outcome.reason})`
+      );
+    default: {
+      const unhandled: never = outcome;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
   const owners = {
     session: fleet.query<{ parent_instance_id: string | null }>(
       "SELECT parent_instance_id FROM instances WHERE id = ?",

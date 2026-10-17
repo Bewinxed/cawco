@@ -1,5 +1,5 @@
 import type { ClaudeModelUsage } from "@cawco/core";
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { instances, turnUsage } from "./schema";
 
@@ -9,6 +9,11 @@ export const TURN_USAGE_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 export type TurnUsageRow = typeof turnUsage.$inferSelect;
 
 export interface TurnUsageDb {
+  /**
+   * The accounts a turn ran on, on `machineId`, since `since`: each one's
+   * sign-in there a model's answer proved.
+   */
+  readonly accountsUsedOn: (machineId: string, since: number) => Set<string>;
   /** One account's turns over a time range, oldest first; every turn with none named. */
   readonly list: (q: {
     accountId?: string;
@@ -29,6 +34,22 @@ export interface TurnUsageDb {
 }
 
 export const turnUsageDb = (db: BunSQLiteDatabase): TurnUsageDb => ({
+  accountsUsedOn: (machineId, since) =>
+    new Set(
+      db
+        .selectDistinct({ accountId: turnUsage.accountId })
+        .from(turnUsage)
+        .innerJoin(instances, eq(instances.id, turnUsage.instanceId))
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            gte(turnUsage.at, new Date(since)),
+            isNotNull(turnUsage.accountId)
+          )
+        )
+        .all()
+        .flatMap((row) => (row.accountId ? [row.accountId] : []))
+    ),
   put: (instanceId, rows, seen) => {
     db.transaction((tx) => {
       if (rows.length > 0) {

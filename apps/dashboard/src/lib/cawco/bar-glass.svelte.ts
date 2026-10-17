@@ -43,9 +43,20 @@ class BarGlass {
    * artifact's page, whose keys never reach that window.
    */
   byPointer = false;
+  /**
+   * The machine the machines were opened onto (Jump's machine result): the
+   * list that shows them (MachinesList, in this card or the phone's sidebar)
+   * brings its row into view, focused, and clears it.
+   */
+  machine = $state<string | null>(null);
   /** Opens `card`, or shuts it when it is the one standing. */
   toggle(card: GlassCard): void {
     this.open = this.open === card ? null : card;
+  }
+  /** Opens the machines onto one machine, where the dashboard keeps them. */
+  showMachine(machineId: string): void {
+    this.machine = machineId;
+    this.open = "machines";
   }
 }
 

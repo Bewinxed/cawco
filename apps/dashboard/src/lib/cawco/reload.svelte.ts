@@ -20,6 +20,7 @@
  * tab's (`runningBuild`), or the reload would load this one again.
  */
 import { version } from "$app/env";
+import { leaveThePage } from "./leaving";
 import { notices } from "./notices.svelte";
 import { runningBuild } from "./served-build.svelte";
 import { store, stored } from "./storage";
@@ -292,5 +293,5 @@ export async function reloadWhenIdle(
     }
     return;
   }
-  location.reload();
+  leaveThePage(() => location.reload());
 }

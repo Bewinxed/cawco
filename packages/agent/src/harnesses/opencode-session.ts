@@ -43,6 +43,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CODE_MODE_TOOL,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
@@ -99,7 +100,7 @@ import {
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
-import { CODE_MODE_TOOL, OPENCODE_DIR } from "./opencode-plugin";
+import { OPENCODE_DIR } from "./opencode-plugin";
 import {
   codeModeCalls,
   compactBoundary,
@@ -647,7 +648,7 @@ export interface OpencodeSessionOptions {
   /** A fenced session: it has CawCo's MCP server and no other. */
   fence: boolean;
   instanceId: string;
-  /** Its role's memory documents ({@link SpawnPayload.instructions}); none on an attach. */
+  /** Its scoped memory documents ({@link SpawnPayload.instructions}); none on an attach. */
   instructions?: readonly SessionInstruction[];
   /**
    * Returns true while the harness's config gate holds this session's sends.
@@ -706,8 +707,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #canDelegate?: boolean;
   /** The instruction entries put on the session, by key, as the hash of the value put. */
   readonly #instructions = new Map<string, string>();
-  /** Its role's memory documents, as it launched with them; none on an attach. */
-  readonly #roleInstructions: readonly SessionInstruction[];
+  /** Its scoped memory documents, as it launched with them; none on an attach. */
+  readonly #scopedInstructions: readonly SessionInstruction[];
   /** The project memory entries the session holds: read off it at the first sync ({@link #syncInstructions}), kept in step after. */
   #projectEntries: Set<string> | undefined;
   readonly #registerChild: (childId: string, callID: string) => void;
@@ -817,7 +818,7 @@ export class OpencodeSession implements HarnessSession {
     this.#lead = options.lead;
     this.#workflowStepId = options.workflowStepId;
     this.#canDelegate = options.canDelegate;
-    this.#roleInstructions = options.instructions ?? [];
+    this.#scopedInstructions = options.instructions ?? [];
     this.#registerChild = options.registerChild;
     this.#turnOutcome = options.turnOutcome;
     this.#onRelease = options.onRelease;
@@ -1013,7 +1014,7 @@ export class OpencodeSession implements HarnessSession {
     const sessionID = this.#opencodeSessionId();
     const entries = await instructionEntries(
       this.#directory,
-      this.#roleInstructions
+      this.#scopedInstructions
     );
     const synced = await askOpencode(async (options) => {
       this.#projectEntries ??= new Set(

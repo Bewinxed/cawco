@@ -173,6 +173,7 @@ function accountsView() {
       {
         ...staged.routing,
         atLimit: {
+          delegateWork: "resume",
           move: false,
           moveWholeUnderK: 0,
           prepareAtPct: 90,

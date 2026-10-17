@@ -23,6 +23,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -202,11 +203,25 @@ async function run(kit: Kit): Promise<void> {
     const removal = await until(
       "the machine removed once its agent is away",
       async () => {
-        const response = await fetch(
-          `${fleet.base}/api/agents/${encodeURIComponent(RENAMED)}`,
-          { method: "DELETE", signal: AbortSignal.timeout(30_000) }
-        );
-        return response.ok ? await response.text() : undefined;
+        const read = await readWithin(30_000, async (signal) => {
+          const response = await fetch(
+            `${fleet.base}/api/agents/${encodeURIComponent(RENAMED)}`,
+            { method: "DELETE", signal }
+          );
+          return response.ok ? await response.text() : undefined;
+        });
+        switch (read.kind) {
+          case "answered":
+            return read.value;
+          case "unanswered":
+            throw new Error(
+              `the hub did not answer the removal within ${read.after} ms`
+            );
+          default: {
+            const unhandled: never = read;
+            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+          }
+        }
       },
       Boolean
     );

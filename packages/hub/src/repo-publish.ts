@@ -24,6 +24,7 @@ import {
   type ProjectSettingChange,
   readEnv,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
@@ -148,35 +149,51 @@ export const createRepoPublish = ({
     token: string
   ): Promise<void> => {
     const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-    const child = Bun.spawn(
-      [
-        "git",
-        "-C",
-        bare(projectId),
-        "push",
-        "--quiet",
-        url,
-        `refs/heads/${branch}:refs/heads/${branch}`,
-      ],
-      {
-        env: {
-          PATH: process.env.PATH ?? "/usr/bin:/bin",
-          HOME: process.env.HOME ?? "/",
-          GIT_TERMINAL_PROMPT: "0",
-          GIT_CONFIG_COUNT: "1",
-          GIT_CONFIG_KEY_0: "http.extraHeader",
-          GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
-        },
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "pipe",
-        timeout: PUSH_MS,
+    const ran = await readWithin(PUSH_MS, async (signal) => {
+      const child = Bun.spawn(
+        [
+          "git",
+          "-C",
+          bare(projectId),
+          "push",
+          "--quiet",
+          url,
+          `refs/heads/${branch}:refs/heads/${branch}`,
+        ],
+        {
+          env: {
+            PATH: process.env.PATH ?? "/usr/bin:/bin",
+            HOME: process.env.HOME ?? "/",
+            GIT_TERMINAL_PROMPT: "0",
+            GIT_CONFIG_COUNT: "1",
+            GIT_CONFIG_KEY_0: "http.extraHeader",
+            GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
+          },
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "pipe",
+          signal,
+        }
+      );
+      const [stderr, code] = await Promise.all([
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { stderr, code };
+    });
+    switch (ran.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Error(
+          `The hub's push to ${url} did not finish within ${Math.round(ran.after / 1000)} s; the repository may hold part of it.`
+        );
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
-    );
-    const [stderr, code] = await Promise.all([
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
+    }
+    const { stderr, code } = ran.value;
     if (code !== 0) {
       throw new Error(
         `The hub's push to ${url} failed: ${stderr.split(token).join("[token]").split(basic).join("[token]").trim()}`
@@ -197,28 +214,44 @@ export const createRepoPublish = ({
     ])) as PlacePush;
     const token = connections.githubToken(change.connection);
     const api = readEnv(CAWCO_ENV.githubApi) ?? "https://api.github.com";
-    const response = await fetch(`${new URL(api).origin}/user/repos`, {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "User-Agent": "CawCo-hub",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      body: JSON.stringify({
-        name: change.name,
-        private: change.private,
-        auto_init: false,
-      }),
-      redirect: "error",
-      signal: AbortSignal.timeout(API_MS),
+    const asked = await readWithin(API_MS, async (signal) => {
+      const response = await fetch(`${new URL(api).origin}/user/repos`, {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "User-Agent": "CawCo-hub",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({
+          name: change.name,
+          private: change.private,
+          auto_init: false,
+        }),
+        redirect: "error",
+        signal,
+      });
+      const made = (await response.json().catch(() => ({}))) as {
+        clone_url?: string;
+        full_name?: string;
+        message?: string;
+      };
+      return { response, made };
     });
-    const made = (await response.json().catch(() => ({}))) as {
-      clone_url?: string;
-      full_name?: string;
-      message?: string;
-    };
+    switch (asked.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Error(
+          `GitHub did not answer within ${Math.round(asked.after / 1000)} s about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
+        );
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const { response, made } = asked.value;
     if (!(response.ok && made.full_name && made.clone_url)) {
       throw new Error(
         `GitHub did not create ${change.name}: ${response.status} ${made.message ?? response.statusText}`

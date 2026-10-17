@@ -340,10 +340,27 @@ export class KeeperWatchdog {
       this.#streaks.delete(found.endpoint);
       return;
     }
-    const dial = await dialKeeper(found.endpoint, welcomeMs);
-    if (dial.answered) {
-      this.#streaks.delete(found.endpoint);
-      return;
+    const { dial, accepted } = await dialKeeper(found.endpoint, welcomeMs);
+    let detail: string;
+    switch (dial.kind) {
+      case "answered":
+        if (dial.value.welcomed) {
+          this.#streaks.delete(found.endpoint);
+          return;
+        }
+        ({ detail } = dial.value);
+        break;
+      case "unanswered":
+        // A running keeper that gives no welcome in time is the silence this
+        // watchdog counts, said as what it is.
+        detail = accepted
+          ? `accepted, no welcome in ${dial.after}ms`
+          : `connect did not complete in ${dial.after}ms`;
+        break;
+      default: {
+        const unhandled: never = dial;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     // A new keeper starts a new count: a restart is not the same silence.
     let streak = this.#streaks.get(found.endpoint);
@@ -351,7 +368,7 @@ export class KeeperWatchdog {
       streak = { pid, firstAt: Date.now(), details: [] };
       this.#streaks.set(found.endpoint, streak);
     }
-    streak.details.push(dial.detail);
+    streak.details.push(detail);
     if (streak.details.length < KEEPER_WEDGED_DIALS) {
       return;
     }
@@ -415,7 +432,19 @@ export class KeeperWatchdog {
     let answered = false;
     while (!answered && Date.now() < back) {
       // biome-ignore lint/performance/noAwaitInLoops: polls the restarted keeper until it answers or the budget ends
-      ({ answered } = await dialKeeper(machineEndpoint(), 2000));
+      const { dial } = await dialKeeper(machineEndpoint(), 2000);
+      switch (dial.kind) {
+        case "answered":
+          answered = dial.value.welcomed;
+          break;
+        case "unanswered":
+          // No welcome within this try's 2 s: the next try asks again.
+          break;
+        default: {
+          const unhandled: never = dial;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       if (!answered) {
         await Bun.sleep(500);
       }

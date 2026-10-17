@@ -34,6 +34,7 @@ import { Database } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../packages/core/src/bounded";
 import { ensureDeps } from "./lib/deps";
 import { refuseInWorkspace } from "./lib/workspace-refusal";
 import type { Reply } from "./scratch-fleet";
@@ -283,17 +284,31 @@ const opened = (sealed: string | undefined) =>
 const hubLog = () => fleet.logs("hub");
 /** A hub route's answer: its status and its body's text. */
 const json = async (method: string, path: string, body?: unknown) => {
-  const response = await fetch(`${fleet.base}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-    signal: AbortSignal.timeout(60_000),
+  const read = await readWithin(60_000, async (signal) => {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+      signal,
+    });
+    return { status: response.status, body: await response.text() };
   });
-  return { status: response.status, body: await response.text() };
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      throw new Error(
+        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+      );
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /** The plain rows an older hub kept, written beside a stopped hub. */

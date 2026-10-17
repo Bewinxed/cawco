@@ -46,7 +46,7 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
-import { USER_LAYER_SHELL, userLayerLabel } from "@cawco/core/claude-dirs";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import {
   accountIds,
@@ -139,14 +139,6 @@ const MEMORY_PATH = userLayerPath("CLAUDE.md");
  */
 const MEMORIES_DIR = userLayerPath("memories");
 
-/**
- * The hook that puts a model's own document in front of the session running
- * that model. CawCo's own machinery rather than a document of the user's, so
- * it lives beside the sidecar and is written whenever it is not what this
- * version of cawco generates.
- */
-const MEMORY_HOOK_PATH = userLayerPath("cawco-model-memory.sh");
-
 /** Where Claude Code reads a user's hooks; the same file the user's own are in. */
 const SETTINGS_PATH = userLayerPath("settings.json");
 
@@ -217,7 +209,10 @@ interface Sidecar {
    * holds up itself and leaves the rest of the set converging.
    */
   memoryDocs: Record<string, string>;
-  /** The SessionStart command cawco registered; only this one is ever removed. */
+  /**
+   * The model-memory SessionStart command an earlier cawco registered, until
+   * it is taken back ({@link retireMemoryHook}); only this one is removed.
+   */
   memoryHook?: string;
   /**
    * A project's MCP servers cawco placed here, by `<name>@<place id>`: the
@@ -570,22 +565,39 @@ const VERSION_TIMEOUT_MS = 5000;
 /** The first `x.y.z` a version command prints, the same rule tools.ts uses. */
 const VERSION_PATTERN = /\d+\.\d+\.\d+/;
 
+/** An install's version, or undefined when it is not known (it printed none, could not run, or did not answer in time, which is logged). */
 const askVersion = async (path: string): Promise<string | undefined> => {
+  let read: Bounded<string | undefined>;
   try {
-    const child = Bun.spawn([path, "--version"], {
-      env: toolEnv(),
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: VERSION_TIMEOUT_MS,
+    read = await readWithin(VERSION_TIMEOUT_MS, async (signal) => {
+      const child = Bun.spawn([path, "--version"], {
+        env: toolEnv(),
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+      });
+      const [out, err] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      await child.exited;
+      return `${out}${err}`.match(VERSION_PATTERN)?.[0];
     });
-    const [out, err] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    await child.exited;
-    return `${out}${err}`.match(VERSION_PATTERN)?.[0];
   } catch {
     return undefined;
+  }
+  switch (read.kind) {
+    case "answered":
+      return read.value;
+    case "unanswered":
+      console.info(
+        `[fleet] ${path} --version did not answer in ${VERSION_TIMEOUT_MS / 1000} s; its version is not known`
+      );
+      return undefined;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 
@@ -672,23 +684,35 @@ const runClaude = async (
   args: string[],
   extraEnv?: Record<string, string>
 ): Promise<Ran> => {
-  const child = Bun.spawn([bin, ...args], {
-    // `$HOME/.claude`, the dir every path in this file names, whatever
-    // config dir the daemon itself was started in.
-    env: { ...claudeHomeEnv(), ...extraEnv },
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: CLI_TIMEOUT_MS,
+  const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
+    const child = Bun.spawn([bin, ...args], {
+      // `$HOME/.claude`, the dir every path in this file names, whatever
+      // config dir the daemon itself was started in.
+      env: { ...claudeHomeEnv(), ...extraEnv },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [stdout, stderr] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const code = await child.exited;
+    if (child.signalCode) {
+      return { output: `was ended by ${child.signalCode}` };
+    }
+    return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
   });
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  const code = await child.exited;
-  if (child.signalCode) {
-    return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      return { output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s` };
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
 };
 
 /**
@@ -2379,54 +2403,6 @@ const syncPlacedMemory = async (
   return placed;
 };
 
-/**
- * The SessionStart hook, verbatim. Claude Code's SessionStart input carries no
- * model (measured on 2.1.280 and 2.1.284: only session_id, transcript_path,
- * cwd, hook_event_name and source), and CLAUDE.md itself is loaded flat. The
- * Claude harness therefore passes the session's model to the hook as the
- * `CAWCO_MODEL` environment variable, and the script prints the document
- * whose name is the longest prefix of that id — the whole of how a document
- * reaches only the sessions it is for.
- *
- * POSIX sh and nothing else: it runs on every machine the fleet has, including
- * the ones where the daemon's own Bun is the only Bun there is.
- */
-export const MEMORY_HOOK = `#!/bin/sh
-# Written by cawco. Edits are overwritten — the fleet's documents are in
-# ${userLayerLabel("memories")}/, and this only decides which one a session is shown.
-set -u
-
-dir="${USER_LAYER_SHELL}/memories/models"
-[ -d "$dir" ] || exit 0
-
-# Claude Code's SessionStart input carries no model, so the harness that
-# started this session names it in CAWCO_MODEL. A session started
-# without one is shown nothing.
-cat >/dev/null
-model="\${CAWCO_MODEL:-}"
-[ -n "$model" ] || exit 0
-
-# Longest prefix wins, so \`claude-opus-5-20260315\` takes claude-opus-5.md over
-# a claude.md beside it, and an id nothing is named for takes nothing.
-best=''
-for file in "$dir"/*.md; do
-  [ -f "$file" ] || continue
-  name=\${file##*/}
-  name=\${name%.md}
-  case "$model" in
-    "$name"*)
-      if [ \${#name} -gt \${#best} ]; then best=$name; fi
-      ;;
-  esac
-done
-
-[ -n "$best" ] || exit 0
-
-# Stdout from a SessionStart hook is added to the session's context.
-cat "$dir/$best.md"
-exit 0
-`;
-
 /** One entry of a hook, as `~/.claude/settings.json` writes them — a command
  * handler carries `command`; the other four handler types do not, so an entry
  * without one is matched on its own JSON instead (see {@link withoutHooks}). */
@@ -2468,21 +2444,22 @@ export function withoutHooks(
 }
 
 /**
- * Registers the hook while the set carries a `models/` document, and takes it
- * back out when it stops. `~/.claude/settings.json` is the user's own file, so
- * only the one command the sidecar names is ever removed and the file is only
- * written when this actually changes something.
+ * Takes back the SessionStart hook earlier versions registered to show a
+ * Claude session the `models/` document for its model. A document scoped by
+ * model now reaches its sessions in their launch instructions (hub
+ * memory-scopes.ts), on every harness and through a compaction; the hook's
+ * output was "Context that hooks added earlier | Summarized with the rest of
+ * the conversation" (code.claude.com/docs/en/context-window). The command
+ * the sidecar names is the only one removed from the user's own
+ * `~/.claude/settings.json`, and the file is written only when that changes
+ * it. A machine it fails on keeps the name, says so in `memoryHook`, and is
+ * tried again on the next sync.
  */
-const syncMemoryHook = async (
-  desired: FleetMemoryDoc[],
+const retireMemoryHook = async (
   managed: string | undefined,
   report: FleetSyncReport
 ): Promise<string | undefined> => {
-  const wanted = desired.some(
-    (doc) =>
-      doc.path.startsWith("models/") && memoryDocProblem(doc.path) === undefined
-  );
-  if (!wanted && managed === undefined) {
+  if (managed === undefined) {
     return undefined;
   }
 
@@ -2502,13 +2479,7 @@ const syncMemoryHook = async (
     ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
   };
   const starts = (hooks.SessionStart as HookMatcher[] | undefined) ?? [];
-  const command = MEMORY_HOOK_PATH;
-  const next = wanted
-    ? [
-        ...withoutHooks(starts, [command]),
-        { hooks: [{ type: "command", command }] },
-      ]
-    : withoutHooks(starts, [managed ?? command]);
+  const next = withoutHooks(starts, [managed]);
 
   if (next.length > 0) {
     hooks.SessionStart = next;
@@ -2524,29 +2495,15 @@ const syncMemoryHook = async (
   }
 
   try {
-    if (
-      wanted &&
-      (await Bun.file(MEMORY_HOOK_PATH)
-        .text()
-        .catch(() => "")) !== MEMORY_HOOK
-    ) {
-      await writeAtomic(MEMORY_HOOK_PATH, MEMORY_HOOK);
-      // Claude Code spawns the command itself, so it has to be executable.
-      await chmod(MEMORY_HOOK_PATH, 0o755);
-    }
     if (JSON.stringify(settings) !== JSON.stringify(root)) {
       await writeJson(SETTINGS_PATH, settings);
     }
-    if (!wanted) {
-      await rm(MEMORY_HOOK_PATH, { force: true });
-    }
+    await rm(managed, { force: true });
   } catch (error) {
     report.memoryHook = { state: "failed", detail: tail(said(error)) };
     return managed;
   }
-
-  report.memoryHook = wanted ? { state: "applied" } : { state: "removed" };
-  return wanted ? command : undefined;
+  return undefined;
 };
 
 /** Where a hook's own script lands: `~/.claude/cawco-hooks/<id>.sh`. */
@@ -2591,27 +2548,40 @@ const scriptParseError = async (
   if (!shell) {
     return undefined;
   }
-  const child = Bun.spawn([shell, "-n"], {
-    env: toolEnv(),
-    stdin: new TextEncoder().encode(script),
-    stdout: "ignore",
-    stderr: "pipe",
-    timeout: PARSE_TIMEOUT_MS,
+  const parsed = await readWithin(PARSE_TIMEOUT_MS, async (signal) => {
+    const child = Bun.spawn([shell, "-n"], {
+      env: toolEnv(),
+      stdin: new TextEncoder().encode(script),
+      stdout: "ignore",
+      stderr: "pipe",
+      signal,
+    });
+    const stderr = await new Response(child.stderr).text();
+    const code = await child.exited;
+    if (child.signalCode) {
+      return `${shell} -n was ended by ${child.signalCode}`;
+    }
+    if (code === 0) {
+      return;
+    }
+    return (
+      stderr
+        .split("\n")
+        .find((line) => line.trim() !== "")
+        ?.trim() ?? `${shell} -n exited ${code}`
+    );
   });
-  const stderr = await new Response(child.stderr).text();
-  const code = await child.exited;
-  if (child.signalCode) {
-    return `${shell} -n timed out after ${PARSE_TIMEOUT_MS / 1000}s`;
+  switch (parsed.kind) {
+    case "answered":
+      return parsed.value;
+    case "unanswered":
+      // Not known to parse: never registered on a parse nobody finished.
+      return `${shell} -n did not answer within ${PARSE_TIMEOUT_MS / 1000}s`;
+    default: {
+      const unhandled: never = parsed;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  if (code === 0) {
-    return undefined;
-  }
-  return (
-    stderr
-      .split("\n")
-      .find((line) => line.trim() !== "")
-      ?.trim() ?? `${shell} -n exited ${code}`
-  );
 };
 
 /** `~/.claude/settings.json` for a fleet-wide hook, `<cwd>/.claude/settings.json`
@@ -2923,7 +2893,7 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   // links none — and the machine gives back the ones cawco wrote it.
   const docs = config.memory?.docs ?? [];
   const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
-  const memoryHook = await syncMemoryHook(docs, managed.memoryHook, report);
+  const memoryHook = await retireMemoryHook(managed.memoryHook, report);
   const placedMemory = await syncPlacedMemory(
     config.placedMemory ?? [],
     managed.placedMemory,
@@ -3124,9 +3094,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
           };
   }
   if (managed.memoryHook !== undefined) {
-    report.memoryHook = (await Bun.file(managed.memoryHook).exists())
-      ? { state: "applied" }
-      : { state: "failed", detail: "not on disk" };
+    report.memoryHook = {
+      state: "failed",
+      detail: `the retired model-memory hook ${managed.memoryHook} is still registered; the next sync takes it back`,
+    };
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {

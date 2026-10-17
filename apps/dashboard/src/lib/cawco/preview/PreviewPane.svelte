@@ -101,8 +101,15 @@
     linkSession = false,
     ownTab = false,
     inset = false,
+    onScreen = true,
   }: {
     instanceId: string;
+    /**
+     * Its conversation's tab is in view (SideSplit's `visible`). A tab kept
+     * mounted off screen keeps its page loaded for {@link PARK_MS}, then
+     * unloads it, and loads it again once its tab is back.
+     */
+    onScreen?: boolean;
     /**
      * Drawn inside another surface (a task's review, TaskReview's stage):
      * the page in its well and what stands over it, with no head of its
@@ -325,11 +332,39 @@
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
-  const frames = $derived(
-    standing === null || standing === frameKey
+  /**
+   * How long a page whose conversation's tab is off screen stays loaded. A
+   * preview is the dashboard's own process and thread wherever the browser
+   * keeps a frame of the same site there (every WebKit, and Chromium over
+   * plain http), so a page left running in every tab kept open adds up. Our
+   * call: a glance at another tab and back keeps the page as it was.
+   */
+  const PARK_MS = 30_000;
+  /** Off screen past {@link PARK_MS}: no frame stands, and the cover waits for the next load. */
+  let parked = $state(false);
+  $effect(() => {
+    if (onScreen) {
+      parked = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      parked = true;
+      standing = null;
+      loaded = false;
+      connected = false;
+      // A ticket is spent by its frame's load: the next load asks again.
+      entries = {};
+    }, PARK_MS);
+    return () => clearTimeout(timer);
+  });
+  const frames = $derived.by(() => {
+    if (parked) {
+      return [];
+    }
+    return standing === null || standing === frameKey
       ? [frameKey]
-      : [standing, frameKey]
-  );
+      : [standing, frameKey];
+  });
   function arrived(key: string) {
     if (key !== frameKey) {
       return;
@@ -347,7 +382,10 @@
     const key = frameKey;
     const origin = paneOrigin;
     const at = framePlace;
-    if (!(byHost && origin && reached?.origin === origin && reached.ok)) {
+    if (
+      parked ||
+      !(byHost && origin && reached?.origin === origin && reached.ok)
+    ) {
       return;
     }
     const wanted = `${origin}${at}`;
@@ -594,7 +632,7 @@
       case "starting":
         return served
           ? "Starting the server…"
-          : `Starting vite in ${staged.dir}…`;
+          : `Starting the dev server in ${staged.dir}…`;
       case "waking":
       case "asleep":
         return "Waking…";

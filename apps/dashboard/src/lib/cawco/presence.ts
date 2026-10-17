@@ -22,7 +22,12 @@ let told: string | undefined;
 /** Minted once per page load where no storage keeps the tab's own. */
 let mintedHere: string | null = null;
 
-const clientId = (): string => {
+/**
+ * This tab's presence id. A send carries it beside the page's own client id
+ * (client.svelte.ts `submitCommand` provenance), so the hub's log ties each
+ * send to the presence that said what the tab had in front.
+ */
+export const presenceClientId = (): string => {
   const kept = stored("session", CLIENT_KEY);
   if (kept) {
     return kept;
@@ -66,7 +71,7 @@ const report = (beat = false, leaving = false): void => {
     told = state;
     post(
       {
-        clientId: clientId(),
+        clientId: presenceClientId(),
         client: "web",
         sessionId: front,
         active,

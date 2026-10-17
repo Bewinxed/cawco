@@ -49,6 +49,7 @@ import {
   type PlaceRepo,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { isSecretFileName } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -282,32 +283,46 @@ const gitIn =
     if (remaining <= 0) {
       throw new Error(`git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`);
     }
-    const child = Bun.spawn(safeGitArgv(args), {
-      cwd,
-      env: {
-        ...hostEnvironment(),
-        ...SAFE_GIT_ENV,
-        GIT_LITERAL_PATHSPECS: "1",
-      },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: remaining,
-      killSignal: "SIGKILL",
+    const ran = await readWithin(remaining, async (signal) => {
+      const child = Bun.spawn(safeGitArgv(args), {
+        cwd,
+        env: {
+          ...hostEnvironment(),
+          ...SAFE_GIT_ENV,
+          GIT_LITERAL_PATHSPECS: "1",
+        },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+        killSignal: "SIGKILL",
+      });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (code !== 0) {
+        throw new Error(
+          child.signalCode
+            ? `git ${args[0]} was ended by ${child.signalCode}`
+            : `git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`
+        );
+      }
+      return stdout;
     });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) {
-      throw new Error(
-        child.signalCode === "SIGKILL"
-          ? `git ${args[0]} exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
-          : `git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`
-      );
+    switch (ran.kind) {
+      case "answered":
+        return ran.value;
+      case "unanswered":
+        throw new Error(
+          `git ${args[0]} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
+        );
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return stdout;
   };
 
 type Git = ReturnType<typeof gitIn>;

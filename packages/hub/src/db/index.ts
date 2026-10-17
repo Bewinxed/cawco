@@ -50,9 +50,11 @@ import type {
 import {
   CLAUDE_CONVERSATION_GONE,
   CONTINUATION_ORIGIN,
+  placedOnly,
   REMOVED_MACHINE,
   RESTART_LOST,
   resolveRates,
+  scoped,
   stoppedWords,
 } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -136,6 +138,7 @@ import {
   fleetMemory,
   fleetMemoryDocProjects,
   fleetMemoryDocs,
+  fleetMemoryDocTypes,
   fleetMemoryHistory,
   fleetSkillHistory,
   fleetWatchNotices,
@@ -152,13 +155,14 @@ import {
   leadTurnReading,
   leadTurns,
   leadTurnWaiting,
+  limitCompactions,
   limitEvents,
   limitHolds,
-  limitSummaries,
   type MachineLineKind,
   marketplaces,
   mcpServers,
   mcpToolListings,
+  memoryBriefings,
   moves,
   notificationCleared,
   notificationSent,
@@ -186,6 +190,7 @@ import {
   routines,
   ruleState,
   rules,
+  ruleTrash,
   type SessionLineKind,
   sentMessages,
   sessionIdentities,
@@ -426,22 +431,6 @@ export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 export type SentMessageRow = typeof sentMessages.$inferSelect;
 
-/**
- * What a session going on in a fresh conversation of its own changes on its
- * row ({@link DbShape.continueInPlace}): the account, harness and model the
- * new conversation runs on, and the `continued` line drawn after the one it
- * leaves.
- */
-export interface InPlaceSwitch {
-  accountId: string | null;
-  /** The effort the caller chose for the new conversation; absent, it keeps the session's chosen one. */
-  effort?: EffortLevel;
-  harness: string;
-  model: string | null;
-  /** The `limit_events` id of the line drawn between the two conversations. */
-  next: string;
-}
-
 /** What folding a session's former rows into it did, for the hub's log. */
 export interface FoldedSession {
   /** The former rows whose process may still run: each is ended at its machine's register, then goes. */
@@ -487,20 +476,27 @@ export interface MemoryDocRow {
   updatedAt: Date;
 }
 
-/** A stored row as the hub answers it, its projects read off the link table. */
+/** A stored row as the hub answers it, its projects and types read off their link tables. */
 const memoryDocRow = (
   row: typeof fleetMemoryDocs.$inferSelect,
-  projectIds: readonly string[]
+  links: { projectIds: readonly string[]; typeNames: readonly string[] }
 ): MemoryDocRow => {
   const scope: MemoryScope = {
+    ...(row.briefer ? { briefer: true as const } : {}),
     ...(row.role ? { role: row.role } : {}),
-    ...(projectIds.length > 0 ? { projectIds: [...projectIds].sort() } : {}),
+    ...(links.typeNames.length > 0
+      ? { delegateTypes: [...links.typeNames].sort() }
+      : {}),
+    ...(row.model ? { model: row.model } : {}),
+    ...(links.projectIds.length > 0
+      ? { projectIds: [...links.projectIds].sort() }
+      : {}),
   };
   return {
     path: row.path,
     content: row.content,
     hash: row.hash,
-    ...(scope.role || scope.projectIds ? { scope } : {}),
+    ...(scoped(scope) ? { scope } : {}),
     updatedAt: row.updatedAt,
   };
 };
@@ -644,6 +640,8 @@ export interface DbShape {
     threadId: string | null;
     usd: number;
   }) => void;
+  /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
+  readonly briefingsHanded: (instanceId: string) => Map<string, string>;
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -691,15 +689,6 @@ export interface DbShape {
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
-  /**
-   * The session goes on in a fresh conversation of its own: the one it ran
-   * (`sessionId`, on the account and harness its row named) is kept, last,
-   * in `conversations` with `next` drawn after it, and the row names no
-   * conversation until the new one's `init` says its key, on the account,
-   * harness and model `to` names, its spend and context counted from
-   * nothing. Once per `next`: a switch already kept answers false.
-   */
-  readonly continueInPlace: (id: string, to: InPlaceSwitch) => boolean;
   /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
@@ -775,8 +764,6 @@ export interface DbShape {
   readonly deletePlugin: (id: string) => void;
   /** The project and its places; the sessions started from it stay, unattached. */
   readonly deleteProject: (id: string) => void;
-  /** Removes the rule and every session's standing with it. */
-  readonly deleteRule: (id: string) => void;
   readonly deleteSkill: (name: string) => void;
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
@@ -858,6 +845,8 @@ export interface DbShape {
     keepId: string,
     taskIds: ReadonlyMap<string, string>
   ) => { places: number; sessions: number; threads: number; workItems: number };
+  /** Forgets every briefer document a session was handed: its context no longer holds them. */
+  readonly forgetBriefings: (instanceId: string) => void;
   /** Every former id, by the id its session has now ({@link instanceIdOf}). */
   readonly formerIds: () => Record<string, string>;
   /** When a session last started again fresh; null when it never did. */
@@ -932,6 +921,11 @@ export interface DbShape {
    * or a turn took its place.
    */
   readonly handBackTurn: (id: string, from: number, at: number) => boolean;
+  /** Records briefer documents as handed to a session, each at its hash. */
+  readonly handBriefings: (
+    instanceId: string,
+    docs: readonly { path: string; hash: string }[]
+  ) => void;
   /** Every machine's held workspaces (schema.ts `WorkspaceState`), newest first. */
   readonly heldWorkspaces: () => WorkspaceRow[];
   readonly hiddenSession: (id: string) => boolean;
@@ -1859,6 +1853,12 @@ export interface DbShape {
     held: string[],
     complete: boolean
   ) => void;
+  /**
+   * Brings a rule deleted at `at` − {@link RULE_UNDO_MS} or later back
+   * whole, with every session's standing as it stood; undefined once its
+   * window has passed, or its project went meanwhile.
+   */
+  readonly restoreRule: (id: string, at: number) => Rule | undefined;
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
@@ -2159,6 +2159,12 @@ export interface DbShape {
   /** A fleet MCP relay session was used now. */
   readonly touchMcpSession: (id: string) => void;
   /**
+   * Deletes the rule and every session's standing with it, kept whole in the
+   * trash for {@link RULE_UNDO_MS} (`restoreRule`); what waited there longer
+   * goes for good. False when there is no such rule.
+   */
+  readonly trashRule: (id: string, at: number) => boolean;
+  /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated and the items of the projects in `ledProjectIds` (it
    * leads them), the live and undismissed failed ones, and any other that
@@ -2171,13 +2177,6 @@ export interface DbShape {
   ) => WorkItemRow[];
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
-  /**
-   * {@link continueInPlace} taken back, while the new conversation has said
-   * nothing yet: the conversation kept under `next` is the row's again, on
-   * the account and harness it ran on. False when there is none to take
-   * back, or the new one already named itself.
-   */
-  readonly undoContinueInPlace: (id: string, next: string) => boolean;
   /**
    * Pending sends handed to a machine before the hub kept each whole
    * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
@@ -2207,7 +2206,12 @@ export interface DbShape {
     patch: Partial<
       Pick<
         ContinuationRow,
-        "stage" | "error" | "summary" | "summariserInstanceId" | "prepared"
+        | "stage"
+        | "error"
+        | "summary"
+        | "summariserInstanceId"
+        | "prepared"
+        | "openItems"
       >
     >
   ) => ContinuationRow | undefined;
@@ -2462,9 +2466,41 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
     ...(row.scopeProjectId ? { projectId: row.scopeProjectId } : {}),
     ...(row.scopeHarness ? { harness: row.scopeHarness } : {}),
     ...(row.scopeModel ? { model: row.scopeModel } : {}),
+    ...(row.scopeRole ? { role: row.scopeRole } : {}),
+    ...(row.scopeDelegateType ? { delegateType: row.scopeDelegateType } : {}),
   },
   createdAt: row.createdAt.getTime(),
 });
+
+/** A rule as its stored row: its own `createdAt`, written now. */
+const ruleValues = (rule: Rule): typeof rules.$inferInsert => ({
+  id: rule.id,
+  name: rule.name,
+  enabled: rule.enabled,
+  pattern: rule.pattern,
+  matchKind: rule.matchKind,
+  caseSensitive: rule.caseSensitive,
+  wholeWord: rule.wholeWord,
+  watch: rule.watch,
+  reply: rule.reply,
+  timing: rule.timing,
+  repeat: rule.repeat,
+  scopeMachineId: rule.scope.machineId || null,
+  scopeProjectId: rule.scope.projectId || null,
+  scopeHarness: rule.scope.harness || null,
+  scopeModel: rule.scope.model || null,
+  scopeRole: rule.scope.role || null,
+  scopeDelegateType: rule.scope.delegateType || null,
+  createdAt: new Date(rule.createdAt),
+  updatedAt: new Date(),
+});
+
+/**
+ * How long a deleted rule can be brought back whole: past the life of the
+ * dashboard's Undo toast (sonner's 4 s, paused while a pointer rests on it
+ * or the tab is hidden), which closes when this runs out.
+ */
+export const RULE_UNDO_MS = 60_000;
 
 /** And a standing row, with the dates flattened to the numbers the wire carries. */
 const ruleStateOf = (row: typeof ruleState.$inferSelect): RuleState => ({
@@ -3147,8 +3183,8 @@ const make = async (path: string): Promise<DbShape> => {
     tx.delete(ruleState).where(inArray(ruleState.instanceId, list)).run();
     tx.delete(sentMessages).where(inArray(sentMessages.instanceId, list)).run();
     tx.delete(limitHolds).where(inArray(limitHolds.instanceId, list)).run();
-    tx.delete(limitSummaries)
-      .where(inArray(limitSummaries.instanceId, list))
+    tx.delete(limitCompactions)
+      .where(inArray(limitCompactions.instanceId, list))
       .run();
     tx.delete(limitEvents).where(inArray(limitEvents.instanceId, list)).run();
     tx.delete(fleetWatchNotices)
@@ -3720,14 +3756,37 @@ const make = async (path: string): Promise<DbShape> => {
     return byPath;
   };
 
+  /** Each document's delegate types, by its path. */
+  const memoryDocTypes = (docPath?: string): Map<string, string[]> => {
+    const byPath = new Map<string, string[]>();
+    for (const link of db
+      .select()
+      .from(fleetMemoryDocTypes)
+      .where(
+        docPath === undefined
+          ? undefined
+          : eq(fleetMemoryDocTypes.path, docPath)
+      )
+      .all()) {
+      byPath.set(link.path, [...(byPath.get(link.path) ?? []), link.typeName]);
+    }
+    return byPath;
+  };
+
   const listFleetMemoryDocs = (): MemoryDocRow[] => {
     const projectsOf = memoryDocProjects();
+    const typesOf = memoryDocTypes();
     return db
       .select()
       .from(fleetMemoryDocs)
       .orderBy(fleetMemoryDocs.path)
       .all()
-      .map((row) => memoryDocRow(row, projectsOf.get(row.path) ?? []));
+      .map((row) =>
+        memoryDocRow(row, {
+          projectIds: projectsOf.get(row.path) ?? [],
+          typeNames: typesOf.get(row.path) ?? [],
+        })
+      );
   };
 
   const getFleetMemoryDoc = (docPath: string): MemoryDocRow | undefined => {
@@ -3737,7 +3796,10 @@ const make = async (path: string): Promise<DbShape> => {
       .where(eq(fleetMemoryDocs.path, docPath))
       .get();
     return row
-      ? memoryDocRow(row, memoryDocProjects(docPath).get(docPath) ?? [])
+      ? memoryDocRow(row, {
+          projectIds: memoryDocProjects(docPath).get(docPath) ?? [],
+          typeNames: memoryDocTypes(docPath).get(docPath) ?? [],
+        })
       : undefined;
   };
 
@@ -5060,93 +5122,7 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map((row) => [row.id, row.now])
       ),
-    continueInPlace: (id, to) =>
-      db.transaction((tx) => {
-        const row = tx
-          .select()
-          .from(instances)
-          .where(eq(instances.id, id))
-          .get();
-        const held = row ? conversationsOf(tx, id) : [];
-        if (!row?.sessionId || held.some((one) => one.next === to.next)) {
-          return false;
-        }
-        // The conversation it leaves joins its prior ones, last.
-        const account = row.accountId
-          ? tx
-              .select({ id: accounts.id })
-              .from(accounts)
-              .where(eq(accounts.id, row.accountId))
-              .get()?.id
-          : undefined;
-        tx.insert(instanceConversations)
-          .values({
-            instanceId: id,
-            ord: held.length,
-            sessionId: row.sessionId,
-            harness: row.harness ?? "claude",
-            model: row.model,
-            accountId: account ?? null,
-            endedAt: new Date(),
-            nextEventId: to.next,
-          })
-          .run();
-        tx.update(instances)
-          .set({
-            sessionId: null,
-            accountId: to.accountId,
-            harness: to.harness,
-            model: to.model,
-            ...(to.effort ? { chosenEffort: to.effort } : {}),
-            // The new conversation has read nothing and spent nothing yet.
-            contextTokens: null,
-            contextReadAt: null,
-            modelUsageSeen: {},
-            cacheCold: null,
-            lastRequestAt: null,
-            lastPingUsage: null,
-            keepAliveTurn: null,
-            turnOpenAt: null,
-            freshStartAt: null,
-          })
-          .where(eq(instances.id, id))
-          .run();
-        return true;
-      }),
     priorConversations: (instanceId) => conversationsOf(db, instanceId),
-    undoContinueInPlace: (id, next) =>
-      db.transaction((tx) => {
-        const row = tx
-          .select()
-          .from(instances)
-          .where(eq(instances.id, id))
-          .get();
-        const held = row ? conversationsOf(tx, id) : [];
-        const left = held.at(-1);
-        if (!(row && left?.next === next && row.sessionId === null)) {
-          return false;
-        }
-        tx.delete(instanceConversations)
-          .where(
-            and(
-              eq(instanceConversations.instanceId, id),
-              eq(instanceConversations.ord, held.length - 1)
-            )
-          )
-          .run();
-        tx.update(instances)
-          .set({
-            sessionId: left.sessionId,
-            accountId: left.accountId,
-            harness: left.harness,
-            model: left.model,
-            // Its spend so far is unknown until its next result says it.
-            modelUsageSeen: null,
-          })
-          .where(eq(instances.id, id))
-          .run();
-        return true;
-      }),
     adoptChildren: (from, to) =>
       db.transaction((tx) => {
         const items = tx
@@ -5988,19 +5964,20 @@ const make = async (path: string): Promise<DbShape> => {
         })(),
         // A project's documents for all its sessions, each placed once per
         // checkout and workspace of it as the sync goes out (project-placements.ts).
-        // One with a role goes to its sessions as they launch instead.
+        // One with a role, type or model goes to its sessions as they launch
+        // instead, and a briefer's to the sessions that delegate.
         // A document of several projects is one row per project.
         placedMemory: listFleetMemoryDocs().flatMap(
           ({ path: docPath, hash, content, scope }) =>
-            scope?.role
-              ? []
-              : (scope?.projectIds ?? []).map((projectId) => ({
+            placedOnly(scope)
+              ? (scope?.projectIds ?? []).map((projectId) => ({
                   path: docPath,
                   hash,
                   content,
                   projectId,
                   scope: "project" as const,
                 }))
+              : []
         ),
         // Always an array, like `skills` above, never omitted: this hub is not
         // one that predates hooks, so there is no version-skew reason to leave
@@ -6529,7 +6506,13 @@ const make = async (path: string): Promise<DbShape> => {
         hash: hashText(content),
         updatedAt: new Date(),
         // Given, it replaces the stored scope whole; left out, the stored one stays.
-        ...(scope === undefined ? {} : { role: scope.role ?? null }),
+        ...(scope === undefined
+          ? {}
+          : {
+              role: scope.role ?? null,
+              model: scope.model?.trim() || null,
+              briefer: scope.briefer === true,
+            }),
       };
       db.transaction((tx) => {
         tx.insert(fleetMemoryDocs)
@@ -6547,12 +6530,47 @@ const make = async (path: string): Promise<DbShape> => {
             .values({ path: docPath, projectId })
             .run();
         }
+        tx.delete(fleetMemoryDocTypes)
+          .where(eq(fleetMemoryDocTypes.path, docPath))
+          .run();
+        for (const typeName of new Set(scope.delegateTypes ?? [])) {
+          tx.insert(fleetMemoryDocTypes)
+            .values({ path: docPath, typeName: typeName.trim() })
+            .run();
+        }
       });
       const stored = getFleetMemoryDoc(docPath);
       if (!stored) {
         throw new Error(`${docPath} was not stored`);
       }
       return stored;
+    },
+    briefingsHanded: (instanceId) =>
+      new Map(
+        db
+          .select({ path: memoryBriefings.path, hash: memoryBriefings.hash })
+          .from(memoryBriefings)
+          .where(eq(memoryBriefings.instanceId, instanceId))
+          .all()
+          .map(({ path: docPath, hash }) => [docPath, hash])
+      ),
+    handBriefings: (instanceId, docs) => {
+      db.transaction((tx) => {
+        for (const { path: docPath, hash } of docs) {
+          tx.insert(memoryBriefings)
+            .values({ instanceId, path: docPath, hash })
+            .onConflictDoUpdate({
+              target: [memoryBriefings.instanceId, memoryBriefings.path],
+              set: { hash, handedAt: new Date() },
+            })
+            .run();
+        }
+      });
+    },
+    forgetBriefings: (instanceId) => {
+      db.delete(memoryBriefings)
+        .where(eq(memoryBriefings.instanceId, instanceId))
+        .run();
     },
     deleteFleetMemoryDoc: (docPath) => {
       db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, docPath)).run();
@@ -9687,25 +9705,7 @@ const make = async (path: string): Promise<DbShape> => {
     },
 
     putRule: (rule) => {
-      const values = {
-        id: rule.id,
-        name: rule.name,
-        enabled: rule.enabled,
-        pattern: rule.pattern,
-        matchKind: rule.matchKind,
-        caseSensitive: rule.caseSensitive,
-        wholeWord: rule.wholeWord,
-        watch: rule.watch,
-        reply: rule.reply,
-        timing: rule.timing,
-        repeat: rule.repeat,
-        scopeMachineId: rule.scope.machineId || null,
-        scopeProjectId: rule.scope.projectId || null,
-        scopeHarness: rule.scope.harness || null,
-        scopeModel: rule.scope.model || null,
-        createdAt: new Date(rule.createdAt),
-        updatedAt: new Date(),
-      };
+      const values = ruleValues(rule);
       db.insert(rules)
         .values(values)
         // `createdAt` is deliberately absent from the update set: editing a rule
@@ -9727,6 +9727,8 @@ const make = async (path: string): Promise<DbShape> => {
             scopeProjectId: values.scopeProjectId,
             scopeHarness: values.scopeHarness,
             scopeModel: values.scopeModel,
+            scopeRole: values.scopeRole,
+            scopeDelegateType: values.scopeDelegateType,
             updatedAt: values.updatedAt,
           },
         })
@@ -9734,10 +9736,78 @@ const make = async (path: string): Promise<DbShape> => {
       return rule;
     },
 
-    deleteRule: (id) => {
-      db.delete(rules).where(eq(rules.id, id)).run();
-      db.delete(ruleState).where(eq(ruleState.ruleId, id)).run();
-    },
+    trashRule: (id, at) =>
+      db.transaction((tx) => {
+        tx.delete(ruleTrash)
+          .where(lt(ruleTrash.deletedAt, new Date(at - RULE_UNDO_MS)))
+          .run();
+        const row = tx.select().from(rules).where(eq(rules.id, id)).get();
+        if (!row) {
+          return false;
+        }
+        const states = tx
+          .select()
+          .from(ruleState)
+          .where(eq(ruleState.ruleId, id))
+          .all()
+          .map(ruleStateOf);
+        tx.insert(ruleTrash)
+          .values({
+            ruleId: id,
+            scopeProjectId: row.scopeProjectId,
+            rule: ruleOf(row),
+            states,
+            deletedAt: new Date(at),
+          })
+          .onConflictDoUpdate({
+            target: ruleTrash.ruleId,
+            set: { rule: ruleOf(row), states, deletedAt: new Date(at) },
+          })
+          .run();
+        tx.delete(rules).where(eq(rules.id, id)).run();
+        tx.delete(ruleState).where(eq(ruleState.ruleId, id)).run();
+        return true;
+      }),
+
+    restoreRule: (id, at) =>
+      db.transaction((tx) => {
+        const kept = tx
+          .select()
+          .from(ruleTrash)
+          .where(
+            and(
+              eq(ruleTrash.ruleId, id),
+              gte(ruleTrash.deletedAt, new Date(at - RULE_UNDO_MS))
+            )
+          )
+          .get();
+        if (!kept) {
+          return;
+        }
+        tx.delete(ruleTrash).where(eq(ruleTrash.ruleId, id)).run();
+        tx.insert(rules).values(ruleValues(kept.rule)).run();
+        if (kept.states.length > 0) {
+          tx.insert(ruleState)
+            .values(
+              kept.states.map((state) => ({
+                id: `${state.ruleId}:${state.instanceId}`,
+                ruleId: state.ruleId,
+                instanceId: state.instanceId,
+                status: state.status,
+                fireCount: state.fireCount,
+                totalFires: state.totalFires,
+                lastFiredAt:
+                  state.lastFiredAt === null
+                    ? null
+                    : new Date(state.lastFiredAt),
+                ackedAt:
+                  state.ackedAt === null ? null : new Date(state.ackedAt),
+              }))
+            )
+            .run();
+        }
+        return kept.rule;
+      }),
 
     ruleStats: () => {
       const rows = db

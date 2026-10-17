@@ -23,7 +23,6 @@ import {
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
-import { domToPng } from "modern-screenshot";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark } from "./boot";
@@ -46,10 +45,11 @@ import { type Box, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
-const PNG_PREFIX = /^data:image\/png;base64,/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
-  /<script src="\/__cawco\/overlay\.js" data-page-hash="([0-9a-f]{64})"/;
+  /<script src="\/__cawco\/overlay\.js(?:\?k=[0-9a-z]+)?" data-page-hash="([0-9a-f]{64})"/;
+/** The overlay's own tag's address: its path, at the overlay's key (core `keyOverlay`) or not. */
+const OVERLAY_SRC = /^\/__cawco\/overlay\.js(?:\?|$)/;
 /**
  * The pane's mode (its head's Interact | Comment | Draw): Interact gives the
  * page every press; Comment takes them, and a tap pins a comment to what it
@@ -479,7 +479,7 @@ const kept = (node: Node): boolean =>
   node === ink.layer ||
   node === pins.layer ||
   (node instanceof HTMLScriptElement &&
-    node.getAttribute("src") === "/__cawco/overlay.js");
+    OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
 
 /**
  * Where the page was served: the root of its own address in the panel, its
@@ -1196,48 +1196,28 @@ function describe(el: Element): PinnedElement {
   };
 }
 
-/** A canvas side every browser draws (Chrome's area cap is this squared). */
-const CANVAS_SIDE = 16_384;
-/** Pixels in one screenshot: enough to read, small enough to send. */
-const CANVAS_AREA = 16_000_000;
+/**
+ * The pixels of the page's thumbnail (the pane's `cawco:capture`, drawn in
+ * its tool row at 90 by 64): a few times that at a phone's density. Our call.
+ */
+const THUMB_AREA = 200_000;
 
 /**
- * The raster scale for an element: the screen's density up to 2, brought
- * down until the canvas fits. Past a browser's canvas limits the raster
- * comes out empty, so a tall element is drawn smaller instead.
+ * The page's thumbnail: what stands in its viewport now, drawn by the crop
+ * (picture.ts), so its work is what is on screen, never the whole document
+ * (a whole tall page drawn once was 1.8 s of the dashboard's own thread,
+ * the frame sharing its process).
  */
-function scaleFor(el: Element): number {
-  const { width, height } = el.getBoundingClientRect();
-  const w = Math.max(1, width);
-  const h = Math.max(1, height);
-  return Math.min(
-    2,
-    devicePixelRatio,
-    CANVAS_SIDE / w,
-    CANVAS_SIDE / h,
-    Math.sqrt(CANVAS_AREA / (w * h))
+async function thumbnail(): Promise<{ png: string | null; error?: string }> {
+  let error: string | undefined;
+  const png = await cropPicture(
+    { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
+    (message) => {
+      error ??= message;
+    },
+    { area: THUMB_AREA, thumbnail: true }
   );
-}
-
-async function capture(
-  el: Element,
-  scale = scaleFor(el)
-): Promise<{ png: string | null; scale: number; error?: string }> {
-  try {
-    const png = await domToPng(el, {
-      scale,
-      // Any overlay's own UI, this one's or a same-origin frame's, is left out.
-      filter: (node) => (node as Element).localName !== "cawco-overlay",
-    });
-    if (!PNG_PREFIX.test(png)) {
-      throw new Error("The element was too large to draw.");
-    }
-    return { png: png.replace(PNG_PREFIX, ""), scale };
-  } catch (reason) {
-    const error = reason instanceof Error ? reason.message : String(reason);
-    post("cawco:error", { message: error });
-    return { png: null, scale, error };
-  }
+  return png ? { png } : { png: null, error: error ?? "Nothing was drawn." };
 }
 
 /** The element Comment mode last outlined under the pointer. */
@@ -1706,8 +1686,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),
-    "cawco:capture": async () =>
-      post("cawco:capture", await capture(document.documentElement)),
+    "cawco:capture": async () => post("cawco:capture", await thumbnail()),
   };
 
 window.addEventListener("message", async (event) => {

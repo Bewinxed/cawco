@@ -198,7 +198,7 @@ public final class HubConnection {
     @ObservationIgnored private var suspended = false
     /// Counts `start`s, so a replaced loop knows it was replaced.
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var waiters: [String: CheckedContinuation<OpenAPIValueContainer?, any Error>] = [:]
+    @ObservationIgnored private var waiters: [String: CheckedContinuation<Components.Schemas.ControlResultFrame, any Error>] = [:]
     private let log = Logger(subsystem: "dev.cawco.app", category: "Hub")
 
     /// The hub this app keeps, the one every window connects to.
@@ -226,6 +226,9 @@ public final class HubConnection {
         threads.onThreads = { [weak self] in
             guard let self else { return }
             fleet.adopt(threads: Array(threads.byId.values))
+        }
+        needs.sayEnd = { [weak self] ask, line in
+            self?.sayAskEnd(ask.instanceId, ask, line)
         }
         plans.post = { [weak self] data in
             guard let self, socket == .connected, let live else { return false }
@@ -1161,11 +1164,23 @@ public final class HubConnection {
         }
     }
 
-    /// Replaces a machine's stored-session catalog with its current answer.
-    /// Failure remains an error for pending menu actions to show.
+    /// Replaces a machine's stored-session catalog with its current answer. A
+    /// harness the listing left out (no answer in time, or its listing threw)
+    /// keeps the sessions the previous catalog held for it: not answering is
+    /// not having none. Failure of the whole call remains an error for pending
+    /// menu actions to show, and leaves the catalog as it was.
     public func reloadCatalog(_ machineId: String) async throws {
         defer { fleet.catalogsTried.insert(machineId) }
-        fleet.catalogs[machineId] = try await listSessions(machineId: machineId)
+        let listing = try await listSessions(machineId: machineId)
+        for left in listing.unanswered {
+            log.notice("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) did not answer within \(left.after, privacy: .public) ms; its sessions are kept")
+        }
+        for left in listing.failed {
+            log.error("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) failed: \(left.error, privacy: .public); its sessions are kept")
+        }
+        let kept = Set(listing.unanswered.map(\.harness) + listing.failed.map(\.harness))
+        let held = kept.isEmpty ? [] : (fleet.catalogs[machineId] ?? []).filter { kept.contains($0.harness) }
+        fleet.catalogs[machineId] = listing.sessions + held
     }
 
     /// The background path reports a failed read without throwing out of its task.
@@ -1182,9 +1197,16 @@ public final class HubConnection {
         }
     }
 
-    /// A machine-scoped control call, answered by its `control_result`.
+    /// A machine-scoped control call, answered by its `control_result`'s `result`.
     func control(_ machineId: String, instanceId: String? = nil, harness: Components.Schemas.ControlPayload.HarnessPayload? = nil,
                  method: String, args: [(any Sendable)?], timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
+        try await controlFrame(machineId, instanceId: instanceId, harness: harness, method: method, args: args, timeout: timeout).result
+    }
+
+    /// A machine-scoped control call, answered by its whole `control_result`
+    /// (`listSessions` reads the harnesses it left out beside `result`).
+    func controlFrame(_ machineId: String, instanceId: String? = nil, harness: Components.Schemas.ControlPayload.HarnessPayload? = nil,
+                      method: String, args: [(any Sendable)?], timeout: Duration = controlTimeout) async throws -> Components.Schemas.ControlResultFrame {
         let requestId = UUID().uuidString.lowercased()
         let payload = Components.Schemas.ControlPayload(
             args: try args.map { value in
@@ -1198,7 +1220,7 @@ public final class HubConnection {
 
     /// All correlated socket verbs share the same reply, disconnect and cancellation paths.
     func request(machineId: String, instanceId: String? = nil, verb: Components.Schemas.Verb,
-                 requestId: String, payload: some Encodable, timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
+                 requestId: String, payload: some Encodable, timeout: Duration = controlTimeout) async throws -> Components.Schemas.ControlResultFrame {
         guard socket == .connected, let live else {
             throw URLError(.notConnectedToInternet)
         }
@@ -1249,6 +1271,43 @@ public final class HubConnection {
         }
     }
 
+    /// An ask over with no answer from this device leaves its quiet line where
+    /// it was asked (client.svelte.ts `permission_settled`): withdrawn, or
+    /// answered somewhere else, saying what won and where. One the hub could
+    /// not show anyone was never parked here, and its reason is the only word
+    /// of it. Read before `needs.settle` takes the ask and its answer away.
+    private func askEnded(_ settled: Components.Schemas.PermissionSettledFrame) {
+        let ask = needs.parked[settled.instanceId]?.first { $0.requestId == settled.requestId }
+        let line: String
+        switch settled.outcome {
+        case .cancelled? where ask != nil || settled.reason != nil:
+            let question = ask?.isQuestion ?? (settled.toolName == Naming.askUserQuestion)
+            line = AskEnd.withdrawn(question: question, reason: settled.reason)
+        case .answered?:
+            guard let ask, let answer = settled.answer else { return }
+            let said = AskEnd.answered(ask, answer, harness: AskEnd.harnessName(fleet.byId[settled.instanceId]?.harness))
+            // With an answer of this device's still out, the winner may be that
+            // answer or another device's: the line waits for the hub's word on
+            // ours, said if it refused it (NeedsYouStore `holdAnswered`).
+            if let sent = needs.answerSent(for: ask), sent.stage != .failed {
+                needs.holdAnswered(ask, line: said)
+                return
+            }
+            line = said
+        default:
+            return
+        }
+        sayAskEnd(settled.instanceId, ask, line)
+    }
+
+    /// An ask's quiet line: in its thread when it is a thread's, and in its session.
+    private func sayAskEnd(_ instanceId: String, _ ask: ParkedAsk?, _ line: String) {
+        if let ask, ask.threadId != nil {
+            threads.ended(ask, line: line)
+        }
+        sessions.noteAskEnd(instanceId, line)
+    }
+
     private func apply(_ frame: Frame) {
         switch frame {
         case let .instances(board, hubBuild):
@@ -1278,11 +1337,7 @@ public final class HubConnection {
         case let .permissionRequest(ask, routedTo, machineId):
             needs.park(ask, routedTo: routedTo, machineId: machineId)
         case let .permissionSettled(settled):
-            // Withdrawn, not answered: a thread's ask leaves its quiet line there.
-            if settled.outcome == .cancelled,
-               let ask = needs.parked[settled.instanceId]?.first(where: { $0.requestId == settled.requestId }), ask.threadId != nil {
-                threads.withdraw(ask, reason: settled.reason)
-            }
+            askEnded(settled)
             needs.settle(settled.instanceId, settled.requestId)
         case let .runQuestion(runId, raisedAt):
             // Represented once, by its waiting run; only the moment it was parked is kept.
@@ -1301,7 +1356,7 @@ public final class HubConnection {
                 return
             }
             if result.ok {
-                waiter.resume(returning: result.result)
+                waiter.resume(returning: result)
             } else {
                 waiter.resume(throwing: ControlError(message: result.error ?? "The machine could not carry out that request."))
             }

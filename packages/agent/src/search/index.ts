@@ -7,6 +7,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { TranscriptAnswer, TranscriptQuery } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   listClaudeFiles,
   opencodeDatabases,
@@ -189,20 +190,30 @@ export class TranscriptSearchService {
     // is indexed so far, saying so.
     let catchingUp = false;
     if (Date.now() - this.#syncedAt > SEARCH_FRESH_MS) {
-      const outcome = await Promise.race([
+      const outcome = await readWithin(SYNC_WAIT_MS, () =>
         this.sync().then(
-          () => ({ synced: true as const }),
+          () => undefined,
           (error: unknown) => ({ error })
-        ),
-        Bun.sleep(SYNC_WAIT_MS).then(() => ({ synced: false as const })),
-      ]);
-      if ("error" in outcome) {
-        throw new Error(
-          `its index couldn't update (${syncFailure(outcome.error)})`,
-          { cause: outcome.error }
-        );
+        )
+      );
+      switch (outcome.kind) {
+        case "answered":
+          if (outcome.value) {
+            throw new Error(
+              `its index couldn't update (${syncFailure(outcome.value.error)})`,
+              { cause: outcome.value.error }
+            );
+          }
+          break;
+        case "unanswered":
+          // Still syncing: answered from what is indexed so far, saying so.
+          catchingUp = true;
+          break;
+        default: {
+          const unhandled: never = outcome;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
-      catchingUp = !outcome.synced;
     }
     const queried = performance.now();
     const limit = Math.min(

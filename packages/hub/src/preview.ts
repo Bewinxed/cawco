@@ -17,7 +17,11 @@ import { detach } from "@cawco/core/detach";
 import {
   causeOf,
   downResponse,
+  folderKey,
+  IMMUTABLE,
   injectOverlay,
+  keyOverlay,
+  OVERLAY_KEY,
   OVERLAY_PATH,
   overlayResponse,
   type PreviewSocket,
@@ -26,6 +30,8 @@ import {
   proxyHeaders,
   RELAY_HEADER,
   upgradePreview,
+  versionAssets,
+  versionedFile,
 } from "@cawco/core/preview-proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
@@ -111,22 +117,60 @@ noteParent(readEnv(CAWCO_ENV.dashboardUrl));
 export const previewParents = (): string[] => [...parents];
 
 /**
- * `answer` as the browser may frame it: from the dashboards alone. A
- * response a hop made with headers it holds fixed goes on as a copy.
+ * What every answer on a preview origin carries: who may frame it, and its
+ * ask for a process of its own. A preview's port is the dashboard's site (a
+ * site is a scheme and a host, its port left out), so Chromium runs the
+ * frame in the dashboard's renderer, on its main thread, and a heavy page
+ * stalls the dashboard's own input. `Origin-Agent-Cluster: ?1` asks for an
+ * origin-keyed agent cluster, which Chromium backs with an origin-locked
+ * process ("The Origin-Agent-Cluster HTTP response header can be used by web
+ * developers to hint to the browser that an origin locked process can be
+ * used", chromium.googlesource.com/chromium/src/+/HEAD/docs/
+ * process_model_and_site_isolation.md). It is sent on every answer, as the
+ * header must be ("send this header on all responses from your origin",
+ * web.dev/articles/origin-agent-cluster). It holds only in a secure context
+ * (https, or localhost): over plain http to an address the page stays in the
+ * dashboard's process, and WebKit runs no frame in a process of its own.
  */
-const framedBy = (answer: Response): Response => {
+const PREVIEW_HEADERS = (): [string, string][] => [
   // `'self'` too: every ancestor is checked, and a page's own frames (an
   // app's inner frame) have the preview's origin among theirs.
-  const policy = `frame-ancestors 'self' ${previewParents().join(" ")}`.trim();
+  [
+    "content-security-policy",
+    `frame-ancestors 'self' ${previewParents().join(" ")}`.trim(),
+  ],
+  ["origin-agent-cluster", "?1"],
+];
+
+/**
+ * `answer` with {@link PREVIEW_HEADERS}. A response a hop made with headers
+ * it holds fixed goes on as a copy.
+ */
+const framedBy = (answer: Response): Response => {
+  const headers = PREVIEW_HEADERS();
   try {
-    answer.headers.set("content-security-policy", policy);
+    for (const [name, value] of headers) {
+      answer.headers.set(name, value);
+    }
     return answer;
   } catch {
     const copy = new Response(answer.body, answer);
-    copy.headers.set("content-security-policy", policy);
+    for (const [name, value] of headers) {
+      copy.headers.set(name, value);
+    }
     return copy;
   }
 };
+
+/**
+ * `answer`, when it is a page, with its overlay tag at the overlay's key
+ * (core `keyOverlay`): the hub's own pages and a machine's alike, since only
+ * the hub knows the overlay's whole text (its parents line).
+ */
+const withKeyedOverlay = (answer: Response): Promise<Response> | Response =>
+  answer.body && answer.headers.get("content-type")?.startsWith("text/html")
+    ? keyOverlay(answer, previewParents())
+    : answer;
 
 /** Where a shown preview is served now, or the hop that failed and why (server.ts `reachPreview`). */
 export type PreviewReach =
@@ -175,19 +219,22 @@ export function previewFrame(
 async function servePage(
   artifactId: string,
   pathname: string,
-  state: (artifactId: string) => string
+  state: (artifactId: string) => string,
+  /** Where the page stands on its origin: its root, or the Decisions tab's `/__cawco/page/<id>/`. */
+  mount = "/"
 ): Promise<Response> {
   let file: string;
   let root: string;
+  // A file at its folder's key (core `versionAssets`), or the page's own address.
+  const versioned = versionedFile(pathname);
+  const asked = versioned ?? pathname;
   try {
     root = await realpath(join(ARTIFACTS_ROOT, artifactId));
     file = await realpath(
       join(
         root,
         folderPath(
-          decodeURIComponent(pathname === "/" ? "/index.html" : pathname).slice(
-            1
-          )
+          decodeURIComponent(asked === "/" ? "/index.html" : asked).slice(1)
         )
       )
     );
@@ -204,16 +251,26 @@ async function servePage(
     return new Response("Not found", { status: 404 });
   }
   const body = Bun.file(file);
-  const headers = { "cache-control": "no-store", "content-type": body.type };
-  return body.type.startsWith("text/html")
-    ? new Response(
-        injectOverlay(await body.text(), {
-          artifact: artifactId,
-          state: state(artifactId),
-        }),
-        { headers }
-      )
-    : new Response(body, { headers });
+  // The page's document is never kept (it carries the doc's state as it is
+  // now); a file at its folder's key never changes, and is kept for good.
+  const headers = {
+    "cache-control": versioned === null ? "no-store" : IMMUTABLE,
+    "content-type": body.type,
+  };
+  if (!body.type.startsWith("text/html")) {
+    return new Response(body, { headers });
+  }
+  // The overlay hashes the page as it was written, before its files are keyed.
+  const page = injectOverlay(await body.text(), {
+    artifact: artifactId,
+    state: state(artifactId),
+  });
+  return new Response(
+    versioned === null
+      ? versionAssets(page, await folderKey(root), mount, pathname)
+      : page,
+    { headers }
+  );
 }
 
 /**
@@ -298,6 +355,10 @@ const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/;
 
 /** Everything under it is the hub's own on a preview origin; a previewed app never sees it. */
 const RESERVED = "/__cawco/";
+
+/** A path the hub keeps for itself: under {@link RESERVED}, but a page's own file at its folder's key, which goes on to whatever serves the page. */
+const hubsOwn = (pathname: string): boolean =>
+  pathname.startsWith(RESERVED) && versionedFile(pathname) === null;
 
 const HOP = "hub listener";
 
@@ -415,14 +476,16 @@ async function serveSession(
   instanceId: string,
   deps: PreviewListenerDeps
 ): Promise<Response | undefined> {
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
   if (pathname === PREVIEW_PING_PATH) {
     return ping();
   }
   if (pathname === OVERLAY_PATH) {
     return overlayResponse(
       previewParents(),
-      request.headers.get("accept-encoding")
+      request.headers.get("accept-encoding"),
+      url.searchParams.get(OVERLAY_KEY)
     );
   }
   const synced = pathname.match(ARTIFACT_PATH);
@@ -442,10 +505,10 @@ async function serveSession(
     const [, artifactId, rest] = paged;
     return deps.ownerOf(artifactId) === instanceId &&
       deps.kindOf(artifactId) === "page"
-      ? servePage(artifactId, rest, deps.state)
+      ? servePage(artifactId, rest, deps.state, `/__cawco/page/${artifactId}/`)
       : new Response("This session has no such page.", { status: 404 });
   }
-  if (pathname.startsWith(RESERVED)) {
+  if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
   }
   const target = previewTargets.get(instanceId);
@@ -705,7 +768,7 @@ export function createPreviewListeners(
           return framedBy(downResponse("closed", 404));
         }
         const answer = await serveSession(request, server, instanceId, deps);
-        return answer && framedBy(answer);
+        return answer && framedBy(await withKeyedOverlay(answer));
       },
     });
 

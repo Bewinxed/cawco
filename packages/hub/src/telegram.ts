@@ -14,6 +14,7 @@ import {
   changeStat,
   readEnv,
 } from "@cawco/core";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach, failureOf } from "@cawco/core/detach";
 // The port the dashboard is served on, for the composed fallback below.
 import { DASHBOARD_PORT } from "./config";
@@ -139,6 +140,33 @@ const POLL_SECONDS = 50;
 const POLL_TIMEOUT_MS = (POLL_SECONDS + 15) * 1000;
 const BACKOFF_FLOOR_MS = 2000;
 const BACKOFF_CEILING_MS = 30_000;
+
+/** "Telegram did not answer <method> within N s". */
+const telegramSilent = (method: string, after: number): string =>
+  `Telegram did not answer ${method} within ${Math.round(after / 1000)} s`;
+
+/** An upload's outcome: the message it made, Telegram's refusal, or no answer in time. */
+type Uploaded =
+  { message: TelegramMessage } | { refused: string } | { unanswered: string };
+
+/**
+ * The message a send made, when Telegram answered with one. Not answered
+ * leaves no message to track; `call` has logged it.
+ */
+const sentMessage = (
+  sent: Bounded<TelegramMessage | undefined>
+): TelegramMessage | undefined => {
+  switch (sent.kind) {
+    case "answered":
+      return sent.value;
+    case "unanswered":
+      return;
+    default: {
+      const unhandled: never = sent;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /** How many bridged messages stay answerable, and for how long. */
 const TRACKED_MESSAGES = 500;
@@ -336,37 +364,64 @@ export const createTelegramBridge = ({
   };
 
   /**
-   * One Bot API call. Never throws: a refusal and a transport failure both
-   * answer `undefined`, each logged once here.
+   * One Bot API call within {@link POLL_TIMEOUT_MS}. Never throws: a refusal
+   * and a transport failure both answer `undefined`, each logged once here;
+   * no answer in time is unanswered, logged as that.
    */
   const call = async <T>(
     method: string,
     body: unknown
-  ): Promise<T | undefined> => {
-    let response: Response;
-    let answer: { ok?: boolean; result?: T; description?: string };
+  ): Promise<Bounded<T | undefined>> => {
+    let read: Bounded<{
+      answer: { ok?: boolean; result?: T; description?: string };
+      status: number;
+    }>;
     try {
-      response = await fetch(`${API_BASE}/bot${token}/${method}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.any([
-          AbortSignal.timeout(POLL_TIMEOUT_MS),
-          closing.signal,
-        ]),
-      });
-      answer = (await response.json()) as typeof answer;
+      read = await readWithin(
+        POLL_TIMEOUT_MS,
+        async (signal) => {
+          const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal,
+          });
+          return {
+            answer: (await response.json()) as {
+              ok?: boolean;
+              result?: T;
+              description?: string;
+            },
+            status: response.status,
+          };
+        },
+        { signal: closing.signal }
+      );
     } catch (error) {
       failed(method, error);
-      return undefined;
+      return { kind: "answered", value: undefined };
     }
+    switch (read.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        console.warn(
+          `[telegram] ${method}: ${telegramSilent(method, read.after)}`
+        );
+        return read;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const { answer, status } = read.value;
     if (!answer.ok) {
       console.warn(
-        `[telegram] ${method} refused: ${answer.description ?? response.status}`
+        `[telegram] ${method} refused: ${answer.description ?? status}`
       );
-      return undefined;
+      return { kind: "answered", value: undefined };
     }
-    return answer.result;
+    return { kind: "answered", value: answer.result };
   };
 
   const media = createMediaIntake({
@@ -376,29 +431,47 @@ export const createTelegramBridge = ({
   });
 
   /** `call`, for a method that carries bytes: multipart, not JSON. Never throws. */
-  const upload = async (
-    method: string,
-    form: FormData
-  ): Promise<{ message: TelegramMessage } | { refused: string }> => {
-    let response: Response;
-    let answer: {
-      ok?: boolean;
-      result?: TelegramMessage;
-      description?: string;
-    };
+  const upload = async (method: string, form: FormData): Promise<Uploaded> => {
+    let read: Bounded<{
+      answer: { ok?: boolean; result?: TelegramMessage; description?: string };
+      status: number;
+    }>;
     try {
-      response = await fetch(`${API_BASE}/bot${token}/${method}`, {
-        method: "POST",
-        body: form,
-        signal: AbortSignal.timeout(POLL_TIMEOUT_MS * 3),
+      read = await readWithin(POLL_TIMEOUT_MS * 3, async (signal) => {
+        const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
+          method: "POST",
+          body: form,
+          signal,
+        });
+        return {
+          answer: (await response.json()) as {
+            ok?: boolean;
+            result?: TelegramMessage;
+            description?: string;
+          },
+          status: response.status,
+        };
       });
-      answer = (await response.json()) as typeof answer;
     } catch (error) {
       failed(method, error);
-      return { refused: `Telegram did not answer ${method}.` };
+      return { refused: `Telegram could not be reached for ${method}.` };
     }
+    switch (read.kind) {
+      case "answered":
+        break;
+      case "unanswered": {
+        const said = telegramSilent(method, read.after);
+        console.warn(`[telegram] ${said}`);
+        return { unanswered: said };
+      }
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const { answer, status } = read.value;
     if (!(answer.ok && answer.result)) {
-      const refused = `Telegram refused ${method}: ${answer.description ?? `HTTP ${response.status}`}`;
+      const refused = `Telegram refused ${method}: ${answer.description ?? `HTTP ${status}`}`;
       console.warn(`[telegram] ${refused}`);
       return { refused };
     }
@@ -417,7 +490,7 @@ export const createTelegramBridge = ({
   const sendAttachment = async (
     machineId: string,
     path: string
-  ): Promise<{ message: TelegramMessage } | { refused: string }> => {
+  ): Promise<Uploaded> => {
     if (chatId === undefined || !readMedia) {
       return { refused: "no Telegram chat is linked to this hub" };
     }
@@ -445,7 +518,8 @@ export const createTelegramBridge = ({
     };
     const shown = uploadOf(answer.mediaType, answer.bytes.byteLength);
     const sent = shown && (await upload(shown.method, form(shown.field)));
-    if (sent && ("message" in sent || shown.field === "animation")) {
+    // Only a refusal goes again as a document: one not answered may have arrived.
+    if (sent && !("refused" in sent && shown.field !== "animation")) {
       return sent;
     }
     return await upload("sendDocument", form("document"));
@@ -467,6 +541,9 @@ export const createTelegramBridge = ({
         return sent.refused.includes(path)
           ? sent.refused
           : `${path}: ${sent.refused}`;
+      }
+      if ("unanswered" in sent) {
+        return `${path}: ${sent.unanswered}, so it may or may not have arrived`;
       }
       track(sent.message.message_id, { instanceId, machineId, text: path });
       return undefined;
@@ -490,10 +567,23 @@ export const createTelegramBridge = ({
     const text = esc(clip(raw, MESSAGE_LIMIT));
     const sent = await send(text);
     const problems: string[] = [];
-    if (sent) {
-      track(sent.message_id, { instanceId, machineId, text });
-    } else {
-      problems.push("The message: Telegram refused sendMessage.");
+    switch (sent.kind) {
+      case "answered":
+        if (sent.value) {
+          track(sent.value.message_id, { instanceId, machineId, text });
+        } else {
+          problems.push("The message: Telegram refused sendMessage.");
+        }
+        break;
+      case "unanswered":
+        problems.push(
+          `The message: ${telegramSilent("sendMessage", sent.after)}, so it may or may not have arrived.`
+        );
+        break;
+      default: {
+        const unhandled: never = sent;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
     for (const path of attachments) {
       // biome-ignore lint/performance/noAwaitInLoops: each attachment is its own message, in the order they were given
@@ -509,9 +599,9 @@ export const createTelegramBridge = ({
   const send = async (
     text: string,
     buttons?: InlineButton[][]
-  ): Promise<TelegramMessage | undefined> => {
+  ): Promise<Bounded<TelegramMessage | undefined>> => {
     if (chatId === undefined) {
-      return undefined;
+      return { kind: "answered", value: undefined };
     }
     return call<TelegramMessage>("sendMessage", {
       chat_id: chatId,
@@ -582,7 +672,9 @@ export const createTelegramBridge = ({
           { text: "Approve", callback_data: `pair:${request.userCode}:a` },
           { text: "Deny", callback_data: `pair:${request.userCode}:d` },
         ],
-      ]).then((message) => {
+      ]).then((sent) => {
+        // Not answered: no message to edit when the pairing settles (call logged it).
+        const message = sentMessage(sent);
         if (message) {
           pairingMessages.set(request.userCode, {
             messageId: message.message_id,
@@ -633,9 +725,34 @@ export const createTelegramBridge = ({
   };
 
   /**
+   * Whether Telegram answered that it deleted the message. Not answered in
+   * time is not a delete: the caller marks it resolved, and an edit of a
+   * message that did go only fails.
+   */
+  const deletedNow = async (
+    chat: number | string,
+    messageId: number
+  ): Promise<boolean> => {
+    const deleting = await call<boolean>("deleteMessage", {
+      chat_id: chat,
+      message_id: messageId,
+    });
+    switch (deleting.kind) {
+      case "answered":
+        return deleting.value === true;
+      case "unanswered":
+        return false;
+      default: {
+        const unhandled: never = deleting;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  };
+
+  /**
    * A needs-you message whose item cleared: deleted inside Telegram's 48
-   * hours, else (or when the delete is refused) edited to one resolved line.
-   * An ask answered here keeps the verdict `close` gives it.
+   * hours, else (or when the delete is refused or not answered) edited to
+   * one resolved line. An ask answered here keeps the verdict `close` gives it.
    */
   const withdraw = async (collapseId: string): Promise<void> => {
     const messages = shownMessages.get(collapseId) ?? [];
@@ -655,10 +772,7 @@ export const createTelegramBridge = ({
       const deleted =
         Date.now() - message.at < DELETE_WINDOW_MS &&
         // biome-ignore lint/performance/noAwaitInLoops: one collapse id is rarely more than one message, and each is settled before the next
-        (await call<boolean>("deleteMessage", {
-          chat_id: chatId,
-          message_id: message.messageId,
-        })) === true;
+        (await deletedNow(chatId, message.messageId));
       if (!deleted) {
         await call("editMessageText", {
           chat_id: chatId,
@@ -710,7 +824,9 @@ export const createTelegramBridge = ({
     const request = envelope.payload as PermissionRequest;
     settledHere.add(requestId);
     try {
-      await answerPermission(pending, request.instanceId, requestId, result);
+      await answerPermission(pending, request.instanceId, requestId, result, {
+        via: "telegram",
+      });
       return true;
     } catch (error) {
       settledHere.delete(requestId);
@@ -826,7 +942,8 @@ export const createTelegramBridge = ({
       landedAt: Date.now(),
       send: () =>
         detach(
-          send(text, buttons).then((message) => {
+          send(text, buttons).then((sent) => {
+            const message = sentMessage(sent);
             if (!message) {
               return;
             }
@@ -857,7 +974,8 @@ export const createTelegramBridge = ({
       `${header(instanceId, "💥")} — <code>${esc(clip(message, 900))}</code>`,
     ]);
     detach(
-      send(text).then((sent) => {
+      send(text).then((sending) => {
+        const sent = sentMessage(sending);
         if (sent) {
           track(sent.message_id, {
             instanceId,
@@ -991,6 +1109,10 @@ export const createTelegramBridge = ({
       await send(esc(carried.reason));
       return;
     }
+    if (carried?.kind === "unanswered") {
+      await send(esc(carried.reason));
+      return;
+    }
     // What the turn says, which media speaks for: a transcript, or the caption
     // that came with the picture.
     const text = carried ? carried.text : (typed ?? "");
@@ -1041,7 +1163,7 @@ export const createTelegramBridge = ({
       return;
     }
     const note = `${heard}→ sent${open ? " — answer that ask with text or a button" : ""}`;
-    const sent = await send(note);
+    const sent = sentMessage(await send(note));
     if (sent) {
       track(sent.message_id, {
         instanceId: entry.instanceId,
@@ -1087,10 +1209,23 @@ export const createTelegramBridge = ({
    */
   const pollOnce = async (): Promise<string | undefined> => {
     try {
-      const updates = await call<TelegramUpdate[]>("getUpdates", {
+      const polled = await call<TelegramUpdate[]>("getUpdates", {
         offset,
         timeout: POLL_SECONDS,
       });
+      let updates: TelegramUpdate[] | undefined;
+      switch (polled.kind) {
+        case "answered":
+          updates = polled.value;
+          break;
+        case "unanswered":
+          // Logged by `call`; the round goes again from the same offset.
+          return "";
+        default: {
+          const unhandled: never = polled;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
       if (!updates) {
         return "";
       }

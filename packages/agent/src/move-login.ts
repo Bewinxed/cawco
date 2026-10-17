@@ -8,6 +8,7 @@ import {
   type HomeLoginMoved,
   sameIdentity,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -23,6 +24,7 @@ import {
   keychainUser,
   kindOf,
   linkUserLayer,
+  noAuthAnswer,
   removeAccountDir,
 } from "./accounts";
 import { inFleetQueue, writeAtomic } from "./fleet";
@@ -71,12 +73,49 @@ const log = (line: string): void => {
 };
 
 /**
+ * A dir's sign-in by its own `claude auth status`. Throws with the sentence
+ * when it was not read (no answer in time, or an answer with no sign-in in
+ * it): that is not "not signed in", and the move refuses on it.
+ */
+const signinIn = async (
+  env: Record<string, string | undefined>,
+  dir: string
+): Promise<{
+  loggedIn: boolean;
+  authMethod?: string;
+  identity?: AccountIdentity;
+}> => {
+  const read = await authStatusIn(env, dir);
+  switch (read.kind) {
+    case "unanswered":
+      throw new Error(noAuthAnswer(dir, read));
+    case "answered": {
+      const status = read.value;
+      switch (status.kind) {
+        case "unread":
+          throw new Error(status.why);
+        case "signin":
+          return status;
+        default: {
+          const unhandled: never = status;
+          throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    }
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/**
  * Who the machine's own `~/.claude` is signed in as, by its `claude auth
- * status`. Throws when Claude Code gives no answer (accounts.ts
- * `AuthStatusUnanswered`): no answer is not "not signed in".
+ * status`. Throws when its sign-in was not read ({@link signinIn}): no
+ * answer is not "not signed in".
  */
 export const readHomeLogin = async (): Promise<HomeLogin> => {
-  const status = await authStatusIn(bareEnv(), claudeHome());
+  const status = await signinIn(bareEnv(), claudeHome());
   const kind = kindOf(status.authMethod);
   return {
     loggedIn: status.loggedIn,
@@ -100,26 +139,47 @@ interface Store {
   write: (account: string, secret: string) => Promise<void>;
 }
 
-/** Runs `security`, its output read and never logged. */
+/** How long one `security` run may take to answer. */
+const SECURITY_MS = 20_000;
+
+/**
+ * Runs `security`, its output read and never logged. Throws when it gave no
+ * answer within {@link SECURITY_MS}: the keychain's word was not read, and
+ * the move refuses on it.
+ */
 const security = async (
   args: string[],
   input?: string
 ): Promise<{ code: number; stdout: string }> => {
-  const child = Bun.spawn(["security", ...args], {
-    stdin: input === undefined ? "ignore" : "pipe",
-    stdout: "pipe",
-    stderr: "ignore",
-    timeout: 20_000,
+  const read = await readWithin(SECURITY_MS, async (signal) => {
+    const child = Bun.spawn(["security", ...args], {
+      stdin: input === undefined ? "ignore" : "pipe",
+      stdout: "pipe",
+      stderr: "ignore",
+      signal,
+    });
+    if (input !== undefined && child.stdin) {
+      child.stdin.write(input);
+      await child.stdin.end();
+    }
+    const [stdout, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    return { code, stdout };
   });
-  if (input !== undefined && child.stdin) {
-    child.stdin.write(input);
-    await child.stdin.end();
+  switch (read.kind) {
+    case "unanswered":
+      throw new Error(
+        `The keychain's \`security ${args[0]}\` did not answer within ${SECURITY_MS / 1000} s; nothing was read from it.`
+      );
+    case "answered":
+      return read.value;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
-  const [stdout, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    child.exited,
-  ]);
-  return { code, stdout };
 };
 
 const findItem = async (service: string): Promise<string | undefined> => {
@@ -261,7 +321,7 @@ const putOauthAccount = async (
 const accountAnswersAs = async (
   account: string
 ): Promise<AccountIdentity | undefined> => {
-  const status = await authStatusIn(
+  const status = await signinIn(
     { ...bareEnv(), ...accountEnv(account) },
     accountConfigDir(account)
   );

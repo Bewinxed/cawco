@@ -624,24 +624,23 @@ final class OrderListView: UIStackView {
 // MARK: At the limit
 
 /// What a running session does when its account runs out and another is
-/// free (AtLimitBlock.svelte): wait for a reset that is close, move a small
-/// conversation whole, or continue a large one from a summary written while
-/// the cache is warm. The figure under the numbers plays that policy,
-/// rebuilt as they change. Off, the numbers fold away with the figure and
-/// the terms.
+/// free (AtLimitBlock.svelte): wait for a reset that is close, or move
+/// whole, a large conversation then compacted there by Claude Code's own
+/// /compact after it files its open items. The figure under the numbers
+/// plays that policy, rebuilt as they change. Off, the numbers fold away
+/// with the figure and the terms.
 final class AtLimitView: UIStackView, UITextFieldDelegate {
     var onChange: ((FleetAccounts.AtLimit) -> Void)?
     private(set) var value: FleetAccounts.AtLimit
     private let move = UISwitch()
     private let rows = UIStackView()
     private let wait = KitField()
-    private let under = KitField()
-    private let at = KitField()
+    private let over = KitField()
     private let lanes: [FigureLane]
     private let figure: StrategyFigureView
 
     private static func policy(_ value: FleetAccounts.AtLimit) -> FigurePolicy {
-        FigurePolicy(wait: value.waitMinutes, under: value.moveWholeUnderK, at: value.prepareAtPct)
+        FigurePolicy(wait: value.waitMinutes, over: value.moveWholeUnderK)
     }
 
     /// `accounts`: the one that runs out, then the one that is free.
@@ -681,16 +680,8 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         rows.axis = .vertical
         let words = Words.Accounts.AtLimit.self
         rows.addArrangedSubview(line(words.wait, field: wait, value: value.waitMinutes, unit: words.minutes, id: "wait"))
-        rows.addArrangedSubview(line(words.under, field: under, value: value.moveWholeUnderK, unit: words.kTokens,
-                                     aside: words.rereads, id: "under"))
-        let otherwise = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
-        otherwise.text = words.otherwise
-        let pad = UIStackView(arrangedSubviews: [otherwise])
-        pad.isLayoutMarginsRelativeArrangement = true
-        pad.directionalLayoutMargins = .init(top: Space.space2, leading: 0, bottom: Space.space2, trailing: 0)
-        rows.addArrangedSubview(pad)
-        rows.addArrangedSubview(line(words.early, field: at, value: value.prepareAtPct, unit: words.percent,
-                                     aside: words.warm, id: "at"))
+        rows.addArrangedSubview(line(words.over, field: over, value: value.moveWholeUnderK, unit: words.kTokens,
+                                     aside: words.compacts, id: "over"))
         let stage = UIStackView(arrangedSubviews: [figure])
         stage.isLayoutMarginsRelativeArrangement = true
         stage.directionalLayoutMargins = .init(top: Space.space3, leading: 0, bottom: Space.space3, trailing: 0)
@@ -745,23 +736,21 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         return stack
     }
 
-    /// A field's number: whole, at least 0, at most `max`; empty reads as 0.
-    private static func whole(_ text: String?, max: Int = .max) -> Int {
-        min(max, Swift.max(0, Int((Double(text ?? "") ?? 0).rounded())))
+    /// A field's number: whole, at least 0; empty reads as 0.
+    private static func whole(_ text: String?) -> Int {
+        max(0, Int((Double(text ?? "") ?? 0).rounded()))
     }
 
     private func read() {
         value.waitMinutes = Self.whole(wait.text)
-        value.moveWholeUnderK = Self.whole(under.text)
-        value.prepareAtPct = Self.whole(at.text, max: 100)
+        value.moveWholeUnderK = Self.whole(over.text)
         figure.update(lanes: lanes, policy: Self.policy(value))
         onChange?(value)
     }
 
     func textFieldDidEndEditing(_ field: UITextField) {
         // The field says the number it holds once it is left.
-        let shown = field === wait ? value.waitMinutes : field === under ? value.moveWholeUnderK : value.prepareAtPct
-        field.text = String(shown)
+        field.text = String(field === wait ? value.waitMinutes : value.moveWholeUnderK)
     }
 
     #if DEBUG

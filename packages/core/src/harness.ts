@@ -167,11 +167,31 @@ export const SESSION_DIR_READ = "session_dir";
 export const ACCOUNT_MOVE = "account_move";
 
 /**
- * The `system` origin name of the message a session goes on from in a fresh
- * conversation of its own: the summary of the one before, the artifact index
- * and its last turns. Its row folds under the `continued` line before it.
+ * The `system` origin name of the message a session went on from in a fresh
+ * conversation of its own, in a hub from before it compacted natively: the
+ * summary of the one before, the artifact index and its last turns. Its row,
+ * stored history, folds under the `continued` line before it.
  */
 export const CONTINUATION_ORIGIN = "continuation";
+
+/**
+ * The `system` origin name of the hub's own steps before a conversation is
+ * made small or carried on (hub open-items.ts): the turn that files a
+ * session's open items in its records, before the hub compacts it after a
+ * move at its account's limit or before a person's Continue opens a new
+ * session from it; and the `/compact` that follows such a move. A person's
+ * Continue asked for it, so it may wake a session that was stopped; it
+ * reopens no finished work.
+ */
+export const COMPACTION_ORIGIN = "compaction";
+
+/**
+ * The `system` origin name of the hub's word to a work item's session about
+ * its open item (hub work-items.ts): a quiet turn's "still open", the sleep
+ * sweep's wake, a declared wait's end. One its account's limit refused is
+ * answered by the provider's `atLimit.delegateWork` (core `AtLimit`).
+ */
+export const WORK_ITEM_ORIGIN = "work-item";
 
 /**
  * The `system` origin name of the hub's word on the person's acts on one of
@@ -1946,8 +1966,9 @@ export interface WorkspaceCommit {
 }
 
 /**
- * A gate workspace (the landing gate's iOS build on a Mac) at another
- * machine's commit: inside its boundary, it
+ * A workspace at another workspace's commit: a gate workspace (the landing
+ * gate's iOS build on a Mac), or a new one cut `from` another, whose hub
+ * then sets its branch there. Inside its boundary, it
  * fetches `origin/<base>`, then the bundle, and checks out `head` detached,
  * its tracked files as the commit has them and every untracked file gone
  * (ignored ones, a dependency install or a build, stay). Args

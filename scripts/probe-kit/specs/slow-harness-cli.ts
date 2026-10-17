@@ -35,6 +35,7 @@
  */
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { unreportedHarnessRefusal } from "../../../packages/hub/src/placement";
 import { ACCOUNT, type Fleet, MACHINE } from "../../scratch-fleet";
 import type { Spec } from "../kit";
@@ -129,8 +130,11 @@ const drive = (fleet: Fleet) => {
       ACCOUNT,
       MACHINE
     )[0]?.state;
-  /** A Claude start from the dashboard: the hub's error for it, or "" when none came in 10 s. */
-  const startClaude = async (): Promise<{ id: string; said: string }> => {
+  /** A Claude start from the dashboard: the hub's error for it, or unanswered when none came in 10 s. */
+  const startClaude = async (): Promise<{
+    id: string;
+    said: Bounded<string>;
+  }> => {
     const id = crypto.randomUUID();
     const socket = new WebSocket(
       `${fleet.base.replace("http", "ws")}/ws/dashboard`
@@ -164,14 +168,39 @@ const drive = (fleet: Fleet) => {
         },
       })
     );
-    const said = await Promise.race([
-      refused,
-      Bun.sleep(10_000).then(() => ""),
-    ]);
+    const said = await readWithin(10_000, () => refused);
     socket.close();
     return { id, said };
   };
   return { row, claudeReport, onlineAt, signin, startClaude };
+};
+
+/** Whether the hub refused a start in `expected`'s words; a start it did not answer was not. */
+const refusedWith = (said: Bounded<string>, expected: string): boolean => {
+  switch (said.kind) {
+    case "answered":
+      return said.value === expected;
+    case "unanswered":
+      return false;
+    default: {
+      const unhandled: never = said;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/** What the hub said to a start, or that it said nothing. */
+const heard = (said: Bounded<string>): string => {
+  switch (said.kind) {
+    case "answered":
+      return said.value;
+    case "unanswered":
+      return `(nothing within ${said.after} ms)`;
+    default: {
+      const unhandled: never = said;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 const spec: Spec = {
@@ -237,8 +266,8 @@ const spec: Spec = {
     const before = await startClaude();
     check(
       "(b) a Claude start before Claude's report is refused in the hub's sentence",
-      before.said === expected,
-      `said: ${before.said || "(nothing in 10 s)"}; expected: ${expected}`
+      refusedWith(before.said, expected),
+      `said: ${heard(before.said)}; expected: ${expected}`
     );
     const held = (await fleet.heldProcs()).filter(({ procId }) =>
       procId.includes(before.id)
@@ -298,8 +327,8 @@ const timeouts = async ({
       "(c) the hub files no Claude report from it, keeps no sign-in for the account, and still refuses a Claude start",
       claudeReport(await row()) === undefined &&
         signin() === undefined &&
-        afterCut.said === expected,
-      `report: ${JSON.stringify(claudeReport(await row()) ?? null)}; sign-in: ${signin() ?? "none"}; said: ${afterCut.said || "(nothing in 10 s)"}`
+        refusedWith(afterCut.said, expected),
+      `report: ${JSON.stringify(claudeReport(await row()) ?? null)}; sign-in: ${signin() ?? "none"}; said: ${heard(afterCut.said)}`
     );
     const caps = await poll(
       async () => (await row())?.machineCapabilities,
@@ -326,11 +355,27 @@ const timeouts = async ({
       `after ${Date.now() - quick} ms: report ${JSON.stringify(claudeReport(answered) ?? null)}; sign-in: ${signin() ?? "none"}; machine: ${answered?.auth ?? "-"}`
     );
     const after = await startClaude();
-    check(
-      "(d) a Claude start is no longer refused for want of a report",
-      after.said !== expected,
-      `said: ${after.said || "(no refusal in 10 s)"}`
-    );
+    switch (after.said.kind) {
+      case "answered":
+        check(
+          "(d) a Claude start is no longer refused for want of a report",
+          after.said.value !== expected,
+          `said: ${after.said.value}`
+        );
+        break;
+      case "unanswered":
+        // No frame is not a yes: the start counts only once the hub holds its row.
+        check(
+          "(d) a Claude start is no longer refused for want of a report",
+          fleet.instance(after.id) !== undefined,
+          `no frame within ${after.said.after} ms; the hub's row: ${JSON.stringify(fleet.instance(after.id) ?? null)}`
+        );
+        break;
+      default: {
+        const unhandled: never = after.said;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
 
     // (e) Slow again: the next read runs out of time.
     await writeFile(flag, "");

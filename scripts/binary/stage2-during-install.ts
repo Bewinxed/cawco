@@ -12,22 +12,42 @@
  * `done sent=<n> accepted=<n> sawInstalling=<bool> ...`. It ends by itself once the machine has left
  * `installing` (three answers in a row), or after 900 s.
  */
+import {
+  type Bounded,
+  Gone,
+  readWithin,
+} from "../../packages/core/src/bounded";
+
 const [, , hub, machineId, prefix] = Bun.argv;
 const POLL_MS = 20;
 const ANSWER_MS = 150;
 const DEADLINE = Date.now() + 900_000;
 
-async function phase(): Promise<string | undefined> {
-  try {
-    const response = await fetch(`${hub}/api/binary-updates/machines`, {
-      signal: AbortSignal.timeout(1000),
-    });
-    const body = (await response.json()) as {
-      machines?: Record<string, { phase?: string }>;
-    };
+/** The machine's update phase as the hub says it; a hub down mid-restart is unanswered "dead". */
+function phase(): Promise<Bounded<string | undefined>> {
+  return readWithin(1000, async (signal) => {
+    const body = (await fetch(`${hub}/api/binary-updates/machines`, {
+      signal,
+    })
+      .then((response) => response.json())
+      .catch((error: unknown) => {
+        throw new Gone(`the hub: ${error}`);
+      })) as { machines?: Record<string, { phase?: string }> };
     return body.machines?.[machineId]?.phase;
-  } catch {
-    return undefined;
+  });
+}
+
+/** What a phase read said, in words: the phase, or that the hub did not answer. */
+function said(read: Bounded<string | undefined>): string {
+  switch (read.kind) {
+    case "answered":
+      return read.value ?? "no phase";
+    case "unanswered":
+      return `no answer from the hub within ${read.after} ms (${read.reason})`;
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -119,27 +139,40 @@ let lastSeen = 0;
 while (Date.now() < DEADLINE) {
   // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must follow the previous answer
   const before = await phase();
-  if (before === "installing") {
-    sawInstalling = true;
-    left = 0;
-    firstSeen ||= Date.now();
-    lastSeen = Date.now();
-    sent += 1;
-    const id = `${prefix}-${sent}`;
-    const { answer, refused } = await fire(id);
-    const after = await phase();
-    console.log(
-      `sent ${id} before=${before} after=${after ?? "no answer from the hub"} answer=${answer}`
-    );
-    if (after === "installing" && !refused) {
-      accepted += 1;
-      console.log(`accepted ${id}`);
-    }
-  } else if (sawInstalling && before !== undefined) {
-    left += 1;
-    if (left >= 3) {
+  let gone = false;
+  switch (before.kind) {
+    case "unanswered":
+      // Not an answer: the machine has neither stayed in nor left `installing`.
       break;
+    case "answered":
+      if (before.value === "installing") {
+        sawInstalling = true;
+        left = 0;
+        firstSeen ||= Date.now();
+        lastSeen = Date.now();
+        sent += 1;
+        const id = `${prefix}-${sent}`;
+        const { answer, refused } = await fire(id);
+        const after = said(await phase());
+        console.log(
+          `sent ${id} before=${before.value} after=${after} answer=${answer}`
+        );
+        if (after === "installing" && !refused) {
+          accepted += 1;
+          console.log(`accepted ${id}`);
+        }
+      } else if (sawInstalling && before.value !== undefined) {
+        left += 1;
+        gone = left >= 3;
+      }
+      break;
+    default: {
+      const unhandled: never = before;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
+  }
+  if (gone) {
+    break;
   }
   await Bun.sleep(POLL_MS);
 }
@@ -147,5 +180,3 @@ console.log(
   `done sent=${sent} accepted=${accepted} sawInstalling=${sawInstalling} installingSeenForMs=${sawInstalling ? lastSeen - firstSeen : 0}`
 );
 dashboard?.close();
-
-export {};

@@ -17,7 +17,7 @@ import type { KitFleet } from "../kit";
 import { pendingAsks } from "./asks";
 import { caw, cawSays, ZERO } from "./j1-check-in";
 import { say } from "./mock";
-import { type Data, eventually, type Journey, type Leg, shows } from "./suite";
+import { eventually, type Journey, type Leg, shows } from "./suite";
 
 const CAW = "You are Caw";
 const ASKED = "JOURNEY-CAW";
@@ -26,7 +26,6 @@ const TONE = "Which tone for the replies?";
 const PLAIN = "Plain";
 const WARM = "Warm";
 const TWO_NEED = /^Needs you, 2(\D|$)/;
-const OPEN_ROW = /^Open /;
 const QUESTION = /^Question from Caw/;
 const FIRST_OF_TWO = /1 of 2/;
 const SECOND_OF_TWO = /2 of 2/;
@@ -50,20 +49,60 @@ const question = (text: string) => ({
 /** How Claude Code hands an answered question back (its tool result). */
 const answered = (text: string, label: string) => `"${text}"="${label}"`;
 
-interface Seeded {
-  projectId: string;
-}
-
-async function seed(fleet: KitFleet, data: Data): Promise<Seeded> {
-  const dir = join(fleet.sandbox, `${data}-launch`);
+/**
+ * The leg's own project, with Caw on: his session, his threads and his asks
+ * are this leg's alone, so a leg's result depends on that leg only. One
+ * project for every leg of a data set gave each leg the turn and the asks a
+ * failed leg before it left running.
+ */
+async function project(fleet: KitFleet, leg: Leg): Promise<string> {
+  const dir = join(fleet.sandbox, `${leg.id}-launch`);
   await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir} && git -C ${dir} -c user.name=Owner -c user.email=o@probe.test commit -q --allow-empty -m First`.quiet();
   const { id } = await fleet.api<{ id: string }>("/api/projects", {
-    name: data === "stretched" ? "Launch — Launch — Launch" : "Launch",
+    name: leg.data === "stretched" ? "Launch — Launch — Launch" : "Launch",
     machineId: MACHINE,
     cwd: dir,
     caw: true,
   });
-  return { projectId: id };
+  made.push(id);
+  return id;
+}
+
+/** The legs' projects whose sessions {@link clean} has yet to stop. */
+const made: string[] = [];
+
+/** Every session the project runs, Caw's among them, stopped as Forget's tray stops them. */
+async function stopAll(fleet: KitFleet, projectId: string): Promise<void> {
+  const running = () =>
+    fleet
+      .api<{ sessions: { id: string }[] }>(`/api/projects/${projectId}/stop`)
+      .then((read) => read.sessions);
+  const sessions = await running();
+  if (sessions.length > 0) {
+    await fleet.api(`/api/projects/${projectId}/stop`, {
+      instanceIds: sessions.map((one) => one.id),
+    });
+  }
+  await eventually(
+    "the leg's Caw stopped",
+    running,
+    (left) => left.length === 0,
+    60_000
+  );
+}
+
+/**
+ * After every leg, however it ended: its Caw stopped, so no turn of his runs
+ * on and no ask of his stands in the next leg's count (an ask leaves with
+ * the process that asked it).
+ */
+async function clean(fleet: KitFleet): Promise<void> {
+  await Promise.all(made.splice(0).map((id) => stopAll(fleet, id)));
+  await eventually(
+    "the hub holds no ask",
+    () => pendingAsks(fleet),
+    (asks) => asks.length === 0
+  );
 }
 
 /** The card for the ask the thread's composer stands in, by its place among two. */
@@ -76,13 +115,15 @@ const cardAt = (page: Page, place: RegExp) =>
 
 async function walk(leg: Leg): Promise<void> {
   const { fleet, page, base } = leg;
-  const { projectId } = leg.seeded as Seeded;
+  const projectId = await project(fleet, leg);
   const token = `${ASKED} ${leg.id}`;
-  const opened = await fleet.api<{ thread: { id: string } }>(
+  const opened = await fleet.api<{ thread: { id: string; title: string } }>(
     `/api/projects/${projectId}/threads`,
     { body: `${token}: ${leg.title("draft the launch post")}` }
   );
   const thread = opened.thread.id;
+  /** His asks' row in what needs you, named for the thread they stand in. */
+  const row = `Open ${opened.thread.title}`;
   const asksHere = async () =>
     (await pendingAsks(fleet)).filter((one) => one.threadId === thread);
   await eventually(
@@ -107,7 +148,11 @@ async function walk(leg: Leg): Promise<void> {
     "Open what needs you, then Caw's question",
     async () => {
       await caw(page).click();
-      await page.getByLabel(OPEN_ROW).filter({ visible: true }).first().click();
+      await page
+        .getByLabel(row, { exact: true })
+        .filter({ visible: true })
+        .first()
+        .click();
     },
     async () => {
       await eventually(
@@ -182,10 +227,13 @@ const journey: Journey = {
     if (!seen.tools) {
       return say("Launch post");
     }
+    // The person's words reach Caw as a turn of their own, or, while a turn
+    // of his is still running (an earlier leg's), read mid-turn after a
+    // tool's result (MID_TURN): he asks on either.
     if (
       seen.all.includes(CAW) &&
       seen.last.includes(ASKED) &&
-      !seen.afterTool
+      (!seen.afterTool || seen.lastMidTurn)
     ) {
       return {
         everyMs: 20,
@@ -198,7 +246,7 @@ const journey: Journey = {
     }
     return say("Plain voice, warm replies: drafting it now.");
   },
-  seed,
+  clean,
   leg: walk,
 };
 

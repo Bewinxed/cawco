@@ -51,11 +51,11 @@ struct FigureLane: Equatable {
     let hue: String
 }
 
-/// The at-limit numbers the limit board is driven by.
+/// The at-limit numbers the limit board is driven by: wait for a reset this
+/// many minutes away, compact after the move at `over` k tokens or more.
 struct FigurePolicy: Equatable {
     var wait: Int
-    var under: Int
-    var at: Int
+    var over: Int
 }
 
 // MARK: Timeline
@@ -686,7 +686,7 @@ extension Figure {
         case .fill: figure = fill(stage, lanes)
         case .spread: figure = spread(stage, lanes)
         case .soonest: figure = soonest(stage, lanes)
-        case .limit: figure = limit(stage, lanes, policy ?? FigurePolicy(wait: 15, under: 200, at: 90))
+        case .limit: figure = limit(stage, lanes, policy ?? FigurePolicy(wait: 15, over: 200))
         }
         let height = figure.finish()
         figure.timeline.rest()
@@ -829,16 +829,12 @@ extension Figure {
         let (work, next) = (f.lanes[0], f.lanes[1])
         let runsInk = AccountInk.color(runsOut.hue)
         let freeInk = AccountInk.color(free.hue)
-        let tc = min(1.5, max(0.1, ((Double(min(policy.at, 100)) / 100 - 0.85) / 0.15) * 1.6))
         work.fillTrack.to(0, [1], 1.6, .linear)
         work.f = 1
         f.pulse(0, 1.6)
-        f.cap(tc, 1.95, Words.Accounts.Figure.summaryEarly)
         let scenes: [(t0: Double, t1: Double, w: Int, tok: Int)] = [(2.0, 3.4, 12, 180), (3.4, 5.2, 120, 180), (5.2, 7.0, 120, 412)]
         let s0 = f.slot(0, 0)
-        let s1 = f.slot(0, 1)
         let p0 = f.slot(1, 0)
-        let p1 = f.slot(1, 1)
         let dy = p0.y - s0.y
         var clocks: [(Double, Double, (Double) -> String)] = [(0, 2.0, { _ in resets(12) })]
         /// A layer at `x, y` (its top left, as `translate`), scaled about its centre.
@@ -864,44 +860,23 @@ extension Figure {
             let isFirst = qi == 0
             let isLast = qi == scenes.count - 1
             let capEnd = isLast ? 99 : q.t1 - 0.1
-            let branch = q.w <= policy.wait ? "wait" : q.tok <= policy.under ? "move" : "summary"
+            let branch = q.w <= policy.wait ? "wait" : q.tok >= policy.over ? "compact" : "move"
             // Each branch's pieces show for its window; the last branch is the still frame, so it stays.
             let wrap = UIView(frame: f.fades.bounds)
             wrap.isUserInteractionEnabled = false
             f.fades.addSubview(wrap)
             let (ch, chBody) = f.chipLayer(runsInk, in: wrap.layer)
             let tg = tag(Words.Accounts.Figure.tokens(k: q.tok), x: s0.x - 8, y: s0.y + 8, in: wrap)
-            let doc = CALayer()
-            doc.bounds = CGRect(x: 0, y: 0, width: 10, height: 13)
-            doc.cornerRadius = Radius.radiusHair
-            doc.backgroundColor = f.rc(Palette.warning9)
-            doc.shadowColor = f.rc(Palette.warning9)
-            doc.shadowOpacity = 0.55
-            doc.shadowRadius = 4
-            doc.shadowOffset = CGSize(width: 0, height: 1)
-            for line in [3.0, 5.5] {
-                let rule = CALayer()
-                rule.frame = CGRect(x: 2, y: line, width: 6, height: 1)
-                rule.backgroundColor = f.rc(Palette.surfaceRecess, 0.55)
-                doc.addSublayer(rule)
-            }
-            wrap.layer.addSublayer(doc)
             let shown = f.timeline.track(wrap.layer, [isFirst ? 1 : 0]) { [("opacity", Float($0[0]))] }
             if !isFirst { shown.to(q.t0 - 0.05, [1], 0.25, .cssEaseOut) }
             if !isLast { shown.to(q.t1 - 0.2, [0], 0.2, .cssEaseOut) }
             // The chip's layer is its ring: its top left sits 1.5 out from the chip's.
             let chipAt = f.timeline.track(ch, [s0.x - 6.5, s0.y - 6.5, 1], apply: place(ch))
-            let docAt = f.timeline.track(doc, [s1.x - 5, s1.y - 6, isFirst ? 0.4 : 1], apply: place(doc))
-            let docShown = f.timeline.track(doc, [isFirst ? 0 : 1]) { [("opacity", Float($0[0]))] }
-            if isFirst {
-                docShown.to(tc, [1], 0.3, .cssEaseOut)
-                docAt.to(tc, [s1.x - 5, s1.y - 6, 1], 0.5, .figure)
-            } else {
+            if !isFirst {
                 work.fillTrack.to(q.t0 - 0.05, [1], 0.25, .figure)
                 next.fillTrack.to(q.t0 - 0.05, [0.2], 0.25, .figure)
             }
-            switch branch {
-            case "wait":
+            if branch == "wait" {
                 f.cap(q.t0 + 0.1, capEnd, Words.Accounts.Figure.waits(minutes: q.w))
                 clocks.append((q.t0, q.t1, { t in
                     t < q.t0 + 0.1 ? Words.Accounts.Figure.resets(time: Words.Accounts.Figure.time(hours: 0, minutes: q.w))
@@ -909,32 +884,23 @@ extension Figure {
                 }))
                 work.fillTrack.to(q.t0 + 0.9, [0.06], 0.4, .easeOut)
                 chipAt.to(q.t0 + 1.0, [s0.x - 6.5, s0.y - 6.5, 1.25], 0.15, .figure).to(q.t0 + 1.15, [s0.x - 6.5, s0.y - 6.5, 1], 0.3, .figure)
-                docShown.to(q.t0 + 1.0, [0], 0.3, .cssEaseOut)
-            case "move":
-                f.cap(q.t0 + 0.1, capEnd, Words.Accounts.Figure.movesWhole)
-                clocks.append((q.t0, q.t1, { _ in resets(Double(q.w)) }))
-                chipAt.to(q.t0 + 0.2, [s0.x - 6.5, s0.y - 6.5 + dy, 1], 0.7, .figure)
-                let from = UIColor(cgColor: f.rc(runsInk))
-                let to = UIColor(cgColor: f.rc(freeInk))
-                f.timeline.track(chBody, [0]) { v in [("backgroundColor", Figure.mix(from, to, v[0]))] }.to(q.t0 + 0.5, [1], 0.3, .cssEaseOut)
-                docAt.to(q.t0 + 0.26, [s1.x - 5, s1.y - 6 + dy, 1], 0.7, .figure)
-                let moved = tag(Words.Accounts.Figure.reread(k: q.tok), x: s0.x - 8, y: s0.y + 8 + dy, in: wrap)
-                f.timeline.track(tg.layer, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.15, [0], 0.2, .cssEaseOut)
-                f.timeline.track(moved.layer, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.8, [1], 0.3, .cssEaseOut)
-                next.fillTrack.to(q.t0 + 0.85, [min(1, 0.2 + Double(q.tok) * 0.0016)], 0.5, .figure)
-            default:
-                f.cap(q.t0 + 0.1, capEnd, Words.Accounts.Figure.continues)
-                clocks.append((q.t0, q.t1, { _ in resets(Double(q.w)) }))
-                docAt.to(q.t0 + 0.2, [p0.x - 5, p0.y - 6, 1], 0.7, .figure)
-                let (nc, _) = f.chipLayer(freeInk, in: wrap.layer)
-                f.timeline.track(nc, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.8, [1], 0.25, .cssEaseOut)
-                f.timeline.track(nc, [p0.x - 6.5, p0.y - 6.5, 0.4], apply: place(nc)).to(q.t0 + 0.8, [p1.x - 6.5, p1.y - 6.5, 1], 0.6, .figure)
-                f.timeline.track(ch, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.8, [0.35], 0.3, .cssEaseOut)
-                let stays = tag(Words.Accounts.Figure.staysOn(k: q.tok, name: runsOut.name), x: s0.x - 8, y: s0.y + 8, in: wrap)
-                f.timeline.track(tg.layer, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.75, [0], 0.2, .cssEaseOut)
-                f.timeline.track(stays.layer, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.9, [1], 0.3, .cssEaseOut)
-                next.fillTrack.to(q.t0 + 0.95, [0.28], 0.5, .figure)
+                continue
             }
+            // Moved whole: the chip crosses to the free account, which re-reads
+            // it; a large one is then compacted there, the chip shrinking.
+            let compact = branch == "compact"
+            f.cap(q.t0 + 0.1, capEnd, compact ? Words.Accounts.Figure.compacts : Words.Accounts.Figure.movesWhole)
+            clocks.append((q.t0, q.t1, { _ in resets(Double(q.w)) }))
+            let moved = chipAt.to(q.t0 + 0.2, [s0.x - 6.5, s0.y - 6.5 + dy, 1], 0.7, .figure)
+            if compact { moved.to(q.t0 + 1.0, [s0.x - 6.5, s0.y - 6.5 + dy, 0.6], 0.4, .figure) }
+            let from = UIColor(cgColor: f.rc(runsInk))
+            let to = UIColor(cgColor: f.rc(freeInk))
+            f.timeline.track(chBody, [0]) { v in [("backgroundColor", Figure.mix(from, to, v[0]))] }.to(q.t0 + 0.5, [1], 0.3, .cssEaseOut)
+            let said = tag(compact ? Words.Accounts.Figure.compacted(k: q.tok) : Words.Accounts.Figure.reread(k: q.tok),
+                           x: s0.x - 8, y: s0.y + 8 + dy, in: wrap)
+            f.timeline.track(tg.layer, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.15, [0], 0.2, .cssEaseOut)
+            f.timeline.track(said.layer, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + (compact ? 1.1 : 0.8), [1], 0.3, .cssEaseOut)
+            next.fillTrack.to(q.t0 + 0.85, [min(1, 0.2 + Double(q.tok) * 0.0016)], 0.5, .figure)
         }
         work.f0 = 0.85
         next.f0 = 0.2

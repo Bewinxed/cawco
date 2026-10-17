@@ -57,7 +57,7 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CAWCO_ENV } from "@cawco/core";
+import { CAWCO_ENV, CODE_MODE_TOOL } from "@cawco/core";
 import { WORKSPACE_POLICY_NAME, workspacesDir } from "@cawco/core/paths";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -98,9 +98,6 @@ export const PLAN_AGENT_OFF = "opencode-plan-agent-off";
 
 /** The dir in a workspace's state dir where the plugin records each session's saved outputs, a file per session. */
 export const SAVED_OUTPUTS = "opencode-saved-outputs";
-
-/** OpenCode's Code Mode tool: MCP tools are reached through the programs it runs. */
-export const CODE_MODE_TOOL = "execute";
 
 /** The plugin's own tools, which take no session credential: they ask the hub as the session's step. */
 const WORKFLOW_TOOLS = [

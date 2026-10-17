@@ -34,6 +34,7 @@ import {
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   isSecretFileName,
   workspaceCacheDir,
@@ -100,28 +101,40 @@ export const gitUntil =
     if (remaining <= 0) {
       throw new Error(late);
     }
-    const child = Bun.spawn(safeGitArgv(args), {
-      cwd: root,
-      env: { ...env, ...SAFE_GIT_ENV },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: remaining,
-      killSignal: "SIGKILL",
+    const ran = await readWithin(remaining, async (signal) => {
+      const child = Bun.spawn(safeGitArgv(args), {
+        cwd: root,
+        env: { ...env, ...SAFE_GIT_ENV },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+        killSignal: "SIGKILL",
+      });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (code !== 0) {
+        throw new Error(
+          child.signalCode
+            ? `git ${args[0]} was ended by ${child.signalCode}`
+            : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
+        );
+      }
+      return stdout.trim();
     });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) {
-      throw new Error(
-        child.signalCode === "SIGKILL"
-          ? late
-          : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
-      );
+    switch (ran.kind) {
+      case "answered":
+        return ran.value;
+      case "unanswered":
+        throw new Error(late);
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
     }
-    return stdout.trim();
   };
 
 const SYMREF = /^ref: refs\/heads\/(\S+)\tHEAD$/m;
@@ -570,7 +583,7 @@ export const workspaceAt = async (
     await rm(path, { force: true });
   }
   console.info(
-    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}, for its landing gate's step on this machine`
+    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}`
   );
 };
 

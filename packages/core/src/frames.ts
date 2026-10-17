@@ -351,7 +351,32 @@ export type DaemonPermissionRequestFrame = Omit<
   "presentation" | "raisedAt"
 >;
 
+/**
+ * An answered ask's answer as the hub took it, and where it came from, so a
+ * screen that held the ask and did not answer it says what won and where
+ * (JOURNEY.md Flow 2: "the answer row resolves to the answer that won,
+ * naming where it came from").
+ */
+export interface AskAnswer {
+  /** Approve or deny; absent when the harness settled the ask itself and did not say. */
+  behavior?: "allow" | "deny";
+  /**
+   * The paired device that answered (a page or the app), or the session that
+   * did (a delegate's parent, its project's lead), by name; absent when the
+   * hub knows no name (a page or app it trusts by its network).
+   */
+  name?: string;
+  /**
+   * Where it was answered: a dashboard page; the app (a client that is no
+   * page: the iOS and Mac app); Telegram; another session; or the harness
+   * itself, in its own interface.
+   */
+  via: "page" | "app" | "telegram" | "session" | "harness";
+}
+
 export interface PermissionSettledFrame {
+  /** What won, and where, when the ask was answered (`outcome: answered`) and the hub knows. */
+  answer?: AskAnswer;
   instanceId: string;
   /** An ask is over, whoever settled it; every client removes its parked card. */
   kind: "permission_settled";
@@ -410,14 +435,31 @@ export interface RecoveryUnavailableFrame {
   reason: string;
 }
 
+/** A harness whose `listSessions` did not answer within its bound: left out of the listing, not read as having none. */
+export interface HarnessUnanswered {
+  /** The milliseconds it was given. */
+  after: number;
+  harness: HarnessKind;
+}
+
+/** A harness whose `listSessions` refused (threw): left out of the listing with its error, not read as having none. */
+export interface HarnessFailed {
+  error: string;
+  harness: HarnessKind;
+}
+
 export interface ControlResultFrame {
   error?: string;
+  /** `listSessions` only, and only when some harness's listing threw: those harnesses, whose sessions `result` leaves out. */
+  failed?: HarnessFailed[];
   instanceId?: string;
   /** No `instanceId` when the call it answers was machine-scoped. */
   kind: "control_result";
   ok: boolean;
   requestId: string;
   result?: unknown;
+  /** `listSessions` only, and only when some harness did not list in time: those harnesses, whose sessions `result` leaves out. */
+  unanswered?: HarnessUnanswered[];
 }
 
 export interface ErrorFrame {

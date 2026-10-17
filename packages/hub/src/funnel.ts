@@ -36,6 +36,7 @@
  *   once.
  */
 import { hostname, userInfo } from "node:os";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 
 /** The Funnel port the relay owns: one of the three Funnel allows, and nothing else of the hub's. */
 export const FUNNEL_PORT = 10_000;
@@ -79,6 +80,12 @@ interface Ran {
   stdout: string;
 }
 
+/** What a call printed so far, kept as it comes. */
+interface Heard {
+  stderr: string;
+  stdout: string;
+}
+
 const firstLine = (text: string) =>
   text
     .split("\n")
@@ -95,25 +102,51 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
   const host = hostname();
   const user = userInfo().username;
 
-  const run = async (args: string[]): Promise<Ran> => {
-    let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
-    try {
-      child = Bun.spawn([bin, ...args], {
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: CALL_MS,
-      });
-    } catch {
-      return { code: null, missing: true, output: "", stdout: "" };
-    }
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { code, output: `${stdout}\n${stderr}`, stdout };
-  };
+  /**
+   * One `tailscale` call within {@link CALL_MS}. What it printed is kept in
+   * `heard` as it comes, so a call let go unanswered still says what it
+   * printed (the approval URL it waits on).
+   */
+  const run = (
+    args: string[],
+    heard: Heard = { stdout: "", stderr: "" }
+  ): Promise<Bounded<Ran>> =>
+    readWithin(CALL_MS, async (signal) => {
+      let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
+      try {
+        child = Bun.spawn([bin, ...args], {
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          signal,
+        });
+      } catch {
+        return { code: null, missing: true, output: "", stdout: "" };
+      }
+      const keep = async (
+        stream: ReadableStream<Uint8Array>,
+        into: keyof Heard
+      ) => {
+        const decoder = new TextDecoder();
+        for await (const chunk of stream) {
+          heard[into] += decoder.decode(chunk, { stream: true });
+        }
+      };
+      const [, , code] = await Promise.all([
+        keep(child.stdout, "stdout"),
+        keep(child.stderr, "stderr"),
+        child.exited,
+      ]);
+      return {
+        code,
+        output: `${heard.stdout}\n${heard.stderr}`,
+        stdout: heard.stdout,
+      };
+    });
+
+  /** "<what> did not answer within N s." */
+  const noAnswer = (what: string, after: number): string =>
+    `${what} did not answer within ${Math.round(after / 1000)} s`;
 
   const notInstalled = (): FunnelState => ({
     state: "needs-owner",
@@ -122,7 +155,21 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
 
   /** The ServeConfig as the CLI answers it; a state when it can't be read. */
   const status = async (): Promise<ServeConfig | FunnelState> => {
-    const ran = await run(["funnel", "status", "--json"]);
+    const asked = await run(["funnel", "status", "--json"]);
+    switch (asked.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        return {
+          state: "wanted",
+          reason: `${noAnswer(`Tailscale on ${host}`, asked.after)} with its Funnel status`,
+        };
+      default: {
+        const unhandled: never = asked;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    const ran = asked.value;
     if (ran.missing) {
       return notInstalled();
     }
@@ -217,16 +264,21 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
           step: `Port ${FUNNEL_PORT} on ${host} is served privately with Tailscale Serve, and Funnel on that port would make all of it public, so the relay won't apply. Move that Serve off port ${FUNNEL_PORT} (tailscale serve --https=${FUNNEL_PORT} off); ${AGAIN}`,
         };
       }
-      const ran = await run([
-        "funnel",
-        "--bg",
-        `--https=${FUNNEL_PORT}`,
-        `--set-path=${FUNNEL_MOUNT}`,
-        target(port),
-      ]);
-      if (ran.missing) {
+      const heard: Heard = { stdout: "", stderr: "" };
+      const ran = await run(
+        [
+          "funnel",
+          "--bg",
+          `--https=${FUNNEL_PORT}`,
+          `--set-path=${FUNNEL_MOUNT}`,
+          target(port),
+        ],
+        heard
+      );
+      if (ran.kind === "answered" && ran.value.missing) {
         return notInstalled();
       }
+      // Answered or not, its status says whether it took hold.
       const after = await status();
       if (isState(after)) {
         return after;
@@ -236,7 +288,29 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
         console.log(`[relay] Funnel is live: ${applied} → ${target(port)}`);
         return { state: "live", base: applied };
       }
-      return refusalOf(ran);
+      switch (ran.kind) {
+        case "answered":
+          return refusalOf(ran.value);
+        case "unanswered": {
+          // The CLI waits on the owner's approval page and prints its URL
+          // first: what it printed before it was let go is the owner's step.
+          const step = refusalOf({
+            code: null,
+            output: `${heard.stdout}\n${heard.stderr}`,
+            stdout: heard.stdout,
+          });
+          return step.state === "needs-owner"
+            ? step
+            : {
+                state: "wanted",
+                reason: `${noAnswer(`tailscale funnel on ${host}`, ran.after)}: ${firstLine(`${heard.stdout}\n${heard.stderr}`)}`,
+              };
+        }
+        default: {
+          const unhandled: never = ran;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
     },
 
     /** Removes the relay's mount when Funnel has it; answers why it couldn't, or nothing. */
@@ -255,11 +329,21 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
         `--set-path=${FUNNEL_MOUNT}`,
         "off",
       ]);
-      if (ran.code === 0) {
+      switch (ran.kind) {
+        case "answered":
+          break;
+        case "unanswered":
+          return noAnswer(`tailscale funnel on ${host}`, ran.after);
+        default: {
+          const unhandled: never = ran;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+      if (ran.value.code === 0) {
         console.log(`[relay] Funnel's ${FUNNEL_MOUNT} mount on ${at} is off`);
         return;
       }
-      return wordsOf(refusalOf(ran));
+      return wordsOf(refusalOf(ran.value));
     },
   };
 };

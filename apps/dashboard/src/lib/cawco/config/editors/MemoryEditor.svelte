@@ -3,7 +3,9 @@
     isMemoryRole,
     type MemoryScope,
     machineLabel,
+    placedOnly,
     scoped,
+    scopeKey,
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -90,15 +92,19 @@
   const savedScope = $derived<MemoryScope>(
     saved && "scope" in saved ? (saved.scope ?? {}) : {}
   );
+  /**
+   * Held whole: the pickers change only their own field, and a save sends
+   * every field the document has, the ones this editor has no picker for
+   * (its delegate types, model, briefer) included.
+   */
   let scope = $state<MemoryScope>(untrack(() => ({ ...savedScope })));
-  const scopeMoved = $derived(
-    (scope.role ?? "") !== (savedScope.role ?? "") ||
-      [...(scope.projectIds ?? [])].sort().join() !==
-        [...(savedScope.projectIds ?? [])].sort().join()
-  );
+  const scopeMoved = $derived(scopeKey(scope) !== scopeKey(savedScope));
   const dirty = $derived(text !== (saved?.content ?? "") || scopeMoved);
-  /** A role's document reaches its sessions as they start, from the hub: it is on no machine. */
-  const onMachines = $derived(!savedScope.role);
+  /**
+   * A document scoped to sessions by role, type or model, or a briefer's,
+   * reaches its sessions from the hub: it is on no machine.
+   */
+  const onMachines = $derived(!scoped(savedScope) || placedOnly(savedScope));
   /**
    * The version the edit started from. A save names it, so if the fleet's
    * copy has moved on since (another tab, another day, a draft kept across
@@ -160,10 +166,7 @@
       conflict = result.latest;
       return false;
     }
-    const result = await saveMemoryDoc(path, text, expectedHash, {
-      ...(scope.role ? { role: scope.role } : {}),
-      ...(scope.projectIds?.length ? { projectIds: scope.projectIds } : {}),
-    });
+    const result = await saveMemoryDoc(path, text, expectedHash, scope);
     if (result.ok) {
       stored(result.doc);
       return true;
@@ -282,24 +285,19 @@
       .sort((a, b) => a.label.localeCompare(b.label)),
   ]);
   const pickRole = (next: string) => {
-    scope = {
-      ...(isMemoryRole(next) ? { role: next } : {}),
-      ...(scope.projectIds ? { projectIds: scope.projectIds } : {}),
-    };
+    const { role: _role, ...rest } = scope;
+    scope = isMemoryRole(next) ? { ...rest, role: next } : rest;
   };
   /** A project picked toggles in or out; "None" clears them all. */
   const pickProject = (next: string) => {
-    const had = scope.projectIds ?? [];
+    const { projectIds: had = [], ...rest } = scope;
     let projectIds: string[] = [];
     if (next) {
       projectIds = had.includes(next)
         ? had.filter((id) => id !== next)
         : [...had, next];
     }
-    scope = {
-      ...(scope.role ? { role: scope.role } : {}),
-      ...(projectIds.length > 0 ? { projectIds } : {}),
-    };
+    scope = projectIds.length > 0 ? { ...rest, projectIds } : rest;
   };
 
   // ── history ──────────────────────────────────────────────────────────

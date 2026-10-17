@@ -75,7 +75,7 @@ export const artifactCreate = {
     "Make an artifact and open it in your panel. A page is `html`, or `dir` " +
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
     "from its folder. A sheet is a component's states: `file`, a CSF 3 story file beside the real component " +
-    "(`export default { component, args }`, a named export per state), run on your workspace's Vite. " +
+    "(`export default { component, args }`, a named export per state), run on the project's own Vite, Astro or Nuxt. " +
     "A preview is a whole app: a folder (`dir`) or a server on `port`; in a workspace `serve` is its command, which " +
     "CawCo runs there with PORT and keeps up (never start it yourself). Options to pick between: " +
     "design-explore skill first. A canvas is `elements` or `mermaid`, " +

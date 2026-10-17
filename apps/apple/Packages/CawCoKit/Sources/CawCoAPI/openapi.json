@@ -1077,6 +1077,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiProjectsByIdFolder 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1200,6 +1210,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdFolderFile 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1361,6 +1381,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "putApiProjectsByIdFolderFile 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -1498,6 +1528,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "deleteApiProjectsByIdFolderFile 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1622,6 +1662,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdFolderRaw 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdFolderRaw 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1762,6 +1812,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdFolderHistory 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdFolderHistory 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1976,6 +2036,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdTasks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdTasks 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2237,6 +2307,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasks 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -2355,6 +2435,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdTasksByTaskId 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdTasksByTaskId 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2612,6 +2702,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "patchApiProjectsByIdTasksByTaskId 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -2728,6 +2828,16 @@
           },
           "503": {
             "description": "deleteApiProjectsByIdTasksByTaskId 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2867,6 +2977,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdTasksByTaskIdOutputsFile 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3022,6 +3142,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -3167,6 +3297,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -3285,6 +3425,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdTasksByTaskIdHistory 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3436,6 +3586,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdTasksByTaskIdStage 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3605,6 +3765,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -3749,6 +3919,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdTasksByTaskIdTodos 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3912,6 +4092,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -4022,6 +4212,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdStages 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdStages 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4171,6 +4371,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "putApiProjectsByIdStages 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -4313,6 +4523,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdStagesTemplate 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdStagesTemplate 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4475,6 +4695,16 @@
           },
           "503": {
             "description": "putApiProjectsByIdTracker 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiProjectsByIdTracker 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6710,6 +6940,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiFavicon 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -6844,6 +7084,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -6954,6 +7204,16 @@
           },
           "503": {
             "description": "postApiProjectOffersByInstanceIdAccept 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectOffersByInstanceIdAccept 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7078,6 +7338,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiProjectsByIdDesignOffer 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -7195,6 +7465,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdDesignOfferDismiss 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -7305,6 +7585,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdDesignOfferBuild 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdDesignOfferBuild 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7471,6 +7761,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdStartersOutcome 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -7581,6 +7881,16 @@
           },
           "503": {
             "description": "getApiInstancesByIdPlan 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiInstancesByIdPlan 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7708,6 +8018,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdDispatch 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdDispatch 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7889,6 +8209,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "patchApiProjectsByIdDispatch 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -8044,6 +8374,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -8192,6 +8532,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdTasksByTaskIdRetry 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9488,6 +9838,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdRequests 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdRequests 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12632,6 +12992,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiProjectsByIdViews 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -12751,6 +13121,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdViewsByNameKeep 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdViewsByNameKeep 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12884,6 +13264,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -13010,6 +13400,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "getApiProjectsByIdViewsByNameRemoval 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -13129,6 +13529,16 @@
           },
           "503": {
             "description": "deleteApiProjectsByIdViewsByName 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiProjectsByIdViewsByName 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -13287,6 +13697,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdViewToolsTasks 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -13413,6 +13833,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdViewToolsStages 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdViewToolsStages 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -13559,6 +13989,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdViewToolsRoutines 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -13691,6 +14131,16 @@
           },
           "503": {
             "description": "postApiProjectsByIdViewToolsSpend 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdViewToolsSpend 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -13837,6 +14287,16 @@
                 }
               }
             }
+          },
+          "504": {
+            "description": "postApiProjectsByIdViewToolsEvents 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -13947,6 +14407,16 @@
           },
           "503": {
             "description": "getApiProjectsByIdBlocks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdBlocks 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -14126,6 +14596,16 @@
           },
           "503": {
             "description": "putApiProjectsByIdBlocksByPage 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiProjectsByIdBlocksByPage 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -15971,9 +16451,6 @@
                   },
                   "note": {
                     "type": "string"
-                  },
-                  "inPlace": {
-                    "type": "boolean"
                   },
                   "askedBy": {
                     "minLength": 1,
@@ -18644,6 +19121,16 @@
                       },
                       "model": {
                         "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "orchestrator",
+                          "leaf"
+                        ]
+                      },
+                      "delegateType": {
+                        "type": "string"
                       }
                     }
                   }
@@ -18778,6 +19265,16 @@
                       },
                       "model": {
                         "type": "string"
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "orchestrator",
+                          "leaf"
+                        ]
+                      },
+                      "delegateType": {
+                        "type": "string"
                       }
                     }
                   }
@@ -18862,6 +19359,43 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/deleteApiRulesById200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rules/{id}/restore": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiRulesByIdRestore",
+        "responses": {
+          "200": {
+            "description": "postApiRulesByIdRestore 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRulesByIdRestore200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiRulesByIdRestore 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20296,6 +20830,21 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "delegateTypes": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "model": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "briefer": {
+                        "type": "boolean",
+                        "const": true
                       }
                     }
                   }
@@ -22507,13 +23056,20 @@
                         "minimum": 0,
                         "maximum": 100,
                         "type": "integer"
+                      },
+                      "delegateWork": {
+                        "type": "string",
+                        "enum": [
+                          "resume",
+                          "move",
+                          "leave"
+                        ]
                       }
                     },
                     "required": [
                       "move",
                       "waitMinutes",
-                      "moveWholeUnderK",
-                      "prepareAtPct"
+                      "moveWholeUnderK"
                     ]
                   }
                 },
@@ -26258,10 +26814,107 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          },
+          "restorableForMs": {
+            "type": "number"
           }
         },
         "required": [
-          "ok"
+          "ok",
+          "restorableForMs"
+        ]
+      },
+      "postApiRulesByIdRestore200": {
+        "type": "object",
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/RuleStats"
+          },
+          "orphaned": {
+            "type": "object",
+            "properties": {
+              "machineId": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "removedAt": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "machineId",
+              "name",
+              "removedAt"
+            ]
+          },
+          "caseSensitive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "matchKind": {
+            "$ref": "#/components/schemas/RuleMatchKind"
+          },
+          "name": {
+            "description": "What the rule is called in the list, and in the reply the session reads.",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
+            "type": "string"
+          },
+          "repeat": {
+            "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
+            "type": "boolean"
+          },
+          "reply": {
+            "description": "What the session is sent when the rule fires.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RuleScope"
+          },
+          "timing": {
+            "$ref": "#/components/schemas/RuleTiming"
+          },
+          "watch": {
+            "$ref": "#/components/schemas/RuleWatch"
+          },
+          "wholeWord": {
+            "description": "Phrase mode only: refuse matches that sit inside a longer word.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "caseSensitive",
+          "createdAt",
+          "enabled",
+          "id",
+          "matchKind",
+          "name",
+          "pattern",
+          "repeat",
+          "reply",
+          "scope",
+          "stats",
+          "timing",
+          "watch",
+          "wholeWord"
         ]
       },
       "getApiRulesByIdActivity200": {
@@ -28250,17 +28903,15 @@
       "putApiAccountsRoutingByProvider200": {
         "type": "object",
         "properties": {
-          "delegates": {
-            "type": "object",
-            "properties": {
-              "pinnedAccountId": {
-                "type": "string"
-              }
-            }
-          },
           "atLimit": {
             "type": "object",
             "properties": {
+              "prepareAtPct": {
+                "type": "number"
+              },
+              "delegateWork": {
+                "$ref": "#/components/schemas/DelegateWork"
+              },
               "move": {
                 "type": "boolean"
               },
@@ -28269,17 +28920,23 @@
               },
               "moveWholeUnderK": {
                 "type": "number"
-              },
-              "prepareAtPct": {
-                "type": "number"
               }
             },
             "required": [
+              "delegateWork",
               "move",
               "moveWholeUnderK",
               "prepareAtPct",
               "waitMinutes"
             ]
+          },
+          "delegates": {
+            "type": "object",
+            "properties": {
+              "pinnedAccountId": {
+                "type": "string"
+              }
+            }
           },
           "yours": {
             "type": "object",
@@ -32520,7 +33177,7 @@
         "type": "object",
         "properties": {
           "file": {
-            "description": "From the Vite root.",
+            "description": "From the toolchain root.",
             "type": "string"
           },
           "name": {
@@ -32636,7 +33293,7 @@
             "type": "object"
           },
           "component": {
-            "description": "The component, from the Vite root; null when the meta names none the stage could resolve.",
+            "description": "The component, from the toolchain root; null when the meta names none the stage could resolve.",
             "type": [
               "null",
               "string"
@@ -32664,7 +33321,7 @@
             "type": "number"
           },
           "component": {
-            "description": "The story's own component, from the Vite root, when it names one apart from the meta's.",
+            "description": "The story's own component, from the toolchain root, when it names one apart from the meta's.",
             "type": [
               "null",
               "string"
@@ -32687,14 +33344,14 @@
         ]
       },
       "StageState": {
-        "description": "A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):\nwhere it is, the Vite root it runs (from the clone's root), why it failed\nwhen it did, and the compile errors standing now.",
+        "description": "A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):\nwhere it is, the toolchain root it runs (from the clone's root), why it failed\nwhen it did, and the compile errors standing now.",
         "type": "object",
         "properties": {
           "at": {
             "type": "string"
           },
           "dir": {
-            "description": "The Vite root, from the clone's root (\".\" for the root itself).",
+            "description": "The toolchain root, from the clone's root (\".\" for the root itself).",
             "type": "string"
           },
           "errors": {
@@ -32719,7 +33376,7 @@
         ]
       },
       "StageError": {
-        "description": "A compile error the stage's Vite sent its pages, as the plugin keeps it\nuntil the module compiles again: the module's file from the Vite root,\n1-based line and column when Vite's payload has them, Vite's message and\ncode frame, and the story files that import the module, which the hub\nfiles it under.",
+        "description": "A compile error the stage's Vite sent its pages, as the plugin keeps it\nuntil the module compiles again: the module's file from the toolchain root,\n1-based line and column when Vite's payload has them, Vite's message and\ncode frame, and the story files that import the module, which the hub\nfiles it under.",
         "type": "object",
         "properties": {
           "column": {
@@ -32747,7 +33404,7 @@
             "type": "string"
           },
           "sheets": {
-            "description": "The story files (from the Vite root) whose sheet imports the module.",
+            "description": "The story files (from the toolchain root) whose sheet imports the module.",
             "type": "array",
             "items": {
               "type": "string"
@@ -33292,7 +33949,7 @@
             "type": "string"
           },
           "sheet": {
-            "description": "On a sheet: its story file (from the Vite root) and the story whose frame holds the element.",
+            "description": "On a sheet: its story file (from the toolchain root) and the story whose frame holds the element.",
             "type": "object",
             "properties": {
               "file": {
@@ -39629,7 +40286,7 @@
           },
           "memoryHook": {
             "$ref": "#/components/schemas/FleetItemState",
-            "description": "The SessionStart hook that shows a session the document for the model it is\nrunning. Absent from a daemon that predates the set, and from one the set\ngave nothing to register."
+            "description": "The model-memory SessionStart hook an earlier cawco registered, while a\nmachine has not managed to take it back (agent fleet.ts\n`retireMemoryHook`): always `failed`, with why. Absent once it is gone."
           },
           "plugins": {
             "type": "object"
@@ -40074,7 +40731,7 @@
         ]
       },
       "ContinuationJob": {
-        "description": "A continuation from a summary the hub is carrying, as every dashboard\nfollows it: summarise the source, then start a conversation seeded with the\nsummary. The hub owns it from the POST that starts it to its end; only a\nCancel (`DELETE /api/continuations/:id`) stops it.",
+        "description": "A continuation in a new session the hub is carrying, as every dashboard\nfollows it: the source files its open items (a person's Continue), is\nsummarised, then a new session starts seeded with the summary and those\nitems. The hub owns it from the POST that starts it to its end; its Cancel\n(`DELETE /api/continuations/:id`) stops it in any stage before `started`.",
         "type": "object",
         "properties": {
           "error": {
@@ -40084,7 +40741,7 @@
             "type": "string"
           },
           "inPlace": {
-            "description": "The session goes on itself, in a fresh conversation (its account at its\nlimit, or it asked with `continue_session`): `targetInstanceId` is\n`sourceInstanceId`, one session throughout. Absent: \"Continue in new\nsession\", whose target is a new session and whose source is only read.",
+            "description": "Never sent: no job goes on in place now. Declared only because the\nTestFlight builds 20261015 and 20261015.3 read it, which the hub's wire\ncheck holds to (packages/hub/scripts/openapi.ts); it goes in the change\nthat expires them.",
             "const": true,
             "type": "boolean"
           },
@@ -40093,7 +40750,7 @@
           },
           "stage": {
             "$ref": "#/components/schemas/ContinuationJobStage",
-            "description": "`starting`: the new conversation (in place) or new session is starting."
+            "description": "`filing`: the source's turn filing its open items (a person's Continue);\n`starting`: the new session is starting."
           },
           "summariserInstanceId": {
             "description": "Absent when the source is short enough that nothing is summarised.",
@@ -40920,6 +41577,10 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "compact": {
+                    "$ref": "#/components/schemas/BlockMetadataCompact",
+                    "description": "Moved at its limit to another organization with a context of the\npolicy's `moveWholeUnderK` or more: it files its open items, then is\ncompacted natively, as its first steps on `to`. The line is said\nagain under its id as that goes."
+                  },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
@@ -41042,10 +41703,15 @@
                     ]
                   },
                   "account": {
-                    "$ref": "#/components/schemas/NamedAccount"
+                    "$ref": "#/components/schemas/NamedAccount",
+                    "description": "The account it is held on, at its limit."
+                  },
+                  "frees": {
+                    "$ref": "#/components/schemas/NamedAccount",
+                    "description": "Another account that frees before `account` resets: it moves there\nat `until`. Absent: `until` is `account`'s own reset."
                   },
                   "until": {
-                    "description": "The reset it waits for, epoch ms: the line counts down to it.",
+                    "description": "The earliest moment an account takes it again, epoch ms: the line counts down to it.",
                     "type": "number"
                   },
                   "why": {
@@ -41070,42 +41736,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "The session's summary is being written, on `to` (null: a harness\nwithout accounts), for it to go on from in a fresh conversation:\nthe line it is until that conversation starts, when it becomes the\n`continued` line under the same id, or `unmoved` if it failed.",
-                    "type": "string",
-                    "enum": [
-                      "continuing"
-                    ]
-                  },
-                  "to": {
-                    "$ref": "#/components/schemas/NamedAccount"
-                  },
-                  "asked": {
-                    "description": "The session asked for it (`continue_session`), not its account's limit.",
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "asks": {
-                    "description": "It restarts from the person's own messages alone: nothing is summarised.",
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "tokens": {
-                    "type": [
-                      "null",
-                      "number"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "tokens"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "description": "The session went on in a fresh conversation of its own, seeded with a\nsummary of the one before: the same session, its account changed\n(`from` to `to`; null on a harness without accounts).",
+                    "description": "History only, from before the hub compacted natively: the session\nwent on in a fresh conversation of its own, seeded with a summary of\nthe one before, the same session with its account changed (`from`\nto `to`; null on a harness without accounts). Lines a hub stored\nthen still read, between the conversations they divide.",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -41220,7 +41851,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "Moving it whole to `to`, or continuing it there from a summary\n(`action`), failed at `step`: it goes on in its conversation, still\non `from`.",
+                    "description": "Moving it whole to `to` failed at `step`: it goes on in its\nconversation, still on `from`. (`continue`, a continuation from a\nsummary, and `asked`, are history only: lines a hub stored before it\ncompacted natively.)",
                     "type": "string",
                     "enum": [
                       "unmoved"
@@ -41228,7 +41859,7 @@
                   },
                   "action": {
                     "$ref": "#/components/schemas/BlockMetadataAction",
-                    "description": "What failed: a move whole (`move`), or a continuation from a summary (`continue`)."
+                    "description": "What failed: a move whole (`move`), or, in a stored line, a continuation from a summary (`continue`)."
                   },
                   "signedOut": {
                     "description": "It was moving off `from` because Claude Code refused `from`'s sign-in: `from` has no reset to wait for.",
@@ -41729,13 +42360,14 @@
         ]
       },
       "WaitReason": {
-        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, or the reset\ncomes sooner than re-reading its context elsewhere is worth.",
+        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, the reset\ncomes sooner than re-reading its context elsewhere is worth, or the limit\nrefused the hub's word to a live work item and the routing has that carry\non after the reset ({@link DelegateWork} `resume`).",
         "type": "string",
         "enum": [
           "fork",
           "full",
           "off",
-          "soon"
+          "soon",
+          "work"
         ]
       },
       "EndedBy": {
@@ -44259,9 +44891,24 @@
         ]
       },
       "MemoryScope": {
-        "description": "Which sessions a fleet memory document is loaded into. No scope at all is\na linked document under `~/.claude/memories/`, read on purpose (the\n`models/` documents). A scope makes it instructions every matching session\nloads at its start:\n\n- `role` alone: every session of that role, in any project or none;\n- `projectIds` alone: every session in a checkout or workspace of any of\n  those projects, written into each as `.claude/rules/cawco/<path>`\n  ({@link FleetPlacedMemoryDoc}): one document for every coding project,\n  and none for the projects it leaves out;\n- both: the sessions of that role in any of those projects.\n\nA document with a role reaches its sessions as they launch, from the hub\n({@link SessionInstruction}), never as a file on a machine.",
+        "description": "Which sessions a fleet memory document reaches. No scope at all is a\nlinked document under `~/.claude/memories/`, read on purpose. A scope\nmakes it instructions every matching session loads at its start; each\nfield narrows, and the fields are ANDed:\n\n- `role`: the sessions of that role;\n- `delegateTypes`: the sessions started as one of those delegate types;\n- `model`: the sessions whose model id contains it, in any case (`opus`\n  covers every dated build of it, as a rule's model scope does);\n- `projectIds`: the sessions in a checkout or workspace of one of those\n  projects. With nothing else, the document is written into each such\n  place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).\n\nA document scoped by role, type or model reaches its sessions as they\nlaunch, from the hub ({@link SessionInstruction}), in the instructions a\ncompaction keeps.\n\n`briefer` turns the scope around: the document is guidance for writing a\nbrief, and reaches the session that calls `delegate`, never the delegate.\n`delegateTypes` and `model` then name the delegates it is about (none:\nevery delegate); the hub hands it to the caller once before the first\nsuch delegate goes out, and again after the caller's next compaction\n(hub briefings.ts). It takes no `role` or `projectIds`.",
         "type": "object",
         "properties": {
+          "briefer": {
+            "const": true,
+            "type": "boolean"
+          },
+          "delegateTypes": {
+            "description": "Never empty when present.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "description": "A model id, or part of one; never blank when present.",
+            "type": "string"
+          },
           "projectIds": {
             "description": "Never empty when present: no project is `projectIds` left out.",
             "type": "array",
@@ -44327,6 +44974,10 @@
         "description": "What narrows a rule from \"every session on the fleet\" to some of them. Every\nfield is optional and they are ANDed; an empty scope is the default and means\neverywhere. `model` is a substring test, so `opus` covers every dated build\nof it.",
         "type": "object",
         "properties": {
+          "delegateType": {
+            "description": "The delegate type the session was started as, by name.",
+            "type": "string"
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind",
             "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter."
@@ -44339,6 +44990,10 @@
           },
           "projectId": {
             "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MemoryScopeRole",
+            "description": "Orchestrators (sessions holding `delegate`) or leaves, as fleet memory reads a role."
           }
         }
       },
@@ -45485,9 +46140,12 @@
         ]
       },
       "AtLimit": {
-        "description": "What a running session does when its account hits its limit: wait for the\nreset, move whole to an account with room, or continue there from a summary\n(the hub's `decideAtLimit`). `waitMinutes`: a reset this close is waited\nfor. `moveWholeUnderK`: a context under this many thousand tokens moves\nwhole; a larger one continues from a summary, which is written early, once\nthe account passes `prepareAtPct` of its window.",
+        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to an account known to have room (the hub's\n`decideAtLimit`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. `delegateWork`: what a turn the limit refused is answered with\nwhen it was the hub's own word to a live work item's session\n({@link DelegateWork}); every other word of the hub's a limit refused is\nleft until a person or the session's parent writes.",
         "type": "object",
         "properties": {
+          "delegateWork": {
+            "$ref": "#/components/schemas/DelegateWork"
+          },
           "move": {
             "type": "boolean"
           },
@@ -45495,6 +46153,7 @@
             "type": "number"
           },
           "prepareAtPct": {
+            "description": "Read by nothing (the summary written ahead of the limit it timed is\ngone): sent at its default only because the TestFlight builds 20261015\nand 20261015.3 require it, which the hub's wire check holds to\n(packages/hub/scripts/openapi.ts). It goes in the change that expires\nthem.",
             "type": "number"
           },
           "waitMinutes": {
@@ -45502,10 +46161,20 @@
           }
         },
         "required": [
+          "delegateWork",
           "move",
           "moveWholeUnderK",
           "prepareAtPct",
           "waitMinutes"
+        ]
+      },
+      "DelegateWork": {
+        "description": "When a delegate's work reaches its account's limit: the hub's word to a\nlive work item's session (\"Your work item is still open\", the sleep\nsweep's wake, a wait's end; core `WORK_ITEM_ORIGIN`) was refused there.\n`resume`: that word is sent again once, when the account's limit resets;\nnothing moves it meanwhile. `move`: it is answered as a person's turn is,\nmoved whole to an account with room by the routing. `leave`: it waits\nuntil a person or its parent writes to it.",
+        "type": "string",
+        "enum": [
+          "leave",
+          "move",
+          "resume"
         ]
       },
       "StrategyChoice": {
@@ -45771,7 +46440,7 @@
                   }
                 },
                 "continued": {
-                  "description": "Continued from a summary on another account.",
+                  "description": "Always 0: nothing continues from a summary at a limit now. Sent only\nbecause the TestFlight builds 20261015 and 20261015.3 require it, which\nthe hub's wire check holds to (packages/hub/scripts/openapi.ts); it\ngoes in the change that expires them.",
                   "type": "number"
                 },
                 "waiting": {
@@ -46898,7 +47567,7 @@
                     "type": "string"
                   },
                   "stage": {
-                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits Vite root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.",
+                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits toolchain root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.",
                     "type": "object",
                     "properties": {
                       "dir": {
@@ -48115,6 +48784,10 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "compact": {
+                    "$ref": "#/components/schemas/BlockMetadataCompact",
+                    "description": "Moved at its limit to another organization with a context of the\npolicy's `moveWholeUnderK` or more: it files its open items, then is\ncompacted natively, as its first steps on `to`. The line is said\nagain under its id as that goes."
+                  },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
@@ -48237,10 +48910,15 @@
                     ]
                   },
                   "account": {
-                    "$ref": "#/components/schemas/NamedAccount"
+                    "$ref": "#/components/schemas/NamedAccount",
+                    "description": "The account it is held on, at its limit."
+                  },
+                  "frees": {
+                    "$ref": "#/components/schemas/NamedAccount",
+                    "description": "Another account that frees before `account` resets: it moves there\nat `until`. Absent: `until` is `account`'s own reset."
                   },
                   "until": {
-                    "description": "The reset it waits for, epoch ms: the line counts down to it.",
+                    "description": "The earliest moment an account takes it again, epoch ms: the line counts down to it.",
                     "type": "number"
                   },
                   "why": {
@@ -48265,42 +48943,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "The session's summary is being written, on `to` (null: a harness\nwithout accounts), for it to go on from in a fresh conversation:\nthe line it is until that conversation starts, when it becomes the\n`continued` line under the same id, or `unmoved` if it failed.",
-                    "type": "string",
-                    "enum": [
-                      "continuing"
-                    ]
-                  },
-                  "to": {
-                    "$ref": "#/components/schemas/NamedAccount"
-                  },
-                  "asked": {
-                    "description": "The session asked for it (`continue_session`), not its account's limit.",
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "asks": {
-                    "description": "It restarts from the person's own messages alone: nothing is summarised.",
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "tokens": {
-                    "type": [
-                      "null",
-                      "number"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "tokens"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "description": "The session went on in a fresh conversation of its own, seeded with a\nsummary of the one before: the same session, its account changed\n(`from` to `to`; null on a harness without accounts).",
+                    "description": "History only, from before the hub compacted natively: the session\nwent on in a fresh conversation of its own, seeded with a summary of\nthe one before, the same session with its account changed (`from`\nto `to`; null on a harness without accounts). Lines a hub stored\nthen still read, between the conversations they divide.",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -48415,7 +49058,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "Moving it whole to `to`, or continuing it there from a summary\n(`action`), failed at `step`: it goes on in its conversation, still\non `from`.",
+                    "description": "Moving it whole to `to` failed at `step`: it goes on in its\nconversation, still on `from`. (`continue`, a continuation from a\nsummary, and `asked`, are history only: lines a hub stored before it\ncompacted natively.)",
                     "type": "string",
                     "enum": [
                       "unmoved"
@@ -48423,7 +49066,7 @@
                   },
                   "action": {
                     "$ref": "#/components/schemas/BlockMetadataAction",
-                    "description": "What failed: a move whole (`move`), or a continuation from a summary (`continue`)."
+                    "description": "What failed: a move whole (`move`), or, in a stored line, a continuation from a summary (`continue`)."
                   },
                   "signedOut": {
                     "description": "It was moving off `from` because Claude Code refused `from`'s sign-in: `from` has no reset to wait for.",
@@ -49874,6 +50517,10 @@
       "PermissionSettledFrame": {
         "type": "object",
         "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/AskAnswer",
+            "description": "What won, and where, when the ask was answered (`outcome: answered`) and the hub knows."
+          },
           "instanceId": {
             "type": "string"
           },
@@ -49906,6 +50553,27 @@
           "instanceId",
           "kind",
           "requestId"
+        ]
+      },
+      "AskAnswer": {
+        "description": "An answered ask's answer as the hub took it, and where it came from, so a\nscreen that held the ask and did not answer it says what won and where\n(JOURNEY.md Flow 2: \"the answer row resolves to the answer that won,\nnaming where it came from\").",
+        "type": "object",
+        "properties": {
+          "behavior": {
+            "$ref": "#/components/schemas/AskAnswerBehavior",
+            "description": "Approve or deny; absent when the harness settled the ask itself and did not say."
+          },
+          "name": {
+            "description": "The paired device that answered (a page or the app), or the session that\ndid (a delegate's parent, its project's lead), by name; absent when the\nhub knows no name (a page or app it trusts by its network).",
+            "type": "string"
+          },
+          "via": {
+            "$ref": "#/components/schemas/AskAnswerVia",
+            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); Telegram; another session; or the harness\nitself, in its own interface."
+          }
+        },
+        "required": [
+          "via"
         ]
       },
       "UsageFrame": {
@@ -50080,6 +50748,13 @@
           "error": {
             "type": "string"
           },
+          "failed": {
+            "description": "`listSessions` only, and only when some harness's listing threw: those harnesses, whose sessions `result` leaves out.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessFailed"
+            }
+          },
           "instanceId": {
             "type": "string"
           },
@@ -50096,12 +50771,52 @@
           "requestId": {
             "type": "string"
           },
-          "result": {}
+          "result": {},
+          "unanswered": {
+            "description": "`listSessions` only, and only when some harness did not list in time: those harnesses, whose sessions `result` leaves out.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessUnanswered"
+            }
+          }
         },
         "required": [
           "kind",
           "ok",
           "requestId"
+        ]
+      },
+      "HarnessFailed": {
+        "description": "A harness whose `listSessions` refused (threw): left out of the listing with its error, not read as having none.",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          }
+        },
+        "required": [
+          "error",
+          "harness"
+        ]
+      },
+      "HarnessUnanswered": {
+        "description": "A harness whose `listSessions` did not answer within its bound: left out of the listing, not read as having none.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "The milliseconds it was given.",
+            "type": "number"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          }
+        },
+        "required": [
+          "after",
+          "harness"
         ]
       },
       "ErrorFrame": {
@@ -51274,7 +51989,7 @@
         ]
       },
       "SessionInstruction": {
-        "description": "One role-scoped document a session launches with: the hub picks them for\nthe session as it grants its launch (`LaunchGrant.instructions`), and the\nharness puts each in its own instructions (Claude Code's system prompt\nappend, an OpenCode instruction entry, a pi context file).",
+        "description": "One scoped document a session launches with ({@link sessionTakes}): the\nhub picks them for the session as it grants its launch\n(`LaunchGrant.instructions`), and the harness puts each in its own\ninstructions, the part of every request a compaction keeps: Claude Code's\nsystem prompt append (\"System prompt and output style | Both still\napply\", code.claude.com/docs/en/context-window, What survives\ncompaction), an OpenCode instruction entry (\"6. Session-specific\ninstruction entries supplied through the API\", among the initial\ninstructions, opencode.ai/v2/docs/instructions), a pi context file (\"System\nmessages are prompt state, not conversation; the compaction entry carries\ntheir replay\", pi-coding-agent 1.0.1 compaction.js).",
         "type": "object",
         "properties": {
           "content": {
@@ -51357,6 +52072,23 @@
           "session"
         ]
       },
+      "AskAnswerBehavior": {
+        "type": "string",
+        "enum": [
+          "allow",
+          "deny"
+        ]
+      },
+      "AskAnswerVia": {
+        "type": "string",
+        "enum": [
+          "app",
+          "harness",
+          "page",
+          "session",
+          "telegram"
+        ]
+      },
       "BinaryUpdateLandingOutcome": {
         "type": "string",
         "enum": [
@@ -51369,6 +52101,15 @@
         "enum": [
           "nightly",
           "stable"
+        ]
+      },
+      "BlockMetadataCompact": {
+        "type": "string",
+        "enum": [
+          "compacted",
+          "compacting",
+          "filing",
+          "stopped"
         ]
       },
       "BlockMetadataAction": {
@@ -51458,6 +52199,7 @@
         "enum": [
           "cancelled",
           "failed",
+          "filing",
           "started",
           "starting",
           "summarising"

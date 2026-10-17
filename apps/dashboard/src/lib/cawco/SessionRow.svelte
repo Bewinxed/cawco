@@ -82,6 +82,7 @@
   import SessionMark from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
   import {
+    faultOn,
     noteOn,
     type RenameTarget,
     renameSession,
@@ -179,6 +180,18 @@
 
   /** What was asked of this session and is on its way, or did not go (session-acts). */
   const act = $derived(sessionId ? sessionAct(sessionId) : undefined);
+  /** Stops what is on its way, as the row offers it; a refusal is the row's fault. */
+  async function stopPending(): Promise<void> {
+    const stop = act?.stop;
+    if (!(stop && sessionId)) {
+      return;
+    }
+    try {
+      await stop.run();
+    } catch (error) {
+      faultOn(sessionId, { reason: failureWords(error) });
+    }
+  }
   /**
    * The word for what is on its way: what this person asked and is waiting
    * on (session-acts), or a stop the hub holds until the machine confirms it
@@ -583,6 +596,23 @@
     >
   </p>
 {/if}
+<!-- What runs for this session elsewhere and may be stopped from here: a
+     continuation in a new session, in any stage before it starts. -->
+{#if act?.pending && act.stop}
+  <p
+    data-slot="session-row-note"
+    class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
+    data-compact={compact || undefined}
+    transition:unfold
+  >
+    {act.pending}
+    <button
+      class="cursor-pointer border-none border-current bg-transparent p-0 text-ink-strong underline underline-offset-2"
+      onclick={stopPending}
+      type="button">{act.stop.label}</button
+    >
+  </p>
+{/if}
 
 <style>
   /* residual: unmapped — the row's corner is its item's (`border-radius:
@@ -655,5 +685,11 @@
   :global(.session-ask) {
     --ask-indent: var(--fault-indent);
     --ask-end: var(--fault-end);
+  }
+
+  /* residual: unmapped — the Stop under a pending row takes the note's own
+     type (`font: inherit`, no utility). */
+  [data-slot="session-row-note"] button {
+    font: inherit;
   }
 </style>

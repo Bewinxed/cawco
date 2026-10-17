@@ -26,6 +26,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ConsoleMessage, Locator, Page } from "playwright-core";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import {
   type Engine,
@@ -100,7 +101,7 @@ export async function eventually<T>(
     if (Date.now() >= deadline) {
       unmet(
         `${what}, not within ${ms / 1000}s: last read ${(error === undefined
-          ? JSON.stringify(last)
+          ? String(JSON.stringify(last))
           : `an error, ${error instanceof Error ? error.message : String(error)}`
         ).slice(0, 600)}`
       );
@@ -418,17 +419,20 @@ async function runLeg(
       );
     } catch (error) {
       // What the page held when the step failed, as text: its accessibility
-      // tree, for the reader of a failure. Never a picture.
-      await page
+      // tree, for the reader of a failure. Never a picture. A page that
+      // cannot give one (its web process hung) says so in its place: an
+      // empty folder read as no evidence at all.
+      const tree = await page
         .locator("body")
         .ariaSnapshot({ timeout: 5000 })
-        .then((tree) =>
-          writeFile(
-            join(out, `step-${number}.aria.yml`),
-            `# ${current}\n# ${page.url()}\n${tree}`
-          )
-        )
-        .catch(() => undefined);
+        .catch(
+          (refused: unknown) =>
+            `# the page gave no tree within 5 s: ${measuredBy(refused)}`
+        );
+      await writeFile(
+        join(out, `step-${number}.aria.yml`),
+        `# ${current}\n# ${page.url()}\n${tree}`
+      ).catch(() => undefined);
       throw error;
     } finally {
       said.length = 0;
@@ -445,22 +449,21 @@ async function runLeg(
   const started = performance.now();
   const since = Date.now();
   let failure: string | null = null;
-  let timer: Timer | undefined;
   try {
-    await Promise.race([
-      journey.leg(leg),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(new Unmet(`the leg ran past ${LEG_MS / 60_000} minutes`)),
-          LEG_MS
-        );
-      }),
-    ]);
+    const ran = await readWithin(LEG_MS, () => journey.leg(leg));
+    switch (ran.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Unmet(`the leg ran past ${LEG_MS / 60_000} minutes`);
+      default: {
+        const unhandled: never = ran;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
   } catch (error) {
     failure = `${current}: ${measuredBy(error)}`;
   } finally {
-    clearTimeout(timer);
     await page
       .context()
       .close()

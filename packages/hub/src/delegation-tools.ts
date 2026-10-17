@@ -110,7 +110,9 @@ const HANDOFF_DESCRIPTION =
   "An idle target starts on it at once; a busy one reads it at its next step, a command it is running moved to the background and kept going. " +
   "For new standalone work, delegate instead. " +
   "A message to your own delegate after it reports (done, failed or cancelled) reopens its work item in the same session, on its cached transcript; prefer a fresh delegate unless that session is warm and holds context the task needs. " +
-  "A cold target other than your own parent is refused once with the cost considerations; a repeat of the call is delivered.";
+  "A cold target (cache expired; never your parent) whose workspace has uncommitted changes gets it; " +
+  "one with only unpushed commits is refused once, naming delegate's `from`; otherwise Jev decides when the hub has it, and that is final. " +
+  "Repeat a call any other cold refusal answered to deliver it.";
 
 /** `handoff`'s target and message, every session's. */
 const handoffShape = () => ({
@@ -564,7 +566,8 @@ export function handoffTools(deps: HandoffDeps) {
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, the commands whose output proves the work, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, every shell command of the delegate inside its boundary. It writes only its clone, its scratch folder and the workspaces' own cache (host caches are read-only), reads no credential store, SSH key or key agent, has no service manager, and reaches another machine only through a delegate there; it signals only its own processes, and on Linux sees only them. The workspace is cut on this session's machine unless `machine` names another. Without `workspace` the item gets a new one; with it, the item is the follow-up there: under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
-        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
+        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A follow-up whose session is cold is checked as handoff checks a cold target. " +
+        "To finish an ended delegate's committed work in a fresh session, delegate with `from`: a new workspace cut at that workspace's branch head, its commits included.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own.",
       {
         prompt: z
@@ -602,7 +605,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "The repository a new workspace is cut from, on branch ws/<id> off its default branch as fetched then. " +
               "With `machine`, an absolute path there, required when not this session's machine. " +
-              "Default: this session's directory; unused with `workspace`."
+              "Default: this session's directory; unused with `workspace` or `from`."
           ),
         machine: z
           .string()
@@ -624,6 +627,13 @@ export function handoffTools(deps: HandoffDeps) {
             "A workspace id from an earlier delegate's result or report: the item is its follow-up, the brief " +
               "going to that workspace's last session on its cached transcript. Refused while an item there runs, " +
               "and with type, model, harness, skills, fork or machine, which are that session's own."
+          ),
+        from: z
+          .string()
+          .optional()
+          .describe(
+            "A workspace id one of your delegates worked in, its item ended: the new workspace's branch is cut at that workspace's head, carrying its commits (uncommitted changes stay there). " +
+              "It is cut on that workspace's machine from its repository, so cwd, machine and workspace go unset. Refused while an item there runs, or once its clone is archived."
           ),
         fork: z
           .boolean()
@@ -677,6 +687,7 @@ export function handoffTools(deps: HandoffDeps) {
         cwd,
         skills,
         workspace,
+        from,
         fork,
         can_delegate,
         inputs,
@@ -695,6 +706,7 @@ export function handoffTools(deps: HandoffDeps) {
           account,
           skills,
           workspace,
+          from,
           fork,
           type,
           canDelegate: can_delegate,
@@ -748,7 +760,9 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "wait_item",
-      "Declare a bounded wait on a command you started, then end your turn. The hub keeps your item running without quiet-turn reminders, tells your parent what you are waiting for, and wakes you when the wait ends. Call again to replace the wait. finish_item, closing, stopping or interrupting the item cancels the wait.",
+      "Declare a bounded wait on a command you started, then end your turn. The hub keeps your item running without reminders, shows your parent what you wait for, and wakes you when it ends. " +
+        "Messages meanwhile leave it on: read them, end your turn. " +
+        "Your tool calls other than CawCo reads end it, as do finish_item and stopping or interrupting the item; call again to replace it.",
       {
         minutes: z
           .number({ error: WAIT_ITEM_LIMIT })
@@ -808,17 +822,13 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Go on from a summary of a session, written by a model you choose. Name another `session`: a new " +
-        "session starts on the model and harness you choose; the named one is only read. Omit it: this " +
-        "session goes on itself once this turn ends, in a fresh conversation on `target_model` (its own " +
-        "harness), keeping its id, parent, delegates and work item.",
+      "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
+        "named one is only read. Never this session: if your context is too big, say so.",
       {
         session: z
           .string()
-          .optional()
-          .describe(
-            "Another session to continue in a new session: its id, short id, or directory name. Omit it to continue this session itself, in place."
-          ),
+          .min(1)
+          .describe("Its id, short id, or directory name."),
         from: z
           .enum(["summary", "asks"])
           .optional()
@@ -978,6 +988,15 @@ export function handoffTools(deps: HandoffDeps) {
           },
         ],
       })
+    ),
+    tool(
+      "open_items",
+      "Your open items, word for word, as every compaction lists them.",
+      {},
+      async () => ({
+        content: [{ type: "text" as const, text: await actions.openItems() }],
+      }),
+      { readOnlyHint: true }
     ),
     tool(
       "set_title",
@@ -1252,7 +1271,10 @@ export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
 const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   { prefixes: ["admin_"], what: "fleet configuration" },
   { prefixes: ["task_"], what: "project tasks" },
-  { prefixes: ["todo_write"], what: "your plan, and your task's to-dos" },
+  {
+    prefixes: ["todo_write", "open_items"],
+    what: "your plan, your task's to-dos, your open items",
+  },
   {
     prefixes: [
       "routine_",

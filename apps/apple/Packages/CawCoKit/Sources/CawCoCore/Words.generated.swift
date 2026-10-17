@@ -533,24 +533,27 @@ public enum Words {
 
             public static let minutes = "minutes"
 
-            public static let under = "Move the whole conversation if it’s under"
+            public static let over = "Compact it after the move if it’s over"
 
             public static let kTokens = "k tokens"
 
-            public static let rereads = "The new account re-reads it from scratch."
+            public static let compacts = "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn."
 
-            public static let otherwise = "Otherwise continue from a summary"
+            /// The fleet setting for a delegate's work at its limit (core `DelegateWork`), and its choices.
+            public static let delegateWork = "When a delegate’s work reaches its account’s limit"
 
-            public static let early = "Write that summary early, at"
+            public enum DelegateWorkChoices {
+                public static let resume = "Carry on after the reset"
 
-            public static let percent = "%"
+                public static let move = "Move it to an account with room"
 
-            public static let warm = "While the current account’s cache is still warm."
+                public static let leave = "Leave it until someone writes"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["resume": resume, "move": move, "leave": leave]
+            }
 
             public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
-
-            /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "under": under, "kTokens": kTokens, "rereads": rereads, "otherwise": otherwise, "early": early, "percent": percent, "warm": warm, "terms": terms]
         }
 
         public enum Figure {
@@ -577,15 +580,13 @@ public enum Words {
 
             public static let fullSkipped = "A full account is skipped."
 
-            public static let summaryEarly = "Summary written early, while the cache is warm."
-
             public static func waits(minutes: Int) -> String {
                 "Waits \(minutes)m for the window to reset"
             }
 
             public static let movesWhole = "Moves the whole conversation"
 
-            public static let continues = "Continues from a summary"
+            public static let compacts = "Moves it whole, then compacts it"
 
             public static func tokens(k: Int) -> String {
                 "\(k)k"
@@ -595,8 +596,8 @@ public enum Words {
                 "re-read \(k)k"
             }
 
-            public static func staysOn(k: Int, name: String) -> String {
-                "\(k)k stays on \(name)"
+            public static func compacted(k: Int) -> String {
+                "\(k)k compacted"
             }
         }
 
@@ -654,6 +655,8 @@ public enum Words {
                 public static let moveWholeUnderK = 200
 
                 public static let prepareAtPct = 90
+
+                public static let delegateWork = "resume"
             }
 
             /// How long the hub waits on a machine's sign-in step: Claude Code printing its link (the agent waits up to 30 s), exchanging a code (up to 60 s), a device code waited for (a minute at a time). A client asks for longer.

@@ -72,7 +72,7 @@
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
-  import { clock, type NeedsItem, span } from "./home-state.svelte";
+  import { askView, clock, type NeedsItem, span } from "./home-state.svelte";
   import { openPeek, peekable, peekTipOff } from "./peek.svelte";
 
   let {
@@ -93,15 +93,8 @@
     if (item.kind !== "ask") {
       return item.href;
     }
-    // An ask opens where it was made: Caw's thread, the session that made
-    // it, else its own session.
-    if (item.thread) {
-      return `/session/${item.thread}`;
-    }
-    return conversationHref(
-      item.origin ?? item.instanceId,
-      cawco.instanceIndex
-    );
+    // An ask opens where it was made (`askView`).
+    return conversationHref(askView(item), cawco.instanceIndex);
   });
   /** What it asks for, in the words it is asked: its second line. */
   const want = $derived.by(() => {

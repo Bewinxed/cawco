@@ -33,6 +33,8 @@ import {
   type FindMachineCoverage,
   type FindMoment,
   type FindResult,
+  type HarnessFailed,
+  type HarnessUnanswered,
   type MomentAuthor,
   machineLabel,
   type NeutralSessionInfo,
@@ -139,10 +141,19 @@ export interface FindDeps {
     timeoutMs: number
   ) => Promise<TranscriptAnswer | { error: string }>;
   db: DbShape;
-  /** A machine's catalog of the sessions it keeps (`listSessions`), or why it gave none. */
-  listStored: (
-    machineId: string
-  ) => Promise<NeutralSessionInfo[] | { error: string }>;
+  /**
+   * A machine's catalog of the sessions it keeps (`listSessions`), with the
+   * harnesses that did not list in time or whose listing threw, or why it
+   * gave none.
+   */
+  listStored: (machineId: string) => Promise<
+    | {
+        failed: HarnessFailed[];
+        sessions: NeutralSessionInfo[];
+        unanswered: HarnessUnanswered[];
+      }
+    | { error: string }
+  >;
   /** The sessions waiting on the person: a permission or a question parked for them. */
   needsYou: () => ReadonlySet<string>;
   /** Whether the hub holds `machineId`'s socket now. */
@@ -405,14 +416,30 @@ export const createFind = (deps: FindDeps) => {
     { at: number; kinds: Map<string, StageKind> }
   >();
   const stagesReading = new Set<string>();
-  /** Each machine's catalog of the sessions it keeps, as last read, and when. */
+  /**
+   * Each machine's catalog of the sessions it keeps, as last read, and when;
+   * with the harnesses that did not list in time, or whose listing threw, on
+   * that read.
+   */
   const storedCatalogs = new Map<
     string,
-    { at: number; sessions: NeutralSessionInfo[] }
+    {
+      at: number;
+      failed: HarnessFailed[];
+      sessions: NeutralSessionInfo[];
+      unanswered: HarnessUnanswered[];
+    }
   >();
   const storedReading = new Set<string>();
-  /** A machine's catalog as last read; read again in the background once stale. */
-  const catalogOf = (machineId: string, now: number) => {
+  /**
+   * A machine's catalog as last read; read again in the background once
+   * stale. A harness that did not list in time, or whose listing threw,
+   * keeps the sessions it listed last, and is said by name ("claude on
+   * obelisk didn't answer within 10 s", "… couldn't list its sessions: …"):
+   * never read as having none.
+   */
+  const catalogOf = (machine: AgentRow, now: number) => {
+    const { machineId } = machine;
     const known = storedCatalogs.get(machineId);
     const due = !known || now - known.at > STORED_FRESH_MS;
     if (due && deps.online(machineId) && !storedReading.has(machineId)) {
@@ -421,10 +448,34 @@ export const createFind = (deps: FindDeps) => {
         deps
           .listStored(machineId)
           .then((answer) => {
-            if (!Array.isArray(answer)) {
+            if ("error" in answer) {
               throw new Error(answer.error);
             }
-            storedCatalogs.set(machineId, { at: Date.now(), sessions: answer });
+            const silent = new Set(
+              [...answer.unanswered, ...answer.failed].map((one) => one.harness)
+            );
+            const kept = (known?.sessions ?? []).filter((info) =>
+              silent.has(info.harness)
+            );
+            const keptOf = (harness: string) =>
+              kept.filter((info) => info.harness === harness).length;
+            const name = machineLabel(machine.hostname);
+            for (const { harness, after } of answer.unanswered) {
+              console.info(
+                `[find] ${harness} on ${name} didn't answer within ${after / 1000} s; its stored sessions are kept as last read (${keptOf(harness)})`
+              );
+            }
+            for (const { harness, error } of answer.failed) {
+              console.info(
+                `[find] ${harness} on ${name} couldn't list its sessions: ${error}; its stored sessions are kept as last read (${keptOf(harness)})`
+              );
+            }
+            storedCatalogs.set(machineId, {
+              at: Date.now(),
+              failed: answer.failed,
+              sessions: [...answer.sessions, ...kept],
+              unanswered: answer.unanswered,
+            });
             stale = true;
           })
           .finally(() => storedReading.delete(machineId)),
@@ -624,7 +675,7 @@ export const createFind = (deps: FindDeps) => {
         id: machine.machineId,
         name: machineLabel(machine.hostname),
       };
-      for (const info of catalogOf(machine.machineId, now)) {
+      for (const info of catalogOf(machine, now)) {
         const entry = bySessionId.has(info.sessionId)
           ? null
           : storedEntry(info, where);

@@ -4,6 +4,10 @@
  * web process that stops answering scripts, then is killed.
  */
 import type { Page } from "playwright-core";
+import { Gone, readWithin } from "../../packages/core/src/bounded";
+
+/** How long the page is given to answer one question; one it never answers counts as this. */
+const ANSWER_MS = 10_000;
 
 /**
  * Asks the page a question every 250ms while `work` runs: the longest it
@@ -20,21 +24,24 @@ export async function answering<T>(
     while (going) {
       const started = performance.now();
       // biome-ignore lint/performance/noAwaitInLoops: one question at a time, timed
-      const answered = await Promise.race([
+      const asked = await readWithin(ANSWER_MS, () =>
         page
           .evaluate(() => 1)
-          .then(
-            () => true,
-            () => false
-          ),
-        Bun.sleep(10_000).then(() => false),
-      ]);
-      longest = Math.max(
-        longest,
-        answered ? performance.now() - started : 10_000
+          .catch((error: unknown) => {
+            throw new Gone(`the page's web process: ${error}`);
+          })
       );
-      if (!answered) {
-        return;
+      switch (asked.kind) {
+        case "answered":
+          longest = Math.max(longest, performance.now() - started);
+          break;
+        case "unanswered":
+          longest = Math.max(longest, ANSWER_MS);
+          return;
+        default: {
+          const unhandled: never = asked;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
       }
       await Bun.sleep(250);
     }

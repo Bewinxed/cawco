@@ -112,7 +112,7 @@ export interface PageAnchor {
   /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
   frames?: string[];
   selector: string;
-  /** On a sheet: its story file (from the Vite root) and the story whose frame holds the element. */
+  /** On a sheet: its story file (from the toolchain root) and the story whose frame holds the element. */
   sheet?: { file: string; story: string };
   source: PreviewElement["source"];
   /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
