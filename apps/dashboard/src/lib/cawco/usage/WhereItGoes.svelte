@@ -254,7 +254,7 @@
     old: Group[];
   }
   /** The boxes whose heights a change drives: each group, and the "more" line's. */
-  const BOXES = ":scope > .group, :scope > .more-slot";
+  const BOXES = ':scope > [data-slot="group"], :scope > [data-slot="more-slot"]';
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -322,7 +322,7 @@
     const list = listEl;
     const before = list ? boxHeights(list, BOXES) : new Map<string, number>();
     // Mid-change, only what is on screen this frame has anything to leave.
-    const seen = plan && list ? onScreen(list, ".group, .more-slot") : null;
+    const seen = plan && list ? onScreen(list, '[data-slot="group"], [data-slot="more-slot"]') : null;
     const drawnNow = (key: string) => !seen || seen.has(key);
     const old: Group[] = drawn
       .filter((entry) => entry.kind !== "gone")
@@ -399,22 +399,28 @@
     });
   }
 
-  const enterAnim = (key: string): string => {
+  const enterAnim = (key: string): string | undefined => {
     const at = plan?.enter.get(key);
-    return at ? `animation:${swap.rowAnim(at.i, at.notBefore)}` : "";
+    return at ? swap.rowAnim(at.i, at.notBefore) : undefined;
   };
-  const leaveAnim = (key: string): string => {
+  const leaveAnim = (key: string): string | undefined => {
     const at = plan?.leave.get(key);
-    return at === undefined ? "" : `animation:${swap.leaveAnim(at)}`;
+    return at === undefined ? undefined : swap.leaveAnim(at);
   };
   /** A header arriving with a new machine, leaving with a gone one, or unseen. */
-  const headStyle = (kind: "stay" | "new" | "gone", id: string): string => {
+  const headAnim = (
+    kind: "stay" | "new" | "gone",
+    id: string
+  ): string | undefined => {
     const key = `head:${id}`;
     if (kind !== "gone") {
       return enterAnim(key);
     }
-    return plan?.leave.has(key) ? leaveAnim(key) : "opacity:0";
+    return plan?.leave.has(key) ? leaveAnim(key) : undefined;
   };
+  /** A gone machine's header with no leave to play stays unseen. */
+  const headHidden = (kind: "stay" | "new" | "gone", id: string): boolean =>
+    kind === "gone" && !plan?.leave.has(`head:${id}`);
 
   /* ---- Export ------------------------------------------------------- */
 
@@ -478,11 +484,14 @@
 <section
   data-slot="where-it-goes-card"
   aria-labelledby="where-title"
-  class="card"
+  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-tile max-phone:p-space-4"
 >
-  <header data-slot="head" class="head">
-    <h2 data-slot="title" class="title" id="where-title">Where it goes</h2>
-    <div class="switches">
+  <header
+    data-slot="head"
+    class="flex flex-wrap items-center justify-between gap-space-3"
+  >
+    <h2 data-slot="title" class="type-label text-ink-muted" id="where-title">Where it goes</h2>
+    <div class="flex flex-wrap gap-space-2">
       <Tabs
         onValueChange={(next) => {
           harness = next as Harness;
@@ -510,13 +519,17 @@
   </header>
 
   {#if start === null}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta text-ink-muted">
       No 5-hour window is running for
       {harness === "claude" ? "Claude" : "opencode"}.
     </p>
   {:else if failed && !view}
-    <div data-slot="failed" class="failed" role="alert">
-      <p data-slot="note" class="note">
+    <div
+      data-slot="failed"
+      class="flex flex-wrap items-center gap-space-3"
+      role="alert"
+    >
+      <p data-slot="note" class="type-meta text-ink-muted">
         Could not read where it goes. {failed}
       </p>
       <Button
@@ -530,20 +543,27 @@
       />
     </div>
   {:else if !view}
-    <div data-skeleton class="skeleton" data-slot="skeleton-rows">
+    <div
+      data-skeleton
+      class="flex flex-col gap-space-2"
+      data-slot="skeleton-rows"
+    >
       {#each [0, 1, 2, 3, 4] as row (row)}
         <Skeleton class="h-6 w-full" />
       {/each}
     </div>
   {:else if empty && !plan}
-    <p data-slot="note" class="note">Nothing recorded in this range.</p>
+    <p data-slot="note" class="type-meta text-ink-muted">Nothing recorded in this range.</p>
   {:else}
-    <div data-slot="list" class="list" bind:this={listEl} {@attach reflow()}>
+    <div
+      data-slot="list"
+      class="flex flex-col overflow-x-clip"
+      bind:this={listEl} {@attach reflow()}>
       {#each drawn as entry (entry.group.machineId)}
         {@const id = entry.group.machineId}
         <div
           data-slot="group"
-          class="group"
+          class="relative flex flex-col not-first:pt-space-2"
           data-flip={plan ? undefined : "box"}
           data-kind={entry.kind}
           data-machine={id}
@@ -552,15 +572,16 @@
             <!-- Where these ran, said once for the rows under it. -->
             <h3
               data-slot="machine"
-              class="machine mark-line"
+              class="mark-line type-label m-0 flex animate-(--swap-anim) items-center gap-space-2 py-space-1 text-ink-muted opacity-(--head-opacity)"
               data-key="head:{id}"
-              style={headStyle(entry.kind, id)}
+              style:--swap-anim={headAnim(entry.kind, id)}
+              style:--head-opacity={headHidden(entry.kind, id) ? "0" : undefined}
             >
               <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
               <span>{entry.group.name}</span>
             </h3>
           {/if}
-          <div class="rows">
+          <div class="relative flex flex-col gap-space-1">
             {#if plan?.layered.has(id) && entry.gone.length}
               <!-- The rows this group had, leaving in the places the new
                    ones take, each new one arriving as its place clears. -->
@@ -570,7 +591,8 @@
               <div
                 data-flip={plan ? undefined : ""}
                 data-key={item.id}
-                style={enterAnim(item.id)}
+                class="animate-(--swap-anim)"
+                style:--swap-anim={enterAnim(item.id)}
               >
                 {@render line(item, true)}
               </div>
@@ -584,16 +606,24 @@
       <!-- The list's last line: the rest of the rows. It comes and goes in
            the relay like any other line. -->
       <div
-        class="more-slot"
+        data-slot="more-slot"
+        class="flex flex-col items-start pt-space-2 kind-gone:pt-0"
         data-kind={more ? "stay" : "gone"}
         data-machine="more"
       >
         {#if more}
-          <span data-key="more" style={enterAnim("more")}>
+          <span
+            data-key="more"
+            class="animate-(--swap-anim)"
+            style:--swap-anim={enterAnim("more")}
+          >
             <Button label={more} onclick={showAll} size="sm" variant="ghost" />
           </span>
         {:else if plan?.more}
-          <span aria-hidden="true" class="more-gone" style={leaveAnim("more")}
+          <span
+            aria-hidden="true"
+            class="type-label animate-(--swap-anim) text-ink-muted"
+            style:--swap-anim={leaveAnim("more")}
             >{plan.more}</span
           >
         {/if}
@@ -602,34 +632,42 @@
   {/if}
 
   {#if harness === "claude"}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta text-ink-muted">
       ~ is the API price of work the plan already covers.
     </p>
   {/if}
 </section>
 
 {#snippet line(item: Item, live: boolean)}
-  <div data-slot="row" class="row">
+  <!-- literal: minmax(0, 2fr) minmax(0, 3fr), 28px -->
+  <div
+    data-slot="row"
+    class="grid min-h-(--row-min) grid-cols-(--row-cols) items-center gap-space-3 max-phone:grid-cols-1 max-phone:gap-space-1 max-phone:py-space-1"
+    style:--row-cols="minmax(0, 2fr) minmax(0, 3fr)"
+    style:--row-min="28px"
+  >
     {#if item.href && live}
-      <a data-slot="name" class="name" href={item.href} title={item.label}
+      <a data-slot="name" class="type-body truncate text-ink-strong no-underline hover:underline" href={item.href} title={item.label}
         >{item.label}</a
       >
     {:else if item.os}
-      <span data-slot="name" class="name machine-name mark-line">
+      <span data-slot="name" class="mark-line type-body flex items-center gap-space-2 truncate text-ink-strong">
         <OsMark class="size-icon-md shrink-0" os={item.os} />
         <span>{item.label}</span>
       </span>
     {:else}
-      <span data-slot="name" class="name" title={item.label}>{item.label}</span>
+      <span data-slot="name" class="type-body truncate text-ink-strong" title={item.label}>{item.label}</span>
     {/if}
     {#if live}
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <span {...props} class="measure">
-              <span data-slot="fill" class="fill" style:--share={item.share}
+            <span {...props} class="flex min-w-0 items-center gap-space-2">
+              <span data-slot="fill" class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer" style:--share={item.share}
+                style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
+                style:--fill-h="8px"
               ></span>
-              <span data-where-it-goes-value data-slot="num" class="value num"
+              <span data-where-it-goes-value data-slot="num" class="type-meta num flex-none text-ink-strong"
                 >{item.value}</span
               >
             </span>
@@ -638,9 +676,11 @@
         <Tooltip.Content>{item.tip}</Tooltip.Content>
       </Tooltip.Root>
     {:else}
-      <span class="measure">
-        <span data-slot="fill" class="fill" style:--share={item.share}></span>
-        <span data-where-it-goes-value data-slot="num" class="value num"
+      <span class="flex min-w-0 items-center gap-space-2">
+        <span data-slot="fill" class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer" style:--share={item.share}
+                style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
+                style:--fill-h="8px"></span>
+        <span data-where-it-goes-value data-slot="num" class="type-meta num flex-none text-ink-strong"
           >{item.value}</span
         >
       </span>
@@ -652,173 +692,14 @@
   <div
     data-layer={layer || undefined}
     aria-hidden="true"
-    class={layer ? "leaving layer" : "leaving"}
+    class="pointer-events-none flex flex-col gap-space-1 data-layer:absolute data-layer:inset-x-0 data-layer:top-0"
     data-leaving
     inert
   >
     {#each lines.filter((l) => l.row) as l (l.key)}
-      <div style={leaveAnim(l.key)}>
+      <div class="animate-(--swap-anim)" style:--swap-anim={leaveAnim(l.key)}>
         {@render line(l.row as Item, false)}
       </div>
     {/each}
   </div>
 {/snippet}
-
-<style>
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .switches {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .failed {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .skeleton {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  /* The groups stand flush: each is one box whose height a relay drives,
-     its header and rows inside it, so a group closing takes its room with
-     it and nothing else moves except on the layout. */
-  .list {
-    display: flex;
-    flex-direction: column;
-    overflow-x: clip;
-  }
-  .group {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .group + .group {
-    padding-block-start: var(--space-2);
-  }
-  .rows {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .leaving {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    pointer-events: none;
-  }
-  /* Over the rows' top: each old row in the place its successor takes. */
-  .leaving.layer {
-    position: absolute;
-    inset: 0 0 auto;
-  }
-  .machine {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    padding-block: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .more-slot {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    padding-block-start: var(--space-2);
-  }
-  .more-slot[data-kind="gone"] {
-    padding-block-start: 0;
-  }
-  .more-gone {
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .row {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-    align-items: center;
-    gap: var(--space-3);
-    min-block-size: 28px;
-  }
-  .name {
-    overflow: hidden;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  a.name {
-    text-decoration: none;
-  }
-  a.name:hover {
-    text-decoration: underline;
-  }
-  .machine-name {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* The bar and its value: the fill takes its share of the room the value
-     leaves, and the value stands at its tip. */
-  .measure {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .fill {
-    flex: 0 0 auto;
-    inline-size: calc(var(--share) * (100% - 5.5rem));
-    min-inline-size: 2px;
-    block-size: 8px;
-    border-radius: var(--radius-hair);
-    background: var(--meter-share);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: inline-size var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  .value {
-    flex: 0 0 auto;
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-
-  @media (max-width: 639px) {
-    .card {
-      padding: var(--space-4);
-    }
-    .row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-1);
-      padding-block: var(--space-1);
-    }
-  }
-</style>
