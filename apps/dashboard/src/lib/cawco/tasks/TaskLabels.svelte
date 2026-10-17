@@ -50,8 +50,9 @@
   {#each labels as label (label)}
     <Badge
       data-task-labels-label
-      class="group/label gap-space-row"
+      class="group/label"
       data-label
+      gap="tight"
       variant="secondary"
     >
       <span>{label}</span>

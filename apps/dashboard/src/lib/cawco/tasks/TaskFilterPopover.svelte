@@ -125,7 +125,7 @@
       {/snippet}
     </Popover.Trigger>
   {/if}
-  <Popover.Content align="end" class="w-80" customAnchor={anchor}>
+  <Popover.Content align="end" customAnchor={anchor} width="wide">
     <div class="flex flex-col gap-space-2 p-space-1">
       <Input
         aria-label="Find a task"
@@ -161,7 +161,8 @@
           <Select.Trigger
             data-task-filter-popover-pick
             aria-label="Label"
-            class="min-w-0 shrink grow basis-0"
+            class="shrink grow"
+            measure="share"
             size="sm">{filter.label ?? "Any label"}</Select.Trigger
           >
           <Select.Content>
@@ -188,7 +189,8 @@
           <Select.Trigger
             data-task-filter-popover-pick
             aria-label="Type"
-            class="min-w-0 shrink grow basis-0"
+            class="shrink grow"
+            measure="share"
             size="sm">{filter.type ?? "Any type"}</Select.Trigger
           >
           <Select.Content>
@@ -210,7 +212,8 @@
               <Select.Trigger
                 data-task-filter-popover-pick
                 aria-label="Field"
-                class="min-w-0 shrink grow basis-0"
+                class="shrink grow"
+                measure="share"
                 size="sm">{key || "Field"}</Select.Trigger
               >
               <Select.Content>
@@ -229,7 +232,8 @@
               <Select.Trigger
                 data-task-filter-popover-pick
                 aria-label="Value"
-                class="min-w-0 shrink grow basis-0"
+                class="shrink grow"
+                measure="share"
                 size="sm">{value || "value"}</Select.Trigger
               >
               <Select.Content>

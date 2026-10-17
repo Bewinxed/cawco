@@ -122,7 +122,8 @@
     <Input
       aria-label={under ? `Add a to-do under ${under}` : "Add a to-do"}
       autocomplete="off"
-      class="flex-auto h-c-btn-h-sm text-label"
+      class="flex-auto h-c-btn-h-sm"
+      text="label"
       onfocus={() => {
         if (!under) {
           addingUnder = "";
@@ -194,7 +195,8 @@
               <Input
                 aria-label="To-do"
                 autocomplete="off"
-                class="h-c-btn-h-sm text-label"
+                class="h-c-btn-h-sm"
+                text="label"
                 disabled={busy}
                 onblur={() => saveEdit(todo)}
                 onkeydown={(event) => {
@@ -235,7 +237,9 @@
             </button>
             <Button
               aria-label="Add a to-do under “{todo.text}”"
-              class="flex-none text-ink-muted can-hover:opacity-0 can-hover:transition-[opacity] can-hover:dur-control can-hover:ease-out can-hover:group-hover:opacity-100 can-hover:focus-visible:opacity-100"
+              class="flex-none"
+              reveal="row-hover"
+              tone="muted"
               onclick={() => {
                 addingUnder = ref;
                 addText = "";

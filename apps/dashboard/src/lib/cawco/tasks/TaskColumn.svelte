@@ -82,7 +82,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 not-kind-you:data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -147,11 +147,12 @@
             data-task-column-pick
             aria-label="Pick {task.id} {task.title}"
             checked={on}
-            class="absolute end-space-3 top-(--pick-top) opacity-0 transition-[opacity] dur-control ease-out group-focus-within/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100 group-hover/card:opacity-100 coarse:opacity-100"
+            class="absolute end-space-3 top-(--pick-top)"
             onclick={(event: MouseEvent) => {
               event.preventDefault();
               onpick(task.id, !on, event.shiftKey);
             }}
+            reveal="card-pick"
             style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - 1rem) / 2)"
           />
         {/if}

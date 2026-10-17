@@ -133,11 +133,12 @@
   </Button>
 {:else}
   <Button
-    class="justify-start text-ink-muted"
+    class="justify-start"
     onclick={() => {
       open = true;
     }}
     press="tint"
+    tone="muted"
     size="sm"
     variant="ghost"
   >

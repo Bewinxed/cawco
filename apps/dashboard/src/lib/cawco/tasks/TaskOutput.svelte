@@ -145,7 +145,7 @@
     <div
       data-slot="body"
       data-roomy={(kind === "markdown" && !compact) || undefined}
-      class="p-space-3 group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
+      class="p-space-3 not-data-roomy:group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
     >
       {#if problem || postProblem}
         <p class="m-0 type-meta text-status-fail-ink">

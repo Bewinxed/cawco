@@ -178,7 +178,7 @@
           >
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" class="w-auto min-w-40">
+      <DropdownMenu.Content align="start" class="w-auto" min="compact">
         {#each movable as stage (stage.name)}
           <DropdownMenu.Item onSelect={() => onmove(stage.name)}
             >{stageLabel(stage.name)}</DropdownMenu.Item
@@ -194,7 +194,7 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="start" class="w-64" side="top">
+      <Popover.Content align="start" side="top" width="narrow">
         <!-- A label typed, as the sheet's label editor takes one, or one the
              project's tasks already carry. -->
         <form
@@ -262,7 +262,7 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="end" class="w-80" side="top">
+      <Popover.Content align="end" side="top" width="wide">
         <form
           data-slot="drop"
           class="flex flex-col gap-space-2 p-space-1"

@@ -421,10 +421,7 @@
       </div>
     {/if}
     {#if listed.length > 0}
-      <div
-        class="flex flex-wrap gap-space-3"
-        data-band-part="attachments"
-      >
+      <div class="flex flex-wrap gap-space-3" data-band-part="attachments">
         {#each listed as one, index (index)}
           {@render attachment(one)}
         {/each}

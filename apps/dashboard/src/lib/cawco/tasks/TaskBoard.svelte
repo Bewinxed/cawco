@@ -207,7 +207,9 @@
         type="button"
       >
         <IconArchive aria-hidden="true" class="size-icon-md" />
-        <span data-slot="rail-name" class="type-label">Archived</span>
+        <span data-slot="rail-name" class="type-label writing-vertical-rl"
+          >Archived</span
+        >
         <span data-slot="num" class="num type-meta text-ink-subtle"
           >{archived.length}</span
         >
@@ -217,10 +219,6 @@
 </div>
 
 <style>
-  /* residual: unmapped — the folded rail's name set vertically (no utility writes writing-mode). */
-  [data-slot="rail-name"] {
-    writing-mode: vertical-rl;
-  }
   /* residual: foreign-dom — a phone's board settles a swipe on a column; TaskColumn's root takes no class. */
   @media (max-width: 639px) {
     [data-slot="board"] > :global([data-slot="column"]) {

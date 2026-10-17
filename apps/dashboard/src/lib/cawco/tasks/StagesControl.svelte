@@ -141,9 +141,10 @@
 <Popover.Root bind:open>
   <Popover.Content
     align="end"
-    class="w-80 gap-space-2"
     customAnchor={anchor}
+    gap="snug"
     side="bottom"
+    width="wide"
   >
     <div class="flex flex-col gap-space-1 px-space-2 pt-space-2 pb-0">
       <p data-slot="lead" class="type-label text-ink-strong">
@@ -198,7 +199,7 @@
       {:else if !problem}
         {#each [0, 1, 2, 3, 4, 5, 6] as row (row)}
           <li class="flex flex-col gap-space-1 px-space-3 py-space-2">
-            <Skeleton class="h-space-4 w-24" />
+            <Skeleton class="h-space-4" width="name" />
             <Skeleton class="h-icon-sm w-full" />
           </li>
         {/each}
