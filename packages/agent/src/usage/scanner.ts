@@ -58,7 +58,7 @@ const PAGE_CACHE_KIB = 8192;
  * dedups and costs them. Bump it with any change to those: a store made by
  * other code is dropped on open and the next scan rebuilds it.
  */
-const SCANNER_VERSION = 2;
+const SCANNER_VERSION = 3;
 
 /**
  * The longest a store goes between full rebuilds. A rebuild heals what

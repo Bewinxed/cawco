@@ -47076,7 +47076,7 @@
         ]
       },
       "UsageSpend": {
-        "description": "The fleet's real spend, as the hub reckons it and serves it at\n`/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every\n\"today\" in CawCo reads.\n\nReal money is opencode's own per-message cost; Claude is a subscription\nwhose constraint is a percentage, so its API-price estimate is never added\nin. The days are the hub's: `todayStart` is local midnight and `weekStart`\nthis Monday's midnight in `timeZone`, the hub's own zone (IANA name).",
+        "description": "The fleet's real spend, as the hub reckons it and serves it at\n`/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every\n\"today\" in CawCo reads.\n\nReal money is opencode's messages, each priced by CawCo at its provider's\nrates and its prompt's tier (`costForUsage`); Claude is a subscription\nwhose constraint is a percentage, so its API-price estimate is never added\nin. The days are the hub's: `todayStart` is local midnight and `weekStart`\nthis Monday's midnight in `timeZone`, the hub's own zone (IANA name).",
         "type": "object",
         "properties": {
           "all": {

@@ -3688,8 +3688,8 @@ export const cawTurns = sqliteTable(
     }),
     /**
      * The harness whose own result said what the turn cost: Claude Code's
-     * `total_cost_usd`, OpenCode's assistant messages' `cost` (the agent's
-     * adapter sums them into the same field). Turns booked before it was
+     * `total_cost_usd`, or the agent's OpenCode adapter's, which sums each
+     * request's CawCo price (`costForUsage`) into the same field. Turns booked before it was
      * recorded take their project's Caw harness then (migration 0096).
      */
     harness: text("harness"),

@@ -153,6 +153,20 @@ export interface Reply {
    * makes one turn park two asks at once. With `tool`, `tool` comes first.
    */
   tools?: ToolCall[];
+  /**
+   * The tokens the request reports: `prompt` with its `cached` part inside
+   * it, `completion` with its `reasoning` part inside it. A chat completion
+   * carries them as OpenAI's `usage` does; Anthropic messages as its own
+   * (the uncached input, the cache read, the output; no reasoning split).
+   * None: 10 in, 2 out (chat completions), 10 in and the words out
+   * (Anthropic messages).
+   */
+  usage?: {
+    cached?: number;
+    completion: number;
+    prompt: number;
+    reasoning?: number;
+  };
   words: string[];
 }
 
@@ -354,10 +368,13 @@ const sseStream = (events: string[], everyMs: number) => {
 const anthropicEvents = (
   words: string[],
   calls: ToolCall[],
-  cache?: Reply["cache"]
+  cache?: Reply["cache"],
+  spent?: Reply["usage"]
 ): string[] => {
   const ev = (type: string, data: object) =>
     `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+  // Anthropic counts the uncached input apart from the cache read.
+  const read = spent?.cached ?? 0;
   const start = ev("message_start", {
     message: {
       id: `msg_${crypto.randomUUID()}`,
@@ -368,8 +385,11 @@ const anthropicEvents = (
       stop_reason: null,
       stop_sequence: null,
       usage: {
-        input_tokens: 10,
+        input_tokens: spent ? spent.prompt - read : 10,
         output_tokens: 1,
+        ...(spent?.cached === undefined
+          ? {}
+          : { cache_read_input_tokens: read }),
         ...(cache
           ? {
               cache_read_input_tokens: cache.read,
@@ -426,7 +446,7 @@ const anthropicEvents = (
       ]),
       ev("message_delta", {
         delta: { stop_reason: "tool_use", stop_sequence: null },
-        usage: { output_tokens: 5 },
+        usage: { output_tokens: spent?.completion ?? 5 },
       }),
       ev("message_stop", {}),
     ];
@@ -446,16 +466,37 @@ const anthropicEvents = (
     ev("content_block_stop", { index: 0 }),
     ev("message_delta", {
       delta: { stop_reason: "end_turn", stop_sequence: null },
-      usage: { output_tokens: words.length },
+      usage: { output_tokens: spent?.completion ?? words.length },
     }),
     ev("message_stop", {}),
   ];
 };
 
-const chatEvents = (words: string[], calls: ToolCall[]): string[] => {
+const chatEvents = (
+  words: string[],
+  calls: ToolCall[],
+  spent: Reply["usage"] = { prompt: 10, completion: 2 }
+): string[] => {
   const chunk = (delta: object, finish: string | null) =>
     `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
-  const usage = `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })}\n\n`;
+  const usage = `data: ${JSON.stringify({
+    id: "c",
+    object: "chat.completion.chunk",
+    created: 0,
+    model: "mock",
+    choices: [],
+    usage: {
+      prompt_tokens: spent.prompt,
+      completion_tokens: spent.completion,
+      total_tokens: spent.prompt + spent.completion,
+      ...(spent.cached === undefined
+        ? {}
+        : { prompt_tokens_details: { cached_tokens: spent.cached } }),
+      ...(spent.reasoning === undefined
+        ? {}
+        : { completion_tokens_details: { reasoning_tokens: spent.reasoning } }),
+    },
+  })}\n\n`;
   if (calls.length > 0) {
     return [
       ...(words.length > 0
@@ -819,6 +860,13 @@ export const MODEL: Record<Harness, string> = {
   pi: "mockpi/mock-pi",
 };
 
+/**
+ * An OpenCode model CawCo's pricing lists, served by the mock: OpenCode Zen's
+ * catalog id (`opencode`) and Claude Haiku 5.5, whose price steps up over a
+ * 100k prompt. A spec reading what a turn cost spawns on it.
+ */
+export const PRICED_OPENCODE_MODEL = "opencode/claude-haiku-5-5";
+
 const ENTRY = {
   hub: "packages/hub/src/index.ts",
   agent: "packages/agent/src/cli.ts",
@@ -1066,8 +1114,13 @@ async function standUp(
       }
       return sseStream(
         chat
-          ? chatEvents(reply.words, callsOf(reply))
-          : anthropicEvents(reply.words, callsOf(reply), reply.cache),
+          ? chatEvents(reply.words, callsOf(reply), reply.usage)
+          : anthropicEvents(
+              reply.words,
+              callsOf(reply),
+              reply.cache,
+              reply.usage
+            ),
         reply.everyMs
       );
     },
@@ -1132,6 +1185,23 @@ async function standUp(
                 name: "Mock OC",
                 capabilities: { tools: true },
                 limit: { context: 100_000, output: 4000 },
+              },
+            },
+          },
+          // PRICED_OPENCODE_MODEL, on the mock. OpenCode speaks Anthropic
+          // messages to Zen's Claude models, whatever the package says.
+          opencode: {
+            name: "Mock Zen",
+            package: "@ai-sdk/openai-compatible",
+            settings: {
+              baseURL: `${mockBase}/v1`,
+              apiKey: "fake-opencode-key",
+            },
+            models: {
+              "claude-haiku-5-5": {
+                name: "Mock Haiku",
+                capabilities: { tools: true },
+                limit: { context: 1_000_000, output: 4000 },
               },
             },
           },

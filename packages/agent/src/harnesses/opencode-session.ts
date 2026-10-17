@@ -546,12 +546,13 @@ interface ChildState {
 }
 
 /**
- * What a turn's assistant messages spent, by message id: OpenCode's own
- * `cost`, and the tokens priced on their own at the step's start (`at`).
+ * What a turn's assistant messages spent, by message id: the tokens priced on
+ * their own at the step's start (`at`). OpenCode's own `cost` is not read: it
+ * is its estimate at its catalog's rates, "not what the provider actually
+ * bills" (https://github.com/anomalyco/opencode/issues/44224).
  */
 interface StepUsage {
   at: number;
-  cost: number;
   tokens: ModelTurnUsage;
 }
 
@@ -737,6 +738,7 @@ export class OpencodeSession implements HarnessSession {
   #lastSent: number | undefined;
   /** What each assistant message of the open turn spent, by message id. */
   readonly #steps = new Map<string, StepUsage>();
+  /** What the process's earlier turns cost, priced as their `turnUsage` was. */
   #costBase = 0;
   /** Each assistant message's blocks, for their places and so each is drawn once. */
   readonly #messages = new Map<string, MessageBlocks>();
@@ -1141,7 +1143,6 @@ export class OpencodeSession implements HarnessSession {
         this.#completion = { uuid: id, timestamp };
         this.#steps.set(id, {
           at: started.getTime(),
-          cost: 0,
           tokens: {
             model: `${event.data.model.providerID}/${event.data.model.id}`,
             input: 0,
@@ -1155,10 +1156,9 @@ export class OpencodeSession implements HarnessSession {
       }
       case "session.step.ended":
       case "session.step.failed": {
-        const { tokens, cost } = event.data;
+        const { tokens } = event.data;
         const step = this.#steps.get(event.data.assistantMessageID);
         if (step && tokens) {
-          step.cost = cost ?? 0;
           // 2.0's `input` leaves out the cached tokens, which are added back
           // for what the request sent; a request that failed sent none.
           step.tokens = pricedRequest(
@@ -1166,6 +1166,7 @@ export class OpencodeSession implements HarnessSession {
             {
               input: tokens.input,
               output: tokens.output,
+              reasoning: tokens.reasoning,
               cacheRead: tokens.cache.read,
               cacheWrite: tokens.cache.write,
             },
@@ -1715,8 +1716,12 @@ export class OpencodeSession implements HarnessSession {
     if (!(this.#turnOpen || result)) {
       return;
     }
-    const turnCost = [...this.#steps.values()].reduce(
-      (sum, step) => sum + step.cost,
+    const turnUsage = usageByModel(
+      [...this.#steps.values()].map((step) => step.tokens)
+    );
+    // An unpriced model's spend is unknown, so it adds nothing here.
+    const turnCost = turnUsage.reduce(
+      (sum, usage) => sum + (usage.costUsd ?? 0),
       0
     );
     const identity =
@@ -1735,9 +1740,7 @@ export class OpencodeSession implements HarnessSession {
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
       total_cost_usd: this.#costBase + turnCost,
-      turnUsage: usageByModel(
-        [...this.#steps.values()].map((step) => step.tokens)
-      ),
+      turnUsage,
       cache: {
         read: this.#lastTokens.cache.read,
         write: this.#lastTokens.cache.write,
@@ -2368,12 +2371,12 @@ export class OpencodeSession implements HarnessSession {
     if (message.tokens) {
       this.#steps.set(message.id, {
         at: message.time.created,
-        cost: message.cost ?? 0,
         tokens: pricedRequest(
           `${message.model.providerID}/${message.model.id}`,
           {
             input: message.tokens.input,
             output: message.tokens.output,
+            reasoning: message.tokens.reasoning,
             cacheRead: message.tokens.cache.read,
             cacheWrite: message.tokens.cache.write,
           },

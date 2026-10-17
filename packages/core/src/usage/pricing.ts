@@ -306,7 +306,7 @@ export function resolveRates(id: string, at: number): ModelRates | null {
 
 /**
  * One request's cost at the rates of `at`:
- * `input*rIn + output*rOut + cacheWrite5m*rCacheWrite + cacheWrite1h*rCacheWrite1h + cacheRead*rCacheRead`,
+ * `input*rIn + (output + reasoning)*rOut + cacheWrite5m*rCacheWrite + cacheWrite1h*rCacheWrite1h + cacheRead*rCacheRead`,
  * where the 1-hour writes are `cacheCreation1h` and the rest of
  * `cacheCreation` are 5-minute ones.
  *
@@ -339,7 +339,7 @@ export function costForUsage(
   const write1h = tokens.cacheCreation1h ?? 0;
   return (
     tokens.input * rates.input +
-    tokens.output * rates.output +
+    (tokens.output + tokens.reasoning) * rates.output +
     (tokens.cacheCreation - write1h) * rates.cacheWrite +
     write1h * rates.cacheWrite1h +
     tokens.cacheRead * rates.cacheRead
@@ -349,10 +349,17 @@ export function costForUsage(
 /**
  * One request's usage on `model` (`provider/model`) at `at` (epoch ms), priced
  * on its own by {@link costForUsage}: the unit a turn's usage is summed from.
+ * `reasoning` is what OpenCode counts apart from `output` and bills as
+ * output; pi-ai's reasoning is already inside `output`, so pi passes none.
  */
 export const pricedRequest = (
   model: string,
-  usage: Omit<ModelTurnUsage, "costUsd" | "model">,
+  {
+    reasoning = 0,
+    ...usage
+  }: Omit<ModelTurnUsage, "costUsd" | "model"> & {
+    reasoning?: number;
+  },
   at: number
 ): ModelTurnUsage => ({
   model,
@@ -367,7 +374,7 @@ export const pricedRequest = (
       ...(usage.cacheWrite1h === undefined
         ? {}
         : { cacheCreation1h: usage.cacheWrite1h }),
-      reasoning: 0,
+      reasoning,
     },
     at
   ),
