@@ -25,6 +25,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parse as parseModule } from "@typescript-eslint/parser";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const THEME = path.join(HERE, "src/app.css");
@@ -448,12 +449,51 @@ function attributeValuesDiffer(a, b) {
   return values(a).some((v, i) => v !== vb[i]);
 }
 
+// `first:`/`last:` are the first and last of `nth-*` counts:
+// `:first-child` is `:nth-child(1)`, `:last-child` is `:nth-last-child(1)`.
+const POSITION_ALIASES = [
+  [/:first-child\b/g, ":nth-child(1)"],
+  [/:last-child\b/g, ":nth-last-child(1)"],
+  [/:first-of-type\b/g, ":nth-of-type(1)"],
+  [/:last-of-type\b/g, ":nth-last-of-type(1)"],
+];
+const POSITION = /:nth-((?:last-)?(?:child|of-type))\(([^()]*)\)/g;
+const PLAIN_POSITION = /^\d+$/;
+const PARITY = new Set(["odd", "even"]);
+
+function positions(selector) {
+  let s = selector;
+  for (const [alias, nth] of POSITION_ALIASES) {
+    s = s.replace(alias, nth);
+  }
+  return {
+    shape: s.replace(POSITION, ":nth-$1(@)"),
+    args: [...s.matchAll(POSITION)].map((m) => m[2].trim()),
+  };
+}
+
+/** One position count, at one place, at two different plain values. */
+function positionsDiffer(a, b) {
+  const pa = positions(a);
+  const pb = positions(b);
+  if (pa.shape !== pb.shape) {
+    return false;
+  }
+  return pa.args.some((x, i) => {
+    const y = pb.args[i];
+    const plain = PLAIN_POSITION.test(x) && PLAIN_POSITION.test(y);
+    const parity = PARITY.has(x) && PARITY.has(y);
+    return (plain || parity) && x !== y;
+  });
+}
+
 function alternativesExclusive(x, y) {
   return (
     atRulesExclusive(x.at, y.at) ||
     negations(x.selector, y.selector) ||
     negations(y.selector, x.selector) ||
-    attributeValuesDiffer(x.selector, y.selector)
+    attributeValuesDiffer(x.selector, y.selector) ||
+    positionsDiffer(x.selector, y.selector)
   );
 }
 
@@ -804,6 +844,65 @@ function blank(word) {
   return " ".repeat(word.length);
 }
 
+const SRC_LIB = path.join(HERE, "src/lib");
+const LIB_ALIAS = /^[#$]lib\//;
+const SCRIPT_MODULE = /\.(?:ts|js)$/;
+const JS_EXTENSION = /\.js$/;
+
+/** The `.ts`/`.js` module a specifier names, in this repo, or null. */
+function moduleFile(specifier, from) {
+  let base = null;
+  if (LIB_ALIAS.test(specifier)) {
+    base = path.join(SRC_LIB, specifier.slice(5));
+  } else if (specifier.startsWith(".")) {
+    base = path.resolve(path.dirname(from), specifier);
+  }
+  if (!base) {
+    return null;
+  }
+  const stem = base.replace(JS_EXTENSION, "");
+  const found = [`${stem}.ts`, `${stem}.js`, `${base}/index.ts`].find((file) =>
+    fs.statSync(file, { throwIfNoEntry: false })?.isFile()
+  );
+  return found && SCRIPT_MODULE.test(found) ? found : null;
+}
+
+const moduleExports = new Map();
+/** A module's `export const name = …` initialisers, by name. */
+function exportedConsts(file) {
+  if (!moduleExports.has(file)) {
+    const consts = new Map();
+    const ast = parseModule(fs.readFileSync(file, "utf8"), { range: true });
+    for (const statement of ast.body) {
+      const declaration =
+        statement.type === "ExportNamedDeclaration"
+          ? statement.declaration
+          : null;
+      if (
+        declaration?.type === "VariableDeclaration" &&
+        declaration.kind === "const"
+      ) {
+        for (const d of declaration.declarations) {
+          if (d.id.type === "Identifier" && d.init) {
+            consts.set(d.id.name, d.init);
+          }
+        }
+      }
+    }
+    moduleExports.set(file, consts);
+  }
+  return moduleExports.get(file);
+}
+
+/** What a named import is bound to, when it is another module's `export const`. */
+function importedConst(def, from) {
+  const imported =
+    def.node.type === "ImportSpecifier" ? def.node.imported : null;
+  const name = imported?.name ?? imported?.value;
+  const file = name ? moduleFile(def.parent.source.value, from) : null;
+  return file ? (exportedConsts(file).get(name) ?? null) : null;
+}
+
 /**
  * Reads the class strings an expression can produce in one file. Each entry
  * is one class with where it stands and the branches it is on: two entries
@@ -830,21 +929,30 @@ function reader(context) {
   };
 
   const resolve = (identifier, seen) => {
-    let scope = sourceCode.getScope(identifier);
+    // A node read from another module has no parent and no scope here.
+    let scope = identifier.parent ? sourceCode.getScope(identifier) : null;
     while (scope) {
       const variable = scope.set.get(identifier.name);
       if (variable) {
-        const [def] = variable.defs;
-        const ok =
-          def?.type === "Variable" &&
-          def.parent?.kind === "const" &&
-          def.node.id.type === "Identifier" &&
-          !seen.has(variable);
-        return ok ? { init: def.node.init, variable } : null;
+        return seen.has(variable) ? null : bindingOf(variable);
       }
       scope = scope.upper;
     }
     return null;
+  };
+
+  /** What a `const` or a named import of an `export const` is bound to. */
+  const bindingOf = (variable) => {
+    const [def] = variable.defs;
+    if (def?.type === "ImportBinding") {
+      const init = importedConst(def, context.physicalFilename);
+      return init ? { init, variable, foreign: true } : null;
+    }
+    const ok =
+      def?.type === "Variable" &&
+      def.parent?.kind === "const" &&
+      def.node.id.type === "Identifier";
+    return ok ? { init: def.node.init, variable, foreign: false } : null;
   };
 
   const visitors = {
@@ -912,8 +1020,19 @@ function reader(context) {
     },
     Identifier(node, tags, out, seen) {
       const found = resolve(node, seen);
-      if (found) {
-        visit(found.init, tags, out, new Set([...seen, found.variable]));
+      if (!found) {
+        return;
+      }
+      const followed = new Set([...seen, found.variable]);
+      if (!found.foreign) {
+        visit(found.init, tags, out, followed);
+        return;
+      }
+      // Another module's classes stand where this file names them.
+      const imported = [];
+      visit(found.init, tags, imported, followed);
+      for (const entry of imported) {
+        out.push({ ...entry, start: node.range[0], end: node.range[1] });
       }
     },
     MemberExpression(node, tags, out, seen) {
@@ -1102,7 +1221,13 @@ const variantOrder = {
       }
       const property = conflict(x.info, y.info);
       const winner = property ? winnerOf(x.entry.name, y.entry.name) : null;
-      const key = `${x.entry.start}:${y.entry.start}`;
+      // Classes from an imported constant share the name's place.
+      const key = [
+        x.entry.start,
+        x.entry.name,
+        y.entry.start,
+        y.entry.name,
+      ].join(":");
       if (!winner || done.has(key)) {
         return;
       }

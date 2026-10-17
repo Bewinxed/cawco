@@ -7,10 +7,10 @@ Invariant: on every element, when two of its utilities set the same CSS property
 `house/variant-order`, in `apps/dashboard/eslint-plugin-house.mjs`, registered in `apps/dashboard/eslint.config.mjs` for `src/**/*.svelte` and `src/**/*.ts` (the kit included), so `bun run lint` gates it.
 
 - **Theme.** Tailwind's own design system over `src/app.css` (`__unstable__loadDesignSystem` from `@tailwindcss/node` 4.3.3, the loader @shadcn/lint's oracle uses), loaded once when the config loads.
-- **Classes.** @shadcn/lint exports none of its readers, so the rule reads the same nodes itself. One list per element: `class="…"` plus every `class:x` directive. Each other `*class*` attribute is its own list, and so is every outermost `cn`/`clsx`/`cx`/`twMerge`/`twJoin`/`classNames`/`tv`/`cva` call outside markup. Strings, templates, arrays, object keys, same-file `const`s and `$derived(…)` are followed. The two sides of a ternary or `||`, two values of one recipe variant and two recipe slots never stand together.
+- **Classes.** @shadcn/lint exports none of its readers, so the rule reads the same nodes itself. One list per element: `class="…"` plus every `class:x` directive. Each other `*class*` attribute is its own list, and so is every outermost `cn`/`clsx`/`cx`/`twMerge`/`twJoin`/`classNames`/`tv`/`cva` call outside markup. Strings, templates, arrays, object keys, same-file `const`s, `$derived(…)` and a named import of another `.ts`/`.js` module's `export const` are followed. An imported constant's classes stand where this file names it. The two sides of a ternary or `||`, two values of one recipe variant and two recipe slots never stand together.
 - **Per pair.** Each class's rules come from `candidatesToAst`. Each variant is compiled alone to get its condition, and `getClassOrder` gives the winner. Shorthands are expanded to physical longhands, so logical and physical forms of one side overlap. A pair is flagged when: both carry a variant; their declarations land on the same element (`*:`, `[&>svg]:` and `before:` move the subject); they write one longhand with different values; neither is `!important` alone; they have equal specificity; neither chain's states contain the other's; and no state of one excludes a state of the other.
-- **Exclusive** means: one attribute at the same place with different values; `x` and `not-x` (including `group-not-`, `peer-not-`, `has-not-` and `not-hover`'s two rules); queries that cannot both match (`not (…)`, a discrete feature such as `hover`/`pointer`/`prefers-reduced-motion` with two values, disjoint width ranges, so `min-[900px]`/`max-[900px]`, `desk`/`max-desk`, `coarse`/`fine`, `hover`/`no-hover`/`hover-none`, `motion-safe`/`motion-reduce`); and variants.css's named complements `data-open`/`data-closed`, `data-checked`/`data-unchecked`, `dark`/`light`.
-- **Not seen:** class strings in a `.ts` file outside a helper call, a constant imported from another file, and a class prop passed to a component (the sweep below covers that).
+- **Exclusive** means: one attribute at the same place with different values; `x` and `not-x` (including `group-not-`, `peer-not-`, `has-not-` and `not-hover`'s two rules); queries that cannot both match (`not (…)`, a discrete feature such as `hover`/`pointer`/`prefers-reduced-motion` with two values, disjoint width ranges, so `min-[900px]`/`max-[900px]`, `desk`/`max-desk`, `coarse`/`fine`, `hover`/`no-hover`/`hover-none`, `motion-safe`/`motion-reduce`); variants.css's named complements `data-open`/`data-closed`, `data-checked`/`data-unchecked`, `dark`/`light`; and two values of one position count (`first:` is `:nth-child(1)` and `last:` is `:nth-last-child(1)`, so `last:`/`nth-last-2:` and `odd:`/`even:` are exclusive, while `first:`/`last:` both hold on an only child).
+- **Not seen:** a class prop passed to a component; the sweep below covers that. A `.ts` string that no class site in its module or in an importer reaches is no element's class.
 
 ## The source of record
 
@@ -50,9 +50,9 @@ At ac7b79de8 every consumer class here came from the consumer's own scoped `<sty
 
 ## Left in set and kit files
 
-48 flagged pairs remain, 33 in set files and 15 in the kit. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step. Two kinds of kit flag hold by selector, though the states are never meant to meet:
-- `field-description`'s `nth-last-2:`/`last:` cannot both match. The rule does not treat structural pseudo-classes as exclusive.
-- `switch`'s `data-unchecked:` against `data-[state=checked]:` is not exclusive by selector, because `data-unchecked` also matches a bare `[data-unchecked]`.
+47 flagged pairs remain, 33 in set files and 14 in the kit. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step.
+- `field-description`'s `nth-last-2:`/`last:` pair is no longer flagged: the rule reads `last:` as `:nth-last-child(1)`, which can't be the same element as `:nth-last-child(2)`. Its two pairs against `[[data-variant=legend]+&]:` remain.
+- `switch`'s `data-unchecked:` against `data-[state=checked]:` is flagged correctly: `data-unchecked` also matches a bare `[data-unchecked]`, so by selector the two can hold together. K1/K2 make them exclusive like any other pair.
 
 | owner | file | pairs |
 |---|---|---|
@@ -79,7 +79,7 @@ At ac7b79de8 every consumer class here came from the consumer's own scoped `<sty
 | set 9 | `src/lib/cawco/decisions/RecordCard.svelte` | 2 |
 | set 9 | `src/lib/components/features/workflows/WorkflowEdge.svelte` | 1 |
 | K1/K2 (kit) | `src/lib/components/ui/checkbox/checkbox.svelte` | 1 |
-| K1/K2 (kit) | `src/lib/components/ui/field/field-description.svelte` | 3 |
+| K1/K2 (kit) | `src/lib/components/ui/field/field-description.svelte` | 2 |
 | K1/K2 (kit) | `src/lib/components/ui/input-group/input-group-addon.svelte` | 2 |
 | K1/K2 (kit) | `src/lib/components/ui/machine-row/machine-row.svelte` | 1 |
 | K1/K2 (kit) | `src/lib/components/ui/switch/switch.svelte` | 4 |
@@ -127,7 +127,6 @@ Each pair (line, A, B, shared property, Tailwind's winner today):
 | `src/lib/components/ui/checkbox/checkbox.svelte:25` | `data-checked:bg-action-solid` | `dark:bg-input/30` | background-color | `data-checked:bg-action-solid` |
 | `src/lib/components/ui/field/field-description.svelte:18` | `[[data-variant=legend]+&]:-mt-1.5` | `nth-last-2:-mt-space-1` | margin-top | `[[data-variant=legend]+&]:-mt-1.5` |
 | `src/lib/components/ui/field/field-description.svelte:18` | `[[data-variant=legend]+&]:-mt-1.5` | `last:mt-0` | margin-top | `[[data-variant=legend]+&]:-mt-1.5` |
-| `src/lib/components/ui/field/field-description.svelte:18` | `nth-last-2:-mt-space-1` | `last:mt-0` | margin-top | `nth-last-2:-mt-space-1` |
 | `src/lib/components/ui/fluid-tabs/TabItem.svelte:288` | `can-hover:data-ghosted:text-ink-strong` | `in-variant-folder:data-tab-item-selected:text-ink-muted` | color | `can-hover:data-ghosted:text-ink-strong` |
 | `src/lib/components/ui/input-group/input-group-addon.svelte:9` | `has-[>button]:-ml-space-1` | `has-[>kbd]:ml-[-0.15rem]` | margin-left | `has-[>kbd]:ml-[-0.15rem]` |
 | `src/lib/components/ui/input-group/input-group-addon.svelte:11` | `has-[>button]:-mr-space-1` | `has-[>kbd]:mr-[-0.15rem]` | margin-right | `has-[>kbd]:mr-[-0.15rem]` |
@@ -162,7 +161,7 @@ So no declaration the cutover kept is pruned on this branch, and nothing was alr
 
 `group-not-x/name:` compiles to `:is(:where(.group/name):not(x) *)`: it holds only inside a `group/name` element whose x is off, so with no such ancestor it never matches. `not-group-x/name:` compiles to `:not(:is(:where(.group/name)x *))`, which also holds where there is no ancestor. The same goes for `peer-not-` against a preceding `peer/name`.
 
-**house/variant-order and the `not-` forms.** `not-group-…` against `group-…` and `not-peer-…` against `peer-…` were already read as exclusive. `not-in-…` against `in-…` was not, because `in-x:` compiles to `x &` and `not-in-x:` to `&:not(x *)`. The rule now writes `x &` as `&:is(x *)` before comparing, so all three pass. The scratch file holding the seven pairs (`group-data-[disabled=true]/field`, `group-data-picked/card`, `peer-checked`, `peer-data-open/x`, `in-data-open`, `in-data-[state=open]` and `group-hover/card`, each with its `not-` form) gives `exit 0`. The 48 variant-order pairs above are unchanged.
+**house/variant-order and the `not-` forms.** `not-group-…` against `group-…` and `not-peer-…` against `peer-…` were already read as exclusive. `not-in-…` against `in-…` was not, because `in-x:` compiles to `x &` and `not-in-x:` to `&:not(x *)`. The rule now writes `x &` as `&:is(x *)` before comparing, so all three pass. The scratch file holding the seven pairs (`group-data-[disabled=true]/field`, `group-data-picked/card`, `peer-checked`, `peer-data-open/x`, `in-data-open`, `in-data-[state=open]` and `group-hover/card`, each with its `not-` form) gives `exit 0`. That change alone left the variant-order count at 48. Reading position counts as exclusive then took it to the 47 listed above.
 
 **The check.** The rule is in `eslint-plugin-house.mjs`, on the same files as variant-order. It flags a `group-not-*/name:` (or a bare `group-not-*:`) whose `group/name` (`group`) is not on an ancestor element, and a `peer-not-*` whose `peer/name` is not on a preceding sibling, in DOM order through `{#if}`/`{#each}`. The class must be in the same file. A `{#snippet}` stands at each of its `{@render}` sites, and the check flags when any render site lacks the group or peer. A class string no markup in the file carries (a `tv`/`cva` recipe, a helper call in a `.ts` module) stands on no element there, so it is flagged. The message says to write `not-group-…` (`not-peer-…`) if the condition should not require the group (peer).
 
