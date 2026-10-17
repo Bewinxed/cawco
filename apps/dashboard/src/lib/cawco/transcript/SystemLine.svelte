@@ -192,23 +192,44 @@
 {#if harness}
   <!-- Harness plumbing, folded onto the rail: the summary and how it went on
        one quiet line, the report itself behind it. -->
-  <div data-system-line-rail-row data-slot="note" class="note rail-row">
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="text-size-label font-medium text-ink-muted rail-row"
+  >
     {#if harness.body}
       <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-        <Collapsible.Trigger class="ftrig hn rail-line">
+        <!-- The harness fold: a notification the operator never wrote, on
+             the same rail as every other note: the summary, how it went,
+             and the report one click behind them. -->
+        <Collapsible.Trigger
+          class="inline-flex bg-transparent border-0 p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start max-w-full rail-line"
+        >
           <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
-          <span data-slot="ftitle" class="ftitle">{harness.title}</span>
+          <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+            >{harness.title}</span
+          >
           {#if harness.status}
+            <!-- The one word on this line that is allowed to carry colour. -->
             <span
               data-slot="hstatus"
-              class="hstatus"
-              class:bad={harness.status === "failed"}>{harness.status}</span
+              class="flex-none text-ink-muted data-bad:text-data-bad"
+              data-bad={harness.status === "failed" || undefined}
+              >{harness.status}</span
             >
           {/if}
-          <span class={["hchev", { open }]} data-box><IconChevronRight /></span>
+          <!-- literal: rotate(90deg) -->
+          <span
+            data-open={open || undefined}
+            style:--chev-turn="rotate(90deg)"
+            class="inline-flex flex-none data-open:transform-(--chev-turn) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out"
+            data-box><IconChevronRight /></span
+          >
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
-          <div class="hbody rail-hang">
+          <!-- The report hangs at the text column under the line that opens
+               it, and keeps MessageBody's own 74ch measure. -->
+          <div class="mt-space-3 rail-hang">
             <MessageBody source={harness.body} />
           </div>
         </Collapsible.Content>
@@ -216,14 +237,19 @@
     {:else}
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
            empty body is the dead disclosure the tool rows already refuse. -->
-      <span class="hline rail-line">
+      <span
+        class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
+      >
         <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
-        <span data-slot="ftitle" class="ftitle">{harness.title}</span>
+        <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+          >{harness.title}</span
+        >
         {#if harness.status}
           <span
             data-slot="hstatus"
-            class="hstatus"
-            class:bad={harness.status === "failed"}>{harness.status}</span
+            class="flex-none text-ink-muted data-bad:text-data-bad"
+            data-bad={harness.status === "failed" || undefined}
+            >{harness.status}</span
           >
         {/if}
       </span>
@@ -231,52 +257,94 @@
   </div>
 {:else if type === "system.task"}
   <!-- A plain task's completion: the verb AND the task it reports. A bare
-       "task done" with no reference to which task is a line that says nothing. -->
-  <div data-system-line-rail-row data-slot="note" class="note rail-row">
-    <span class="hline rail-line">
+       "task done" with no reference to which task is a line that says nothing.
+       The verb holds body ink; only failure carries colour. WHICH task, in
+       the same muted register as every note: ellipsized, never wrapped. -->
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="text-size-label font-medium text-ink-muted rail-row"
+  >
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
+    >
       <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
-      <span class="tverb" class:bad={message?.content === "task failed"}
+      <span
+        class="flex-none text-ink-strong data-bad:text-data-bad"
+        data-bad={message?.content === "task failed" || undefined}
         >{message?.content}</span
       >
       {#if message?.metadata?.result}
-        <span class="tsum">{message.metadata.result}</span>
+        <span
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
+          >{message.metadata.result}</span
+        >
       {/if}
     </span>
   </div>
 {:else if isOutput}
   <!-- A command's output: the command it answers on the line, the output in
-       its recessed well under it. -->
-  <div data-system-line-rail-row data-slot="note" class="note rail-row">
-    <span class="hline rail-line">
+       its recessed well under it: its text at the text column, the well
+       reaching out past it by its own padding. -->
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="text-size-label font-medium text-ink-muted rail-row"
+  >
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
+    >
       <span data-slot="rail-cell" class="rail-cell"><IconTerminal /></span>
-      <span data-slot="ftitle" class="ftitle">{foldCommand ?? "Output"}</span>
+      <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+        >{foldCommand ?? "Output"}</span
+      >
     </span>
-    <pre data-slot="well" class="well">{message?.content}</pre>
+    <pre
+      data-slot="well"
+      style:--well-x="calc(var(--x-hang) - var(--space-3))"
+      class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{message?.content}</pre>
   </div>
 {:else if isInterrupted}
   <!-- One quiet word for a deliberate act. The colour budget is for things
        that happened TO the operator, not things they did. -->
-  <div data-system-line-rail-row data-slot="note" class="note rail-row">
-    <span class="hline rail-line">
-      <span data-slot="rail-cell" class="rail-cell"><IconStop /></span>
-      <span data-slot="ftitle" class="ftitle">Interrupted</span>
-    </span>
-  </div>
-{:else if responses}
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="note responses rail-row"
-    data-artifact-responses={responses.id}
-    class:waiting={message?.state === "pending"}
+    class="text-size-label font-medium text-ink-muted rail-row"
   >
-    <span class="hline rail-line">
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
+    >
+      <span data-slot="rail-cell" class="rail-cell"><IconStop /></span>
+      <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+        >Interrupted</span
+      >
+    </span>
+  </div>
+{:else if responses}
+  <!-- An artifact's responses: the line names it, and the name is the way to
+       it — Peer's sender link, as a button, since it opens the panel rather
+       than going anywhere. The state word follows it. Waiting for the agent:
+       MessageRow's queued presence, as Peer has it. -->
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="text-size-label font-medium text-ink-muted data-waiting:opacity-(--ghost-presence) rail-row"
+    data-artifact-responses={responses.id}
+    data-waiting={message?.state === "pending" || undefined}
+  >
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-muted gap-space-2 items-baseline rail-line"
+    >
       <span data-slot="rail-cell" class="rail-cell"><ResponseGlyph /></span>
-      <span data-slot="ftitle" class="ftitle"
+      <!-- literal (the name's underline offset): 0.2em -->
+      <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{responses.said} on
         <button
           aria-busy={opening}
-          class="aname"
+          data-slot="aname"
+          style:--name-offset="0.2em"
+          class="py-space-1 px-0 border-0 bg-transparent text-ink-strong cursor-pointer underline decoration-(--link-underline) underline-offset-(--name-offset) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.name}"
           type="button"
@@ -286,31 +354,52 @@
       >
       <span
         data-slot="hstatus"
-        class="hstatus"
-        class:bad={message?.state === "failed"}>{responsesState}</span
+        class="flex-none text-ink-muted font-normal data-bad:text-data-bad"
+        data-bad={message?.state === "failed" || undefined}
+        >{responsesState}</span
       >
     </span>
     {#if message?.state === "failed" && message.metadata?.sendFailed}
-      <p data-slot="reason" class="reason rail-hang">
+      <p
+        data-slot="reason"
+        class="mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink rail-hang"
+      >
         {message.metadata.sendFailed}
       </p>
     {:else if openFailed}
-      <p data-slot="reason" class="reason rail-hang">{openFailed}</p>
+      <p
+        data-slot="reason"
+        class="mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink rail-hang"
+        >{openFailed}</p
+      >
     {/if}
   </div>
 {:else if moved}
+  <!-- Where the project came from: the done glyph in its status ink, what
+       moved on the line, and what stayed under it in the meta voice. -->
   <div
     data-system-line-rail-row
     data-slot="note"
     data-moved
-    class="note moved rail-row"
+    class="text-size-label font-medium text-ink-muted rail-row"
   >
-    <span class="hline rail-line">
-      <span data-slot="rail-cell" class="rail-cell"><IconSuccess /></span>
-      <span data-slot="ftitle" class="ftitle">{title}</span>
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
+    >
+      <span data-slot="rail-cell" class="text-status-live-glyph rail-cell"
+        ><IconSuccess /></span
+      >
+      <span
+        data-slot="ftitle"
+        class="min-w-0 overflow-visible text-ellipsis whitespace-normal wrap-anywhere"
+        >{title}</span
+      >
     </span>
     {#if message?.content}
-      <p class="stayed rail-hang">{message.content}</p>
+      <p
+        class="mt-space-1 mb-0 text-size-meta font-normal leading-body text-ink-muted rail-hang"
+        >{message.content}</p
+      >
     {/if}
   </div>
 {:else if unread}
@@ -319,66 +408,107 @@
        The clock in the glyph cell, the title on the line with its time, and
        under it, at the text column, why and the way on (the pane's
        `event`: the reason and Try again). -->
+  <!-- The rows' height (`space-2` above and below), the clock at the 16px
+       glyph size with both its tones standing clear of the row, the title
+       in the strong ink, and what hangs under it at the text column free to
+       shrink and wrap. -->
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="note unread rail-row"
+    class="unread py-space-2 text-size-label font-medium text-ink-muted rail-row"
     data-unread-note={message?.id}
   >
-    <span class="hline rail-line">
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-strong rail-line"
+    >
       <span data-slot="rail-cell" class="rail-cell"><IconClock /></span>
-      <span data-slot="ftitle" class="ftitle">Caw hasn't read this</span>
+      <span
+        data-slot="ftitle"
+        class="min-w-0 overflow-clip text-ellipsis wrap-anywhere text-pretty"
+        >Caw hasn't read this</span
+      >
       {#if eventAt}
         <time
           data-slot="num"
           data-eat
-          class="eat num"
+          class="flex-none ms-space-2 font-normal text-ink-subtle num"
           datetime={eventAt.toISOString()}>{eventClock}</time
         >
       {/if}
     </span>
     {#if under}
-      <div data-slot="why" class="why rail-hang">
+      <div data-slot="why" class="min-w-0 rail-hang">
         {@render under.snippet(under.id)}
       </div>
     {/if}
   </div>
 {:else if isFail}
   <!-- A failure takes the rail like every other line, in the fail colours:
-       what failed on the line, why under it. -->
-  <div data-system-line-rail-row data-slot="note" class="note fail rail-row">
-    <span class="hline rail-line">
-      <span data-slot="rail-cell" class="rail-cell"><IconError /></span>
-      <b data-slot="ftitle" class="ftitle">{failTitle}</b>
-    </span>
-    <p class="handoff rail-hang">{message?.content}</p>
-  </div>
-{:else if foldCommand || foldBody}
+       what failed on the line, why under it. The rail, the mark, the title
+       and the reason, all in the fail ink. -->
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="note rail-row"
+    style:--rail-head="linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"
+    class="text-size-label font-medium text-status-fail-ink rail-row"
+  >
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-inherit rail-line"
+    >
+      <span data-slot="rail-cell" class="rail-cell"><IconError /></span>
+      <b data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+        >{failTitle}</b
+      >
+    </span>
+    <p
+      class="mt-space-1 mb-0 text-size-label font-medium leading-body whitespace-pre-wrap rail-hang"
+      >{message?.content}</p
+    >
+  </div>
+{:else if foldCommand || foldBody}
+  <!-- An event that woke a project's Caw is code: its line stands in a 1px
+       dashed box in the control edge (design §1, SystemLine), and the box is
+       its one marker — no rail beside it, the box on the row's own edge. -->
+  <div
+    data-system-line-rail-row
+    data-slot="note"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
     data-code={wokeCaw || undefined}
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-      <Collapsible.Trigger class="ftrig rail-line">
+      <Collapsible.Trigger
+        class="inline-flex bg-transparent border-0 p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
+      >
         <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
-        <span data-slot="ftitle" class="ftitle">{foldTitle}</span>
+        <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+          >{foldTitle}</span
+        >
         {#if eventAt}
           <time
             data-slot="num"
             data-eat
-            class="eat num"
+            class="flex-none ms-space-2 font-normal text-ink-subtle num"
             datetime={eventAt.toISOString()}>{eventClock}</time
           >
         {/if}
-        <span class={["hchev", { open }]} data-box><IconChevronRight /></span>
+        <!-- literal: rotate(90deg) -->
+        <span
+          data-open={open || undefined}
+          style:--chev-turn="rotate(90deg)"
+          class="inline-flex flex-none data-open:transform-(--chev-turn) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out"
+          data-box><IconChevronRight /></span
+        >
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}
-          <pre data-slot="well" class="well">{foldCommand}</pre>
+          <pre
+            data-slot="well"
+            style:--well-x="calc(var(--x-hang) - var(--space-3))"
+            class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{foldCommand}</pre>
         {:else if foldBody}
-          <div class="hbody rail-hang"><MessageBody source={foldBody} /></div>
+          <div class="mt-space-3 rail-hang"
+            ><MessageBody source={foldBody} /></div
+          >
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
@@ -395,17 +525,21 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="note rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
     data-code={wokeCaw || undefined}
   >
-    <span class="hline rail-line">
+    <span
+      class="inline-flex max-w-full text-size-label font-medium text-ink-muted group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
+    >
       <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
-      <span data-slot="ftitle" class="ftitle">{foldTitle}</span>
+      <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+        >{foldTitle}</span
+      >
       {#if eventAt}
         <time
           data-slot="num"
           data-eat
-          class="eat num"
+          class="flex-none ms-space-2 font-normal text-ink-subtle num"
           datetime={eventAt.toISOString()}>{eventClock}</time
         >
       {/if}
@@ -420,232 +554,26 @@
 {/if}
 
 <style>
-  /* A recessed well under the line: its text at the text column, the well
-     reaching out past it by its own padding. */
-  .well {
-    background: var(--surface-recess);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3);
-    margin-block-start: var(--space-2);
-    margin-inline-start: calc(var(--x-hang) - var(--space-3));
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-  }
-  .note {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-      flex: 0 0 auto;
-    }
-    & :global(.ftrig) {
-      display: inline-flex;
-      background: none;
-      border: 0;
-      padding: 0;
-      color: var(--ink-muted);
-      font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-      cursor: pointer;
-      text-align: start;
-    }
-    /* ── The harness fold ────────────────────────────────────────────────
-       A notification the operator never wrote, on the same rail as every
-       other note: the summary, how it went, and the report one click behind
-       them. */
-    & :global(.ftrig.hn) {
-      max-inline-size: 100%;
-    }
-  }
-  .ftitle {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  .eat {
-    flex: none;
-    margin-inline-start: var(--space-2);
-    font-weight: var(--weight-body);
-    color: var(--ink-subtle);
-  }
-  /* The non-expandable twin: same line, no button, because there is nothing
-     under it to open. */
-  .hline {
-    display: inline-flex;
-    max-inline-size: 100%;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  /* An event that woke a project's Caw is code: its line stands in a 1px
-     dashed box in the control edge (design §1, SystemLine), and the box is
-     its one marker — no rail beside it, the box on the row's own edge. */
-  .note[data-code] {
-    padding-inline-start: 0;
-    background: none;
-  }
-  .note[data-code] .hline,
-  .note[data-code] :global(.ftrig) {
-    padding: 0 var(--space-2);
-    border: 1px dashed var(--border-control);
-    border-radius: var(--radius-xs);
-  }
-  .hstatus {
+  /* residual: foreign-dom: every svg on the row at the glyph size, the
+     row's own marks and those MessageBody and the action rows draw inside
+     it; the unread row's clock at the 16px glyph size, with both its tones
+     standing clear of the row (unlayered, so it outranks the rule above). */
+  [data-slot="note"] :global(svg) {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
     flex: 0 0 auto;
-    color: var(--ink-muted);
-
-    /* The one word on this line that is allowed to carry colour. */
-    &.bad {
-      color: var(--data-bad);
-    }
   }
-  /* Where the project came from: the done glyph in its status ink, what
-     moved on the line, and what stayed under it in the meta voice. */
-  .note.moved .rail-cell {
-    color: var(--status-live-glyph);
+  .unread .rail-cell :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
-  .note.moved .ftitle {
-    overflow: visible;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .stayed {
-    margin-block: var(--space-1) 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-muted);
-  }
-  /* An artifact's responses: the line names it, and the name is the way to
-     it — Peer's sender link, as a button, since it opens the panel rather
-     than going anywhere. The state word follows it. */
-  .note.responses .hline {
-    gap: var(--space-2);
-    align-items: baseline;
-  }
-  .aname {
-    padding: var(--space-1) 0;
-    border: 0;
+  /* residual: unmapped: code drops the rail's whole background shorthand
+     (image, position, size, repeat), which no single utility resets; the
+     responses name takes its line's font whole. */
+  [data-slot="note"][data-code] {
     background: none;
+  }
+  [data-slot="aname"] {
     font: inherit;
-    color: var(--ink-strong);
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
-    text-underline-offset: 0.2em;
-
-    &:focus-visible {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: var(--focus-ring-offset);
-      border-radius: var(--radius-xs);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .aname:hover {
-      color: var(--brand-ink);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    .aname {
-      transition: color var(--dur-control) var(--ease-out);
-    }
-  }
-  .note.responses .hstatus {
-    font-weight: var(--weight-body);
-  }
-  /* Waiting for the agent: MessageRow's queued presence, as Peer has it. */
-  .note.responses.waiting {
-    opacity: var(--ghost-presence);
-  }
-  .reason {
-    margin-block: var(--space-1) 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-  }
-  /* The task line's verb holds body ink; only failure carries colour. */
-  .tverb {
-    flex: 0 0 auto;
-    color: var(--ink-strong);
-
-    &.bad {
-      color: var(--data-bad);
-    }
-  }
-  /* WHICH task, in the same muted register as every note — ellipsized, never
-     wrapped, so the line stays a line. */
-  .tsum {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--ink-muted);
-  }
-  .hchev {
-    display: inline-flex;
-    flex: 0 0 auto;
-
-    &.open {
-      transform: rotate(90deg);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  /* The report hangs at the text column under the line that opens it, and
-     keeps MessageBody's own 74ch measure — a subagent's write-up is prose,
-     not a dump. */
-  .hbody {
-    margin-block-start: var(--space-3);
-  }
-  /* Your words he has not read: the rows' height (`space-2` above and
-     below), the clock at the 16px glyph size with both its tones standing
-     clear of the row, the title in the strong ink, and what hangs under it
-     at the text column free to shrink and wrap. */
-  .note.unread {
-    padding-block: var(--space-2);
-
-    & .hline {
-      color: var(--ink-strong);
-    }
-    & .ftitle {
-      overflow-wrap: anywhere;
-      text-wrap: pretty;
-    }
-    & .rail-cell :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-    & .why {
-      min-inline-size: 0;
-    }
-  }
-  /* A failure: the rail, the mark, the title and the reason, all in the
-     fail ink — last, so it wins over the note's muted ink on the same
-     elements. */
-  .note.fail {
-    --rail-head: linear-gradient(
-      var(--status-fail-ink),
-      var(--status-fail-ink)
-    );
-    color: var(--status-fail-ink);
-
-    & .hline {
-      color: inherit;
-    }
-    & .handoff {
-      margin-block: var(--space-1) 0;
-      font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-      line-height: var(--leading-body);
-      white-space: pre-wrap;
-    }
   }
 </style>

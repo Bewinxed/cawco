@@ -778,7 +778,7 @@
               {:else}
                 <!-- A stored transcript can name an image it no longer carries. -->
                 <Badge
-                  class="h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted"
+                  class="h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted!"
                   variant="secondary"
                   ><span>Image {i + 1} · {img.mediaType}</span></Badge
                 >
