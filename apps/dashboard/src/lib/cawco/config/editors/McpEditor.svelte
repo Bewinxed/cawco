@@ -281,14 +281,16 @@
       bind:value={serverName}
     />
     {#if serverName !== "" && nameProblem}
-      <p class="problem" in:appear>{nameProblem}</p>
+      <p class="type-meta text-status-fail-ink" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
-      <p data-slot="note" class="note" in:appear>
+      <!-- literal: 72ch -->
+      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" in:appear>
         A new name makes a new server; {server.name} stays as it is.
       </p>
     {:else}
-      <p data-slot="note" class="note">
+      <!-- literal: 72ch -->
+      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
         What sessions call its tools —
         <span class="font-mono">mcp__{serverName || "name"}__…</span>. New
         sessions pick it up; a running session keeps the servers it started
@@ -296,12 +298,12 @@
       </p>
     {/if}
     {#if failed}
-      <p class="problem" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{failed}</p>
     {/if}
     {#if server}
       <McpSignIn {server} />
       {#if server.auth?.state === "failed"}
-        <p class="problem" role="alert">{server.auth.detail}</p>
+        <p class="type-meta text-status-fail-ink" role="alert">{server.auth.detail}</p>
       {/if}
     {/if}
   {/snippet}
@@ -324,12 +326,14 @@
          --ease-drawer. -->
     <div
       data-slot="kind"
-      class="kind"
+      class="relative flex flex-col"
       {@attach morph({ ms: dur("--dur-pop") })}
     >
       {#if mode === "bunx"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.bunx}</p>
+        <!-- literal: 8px -->
+        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+          <!-- literal: 72ch -->
+          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{HOW.bunx}</p>
           <Field id="mcp-package" label="Package">
             <Input
               autocomplete="off"
@@ -357,8 +361,10 @@
           </Field>
         </div>
       {:else if mode === "command"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.command}</p>
+        <!-- literal: 8px -->
+        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+          <!-- literal: 72ch -->
+          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{HOW.command}</p>
           <Field id="mcp-command" label="Command">
             <Input
               autocomplete="off"
@@ -385,8 +391,10 @@
           </Field>
         </div>
       {:else}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.remote}</p>
+        <!-- literal: 8px -->
+        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+          <!-- literal: 72ch -->
+          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{HOW.remote}</p>
           <Field id="mcp-url" label="URL">
             <Input
               autocomplete="off"
@@ -422,14 +430,15 @@
         icon={IconKey}
         label={mode === "remote" ? "Headers" : "Environment"}
       >
-        <p data-slot="note" class="note">
+        <!-- literal: 72ch -->
+        <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
           <span class="font-mono">&#36;&#123;VAR&#125;</span>
           is expanded on each machine, from that machine's own environment — secrets
           never pass through the hub.
         </p>
         <div
           data-slot="kind"
-          class="kind"
+          class="relative flex flex-col"
           {@attach morph({ ms: dur("--dur-pop") })}
         >
           {#if mode === "remote"}
@@ -457,7 +466,8 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
       Every machine in the fleet unless you narrow it to one project. A
       project's server reaches each of its checkouts and delegate workspaces.
     </p>
@@ -479,27 +489,3 @@
     </div>
   </EditorSection>
 </EditorFrame>
-
-<style>
-  /* The kind's box: the set leaving is pinned in it (crossOut) while the
-     one arriving sets its height. */
-  .kind {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .fold {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

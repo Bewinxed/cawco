@@ -159,10 +159,18 @@ You are a <role>, working in one repository at a time.
   title={agent ? agent.name : "New subagent"}
 >
   {#snippet header()}
-    <h1 data-slot="title" class="title">
+    <h1
+      data-slot="title"
+      class="text-size-title leading-ui font-medium font-mono wrap-anywhere text-ink-strong"
+    >
       {agent ? agent.name : front.name || "New subagent"}
     </h1>
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       The file is the definition. It lands at
       <span class="font-mono"
         >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
@@ -170,18 +178,28 @@ You are a <role>, working in one repository at a time.
       on every machine, and Claude Code picks it up within seconds.
     </p>
     {#if refused}
-      <p class="problem" role="alert" in:appear>{refused}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{refused}</p>
     {/if}
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <span data-slot="num" class="claims num">{claims.join(" · ")}</span>
+      <!-- literal: 72ch -->
+      <span
+        data-slot="num"
+        class="num type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch">{claims.join(" · ")}</span
+      >
     {/snippet}
     {#if problem}
-      <p class="caution">Not storable yet — {problem}.</p>
+      <p class="type-meta text-status-attn-ink">Not storable yet — {problem}.</p>
     {:else if front.description}
-      <p data-slot="note" class="note">{front.description}</p>
+      <!-- literal: 72ch -->
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >{front.description}</p>
     {/if}
     <Textarea
       aria-label="{target ?? 'New'} definition"
@@ -191,26 +209,3 @@ You are a <role>, working in one repository at a time.
     />
   </EditorSection>
 </EditorFrame>
-
-<style>
-  .title {
-    font: var(--type-title);
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .note,
-  .claims {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-</style>
