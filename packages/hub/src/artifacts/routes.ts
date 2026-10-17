@@ -417,10 +417,12 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // A sheet's stage as its doc keeps it, for the app's panel: never wakes the stage.
-    .get("/api/instances/:id/artifacts/:artifact/stage", ({ params }) => {
+    // The artifact's doc as a person's view reads it (the app's panel): its
+    // picks, their send, a sheet's stage. No read of the session's, and it
+    // never wakes a stage.
+    .get("/api/instances/:id/artifacts/:artifact/view", ({ params }) => {
       try {
-        return artifacts.stageOf(params.id, params.artifact);
+        return artifacts.viewOf(params.id, params.artifact);
       } catch (error) {
         return refused(error);
       }
