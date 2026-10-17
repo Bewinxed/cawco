@@ -64,6 +64,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let cover = UIView()
     /// The cover's loading line, hidden once the cover has faded so its sweep stops.
     private let coverLine = SkeletonView(height: 11)
+    /// `.cover-state`: what a sheet's stage is doing while its page is on its way, under the line.
+    private let coverState = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    /// The current document finished loading: the cover may go, unless a sheet's stage still has a word for it.
+    private var pageLoaded = false
+
+    // A sheet's stage (live components), as its doc keeps it (SheetStage.swift).
+    private var stage: StageState?
+    private var stageShown = SheetStageShown(nil, connected: false)
+    private var stageReading = false
+    private var stageReadAgain = false
+    /// `.sheet-dim`: the last good render, under the scrim, while it doesn't compile.
+    private let dim = UIView()
+    private let errorCard = SheetErrorCard()
+    private let down = SheetDownView()
+    /// Try again was pressed: pending until the page loads again, or fails to.
+    private var retrying = false
     private let failure = KitAlert(tone: .destructive)
     /// What the band's failure is of (PreviewPane.svelte `failure.again`):
     /// "send" clears when the picks are sent, "field" when the page keeps the
@@ -239,6 +255,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         cover.isUserInteractionEnabled = false
         let line = coverLine
         cover.addSubview(line)
+        coverState.translatesAutoresizingMaskIntoConstraints = false
+        coverState.isHidden = true
+        cover.addSubview(coverState)
+        dim.translatesAutoresizingMaskIntoConstraints = false
+        dim.backgroundColor = Palette.scrim
+        dim.isUserInteractionEnabled = false
+        dim.isAccessibilityElement = false
+        for part in [dim, errorCard, down] as [UIView] {
+            part.alpha = 0
+            part.isHidden = true
+        }
+        down.onAgain = { [weak self] in self?.tryStageAgain() }
         failure.isHidden = true
         card.isHidden = true
         wellEdge.translatesAutoresizingMaskIntoConstraints = false
@@ -250,7 +278,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         stopped.translatesAutoresizingMaskIntoConstraints = false
         stopped.backgroundColor = Palette.surfaceWell
         stopped.isHidden = true
-        for part in [web!, cover, stopped, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
+        // A page that stopped stands over a sheet's stage states: they were the page's.
+        for part in [web!, cover, dim, errorCard, down, stopped, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
         placeWeb()
         NSLayoutConstraint.activate([
             stopped.topAnchor.constraint(equalTo: well.topAnchor),
@@ -320,6 +349,23 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             line.topAnchor.constraint(equalTo: cover.topAnchor, constant: Space.space5),
             line.leadingAnchor.constraint(equalTo: cover.leadingAnchor, constant: Space.space5),
             line.widthAnchor.constraint(equalTo: cover.widthAnchor, multiplier: 0.42),
+            // `.cover-state`: `space-3` under the line, the cover's own padding at its sides.
+            coverState.topAnchor.constraint(equalTo: line.bottomAnchor, constant: Space.space3),
+            coverState.leadingAnchor.constraint(equalTo: cover.leadingAnchor, constant: Space.space5),
+            coverState.trailingAnchor.constraint(lessThanOrEqualTo: cover.trailingAnchor, constant: -Space.space5),
+            dim.topAnchor.constraint(equalTo: well.topAnchor),
+            dim.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            dim.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            dim.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+            // `.sheet-error`: `space-3` from the well's sides and foot, at most 60% of it tall.
+            errorCard.leadingAnchor.constraint(equalTo: well.leadingAnchor, constant: Space.space3),
+            errorCard.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: -Space.space3),
+            errorCard.bottomAnchor.constraint(equalTo: well.bottomAnchor, constant: -Space.space3),
+            errorCard.heightAnchor.constraint(lessThanOrEqualTo: well.heightAnchor, multiplier: 0.6),
+            down.topAnchor.constraint(equalTo: well.topAnchor),
+            down.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            down.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            down.bottomAnchor.constraint(equalTo: well.bottomAnchor),
             failure.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             failure.trailingAnchor.constraint(equalTo: well.trailingAnchor),
             failure.bottomAnchor.constraint(equalTo: well.bottomAnchor),
@@ -418,8 +464,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         silence?.cancel()
         connected = false
         replaceWeb()
-        cover.alpha = 1
-        coverLine.isHidden = false
+        pageLoaded = false
+        paintCover(animated: false)
     }
 
     /// A web view for the page: its own cookie store, never shared with
@@ -435,7 +481,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         #endif
         configuration.allowsInlineMediaPlayback = true
-        let web = WKWebView(frame: .zero, configuration: configuration)
+        let web = PreviewPage(frame: .zero, configuration: configuration)
         web.navigationDelegate = self
         web.isOpaque = false
         web.backgroundColor = Palette.surfaceRecess
@@ -687,8 +733,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // A canvas draws with its own tools: no modes over it.
         modes.isHidden = frame.artifact.kind == .canvas
         paintSend()
-        cover.alpha = 1
-        coverLine.isHidden = false
+        pageLoaded = false
+        paintCover(animated: false)
+        // A sheet's stage as it stands as this page starts to load (asleep, waking, live).
+        readStage()
         byHost = route.byHost
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
@@ -758,6 +806,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// overlay hears it again once it says it is ready (`ready`), so the
     /// head and the page never disagree.
     func webView(_: WKWebView, didCommit _: WKNavigation!) {
+        // The page's answer has come: a sheet's stage serves it now, and its
+        // modules compile until the overlay says it is ready ("Compiling…").
+        readStage()
         #if DEBUG
         PreviewProbe.say("preview document")
         PreviewProbe.documents += 1
@@ -765,17 +816,40 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
-        let fade = Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }
-        // Faded out, its line stops sweeping; a load since brought the cover back.
+        pageLoaded = true
+        endRetry()
+        paintCover(animated: true)
+        readStage()
+        // A load served the page again: the stopped state goes.
+        if !stopped.isHidden { showStopped(false) }
+        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        loaded(frame.revision)
+    }
+
+    /// `.cover` and `.cover.ready`: it stands until the page has loaded and a
+    /// sheet's stage has nothing more to say on it, then fades over
+    /// `--dur-control`, and comes back as the stage gets a word again (a
+    /// restart under an open page). Faded out, its line stops sweeping.
+    private func paintCover(animated: Bool) {
+        let word = stageShown.waiting
+        coverState.text = word
+        coverState.isHidden = word == nil
+        cover.accessibilityElementsHidden = word == nil
+        let shown = !pageLoaded || word != nil
+        if shown { coverLine.isHidden = false }
+        let target: CGFloat = shown ? 1 : 0
+        guard cover.alpha != target else { return }
+        guard animated else {
+            cover.alpha = target
+            coverLine.isHidden = !shown
+            return
+        }
+        let fade = Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = target }
         fade.addCompletion { [weak self] position in
             guard position == .end, let self, cover.alpha < 0.01 else { return }
             coverLine.isHidden = true
         }
         fade.startAnimation()
-        // A load served the page again: the stopped state goes.
-        if !stopped.isHidden { showStopped(false) }
-        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
-        loaded(frame.revision)
     }
 
     /// PreviewPane.svelte `announce`, at the page's own `load` (the host
@@ -806,12 +880,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
         guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
+        endRetry()
+        readStage()
         loaded(revision)
     }
 
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) {
         guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
+        endRetry()
+        readStage()
         loaded(revision)
     }
 
@@ -866,6 +944,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             placeCard()
         case "cawco:key":
             if let key = Self.text(body["key"], 10) { press(key) }
+        case "cawco:shortcut":
+            // One of the shell's combos the page left alone (overlay page.ts
+            // `leftToShell`): the shell runs it as from its own key command.
+            if let command = Self.shellCommand(body["name"]) {
+                #if DEBUG
+                PreviewProbe.say("preview shortcut \(Self.text(body["name"], 40) ?? "")")
+                #endif
+                (view.window?.rootViewController as? RootViewController)?.run(command)
+            }
         case "cawco:escape":
             // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
             setMode(.interact)
@@ -896,6 +983,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         connected = true
         // In: a later lapse of its pass may enter again.
         reentered = false
+        // Compiled: the cover's "Compiling…" goes.
+        paintStage()
         #if DEBUG
         PreviewProbe.say("preview ready")
         PreviewMeter.ready(web)
@@ -918,6 +1007,137 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             }
         }
         #endif
+    }
+
+    // MARK: A sheet's stage
+
+    /// A sheet's stage as its doc keeps it: read as each page starts and ends
+    /// loading, and whenever the page says its doc changed (`cawco:doc`,
+    /// which a stage's change is); one read at a time, and one more after it
+    /// when asked meanwhile. Any other kind has none.
+    private func readStage() {
+        guard isViewLoaded, let artifact = artifactId,
+              hub.previews.byInstance[instanceId]?.artifact.kind == .sheet else {
+            if stage != nil {
+                stage = nil
+                paintStage()
+            }
+            return
+        }
+        guard !stageReading else {
+            stageReadAgain = true
+            return
+        }
+        stageReading = true
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let read = try await hub.sheetStage(artifact, in: instanceId)
+                if artifact == artifactId {
+                    stage = read
+                    paintStage()
+                }
+            } catch {
+                #if DEBUG
+                PreviewProbe.say("preview stage read failed: \(error.localizedDescription)")
+                #endif
+            }
+            stageReading = false
+            if stageReadAgain {
+                stageReadAgain = false
+                readStage()
+            }
+        }
+    }
+
+    /// The stage on the pane: its word on the cover, its first compile error
+    /// on a card over the dimmed last render, or the stage that didn't start
+    /// where the page would be. Each appears and leaves as the web's
+    /// `appear` does: its opacity over `--dur-fade`, the same with or without
+    /// Reduce Motion, since nothing travels.
+    private func paintStage() {
+        guard isViewLoaded else { return }
+        let next = SheetStageShown(stage, connected: connected)
+        let before = stageShown
+        stageShown = next
+        paintCover(animated: true)
+        if let error = next.error { errorCard.show(error, more: next.more) }
+        if let down = next.down { self.down.show(dir: down.dir, message: down.message) }
+        appear(dim, next.error != nil)
+        appear(errorCard, next.error != nil)
+        appear(self.down, next.down != nil)
+        if next.waiting != before.waiting, let word = next.waiting {
+            // `role="status"`: the cover says what the stage is doing.
+            UIAccessibility.post(notification: .announcement, argument: word)
+        }
+        if (next.error != nil && before.error == nil) || (next.down != nil && before.down == nil) {
+            // `role="alert"`: what went wrong is read out as it stands.
+            UIAccessibility.post(notification: .layoutChanged, argument: next.error != nil ? errorCard : self.down)
+        }
+        #if DEBUG
+        if next != before {
+            let card = next.error.map(SheetStageShown.place) ?? "-"
+            PreviewProbe.say("preview stage status=\(stage?.status.rawValue ?? "-") cover=\(next.waiting ?? "-") card=\(card) down=\(next.down == nil ? "no" : "yes")")
+        }
+        if next.down != nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                view.layoutIfNeeded()
+                PreviewProbe.say("preview stage-down again=\(PreviewProbe.centre(self.down.again))")
+            }
+        }
+        #endif
+    }
+
+    /// The web's `transition:appear`, in and out: opacity alone over `--dur-fade`.
+    private func appear(_ part: UIView, _ shown: Bool) {
+        let target: CGFloat = shown ? 1 : 0
+        guard part.alpha != target || part.isHidden == shown else { return }
+        if shown { part.isHidden = false }
+        let fade = Motion.easeOut.animator(Motion.durFade) { part.alpha = target }
+        fade.addCompletion { position in
+            if position == .end, !shown { part.isHidden = true }
+        }
+        fade.startAnimation()
+    }
+
+    /// Try again on a stage that didn't start (PreviewPane.svelte `retry`):
+    /// the page loads again, which asks the stage to start again; pending
+    /// until that load ends.
+    private func tryStageAgain() {
+        retrying = true
+        down.pending(true)
+        reload()
+    }
+
+    private func endRetry() {
+        guard retrying else { return }
+        retrying = false
+        down.pending(false)
+    }
+
+    /// A shortcut's name as core's `SHELL_SHORTCUTS` names it, as the shell's command it runs.
+    private static func shellCommand(_ value: Any?) -> RootViewController.ShellCommand? {
+        switch value as? String {
+        case "new-session": .startSession
+        case "jump": .jump
+        case "split-right": .splitRight
+        case "split-down": .splitDown
+        default: nil
+        }
+    }
+
+    /// Whether the keyboard is in a preview's page: the page then has the
+    /// first claim on every key, as the dashboard's iframe has (overlay
+    /// page.ts `leftToShell`), so the app's own key commands stand down and
+    /// the page hands back, as `cawco:shortcut`, the shell's combos it left.
+    static var pageHoldsKeys: Bool {
+        var at = UIResponder.current as? UIView
+        while let view = at {
+            if view is PreviewPage { return true }
+            at = view.superview
+        }
+        return false
     }
 
     // MARK: The mode
@@ -1058,6 +1278,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// more after it when asked meanwhile, so a read under way when the doc
     /// changed is never the last.
     private func refresh() {
+        // A sheet's doc changed too (its stage, its errors): its stage is read with the pins.
+        readStage()
         guard let artifact = artifactId else { return }
         guard !reading else {
             readAgain = true
@@ -1920,6 +2142,19 @@ final class GrabArea: UIControl {
             action.window != nil && !action.isHidden && action.bounds.contains(action.convert(point, from: self))
         }
     }
+}
+
+/// The preview's page: a web view of its own class, so whether the keyboard
+/// is in it (`PreviewKeys.pageHolds`) is told from any other web view's.
+final class PreviewPage: WKWebView {}
+
+/// The app's key commands ask this before they act (AppDelegate
+/// `canPerformAction`): while a preview's page has the keyboard, every key is
+/// the page's first, as on the web, and the page hands back the shell's own
+/// combos it leaves alone (`cawco:shortcut`).
+@MainActor
+public enum PreviewKeys {
+    public static var pageHolds: Bool { PreviewController.pageHoldsKeys }
 }
 
 /// Holds the preview weakly: a content controller retains its handlers.

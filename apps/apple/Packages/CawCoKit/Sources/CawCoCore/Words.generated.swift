@@ -727,4 +727,53 @@ public enum Words {
             "Wants to run your fleet with code \(userCode). Approve only if it's the code on that device."
         }
     }
+
+    public enum Sheet {
+        // packages/core/src/words/sheet.ts `sheetWords`
+        /// The loading cover's line while the stage first starts.
+        public static func starting(dir: String) -> String {
+            "Starting the dev server in \(dir)…"
+        }
+
+        /// The cover's line while a sleeping stage starts again.
+        public static let waking = "Waking…"
+
+        /// The cover's line while the stage serves and the page has not said it is ready.
+        public static let compiling = "Compiling…"
+
+        /// The compile error card's title, before the error's `file:line:column`.
+        public static let errorTitle = "Doesn't compile:"
+
+        /// The card's foot: how many errors stand besides the first, and what happens next.
+        public static func errorNext(more: Int) -> String {
+            "\(more > 0 ? "\(more) more besides. " : "")The session is told; the sheet redraws once it compiles."
+        }
+
+        /// Where the page would be, when the stage did not start or failed its restarts.
+        public static func downTitle(dir: String) -> String {
+            "The stage for \(dir) didn't start"
+        }
+
+        /// The line under it: the stage's own reason, or this when it gave none.
+        public static func downLine(message: String?) -> String {
+            "\(message ?? "Vite ended before it served the sheet.") Try again starts it again."
+        }
+
+        /// A workspace preview's server (`serve`), run the same way: the cover's line while it starts.
+        public static let serverStarting = "Starting the server…"
+
+        /// Where its page would be, when the server did not start or stopped.
+        public static func serverDownTitle(port: Int) -> String {
+            "The server on port \(port) isn't running"
+        }
+
+        public static func serverDownLine(message: String?) -> String {
+            "\(message ?? "It ended before it answered.") Try again starts it again."
+        }
+
+        public static let tryAgain = "Try again"
+
+        /// Try again's words while the stage starts again.
+        public static let tryingAgain = "Starting…"
+    }
 }

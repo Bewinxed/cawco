@@ -141,6 +141,24 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         #selector(splitRight): .splitRight, #selector(splitDown): .splitDown, #selector(openConfigure): .configure,
     ]
 
+    /// Every command `buildMenu` adds.
+    private static let ownCommands: Set<Selector> = Set(shellCommands.keys).union([
+        #selector(approveFirstAsk), #selector(denyFirstAsk), #selector(reconnectHub),
+        #selector(stopSession), #selector(steerSession), #selector(openSessionWindow),
+    ])
+
+    /// The page has the first claim on keys (overlay page.ts `leftToShell`):
+    /// while a preview's page has the keyboard, these commands stand down,
+    /// so the key goes on to the page, which hands back as `cawco:shortcut`
+    /// the shell's combos it leaves alone. With no page holding the
+    /// keyboard, they act as ever.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if Self.ownCommands.contains(action), PreviewKeys.pageHolds {
+            return false
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
     override func validate(_ command: UICommand) {
         super.validate(command)
         switch command.action {
