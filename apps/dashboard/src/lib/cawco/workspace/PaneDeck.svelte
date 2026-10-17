@@ -43,20 +43,66 @@
 
 <!-- The card's place in the stack is its delta, and the stylesheet parks it
      there; the deck writes the fingers' travel inline and clears it after. -->
-<div class="deck" class:lifted={deck.lifted} use:deck.action>
+<!-- The ground the lifted cards float over. Pinch belongs to nobody here;
+     two fingers are the deck's. -->
+<!-- Parked by delta. The 12px is `GAP` in deck.svelte.ts; keep them equal. -->
+<!-- literal: 12px -->
+<div
+  data-lifted={deck.lifted || undefined}
+  class="group/deck relative min-h-0 min-w-0 flex-auto touch-pan-x touch-pan-y overflow-hidden bg-surface-recess"
+  style:--park-up="translate3d(0, calc(-100% - 12px), 0)"
+  style:--park-here="translate3d(0, 0, 0)"
+  style:--park-down="translate3d(0, calc(100% + 12px), 0)"
+  use:deck.action
+>
   {#each workspace.leaves as leaf, index (leaf.id)}
     {@const delta = index - focusedIndex}
     {@const focused = delta === 0}
+    <!-- The compositor carries every per-frame property: the translate the
+         deck writes on the card, the scale on the lift, the opacity on the
+         shadow. The radius is the one main-thread property, and it tweens —
+         the corners rounding as the card comes up is the lift — but it is
+         confined to the clip, so nothing heavy repaints for it: the shadow
+         keeps a constant radius on its own layer and only fades, and at rest
+         it is invisible, so its corners never show against the square card.
+         Tweening `box-shadow` or the shadow's radius would repaint a whole
+         transcript every frame. The clip is a child because
+         `overflow: hidden` on the lift would cut the shadow off.
+
+         Two elements carry the two transforms. The outer card takes the
+         translate — the stylesheet's parking place at rest, the deck's
+         inline value in motion; the inner lift owns the scale and its
+         transition. On one element the inline transform would replace the
+         scale outright every frame, and the lift would snap.
+
+         `visibility`, never `display`, and only the hidden state is declared
+         — see the note on `.pane-hidden` in PaneLeaf: a re-declared
+         `visible` paints through a hidden ancestor. -->
     <div
       data-slot="pane-deck-card"
-      class="card"
+      class="absolute inset-0 flex min-h-0 min-w-0 will-change-transform delta--1:transform-(--park-up) delta-0:transform-(--park-here) delta-1:transform-(--park-down) data-card-hidden:pointer-events-none data-card-hidden:invisible"
       data-delta={delta}
       data-leaf={leaf.id}
       inert={!focused}
-      class:card-hidden={Math.abs(delta) > 1}
+      data-card-hidden={Math.abs(delta) > 1 || undefined}
     >
-      <div data-slot="lift" class="lift">
-        <div class="clip">
+      <!-- Two timings, one each way. The pick-up rides the entry curve,
+           quick and masked by the fingers already moving; the set-down is
+           the eye's, so it takes the toggle curve at the base duration —
+           symmetric, and long enough that the card is seen arriving. The
+           set-down is declared on the base rule and the pick-up on the
+           lifted one, which is how a single `transition` property gets a
+           different value in each direction. The pick-up: 180ms, derived
+           from the base beat the way `--breath` is. Fewer and gentler under
+           reduced motion, not none: the fades stay, the movement goes. -->
+      <div
+        data-slot="lift"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:duration-(--pick-up) motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-none"
+        style:--lift-rest="scale(1)"
+        style:--lift-up="scale(var(--press-scale))"
+        style:--pick-up="calc(var(--dur-panel) * 0.6)"
+      >
+        <div data-slot="clip" class="flex min-h-0 min-w-0 flex-auto overflow-hidden">
           <PaneLeaf {leaf} swipeable={focused} />
         </div>
       </div>
@@ -68,14 +114,24 @@
   <!-- The fades are on wrappers: the dots' own opacity is the lift's and
        the focus's, and a fade written over it would flash them in. -->
   {#if workspace.leaves.length > 1}
-    <div aria-hidden="true" class="dots">
-      <div class="dots-in" transition:fadeDots>
+    <!-- literal: 50%, -50% -->
+    <div
+      aria-hidden="true"
+      class="pointer-events-none absolute top-(--dots-top) right-space-3 z-5 translate-y-(--dots-shift) opacity-0 transition-[opacity] dur-control ease-out group-data-lifted/deck:opacity-100"
+      style:--dots-top="50%"
+      style:--dots-shift="-50%"
+    >
+      <!-- literal: 6px -->
+      <div class="flex flex-col gap-(--dots-gap)" style:--dots-gap="6px" transition:fadeDots>
         {#each workspace.leaves as leaf (leaf.id)}
-          <span class="dot-slot" transition:fadeDots>
+          <span class="flex" transition:fadeDots>
+            <!-- literal: 6px, 18px -->
             <span
               data-slot="dot"
-              class="dot"
-              class:dot-on={leaf.id === workspace.focusedLeafId}
+              class="size-(--dot) rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] dur-toggle ease-out data-dot-on:h-(--dot-on) data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:dur-toggle"
+              style:--dot="6px"
+              style:--dot-on="18px"
+              data-dot-on={leaf.id === workspace.focusedLeafId || undefined}
             ></span>
           </span>
         {/each}
@@ -85,73 +141,11 @@
 </div>
 
 <style>
-  /* The ground the lifted cards float over. */
-  .deck {
-    position: relative;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-    /* Pinch belongs to nobody here; two fingers are the deck's. */
-    touch-action: pan-x pan-y;
-  }
-
-  /* The compositor carries every per-frame property: the translate the deck
-     writes on the card, the scale on the lift, the opacity on the shadow.
-     The radius is the one main-thread property, and it tweens — the corners
-     rounding as the card comes up is the lift — but it is confined to the
-     clip, so nothing heavy repaints for it: the shadow keeps a constant
-     radius on its own layer and only fades, and at rest it is invisible, so
-     its corners never show against the square card. Tweening `box-shadow`
-     or the shadow's radius would repaint a whole transcript every frame.
-     The clip is a child because `overflow: hidden` on the lift would cut
-     the shadow off.
-
-     Two elements carry the two transforms. The outer card takes the
-     translate — the stylesheet's parking place at rest, the deck's inline
-     value in motion; the inner lift owns the scale and its transition. On
-     one element the inline transform would replace the scale outright
-     every frame, and the lift would snap.
-
-     Two timings, one each way. The pick-up rides the entry curve, quick
-     and masked by the fingers already moving; the set-down is the eye's,
-     so it takes the toggle curve at the base duration — symmetric, and
-     long enough that the card is seen arriving. The set-down is declared on
-     the base rule and the pick-up on the lifted one, which is how a single
-     `transition` property gets a different value in each direction. */
-  .card {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    min-width: 0;
-    min-height: 0;
-    will-change: transform;
-  }
-  /* Parked by delta. The 12px is `GAP` in deck.svelte.ts; keep them equal. */
-  .card[data-delta="-1"] {
-    transform: translate3d(0, calc(-100% - 12px), 0);
-  }
-  .card[data-delta="0"] {
-    transform: translate3d(0, 0, 0);
-  }
-  .card[data-delta="1"] {
-    transform: translate3d(0, calc(100% + 12px), 0);
-  }
-  .lift {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    transform: scale(1);
-    border-radius: 0;
-    will-change: transform;
-    transition:
-      transform var(--dur-panel) var(--ease-in-out),
-      border-radius var(--dur-panel) var(--ease-in-out);
-  }
-  .lift::before {
+  /* residual: pseudo — the lift's shadow, on its own layer at a constant
+     radius: it only fades (will-change: opacity), at the set-down's timing
+     at rest and the pick-up's while lifted; no transition under reduced
+     motion. */
+  [data-slot="lift"]::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -162,87 +156,19 @@
     transition: opacity var(--dur-panel) var(--ease-in-out);
     pointer-events: none;
   }
-  .clip {
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    border-radius: inherit;
-    overflow: hidden;
-  }
-
-  /* The pick-up: 180ms, derived from the base beat the way `--breath` is. */
-  .deck.lifted .lift {
-    transform: scale(var(--press-scale));
-    border-radius: var(--radius-lg);
-    transition:
-      transform calc(var(--dur-panel) * 0.6) var(--ease-out),
-      border-radius calc(var(--dur-panel) * 0.6) var(--ease-out);
-  }
-  .deck.lifted .lift::before {
+  [data-lifted] [data-slot="lift"]::before {
     opacity: 1;
     transition: opacity calc(var(--dur-panel) * 0.6) var(--ease-out);
   }
-
-  /* `visibility`, never `display`, and only the hidden state is declared —
-     see the note on `.pane-hidden` in PaneLeaf: a re-declared `visible`
-     paints through a hidden ancestor. */
-  .card-hidden {
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-  .dots {
-    position: absolute;
-    right: var(--space-3);
-    top: 50%;
-    translate: 0 -50%;
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-    pointer-events: none;
-    z-index: 5;
-  }
-  .dots-in {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .dot-slot {
-    display: flex;
-  }
-  .deck.lifted .dots {
-    opacity: 1;
-  }
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--ink-muted);
-    opacity: 0.5;
-    transition:
-      height var(--dur-toggle) var(--ease-out),
-      opacity var(--dur-toggle) var(--ease-out);
-  }
-  .dot-on {
-    height: 18px;
-    opacity: 1;
-    background: var(--ink-strong);
-  }
-
-  /* Fewer and gentler, not none: the fades stay, the movement goes. */
   @media (prefers-reduced-motion: reduce) {
-    .lift,
-    .lift::before,
-    .deck.lifted .lift,
-    .deck.lifted .lift::before {
+    [data-slot="lift"]::before,
+    [data-lifted] [data-slot="lift"]::before {
       transition: none;
     }
-    .dot {
-      transition: opacity var(--dur-toggle) var(--ease-out);
-    }
-    .deck.lifted .lift {
-      transform: scale(1);
-      border-radius: 0;
-    }
+  }
+  /* residual: unmapped — the clip takes the lift's tweening radius:
+     no utility says border-radius: inherit. */
+  [data-slot="clip"] {
+    border-radius: inherit;
   }
 </style>
