@@ -339,13 +339,18 @@ const run = async (kit: Kit) => {
         await page.goto(`${dashboard}/session/${session}`, {
           waitUntil: "domcontentloaded",
         });
-        await page.locator("[data-artifact-trigger]").first().click({ timeout: 30_000 });
+        await page
+          .locator("[data-artifact-trigger]")
+          .first()
+          .click({ timeout: 30_000 });
         await page.locator("[data-artifact-list]").waitFor({ timeout: 10_000 });
         await pause(500);
         await page.screenshot({ path: join(keep, `web-menu-${theme}.png`) });
         await page.close();
       } catch (error) {
-        console.log(`  the web ${theme} menu wasn't captured: ${(error as Error).message.split("\n")[0]}`);
+        console.log(
+          `  the web ${theme} menu wasn't captured: ${(error as Error).message.split("\n")[0]}`
+        );
       }
     }
     await sh(`xcrun simctl ui ${udid} appearance light`);
@@ -396,9 +401,7 @@ const run = async (kit: Kit) => {
       30_000
     ).catch(() => sh(`git -C "${fleet.repo}" diff --stat`));
     const diff = await sh(`git -C "${fleet.repo}" diff -U0 -- ${STORY}`);
-    const changed = diff
-      .split("\n")
-      .filter((line) => CHANGED_LINE.test(line));
+    const changed = diff.split("\n").filter((line) => CHANGED_LINE.test(line));
     const files = stat.trim().split("\n").slice(0, -1);
     await sh(
       `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-sheet-inspector-saved.png")}" >/dev/null`
@@ -415,7 +418,6 @@ const run = async (kit: Kit) => {
         SAVED_ARGS.test(changed[1] ?? ""),
       `heard: ${heardSheet ?? "nothing"}; wrote: ${wrote ?? "nothing"}; stat: ${stat.trim()}; diff: ${changed.join(" | ")}; last inspector line: ${said("inspector ").at(-1)}`
     );
-
   } finally {
     stream?.kill();
     await sim?.release();

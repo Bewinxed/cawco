@@ -262,7 +262,8 @@ const run = async (kit: Kit) => {
     );
     kit.check(
       "2: the plan's sheet draws the hub's steps and its spec",
-      drawn === `plan drawn ${session} steps=${said(hubPlan)} spec=true todos=0`,
+      drawn ===
+        `plan drawn ${session} steps=${said(hubPlan)} spec=true todos=0`,
       `drawn: ${drawn ?? "nothing"}`
     );
 
@@ -272,13 +273,17 @@ const run = async (kit: Kit) => {
     for (const theme of ["light", "dark"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
       await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
-      const opened = heard.filter((line) => line.startsWith("plan opened")).length;
+      const opened = heard.filter((line) =>
+        line.startsWith("plan opened")
+      ).length;
       await sh(
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe -open-plan >/dev/null`
       );
       await until(
         `the ${theme} sheet`,
-        () => heard.filter((line) => line.startsWith("plan opened")).length > opened,
+        () =>
+          heard.filter((line) => line.startsWith("plan opened")).length >
+          opened,
         Boolean,
         90_000
       ).catch(() => undefined);
@@ -291,12 +296,17 @@ const run = async (kit: Kit) => {
         await page.goto(`${dashboard}/session/${session}`, {
           waitUntil: "domcontentloaded",
         });
-        await page.locator('[data-slot="plan-ring"]').first().click({ timeout: 30_000 });
+        await page
+          .locator('[data-slot="plan-ring"]')
+          .first()
+          .click({ timeout: 30_000 });
         await pause(1500);
         await page.screenshot({ path: join(keep, `web-plan-${theme}.png`) });
         await page.close();
       } catch (error) {
-        console.log(`  the web ${theme} plan wasn't captured: ${(error as Error).message.split("\n")[0]}`);
+        console.log(
+          `  the web ${theme} plan wasn't captured: ${(error as Error).message.split("\n")[0]}`
+        );
       }
     }
     await sh(`xcrun simctl ui ${udid} appearance light`);
