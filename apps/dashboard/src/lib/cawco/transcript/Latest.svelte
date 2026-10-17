@@ -11,43 +11,13 @@
   let { onjump }: { onjump: () => void } = $props();
 </script>
 
+<!-- The small button's height: where it rests is measured from it. -->
 <button
-  class="latest mark-line pressable"
+  class="mark-line pressable inline-flex items-center gap-space-2 h-c-btn-h-sm py-0 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong cursor-pointer hover:bg-surface-hover"
   onclick={onjump}
   type="button"
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  <IconArrowDown /><span>Jump to latest</span>
+  <IconArrowDown class="size-icon-md" /><span>Jump to latest</span>
 </button>
-
-<style>
-  /* The small button's height: where it rests is measured from it. */
-  .latest {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: var(--c-btn-h-sm);
-    padding-block: 0;
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    cursor: pointer;
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-
-    @media (hover: hover) {
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-  }
-</style>

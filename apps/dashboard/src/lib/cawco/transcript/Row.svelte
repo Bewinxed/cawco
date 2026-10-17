@@ -445,39 +445,33 @@
   });
 </script>
 
+<!-- The row's box is its whole height, its content's margins inside it
+     (flow-root): what is measured, handed on and tweened is what the list
+     lays out, and clipping it for a tween changes nothing. Continuation is
+     published, not reached for: rail blocks read --rail-head and --rail-gap
+     wherever they sit (`var(--rail-head, var(--rail))`). -->
 <div
   data-slot="row"
-  class={["row", { continues }]}
+  data-continues={continues || undefined}
+  class="flow-root data-marked:relative"
   data-drawn={drawn || undefined}
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
+  style:--rail-head={continues ? "var(--rail-body)" : undefined}
+  style:--rail-gap={continues ? "0px" : undefined}
 >
   {@render children(ticket)}
 </div>
 
 <style>
-  .row {
-    /* The row's box is its whole height, its content's margins inside it:
-       what is measured, handed on and tweened is what the list lays out, and
-       clipping it for a tween changes nothing. */
-    display: flow-root;
-
-    /* Continuation is published, not reached for: rail blocks read these
-       wherever they sit (`var(--rail-head, var(--rail))`). */
-    &.continues {
-      --rail-head: var(--rail-body);
-      --rail-gap: 0px;
-    }
-  }
+  /* residual: pseudo */
   /* The record a conversation was opened at: the selection tint laid over
      the whole row, a well's step past its edges and on its radius, so a
      message in the reader's well and a line on the rail read the same. It
      fades in where it stands and out once the reader has moved on; with less
      motion it is simply there, then gone. */
-  .row[data-marked] {
-    position: relative;
-
+  [data-slot="row"][data-marked] {
     &::before {
       content: "";
       position: absolute;

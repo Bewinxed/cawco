@@ -16,35 +16,15 @@
   let { solid }: { solid?: string } = $props();
 </script>
 
+<!-- literal: 96px, and the two gradients -->
 <div
   data-standing={solid !== undefined || undefined}
   aria-hidden="true"
-  class="foot-fade"
+  class="absolute inset-x-0 bottom-0 z-1 h-(--foot-fade-h) pointer-events-none bg-(image:--foot-fade-image) data-standing:h-(--foot-fade-standing-h) data-standing:bg-(image:--foot-fade-standing-image)"
   style:--fade-solid={solid ?? null}
-  class:standing={solid !== undefined}
+  style:--foot-fade-h="96px"
+  style:--foot-fade-image="linear-gradient(to top, var(--surface-recess) 22%, var(--surface-recess-clear))"
+  style:--foot-fade-standing-h="calc(var(--fade-solid) + var(--space-8))"
+  style:--foot-fade-standing-image="linear-gradient(to top, var(--surface-recess) var(--fade-solid), var(--surface-recess-clear))"
   transition:fade
 ></div>
-
-<style>
-  .foot-fade {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-end: 0;
-    z-index: 1;
-    block-size: 96px;
-    pointer-events: none;
-    background: linear-gradient(
-      to top,
-      var(--surface-recess) 22%,
-      oklch(from var(--surface-recess) l c h / 0)
-    );
-  }
-  .foot-fade.standing {
-    block-size: calc(var(--fade-solid) + var(--space-8));
-    background: linear-gradient(
-      to top,
-      var(--surface-recess) var(--fade-solid),
-      oklch(from var(--surface-recess) l c h / 0)
-    );
-  }
-</style>
