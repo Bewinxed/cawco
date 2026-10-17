@@ -14,6 +14,8 @@
  *  - `POST /register`: Dynamic Client Registration, the client given an id.
  *  - `POST /token`: an authorization code's exchange; every code is good,
  *    since the sign-in is the scene's own ({@link signIn}).
+ *  - `POST /feed`: an open MCP server of its own, a service connection's
+ *    (hub connections.ts), listing one tool, `post_update`.
  *
  * The hub never sends a person to `/authorize` here: the scene takes the
  * state the hub put in its authorization URL and completes the sign-in as
@@ -21,6 +23,8 @@
  */
 
 export interface McpOauthMock {
+  /** The open MCP server's URL, the one a service connection names (`post_update`, no sign-in). */
+  feedUrl: string;
   stop: () => void;
   /** The MCP server's URL, the one a fleet MCP server row names. */
   url: string;
@@ -32,8 +36,45 @@ const JSON_TYPE = { "content-type": "application/json" };
 const MCP_PATH = "/mcp";
 const RESOURCE_METADATA = `/.well-known/oauth-protected-resource${MCP_PATH}`;
 
+/** The open MCP server's path: a service connection's (hub connections.ts), its one tool. */
+const FEED_PATH = "/feed";
+const FEED_TOOL = {
+  name: "post_update",
+  description: "Post an update to the tray's feed.",
+  inputSchema: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+};
+
+/** One JSON-RPC call answered as an MCP server named `server` with `tools`: `initialize`, the tool list, a call's text. */
+async function answer(
+  request: Request,
+  server: string,
+  tools: object[]
+): Promise<Response> {
+  const call = (await request.json()) as { id?: number; method: string };
+  if (call.id === undefined) {
+    return new Response(null, { status: 202 });
+  }
+  const results: Record<string, object> = {
+    initialize: {
+      protocolVersion: "2025-06-18",
+      capabilities: { tools: {} },
+      serverInfo: { name: server, version: "1" },
+    },
+    "tools/call": { content: [{ type: "text", text: "Posted." }] },
+  };
+  return Response.json({
+    jsonrpc: "2.0",
+    id: call.id,
+    result: results[call.method] ?? { tools },
+  });
+}
+
 /** The MCP endpoint: 401 naming the resource metadata without a token; `initialize` and an empty tool list with one. */
-async function mcp(request: Request, origin: string): Promise<Response> {
+function mcp(request: Request, origin: string): Promise<Response> | Response {
   if (!request.headers.get("authorization")) {
     return new Response(null, {
       status: 401,
@@ -42,19 +83,7 @@ async function mcp(request: Request, origin: string): Promise<Response> {
       },
     });
   }
-  const call = (await request.json()) as { id?: number; method: string };
-  if (call.id === undefined) {
-    return new Response(null, { status: 202 });
-  }
-  const result =
-    call.method === "initialize"
-      ? {
-          protocolVersion: "2025-06-18",
-          capabilities: { tools: {} },
-          serverInfo: { name: "tray-docs", version: "1" },
-        }
-      : { tools: [] };
-  return Response.json({ jsonrpc: "2.0", id: call.id, result });
+  return answer(request, "tray-docs", []);
 }
 
 /** Each route by method and path: what it answers. */
@@ -63,6 +92,7 @@ const ROUTES: Record<
   (request: Request, origin: string) => Response | Promise<Response>
 > = {
   [`POST ${MCP_PATH}`]: mcp,
+  [`POST ${FEED_PATH}`]: (request) => answer(request, "tray-feed", [FEED_TOOL]),
   [`GET ${RESOURCE_METADATA}`]: (_, origin) =>
     Response.json({
       resource: `${origin}${MCP_PATH}`,
@@ -112,6 +142,7 @@ export function mcpOauthMock(): McpOauthMock {
     },
   });
   return {
+    feedUrl: `http://127.0.0.1:${server.port}${FEED_PATH}`,
     url: `http://127.0.0.1:${server.port}${MCP_PATH}`,
     stop: () => server.stop(true),
   };

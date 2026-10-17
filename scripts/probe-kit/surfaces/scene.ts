@@ -388,27 +388,43 @@ const plans = (repo: string): Record<string, Step[]> => ({
     },
   ],
   compact: [{ words: "The chip notes are in order." }],
+  // Its steps in Claude Code's own task list (the fleet keeps CawCo's
+  // to-dos off for it: hub plans.ts), one task each, the first done and the
+  // second under way.
   plan: [
+    ...PLAN_STEPS.map(
+      (subject): Step => ({
+        tool: {
+          name: "TaskCreate",
+          input: { subject, description: subject, activeForm: subject },
+        },
+      })
+    ),
+    { tool: { name: "TaskUpdate", input: { taskId: "1", status: "completed" } } },
+    {
+      tool: { name: "TaskUpdate", input: { taskId: "2", status: "in_progress" } },
+    },
+    { words: "The plan is set: the label first, then the badge." },
+  ],
+  propose: [
     {
       tool: {
         name: "ToolSearch",
-        input: { query: `select:${TODO_WRITE}`, max_results: 1 },
+        input: { query: `select:${ACTION_PROPOSE}`, max_results: 1 },
       },
     },
     {
       tool: {
-        name: TODO_WRITE,
+        name: ACTION_PROPOSE,
         input: {
-          steps: [
-            { content: "Read the tray's chip row", status: "completed" },
-            { content: "Let the label shrink", status: "in_progress" },
-            { content: "Keep the badge whole", status: "pending" },
-          ],
-          spec: "# The chip's wrap\n\nThe label shrinks and clips; the count badge never does.\n",
+          connection: FEED_CONNECTION,
+          tool: "post_update",
+          args: { text: "The tray's chips keep their badge whole now." },
+          reason: "The chip fix shipped; the feed says so once you approve.",
         },
       },
     },
-    { words: "The plan is set: the label first, then the badge." },
+    { words: "The update is proposed for your approval." },
   ],
   limit: [
     {
@@ -611,8 +627,15 @@ const DELEGATE = "mcp__cawco__delegate";
 const FINISH_ITEM = "mcp__cawco__finish_item";
 const WORKFLOW_RUN = "mcp__cawco__workflow_run";
 const SUBMIT_RESULT = "mcp__cawco__submit_result";
-/** CawCo's plan writer (task-tools.ts `todo_write`, its session scope), deferred. */
-const TODO_WRITE = "mcp__cawco__todo_write";
+/** CawCo's action proposer (actions.ts `action_propose`), deferred, and the connection it proposes on. */
+const ACTION_PROPOSE = "mcp__cawco__action_propose";
+const FEED_CONNECTION = "tray-feed";
+/** The planning session's steps, its task list's subjects in order. */
+const PLAN_STEPS = [
+  "Read the tray's chip row",
+  "Let the label shrink",
+  "Keep the badge whole",
+];
 /** CawCo's fleet-memory read (admin-tools.ts `admin_<group>_read`), deferred. */
 const ADMIN_MEMORY_READ = "mcp__cawco__admin_memory_read";
 /** A skill on the machine (`~/.claude/skills`), which the "skill" session runs. */
@@ -784,7 +807,8 @@ export interface Scene {
  * done, in this order (each leaves the fleet in it): composer suggestions
  * switched on; `written`, the hub as states that write to it leave it (an
  * account made, a key sent), kept apart so no other state reads what they
- * wrote; every machine offline; paired devices required. A state that
+ * wrote; every machine offline; every machine removed; paired devices
+ * required. A state that
  * reads one names it (catalogue `hub`); the tape keeps each on its own
  * (hub-tape.ts `variants`).
  */
@@ -792,6 +816,7 @@ export const VARIANTS = [
   "suggesting",
   "written",
   "machineless",
+  "unregistered",
   "pairing",
 ] as const;
 export type Variant = (typeof VARIANTS)[number];
@@ -830,6 +855,23 @@ export async function enterVariant(
       (machines) => machines.every((machine) => machine.status !== "online"),
       60_000
     );
+    return;
+  }
+  if (variant === "unregistered") {
+    // Every machine, all offline now, removed as a machine's menu removes
+    // it (its sessions with it): a hub with no machine at all.
+    const machines = await fleet.api<{ machineId: string }[]>("/api/agents");
+    for (const { machineId } of machines) {
+      // biome-ignore lint/performance/noAwaitInLoops: one removal at a time
+      const response = await fetch(`${fleet.base}/api/agents/${machineId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(
+          `DELETE /api/agents/${machineId}: ${response.status} ${await response.text()}`
+        );
+      }
+    }
     return;
   }
   // Paired devices required, as Configure → Devices turns it on: the asking
@@ -986,9 +1028,6 @@ export async function seedScene(
     fleet.repo
   );
   await fleet.send(compact, "Put the chip notes in order. PROBE-STEP:compact");
-  // A session that writes its plan (CawCo's list: the plan's ring, its panel).
-  const planned = await fleet.spawn("claude", "Plan the chip's fix", fleet.repo);
-  await fleet.send(planned, "Plan the chip's fix. PROBE-STEP:plan");
   // A delegate it starts, which reports back: its card, transcript inline.
   const split = delegate
     ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
@@ -1219,7 +1258,6 @@ export async function seedScene(
     ["the skill session's turn done", skillRun],
     ["the thinking session's turn done", think],
     ["the compact session's turn done", compact],
-    ["the planning session's turn done", planned],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
@@ -1581,6 +1619,63 @@ export async function seedScene(
     () => fleet.api<{ rebalances?: unknown[] }>("/api/accounts"),
     (view) => (view.rebalances?.length ?? 0) > 0,
     60_000
+  );
+  // A session that plans in its harness's task list (the plan's ring, its
+  // panel), started on the second account now the first is at its limit,
+  // so no carry moves it, and its list, between accounts' dirs.
+  const planned = await fleet.spawn("claude", "Plan the chip's fix", fleet.repo);
+  await fleet.send(planned, "Plan the chip's fix. PROBE-STEP:plan");
+  await until(
+    "the planning session's turn done",
+    () => fleet.instance(planned),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
+  // A service connection the cawco project lists (the stand-in's open feed,
+  // its one tool), and a session of the project proposing one call of it
+  // for you to approve (actions.ts): the project's approved-actions ledger.
+  if (!trayDocs) {
+    throw new Error("the scene's MCP server is not standing: sceneHub first");
+  }
+  await send("/api/connections", "POST", {
+    name: FEED_CONNECTION,
+    service: "feed",
+    account: "@cawco",
+    transport: "http",
+    url: trayDocs.feedUrl,
+    auth: "none",
+    projects: [project.id],
+  });
+  await until(
+    "the feed connection answering",
+    () =>
+      fleet.api<{ connections: { name: string; state: string }[] }>(
+        "/api/connections"
+      ),
+    (view) =>
+      view.connections.some(
+        (one) => one.name === FEED_CONNECTION && one.state === "signed-in"
+      ),
+    60_000
+  );
+  const proposer = await fleet.spawn(
+    "claude",
+    "Post the tray's update",
+    fleet.repo,
+    { projectId: project.id }
+  );
+  await fleet.send(proposer, "Post the tray's update. PROBE-STEP:propose");
+  await until(
+    "the proposed action filed",
+    () => fleet.api<unknown[] | { actions?: unknown[] }>("/api/actions"),
+    (view) => (Array.isArray(view) ? view : (view.actions ?? [])).length > 0,
+    120_000
+  );
+  await until(
+    "the proposing session's turn done",
+    () => fleet.instance(proposer),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    120_000
   );
   // Two accounts made in Configure and signed in nowhere yet: a spare
   // Claude login (its sign-in on a machine pastes a code) and a GitHub

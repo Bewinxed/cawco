@@ -12,7 +12,7 @@
  * for a `/motion/` bench (a built dashboard 404s them), on the dev server
  * against the same tape ("dev").
  */
-import type { Page } from "playwright-core";
+import type { Page, WebSocketRoute } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
 import {
   DELEGATE_TITLE,
@@ -201,7 +201,10 @@ const PLAN_RING = /^Plan, /;
 const KEY_PROVIDER = "302.AI";
 /** An account's Sign in on a machine (AccountMachines' "Sign in <account> on <machine>"). */
 const SIGN_IN_ON = /^Sign in .+ on /;
-/** A new account's setup, its API-key provider chosen, on to signing in (AccountSetup). */
+/**
+ * A new account's setup, its API-key provider chosen: choosing one goes on
+ * to signing in by itself (AccountSetup `choose`), its key's field there.
+ */
 const toKeyStep = async (page: Page) => {
   // A search field (role searchbox), found by the words in it.
   await page.getByPlaceholder("Search providers").fill(KEY_PROVIDER);
@@ -210,7 +213,7 @@ const toKeyStep = async (page: Page) => {
     .filter({ hasText: KEY_PROVIDER })
     .first()
     .click();
-  await press("Continue")(page);
+  await page.getByRole("textbox", { name: "API key" }).waitFor();
 };
 
 /** The keychain dialog's password field and its Unlock (UnlockKeychain's). */
@@ -272,13 +275,18 @@ const pressInTranscript = async (page: Page, name: RegExp) => {
 const TRANSCRIPT_WHEEL_PX = 600;
 const TRANSCRIPT_WHEELS = 20;
 
+/** A Jump result's peek in place (Finder's peek slot). */
+const FIND_PEEK = "[data-slot=peek-slot]";
+/** A session's transcript read (client.svelte.ts `readNewestPage`, its catch-up included). */
+const TRANSCRIPT_READ = "**/api/instances/*/transcript*";
 /** The spawn sheet's project and machines chips, and its Start once a move is due. */
 const PROJECT_CHIP = /^Project: /;
 const MACHINES_CHIP = /^Machines: /;
 const CAWCO_PROJECT = /^cawco\b/;
 const MOVE_AND_START = /^Move & start$/;
-/** A machine row in the Machines chip's popover (MachinesChip's), not its Add. */
-const MACHINE_ROW = "button[data-slot=row]:not([data-add])";
+/** A row in the Machines chip's popover (MachinesChip's), and a machine's, not its Add. */
+const MACHINE_ROW_ANY = "button[data-slot=row]";
+const MACHINE_ROW = `${MACHINE_ROW_ANY}:not([data-add])`;
 
 /**
  * In the spawn sheet: the cawco project, on the one online machine that is
@@ -290,7 +298,15 @@ const toOtherMachine = async (page: Page) => {
   await press(PROJECT_CHIP)(page);
   await page.getByRole("button", { name: CAWCO_PROJECT }).first().click();
   await press(MACHINES_CHIP)(page);
-  const rows = page.locator(LAYER).locator(MACHINE_ROW);
+  // The machines' rows: the siblings of its "Connect a machine…" row (the
+  // popover is a presentation layer LAYER does not name, and the project's,
+  // still open, lists its rows the same way).
+  const rows = page
+    .locator(`${MACHINE_ROW_ANY}[data-add]`)
+    .filter({ visible: true })
+    .first()
+    .locator("..")
+    .locator(MACHINE_ROW);
   const pressed = await rows.evaluateAll((all) =>
     all.map((row) => ({
       on: row.getAttribute("aria-pressed") === "true",
@@ -479,6 +495,13 @@ const EDITORS: Record<string, State[]> = {
     },
     // The fleet's memory in its editor.
     { name: "editor", route: () => "/config/memory/CLAUDE.md", root: "body" },
+    {
+      // The same, with no machine at all: where it lands, a link to add one.
+      name: "editor-no-machine",
+      hub: "unregistered",
+      route: () => "/config/memory/CLAUDE.md",
+      root: "body",
+    },
     {
       // The memory's Delete everywhere: the ask under its row.
       name: "delete-ask",
@@ -866,6 +889,27 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk"],
       },
+      {
+        // The hub's socket dropped, and the catch-up read on reconnecting
+        // (client.svelte.ts `rereadFollowed`) refused: the rows held where
+        // they are, the view not caught up. Last (its routes stay).
+        name: "behind",
+        act: async (page) => {
+          const sockets: WebSocketRoute[] = [];
+          await reloadedWith((p) =>
+            p.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
+              ws.connectToServer();
+              sockets.push(ws);
+            })
+          )(page);
+          await page.route(TRANSCRIPT_READ, (route) =>
+            route.abort("connectionrefused")
+          );
+          await sockets.at(-1)?.close();
+          await page.locator("[data-slot=behind]").first().waitFor();
+        },
+        root: MAIN,
+      },
     ],
   },
   {
@@ -1116,13 +1160,16 @@ export const SURFACES: Surface[] = [
     states: [
       { name: "open", act: openJump, root: LAYER },
       {
-        // A word typed, then → on the active row: its peek in place.
+        // A word typed, its results in, then ↓ to a session's row and → on
+        // it: its peek in place (Finder: → peeks the active row).
         name: "peek",
         act: async (page) => {
           await openJump(page);
           await page.keyboard.type("chip");
+          await page.locator("[role=option]").filter({ visible: true }).first().waitFor();
           await page.keyboard.press("ArrowDown");
           await page.keyboard.press("ArrowRight");
+          await page.locator(FIND_PEEK).first().waitFor();
         },
         root: LAYER,
       },
@@ -1264,6 +1311,8 @@ export const SURFACES: Surface[] = [
     route: () => "/",
     states: [
       { name: "rest", hub: "machineless", root: "body" },
+      // No machine at all, every one removed: where the page says to add one.
+      { name: "none", hub: "unregistered", root: "body" },
       // A session on the machine that went away: what its pane can still show.
       {
         name: "session",
