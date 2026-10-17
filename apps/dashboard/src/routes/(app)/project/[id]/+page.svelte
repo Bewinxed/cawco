@@ -1823,7 +1823,7 @@
     <!-- A phone: the task is its own page, with Back to the view. -->
     <div
       data-slot="project-page"
-      class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
+      class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
       style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
     >
       <TaskPane
@@ -1846,7 +1846,7 @@
       <div
         data-slot="project-page"
         class={[
-          "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)",
+          "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)",
           fadeOn === "page" && "kit-edge-fade-block",
         ]}
         style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
@@ -2140,13 +2140,12 @@
     [data-slot="project-page"] > :global(*) {
       flex-shrink: 0;
     }
-    /* residual: unmapped */
+    /* residual: unmapped — a custom property under a query (needs shared utility) */
     /* A phone: the page is the one scroller, so iOS never chains two. The
        foot's edge fade ends at the bar's top edge, a step of air under the
        reach (--bar-reach, set on the page). */
     [data-slot="project-page"] {
       --fade-inset-end: calc(var(--bar-reach) - var(--space-3));
-      container-type: size;
     }
   }
 </style>

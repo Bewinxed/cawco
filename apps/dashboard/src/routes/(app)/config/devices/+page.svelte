@@ -240,10 +240,11 @@
       <SectionHeader hue={HUE} icon={IconClock} label="Waiting for you" />
       <ul class="flex flex-col">
         {#each hubAuth.requests as request (request.userCode)}
-          <!-- literal: 12px, 10px -->
+          <!-- literal: 12px, 10px; minmax(0, 1fr) auto auto (the row's tracks) -->
           <li
             data-slot="row"
-            class="grid items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
+            class="grid grid-cols-(--row-cols) items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
+            style:--row-cols="minmax(0, 1fr) auto auto"
             style:--row-gap="12px"
             style:--row-pad-y="10px"
           >
@@ -295,10 +296,11 @@
           </li>
         {/each}
         {#each hubAuth.waiting as machine (machine.machineId)}
-          <!-- literal: 12px, 10px -->
+          <!-- literal: 12px, 10px; minmax(0, 1fr) auto auto (the row's tracks) -->
           <li
             data-slot="row"
-            class="grid items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
+            class="grid grid-cols-(--row-cols) items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
+            style:--row-cols="minmax(0, 1fr) auto auto"
             style:--row-gap="12px"
             style:--row-pad-y="10px"
           >
@@ -359,11 +361,12 @@
       <SectionHeader hue={HUE} icon={IconLaptop} label="Paired devices" />
       <ul class="flex flex-col">
         {#each devices as device (device.id)}
-          <!-- literal: 12px, 10px -->
+          <!-- literal: 12px, 10px; minmax(0, 1fr) auto (the row's tracks) -->
           <li
             data-slot="row"
             data-devices
-            class="grid items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
+            class="grid grid-cols-(--row-cols) items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
+            style:--row-cols="minmax(0, 1fr) auto"
             style:--row-gap="12px"
             style:--row-pad-y="10px"
           >
@@ -419,14 +422,3 @@
     </p>
   {/if}
 </SectionFrame>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="row"] {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-  /* residual: unmapped */
-  [data-slot="row"][data-devices] {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-</style>

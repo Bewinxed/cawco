@@ -230,7 +230,7 @@
     <span
       data-slot="tip"
       aria-hidden="true"
-      class="pointer-events-none absolute top-0 left-0 z-5 flex h-(--tip-h) w-(--tip-w) transform-(--tip-move) items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 opacity-(--tip-opacity) shadow-raised transition-[opacity] dur-control ease-out group-axis-x/rail:top-(--tip-top) group-axis-y/rail:left-(--tip-left)"
+      class="pointer-events-none absolute top-0 left-0 z-5 flex h-(--tip-h) w-(--tip-w) transform-(--tip-move) items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 opacity-(--tip-opacity) shadow-raised transition-[opacity] dur-control ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-top) group-axis-y/rail:left-(--tip-left)"
       style:--tip-h={tipBox ? `${tipBox.h}px` : undefined}
       style:--tip-left="calc(100% + 6px)"
       style:--tip-move={translate(tipBox, axis)}
@@ -258,16 +258,6 @@
 </div>
 
 <style>
-  /* residual: unmapped — the tip's three properties glide over different durations (needs transition token: transform/width var(--dur-morph) var(--ease-in-out), opacity var(--dur-control) var(--ease-out)) */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="tip"] {
-      transition:
-        transform var(--dur-morph) var(--ease-in-out),
-        width var(--dur-morph) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
-    }
-  }
-
   /* residual: keyframes */
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="tip-text"] {

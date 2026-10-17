@@ -165,10 +165,12 @@
         style:--status-gap="8px"
         transition:unfold
       >
+        <!-- literal: 50% -->
         <span
           data-slot="dot"
           aria-hidden="true"
-          class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+          style:--dot-r="50%"
+          class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
           data-box
         ></span>
         <span>{line.text}</span>
@@ -185,10 +187,12 @@
     {:else}
       <ul class="flex flex-col">
         {#each devices as device (device.id)}
-          <!-- literal: 12px, 10px -->
+          <!-- literal: 12px, 10px; minmax(0, 1fr) auto auto, and minmax(0, 1fr) auto on a phone (the row's tracks) -->
           <li
             data-slot="device"
-            class="grid items-center gap-(--device-gap) not-first:border-t not-first:border-t-border-hairline py-(--device-pad-y)"
+            class="grid grid-cols-(--device-cols) items-center gap-(--device-gap) not-first:border-t not-first:border-t-border-hairline py-(--device-pad-y) max-phone:grid-cols-(--device-cols-phone)"
+            style:--device-cols="minmax(0, 1fr) auto auto"
+            style:--device-cols-phone="minmax(0, 1fr) auto"
             style:--device-gap="12px"
             style:--device-pad-y="10px"
           >
@@ -248,19 +252,7 @@
 </SectionFrame>
 
 <style>
-  /* residual: unmapped */
-  [data-slot="device"] {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-  /* residual: unmapped */
-  [data-slot="dot"] {
-    border-radius: 50%;
-  }
   @media (max-width: 639px) {
-    /* residual: unmapped */
-    [data-slot="device"] {
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
     /* residual: foreign-dom */
     [data-slot="device"] > :global(:nth-child(2)) {
       grid-column: 1 / -1;

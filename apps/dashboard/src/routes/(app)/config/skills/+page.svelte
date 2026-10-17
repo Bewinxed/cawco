@@ -657,7 +657,7 @@
                         <!-- literal: 240px -->
                         <span
                           data-slot="text"
-                          class="flex min-w-0 flex-col gap-space-row"
+                          class="flex min-w-0 shrink grow basis-(--text-basis) flex-col gap-space-row"
                           style:--text-basis="240px"
                         >
                           <span
@@ -805,10 +805,3 @@
     taken={skills.map((row) => row.name)}
   />
 </SectionFrame>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="text"] {
-    flex: 1 1 var(--text-basis);
-  }
-</style>

@@ -76,13 +76,17 @@
     <!-- Keyed on the path, so a section change or a drill into an editor
          swaps only this pane (motion/route.svelte.ts) while the rail beside
          it holds still and its pill glides to the new section. -->
+    <!-- The two pages of a swap stand in one cell; a phone's push slides the
+         new one in from off the pane's edge, so the pane clips it. -->
+    <!-- literal: minmax(0, 1fr) (the one cell's track) -->
     <div
       data-slot="pane"
-      class="grid min-h-0 min-w-0 flex-auto overflow-hidden"
+      class="grid min-h-0 min-w-0 flex-auto grid-cols-(--pane-track) grid-rows-(--pane-track) overflow-hidden"
+      style:--pane-track="minmax(0, 1fr)"
     >
       {#key page.url.pathname}
         <div
-          class="flex min-h-0 min-w-0 flex-col bg-surface-recess"
+          class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-surface-recess"
           in:pageIn
           out:pageOut
         >
@@ -92,16 +96,3 @@
     </div>
   </div>
 </Tooltip.Provider>
-
-<style>
-  /* residual: unmapped */
-  /* The two pages of a swap stand in one cell; a phone's push slides the
-     new one in from off the pane's edge, so the pane clips it. */
-  [data-slot="pane"] {
-    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-  }
-  /* residual: unmapped */
-  [data-slot="pane"] > div {
-    grid-area: 1 / 1;
-  }
-</style>

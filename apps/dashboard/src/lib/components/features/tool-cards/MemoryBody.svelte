@@ -219,8 +219,8 @@
     {#if footer}
       <span
         data-slot="foot"
-        class="font-(family-name:--font-mono) text-size-meta font-normal text-ink-muted num"
-        >{footer}</span
+        class="font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal) text-ink-muted num"
+        style:--lh-normal="normal">{footer}</span
       >
     {/if}
   {:else if action === "get" && parsed.kind === "doc"}
@@ -228,8 +228,8 @@
     {#if footer}
       <span
         data-slot="foot"
-        class="font-(family-name:--font-mono) text-size-meta font-normal text-ink-muted num"
-        >{footer}</span
+        class="font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal) text-ink-muted num"
+        style:--lh-normal="normal">{footer}</span
       >
     {/if}
   {:else if action === "list_docs" && parsed.kind === "docs"}
@@ -282,10 +282,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: unmapped — the `font` shorthand reset line-height to normal */
-  [data-slot="foot"] {
-    line-height: normal;
-  }
-</style>

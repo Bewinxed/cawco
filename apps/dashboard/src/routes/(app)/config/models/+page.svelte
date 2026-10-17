@@ -340,12 +340,13 @@
         ? `${openrouterHeight}px`
         : undefined}
     >
+      <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
       <div data-slot="stack" class="grid" bind:clientHeight={openrouterHeight}>
         {#key phase}
           <p
             data-slot="num"
             aria-live="polite"
-            class="num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
+            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
             in:blur={{
               duration: dur("--dur-panel"),
@@ -359,10 +360,12 @@
             }}
           >
             {#if phase === "exchanging"}
+              <!-- literal: 50% -->
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none bg-ink-muted opacity-60 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                style:--dot-r="50%"
+                class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-60 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
                 data-box
                 data-pulse
               ></span>
@@ -391,10 +394,12 @@
                 )}</span
               >
             {:else}
+              <!-- literal: 50% -->
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                style:--dot-r="50%"
+                class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not connected</span>
@@ -461,10 +466,12 @@
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
+      <!-- literal: 50% -->
       <span
         data-slot="dot"
         aria-hidden="true"
-        class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+        style:--dot-r="50%"
+        class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
         data-box
       ></span>
       <span>{routeLine}</span>
@@ -489,7 +496,7 @@
           <p
             data-slot="num"
             aria-live="polite"
-            class="num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
+            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={{
@@ -523,10 +530,12 @@
               </svg>
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
+              <!-- literal: 50% -->
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                style:--dot-r="50%"
+                class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not set</span>
@@ -613,15 +622,6 @@
 </SectionFrame>
 
 <style>
-  /* residual: unmapped */
-  [data-slot="dot"] {
-    border-radius: 50%;
-  }
-  /* A status line that swaps: the lines cross-fade over each other in one grid cell. */
-  /* residual: unmapped */
-  [data-slot="stack"] > * {
-    grid-area: 1 / 1;
-  }
   /* Connected: the tick draws itself in. */
   /* residual: svg-paint */
   [data-slot="check"] {

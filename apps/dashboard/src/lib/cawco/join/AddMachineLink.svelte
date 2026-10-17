@@ -19,10 +19,3 @@
 >
   {@render children()}
 </button>
-
-<style>
-  /* residual: unmapped */
-  button {
-    font: inherit;
-  }
-</style>

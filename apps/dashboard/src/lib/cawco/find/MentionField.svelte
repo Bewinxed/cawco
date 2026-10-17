@@ -708,7 +708,7 @@
   bind:this={editor}
   data-phone={phone || undefined}
   class={[
-    "relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 font-body font-normal text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar",
+    "relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 font-body font-normal text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-none outline-current",
     className,
   ]}
   style:--editor-min-h="34px"
@@ -775,11 +775,6 @@
 
 <style>
   [data-slot="editor"] {
-    /* residual: unmapped — the shorthand also resets the outline colour and
-       width the base :focus-visible ring sets; outline-none sets the style
-       alone */
-    outline: none;
-
     /* residual: pseudo */
     /* The hint stands out of the text's flow, so the caret stands at the
        line's start under it. */
