@@ -607,7 +607,7 @@
           <button
             data-slot="icon-action"
             aria-label="Copy link"
-            class="touch-hit grid size-(--icon-action) flex-none cursor-pointer place-items-center rounded-sm border-0 bg-transparent hover:bg-surface-hover"
+            class="touch-hit grid size-(--icon-action) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent hover:bg-surface-hover"
             style:--icon-action="28px"
             onclick={() =>
               copyToClipboard("Link", new URL(href, location.origin).href)}
@@ -652,7 +652,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left wrap-anywhere"
+            class="min-w-0 cursor-pointer border-none border-current bg-transparent p-0 text-left wrap-anywhere"
             onclick={() => copyToClipboard("Working directory", cwd)}
             title={cwd}
             type="button"

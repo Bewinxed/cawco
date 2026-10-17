@@ -744,7 +744,8 @@
     }
     // The tabs in the order (`rects.items`), which a leaving tab has left.
     const items = rects.items.flatMap(
-      (item) => item.querySelector<HTMLElement>(":scope > .hit") ?? []
+      (item) =>
+        item.querySelector<HTMLElement>(':scope > [data-slot="hit"]') ?? []
     );
     if (items.length === 0) {
       return;
@@ -1098,14 +1099,6 @@
       },
     };
   }
-
-  const px = (rect: {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  }) =>
-    `transform:translate(${rect.left}px,${rect.top}px);width:${rect.width}px;height:${rect.height}px`;
 </script>
 
 <div
@@ -1126,28 +1119,60 @@
   use:rects.container
   use:sideways
   {@attach highlight({
-    rows: ".ff-tab",
+    rows: '[data-slot="ff-tab"]',
     axis: "x",
-    covered: ".ff-tab.selected",
+    covered: '[data-slot="ff-tab"][data-tab-item-selected]',
     laidOut: () => rects.rects,
   })}
   {...rest}
 >
+  <!-- The segment and the ring are placed by `transform`, not `left`/`top`:
+       moving between tabs is then a compositor-only translate. Only the
+       width change lays out, and it lays out one empty absolutely-positioned
+       box. The active segment: raised, at the moderate tier — critically
+       damped, lands without overshoot. Folder tabs draw their own sheet
+       (TabItem): it has to sit exactly on the chosen tab in the same frame
+       the tabs reflow, and a box placed from measurements lands a frame
+       late, wherever the tab used to be. -->
   {#if selectedRect}
+    {@const at = segmentRect ?? selectedRect}
     <div
+      data-slot="segment"
       aria-hidden="true"
-      class="segment"
-      style={px(segmentRect ?? selectedRect)}
-      class:travelling={travelRect !== undefined}
+      class="pointer-events-none absolute start-0 top-0 z-1 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden"
+      style:--box-at="translate({at.left}px,{at.top}px)"
+      style:--box-w="{at.width}px"
+      style:--box-h="{at.height}px"
+      data-travelling={travelRect !== undefined || undefined}
     ></div>
   {/if}
+  <!-- The focus ring, gliding from tab to tab: the app's one ring, drawn
+       on the tab's own box (a tab sits flush in the strip). Above every tab
+       and every outline a host draws on them. -->
   {#if focusRect}
-    <div aria-hidden="true" class="ring" style={px(focusRect)}></div>
+    <div
+      data-slot="ring"
+      aria-hidden="true"
+      class="pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"
+      style:--box-at="translate({focusRect.left}px,{focusRect.top}px)"
+      style:--box-w="{focusRect.width}px"
+      style:--box-h="{focusRect.height}px"
+      style:--ring-z="calc(var(--stack-top) + 2)"
+      style:--ring-r="calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0"
+    ></div>
   {/if}
   {@render children()}
 </div>
 
 <style>
+  /* residual: unmapped — DEFERRED (delta Q contract), the three track
+     rules below as the foundation had them: they set the size ladder's
+     custom properties (`--pad`, `--item`, `--gap`, `--px`, `--icon`,
+     `--text`, `--radius`, `--shape`, `--sheet`, `--flare`, `--overlap`,
+     `--slope-*`, `--choose-*`) that hosts override by selector on
+     `.ff-tabs-list` (PaneTabs, WorkTabs, the compact size). As `style:` they
+     would beat every override; as a residual their literals are not
+     allowed. */
   /* The size ladder: the pad and the item add up to the control height —
      36px by default, 28px compact — so the control lines up with the
      buttons, selects and inputs beside it. `--shape` is the corner the
@@ -1200,12 +1225,6 @@
       }
     }
   }
-  /* A track that scrolls keeps every tab at its own width and scrolls past
-     the edge (its fades say there is more), never squeezing a tab toward an
-     ellipsis to fit: a tab's own cap is what ends a long title. */
-  .ff-tabs-list.scrollable > :global(.ff-tab) {
-    flex-shrink: 0;
-  }
   :global([data-size="compact"]) .ff-tabs-list {
     --pad: 2px;
     --item: 24px;
@@ -1253,31 +1272,14 @@
     --choose-dur: var(--dur-settle);
     --choose-ease: var(--ease-crossfade);
   }
-  /* The come-forward's clock (`tab-come-forward`): a number on the track
-     the run carries from 0 to 1, which nothing draws; each tab's pose is
-     read off the run's time. */
-  @property --forward {
-    syntax: "<number>";
-    inherits: false;
-    initial-value: 0;
+  /* residual: foreign-dom — the tabs (TabItem) and a host's boxes round
+     them, which the track's children render. A track that scrolls keeps
+     every tab at its own width and scrolls past the edge (its fades say
+     there is more), never squeezing a tab toward an ellipsis to fit: a
+     tab's own cap is what ends a long title. */
+  .ff-tabs-list.scrollable > :global([data-slot="ff-tab"]) {
+    flex-shrink: 0;
   }
-  /* A tab's rank in the stack (`--z`, the script's; `--z-rest`, from the
-     order and the value until the track ranks it), read only on the box
-     that carries it (its `z-index`, below; a leaving tab's own). Not
-     inherited: a choice re-ranks most of the strip, and as plain custom
-     properties each new rank restyled everything its tab holds (its
-     sheet, rim, name, glyph and controls), 430 elements a choice. No
-     initial value (`*`), so a box the track has not ranked yet still falls
-     back to its rest rank. */
-  @property --z {
-    syntax: "*";
-    inherits: false;
-  }
-  @property --z-rest {
-    syntax: "*";
-    inherits: false;
-  }
-
   /* Each folder tab, or the host's box round it, steps back over its
      leading neighbour by the overlap, and is one stack at its rank (`--z`,
      the script; `--z-rest` until the track has ranked it): its sheet, rim
@@ -1288,56 +1290,19 @@
      room. */
   :global([data-variant="folder"])
     .ff-tabs-list
-    > :global(:not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail)) {
+    > :global(
+      :not(
+          [data-slot="segment"],
+          [data-slot="ring"],
+          .kit-ghost,
+          .kit-pill,
+          .kit-pill-trail
+        )
+    ) {
     position: relative;
     z-index: var(--z, var(--z-rest, 1));
     isolation: isolate;
     margin-inline-start: calc(-1 * var(--overlap));
-  }
-  /* Placed by `transform`, not `left`/`top`: moving between tabs is then a
-     compositor-only translate. Only the width change lays out, and it lays
-     out one empty absolutely-positioned box. */
-  .segment,
-  .ring {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    pointer-events: none;
-    border-radius: var(--shape);
-  }
-  /* The active segment: raised, at the moderate tier — critically
-     damped, lands without overshoot. Steps back a little while another
-     tab is under the hover ghost, so the ghost reads as the thing about
-     to take over. */
-  .segment {
-    z-index: 1;
-    background: var(--sheet);
-    box-shadow: var(--shadow-tile);
-
-    @media (hover: hover) {
-      .ff-tabs-list:has(:global(.ff-tab[data-ghosted]:not(.selected))) > & {
-        opacity: 0.85;
-      }
-    }
-    /* Under a hand, or riding a settle read off its clock each frame: the
-       position is the motion, and an easing on top would lag the finger. */
-    &.travelling {
-      transition: none;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-toggle) var(--ease-out),
-        width var(--dur-toggle) var(--ease-out),
-        height var(--dur-toggle) var(--ease-out),
-        opacity var(--dur-ghost) var(--ease-out);
-    }
-  }
-  /* Folder tabs draw their own sheet (TabItem): it has to sit exactly on
-     the chosen tab in the same frame the tabs reflow, and a box placed
-     from measurements lands a frame late, wherever the tab used to be. */
-  :global([data-variant="folder"]) .segment {
-    display: none;
   }
   /* The hover ghost is the kit's (app.css .kit-ghost), cut to the tab's
      own shape and filled as the kit fills it: surface-hover, whole.
@@ -1347,23 +1312,57 @@
   :global([data-variant="folder"]) .ff-tabs-list > :global(.kit-ghost) {
     display: none;
   }
-  /* The focus ring, gliding from tab to tab: the app's one ring, drawn on
-     the tab's own box (a tab sits flush in the strip). */
-  .ring {
-    z-index: 4;
-    border: var(--focus-ring-width) solid var(--focus-ring);
-    border-radius: var(--shape);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-ghost) var(--ease-out),
-        width var(--dur-ghost) var(--ease-out),
-        height var(--dur-ghost) var(--ease-out);
+  /* residual: unmapped — the segment steps back a little while another tab
+     is under the hover ghost, so the ghost reads as the thing about to
+     take over: a run-time state (`data-ghosted`, the highlight's) on a
+     sibling. Under a hand, or riding a settle read off its clock each
+     frame (`data-travelling`), the position is the motion, and an easing
+     on top would lag the finger. needs transition token: transform
+     var(--dur-toggle) var(--ease-out), width var(--dur-toggle)
+     var(--ease-out), height var(--dur-toggle) var(--ease-out), opacity
+     var(--dur-ghost) var(--ease-out). */
+  @media (hover: hover) {
+    .ff-tabs-list:has(
+        :global([data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected]))
+      )
+      > [data-slot="segment"] {
+      opacity: 0.85;
     }
   }
-  /* Above every tab and every outline a host draws on them. */
-  :global([data-variant="folder"]) .ring {
-    z-index: calc(var(--stack-top) + 2);
-    border-radius: calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0;
+  [data-slot="segment"][data-travelling] {
+    transition: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="segment"] {
+      transition:
+        transform var(--dur-toggle) var(--ease-out),
+        width var(--dur-toggle) var(--ease-out),
+        height var(--dur-toggle) var(--ease-out),
+        opacity var(--dur-ghost) var(--ease-out);
+    }
+  }
+  /* The come-forward's clock (`tab-come-forward`): a number on the track
+     the run carries from 0 to 1, which nothing draws; each tab's pose is
+     read off the run's time. A tab's rank in the stack (`--z`, the
+     script's; `--z-rest`, from the order and the value until the track
+     ranks it), read only on the box that carries it (its `z-index`; a
+     leaving tab's own). Not inherited: a choice re-ranks most of the strip,
+     and as plain custom properties each new rank restyled everything its
+     tab holds (its sheet, rim, name, glyph and controls), 430 elements a
+     choice. No initial value (`*`), so a box the track has not ranked yet
+     still falls back to its rest rank. */
+  /* residual: unmapped — registrations no utility makes. */
+  @property --forward {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0;
+  }
+  @property --z {
+    syntax: "*";
+    inherits: false;
+  }
+  @property --z-rest {
+    syntax: "*";
+    inherits: false;
   }
 </style>
