@@ -60,6 +60,20 @@
  * more by kind; every number is written to `numbers.json` in the spec's out
  * folder.
  *
+ * WHAT IT FOUND is in docs/perf/two-pane.md, each engine claim with its
+ * Chromium source line. In short: an inherited value lifted on a container
+ * restyles everything under it in full wherever a style reads or sets a
+ * custom property (Blink `Element::PropagateInheritedProperties`), so a pane
+ * is shown by lifting `content-visibility` alone, laid out while skipped
+ * when reached for; a pane that streamed while skipped measures its new rows
+ * in the frame that shows it (virtua measures by ResizeObserver alone, which
+ * skips a skipped subtree); the rail's, tab's and composer's own state
+ * changes still lift inherited values. A second drawn transcript costs
+ * per-frame work that walks everything drawn (a full layerize on any chunk's
+ * bounds change; a cursor hit test after every layout, every layer walked);
+ * edge fades, head-fade animations, cursors and `content-visibility` on rows
+ * changed nothing.
+ *
  * A LEG COUNTS ONLY UNCONTENDED. Each phase is a leg, and it counts when the
  * spec's own cgroup's CPU pressure (Linux PSI, `cpu.pressure`, `some avg10`)
  * is under `PSI_LIMIT` at every reading while it runs; a try over it is void
