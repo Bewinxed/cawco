@@ -40,28 +40,32 @@
       <Input
         aria-label="{legend} name"
         autocomplete="off"
-        class="h-space-8 flex-1 font-mono text-meta"
+        class="h-space-8 flex-1"
+        face="mono"
         oninput={settle}
         placeholder={keyPlaceholder}
         spellcheck="false"
+        text="meta"
         bind:value={row.key}
       />
       <Input
         aria-label="{legend} value"
         autocomplete="off"
-        class="h-space-8 grow-(--value-grow) basis-(--value-basis) font-mono text-meta"
+        class="h-space-8 grow-(--value-grow) basis-(--value-basis)"
+        face="mono"
         style="--value-basis: 0%; --value-grow: 2"
         oninput={settle}
         placeholder={valuePlaceholder}
         spellcheck="false"
+        text="meta"
         bind:value={row.value}
       />
       <Button
         aria-label="Remove {row.key || 'this line'}"
-        class="text-ink-muted"
         disabled={index === rows.length - 1}
         onclick={() => rows.splice(index, 1)}
         size="icon-sm"
+        tone="muted"
         variant="ghost"
       >
         <IconClose />

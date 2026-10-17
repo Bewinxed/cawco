@@ -127,11 +127,11 @@
          picked blind. It also stays open, so hue and mark are one visit. -->
     <ContextMenu.Sub>
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
-      <ContextMenu.SubTrigger class="gap-2.5">
+      <ContextMenu.SubTrigger gap="item">
         <IconPalette class="size-icon-md" />
         <span>Customize</span>
       </ContextMenu.SubTrigger>
-      <ContextMenu.SubContent class="w-64 rounded-lg p-3 shadow-xl">
+      <ContextMenu.SubContent frame="panel-high" pad="card" width="wide">
         <div class="flex items-center justify-between pb-2 pl-space-1">
           <span class="text-label font-medium text-ink-muted">Colour</span>
           {#if pickedHue !== undefined}

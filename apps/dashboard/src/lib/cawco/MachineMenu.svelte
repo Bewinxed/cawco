@@ -173,12 +173,12 @@
     {/if}
     <ContextMenu.Sub>
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
-      <ContextMenu.SubTrigger class="gap-2.5">
+      <ContextMenu.SubTrigger gap="item">
         <IconPause class="size-icon-md" />
         <span>Pause until…</span>
       </ContextMenu.SubTrigger>
       <!-- Each end says its clock beside it: no sums before choosing. -->
-      <ContextMenu.SubContent class="min-w-52">
+      <ContextMenu.SubContent min="standard">
         {#each pauseChoices(new Date()) as choice (choice.label)}
           <ContextMenu.PendingItem
             label={choice.label}

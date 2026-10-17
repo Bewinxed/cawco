@@ -63,7 +63,7 @@
             class="grid size-(--mark-size) place-items-center text-ink-muted"
             style:--mark-size="2.25rem"
           >
-            <Spinner aria-hidden="true" class="size-6" role="presentation" />
+            <Spinner aria-hidden="true" box="large" role="presentation" />
           </span>
           <p
             data-slot="title"

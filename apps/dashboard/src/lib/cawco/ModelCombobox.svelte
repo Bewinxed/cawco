@@ -7,7 +7,11 @@
   import { tick } from "svelte";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
-  import { Button, type ButtonSize } from "#lib/components/ui/button/index.js";
+  import {
+    Button,
+    type ButtonProps,
+    type ButtonSize,
+  } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Command from "#lib/components/ui/command/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -29,6 +33,7 @@
     onchoose,
     showDefault = false,
     size = "sm",
+    width,
     class: className = "",
   }: {
     /** The model in force, as the id it is known by. `''` is the SDK's own choice. */
@@ -39,6 +44,8 @@
     /** Whether "Default" is offered — it is, wherever no model at all is a choice. */
     showDefault?: boolean;
     size?: ButtonSize;
+    /** The trigger's width look, passed on to its Button. */
+    width?: ButtonProps["width"];
     class?: string;
   } = $props();
 
@@ -142,13 +149,15 @@
         {...props}
         aria-expanded={open}
         aria-label={unreported ? "Model, not reported yet" : "Model"}
-        class="justify-between gap-2 {className}"
+        class="justify-between {className}"
+        gap="loose"
         role="combobox"
         {size}
         title={unreported
           ? "Read from this session's next turn — it has not said which model answers"
           : value || "The model the harness picks for itself"}
         variant="outline"
+        {width}
       >
         <span
           data-slot="num"
@@ -162,7 +171,7 @@
     {/snippet}
   </Popover.Trigger>
 
-  <Popover.Content align="start" class="w-80 p-0">
+  <Popover.Content align="start" pad="none" width="wide">
     <Command.Root>
       <Command.Input
         placeholder="Search, or type a model id…"

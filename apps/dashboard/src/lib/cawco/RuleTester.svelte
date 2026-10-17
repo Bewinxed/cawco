@@ -77,10 +77,13 @@
 
   <Textarea
     aria-label="Sample text to test this rule against"
-    class="resize-y bg-surface-page font-(family-name:--font-mono) text-label"
+    class="resize-y"
+    face="mono-family"
+    fill="page"
     placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
     rows={3}
     spellcheck="false"
+    text="label"
     bind:value={sample}
   />
 
@@ -95,7 +98,7 @@
       <!-- literal: 12px -->
       <p
         data-slot="layer"
-        class="col-start-1 row-start-1 p-(--layer-pad) break-words whitespace-pre-wrap"
+        class="col-start-1 row-start-1 p-(--layer-pad) wrap-break-word whitespace-pre-wrap"
         style:--layer-pad="12px"
       >
         {sample}
@@ -105,7 +108,7 @@
         <p
           data-slot="layer"
           aria-hidden="true"
-          class="col-start-1 row-start-1 p-(--layer-pad) break-words whitespace-pre-wrap text-transparent"
+          class="col-start-1 row-start-1 p-(--layer-pad) wrap-break-word whitespace-pre-wrap text-transparent"
           style:--layer-pad="12px"
           in:crossIn
           out:crossOut

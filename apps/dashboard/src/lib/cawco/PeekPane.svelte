@@ -295,7 +295,7 @@
                    leaf is what tells two checkouts apart. -->
               <span
                 data-slot="cwd"
-                class="min-w-0 truncate font-(family-name:--font-mono)"
+                class="dir-rtl min-w-0 truncate font-(family-name:--font-mono)"
                 title={cwd}
               >
                 <bdi>{cwd}</bdi>
@@ -304,8 +304,9 @@
           </p>
         </div>
         <Button
-          class="-mr-1.5 shrink-0"
+          class="shrink-0"
           href={target.href}
+          margin="ghost-end"
           size="sm"
           variant="ghost"
         >
@@ -430,8 +431,8 @@
         >
           <Button
             data-deny
+            answer="deny-edge"
             aria-label="Deny {summary}"
-            class="border-status-fail-ink bg-surface-recess text-ink-strong hover:border-status-fail-ink hover:bg-surface-recess hover:text-ink-strong"
             onclick={() => answer(request, "deny")}
             size="sm"
             variant="secondary"
@@ -441,8 +442,8 @@
           </Button>
           <Button
             data-approve
+            answer="approve-edge"
             aria-label="Approve {summary}"
-            class="border-status-done-ink bg-surface-recess text-ink-strong hover:border-status-done-ink hover:bg-surface-recess hover:text-ink-strong"
             onclick={() => answer(request, "allow")}
             size="sm"
             variant="secondary"
@@ -525,24 +526,26 @@
           {:else if message.type === "user.peer"}
             <!-- The one voice worth tinting: what the session was asked. -->
             <p
-              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
+              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body wrap-break-word whitespace-pre-wrap"
             >
               {message.content}
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 text-body break-words text-error-9">
+            <p class="line-clamp-3 text-body wrap-break-word text-error-9">
               {plainMarkdown(message.content)}
             </p>
           {:else}
             <!-- The agent's words read flat: its markdown, without the syntax. -->
-            <p class="line-clamp-6 text-body break-words whitespace-pre-wrap">
+            <p
+              class="line-clamp-6 text-body wrap-break-word whitespace-pre-wrap"
+            >
               {plainMarkdown(message.content)}
             </p>
           {/if}
         {/each}
         {#if session?.streaming}
-          <p class="text-body break-words whitespace-pre-wrap">
+          <p class="text-body wrap-break-word whitespace-pre-wrap">
             {streamed}
             <!-- literal: 3px -->
             <span
@@ -555,10 +558,3 @@
     </div>
   {/key}
 </div>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="cwd"] {
-    direction: rtl;
-  }
-</style>

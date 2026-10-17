@@ -37,7 +37,6 @@
     policies: ToolPolicy[];
   } = $props();
 
-  const CHIP = "h-auto min-h-6 gap-1.5 px-2";
   const columns = $derived(catalog.filter((spec) => !spec.dependencyOnly));
   let written = $state<Record<string, ToolPolicy>>({});
   const policyOf = (spec: ToolSpec): ToolPolicy =>
@@ -109,7 +108,7 @@
 
   {#if shown === "installed"}
     <span class="flex items-center gap-space-1">
-      <Badge class="{CHIP} text-success-9" variant="ghost">
+      <Badge class="h-auto" size="cell" tone="success" variant="ghost">
         <IconCheck class="size-icon-md shrink-0" />
         <span data-slot="num" class="num font-(family-name:--font-mono)"
           >{toolStatus?.version ?? "—"}</span
@@ -119,7 +118,6 @@
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 min-[48rem]:opacity-0"
       >
         <Button
-          class="text-ink-muted"
           disabled={!online}
           {failed}
           label="Reinstall"
@@ -127,12 +125,13 @@
           {pending}
           pendingLabel="Installing…"
           size="xs"
+          tone="muted"
           variant="ghost"
         />
       </span>
     </span>
   {:else if shown === "installing"}
-    <Badge class="{CHIP} text-ink-muted" variant="ghost">
+    <Badge class="h-auto" size="cell" tone="muted" variant="ghost">
       <Spinner class="size-icon-md shrink-0" />
       <span>Installing…</span>
     </Badge>
@@ -157,7 +156,8 @@
               aria-label="Why {spec.name} did not install on {machineLabel(
                 machine.hostname
               )}"
-              class="{CHIP} cursor-pointer"
+              class="h-auto cursor-pointer"
+              size="cell"
               variant="destructive"
             >
               <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
@@ -166,7 +166,12 @@
             </Badge>
           {/snippet}
         </Popover.Trigger>
-        <Popover.Content align="start" class="w-96 rounded-lg p-0 shadow-xl">
+        <Popover.Content
+          align="start"
+          frame="panel-high"
+          pad="none"
+          width="widest"
+        >
           <header
             class="flex items-baseline gap-space-1 border-b border-border px-space-3 py-space-2"
           >
@@ -199,7 +204,6 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="text-ink-muted"
         disabled={!online}
         {failed}
         label="Retry"
@@ -207,6 +211,7 @@
         {pending}
         pendingLabel="Installing…"
         size="xs"
+        tone="muted"
         variant="ghost"
       />
     </span>
@@ -219,14 +224,16 @@
             aria-label="Why {spec.name} cannot run on {machineLabel(
               machine.hostname
             )}"
-            class="{CHIP} cursor-pointer text-ink-muted"
+            class="h-auto cursor-pointer"
+            size="cell"
+            tone="muted"
             variant="ghost"
           >
             <span>Unsupported</span>
           </Badge>
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="start" class="w-80 rounded-lg shadow-xl">
+      <Popover.Content align="start" frame="panel-high" width="wide">
         <p class="font-(family-name:--font-mono) text-label">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
@@ -237,15 +244,18 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge {...props} class="{CHIP} text-ink-subtle" variant="ghost"
-              ><span>Unknown</span></Badge
+            <Badge
+              {...props}
+              class="h-auto"
+              size="cell"
+              tone="subtle"
+              variant="ghost"><span>Unknown</span></Badge
             >
           {/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>The daemon has not reported this tool</Tooltip.Content>
       </Tooltip.Root>
       <Button
-        class="text-ink-muted"
         disabled={!online}
         {failed}
         label="Install"
@@ -253,6 +263,7 @@
         {pending}
         pendingLabel="Installing…"
         size="xs"
+        tone="muted"
         variant="ghost"
       />
     </span>
@@ -284,22 +295,27 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <div class="matrix overflow-x-auto rounded-md bg-surface-raised">
+  <!-- The matrix scrolls sideways inside the section; the page never does. -->
+  <div
+    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
+  >
     <Table.Root class="border-collapse text-left">
       <Table.Header>
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="sticky left-0 z-10 h-auto bg-surface-raised px-space-4 py-space-3 text-meta text-ink-muted"
-            scope="col">Machine</Table.Head
+            class="sticky z-10 h-auto"
+            scope="col"
+            variant="matrix-corner-pinned">Machine</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           {#each columns as spec (spec.id)}
             {@const policy = policyOf(spec)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-auto min-w-56 border-l border-border px-space-4 py-space-3 whitespace-normal"
+              class="h-auto whitespace-normal"
               scope="col"
+              variant="matrix-column-wide-plain"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <div class="flex flex-col items-start gap-space-2">
@@ -346,11 +362,12 @@
         {#each machines as machine (machine.machineId)}
           {@const os = machineOs(machine.os)}
           {@const online = machine.status === "online"}
-          <Table.Row class={online ? "" : "opacity-50"}>
+          <Table.Row inactive={!online}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky left-0 z-10 h-auto bg-surface-raised px-space-4 py-space-2"
+              class="sticky z-10 h-auto"
               scope="row"
+              variant="matrix-row-pinned"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <span class="flex items-center gap-space-2">
@@ -376,9 +393,7 @@
               </span>
             </Table.Head>
             {#each columns as spec (spec.id)}
-              <Table.Cell
-                class="group/cell border-l border-border px-space-4 py-space-2 whitespace-normal"
-              >
+              <Table.Cell class="group/cell whitespace-normal" variant="matrix">
                 {@render cell(machine, spec, online)}
               </Table.Cell>
             {/each}
@@ -388,11 +403,3 @@
     </Table.Root>
   </div>
 {/if}
-
-<style>
-  /* residual: unmapped */
-  /* The matrix scrolls sideways inside the section; the page never does. */
-  .matrix {
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-</style>
