@@ -3,71 +3,99 @@
     | "asking"
     | "waiting"
     | "last-minute"
+    | "checking"
     | "approved"
     | "denied"
     | "expired"
     | "failed";
+  /** A take the owner picks between, shown on its own stop. */
+  export interface StopPick {
+    choice: string;
+    label: string;
+    option: string;
+  }
 </script>
 
 <script lang="ts">
   /**
    * One stop of the pairing sheet: the real PairingPanel at rest in the
-   * stop's stage, and the control that plays the storyboard into it (T2 to
-   * T7), from the stage before it. Start pairing on an answered stop plays
-   * T7 then T2, as it does on the screen. Preview only.
+   * stop's state, the control that plays the moment into it from the state
+   * before, and, on a take's stop, its Pick. Preview only.
    */
   import { onDestroy, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import IconPlay from "~icons/solar/play-bold-duotone";
-  import type { PairingStage } from "../../hub-auth.svelte";
   import { dur } from "../../motion/curves.svelte";
-  import PairingPanel from "../PairingPanel.svelte";
-  import PickSwitch from "./PickSwitch.svelte";
-  import { FIXTURE, picks, timeline, verification } from "./picks.svelte";
+  import PairingPanel, {
+    type ApprovedTake,
+    type ExpiredTake,
+    type PanelStage,
+  } from "../PairingPanel.svelte";
+  import type { QrWait } from "../PairingQr.svelte";
+  import { FIXTURE, timeline, verification } from "./picks.svelte";
 
-  let { stop }: { stop: PairingStopName } = $props();
+  let {
+    stop,
+    wait = "sweep",
+    approved = "swallow",
+    expired = "park",
+    pick,
+  }: {
+    stop: PairingStopName;
+    wait?: QrWait;
+    approved?: ApprovedTake;
+    expired?: ExpiredTake;
+    pick?: StopPick;
+  } = $props();
 
   const SECOND = 1000;
-  /** 9:41 and 0:41 left, the sheet's two countdown stops. */
+  /** 9:41 and 0:41 left. */
   const AT_REST = 581 * SECOND;
-  const LAST_MINUTE = 41 * SECOND;
+  const LAST = 41 * SECOND;
 
   let now = $state(Date.now());
   let code = $state<string>(FIXTURE.code);
   let leaving = $state(false);
-  /** A new run mounts the panel afresh in the stage a storyboard starts from. */
+  /** A new run mounts the panel afresh in the state a moment starts from. */
   let run = $state(0);
 
-  const waiting = (left: number): PairingStage => ({
-    kind: "waiting",
-    verificationUriComplete: verification(FIXTURE.hub, code),
+  const live = (left: number) => ({
     userCode: code,
+    verificationUriComplete: verification(FIXTURE.hub, code),
     expiresAt: now + left,
   });
+  const ended = (kind: "approved" | "denied" | "expired"): PanelStage => ({
+    kind,
+    userCode: code,
+    verificationUriComplete: verification(FIXTURE.hub, code),
+  });
+  const FAILED: PanelStage = {
+    kind: "failed",
+    message:
+      "This hub trusts its network, so there is nothing to pair: every device on it reaches the fleet.",
+    status: 409,
+  };
 
-  function rest(): PairingStage {
+  function rest(): PanelStage {
     switch (stop) {
       case "asking":
         return { kind: "asking" };
       case "waiting":
-        return waiting(AT_REST);
+        return { kind: "waiting", ...live(AT_REST) };
       case "last-minute":
-        return waiting(LAST_MINUTE);
+        return { kind: "waiting", ...live(LAST) };
+      case "checking":
+        return { kind: "checking", ...live(AT_REST) };
       case "failed":
-        return {
-          kind: "failed",
-          message:
-            "Pairing is off on this hub. Turn it on in Configure › Devices.",
-        };
+        return FAILED;
       default:
-        return { kind: stop, verificationUriComplete: verification(FIXTURE.hub, code), userCode: code };
+        return ended(stop);
     }
   }
-  let stage = $state<PairingStage>(untrack(rest));
+  let stage = $state<PanelStage>(untrack(rest));
 
   /* The clock runs a second at a time while a code waits, except on the
-     last-minute stop, which holds at 0:41 until played. A code that has run
-     out (0:00 shown) expires on the next second, as the hub's poll answers. */
+     last-minute stop, which holds at 0:41 until played. */
   let ticking = $state(untrack(() => stop !== "last-minute"));
   $effect(() => {
     if (stage.kind !== "waiting" || !ticking) {
@@ -76,7 +104,7 @@
     const timer = setInterval(() => {
       now += SECOND;
       if (stage.kind === "waiting" && now > stage.expiresAt) {
-        stage = { kind: "expired", verificationUriComplete: verification(FIXTURE.hub, code), userCode: code };
+        stage = ended("expired");
       }
     }, SECOND);
     return () => clearInterval(timer);
@@ -86,7 +114,7 @@
   onDestroy(steps.stop);
 
   /** Mounts the panel afresh in `from`, then plays into the rest of it. */
-  function replay(from: PairingStage, then: () => void): void {
+  function replay(from: PanelStage, then: () => void): void {
     steps.stop();
     leaving = false;
     ({ code } = FIXTURE);
@@ -95,52 +123,68 @@
     steps.after(dur("--dur-hold"), then);
   }
 
+  const waiting = () => ({ kind: "waiting" as const, ...live(AT_REST) });
+  const checking = () => ({ kind: "checking" as const, ...live(AT_REST) });
   const PLAY: Partial<
     Record<PairingStopName, { label: string; play: () => void }>
   > = {
     waiting: {
-      label: "Play: the code arrives",
+      label: "Play: the key arrives",
       play: () =>
         replay({ kind: "asking" }, () => {
-          stage = waiting(AT_REST);
+          stage = waiting();
         }),
     },
     "last-minute": {
-      label: "Play: one tick into the last minute",
+      label: "Play: into the last minute",
       play: () => {
         ticking = false;
-        replay(waiting(60 * SECOND), () => {
-          now += SECOND;
+        replay({ kind: "waiting", ...live(61 * SECOND) }, () => {
+          now += 2 * SECOND;
         });
       },
+    },
+    checking: {
+      label: "Play: the phone scans it",
+      play: () =>
+        replay(waiting(), () => {
+          stage = checking();
+        }),
     },
     approved: {
       label: "Play: approved",
       play: () => {
         playing = true;
-        replay(waiting(AT_REST), () => {
-          stage = { kind: "approved", verificationUriComplete: verification(FIXTURE.hub, code), userCode: code };
+        replay(checking(), () => {
+          stage = ended("approved");
         });
       },
     },
     denied: {
       label: "Play: denied",
       play: () =>
-        replay(waiting(AT_REST), () => {
-          stage = { kind: "denied", verificationUriComplete: verification(FIXTURE.hub, code), userCode: code };
+        replay(checking(), () => {
+          stage = ended("denied");
         }),
     },
     expired: {
       label: "Play: the code runs out",
       play: () => {
         ticking = true;
-        replay(waiting(3 * SECOND), () => undefined);
+        replay({ kind: "waiting", ...live(3 * SECOND) }, () => undefined);
       },
+    },
+    failed: {
+      label: "Play: the hub refuses",
+      play: () =>
+        replay({ kind: "asking" }, () => {
+          stage = FAILED;
+        }),
     },
   };
   const control = $derived(PLAY[stop]);
 
-  /** Approved and held: the screen leaves, then the stop comes back at rest. */
+  /** Approved: the dashboard opens; the stop comes back at rest after. */
   let playing = $state(false);
   function held(): void {
     leaving = true;
@@ -152,16 +196,14 @@
     });
   }
 
-  /** Start pairing (T7): the hub is asked again, and a new code arrives (T2). */
+  /** Start again, New code, Try again, or the fresh code's own start. */
   function start(): void {
     steps.stop();
-    steps.after(dur("--dur-morph"), () => {
-      stage = { kind: "asking" };
-      steps.after(dur("--dur-hold"), () => {
-        code = FIXTURE.nextCode;
-        ticking = true;
-        stage = waiting(AT_REST);
-      });
+    stage = { kind: "asking" };
+    steps.after(dur("--dur-hold"), () => {
+      code = FIXTURE.nextCode;
+      ticking = true;
+      stage = waiting();
     });
   }
 
@@ -169,7 +211,7 @@
 </script>
 
 <div class="stop">
-  {#if control || stop === "waiting"}
+  {#if control || pick}
     <div class="controls">
       {#if control}
         <Button
@@ -180,25 +222,22 @@
           variant="secondary"
         />
       {/if}
-      {#if stop === "waiting"}
-        <PickSwitch
-          choice="code-letters"
-          onchange={(value) => {
-            picks.arrive = value;
-          }}
-          options={[
-            { value: "pop", label: "Code letters pop in (recommended)" },
-            { value: "reel", label: "Code letters spin into place" },
-          ]}
-          question="How the code's letters arrive"
-          value={picks.arrive}
-        />
+      {#if pick}
+        <div data-cawco-choice={pick.choice}>
+          <Button
+            data-option={pick.option}
+            label="Pick: {pick.label}"
+            size="xs"
+            variant="ghost"
+          />
+        </div>
       {/if}
     </div>
   {/if}
   {#key run}
     <PairingPanel
-      arrive={picks.arrive}
+      {approved}
+      {expired}
       {leaving}
       {now}
       onchangehub={() => undefined}
@@ -206,6 +245,7 @@
       onstart={start}
       {payload}
       {stage}
+      {wait}
     />
   {/key}
 </div>
@@ -225,8 +265,9 @@
     border-radius: var(--radius-lg);
   }
   .controls {
-    display: grid;
-    justify-items: start;
-    gap: var(--space-3);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
   }
 </style>

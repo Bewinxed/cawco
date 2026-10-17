@@ -44,7 +44,12 @@ export type PairingStage =
       userCode: string;
       verificationUriComplete: string;
     }
-  | { kind: "failed"; message: string };
+  | {
+      kind: "failed";
+      message: string;
+      /** The hub's answer's status, or null when no answer came. */
+      status: number | null;
+    };
 
 export const hubAuth = $state<{
   caller: CallerKind;
@@ -117,11 +122,20 @@ export async function startPairing(): Promise<void> {
       body: JSON.stringify({ kind: "browser" }),
     });
     if (!response.ok) {
-      throw new Error(await response.text());
+      hubAuth.pairing = {
+        kind: "failed",
+        message: await response.text(),
+        status: response.status,
+      };
+      return;
     }
     started = (await response.json()) as PairingStart;
   } catch (error) {
-    hubAuth.pairing = { kind: "failed", message: failureWords(error) };
+    hubAuth.pairing = {
+      kind: "failed",
+      message: failureWords(error),
+      status: null,
+    };
     return;
   }
   const { userCode, verificationUriComplete } = started;

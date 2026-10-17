@@ -890,6 +890,14 @@ public enum Motion {
     public static let checkTurn: Double = 80
     /// The share of a pending pairing QR card's edge its lit segment covers, travelling the card's rounded rect once a breath while the code waits to be scanned.
     public static let qrEdgeShare: Double = 0.18
+    /// A pairing QR once a phone has scanned it and the person is checking the letters: the key is still there, stepped back, so the eye goes to the letters.
+    public static let qrDimOpacity: Double = 0.3
+    /// How strong the light is that rides a waiting pairing QR's edge (or rings out from its head), screened over the key so the dark dots it crosses glint: the key under the scanner's light.
+    public static let qrGlintOpacity: Double = 0.35
+    /// The size a leaving pairing key ends at as it fades: its dots draining away (expired), or the whole card flown up to Caw (approved, that take).
+    public static let qrShrink: Double = 0.3
+    /// How far the head in a refused pairing key squeezes shut (its height; its width grows by as much) before it shakes.
+    public static let qrSqueeze: Double = 0.84
     /// How far a pending pairing QR card's breathing ring grows from the card's edge as it fades, once a breath.
     public static let qrPulseScale: Double = 1.04
     /// Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out.
