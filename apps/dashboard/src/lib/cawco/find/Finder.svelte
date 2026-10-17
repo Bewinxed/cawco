@@ -484,7 +484,7 @@
     {#if finder.text}
       <button
         data-slot="clear"
-        class="grid place-items-center flex-none size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted hover:bg-surface-hover active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
+        class="grid place-items-center flex-none size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted not-active:hover:bg-surface-hover active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
         aria-label="Clear the words"
         onclick={clear}
         type="button"
