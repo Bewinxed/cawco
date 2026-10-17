@@ -53,3 +53,6 @@ none (none of the eight carried variants used).
 - Cascade risk for integration's compare: the `Input` classes (`h-c-btn-h-sm`, `w-(--field-w)`, `px-space-2`, `h-(--code-h)`, `max-w-(--nick-max)`) replace rules that out-ranked the kit's own at (0,2,0); utilities are (0,1,0).
 
 - cross-file hook: AccountSwitch.svelte:72 `triggerClass` classes `ns-chip-btn tool account-chip` stay as written; selected by spawn/ns-theme.css:202 and workspace/SessionDetails.svelte:1092. Integration gives NsPopover's trigger a hook.
+
+## Contracts
+contract: apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte:72 shadcn/no-unknown-classes | NsPopover.svelte's trigger (S13) and workspace/SessionDetails.svelte | NsPopover's trigger needs a hook so tool and account-chip become a data-slot or attribute
