@@ -127,7 +127,7 @@
    * a start-aligned block set in the middle.
    */
   const STATEFUL =
-    "m-auto max-w-[46ch] items-center px-space-6 text-center";
+    "m-auto max-w-(--stateful-measure) items-center px-space-6 text-center";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):
@@ -1074,7 +1074,7 @@
      ask is not drawn here: the composer grows into it (`ask`). -->
 {#snippet offer()}
   {#if projectOffer || projectJoin}
-    <div class="parked" data-flip>
+    <div data-flip>
       <ProjectOffer
         instanceId={viewId}
         joined={projectJoin}
@@ -1137,7 +1137,13 @@
   </EmptyState>
 {/snippet}
 
-<div data-slot="pane" class="pane" bind:clientWidth={paneWidth}>
+<!-- literal: 46ch -->
+<div
+  data-slot="pane"
+  class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
+  style:--stateful-measure="46ch"
+  bind:clientWidth={paneWidth}
+>
   {#if prestart}
     <!-- Nothing stands behind the wait: the session does not exist yet. -->
   {:else if session}
@@ -1154,25 +1160,28 @@
     >
       <div
         data-slot="body"
-        class="body"
-        style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
+        class="relative flex min-h-0 min-w-0 flex-auto flex-col"
+        style:--composer-clearance="calc({composerRoom} + var(--space-4) + var(--space-4))"
       >
         <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is
            the surface a swipe carries, not the thing that carries it. -->
-        <div class="transcript-slide">
+        <div
+          data-slot="transcript-slide"
+          class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden"
+        >
           <!-- A named state, not an empty pane: what happened, in one line,
                    and the one thing that can be done about it. -->
           {#if fault}
-            <div class="state" in:crossIn out:leave>
+            <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
               {@render faultState(fault)}
             </div>
           {:else if unaddressable}
-            <div class="state" in:crossIn out:leave>
+            <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
               {@render missingState()}
             </div>
           {:else if blank}
-            <div class="state" in:crossIn out:leave>
+            <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
               <EmptyState
                 class={STATEFUL}
                 icon={IconChat}
@@ -1181,7 +1190,7 @@
               />
             </div>
           {:else if mounted}
-            <div class="state">
+            <div class="flex min-h-0 flex-auto flex-col">
               <RegionBoundary region="transcript">
                 <Transcript
                   {agentName}
@@ -1205,7 +1214,10 @@
             <FootFade />
           {/if}
           {#if veiled}
-            <div class="veil" in:crossIn>
+            <div
+              class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
+              in:crossIn
+            >
               <TranscriptSkeleton />
             </div>
           {/if}
@@ -1214,7 +1226,11 @@
         <!-- The group draws the composer; only the server's first paint,
                  before any group composer exists, draws one here. -->
         {#if !fault && (unaddressable || readOnly)}
-          <p class="readonly" in:crossIn out:crossOut>
+          <p
+            class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center text-size-meta font-normal text-ink-muted"
+            in:crossIn
+            out:crossOut
+          >
             This transcript is stored; the session isn't reachable from here.
           </p>
         {:else if writable && !browser}
@@ -1243,9 +1259,9 @@
   {:else if fault}
     <!-- No session in the store yet, and the server's read was refused: the
          same named state the pane's own read would show. -->
-    <div class="state">{@render faultState(fault)}</div>
+    <div class="flex min-h-0 flex-auto flex-col">{@render faultState(fault)}</div>
   {:else if unaddressable}
-    <div class="state">{@render missingState()}</div>
+    <div class="flex min-h-0 flex-auto flex-col">{@render missingState()}</div>
   {:else}
     <!-- No session in the store yet: the same placeholder the transcript
          area shows, so the two loading moments look like one. -->
@@ -1255,100 +1271,16 @@
        its transcript until that has drawn, fading from over it (design
        §2e: the ready line is the transcript's first row by then). -->
   {#if move && (prestart || !(shown || namedState))}
-    <div class="move-layer" out:crossOut>
+    <div class="absolute inset-0 z-6 flex flex-col" out:crossOut>
       <MoveWait job={move} {phone} />
     </div>
   {/if}
 </div>
 
 <style>
-  .body {
-    min-width: 0;
-  }
-
-  /* The composer's slot, when there is no composer. Sits where the input would,
-     in the muted voice of something stating a fact rather than refusing one. */
-  .readonly {
-    margin: 0 auto var(--space-4);
-    padding: var(--space-2) var(--space-3);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    text-align: center;
-  }
-
-  .pane {
-    position: relative;
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-recess);
-  }
-  .body {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-
-  /* ── Transcript slide ─────────────────────────────────────────────
-     Only the transcript area slides on tab switch. Header and composer
-     stay put. The entering transcript slides in from the tab direction,
-     the exiting one slides out the opposite way. */
-  .transcript-slide {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    /* The area's own stacking context: the placeholder's z-index below is
-       ranked among the transcript's, never against the group's composer
-       standing over this area's foot. Without it a desk's placeholder
-       painted over the composer and took its clicks until the rows came. */
-    isolation: isolate;
-    /* The transcript's scroll, in reach of its head blur (HeadFade). */
+  /* residual: unmapped */
+  /* The transcript's scroll, in reach of its head blur (HeadFade). */
+  [data-slot="transcript-slide"] {
     timeline-scope: --transcript-head;
   }
-
-  /* One named state, or the transcript, filling the area. */
-  .state {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  /* The placeholder, laid over the transcript until its rows are drawn:
-     opaque, so fading it is the cross-fade, and above the transcript's own
-     sticky notes, below the composer. */
-  /* A move's wait, over everything the pane holds, opaque: fading it is the
-     cross-fade to the transcript under it. */
-  .move-layer {
-    position: absolute;
-    inset: 0;
-    z-index: 6;
-    display: flex;
-    flex-direction: column;
-  }
-  .veil {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-recess);
-  }
-
-  /**
-   * The handover. The transcript is IN FLOW the whole time — it is the thing
-   * that stays — so revealing it moves nothing; it is merely unpainted while it
-   * measures. The server's tail is the one lifted out of flow and laid over it,
-   * because both want to be `.body`'s whole box and two in-flow flex children
-   * would take half each.
-   */
-  /* No standin — virtua renders the tail directly via ssrCount. */
 </style>
