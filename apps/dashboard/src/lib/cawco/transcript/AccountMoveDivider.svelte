@@ -131,7 +131,7 @@
   <!-- literal: minmax(0, 1fr) auto minmax(0, 1fr) -->
   <button
     aria-expanded={live ? undefined : open}
-    class="peer/line grid grid-cols-(--cols) items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-0 rounded-xs bg-transparent type-meta text-ink-muted cursor-pointer disabled:cursor-default focus-inset touch-hit"
+    class="peer/line grid grid-cols-(--cols) items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted cursor-pointer disabled:cursor-default focus-inset touch-hit"
     disabled={live}
     onclick={() => {
       open = !open;

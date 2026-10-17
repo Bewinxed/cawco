@@ -232,7 +232,7 @@
     <fieldset
       style:--hit-gap-x="var(--space-2)"
       style:--hit-gap-y="var(--space-2)"
-      class="relative min-w-0 m-0 border-0 flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+      class="relative min-w-0 m-0 border-none border-current flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
       out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
       <legend class="sr-only flex-none pointer-events-auto"

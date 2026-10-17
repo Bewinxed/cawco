@@ -33,7 +33,7 @@
   <!-- Read, never seen: off-screen rather than `display: none`, which
        assistive tech skips entirely. -->
   <span
-    class="spoken absolute w-px h-px -m-px p-0 border-0 overflow-hidden whitespace-nowrap"
+    class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
     >Reading transcript…</span
   >
 

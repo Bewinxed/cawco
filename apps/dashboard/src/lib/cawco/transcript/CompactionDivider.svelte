@@ -162,7 +162,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="group/divider grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-0 bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="group/divider grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"

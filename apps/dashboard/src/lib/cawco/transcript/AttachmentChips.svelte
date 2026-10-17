@@ -74,7 +74,7 @@
         <button
           data-slot="canvas-open"
           aria-label="Open the canvas"
-          class="inline-flex place-items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-0 rounded-xs bg-transparent text-ink-strong cursor-pointer flex-none mark-line touch-hit"
+          class="inline-flex place-items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong cursor-pointer flex-none mark-line touch-hit"
           onclick={onopencanvas}
           type="button"
         >
@@ -100,7 +100,7 @@
         </button>
         <button
           aria-label="Remove the canvas"
-          class="grid place-items-center size-icon-lg border-0 rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           onclick={onremovecanvas}
           type="button"
         >
@@ -125,7 +125,7 @@
         >
         <button
           aria-label={`Remove ${img.name}`}
-          class="grid place-items-center size-icon-lg border-0 rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           data-box
           onclick={() => removeImage(i)}
           type="button"

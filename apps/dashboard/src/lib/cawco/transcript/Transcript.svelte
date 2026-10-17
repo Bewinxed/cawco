@@ -3388,7 +3388,7 @@
 <p
   aria-atomic="true"
   aria-live="polite"
-  class="spoken absolute w-px h-px -m-px p-0 border-0 overflow-hidden whitespace-nowrap"
+  class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
   role="status"
 >
   {announcement}
@@ -3396,7 +3396,7 @@
 <p
   aria-atomic="true"
   aria-live="assertive"
-  class="spoken absolute w-px h-px -m-px p-0 border-0 overflow-hidden whitespace-nowrap"
+  class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
 >
   {blockedNote || trayAlert}
 </p>
@@ -3593,7 +3593,7 @@
                   >
                 {/if}
                 <span
-                  class="font-mono text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0"
+                  class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0"
                   >{row.glance.glance}</span
                 >
               </div>

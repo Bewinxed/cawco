@@ -203,7 +203,7 @@
              the same rail as every other note: the summary, how it went,
              and the report one click behind them. -->
         <Collapsible.Trigger
-          class="inline-flex bg-transparent border-0 p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start max-w-full rail-line"
+          class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start max-w-full rail-line"
         >
           <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
           <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
@@ -344,7 +344,7 @@
           aria-busy={opening}
           data-slot="aname"
           style:--name-offset="0.2em"
-          class="py-space-1 px-0 border-0 bg-transparent text-ink-strong cursor-pointer underline decoration-(--link-underline) underline-offset-(--name-offset) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
+          class="py-space-1 px-0 border-none border-current bg-transparent text-ink-strong cursor-pointer underline decoration-(--link-underline) underline-offset-(--name-offset) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.name}"
           type="button"
@@ -477,7 +477,7 @@
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger
-        class="inline-flex bg-transparent border-0 p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
+        class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
       >
         <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
         <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
