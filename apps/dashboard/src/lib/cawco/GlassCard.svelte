@@ -43,6 +43,15 @@
    * frame back in WebKit (owner: "the pressing on caw is very laggy when it
    * opens"), so it is opened once, unseen, just after the page has loaded,
    * and Caw's panel is what it holds at rest.
+   *
+   * It is placed `fixed`, as the bar it hangs from stands. bits-ui places a
+   * card only while it is open (use-floating: no `autoUpdate` while shut),
+   * so the shut card keeps the place it had with the face it closed on:
+   * Jump's, 756px wide from a tablet's 12px, while it now holds Caw's 380px,
+   * its neck still measured from the glass at the screen's trailing edge,
+   * flared 12px past it. Placed `absolute`, that stale box was the page's
+   * own (the page scrolled sideways, 780px in a 768px screen, Chromium and
+   * Firefox alike, J9); a fixed box is never part of the page's scroll.
    */
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -496,6 +505,7 @@
     }}
     side="bottom"
     sideOffset={placement.sideOffset}
+    strategy="fixed"
     trapFocus={false}
     bind:joined={
       () => barGlass.joined,

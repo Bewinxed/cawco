@@ -838,12 +838,17 @@
     cursor: pointer;
     transition: background-color var(--dur-control) var(--ease-out);
   }
+  /* Words on the mark line, so the line's recipe trims them to their
+     x-height and gives the room back as block padding (app.css
+     .mark-line): only the inline padding is the button's to take away.
+     `padding: 0` took the recipe's too, and left a 7px box round a 15px
+     line of words. */
   .places {
     flex: none;
     border: 0;
     border-radius: var(--radius-xs);
     background: none;
-    padding: 0;
+    padding-inline: 0;
     font: inherit;
     color: var(--ink-muted);
     cursor: pointer;

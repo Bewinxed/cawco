@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={cn("absolute top-2.5 right-3", className)}
+  class={cn("col-start-[-1] row-start-1 self-center", className)}
   data-slot="alert-action"
   bind:this={ref}
   {...restProps}

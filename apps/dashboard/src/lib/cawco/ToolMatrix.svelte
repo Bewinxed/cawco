@@ -116,7 +116,7 @@
         >
       </Badge>
       <span
-        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 md:opacity-0"
+        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 [@media(hover:hover)]:opacity-0"
       >
         <Button
           class="text-muted-foreground"

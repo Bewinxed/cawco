@@ -1141,11 +1141,6 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
   }
-  .off :global(.off-line [data-slot="alert-action"]) {
-    inset-block: 0;
-    display: flex;
-    align-items: center;
-  }
   .seat {
     inline-size: var(--seat);
   }
