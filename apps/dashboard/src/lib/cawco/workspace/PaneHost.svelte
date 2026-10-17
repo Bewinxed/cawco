@@ -86,13 +86,15 @@
   });
 </script>
 
-<div class="pen">
+<div class="pointer-events-none invisible absolute inset-0 overflow-hidden">
   {#each hosted as id (id)}
     {@const ctx = contextOf(id)}
     {@const leaf = workspace.leafOf(id)}
     {@const isActive = leaf?.active === id}
     {@const runId = runIdOf(id)}
-    <div class="hosted" use:dock={id}>
+    <!-- The wrapper is a flex item of whichever slot it lands in, and the slot
+         is the pane's whole box. -->
+    <div class="flex min-h-0 min-w-0 flex-auto" use:dock={id}>
       <RegionBoundary region="conversation">
         {#if runId}
           <!-- A workflow run's tab: the run, as its own view. -->
@@ -121,22 +123,3 @@
     </div>
   {/each}
 </div>
-
-<style>
-  .pen {
-    position: absolute;
-    inset: 0;
-    visibility: hidden;
-    pointer-events: none;
-    overflow: hidden;
-  }
-
-  /* The wrapper is a flex item of whichever slot it lands in, and the slot
-     is the pane's whole box. */
-  .hosted {
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-  }
-</style>

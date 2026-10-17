@@ -68,30 +68,63 @@
   const expanded = $derived(!!expand?.expanded);
 </script>
 
+<!-- Expanded: the card meets the split's edges and the well its sides, so a
+     page is drawn at the full width. The head's inset is the card's and the
+     split's, as before, so its controls hold still while it goes; text on
+     the card itself (the plan's) keeps its inset off the edges. The card's
+     edges go on the split's slide (SideSplit); under a drag they go as the
+     panes do, at once. -->
 <section
   data-side-surface-class={className}
   data-slot="side-card"
   data-side-surface-expanded={expanded || undefined}
+  data-expanded-recessed={(expanded && recessed) || undefined}
+  data-recessed={recessed || undefined}
   aria-label={label}
-  class="side-card {className}"
+  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer {className}"
+  style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   bind:this={section}
-  class:expanded
-  class:recessed
 >
   <!-- mark-line: its icons are controls at the head's end, each its own
        button, not marks set beside the title -->
-  <header data-slot="side-head" class="side-head">
+  <!-- One header: its first word, the switch's or the title's, stands on
+       the well's left edge. -->
+  <!-- literal: 44px, 30px -->
+  <header
+    data-slot="side-head"
+    class="flex h-(--head-h) shrink-0 items-center gap-space-1 group-data-expanded-recessed/card:px-(--expanded-inset) motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
+    style:--hit-gap-x="var(--space-1)"
+    style:--head-h="44px"
+    style:--head-control="30px"
+  >
     {#if switcher}
       {@render switcher()}
     {/if}
-    <div class="identity" class:controlled={!!titleControl}>
+    <!-- The header's first thing, the switch or the title, stands on the
+         well's edge, with or without the switch; after the switch, a gap.
+         The title's text stands where the controls' text does: their
+         inset. A title control's own padding is its text's inset, as the
+         controls'. -->
+    <div
+      data-controlled={!!titleControl || undefined}
+      class="flex min-w-0 flex-1 flex-col ps-space-2 data-controlled:items-start data-controlled:ps-0 [[data-slot=side-head]:has([role=tablist])_&]:ps-space-1"
+    >
       {#if titleControl}
         {@render titleControl()}
       {:else if title}
-        <span data-slot="title" class="title">{title}</span>
+        <!-- What is on show is a name in a toolbar row of 30px label-type
+             controls and the switch's label-type tabs: the label role
+             (DESIGN.md, The Role, Not Size Rule). The title role is a
+             sheet's own head (.kit-sheet-head), which stands over its
+             content, not in a bar. -->
+        <span data-slot="title" class="truncate text-ink-strong type-label"
+          >{title}</span
+        >
       {/if}
       {#if subtitle}
-        <span class="subtitle">{subtitle}</span>
+        <span data-slot="subtitle" class="truncate text-ink-muted"
+          >{subtitle}</span
+        >
       {/if}
     </div>
     {@render actions?.()}
@@ -116,7 +149,8 @@
       aria-busy={closing || undefined}
       aria-disabled={closing || undefined}
       aria-label="Close"
-      class="close touch-hit"
+      class="touch-hit"
+      style:--btn-icon="var(--icon-md)"
       onclick={whileIdle(() => closing, onclose)}
       title="Close"
       type="button"
@@ -125,7 +159,14 @@
     </button>
   </header>
   {#if recessed}
-    <div data-slot="side-well" class="side-well" bind:this={well}>
+    <!-- The content's ground: a well inside its edge (surface-well,
+         border-well: the recess and hairline by day, deeper with a clear
+         edge at night). -->
+    <div
+      data-slot="side-well"
+      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0"
+      bind:this={well}
+    >
       {@render children()}
     </div>
   {:else}
@@ -134,73 +175,16 @@
 </section>
 
 <style>
-  .side-card {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    height: 100%;
-    padding: 0 var(--space-2) var(--space-2);
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-drawer);
-  }
-  /* One header: its first word, the switch's or the title's, stands on the
-     well's left edge. */
-  .side-head {
-    --hit-gap-x: var(--space-1);
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    height: 44px;
-    flex-shrink: 0;
-  }
-  /* The header's first thing, the switch or the title, stands on the
-     well's edge, with or without the switch. After the switch, a gap. */
-  .identity {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    /* The title's text stands where the controls' text does: their inset. */
-    padding-inline-start: var(--space-2);
-  }
-  .side-head:has(:global([role="tablist"])) .identity {
-    padding-inline-start: var(--space-1);
-  }
-  /* A title control's own padding is its text's inset, as the controls'. */
-  .identity.controlled {
-    align-items: flex-start;
-    padding-inline-start: 0;
-  }
-  .title,
-  .subtitle {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* What is on show is a name in a toolbar row of 30px label-type
-     controls and the switch's label-type tabs: the label role (DESIGN.md,
-     The Role, Not Size Rule). The title role is a sheet's own head
-     (.kit-sheet-head), which stands over its content, not in a bar. */
-  .title {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .subtitle {
-    color: var(--ink-muted);
-    font: var(--text-meta) var(--font-mono);
-  }
-  /* Every control in the header, the pane's and Close: one recipe, one
-     press. */
-  .side-head :global(:is(button, a):not([role="tab"])) {
+  /* residual: foreign-dom — every control in the header, the pane's
+     (`actions`, `titleControl`, the switch's own) and Close: one recipe,
+     one press. Most of them are DOM the callers' snippets render. */
+  [data-slot="side-head"] :global(:is(button, a):not([role="tab"])) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: var(--space-1);
-    min-width: 30px;
-    height: 30px;
+    min-width: var(--head-control);
+    height: var(--head-control);
     padding: 0 var(--space-2);
     border: 0;
     border-radius: var(--radius-sm);
@@ -217,68 +201,38 @@
       transform var(--dur-control) var(--ease-out),
       opacity var(--dur-control) var(--ease-in-out);
   }
-  .close {
-    --btn-icon: 16px;
-  }
-  .side-head :global(:is(button, a):not([role="tab"]) svg) {
-    width: 16px;
-    height: 16px;
+  [data-slot="side-head"] :global(:is(button, a):not([role="tab"]) svg) {
+    width: var(--icon-md);
+    height: var(--icon-md);
   }
   @media (prefers-reduced-motion: no-preference) {
-    .side-head :global(:is(button, a):not([role="tab"]):active) {
+    [data-slot="side-head"] :global(:is(button, a):not([role="tab"]):active) {
       transform: scale(var(--press-scale));
     }
   }
-  .side-head :global(button[aria-pressed="true"]:not([role="tab"])) {
+  [data-slot="side-head"] :global(button[aria-pressed="true"]:not([role="tab"])) {
     background: var(--surface-fill);
     color: var(--ink-strong);
   }
-  .side-head :global(button:disabled) {
+  [data-slot="side-head"] :global(button:disabled) {
     opacity: 0.5;
   }
   @media (hover: hover) {
-    .side-head :global(:is(button, a):not([role="tab"]):hover) {
+    [data-slot="side-head"] :global(:is(button, a):not([role="tab"]):hover) {
       background: var(--surface-hover);
     }
   }
-  /* The content's ground: a well inside its edge (surface-well, border-well:
-     the recess and hairline by day, deeper with a clear edge at night). */
-  .side-well {
-    position: relative;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
+  /* residual: unmapped — the font shorthand also sets line-height: normal
+     and weight normal; no utility says line-height: normal. */
+  [data-slot="subtitle"] {
+    font: var(--text-meta) var(--font-mono);
   }
-  /* Expanded: the card meets the split's edges and the well its sides, so
-     a page is drawn at the full width. The head's inset is the card's and
-     the split's, as before, so its controls hold still while it goes. */
-  .side-card.expanded {
-    padding: var(--space-3) 0 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .side-card.expanded.recessed .side-head {
-    padding-inline: calc(var(--space-3) + var(--space-2));
-  }
-  /* Text on the card itself (the plan's) keeps its inset off the edges. */
-  .side-card.expanded:not(.recessed) {
-    padding-inline: calc(var(--space-3) + var(--space-2));
-  }
-  .side-card.expanded .side-well {
-    border-width: 1px 0 0;
-    border-radius: 0;
-  }
-  /* The card's edges go on the split's slide (SideSplit); under a drag they
-     go as the panes do, at once. */
+  /* residual: unmapped — the well's edges on the split's slide. A single
+     duration and easing, but PreviewPane's own unlayered
+     `.preview-pane .side-well` transition (0,2,0) would beat a utility;
+     this rule beat it at (0,3,0) and still does. */
   @media (prefers-reduced-motion: no-preference) {
-    :global(.sliding) .side-card,
-    :global(.sliding) .side-head,
-    :global(.sliding) .side-well {
+    :global([data-split-sliding]) [data-slot="side-well"] {
       transition:
         padding var(--dur-panel) var(--ease-drawer),
         border-radius var(--dur-panel) var(--ease-drawer),

@@ -327,20 +327,30 @@
 
 <svelte:window onkeydown={escapeExpanded} />
 
+<!-- Opening or closing in front of the reader grows one side into the
+     other: the split's size change is the information. Opening decelerates
+     into place on the drawer curve; closing is a morph on --ease-in-out.
+     Any other size — a drag, a pane sized off screen — is taken at once. -->
+<!-- literal: 6px -->
 <div
   data-slot="side-split"
   data-split-expanded={expanded || undefined}
-  class={["side-split", { expanded, open, resizing, sliding }]}
+  data-split-open={open || undefined}
+  data-split-opening={(sliding && open) || undefined}
+  data-split-resizing={resizing || undefined}
+  data-split-sliding={sliding || undefined}
+  class="group/split flex min-h-0 min-w-0 flex-1"
+  style:--divider-hit="6px"
   bind:this={root}
   bind:clientWidth={width}
 >
-  <Resizable.PaneGroup class="side-group" direction="horizontal">
+  <Resizable.PaneGroup direction="horizontal">
     <!-- Dragged past its narrowest, the page collapses to nothing
          (expanded); dragged back out of the edge it stands at its
          narrowest, then follows the pointer. Collapsed, it is put away:
          nothing in it takes a press or the keyboard. -->
     <Resizable.Pane
-      class="main-pane {mainClass}"
+      class="flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer"
       data-split-main-class={mainClass}
       collapsedSize={0}
       collapsible
@@ -351,10 +361,15 @@
       {@render main()}
     </Resizable.Pane>
     <!-- Expanded, the handle stays on the far edge: it is how the page is
-         dragged back out. -->
+         dragged back out. Expanded, the handle stands on the page area's
+         edge, where the sidebar's own grip (Shell.svelte `.grip`, 6px over
+         the edge) takes the pointer: its hit area stands just inside the
+         surface instead, past the grip, so the page can be dragged back
+         out. -->
     <Resizable.Handle
       data-side-divider={open || !open || undefined}
-      class={open ? "side-divider" : "side-divider hidden"}
+      data-hidden={!open || undefined}
+      class="z-2 bg-border-hairline transition-[background-color] dur-control ease-out group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:after:w-(--divider-hit) group-data-split-expanded/split:after:transform-none hover:bg-border-control data-active:bg-ink-muted data-hidden:hidden"
       onDraggingChange={(dragging) => {
         resizing = dragging;
         if (dragging) {
@@ -368,7 +383,7 @@
     />
     <Resizable.Pane
       data-side-pane
-      class="side-pane"
+      class="flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer"
       collapsedSize={0}
       collapsible
       defaultSize={sideSize}
@@ -399,10 +414,16 @@
       bind:this={sidePane}
     >
       {#if mounted}
+        <!-- Expanded, the card meets the split's edges (SideSurface), so the
+             page is drawn at the full width; its inset goes on the slide's
+             clock. -->
+        <!-- literal: 320px -->
         <div
           data-split-shown={open || undefined}
-          class="side-surface"
-          class:shown={open}
+          class="w-full min-w-(--surface-min) p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out"
+          style:--surface-min="320px"
+          style:--surface-off="translateX(var(--space-7))"
+          style:--surface-on="translateX(0)"
           in:surfaceIn
           {@attach landKey
             ? land(() => landKey, {
@@ -420,89 +441,21 @@
 </div>
 
 <style>
-  .side-split {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    min-width: 0;
-  }
-  .side-split :global(.main-pane),
-  .side-split :global(.side-pane) {
-    display: flex;
-    min-width: 0;
-    min-height: 0;
-  }
-  /* Opening or closing in front of the reader grows one side into the
-     other: the split's size change is the information. Opening decelerates
-     into place on the drawer curve; closing is a morph on --ease-in-out.
-     Any other size — a drag, a pane sized off screen — is taken at once. */
+  /* residual: unmapped — needs transition token: opacity and transform on
+     --ease-out, padding on --ease-drawer, one --dur-panel. The surface
+     sliding in with the split. */
   @media (prefers-reduced-motion: no-preference) {
-    .sliding :global(.main-pane),
-    .sliding :global(.side-pane) {
-      transition: flex-grow var(--dur-panel) var(--ease-in-out);
-    }
-    .sliding.open :global(.main-pane),
-    .sliding.open :global(.side-pane) {
-      transition-timing-function: var(--ease-drawer);
-    }
-  }
-  .side-surface {
-    width: 100%;
-    min-width: 320px;
-    padding: var(--space-3);
-    opacity: 0;
-    transform: translateX(var(--space-7));
-    transition: opacity var(--dur-panel) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity var(--dur-panel) var(--ease-out),
-        transform var(--dur-panel) var(--ease-out);
-    }
-  }
-  .side-surface.shown {
-    opacity: 1;
-    transform: translateX(0);
-    transition-timing-function: var(--ease-out);
-  }
-  /* Expanded, the card meets the split's edges (SideSurface), so the page
-     is drawn at the full width; its inset goes on the slide's clock. */
-  .expanded .side-surface {
-    padding: 0;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .sliding .side-surface.shown {
+    [data-split-sliding] [data-split-shown] {
       transition:
         opacity var(--dur-panel) var(--ease-out),
         transform var(--dur-panel) var(--ease-out),
         padding var(--dur-panel) var(--ease-drawer);
     }
   }
-  .side-split :global(.side-divider) {
-    z-index: 2;
-    background: var(--border-hairline);
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .side-split :global(.side-divider.hidden) {
-    display: none;
-  }
-  /* Expanded, the handle stands on the page area's edge, where the
-     sidebar's own grip (Shell.svelte `.grip`, 6px over the edge) takes the
-     pointer: its hit area stands just inside the surface instead, past the
-     grip, so the page can be dragged back out. */
-  .expanded :global(.side-divider::after) {
-    left: var(--space-1);
-    width: 6px;
-    transform: none;
-  }
-  .resizing :global(iframe) {
+  /* residual: foreign-dom — a frame anywhere in the split (a preview's
+     iframe, another component's DOM) takes no pointer while the divider is
+     dragged. */
+  [data-split-resizing] :global(iframe) {
     pointer-events: none;
-  }
-  .side-split :global(.side-divider[data-active]) {
-    background: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .side-split :global(.side-divider:hover) {
-      background: var(--border-control);
-    }
   }
 </style>

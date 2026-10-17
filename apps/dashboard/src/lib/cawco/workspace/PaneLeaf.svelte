@@ -320,7 +320,7 @@
         unstarted = null;
         const glide = track
           .querySelector<HTMLElement>(
-            `:scope > .pane[data-pane="${CSS.escape(id)}"]`
+            `:scope > [data-slot="pane"][data-pane="${CSS.escape(id)}"]`
           )
           ?.animate(
             [
@@ -357,9 +357,13 @@
 <!-- The whole group answers to a click by taking focus, so typing goes where
      the reader just looked. `focusin` rather than `click`: reaching the
      composer with the keyboard should move focus too. -->
+<!-- A split pane can be 370px wide inside a 1400px window, so the chrome
+     inside it has to answer to the PANE, not the viewport. Viewport media
+     queries are the wrong instrument here and produce exactly what they did
+     before this: a full-width identity bar clipped in half. -->
 <section
   data-slot="leaf"
-  class="leaf"
+  class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
   data-leaf={leaf.id}
   onfocusincapture={() => workspace.focus(leaf.id)}
   onpointerdowncapture={() => workspace.focus(leaf.id)}
@@ -368,13 +372,15 @@
        this product means a session is asking for something, and "you are
        typing here" must not compete with it. Said on the mark itself: said
        on the group, every focus change invalidated the group's whole
-       subtree, both panes and their composer. -->
+       subtree, both panes and their composer. Which group the keyboard
+       belongs to, said without colour: a hairline rail down the leading
+       edge, and nothing at all on the others. Rank by position and weight —
+       the accent budget belongs to "needs you". -->
   <span
     data-pane-leaf-shown={railShown || undefined}
     data-slot="rail"
     aria-hidden="true"
-    class="rail"
-    class:shown={railShown}
+    class="pointer-events-none absolute inset-y-0 left-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
   ></span>
 
   {#if !hosted}
@@ -390,11 +396,13 @@
        drop will not do. One box, so moving between halves morphs it from
        one shape to the next instead of swapping boxes. -->
   {#if previewInset}
+    <!-- Graphite and a hairline, never the accent — a drop preview is
+         structure being proposed, not a session asking for something. -->
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="drop-preview"
-      style:inset={previewInset}
+      class="pointer-events-none absolute inset-(--drop-inset) z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:dur-morph motion-safe:ease-in-out"
+      style:--drop-inset={previewInset}
       transition:previewFade
     ></div>
   {/if}
@@ -406,12 +414,23 @@
        committed swipe or a tap brings into reach are painted once its
        settle runs, and a tap that jumps along the strip keeps the pane it
        left painted until it lands (gesture.svelte.ts, `veiled`, `leaving`). -->
+  <!-- Parked by delta, flush, so the seam between two panes never shows. The
+       swipe writes its travel inline over these and clears it after; only a
+       pane that can be seen is promised to the compositor. Swipe groups
+       only. A desktop pane is never parked or promoted: a transcript held on
+       its own GPU layer cannot snap its text to the pixel grid, and wherever
+       the rail's width leaves the pane on a fractional x the whole
+       transcript reads soft and hazy. The switch glide promotes the pane
+       only for its 260ms. -->
   <div
     data-slot="stack"
-    class="stack"
+    data-swipe={swipeable || undefined}
+    class="group/stack relative flex min-h-0 min-w-0 flex-auto overflow-hidden"
+    style:--park-left="translate3d(-100%, 0, 0)"
+    style:--park-here="translate3d(0, 0, 0)"
+    style:--park-right="translate3d(100%, 0, 0)"
     data-drop-leaf={leaf.id}
     bind:this={stack}
-    class:swipe={swipeable}
     use:swipe.action={swipeable}
     use:paneDropTarget={leaf.id}
   >
@@ -432,17 +451,35 @@
            or focusable" (`content-visibility: hidden`, `.pane-hidden`) — and a
            pane laid out off screen is hidden (`.pane-settling`). Said again
            with `inert`, an inherited style (CSS `interactivity`), every switch
-           set and lifted it on two panes, restyling each of their elements. -->
+           set and lifted it on two panes, restyling each of their elements.
+
+           `visibility`, never `display`: a hidden pane still lays out, so
+           the virtualiser keeps its measurements and revealing one costs
+           nothing. Note what is NOT here — the pane does not declare
+           `visibility: visible`. Visibility inherits, but a descendant that
+           re-declares `visible` un-hides ITSELF through a hidden ancestor,
+           so writing it here made every pane paint straight through the
+           surface hiding this whole group, and the fleet board and the
+           transcripts rendered on top of each other. Only the hidden state
+           is ever stated; the visible one is inherited.
+           A pane off screen that has not drawn its first picture yet
+           (dock.svelte.ts `settling`) is laid out but not painted, so its
+           transcript measures its rows and draws before its tab is chosen;
+           once drawn it is skipped (`content-visibility`, below). So is the
+           pane whose tab the reader is reaching for (warm.svelte.ts), so the
+           switch that shows it only paints. Only the hidden state is
+           declared, as on the surfaces (see `.groups.hidden-surface` in
+           SessionSurface). Hidden, it takes no pointer, so nothing else is
+           said: every property the switch changes on this box is one more
+           its elements are restyled for. -->
       <div
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
         data-slot="pane"
-        class="pane"
+        class="absolute inset-0 flex group-data-swipe/stack:not-data-pane-hidden:not-data-pane-settling:will-change-transform group-data-swipe/stack:delta--1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-settling:invisible"
         data-delta={delta}
         data-pane={paneId}
         inert={shown && !isActive}
-        class:pane-hidden={!(shown || laidOut)}
-        class:pane-settling={!shown && laidOut}
         use:slot={{ id: paneId, shown }}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",
@@ -481,13 +518,15 @@
   {#if bound && lent}
     <!-- A side surface expanded over the whole conversation (SideSplit)
          leaves the transcript no share: its composer is put away with it. -->
+    <!-- The composer's box: it positions itself at the foot of this, and
+         lets every touch outside itself through to the transcript. Above the
+         panes, under a drop preview, as a pane's own composer was. -->
     <div
       data-slot="dock"
       data-pane-leaf-away={lent.transcriptShare === 0 || undefined}
-      class="dock"
+      class="pointer-events-none absolute inset-y-0 left-0 z-1 w-(--dock-w) data-pane-leaf-away:invisible"
       inert={lent.transcriptShare === 0}
-      style:width="{lent.transcriptShare * 100}%"
-      class:away={lent.transcriptShare === 0}
+      style:--dock-w="{lent.transcriptShare * 100}%"
     >
       <RegionBoundary kept="Your draft is kept." region="composer">
         <Composer
@@ -523,132 +562,12 @@
 </section>
 
 <style>
-  .leaf {
-    /* A split pane can be 370px wide inside a 1400px window, so the chrome
-       inside it has to answer to the PANE, not the viewport. Viewport media
-       queries are the wrong instrument here and produce exactly what they
-       did before this: a full-width identity bar clipped in half. */
-    container-type: inline-size;
-    container-name: leaf;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-  }
-
-  /* Which group the keyboard belongs to, said without colour: a hairline
-     rail down the leading edge, and nothing at all on the others. Rank by
-     position and weight — the accent budget belongs to "needs you". */
-  .rail {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 2px;
-    background: var(--ink-muted);
-    opacity: 0;
-    z-index: 2;
-    pointer-events: none;
-  }
-  .rail.shown {
-    opacity: 0.5;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .rail {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-
-  /* Graphite and a hairline, never the accent — a drop preview is
-     structure being proposed, not a session asking for something. */
-  .drop-preview {
-    position: absolute;
-    z-index: 3;
-    pointer-events: none;
-    background: var(--surface-hover);
-    border: 1px solid var(--border-control);
-    opacity: 0.9;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: inset var(--dur-morph) var(--ease-in-out);
-    }
-  }
-
-  /* The composer's box: it positions itself at the foot of this, and lets
-     every touch outside itself through to the transcript. Above the panes,
-     under a drop preview, as a pane's own composer was. */
-  .dock {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 1;
-    pointer-events: none;
-  }
-  .dock.away {
-    visibility: hidden;
-  }
-
-  .stack {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .pane {
-    position: absolute;
-    inset: 0;
-    display: flex;
-  }
-  /* Parked by delta, flush, so the seam between two panes never shows. The
-     swipe writes its travel inline over these and clears it after; only a
-     pane that can be seen is promised to the compositor.
-     Swipe groups only. A desktop pane is never parked or promoted: a
-     transcript held on its own GPU layer cannot snap its text to the pixel
-     grid, and wherever the rail's width leaves the pane on a fractional x
-     the whole transcript reads soft and hazy. The switch glide promotes the
-     pane only for its 260ms. */
-  .swipe > .pane:not(.pane-hidden, .pane-settling) {
-    will-change: transform;
-  }
-  .swipe > .pane[data-delta="-1"] {
-    transform: translate3d(-100%, 0, 0);
-  }
-  .swipe > .pane[data-delta="0"] {
-    transform: translate3d(0, 0, 0);
-  }
-  .swipe > .pane[data-delta="1"] {
-    transform: translate3d(100%, 0, 0);
-  }
-
-  /* `visibility`, never `display`: a hidden pane still lays out, so the
-     virtualiser keeps its measurements and revealing one costs nothing.
-     Note what is NOT here — `.pane` does not declare `visibility: visible`.
-     Visibility inherits, but a descendant that re-declares `visible`
-     un-hides ITSELF through a hidden ancestor, so writing it here made
-     every pane paint straight through the surface hiding this whole group,
-     and the fleet board and the transcripts rendered on top of each other.
-     Only the hidden state is ever stated; the visible one is inherited. */
-  /* A pane off screen keeps its DOM, its scroll and its rows — it is still
-     streaming — but the browser skips its style, layout and paint entirely.
+  /* residual: unmapped — no utility says content-visibility. A pane off
+     screen keeps its DOM, its scroll and its rows — it is still streaming —
+     but the browser skips its style, layout and paint entirely.
      `visibility: hidden` left every hidden transcript in each restyle and
      reflow of the group, which is what a tab switch paid for. */
-  .pane-hidden {
+  [data-pane-hidden] {
     content-visibility: hidden;
-    pointer-events: none;
-  }
-  /* A pane off screen that has not drawn its first picture yet (dock.svelte.ts
-     `settling`) is laid out but not painted, so its transcript measures its
-     rows and draws before its tab is chosen; once drawn it is skipped as
-     above. So is the pane whose tab the reader is reaching for (warm.svelte.ts),
-     so the switch that shows it only paints. Only the hidden state is declared, as on the surfaces (see
-     `.groups.hidden-surface` in SessionSurface). Hidden, it takes no
-     pointer, so nothing else is said: every property the switch changes on
-     this box is one more its elements are restyled for. */
-  .pane-settling {
-    visibility: hidden;
   }
 </style>
