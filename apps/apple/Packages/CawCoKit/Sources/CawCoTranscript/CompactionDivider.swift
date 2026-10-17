@@ -74,7 +74,7 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
         // nobody sees, and building them was the dearest row of a first screen.
         brief = compaction.brief ?? ""
         text.configure(open ? brief : "", style: .muted)
-        // A continuation's "Summarising for …" settles into its "Continued on …" here.
+        // "Compacted", or a stored continuation's "Continued on …".
         button.set(word: compaction.word)
         button.set(enabled: compaction.brief != nil, animated: same)
         button.set(open: open, animated: false)

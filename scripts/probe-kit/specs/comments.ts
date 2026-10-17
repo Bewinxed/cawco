@@ -714,7 +714,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         await rowsOf(on)
       )
         .locator(
-          ':is([data-task-card-live], [data-slot="live"], [data-account-move-divider-live], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+          ':is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
         )
         .count()) > 0
     ) {
@@ -741,7 +741,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     () =>
       on.page
         .locator(
-          '[data-pin-list-pop] :is([data-task-card-live], [data-slot="live"], [data-account-move-divider-live], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
+          '[data-pin-list-pop] :is([data-task-card-live], [data-slot="live"], [data-compaction-divider-live], [data-plan-pane-live], [data-session-hover-tone~="live"], [data-session-status-tone~="live"], [data-delegate-tone~="live"])'
         )
         .count(),
     (count) => count === 0,

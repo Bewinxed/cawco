@@ -2321,32 +2321,25 @@ export const limitHolds = sqliteTable("limit_holds", {
 });
 
 /**
- * A summary of a session at its account's limit: what continuing it on
- * another account starts from. Written ahead of the limit while its account
- * still had room (`percent`), or at a move (`percent` null), and kept while
- * it stays on that account, so a retry after a failed continuation starts
- * from it again. It answers for the conversation up to `covers` only: once
- * the session's summarised part ends elsewhere, a fresh one replaces it.
- * Discarded when the window resets, or the session ends or leaves the
- * account. `summary` and `covers` null: the summariser is still writing it.
+ * A session moved at its account's limit that compacts once there (core
+ * `AccountMove` `moved` with `compact`), from the move until its compaction
+ * has ended (server.ts `compactions`): its filing turn (`filing`, the send
+ * `filingUuid`), then Claude Code's `/compact` (`compacting`, the send
+ * `compactUuid`). Everything else sent to it waits at the hub meanwhile. Kept
+ * here so a hub restart carries it on from where its sends stand.
  */
-export const limitSummaries = sqliteTable("limit_summaries", {
+export const limitCompactions = sqliteTable("limit_compactions", {
   instanceId: text("instance_id").primaryKey(),
-  /** The account the session is on, at its limit. */
-  accountId: text("account_id").notNull(),
-  /** The account whose summariser wrote it. */
-  writtenOn: text("written_on").notNull(),
-  /** The reset of the window it was written against (ISO). */
-  resetsAt: text("resets_at").notNull(),
-  /** That window's percent when a summary written ahead of the limit was started; null: written at a move. */
-  percent: integer("percent"),
-  /**
-   * The last transcript entry the summary covers: the end of the part of
-   * the conversation a continuation summarises (the rest goes verbatim).
-   */
-  covers: text("covers"),
-  summary: text("summary"),
-  preparedAt: timestamp("prepared_at")
+  stage: text("stage").$type<"filing" | "compacting">().notNull(),
+  /** The `limit_events` id of the move's line, said again as the compaction goes. */
+  lineId: text("line_id").notNull(),
+  /** The move's line as written, which each stage restates. */
+  move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+  filingUuid: text("filing_uuid").notNull(),
+  compactUuid: text("compact_uuid").notNull(),
+  /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
+  compacted: integer("compacted", { mode: "boolean" }).notNull().default(false),
+  createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
@@ -2845,6 +2838,8 @@ export const continuations = sqliteTable("continuations", {
   openingUuid: text("opening_uuid").notNull(),
   /** The summariser's answer, kept once read so a restart never asks again. */
   summary: text("summary"),
+  /** The source's Open items section (open-items.ts), read from its records once before the opening goes. */
+  openItems: text("open_items"),
   stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
   error: text("error"),
   createdAt: timestamp("created_at").notNull(),

@@ -73,6 +73,7 @@
   import {
     type ContinueSource,
     cancelContinuation,
+    continuationStageWords,
     detachContinuation,
     releaseContinuation,
     type SessionDraft,
@@ -909,14 +910,17 @@
       title: continueFrom.title,
     }
   );
-  /** What Start says while its press waits: on the folder check, the summary, the start. */
+  /** What Start says while its press waits: on the folder check, the source's filing, the summary, the start. */
   const busyLabel = $derived.by(() => {
     if (pressedFor !== null) {
       return "Checking the folder…";
     }
+    if (continueFrom && followed?.stage === "filing") {
+      return continuationStageWords.filing;
+    }
     return continueFrom && carry === "summary" && followed?.stage !== "starting"
-      ? "Summarising…"
-      : "Starting…";
+      ? continuationStageWords.summarising
+      : continuationStageWords.starting;
   });
   const startLabel = $derived.by(() => {
     if (continueFrom) {

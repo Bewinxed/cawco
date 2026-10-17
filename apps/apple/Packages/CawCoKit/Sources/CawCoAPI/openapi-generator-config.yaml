@@ -22,6 +22,7 @@ typeOverrides:
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase
     BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
     BlockMetadataAction: OpenEnums.BlockMetadataAction
+    BlockMetadataCompact: OpenEnums.BlockMetadataCompact
     BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
     BlockMetadataHandoffKind: OpenEnums.BlockMetadataHandoffKind
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind

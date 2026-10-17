@@ -155,7 +155,7 @@ export const RESTART_WAIT_CAP_MS = 30 * 60_000;
  * Whether a restart that has waited since `since` on work it would cut now
  * cuts it: never before {@link RESTART_WAIT_CAP_MS}. The one rule an
  * auto-update (agent binary-update.ts `#drain`) and an account move (hub
- * server.ts `waitForLater`, `endConversationProcess`) wait by.
+ * server.ts `waitForLater`) wait by.
  */
 export const waitedOut = (since: number, now = Date.now()): boolean =>
   now - since >= RESTART_WAIT_CAP_MS;

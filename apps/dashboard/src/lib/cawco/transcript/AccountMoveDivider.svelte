@@ -14,27 +14,22 @@
    * its second line, as a stop (Caw off) does to its own account's. The
    * clock ticks only while something on the row counts.
    *
-   * While the session's summary is being written for it to go on from
-   * (`continuing`), the row is the compaction row at work: Caw working in its
-   * middle beside "Summarising for …", no line yet. When its fresh
-   * conversation starts, the same row settles into the "Continued on" line in
-   * place — Caw leaves, the glyph and dot come in, the words morph, the line
-   * draws out — and the message that conversation opened on (the summary,
-   * the artifact index, the last turns) is folded under it: the chevron
-   * opens it, as a compaction's brief opens.
+   * A move that compacts once there says where that stands, the hub saying
+   * the line again as it goes: "Moved to B, compacting next", "…
+   * compacting", then "Moved to B, then compacted" (or "compaction
+   * stopped"). The compaction itself is Claude Code's own, drawn by its own
+   * divider after the turns it took.
+   *
+   * A `continued` line a hub stored before it compacted natively still
+   * reads, the message that conversation opened on folded under it: the
+   * chevron opens it, as a compaction's brief opens.
    */
   import { accountMoveWords } from "@cawco/core";
-  import { untrack } from "svelte";
-  import { fade } from "svelte/transition";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import IconTransfer from "~icons/solar/transfer-horizontal-bold-duotone";
   import { hueVar } from "../accounts/model.svelte";
-  import Caw from "../home/Caw.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { dur } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
-  import { COMPACTING_MARK } from "./compaction-mark";
   import type { Row } from "./rows";
 
   let { row }: { row: Extract<Row, { kind: "account" }> } = $props();
@@ -45,16 +40,6 @@
   let now = $state(Date.now());
   /** Pressed open: the second line shows at any width, for a finger too, and the summary under it. */
   let open = $state(false);
-
-  /**
-   * This mount saw the summary being written: it settles here, Caw at work
-   * is this mount's, and the words morph. A row mounted after that is
-   * simply at rest.
-   */
-  const watched = untrack(() => row.move.kind === "continuing");
-  const live = $derived(row.move.kind === "continuing");
-  /** Caw at work is on the page: until his leave has played out. */
-  let working = $state(watched);
 
   /** The moment the row stops counting: the reset it names; null when it names none. */
   const countsTo = $derived.by(() => {
@@ -100,38 +85,14 @@
         return row.move.to?.hue ?? null;
     }
   });
-
-  /**
-   * What the row says to a screen reader, as it changes: that the summary
-   * is being written, then how it went. Written a frame after the region is
-   * on the page, so its first words are an announcement.
-   */
-  let spoken = $state("");
-  $effect(() => {
-    if (!watched) {
-      return;
-    }
-    const said = words.line;
-    const frame = requestAnimationFrame(() => {
-      spoken = said;
-    });
-    return () => cancelAnimationFrame(frame);
-  });
 </script>
 
-<div
-  data-account-move-divider-live={live || undefined}
-  class="move"
-  class:live
-  class:open
-  class:settled={watched && !live}
->
+<div class="move" class:open>
   <!-- A button, so a keyboard and a finger can bring in the second line, as
        a pointer does by hovering. -->
   <button
-    aria-expanded={live ? undefined : open}
+    aria-expanded={open}
     class="line focus-inset touch-hit"
-    disabled={live}
     onclick={() => {
       open = !open;
     }}
@@ -140,41 +101,15 @@
   >
     <span class="arm"></span>
     <span class="mid mark-line"
-      >{#if working}
-        <span class="caw" data-box
-          ><span class="stand"
-            ><Caw
-              ongone={() => {
-                working = false;
-              }}
-              present={live}
-              size={COMPACTING_MARK.size}
-              status={COMPACTING_MARK.status}
-            /></span
-          ></span
-        >
-      {/if}
-      {#if !live}
-        <span
-          data-slot="mark"
-          class="mark"
-          data-box
-          in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
-          ><IconTransfer
-            data-account-move-divider-glyph
-            aria-hidden="true"
-            class="glyph"
-          />
-          <span data-slot="dot" aria-hidden="true" class="dot"></span></span
-        >
-      {/if}
-      <span data-slot="words" class="words"
-        >{#if watched}
-          <MorphText text={words.line} />
-        {:else}
-          {words.line}
-        {/if}</span
+      ><span data-slot="mark" class="mark" data-box
+        ><IconTransfer
+          data-account-move-divider-glyph
+          aria-hidden="true"
+          class="glyph"
+        />
+        <span data-slot="dot" aria-hidden="true" class="dot"></span></span
       >
+      <span data-slot="words" class="words">{words.line}</span>
       {#if row.brief !== null}
         <span data-slot="chev" class="chev" data-box
           ><IconChevron aria-hidden="true" /></span
@@ -190,9 +125,6 @@
     </div>
   {/if}
 </div>
-{#if watched}
-  <span class="sr-only" role="status">{spoken}</span>
-{/if}
 
 <style>
   /* The container the wide rule is measured against: the transcript column. */
@@ -214,19 +146,10 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     cursor: pointer;
-
-    &:disabled {
-      cursor: default;
-    }
   }
   .arm {
     block-size: 1px;
     background: var(--border-control);
-
-    /* While the summary is written there is no line. */
-    .live & {
-      opacity: 0;
-    }
   }
   .mid {
     display: inline-flex;
@@ -257,24 +180,6 @@
     block-size: 8px;
     border-radius: 50%;
     background: var(--account);
-  }
-  /* Caw at work's slot, the compaction row's while it compacts: as wide as
-     he stands, taking no height, so the row never changes height. */
-  .caw {
-    position: relative;
-    display: inline-block;
-    flex: none;
-    vertical-align: middle;
-    inline-size: var(--tx-compacting-caw);
-    block-size: var(--tx-compact-caw);
-  }
-  .stand {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    display: block;
-    line-height: 0;
-    translate: -50% -50%;
   }
   /* The summary opens under the line: the chevron says so, turned down
      while it is open. */
@@ -346,27 +251,6 @@
     }
     .chev :global(svg) {
       transition: rotate var(--dur-toggle) var(--ease-in-out);
-    }
-    /* The line draws out from the words as the row settles. */
-    .settled .arm {
-      animation: arm-draw var(--dur-pop) var(--ease-out) backwards;
-    }
-    .arm:first-child {
-      transform-origin: right;
-    }
-    .arm:last-child {
-      transform-origin: left;
-    }
-  }
-  /* With less motion the line is not drawn: it fades in where it stands. */
-  @media (prefers-reduced-motion: reduce) {
-    .settled .arm {
-      transition: opacity var(--dur-fade) var(--ease-out);
-    }
-  }
-  @keyframes arm-draw {
-    from {
-      scale: 0 1;
     }
   }
 </style>

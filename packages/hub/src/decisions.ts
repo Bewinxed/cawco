@@ -632,6 +632,37 @@ export const createDecisions = (deps: DecisionsDeps) => {
     },
 
     /**
+     * The pages `instanceId` wrote that are not decided yet, newest first,
+     * each with its cards as the person sees them: a session's open
+     * questions to the person, for its open items (open-items.ts).
+     */
+    async undecidedBy(
+      projectId: string,
+      instanceId: string
+    ): Promise<{ cards: DecisionCard[]; read: DecisionPageRead }[]> {
+      known(projectId);
+      const [names, tasks] = await Promise.all([
+        pageNames(projectId),
+        deps.tasks(projectId),
+      ]);
+      const pages: { cards: DecisionCard[]; read: DecisionPageRead }[] = [];
+      for (const { name, artifact } of names) {
+        if (artifact && writerOf(artifact)?.instanceId !== instanceId) {
+          continue;
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
+        const { read, page } = await readOne(projectId, name, artifact, tasks);
+        if (
+          read.writer?.instanceId === instanceId &&
+          read.state !== "decided"
+        ) {
+          pages.push({ read, cards: page.cards });
+        }
+      }
+      return pages.sort((a, b) => b.read.updatedAt - a.read.updatedAt);
+    },
+
+    /**
      * The person's send on a page: I'm done picking (no words) or a comment.
      * Its session hears it as from its own panel; an ended one's goes to Caw.
      */

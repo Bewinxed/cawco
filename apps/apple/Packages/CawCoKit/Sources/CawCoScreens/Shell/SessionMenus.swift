@@ -27,6 +27,8 @@ struct SessionMenuContext {
     let continueInNewSession: ((String) -> Void)?
     /// The same flow for a stored transcript the hub holds no row for: it is named whole.
     let continueStored: (ContinueSource) -> Void
+    /// Cancels the continuation carried on from this row after its form was put away, in any stage before it starts.
+    let cancelContinuation: (String) -> Void
     /// The window's one question about its sessions, drawn under the row that asked.
     let asks: SessionAsks
     /// The list the menu opened in ("page-work", "page-recent", …): a
@@ -113,6 +115,10 @@ enum SessionMenus {
         if let onward = context.continueInNewSession {
             first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image,
                                   attributes: busy(.continueOn) ? .disabled : []) { _ in onward(id) })
+        }
+        // A continuation carried on from this row stops from here, until its new session has started.
+        if busy(.continueOn) {
+            first.append(UIAction(title: "Cancel the continuation", image: Glyph.stop.image) { _ in context.cancelContinuation(id) })
         }
         if running {
             // Stopping cuts a turn short when one is running: the item says so.

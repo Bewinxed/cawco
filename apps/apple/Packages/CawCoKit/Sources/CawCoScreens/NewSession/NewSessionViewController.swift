@@ -650,7 +650,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         case .cancelled:
             job = nil
             busy = false
-        case .starting, .summarising, .unrecognized:
+        case .filing, .starting, .summarising, .unrecognized:
             break
         }
     }
@@ -1174,7 +1174,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         scroll.isUserInteractionEnabled = !busy
         start.setLabel(startLabel)
         let stage = job.flatMap { id in fleet.continuations.first { $0.id == id }?.stage }
-        start.setPending(busy, label: continuing != nil && !fromAsks && stage != .starting ? "Summarising…" : "Starting…")
+        let pending = switch stage {
+        case .filing: "Filing its open items…"
+        case .starting: "Starting…"
+        default: continuing != nil && !fromAsks ? "Summarising…" : "Starting…"
+        }
+        start.setPending(busy, label: pending)
         start.isEnabled = !cantStart
         cancel.isEnabled = !busy || job != nil
     }

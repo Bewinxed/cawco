@@ -399,7 +399,6 @@ export interface RebalancerDeps {
   ports: Pick<
     AtLimitPorts,
     | "changed"
-    | "continuing"
     | "idle"
     | "machineName"
     | "move"
@@ -504,7 +503,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     if (row.contextTokens !== null && row.contextTokens >= floorK * 1000) {
       return {
         ok: false,
-        why: `its cache is warm and ${Math.round(row.contextTokens / 1000)}k is over the ${floorK}k floor; it is shrunk at its limit instead`,
+        why: `its cache is warm and ${Math.round(row.contextTokens / 1000)}k is over the ${floorK}k floor; it moves at its limit instead, and is compacted there`,
       };
     }
     const cost = reReadCost(source.forecast, row, target);
@@ -541,8 +540,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       refused.has(row.id) ||
       ports.owed().has(row.id) ||
       acting.has(row.id) ||
-      ports.continuing(fresh) ||
-      db.atLimit.hold(row.id)
+      db.atLimit.hold(row.id) ||
+      db.atLimit.compaction(row.id)
     ) {
       return undefined;
     }
@@ -829,10 +828,6 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   ): boolean => {
     if (db.atLimit.hold(row.id)) {
       group.waiting.push(context);
-      return true;
-    }
-    if (ports.continuing(row)) {
-      group.continued += 1;
       return true;
     }
     const to =

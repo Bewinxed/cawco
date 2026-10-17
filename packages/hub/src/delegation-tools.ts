@@ -808,17 +808,13 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Go on from a summary of a session, written by a model you choose. Name another `session`: a new " +
-        "session starts on the model and harness you choose; the named one is only read. Omit it: this " +
-        "session goes on itself once this turn ends, in a fresh conversation on `target_model` (its own " +
-        "harness), keeping its id, parent, delegates and work item.",
+      "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
+        "named one is only read. Never this session: if your context is too big, say so.",
       {
         session: z
           .string()
-          .optional()
-          .describe(
-            "Another session to continue in a new session: its id, short id, or directory name. Omit it to continue this session itself, in place."
-          ),
+          .min(1)
+          .describe("Its id, short id, or directory name."),
         from: z
           .enum(["summary", "asks"])
           .optional()
@@ -978,6 +974,15 @@ export function handoffTools(deps: HandoffDeps) {
           },
         ],
       })
+    ),
+    tool(
+      "open_items",
+      "Your open items, word for word, as every compaction lists them.",
+      {},
+      async () => ({
+        content: [{ type: "text" as const, text: await actions.openItems() }],
+      }),
+      { readOnlyHint: true }
     ),
     tool(
       "set_title",
@@ -1252,7 +1257,10 @@ export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
 const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   { prefixes: ["admin_"], what: "fleet configuration" },
   { prefixes: ["task_"], what: "project tasks" },
-  { prefixes: ["todo_write"], what: "your plan, and your task's to-dos" },
+  {
+    prefixes: ["todo_write", "open_items"],
+    what: "your plan, your task's to-dos, your open items",
+  },
   {
     prefixes: [
       "routine_",

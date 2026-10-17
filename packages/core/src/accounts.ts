@@ -273,15 +273,24 @@ export interface StrategyChoice {
 
 /**
  * What a running session does when its account hits its limit: wait for the
- * reset, move whole to an account with room, or continue there from a summary
- * (the hub's `decideAtLimit`). `waitMinutes`: a reset this close is waited
- * for. `moveWholeUnderK`: a context under this many thousand tokens moves
- * whole; a larger one continues from a summary, which is written early, once
- * the account passes `prepareAtPct` of its window.
+ * reset, or move whole to an account known to have room (the hub's
+ * `decideAtLimit`). `waitMinutes`: a reset this close is waited for.
+ * `moveWholeUnderK`: a context under this many thousand tokens moves whole
+ * and goes on; one of this many or more, moved to another organization
+ * (whose cache it can't read), also files its open items and is compacted by
+ * Claude Code's own `/compact` as its first steps there, before anything it
+ * is owed.
  */
 export interface AtLimit {
   move: boolean;
   moveWholeUnderK: number;
+  /**
+   * Read by nothing (the summary written ahead of the limit it timed is
+   * gone): sent at its default only because the TestFlight builds 20261015
+   * and 20261015.3 require it, which the hub's wire check holds to
+   * (packages/hub/scripts/openapi.ts). It goes in the change that expires
+   * them.
+   */
   prepareAtPct: number;
   waitMinutes: number;
 }
@@ -933,6 +942,15 @@ export const namedAccount = (account: Account): NamedAccount => ({
 export type WaitReason = "fork" | "off" | "full" | "soon";
 
 /**
+ * Where the compaction after an at-limit move stands ({@link AccountMove}
+ * `moved`): the session files its open items in its records (`filing`),
+ * then Claude Code's own `/compact` runs (`compacting`); it ends compacted,
+ * or stopped (a person interrupted or stopped either turn, or the
+ * compaction failed), the conversation then going on whole.
+ */
+export type CompactStage = "filing" | "compacting" | "compacted" | "stopped";
+
+/**
  * What the hub did when a running session's account reached its limit: the
  * one line its transcript says it in (core `ACCOUNT_MOVE`). `tokens` is the
  * session's context as its harness last reported it; null when it never has.
@@ -942,6 +960,13 @@ export type AccountMove =
       kind: "moved";
       /** Moved because a person asked (`POST /api/instances/:id/account`), not at a limit. */
       asked?: true;
+      /**
+       * Moved at its limit to another organization with a context of the
+       * policy's `moveWholeUnderK` or more: it files its open items, then is
+       * compacted natively, as its first steps on `to`. The line is said
+       * again under its id as that goes.
+       */
+      compact?: CompactStage;
       from: NamedAccount;
       to: NamedAccount;
       /** Both accounts in one organization: its prompt cache came along. */
@@ -967,32 +992,25 @@ export type AccountMove =
     }
   | {
       kind: "waiting";
+      /** The account it is held on, at its limit. */
       account: NamedAccount;
-      /** The reset it waits for, epoch ms: the line counts down to it. */
+      /**
+       * Another account that frees before `account` resets: it moves there
+       * at `until`. Absent: `until` is `account`'s own reset.
+       */
+      frees?: NamedAccount;
+      /** The earliest moment an account takes it again, epoch ms: the line counts down to it. */
       until: number;
       why: WaitReason;
       tokens: number | null;
     }
   | {
       /**
-       * The session's summary is being written, on `to` (null: a harness
-       * without accounts), for it to go on from in a fresh conversation:
-       * the line it is until that conversation starts, when it becomes the
-       * `continued` line under the same id, or `unmoved` if it failed.
-       */
-      kind: "continuing";
-      to: NamedAccount | null;
-      /** The session asked for it (`continue_session`), not its account's limit. */
-      asked?: true;
-      /** It restarts from the person's own messages alone: nothing is summarised. */
-      asks?: true;
-      tokens: number | null;
-    }
-  | {
-      /**
-       * The session went on in a fresh conversation of its own, seeded with a
-       * summary of the one before: the same session, its account changed
-       * (`from` to `to`; null on a harness without accounts).
+       * History only, from before the hub compacted natively: the session
+       * went on in a fresh conversation of its own, seeded with a summary of
+       * the one before, the same session with its account changed (`from`
+       * to `to`; null on a harness without accounts). Lines a hub stored
+       * then still read, between the conversations they divide.
        */
       kind: "continued";
       from: NamedAccount | null;
@@ -1038,12 +1056,13 @@ export type AccountMove =
     }
   | {
       /**
-       * Moving it whole to `to`, or continuing it there from a summary
-       * (`action`), failed at `step`: it goes on in its conversation, still
-       * on `from`.
+       * Moving it whole to `to` failed at `step`: it goes on in its
+       * conversation, still on `from`. (`continue`, a continuation from a
+       * summary, and `asked`, are history only: lines a hub stored before it
+       * compacted natively.)
        */
       kind: "unmoved";
-      /** What failed: a move whole (`move`), or a continuation from a summary (`continue`). */
+      /** What failed: a move whole (`move`), or, in a stored line, a continuation from a summary (`continue`). */
       action: "move" | "continue";
       /** It was moving off `from` because Claude Code refused `from`'s sign-in: `from` has no reset to wait for. */
       signedOut?: true;
@@ -1169,6 +1188,9 @@ const movedWords = (
         : `Re-read ${tokenWords(move.tokens)}${cost}`,
     };
   }
+  if (move.compact) {
+    return compactedMoveWords(move, cost, now);
+  }
   const line = move.sameOrganization
     ? `Moved to ${move.to.name} · same organization, cache kept`
     : `Moved to ${move.to.name} · re-read ${tokenWords(move.tokens)}${cost}`;
@@ -1181,14 +1203,56 @@ const movedWords = (
   if (move.asked) {
     return { line, detail: `Moved here from ${move.from.name}, as asked` };
   }
+  return { line, detail: limitHitWords(move, now) };
+};
+
+/** Whose limit sent it and when that resets: "A hit its 5-hour limit · resets in 3h 10m". */
+const limitHitWords = (
+  move: Extract<AccountMove, { kind: "moved" }>,
+  now: number
+): string => {
   const left = move.resetsAt === null ? 0 : move.resetsAt - now;
-  return {
-    line,
-    detail: [
-      `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
-      ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
-    ].join(" · "),
-  };
+  return [
+    `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
+    ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
+  ].join(" · ");
+};
+
+/**
+ * A move at the limit that compacts once there, by where that stands: "Moved
+ * to B, compacting next", "Moved to B, compacting", "Moved to B, then
+ * compacted", or "compaction stopped" with the whole conversation kept.
+ */
+const compactedMoveWords = (
+  move: Extract<AccountMove, { kind: "moved" }>,
+  cost: string,
+  now: number
+): { line: string; detail: string } => {
+  const to = move.to.name;
+  const tokens = tokenWords(move.tokens);
+  const hit = limitHitWords(move, now);
+  switch (move.compact) {
+    case "filing":
+      return {
+        line: `Moved to ${to}, compacting next · re-read ${tokens}${cost}`,
+        detail: `It files its open items, then Claude Code compacts it · stop either like any turn · ${hit}`,
+      };
+    case "compacting":
+      return {
+        line: `Moved to ${to}, compacting · re-read ${tokens}${cost}`,
+        detail: `Claude Code's own /compact · stop it like any turn · ${hit}`,
+      };
+    case "compacted":
+      return {
+        line: `Moved to ${to}, then compacted · re-read ${tokens} once${cost}`,
+        detail: `Its open items were filed first and listed after · ${hit}`,
+      };
+    default:
+      return {
+        line: `Moved to ${to} · compaction stopped, ${tokens} kept`,
+        detail: `It goes on with its whole conversation · ${hit}`,
+      };
+  }
 };
 
 /**
@@ -1205,12 +1269,15 @@ export const accountMoveWords = (
       return movedWords(move, now);
     case "waiting": {
       const left = move.until - now;
+      const next = move.frees ?? move.account;
       return {
         line:
           left > 0
-            ? `Waiting for ${move.account.name} to reset · ${spanWords(left)}`
-            : `Continued on ${move.account.name}`,
-        detail: WAIT_WHY[move.why](tokenWords(move.tokens)),
+            ? `Waiting for ${next.name} to reset · ${spanWords(left)}`
+            : `Continued on ${next.name}`,
+        detail: move.frees
+          ? `No account has room for it now · it moves to ${move.frees.name} when that resets, before ${move.account.name} does`
+          : WAIT_WHY[move.why](tokenWords(move.tokens)),
       };
     }
     case "stopped":
@@ -1227,17 +1294,6 @@ export const accountMoveWords = (
         line: `${unmovedWords(move)}: ${move.reason}`,
         detail: unmovedNext(move),
       };
-    case "continuing":
-      return move.asks
-        ? {
-            line: `Restarting from the person's messages${move.to ? ` on ${move.to.name}` : ""}…`,
-            detail:
-              "It goes on in a fresh conversation that opens on the person's own messages alone · nothing is summarised",
-          }
-        : {
-            line: move.to ? `Summarising for ${move.to.name}…` : "Summarising…",
-            detail: `It goes on from the summary in a fresh conversation · ${tokenWords(move.tokens)} to summarise`,
-          };
     default:
       return continuedWords(move);
   }
@@ -1352,7 +1408,12 @@ export interface RebalanceNotice {
       cacheKept: boolean;
       cost?: { pct: number; window: string };
     }[];
-    /** Continued from a summary on another account. */
+    /**
+     * Always 0: nothing continues from a summary at a limit now. Sent only
+     * because the TestFlight builds 20261015 and 20261015.3 require it, which
+     * the hub's wire check holds to (packages/hub/scripts/openapi.ts); it
+     * goes in the change that expires them.
+     */
     continued: number;
     /** Still waiting: each one's context. */
     waiting: (number | null)[];
@@ -1407,15 +1468,12 @@ const heldMoveWords = (
 
 /** "2 held sessions on gmail re-decided: 1 moved (…), 1 kept waiting (612k; shrink at the limit)". */
 const heldLine = (group: RebalanceNotice["held"][number]): string => {
-  const total = group.moved.length + group.continued + group.waiting.length;
+  const total = group.moved.length + group.waiting.length;
   const parts: string[] = [];
   if (group.moved.length > 0) {
     parts.push(
       `${group.moved.length} moved (${group.moved.map(heldMoveWords).join("; ")})`
     );
-  }
-  if (group.continued > 0) {
-    parts.push(`${group.continued} continued from a summary`);
   }
   if (group.waiting.length > 0) {
     parts.push(

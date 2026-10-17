@@ -155,9 +155,9 @@ import {
   leadTurnReading,
   leadTurns,
   leadTurnWaiting,
+  limitCompactions,
   limitEvents,
   limitHolds,
-  limitSummaries,
   type MachineLineKind,
   marketplaces,
   mcpServers,
@@ -430,22 +430,6 @@ export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 export type SentMessageRow = typeof sentMessages.$inferSelect;
 
-/**
- * What a session going on in a fresh conversation of its own changes on its
- * row ({@link DbShape.continueInPlace}): the account, harness and model the
- * new conversation runs on, and the `continued` line drawn after the one it
- * leaves.
- */
-export interface InPlaceSwitch {
-  accountId: string | null;
-  /** The effort the caller chose for the new conversation; absent, it keeps the session's chosen one. */
-  effort?: EffortLevel;
-  harness: string;
-  model: string | null;
-  /** The `limit_events` id of the line drawn between the two conversations. */
-  next: string;
-}
-
 /** What folding a session's former rows into it did, for the hub's log. */
 export interface FoldedSession {
   /** The former rows whose process may still run: each is ended at its machine's register, then goes. */
@@ -704,15 +688,6 @@ export interface DbShape {
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
-  /**
-   * The session goes on in a fresh conversation of its own: the one it ran
-   * (`sessionId`, on the account and harness its row named) is kept, last,
-   * in `conversations` with `next` drawn after it, and the row names no
-   * conversation until the new one's `init` says its key, on the account,
-   * harness and model `to` names, its spend and context counted from
-   * nothing. Once per `next`: a switch already kept answers false.
-   */
-  readonly continueInPlace: (id: string, to: InPlaceSwitch) => boolean;
   /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
@@ -2192,13 +2167,6 @@ export interface DbShape {
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
   /**
-   * {@link continueInPlace} taken back, while the new conversation has said
-   * nothing yet: the conversation kept under `next` is the row's again, on
-   * the account and harness it ran on. False when there is none to take
-   * back, or the new one already named itself.
-   */
-  readonly undoContinueInPlace: (id: string, next: string) => boolean;
-  /**
    * Pending sends handed to a machine before the hub kept each whole
    * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
    * given each its own, which a hub start does once.
@@ -2227,7 +2195,12 @@ export interface DbShape {
     patch: Partial<
       Pick<
         ContinuationRow,
-        "stage" | "error" | "summary" | "summariserInstanceId" | "prepared"
+        | "stage"
+        | "error"
+        | "summary"
+        | "summariserInstanceId"
+        | "prepared"
+        | "openItems"
       >
     >
   ) => ContinuationRow | undefined;
@@ -3169,8 +3142,8 @@ const make = async (path: string): Promise<DbShape> => {
     tx.delete(ruleState).where(inArray(ruleState.instanceId, list)).run();
     tx.delete(sentMessages).where(inArray(sentMessages.instanceId, list)).run();
     tx.delete(limitHolds).where(inArray(limitHolds.instanceId, list)).run();
-    tx.delete(limitSummaries)
-      .where(inArray(limitSummaries.instanceId, list))
+    tx.delete(limitCompactions)
+      .where(inArray(limitCompactions.instanceId, list))
       .run();
     tx.delete(limitEvents).where(inArray(limitEvents.instanceId, list)).run();
     tx.delete(fleetWatchNotices)
@@ -5108,93 +5081,7 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map((row) => [row.id, row.now])
       ),
-    continueInPlace: (id, to) =>
-      db.transaction((tx) => {
-        const row = tx
-          .select()
-          .from(instances)
-          .where(eq(instances.id, id))
-          .get();
-        const held = row ? conversationsOf(tx, id) : [];
-        if (!row?.sessionId || held.some((one) => one.next === to.next)) {
-          return false;
-        }
-        // The conversation it leaves joins its prior ones, last.
-        const account = row.accountId
-          ? tx
-              .select({ id: accounts.id })
-              .from(accounts)
-              .where(eq(accounts.id, row.accountId))
-              .get()?.id
-          : undefined;
-        tx.insert(instanceConversations)
-          .values({
-            instanceId: id,
-            ord: held.length,
-            sessionId: row.sessionId,
-            harness: row.harness ?? "claude",
-            model: row.model,
-            accountId: account ?? null,
-            endedAt: new Date(),
-            nextEventId: to.next,
-          })
-          .run();
-        tx.update(instances)
-          .set({
-            sessionId: null,
-            accountId: to.accountId,
-            harness: to.harness,
-            model: to.model,
-            ...(to.effort ? { chosenEffort: to.effort } : {}),
-            // The new conversation has read nothing and spent nothing yet.
-            contextTokens: null,
-            contextReadAt: null,
-            modelUsageSeen: {},
-            cacheCold: null,
-            lastRequestAt: null,
-            lastPingUsage: null,
-            keepAliveTurn: null,
-            turnOpenAt: null,
-            freshStartAt: null,
-          })
-          .where(eq(instances.id, id))
-          .run();
-        return true;
-      }),
     priorConversations: (instanceId) => conversationsOf(db, instanceId),
-    undoContinueInPlace: (id, next) =>
-      db.transaction((tx) => {
-        const row = tx
-          .select()
-          .from(instances)
-          .where(eq(instances.id, id))
-          .get();
-        const held = row ? conversationsOf(tx, id) : [];
-        const left = held.at(-1);
-        if (!(row && left?.next === next && row.sessionId === null)) {
-          return false;
-        }
-        tx.delete(instanceConversations)
-          .where(
-            and(
-              eq(instanceConversations.instanceId, id),
-              eq(instanceConversations.ord, held.length - 1)
-            )
-          )
-          .run();
-        tx.update(instances)
-          .set({
-            sessionId: left.sessionId,
-            accountId: left.accountId,
-            harness: left.harness,
-            model: left.model,
-            // Its spend so far is unknown until its next result says it.
-            modelUsageSeen: null,
-          })
-          .where(eq(instances.id, id))
-          .run();
-        return true;
-      }),
     adoptChildren: (from, to) =>
       db.transaction((tx) => {
         const items = tx

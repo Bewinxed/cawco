@@ -533,24 +533,16 @@ public enum Words {
 
             public static let minutes = "minutes"
 
-            public static let under = "Move the whole conversation if it’s under"
+            public static let over = "Compact it after the move if it’s over"
 
             public static let kTokens = "k tokens"
 
-            public static let rereads = "The new account re-reads it from scratch."
-
-            public static let otherwise = "Otherwise continue from a summary"
-
-            public static let early = "Write that summary early, at"
-
-            public static let percent = "%"
-
-            public static let warm = "While the current account’s cache is still warm."
+            public static let compacts = "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn."
 
             public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
 
             /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "under": under, "kTokens": kTokens, "rereads": rereads, "otherwise": otherwise, "early": early, "percent": percent, "warm": warm, "terms": terms]
+            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms]
         }
 
         public enum Figure {
@@ -577,15 +569,13 @@ public enum Words {
 
             public static let fullSkipped = "A full account is skipped."
 
-            public static let summaryEarly = "Summary written early, while the cache is warm."
-
             public static func waits(minutes: Int) -> String {
                 "Waits \(minutes)m for the window to reset"
             }
 
             public static let movesWhole = "Moves the whole conversation"
 
-            public static let continues = "Continues from a summary"
+            public static let compacts = "Moves it whole, then compacts it"
 
             public static func tokens(k: Int) -> String {
                 "\(k)k"
@@ -595,8 +585,8 @@ public enum Words {
                 "re-read \(k)k"
             }
 
-            public static func staysOn(k: Int, name: String) -> String {
-                "\(k)k stays on \(name)"
+            public static func compacted(k: Int) -> String {
+                "\(k)k compacted"
             }
         }
 

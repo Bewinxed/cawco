@@ -109,7 +109,20 @@ export async function startContinuation(
   return continuationId;
 }
 
-/** Cancel: the hub stops the summariser and starts nothing. Throws the hub's refusal. */
+/** A continuation's running stages, as the dialog's Start and the source's rows say them. */
+export const continuationStageWords = {
+  filing: "Filing its open items…",
+  summarising: "Summarising…",
+  starting: "Starting…",
+} as const;
+
+/** What the source's rows say while its continuation runs, by stage. */
+const pendingWords = (stage: ContinuationJob["stage"] | undefined): string =>
+  stage === "filing" || stage === "summarising" || stage === "starting"
+    ? `Continuing in a new session · ${continuationStageWords[stage]}`
+    : "Continuing in a new session…";
+
+/** Cancel, in any stage before the new session has started: nothing starts. Throws the hub's refusal. */
 export async function cancelContinuation(id: string): Promise<void> {
   const response = await fetch(`/api/continuations/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -127,29 +140,42 @@ export function releaseContinuation(id: string): void {
 
 /**
  * The dialog was dismissed while `id` runs: this tab sees it through, on the
- * source session's rows, where it was asked for (session-acts).
+ * source session's rows, where it was asked for (session-acts), with its
+ * stage and a Cancel beside it until it has started.
  */
 export function detachContinuation(id: string): void {
   const entry = started.get(id);
   if (entry) {
     entry.detached = true;
-    pendingOn(entry.source.instanceId, "Continuing in a new session…");
     settleDetached(cawco.continuations);
   }
 }
 
 /**
- * A dismissed continuation's end, said under its source's rows: started, a
- * note with the new session to open (the person is left where they are);
- * failed, the hub's reason with Reopen, which brings the same form back.
+ * A dismissed continuation, said under its source's rows: running, its
+ * stage with Cancel; started, a note with the new session to open (the
+ * person is left where they are); failed, the hub's reason with Reopen,
+ * which brings the same form back.
  */
 function settleDetached(table: ContinuationJob[]): void {
   for (const [id, entry] of started) {
     const job = table.find((row) => row.id === id);
-    if (!(entry.detached && job)) {
+    if (!entry.detached) {
       continue;
     }
     const from = entry.source.instanceId;
+    if (
+      !job ||
+      job.stage === "filing" ||
+      job.stage === "summarising" ||
+      job.stage === "starting"
+    ) {
+      pendingOn(from, pendingWords(job?.stage), {
+        label: "Cancel",
+        run: () => cancelContinuation(id),
+      });
+      continue;
+    }
     if (job.stage === "started") {
       started.delete(id);
       pendingOn(from, undefined);

@@ -164,10 +164,20 @@ import type { Tasks } from "./tasks";
  * text was summarized away at each compaction. About 150 tokens for the
  * worker alone, the memory group's words and the rule scope's cut to a
  * clause each (worker 24,278 → 24,426 measured). Within the same budgets.
+ * 2026-10-16: native compaction (open-items.ts): `open_items`, a session's
+ * open items built from its records, the one reader the fleet's SessionStart
+ * hook on Claude Code's `compact` source calls (`cawco tool open_items`), so
+ * every compaction lists them; and todo_write's one clause saying so, so
+ * sessions file what is open there rather than only in chat (the
+ * continuation evaluation: 16% with native compaction alone, 47% with open
+ * items filed). continue_session's words cut to its one mode. About 55
+ * tokens for the worker, the delegate and the lead (worker 24,293, delegate
+ * 7,321, lead 15,569 measured). Raised deliberately for the delegate; the
+ * worker's and the lead's fit as they stand.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,
-  delegate: 7310,
+  delegate: 7330,
   lead: 16_220,
   overseer: 770,
   "web-facing": 3400,

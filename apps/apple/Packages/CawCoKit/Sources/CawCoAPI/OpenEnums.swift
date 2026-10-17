@@ -586,6 +586,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BlockMetadataCompact`.
+    public enum BlockMetadataCompact: OpenEnum {
+        case compacted
+        case compacting
+        case filing
+        case stopped
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "compacted": self = .compacted
+            case "compacting": self = .compacting
+            case "filing": self = .filing
+            case "stopped": self = .stopped
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .compacted: "compacted"
+            case .compacting: "compacting"
+            case .filing: "filing"
+            case .stopped: "stopped"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.compacted, .compacting, .filing, .stopped]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/BlockMetadataCompactResult`.
     public enum BlockMetadataCompactResult: OpenEnum {
         case failed
@@ -1363,6 +1407,7 @@ public enum OpenEnums {
     public enum ContinuationJobStage: OpenEnum {
         case cancelled
         case failed
+        case filing
         case started
         case starting
         case summarising
@@ -1373,6 +1418,7 @@ public enum OpenEnums {
             switch rawValue {
             case "cancelled": self = .cancelled
             case "failed": self = .failed
+            case "filing": self = .filing
             case "started": self = .started
             case "starting": self = .starting
             case "summarising": self = .summarising
@@ -1384,6 +1430,7 @@ public enum OpenEnums {
             switch self {
             case .cancelled: "cancelled"
             case .failed: "failed"
+            case .filing: "filing"
             case .started: "started"
             case .starting: "starting"
             case .summarising: "summarising"
@@ -1395,7 +1442,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.cancelled, .failed, .started, .starting, .summarising]
+        public static let allCases: [Self] = [.cancelled, .failed, .filing, .started, .starting, .summarising]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

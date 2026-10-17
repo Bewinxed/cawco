@@ -82,6 +82,7 @@
   import SessionMark from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
   import {
+    faultOn,
     noteOn,
     type RenameTarget,
     renameSession,
@@ -179,6 +180,18 @@
 
   /** What was asked of this session and is on its way, or did not go (session-acts). */
   const act = $derived(sessionId ? sessionAct(sessionId) : undefined);
+  /** Stops what is on its way, as the row offers it; a refusal is the row's fault. */
+  async function stopPending(): Promise<void> {
+    const stop = act?.stop;
+    if (!(stop && sessionId)) {
+      return;
+    }
+    try {
+      await stop.run();
+    } catch (error) {
+      faultOn(sessionId, { reason: failureWords(error) });
+    }
+  }
   /**
    * The word for what is on its way: what this person asked and is waiting
    * on (session-acts), or a stop the hub holds until the machine confirms it
@@ -496,6 +509,14 @@
     >
   </p>
 {/if}
+<!-- What runs for this session elsewhere and may be stopped from here: a
+     continuation in a new session, in any stage before it starts. -->
+{#if act?.pending && act.stop}
+  <p class="session-note" data-compact={compact || undefined} transition:unfold>
+    {act.pending}
+    <button onclick={stopPending} type="button">{act.stop.label}</button>
+  </p>
+{/if}
 
 <style>
   .item {
@@ -797,10 +818,18 @@
     padding-inline: var(--fault-indent) var(--fault-end);
     font: var(--type-meta);
     color: var(--ink-muted);
-    & a {
+    & a,
+    & button {
       color: var(--ink-strong);
       text-decoration: underline;
       text-underline-offset: 2px;
+    }
+    & button {
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      cursor: pointer;
     }
   }
 </style>

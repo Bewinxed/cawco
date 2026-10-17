@@ -45,8 +45,9 @@ export interface PlacementInput {
   current?: string;
   /**
    * The account a running session leaves at its limit. Placement then looks
-   * for another to carry it: never this one, only one with headroom, and none
-   * at all ({@link Placement}'s `accountId` null) rather than one anyway.
+   * for another to carry it: never this one, only one whose reading shows
+   * headroom, and none at all ({@link Placement}'s `accountId` null) rather
+   * than one anyway.
    */
   exclude?: string;
   /** The account the spawn named (id, nickname or email); must be allowed, and ignores bench and reserve. */
@@ -282,6 +283,14 @@ class Usage {
   }
 
   headroom = (account: Account): boolean => this.binding(account.id) < 100;
+
+  /**
+   * Whether its limits have been read at all: a session leaving its account
+   * at the limit goes only where a reading shows room, never to an account
+   * whose windows nobody has read, which may be spent.
+   */
+  read = (account: Account): boolean =>
+    this.#input.readings.some((one) => one.accountId === account.id);
 
   /** Whether its 5-hour window is open: it has a reset still ahead. */
   opened(id: string): boolean {
@@ -568,19 +577,27 @@ const choose = (
   name: (id: string) => string
 ): Placement => {
   const usage = new Usage(input);
-  // A session leaving its account at the limit goes only where there is room.
+  // A session leaving its account at the limit goes only where a reading
+  // shows room.
+  const carry = input.exclude !== undefined;
   const candidates = allowed.filter(
     (account) =>
       !(usage.benched(account.id) || usage.pastReserve(account)) &&
-      (input.exclude === undefined || usage.headroom(account))
+      (!carry || (usage.read(account) && usage.headroom(account)))
   );
   const outNote = allowed
     .filter((account) => !candidates.includes(account))
-    .map((account) =>
-      usage.benched(account.id)
-        ? `${accountName(account)} is benched until its window resets`
-        : `${accountName(account)} is past its ${account.reservePct}% reserve`
-    );
+    .map((account) => {
+      if (usage.benched(account.id)) {
+        return `${accountName(account)} is benched until its window resets`;
+      }
+      if (usage.pastReserve(account)) {
+        return `${accountName(account)} is past its ${account.reservePct}% reserve`;
+      }
+      return usage.read(account)
+        ? `${accountName(account)} is at its limit`
+        : `${accountName(account)}'s limits are unread`;
+    });
   const out = outNote.length > 0 ? ` (${outNote.join("; ")}.)` : "";
 
   const preferred = candidates.find((one) => one.id === input.typeAccount);
@@ -630,6 +647,58 @@ const choose = (
       ? `No allowed account has room for it now${out}, so it starts on ${accountName(fallback)} anyway.`
       : `No allowed account has room for it now${out}.`,
   };
+};
+
+/**
+ * The account other than `input.exclude` that takes the session again
+ * soonest, and when: among those it may run on on its machine (signed in,
+ * allowed by its project and task, not past its reserve), each at its limit
+ * now, at the latest of its bench and its spent windows' resets. One whose
+ * limits are unread names no moment and is left out; so is one with room
+ * now, which a carry takes instead. Undefined when none names a moment.
+ */
+export const nextFree = (
+  input: PlacementInput & { exclude: string }
+): { accountId: string; at: number } | undefined => {
+  const usage = new Usage(input);
+  const scope = modelScope(input.model);
+  let soonest: { accountId: string; at: number } | undefined;
+  for (const account of eligible(input).allowed) {
+    if (
+      account.id === input.exclude ||
+      usage.pastReserve(account) ||
+      !usage.read(account)
+    ) {
+      continue;
+    }
+    const benched = input.bench
+      .filter(
+        (one) =>
+          one.accountId === account.id &&
+          one.until > input.now &&
+          (one.scope === null || one.scope === scope)
+      )
+      .map((one) => one.until);
+    const spent = (
+      input.readings.find((one) => one.accountId === account.id)?.windows ?? []
+    )
+      .filter(
+        (window) =>
+          window.percent >= 100 &&
+          window.resetsAt &&
+          Date.parse(window.resetsAt) > input.now &&
+          (window.kind !== "weekly_scoped" || window.scopeLabel === scope)
+      )
+      .map((window) => Date.parse(window.resetsAt as string));
+    if (benched.length === 0 && spent.length === 0) {
+      continue;
+    }
+    const at = Math.max(...benched, ...spent);
+    if (!soonest || at < soonest.at) {
+      soonest = { accountId: account.id, at };
+    }
+  }
+  return soonest;
 };
 
 export const place = (input: PlacementInput): Placement => {

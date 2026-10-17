@@ -36,6 +36,8 @@ export interface SessionAct {
   fault?: RowFaultState;
   note?: { href: string; text: string };
   pending?: string;
+  /** What is on its way may be stopped from the row ("Cancel"): only beside `pending`. */
+  stop?: { label: string; run: () => Promise<unknown> };
 }
 
 const acts = new SvelteMap<string, SessionAct>();
@@ -64,11 +66,20 @@ export function faultOn(id: string, fault: RowFaultState | undefined): void {
   put(id, { fault });
 }
 
-/** Says `pending` on `id`'s rows while something runs elsewhere; undefined ends it. */
-export function pendingOn(id: string, pending: string | undefined): void {
+/**
+ * Says `pending` on `id`'s rows while something runs elsewhere, with `stop`
+ * beside it when it may be stopped from there; undefined ends both.
+ */
+export function pendingOn(
+  id: string,
+  pending: string | undefined,
+  stop?: SessionAct["stop"]
+): void {
   put(
     id,
-    pending ? { pending, fault: undefined, note: undefined } : { pending }
+    pending
+      ? { pending, stop, fault: undefined, note: undefined }
+      : { pending, stop: undefined }
   );
 }
 

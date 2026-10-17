@@ -245,26 +245,6 @@
       inset 0 0 0 1.5px var(--c),
       0 0 0 1.5px var(--surface-recess);
   }
-  .stage :global(.doc) {
-    width: 10px;
-    height: 13px;
-    border-radius: var(--radius-hair);
-    background: var(--warning-9);
-    box-shadow: 0 1px 8px color-mix(in oklab, var(--warning-9) 55%, transparent);
-  }
-  .stage :global(.doc::after) {
-    content: "";
-    position: absolute;
-    left: 2px;
-    right: 2px;
-    top: 3px;
-    height: 5px;
-    background: repeating-linear-gradient(
-      var(--surface-recess) 0 1px,
-      transparent 1px 2.5px
-    );
-    opacity: 0.55;
-  }
   .stage :global(.tag) {
     padding: 0 4px;
     border-radius: var(--radius-xs);

@@ -1,29 +1,32 @@
 /**
- * In-place continuation proof on a private stack: the real hub (scratch
- * database, free port), the real agent daemon and a private sessiond, two
- * fake Claude accounts (A and B, no credentials anywhere) and a stand-in
- * `claude` harness whose sessions are `/bin/sleep` children held by
- * sessiond. The stand-in plays the account's API: a turn on an account
- * marked at its limit ends the way Claude Code ends one its usage limit
- * refused (an assistant entry with `error: "rate_limit"`, then the result);
- * any other turn is answered, and a summariser's slowly when asked to be.
+ * At-limit carry proof on a private stack: the real hub (scratch database,
+ * free port), the real agent daemon and a private sessiond, two fake Claude
+ * accounts of two organizations (A and B, no credentials anywhere, each
+ * read with room) and a stand-in `claude` harness whose sessions are
+ * `/bin/sleep` children held by sessiond. The stand-in plays the account's
+ * API: a turn on an account marked at its limit ends the way Claude Code
+ * ends one its usage limit refused (an assistant entry with `error:
+ * "rate_limit"`, then the result); a `/compact` says its compaction
+ * boundary, slowly when asked; any other turn is answered.
  *
  *   unshare -rn sh -c 'ip link set lo up && bun scripts/probe-in-place.ts'
  *   bun scripts/probe-in-place.ts --hold   (a session to watch in a browser;
- *     touching <scratch>/go continues it at A's limit, its summary slow)
+ *     touching <scratch>/go moves it at A's limit, its compaction slow)
  *
  * Proves, one run each:
  *   (d) chains a hub before this one split at the limit, seeded at migration
  *       0127 (two steps; and one source continued twice), fold into one row
  *       each under the id that runs: children under it, conversations read
- *       through behind "Continued on" lines, the openings folded under them,
- *       the sends a process lost owed to it again and read;
- *   (a) a session at A's limit goes on on B in place: same id, row, parent,
- *       work item and child; "Summarising for B…" first, then the
- *       "Continued on B" line under the same id; its new conversation opens
- *       on the summary; the send its refused turn read stays read;
- *   (c) a person's send to it while it is at its limit is held, then read by
- *       the new conversation, after the opening;
+ *       through behind the "Continued on" lines stored then, the openings
+ *       folded under them, the sends a process lost owed to it again and
+ *       read;
+ *   (a) a session at A's limit moves whole to B: same id, row, conversation,
+ *       parent, work item and child; its first steps there are its filing
+ *       turn, then Claude Code's /compact; its move line says "compacting",
+ *       then "Moved to B, then compacted" under the same id; the send its
+ *       refused turn read stays read;
+ *   (c) a person's send to it while it compacts is held, then read after
+ *       the compaction;
  *   (b) an agent restart while a session's turn is parked on a question:
  *       what was queued for it is read by the restored process, nothing is
  *       failed as ended, and the turn handed back asks the question again;
@@ -31,7 +34,7 @@
  *       process holding a background task: held and at rest, it moves at
  *       once; moved mid-turn while its target is briefly at its limit too,
  *       the at-limit controller holds it for that account and never
- *       continues it on C, then carries the move out. Either way its
+ *       moves it to C, then carries the move out. Either way its
  *       conversation is resumed there, no session row is added and its
  *       delegate keeps its parent. The controller's own whole move, refused
  *       by a process that holds a send unread, says "Couldn't move to …" in
@@ -396,9 +399,18 @@ if (role === "sessiond") {
           label: "B",
           identity: { email: "b@fake.invalid", organization: "org-b" },
         });
+        // Each account's limits read, none spent: a carry goes only to an
+        // account a reading shows room on (placement.ts `read`).
+        for (const one of [a, b]) {
+          db.accounts.putReading(
+            one.id,
+            { windows: [], subscription: "max" },
+            Date.now()
+          );
+        }
         const routing = db.accounts.routing(CLAUDE_PROVIDER);
-        // Any reported context counts as large: a refused turn continues
-        // from a summary rather than moving whole.
+        // Any reported context counts as large: a session moved to another
+        // organization at its limit files its open items and is compacted.
         db.accounts.setRouting({
           ...routing,
           atLimit: { ...routing.atLimit, move: true, moveWholeUnderK: 1 },
@@ -464,6 +476,11 @@ if (role === "sessiond") {
               label: "C",
               identity: { email: "c@fake.invalid", organization: "org-c" },
             });
+            db.accounts.putReading(
+              c.id,
+              { windows: [], subscription: "max" },
+              Date.now()
+            );
             pinned.push(c.id);
             return { id: c.id };
           })
@@ -560,7 +577,7 @@ if (role === "sessiond") {
           .get("/proof/events", ({ query }) =>
             sql
               .query(
-                "SELECT id, at, json_extract(move, '$.kind') AS kind FROM limit_events WHERE instance_id = ? ORDER BY at"
+                "SELECT id, at, json_extract(move, '$.kind') AS kind, json_extract(move, '$.compact') AS compact FROM limit_events WHERE instance_id = ? ORDER BY at"
               )
               .all(String(query.id))
           )
@@ -676,6 +693,25 @@ if (role === "sessiond") {
               })
               .catch(() => undefined);
           }, 300);
+    /**
+     * Claude Code's own /compact: its compaction boundary, said before the
+     * turn's end; slow when asked, so a send meanwhile is seen held.
+     */
+    const compacted = async (): Promise<void> => {
+      if (await Bun.file(join(scratch, "slow-compact")).exists()) {
+        ctx.busy(true);
+        await delay(
+          Number(await readFile(join(scratch, "slow-compact"), "utf8"))
+        );
+      }
+      ctx.frame({
+        type: "system",
+        subtype: "compact_boundary",
+        uuid: crypto.randomUUID(),
+        session_id: key,
+        compact_metadata: { trigger: "manual", pre_tokens: 50_000 },
+      } as never);
+    };
     const ended = (said = TERM_EXIT): void => {
       if (over) {
         return;
@@ -696,7 +732,7 @@ if (role === "sessiond") {
           cwd: ctx.cwd,
         } as never),
       // What Claude Code's context read answers: a context past any account's
-      // move-whole bound, so a refused turn continues from a summary.
+      // compaction bound, so a session moved at its limit is compacted.
       control: async (method: string) => {
         if (method === "interrupt") {
           await log(`INTERRUPTED ${ctx.instanceId}`);
@@ -817,14 +853,8 @@ if (role === "sessiond") {
             } as never);
             return;
           }
-          // A summariser asked to take its time does, so its live row is seen.
-          if (
-            text.startsWith("Below is the transcript") &&
-            (await Bun.file(join(scratch, "slow-summary")).exists())
-          ) {
-            await delay(
-              Number(await readFile(join(scratch, "slow-summary"), "utf8"))
-            );
+          if (text.startsWith("/compact")) {
+            await compacted();
           }
           const answer = stamped(
             key,
@@ -1064,7 +1094,7 @@ if (role === "sessiond") {
   const sends = (id: string) => api(`/proof/sends?id=${id}`) as Promise<Send[]>;
   const limitLines = (id: string) =>
     api(`/proof/events?id=${id}`) as Promise<
-      { id: string; at: number; kind: string }[]
+      { compact: string | null; id: string; at: number; kind: string }[]
     >;
   const hubLog = () => readFile(join(dir, "hub.log"), "utf8");
   const eventLog = async () =>
@@ -1404,7 +1434,7 @@ if (role === "sessiond") {
       JSON.stringify(sSends)
     );
 
-    // ── (a) + (c) a session at A's limit goes on on B, in place ──────────
+    // ── (a) + (c) a session at A's limit moves whole to B, files, compacts ─
     const parent = crypto.randomUUID();
     const s0 = crypto.randomUUID();
     spawn(parent, b);
@@ -1422,7 +1452,7 @@ if (role === "sessiond") {
     const countBefore = (await rows()).filter(
       (one) => one.kind !== "summariser"
     ).length;
-    await writeFile(join(dir, "slow-summary"), "6000");
+    await writeFile(join(dir, "slow-compact"), "6000");
     await writeFile(join(dir, `limit-${a}`), "at its limit");
     await api("/proof/limit", { account: a });
     const brief = await tool(parent, "handoff", {
@@ -1430,13 +1460,14 @@ if (role === "sessiond") {
       message: "Do the private work.",
     });
     console.log(`parent's brief to S0: ${brief.text}`);
-    const summarising = await until(
-      "S0's live line",
+    const compacting = await until(
+      "S0's move line, compacting",
       () => limitLines(s0),
-      (seen) => seen.some((one) => one.kind === "continuing")
+      (seen) =>
+        seen.some((one) => one.kind === "moved" && one.compact === "compacting")
     );
-    const live = summarising.find((one) => one.kind === "continuing");
-    // (c) a person writes to it while the summary is being written.
+    const moved = compacting.find((one) => one.kind === "moved");
+    // (c) a person writes to it while it compacts.
     personSays(s0, "A late word from the person.");
     const held = await until(
       "the late word held",
@@ -1449,40 +1480,41 @@ if (role === "sessiond") {
             one.state === "pending"
         )
     );
-    quote("while summarising: S0's line and the late word", [
-      JSON.stringify(summarising),
+    quote("while compacting: S0's line and the late word", [
+      JSON.stringify(compacting),
       JSON.stringify(held.filter((one) => one.words.startsWith("A late word"))),
     ]);
     await until(
-      "S0's line became the divider, under the same id",
+      "S0's move line says compacted, under the same id",
       () => limitLines(s0),
       (now) =>
-        now.some((one) => one.id === live?.id && one.kind === "continued")
+        now.some((one) => one.id === moved?.id && one.compact === "compacted")
     );
     await until(
-      "the new conversation read the opening, then the late word",
+      "it filed its open items, compacted, then read the late word",
       eventLog,
       (text) => {
         const turns = lines(text, `TURN ${s0}`);
-        const opening = turns.findIndex((one) =>
-          one.includes("Continuing session")
+        const filing = turns.findIndex((one) =>
+          one.includes("file everything still open")
         );
+        const compact = turns.findIndex((one) => one.includes("/compact "));
         const late = turns.findIndex((one) => one.includes("A late word"));
-        return opening >= 0 && late > opening;
+        return filing >= 0 && compact > filing && late > compact;
       }
     );
     const s0After = (await row(s0)) as Row;
-    const s0Conversations = JSON.parse(s0After.conversations) as {
-      sessionId: string;
-      accountId: string;
-      next: string;
-    }[];
     assert.equal(s0After.account, b, "S0 runs on B now");
-    assert.equal(s0Conversations.length, 1);
-    assert.equal(s0Conversations[0].sessionId, sessionBefore);
-    assert.equal(s0Conversations[0].accountId, a);
-    assert.equal(s0Conversations[0].next, live?.id);
-    assert.notEqual(s0After.sessionId, sessionBefore);
+    assert.equal(
+      JSON.parse(s0After.conversations).length,
+      0,
+      "moved whole: no conversation left behind"
+    );
+    assert.equal(
+      s0After.sessionId,
+      sessionBefore,
+      "the same conversation, carried whole"
+    );
     assert.equal(s0After.parent, parent, "same parent");
     assert.equal(s0After.workItemId, itemId, "same work item");
     assert.equal((await row(child))?.parent, s0, "its child still under it");
@@ -1520,28 +1552,27 @@ if (role === "sessiond") {
         id: string;
         type: string;
         content: string;
-        metadata?: { continuation?: boolean; accountMove?: { kind: string } };
+        metadata?: { accountMove?: { compact?: string; kind: string } };
       }[];
     };
-    const divider = s0Page.blocks.findIndex(
-      (block) => block.metadata?.accountMove?.kind === "continued"
+    const line = s0Page.blocks.findIndex(
+      (block) => block.metadata?.accountMove?.kind === "moved"
     );
-    assert.ok(divider > 0, "the divider is in S0's transcript");
-    assert.ok(
-      s0Page.blocks[divider + 1]?.metadata?.continuation,
-      `the opening right under it, marked to fold: ${JSON.stringify(
-        s0Page.blocks
-          .slice(Math.max(0, divider - 2), divider + 4)
-          .map((block) => [block.type, block.id, block.content.slice(0, 50)])
-      )}`
+    assert.ok(line > 0, "the move line is in S0's transcript");
+    assert.equal(
+      s0Page.blocks[line]?.metadata?.accountMove?.compact,
+      "compacted",
+      `it says moved, then compacted: ${s0Page.blocks[line]?.content}`
     );
     assert.ok(
       s0Page.blocks
-        .slice(0, divider)
+        .slice(0, line)
         .some((block) => block.content.includes("Turn 1:")),
-      "the old conversation reads above it"
+      "the conversation reads on above it"
     );
-    quote("the continuation (hub log)", [...lines(await hubLog(), titled(s0))]);
+    quote("the move and compaction (hub log)", [
+      ...lines(await hubLog(), titled(s0)),
+    ]);
     quote(
       "the stand-in: what S0's processes did",
       lines(await eventLog(), s0).filter((one) => !one.includes("Turn "))
@@ -1557,7 +1588,7 @@ if (role === "sessiond") {
       )
     );
     await rm(join(dir, `limit-${a}`));
-    await rm(join(dir, "slow-summary"));
+    await rm(join(dir, "slow-compact"));
 
     // ── (b) an agent restart while a turn waits on a question ───────────
     // An orchestrator, as the session the restart cut was.
@@ -1702,7 +1733,7 @@ if (role === "sessiond") {
     );
 
     // (e2) A move owed mid-turn while its target is briefly at its limit too:
-    // the controller holds it for that account, never continues it on C.
+    // the controller holds it for that account, never moves it to C.
     await api("/proof/limit", { account: b, ms: 12_000 });
     personSays(o, "slow-turn: one more piece of work.");
     await until("O mid-turn", eventLog, (text) =>
@@ -1718,8 +1749,8 @@ if (role === "sessiond") {
     await delay(2000);
     const whileOwed = await limitLines(o);
     assert.ok(
-      !whileOwed.some((one) => ["continuing", "continued"].includes(one.kind)),
-      `O was not continued while its move was owed: ${JSON.stringify(whileOwed)}`
+      !whileOwed.some((one) => one.kind === "moved"),
+      `nothing moved O elsewhere while its move was owed: ${JSON.stringify(whileOwed)}`
     );
     await until(
       "O relaunched on B, its conversation resumed, once B came free",
@@ -1746,8 +1777,8 @@ if (role === "sessiond") {
     );
     const oLines = await limitLines(o);
     assert.ok(
-      !oLines.some((one) => ["continuing", "continued"].includes(one.kind)),
-      JSON.stringify(oLines)
+      !oLines.some((one) => one.compact),
+      `a person's move is carried as asked, never compacted: ${JSON.stringify(oLines)}`
     );
     assert.deepEqual(await sessionsOf(), before5, "no session row was added");
     const log5 = await hubLog();
@@ -2039,9 +2070,9 @@ if (role === "sessiond") {
       // ── A session to watch in a browser ───────────────────────────────
       const w = crypto.randomUUID();
       await withHistory(w, a);
-      await writeFile(join(dir, "slow-summary"), "20000");
+      await writeFile(join(dir, "slow-compact"), "20000");
       console.log(`\nHOLD hub ${base} session ${w}`);
-      console.log(`touch ${join(dir, "go")} to continue it at A's limit`);
+      console.log(`touch ${join(dir, "go")} to move it at A's limit`);
       await until(
         "go",
         () => Promise.resolve(existsSync(join(dir, "go"))),
@@ -2052,12 +2083,15 @@ if (role === "sessiond") {
       await api("/proof/limit", { account: a });
       personSays(w, "Carry on with the work.");
       await until(
-        "W continued",
+        "W moved and compacted",
         () => limitLines(w),
-        (now) => now.some((one) => one.kind === "continued"),
+        (now) =>
+          now.some(
+            (one) => one.kind === "moved" && one.compact === "compacted"
+          ),
         120_000
       );
-      console.log("CONTINUED; touch stop to end");
+      console.log("MOVED AND COMPACTED; touch stop to end");
       await until(
         "stop",
         () => Promise.resolve(existsSync(join(dir, "stop"))),

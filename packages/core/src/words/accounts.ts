@@ -297,13 +297,10 @@ export const accountsWords = {
     move: "Move running sessions between accounts",
     wait: "Wait if the window resets within",
     minutes: "minutes",
-    under: "Move the whole conversation if it’s under",
+    over: "Compact it after the move if it’s over",
     kTokens: "k tokens",
-    rereads: "The new account re-reads it from scratch.",
-    otherwise: "Otherwise continue from a summary",
-    early: "Write that summary early, at",
-    percent: "%",
-    warm: "While the current account’s cache is still warm.",
+    compacts:
+      "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn.",
     terms:
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
   },
@@ -322,13 +319,12 @@ export const accountsWords = {
     policyBelow: "At the limit → the policy below",
     unusedWasted: "What’s unused at reset is wasted, so it goes first.",
     fullSkipped: "A full account is skipped.",
-    summaryEarly: "Summary written early, while the cache is warm.",
     waits: (minutes: number) => `Waits ${minutes}m for the window to reset`,
     movesWhole: "Moves the whole conversation",
-    continues: "Continues from a summary",
+    compacts: "Moves it whole, then compacts it",
     tokens: (k: number) => `${k}k`,
     reread: (k: number) => `re-read ${k}k`,
-    staysOn: (k: number, name: string) => `${k}k stays on ${name}`,
+    compacted: (k: number) => `${k}k compacted`,
   },
 
   // ── Colours (Swatches) ────────────────────────────────────────────────

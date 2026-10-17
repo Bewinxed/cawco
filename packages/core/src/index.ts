@@ -1101,24 +1101,29 @@ export const relaunchOf = (row: {
 };
 
 /**
- * A continuation from a summary the hub is carrying, as every dashboard
- * follows it: summarise the source, then start a conversation seeded with the
- * summary. The hub owns it from the POST that starts it to its end; only a
- * Cancel (`DELETE /api/continuations/:id`) stops it.
+ * A continuation in a new session the hub is carrying, as every dashboard
+ * follows it: the source files its open items (a person's Continue), is
+ * summarised, then a new session starts seeded with the summary and those
+ * items. The hub owns it from the POST that starts it to its end; its Cancel
+ * (`DELETE /api/continuations/:id`) stops it in any stage before `started`.
  */
 export interface ContinuationJob {
   error?: string;
   id: string;
   /**
-   * The session goes on itself, in a fresh conversation (its account at its
-   * limit, or it asked with `continue_session`): `targetInstanceId` is
-   * `sourceInstanceId`, one session throughout. Absent: "Continue in new
-   * session", whose target is a new session and whose source is only read.
+   * Never sent: no job goes on in place now. Declared only because the
+   * TestFlight builds 20261015 and 20261015.3 read it, which the hub's wire
+   * check holds to (packages/hub/scripts/openapi.ts); it goes in the change
+   * that expires them.
    */
   inPlace?: true;
   sourceInstanceId: string;
-  /** `starting`: the new conversation (in place) or new session is starting. */
-  stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
+  /**
+   * `filing`: the source's turn filing its open items (a person's Continue);
+   * `starting`: the new session is starting.
+   */
+  stage:
+    "filing" | "summarising" | "starting" | "started" | "failed" | "cancelled";
   /** Absent when the source is short enough that nothing is summarised. */
   summariserInstanceId?: string;
   targetInstanceId: string;

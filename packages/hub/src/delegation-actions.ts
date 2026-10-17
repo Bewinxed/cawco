@@ -822,18 +822,8 @@ export interface HandoffActions {
     path: string,
     body?: unknown
   ) => Promise<unknown>;
-  /**
-   * Summarises a session with the chosen summariser through the hub's own
-   * continuation. Another session (`session`): a new session starts seeded
-   * with the summary, and that one is only read. This one (`session`
-   * omitted): it goes on itself, in place, in a fresh conversation seeded
-   * with the summary once the turn that asked ends — same id, row, parent
-   * and children. `from: "asks"`: nothing is summarised, and the new
-   * conversation opens on the person's own messages alone, verbatim and in
-   * order.
-   */
   readonly continueSession: (input: {
-    session?: string;
+    session: string;
     from?: "summary" | "asks";
     summarizer_harness?: "claude" | "opencode" | "pi";
     summarizer_model?: string;
@@ -935,6 +925,16 @@ export interface HandoffActions {
     minutes?: number,
     resume?: boolean
   ) => Promise<string>;
+  /**
+   * Summarises another session with the chosen summariser through the hub's
+   * own continuation: a new session starts seeded with the summary and that
+   * session's open items, and takes over its delegates; that one is only
+   * read. Never the calling session itself. `from: "asks"`: nothing is
+   * summarised, and the new session opens on the person's own messages
+   * alone, verbatim and in order, and the open items.
+   */
+  /** This session's Open items section, built by the hub from its records (open-items.ts). */
+  readonly openItems: () => Promise<string>;
   /** A window into one result of a run this session supervises. */
   readonly readWorkflow: (
     runId: string,
@@ -1420,23 +1420,30 @@ export const handoffActions = ({
     const { held } = (await spent.json()) as { held: HeldWork[] };
     return { delegates, held, queued };
   },
+  async openItems() {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items`
+    );
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
+  },
   async continueSession(input) {
     const { rows, hosts } = fleetInstances(fleet);
-    const target = input.session
-      ? (formerOf(formerIds(), input.session)?.now ?? input.session)
-      : undefined;
-    const source = target
-      ? resolve(
-          rows.map((row) => toPeer(row, hosts)),
-          target
-        ).row.id
-      : instanceId;
-    const inPlace = source === instanceId;
-    // The new conversation or session answers permissions as the caller
-    // does, where its harness has modes; the hub settles it, never the
-    // machine's default.
+    const target = formerOf(formerIds(), input.session)?.now ?? input.session;
+    const source = resolve(
+      rows.map((row) => toPeer(row, hosts)),
+      target
+    ).row.id;
+    if (source === instanceId) {
+      throw new Error(
+        "continue_session continues another session, never this one. If your context is too big, say so in one line: the person compacts it with Claude Code's own /compact."
+      );
+    }
+    // The new session answers permissions as the caller does, where its
+    // harness has modes; the hub settles it, never the machine's default.
     const fallbackPermissionMode = callerMode(rows, instanceId);
-    const asks = input.from === "asks";
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
       {
@@ -1449,7 +1456,6 @@ export const handoffActions = ({
             model: input.target_model,
             ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
-          ...(inPlace ? { inPlace: true } : {}),
           askedBy: instanceId,
           ...(input.note ? { note: input.note } : {}),
         }),
@@ -1458,26 +1464,9 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const { continuationId, summariserInstanceId } =
-      (await response.json()) as {
-        continuationId: string;
-        summariserInstanceId: string | null;
-      };
-    // In place, this process is the one the fresh conversation replaces: the
-    // job waits for this turn to end, so nothing here waits on it.
-    if (inPlace) {
-      return {
-        summariserInstanceId,
-        targetInstanceId: instanceId,
-        text:
-          `This session goes on as itself, in a fresh ${input.target_harness} conversation on ${input.target_model}, ` +
-          (asks
-            ? "once this turn ends: nothing is summarised, and the new conversation opens on the person's own messages alone, verbatim and in order. "
-            : `once this turn ends: ${summariserOf(input)} summarises it then, and the new conversation opens on that summary, the artifact index and your last turns. `) +
-          'Same id, parent, delegates and work item; your transcript reads on through a "Continued" line. ' +
-          `End your turn now. (continuation ${continuationId})`,
-      };
-    }
+    const { continuationId } = (await response.json()) as {
+      continuationId: string;
+    };
     // The hub runs the continuation as its own job; this waits for its report.
     const outcome = await fetch(
       `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
