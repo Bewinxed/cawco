@@ -131,7 +131,7 @@
     r={geometry.rd.toFixed(3)}
   />
   <circle
-    class="arc fill-none stroke-(--c) origin-(--ring-origin) transform-(--ring-turn) group-data-stale/rings:opacity-(--account-stale-opacity)"
+    class="arc fill-none stroke-(--c) origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="disc"
@@ -150,7 +150,7 @@
     stroke-width={geometry.w.toFixed(3)}
   />
   <circle
-    class="arc week fill-none origin-(--ring-origin) transform-(--ring-turn) group-data-stale/rings:opacity-(--account-stale-opacity)"
+    class="arc week fill-none origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="rim"
@@ -161,7 +161,7 @@
     style:--arc-offset={off(rim)}
   />
   <circle
-    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 data-off:group-data-stale/rings:opacity-(--account-stale-opacity)"
+    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 data-off:group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}
@@ -207,22 +207,5 @@
     stroke: var(--ring-ground, var(--sidebar));
     stroke-dasharray: 1.6 98.4;
     stroke-dashoffset: var(--notch-offset);
-  }
-  /* residual: unmapped — three properties at two durations in one
-     transition (needs transition token); a refill, and reduced motion,
-     override it, so they stay beside it. */
-  .arc {
-    transition:
-      stroke-dashoffset var(--dur-panel) var(--ease-in-out),
-      stroke var(--dur-toggle) var(--ease-out),
-      opacity var(--dur-toggle) var(--ease-out);
-  }
-  [data-refill] .arc {
-    transition: stroke-dashoffset var(--dur-settle) var(--ease-out);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .arc {
-      transition: none;
-    }
   }
 </style>

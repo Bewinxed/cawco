@@ -497,7 +497,7 @@
               {#each spend.threads as thread (thread.id)}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2 max-phone:border-b max-phone:border-b-border-hairline"
                 >
                   <Table.Cell
                     class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
@@ -531,7 +531,7 @@
               {#if spend.caw.unthreadedMonthUsd > 0}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2 max-phone:border-b max-phone:border-b-border-hairline"
                 >
                   <Table.Cell
                     class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
@@ -585,7 +585,7 @@
               {#each spend.attempts as attempt (attempt.taskId)}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2 max-phone:border-b max-phone:border-b-border-hairline"
                 >
                   <Table.Cell
                     class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
@@ -629,7 +629,7 @@
             {#if spend.others.monthUsd > 0}
               <Table.Row
                 data-project-spend-row
-                class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2 max-phone:border-b max-phone:border-b-border-hairline"
               >
                 <Table.Cell
                   class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
@@ -655,7 +655,7 @@
             {/if}
             <Table.Row
               data-project-spend-row
-              class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+              class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2 max-phone:border-b max-phone:border-b-border-hairline"
             >
               <Table.Cell
                 class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
@@ -695,11 +695,5 @@
     position: absolute;
     inset: 0;
     content: "";
-  }
-  /* residual: unmapped */
-  @media (max-width: 639px) {
-    [data-slot="ledger"] :global(tr[data-project-spend-row]) {
-      border-block-end: 1px solid var(--border-hairline);
-    }
   }
 </style>
