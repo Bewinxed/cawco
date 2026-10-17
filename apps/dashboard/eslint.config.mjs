@@ -8,6 +8,7 @@ import { plugin as shadcn } from "@shadcn/lint";
 import tsParser from "@typescript-eslint/parser";
 import { defineConfig } from "eslint/config";
 import svelteParser from "svelte-eslint-parser";
+import { house } from "./eslint-plugin-house.mjs";
 
 const settings = {
   shadcn: {
@@ -25,6 +26,9 @@ const HOUSE = [
   "press-tint",
 ];
 const rules = {
+  // Two states that can hold together never leave their winner to Tailwind's
+  // variant sort (eslint-plugin-house.mjs).
+  "house/variant-order": "error",
   // Property lists only; durations and easings stay tokens.
   "shadcn/no-arbitrary-values": ["error", { allow: ["transition-*"] }],
   "shadcn/no-raw-colors": "error",
@@ -89,14 +93,14 @@ export default defineConfig([
       parser: svelteParser,
       parserOptions: { parser: tsParser },
     },
-    plugins: { shadcn },
+    plugins: { shadcn, house },
     settings,
     rules,
   },
   {
     files: ["src/**/*.ts"],
     languageOptions: { parser: tsParser },
-    plugins: { shadcn },
+    plugins: { shadcn, house },
     settings,
     rules,
   },
