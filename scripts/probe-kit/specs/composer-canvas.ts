@@ -1161,6 +1161,31 @@ const canvasBox = async (page: Page) => {
     : null;
 };
 
+/**
+ * The composer's column, which the canvas's slot hangs from (`bottom: 100%`):
+ * its top, the slot's height, and each block standing in it, by its slot and
+ * height. A canvas whose top moved says here whether it grew or the column did.
+ */
+const columnParts = (page: Page) =>
+  page.evaluate(() => {
+    const column = document.querySelector('[data-slot="composer"]');
+    const slot = column?.querySelector('[data-slot="canvas-slot"]');
+    const field = column?.querySelector(
+      '[role="combobox"][contenteditable="true"]'
+    );
+    return {
+      top: column?.getBoundingClientRect().top ?? null,
+      slot: slot?.getBoundingClientRect().height ?? null,
+      field: field
+        ? `${Math.round(field.getBoundingClientRect().height * 10) / 10}px ${JSON.stringify(field.innerHTML.slice(0, 160))}`
+        : null,
+      parts: [...(column?.children ?? [])].map(
+        (el) =>
+          `${el.getAttribute("data-slot") ?? el.tagName.toLowerCase()} ${Math.round(el.getBoundingClientRect().height * 10) / 10}`
+      ),
+    };
+  });
+
 /** A handle's centre, once it stands. */
 const gripAt = async (page: Page, selector: string) => {
   await page.waitForSelector(selector, { timeout: 5000 });
@@ -1268,6 +1293,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
   await dragBy(page, grip, -50, -60);
   await settle(page);
   const chosen = await canvasBox(page);
+  const chosenColumn = await columnParts(page);
   await page.focus(FIELD);
   await page.keyboard.press("Control+Shift+KeyD");
   await settle(page, 300);
@@ -1275,6 +1301,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
   await page.keyboard.press("Control+Shift+KeyD");
   await settle(page, 300);
   const reopened = await canvasBox(page);
+  const reopenedColumn = await columnParts(page);
   kit.check(
     "12: the size chosen by the top-left corner (wider by 100, taller by 60) survives Done and reopen",
     !!(reopened && chosen && narrowest) &&
@@ -1283,7 +1310,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
       near(reopened.left, chosen.left, 1) &&
       near(reopened.right, chosen.right, 1) &&
       near(reopened.top, chosen.top, 1),
-    `${JSON.stringify(reopened)} (was ${JSON.stringify(chosen)})`
+    `${JSON.stringify(reopened)} (was ${JSON.stringify(chosen)}); column ${JSON.stringify(reopenedColumn)} (was ${JSON.stringify(chosenColumn)})`
   );
   // Reduced motion: the corner's drag lands where it is let go, no settle run.
   await emulateMotion(page, "reduce");
@@ -2073,7 +2100,9 @@ const dockCheck = async (on: On, clock: Clock) => {
     docking.filter((one) => one.id === "canvas-flight").length === 1 &&
       flight?.duration === panel &&
       flight.easing === DRAWER &&
-      flight.props.join() === "transformOrigin,transform" &&
+      // getKeyframes() lists a frame's properties in the engine's order,
+      // not the order the page wrote them: the set is what is asserted.
+      [...flight.props].sort().join() === "transform,transformOrigin" &&
       room?.duration === control &&
       room.easing === EASE_OUT,
     `${panel}/${control}; ${JSON.stringify(docking)}`
