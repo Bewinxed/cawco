@@ -1,0 +1,142 @@
+[
+ {
+  "file": "board",
+  "kind": "page",
+  "w": 1280,
+  "h": 800,
+  "title": "",
+  "text": "siteboard6 tasks Ready 2 1 Running 1 2 Needs you 1 Review 1 2 Done 1 2 #151 Add dark mode toggle after #142 queued tsk-9 Write launch brief #146 Cut v0.4 release Approve tsk-5 Draft changelog +42 -8 #130 Bump Bun to 1.3 done #142 Fix tray chip overflow queued +18 -3 done #142 GitHub issue tsk-9 CawCo task blocked by",
+  "tw": 320,
+  "th": 200
+ },
+ {
+  "file": "thread",
+  "kind": "preview",
+  "w": 390,
+  "h": 844,
+  "title": "",
+  "text": "site \u00b7 Caw/Morning Routine \u00b7 08:55 \u00b7 3 new GitHub issues Caw 08:56 Filed 2 tasks from the 3 issues. #142 Fix tray chip overflow check bun test #151 Add dark mode toggle after #142 1 likely duplicate of #120 \u2014 merge? Merge Keep both 08:58 Merge it Since 09:00 09:14 #142 landed ev-3121 #151 retried fresh ev-3126 Review queue full ev-3130 Message the project\u2026 Send",
+  "tw": 320,
+  "th": 693
+ },
+ {
+  "file": "canvas",
+  "kind": "canvas",
+  "w": 900,
+  "h": 900,
+  "title": "",
+  "text": "site\u00b7 canvas \u00b7 pricing page3 variants Pricing A :5173 live contrast ok diff 0.4% made by deep \u00b7 ws-4f2a Pricing B Picked pricing-b.pen \u2192 png 1 src/lib/Pricing.svelte:42 Make this the only primary button sent to writer contrast ok tokens ok made by writer \u00b7 ws-4f2a Pricing C Paper \u2192 png 1 literal colour made by medium \u00b7 ws-91c0 Any tool with an MCP exports here. CawCo shows files and live previews; it has no per-tool adapter.",
+  "tw": 320,
+  "th": 320
+ },
+ {
+  "file": "stages",
+  "kind": "sheet",
+  "w": 1200,
+  "h": 700,
+  "title": "",
+  "text": "x-growth board calendar outreach pipeline Board Calendar Pipeline Idea 2 to do Draft 2 1 active Review 1 2 you Scheduled 2 waiting Posted 1 done Measured 2 done tsk-158 Poll: pricing tsk-160 Tip: keyboard nav tsk-148 Reply guide tsk-146 Launch recap waiting on you tsk-139 Release notes Thu 09:30 tsk-142 Build log #12 Fri 13:00 tsk-131 Hub on a Pi 4.1k views tsk-120 Why self-host 12.6k views tsk-114 Week 11 recap 3.2k views tsk-151 Thread: what we shipped writer drafting waiting on you Mon Tue Wed Thu Fri Sat Sun 09:30 Hub Notes Recap 13:00 Thread Log 18:00 Host scheduled posted needs you Prospect to do 40 Contacted waiting 22 3 replies due \u00b7 routine checks 4h Replied active 9 Meeting you 4 Won done 1 Lost dropped 6 Stages come from the project's stages file. Live work is an overlay, never a column.",
+  "tw": 320,
+  "th": 187
+ },
+ {
+  "file": "routines",
+  "kind": "page",
+  "w": 1280,
+  "h": 800,
+  "title": "",
+  "text": "Routineslaunch-q43 routines Morning triage fresh session Pause weekdays 08:55 next in 2 h 14 m Run now SEO audit top 20 pages Pause Mon 09:00 next paused Run now Weekly recap to #launch-q4 Pause Fri 17:00 next in 3 d 6 h Run now last 8 runs ok skipped, overlap failed",
+  "tw": 320,
+  "th": 200
+ },
+ {
+  "file": "inbound",
+  "kind": "preview",
+  "w": 390,
+  "h": 844,
+  "title": "",
+  "text": "Inboundlaunch-q4 poll every 60 s \u00b7 last 304 \u00b7 0 of 5,000 calls used github pull_request.closed #158 \u2192 duplicate dropped github pull_request.closed #158 \u2192 matched Land and recap relay stripe.checkout evt_3f.. \u2192 no match kept 7 days github issues.opened #160 \u2192 matched Morning triage",
+  "tw": 320,
+  "th": 693
+ },
+ {
+  "file": "memory",
+  "kind": "page",
+  "w": 1280,
+  "h": 800,
+  "title": "",
+  "text": "launch-q4\u00b7 Memory \u00b7 3 proposalscurator Inbox \u00b7 41 notes \u00b7 3 ready to promote Project memory 12 13 Headlines under 60 characters performed best in Q3 tests 2 sessions obelisk, macbook 3 weeks + Add to project memory Looks good Edit Drop Use bun run typecheck, not tsc, in this repo 4 sessions obelisk 5 days Supersedes an older note Typecheck with tsc --noEmit Looks good Edit Drop Brand voice: no exclamation marks 3 sessions macbook 2 weeks + Add to project memory Looks good Edit Drop filter Routine, heartbeat and web-tainted notes are never proposed",
+  "tw": 320,
+  "th": 200
+ },
+ {
+  "file": "brandkit",
+  "kind": "sheet",
+  "w": 1200,
+  "h": 760,
+  "title": "",
+  "text": "launch-q4\u00b7 Brand kitknowledge project Every skill in this project reads this kit VOICE seo-audit Short sentences. No exclamation marks. Say what it does, then stop. Name the tool. Skip the hype. DO / DON'T seo-audit Do Self-host your agents. Don't Unlock AI power. KEYWORD FACTS seo-audit self-hosted agent dashboard 8 wk left 1.2k/mo \u00b7 source: Ahrefs \u00b7 expires 2026-12-01 agent fleet manager expired 880/mo \u00b7 source: Semrush \u00b7 expires 2026-09-15 AUDIENCES seo-audit indie devs small agencies ASSETS seo-audit hero-v3.png og-card.png logo-mark.svg board-shot.png",
+  "tw": 320,
+  "th": 203
+ },
+ {
+  "file": "delegates",
+  "kind": "page",
+  "w": 1280,
+  "h": 900,
+  "title": "",
+  "text": "sitews-0a1eobelisk auth-rework 3 delegates \u00b7 one report when all settle Report1/3 ws-4f2a Add session table running checks 1/3 $0.42 6 min ws-91c0 Board API queued checks 0/3 after ws-4f2a $0.00 0 min ws-7d13 Login copy done checks 3/3 $0.61 9 min Landing queue 1 rebase re-run checks push ws-7d13",
+  "tw": 320,
+  "th": 225
+ },
+ {
+  "file": "plans",
+  "kind": "canvas",
+  "w": 900,
+  "h": 900,
+  "title": "",
+  "text": "site decisions \u00b7 checkout Page Canvas 3 4 of 5 picked Caw wrote this page from our chat decisions/checkout/ D1 Guest checkout picked Required account Guest, account after Guest only note keep Apple Pay first D2 Payment step open picked One page Two steps 1 You what about saved cards? Caw added as D3 Caw reads your picks and notes Caw Noted. D4 depends on this. Make tasks D1 Guest D2 Payment D3 Saved cards D4 Recap D5 Expiry A decision page is files in the project. Picks, notes and comments are kept; Caw reads them and turns them into tasks. tsk-201 Guest checkout tsk-202 One-page payment tsk-203 Saved cards",
+  "tw": 320,
+  "th": 320
+ },
+ {
+  "file": "fleet",
+  "kind": "page",
+  "w": 1280,
+  "h": 800,
+  "title": "",
+  "text": "Fleet \u00b7 Home2 machines \u00b7 5 sessionswatching NEEDS YOU All caught up launch-q4 \u00b7 writer session stalled 18 min \u00b7 second source agrees Nudge lead Open Stop WATCHING EVERY SESSION no output 15 min same tool \u00d75 spend over budget checks failed \u00d73 triage1 decision templated nudge needs-you stop",
+  "tw": 320,
+  "th": 200
+ },
+ {
+  "file": "threads",
+  "kind": "preview",
+  "w": 390,
+  "h": 844,
+  "title": "",
+  "text": "sitepreview \u00b7 /pricing2 comments 1 A $9 B $24 C $79 2 You 14:02 2 Make B the only primary button Pricing.svelte:42 \u00b7 button.plan-cta Sent to writer writer 14:03 Changed Pricing.svelte:42 and :58. A and C now use the secondary button. before after Resolved Reopen 1 \u00b7 Heading too long \u00b7 resolved Comments stay on the page. The session replies, changes the code, and resolves; you can reopen.",
+  "tw": 320,
+  "th": 693
+ },
+ {
+  "file": "bridge",
+  "kind": "page",
+  "w": 1280,
+  "h": 760,
+  "title": "",
+  "text": "sitepreview \u00b7 hero options A Pick B Picked C Pick radius 14 8 accent coral motion on Picks, notes and dials are stored in the hub. The session reads them; nothing is copied. data-cawco-choice=\"hero\" STORED IN THE HUB hero b you \u00b7 14:02 radius 14 dial accent coral dial note \"less shadow on B\" writer read_choices(\"hero options\") Applying B with radius 14 to Hero.svelte",
+  "tw": 320,
+  "th": 190
+ },
+ {
+  "file": "attempts",
+  "kind": "sheet",
+  "w": 1200,
+  "h": 700,
+  "title": "",
+  "text": "#151 Running Add dark mode toggle CHECKS 1 2 bun run typecheck bun test bun run lint ATTEMPTS Attempt 1 failed checks 2/3 ended Attempt 2 running ws-4f2a 40% Continue this session New attempt Continue only while idle, on this task, under 40% context",
+  "tw": 320,
+  "th": 187
+ }
+]
