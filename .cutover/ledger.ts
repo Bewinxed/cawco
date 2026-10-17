@@ -18,6 +18,7 @@ const DASHBOARD = join(ROOT, "apps", "dashboard");
 const LANES = join(ROOT, ".cutover", "lanes");
 const OUT = join(ROOT, ".cutover", "ledger.md");
 const BASELINE = join(ROOT, ".cutover", "ledger-merge-counts.json");
+const NOTES = join(ROOT, ".cutover", "ledger-notes.md");
 
 /** The lane-file line forms, in the order the ledger lists them. */
 const FORMS = [
@@ -194,6 +195,11 @@ for (const key of [...new Set([...Object.keys(merge), ...Object.keys(counts)])])
   md.push(`| ${key} | ${merge[key] ?? "—"} | ${counts[key] ?? 0} |`);
 }
 md.push("");
+// The notes that are no count: what main changed under the branch, the kit's insets.
+if (existsSync(NOTES)) {
+  md.push(readFileSync(NOTES, "utf8").trimEnd());
+  md.push("");
+}
 md.push("## Lane lines, by kind");
 for (const form of FORMS) {
   const rows = lanes.filter((l) => l.form === form);

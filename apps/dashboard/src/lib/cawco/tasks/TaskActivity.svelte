@@ -292,7 +292,8 @@
                 <IconChevronRight
                   data-chev
                   aria-hidden="true"
-                  class="size-icon-sm flex-none transition-[rotate] dur-control ease-out group-state-open:rotate-90"
+                  class="size-icon-sm flex-none transition-[transform] dur-control ease-out group-state-open:transform-(--chev-turn)"
+                  style="--chev-turn: rotate(90deg)"
                 />
                 <span>{piece.lines.length} changes</span>
                 <span

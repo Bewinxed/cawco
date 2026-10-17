@@ -79,8 +79,8 @@
 
 <!-- Focus never leaves the field: the menu swallows the mousedown that would
      blur it, so a picked row lands its chip where the words were typed. -->
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <!-- literal: 6px, 36px, 8px, 16px, 24px -->
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
   data-slot="menu"
   class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-border-control rounded-lg bg-surface-raised shadow-overlay"

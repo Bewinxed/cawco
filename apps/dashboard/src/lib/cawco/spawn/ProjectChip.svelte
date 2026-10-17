@@ -98,8 +98,8 @@
       >
     {/key}
     {#if project}
-      <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <!-- literal: 18px box -->
+      <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
         class="clear ns-check relative -mr-space-row inline-flex size-(--box) items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong"

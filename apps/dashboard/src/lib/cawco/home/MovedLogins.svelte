@@ -134,8 +134,9 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-none"
+            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-none"
             data-icon="inline-end"
+            style="--chev-flip: scaleY(-1)"
           />
         </Button>
       </div>
@@ -152,7 +153,7 @@
       >
         <div
           data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 transition-[opacity,filter] dur-exit ease-out group-data-open:opacity-100 group-data-open:dur-panel motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:dur-panel"
+          class="min-h-0 overflow-hidden opacity-0 transition-fold-fade group-data-open:opacity-100 group-data-open:dur-panel motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:dur-panel"
         >
           <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
             {#each done as one (one.id)}

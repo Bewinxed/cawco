@@ -613,9 +613,9 @@
             >
           </span>
           {#if goWeek !== null}
+            <!-- literal: 15px -->
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
-            <!-- literal: 15px -->
             <span
               class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
               data-strip-go-week
@@ -775,7 +775,6 @@
     ? { local: "opencode Go", domain: "" }
     : (names.get(ring.id) ?? { local: ring.name, domain: "" })}
   {@const shown = `${name.local}${name.domain}`}
-  <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <!-- A cell: one row on its column's five tracks (subgrid), space-1 in on
        every side, in meta. The carrier wears a ring in the outline button's
        edge (3:1 on the raised surface); an account at its limit the limit
@@ -783,6 +782,7 @@
        relay band stands for, while that band is hovered or open, the hover
        wash. (`cell-d` is the class rowOf reads and the states' hook.) -->
   <!-- literal: span 5; auto auto -->
+  <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <div
     {...props}
     aria-label={cellLabel(ring, c, shown)}
@@ -1178,6 +1178,7 @@
 </div>
 
 <style>
+  /* css-scope .strip-hit: the strip's own control; the usage-relay motion bench draws the strip with it */
   /* residual: unmapped — the strip's control under the pointer or open
      paints its own ground, and the dials' reserve notch takes it
      (--ring-ground: a custom property no utility sets); the strip's caption

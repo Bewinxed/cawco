@@ -44,6 +44,7 @@
 
 <style>
   /* residual: unmapped */
+  /* css-scope: this file's own root (a Collapsible.Root, which takes no scoped class); only it sets this data-slot */
   :global([data-slot="thinking-steps"]) {
     font-family: inherit;
   }

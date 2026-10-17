@@ -1900,6 +1900,7 @@
 {/snippet}
 
 <style>
+  /* css-scope .preview-pane: this pane's root; SideSurface's notes name the rule below */
   /* residual: foreign-dom */
   /* The well is the card's (SideSurface). Comment and Draw turn the well's
      own border the accent, 2px, inside its box: never a second ring round

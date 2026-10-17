@@ -233,11 +233,11 @@
         <span class="inline-grid justify-items-start" data-slot="words"
           ><span
             aria-hidden={pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-[opacity,filter] motion-safe:dur-morph motion-safe:ease-out active-false:opacity-0"
+            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0"
             data-active={!pending}><MorphText text={label} /></span
           ><span
             aria-hidden={!pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-[opacity,filter] motion-safe:dur-morph motion-safe:ease-out active-false:opacity-0"
+            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0"
             data-active={pending}>{pendingLabel}</span
           ></span
         >

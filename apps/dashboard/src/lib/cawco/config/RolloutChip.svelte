@@ -118,9 +118,9 @@
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="rollout-chip mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink data-fail:hover:bg-status-fail-bg motion-safe:active:scale-(--press-scale)"
+    class="rollout-chip mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink data-fail:hover:bg-status-fail-bg motion-safe:active:transform-(--tpress)"
     data-fail={failed > 0 ? "" : undefined}
-    style="--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px"
+    style="--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px; --tpress: scale(var(--press-scale))"
   >
     <!-- literal: 5px -->
     <span
@@ -212,7 +212,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
+                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:active:enabled:not-aria-busy:transform-(--tpress)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
@@ -222,6 +222,7 @@
                   style:--btn-icon="12px"
                   style:--gutter="8px"
                   style:--sync-h="26px"
+                  style:--tpress="scale(var(--press-scale))"
                   type="button"
                 >
                   <PendingContent
@@ -314,18 +315,18 @@
 
 <style>
   /* residual: unmapped */
-  /* needs transition token: background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out), scale var(--dur-toggle) var(--ease-out) (the press is `scale`, the property scale-(--press-scale) sets) */
+  /* needs transition token: background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out), transform var(--dur-toggle) var(--ease-out) (the press is `transform-(--tpress)`, as the source's `transform: scale(…)`) */
   @media (prefers-reduced-motion: no-preference) {
     :global(.rollout-chip) {
       transition:
         background-color var(--dur-panel) var(--ease-out),
         color var(--dur-panel) var(--ease-out),
-        scale var(--dur-toggle) var(--ease-out);
+        transform var(--dur-toggle) var(--ease-out);
     }
     [data-slot="sync"] {
       transition:
         var(--transition-control),
-        scale var(--dur-toggle) var(--ease-out);
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   /* A glyph that is not showing does not spin: the busy spinner's animation holds. */

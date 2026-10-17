@@ -263,8 +263,9 @@
             >
             <span
               data-slot="chev"
-              class="flex-none grid place-items-center text-ink-muted transition-[transform] dur-control ease-out motion-reduce:transition-none group-state-open:rotate-90"
-              data-box><IconChevronRight class="size-icon-sm block" /></span
+              class="flex-none grid place-items-center text-ink-muted transition-[transform] dur-control ease-out motion-reduce:transition-none group-state-open:transform-(--chev-turn)"
+              data-box
+              style:--chev-turn="rotate(90deg)"><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>
           <!-- Folds like the row that holds it: grows open and folds shut

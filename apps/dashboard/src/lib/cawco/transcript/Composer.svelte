@@ -3435,10 +3435,6 @@
 
         <!-- The pill's padding above and below the 34px field focuses it,
          the caret at the end: its touch area is the field's. -->
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
-        <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
-        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- The field's box. Its custom properties reach the field and the
              autosize twin beside it (a copy of the field without its inline
              style): the field's size, ceiling and padding, the hint's
@@ -3446,6 +3442,10 @@
              folded line's end the "+N lines" stands on, and the mention
              chips' sizes (MentionField's own, for the twin). -->
         <!-- literal: 4.5rem, 16px, 200px, -0.01em, 1lh, -100vh, -100vw, 6px, 15px, 22px -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
+        <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
+        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
@@ -3680,6 +3680,7 @@
   /* residual: unmapped — needs transition token: opacity var(--dur-fade)
      var(--ease-out), visibility 0s (--step-aside: what steps aside while an
      ask holds the composer comes back at once and fades in) */
+  /* css-scope: not global: Svelte scopes each selector inside :is() to this composer (built, it reads [data-slot=ctrls].svelte-…) */
   :is(
       [data-slot="prompts"],
       [data-slot="tray-slot"],

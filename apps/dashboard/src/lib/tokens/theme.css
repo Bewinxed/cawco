@@ -657,10 +657,6 @@
   transition: var(--transition-control-press);
 }
 
-@utility transition-control-scale {
-  transition: var(--transition-control-scale);
-}
-
 @utility transition-control-slide {
   transition: var(--transition-control-slide);
 }
@@ -669,8 +665,8 @@
   transition: var(--transition-control-ring);
 }
 
-@utility transition-tint-scale {
-  transition: var(--transition-tint-scale);
+@utility transition-chip-settle {
+  transition: var(--transition-chip-settle);
 }
 
 @utility transition-pick-card {
@@ -711,6 +707,14 @@
 
 @utility transition-segment {
   transition: var(--transition-segment);
+}
+
+@utility transition-fold-fade {
+  transition: var(--transition-fold-fade);
+}
+
+@utility transition-morph-fade {
+  transition: var(--transition-morph-fade);
 }
 
 @utility liga-none {

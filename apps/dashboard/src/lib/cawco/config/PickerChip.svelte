@@ -47,8 +47,8 @@
   <Popover.Trigger
     data-picker-chip
     aria-label="{label}: {chosen}"
-    class="inline-flex items-center gap-(--chip-gap) max-w-full h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:scale-(--press-scale) mark-line"
-    style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px"
+    class="inline-flex items-center gap-(--chip-gap) max-w-full h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:transform-(--tpress) mark-line"
+    style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px; --tpress: scale(var(--press-scale))"
   >
     <span class="text-ink-muted">{label}</span>
     <span data-slot="num" class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"><MorphText text={chosen} /></span>

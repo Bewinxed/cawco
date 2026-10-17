@@ -161,8 +161,8 @@
 >
   <ContextMenu.Trigger>
     {#snippet child({ props })}
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: these are the kit menu trigger's own handlers (in `props`), narrowed to a node; the node's inspector is the keyboard path to the same actions -->
       <!-- literal: 280px, 10px -->
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: these are the kit menu trigger's own handlers (in `props`), narrowed to a node; the node's inspector is the keyboard path to the same actions -->
       <section
         {...props}
         aria-label="Workflow graph"

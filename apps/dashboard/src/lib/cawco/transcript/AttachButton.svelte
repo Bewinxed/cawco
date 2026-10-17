@@ -47,8 +47,8 @@
     <DropdownMenu.Trigger
       data-att-btn
       aria-label="Attach or draw"
-      class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale)"
-      style="--hit-edge: 1px; --att-radius: calc(var(--radius-lg) - var(--c-composer-inset))"
+      class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--tpress)"
+      style="--hit-edge: 1px; --att-radius: calc(var(--radius-lg) - var(--c-composer-inset)); --tpress: scale(var(--press-scale))"
     >
       <IconPlus class="size-icon-md" />
     </DropdownMenu.Trigger>
@@ -68,9 +68,10 @@
   <button
     data-slot="att-btn"
     aria-label="Attach a file or image"
-    class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale)"
+    class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--tpress)"
     onclick={() => input?.click()}
     style:--hit-edge="1px"
+    style:--tpress="scale(var(--press-scale))"
     style:--att-radius="calc(var(--radius-lg) - var(--c-composer-inset))"
     type="button"
   >

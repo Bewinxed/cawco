@@ -28,14 +28,16 @@
   {/if}
   <span
     aria-hidden="true"
-    class="grid flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/header:rotate-90 group-disabled/header:invisible"
-    data-box><IconChevronRight class="size-icon-sm" /></span
+    class="grid flex-none motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/header:transform-(--chev-turn) group-disabled/header:invisible"
+    data-box
+    style:--chev-turn="rotate(90deg)"><IconChevronRight class="size-icon-sm" /></span
   >
   {@render after?.()}
 </Collapsible.Trigger>
 
 <style>
   /* residual: unmapped */
+  /* css-scope: this file's own trigger (a Collapsible.Trigger, which takes no scoped class); only it sets this data-slot */
   :global([data-slot="thinking-steps-header"]) {
     font: inherit;
   }
@@ -45,6 +47,7 @@
      target reaches past the header instead of the header being taller. */
   /* residual: pseudo */
   @media (pointer: coarse) {
+    /* css-scope: the same trigger's touch target */
     :global([data-slot="thinking-steps-header"]:not(:disabled))::before {
       content: "";
       position: absolute;

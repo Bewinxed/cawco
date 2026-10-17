@@ -82,9 +82,10 @@
       <button
         data-slot="x"
         aria-label={dismissLabel}
-        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted motion-safe:active:scale-(--press-scale) hover:bg-surface-hover hover:text-ink-strong"
+        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted motion-safe:active:transform-(--tpress) hover:bg-surface-hover hover:text-ink-strong"
         onclick={ondismiss}
         style:--box="24px"
+        style:--tpress="scale(var(--press-scale))"
         style:--hit-edge="0px"
         style:--hit-shift="calc((24px - 44px) / 2)"
         type="button"

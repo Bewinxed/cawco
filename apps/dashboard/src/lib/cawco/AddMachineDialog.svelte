@@ -371,7 +371,7 @@
                     class="size-icon-md flex-none text-status-done-ink"
                   />
                 {/if}
-                <span class="min-w-0 truncate">{step}</span>
+                <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">{step}</span>
               </li>
             {:else}
               <!-- literal: 10px -->
@@ -380,7 +380,7 @@
                 data-current
                 style:--step-gap="10px"
               >
-                <Spinner class="size-icon-md" /><span class="min-w-0 truncate"
+                <Spinner class="size-icon-md" /><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                   >Connecting over SSH</span
                 >
               </li>

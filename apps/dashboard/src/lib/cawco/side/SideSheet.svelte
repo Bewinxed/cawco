@@ -399,6 +399,7 @@
      the surface and holds the vaul handle: the one box that comes out of the
      Preview button. The kit's own classes are utilities in a layer; these
      stand over them. */
+  /* css-scope: the kit Drawer's content this file renders; only this sheet sets data-preview-sheet on it */
   :global([data-preview-sheet][data-slot="drawer-content"]) {
     position: absolute;
     inset: 0;
@@ -412,6 +413,7 @@
     padding: 0;
     outline: none;
   }
+  /* css-scope: the same drawer content's drawn grab bar and inset card, which the sheet replaces */
   :global([data-preview-sheet][data-slot="drawer-content"]::before),
   :global([data-preview-sheet][data-slot="drawer-content"] > div:first-child) {
     display: none;
@@ -434,6 +436,7 @@
   }
   /* The card is as tall as what the snap shows (`--sheet-hidden` stands
      below the composer), so its well keeps its foot and radius above it. */
+  /* css-scope: SideSurface's card, held in this sheet's own sheet div */
   :global(
       [data-preview-sheet] [data-slot="sheet"] > [data-slot="side-card"]
     ) {

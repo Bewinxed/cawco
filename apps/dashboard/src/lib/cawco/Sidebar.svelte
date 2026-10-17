@@ -891,7 +891,7 @@
           type="button"
         >
           <IconSearch class="flex-none size-icon-md" />
-          <span class="truncate">Search sessions, projects, machines</span>
+          <span class="overflow-clip text-ellipsis whitespace-nowrap">Search sessions, projects, machines</span>
         </button>
       </div>
     {/if}

@@ -1,0 +1,28 @@
+## What a 1b lane does
+
+The invariant, unchanged: a class is a style, a state is an attribute, a hook is `data-slot`. Nothing the owner sees changes; the computed styles of every surface are identical before and after.
+
+A 1b lane clears its set's files and touches no other file: every kind-5 declaration (`/* residual: unmapped */`) becomes utilities (or one of the four kept kinds where it truly is one), and every `shadcn/no-restyle` hit is gone. It maps with the lane prompt (`lane-a.md`) and its deltas (O, Q, R1–R3), plus what 1a added below.
+
+**Order.** K1 and K2 own `src/lib/components/ui/**`. A no-restyle hit is a consumer's class on a kit part; it is cleared by the part gaining a variant or prop that draws that look (the appendix lists every hit by part, with the classes each consumer passes), and the consumer then passing the variant. So K1 and K2 land first, and sets 1–9 start on their commit. A consumer set never edits a kit file: a look K1/K2 did not make is a `needs kit variant: <part> <classes> (<site>)` line in the lane file, not an edit. A set's kind-5 work does not wait on K.
+
+**Checks, each lane, on its own files:**
+- `cd apps/dashboard && bunx eslint <files>` → no problems.
+- `bun scripts/style-residual-check.ts --list <files>` → exit 0, no `unmapped` line.
+- `flock /home/bewinxed/.cawco/workspace-cache/xdg/tailwind-landing-build.lock bunx vite build` in apps/dashboard → exit 0; `bun run typecheck` in apps/dashboard under the same lock → 0 errors, 1 warning (Shot.svelte's video captions).
+- `bun apps/dashboard/scripts/spacing-ratchet.ts` → within its ratchet.
+- When the lane touches the token JSON (it should not need to): `bun run tokens` then `bun scripts/build-tokens.ts --check` from apps/dashboard.
+
+## What 1a added to the map
+
+- **R4, one side's border.** `border-bottom: 1px solid X` paints one side; Tailwind's whole-border colour `border-X` paints all four (the base `* { border-color: var(--border) }` stood on the other three, and the snapshot reads every side). Write the side's colour: `border-b border-b-X` (`border-t-`, `border-s-`, `border-bs-` …). `.row + .row { border-top: … }` on a list of rows is `not-first:border-t not-first:border-t-X`, never `border-t first:border-t-0`.
+- **R5, one side taken away.** `border-bottom: 0` (or `border-block-end: none`) also takes that side's style and colour back (`none`, currentcolor); `border-b-0` zeroes only the width, and Tailwind has no per-side style. Write app.css's `border-t-none`, `border-b-none`, `border-l-none`, `border-r-none`, `border-s-none`: each is the shorthand itself and sorts after every border utility of its variant, so it wins as the source rule did. `border: 0` plus one side (`border: 0; border-top: 1px solid X`) is `border-t border-t-X border-r-none border-b-none border-l-none`. One dashed side is `border-t border-t-dashed …` (`border-dashed` dashes all four). Another side's form joins these in app.css, with its own tailwind-merge group in `src/lib/utils.ts`.
+- **Transforms (the orchestrator's ruling).** A source `transform: <function>(…)` stays on `transform`: `transform-(--x)` with the function in a custom property on the element (`style:--tpress="scale(var(--press-scale))"`, `--chev-turn: rotate(90deg)`, `--chev-flip: scaleY(-1)`; a component takes it in its `style` prop). Never `scale-*`, `translate-*` or `rotate-*` for it: those write the separate `scale`, `translate` and `rotate` properties, which a transition naming `transform` does not animate and the snapshot reads apart. A transition list keeps the source's property names (`transform`, not `scale`). Where the source wrote the property itself (`scale:`, `translate:`, `rotate:`), the utility is exact.
+- **Transitions.**
+  - A kind-5 transition whose value a `--transition-*` token holds takes `transition-<token>`: each set's list below names it. The token is the source's text, so the residual and its literal custom properties go (Composer's `--step-aside` is `transition-fade-show`'s value: its two readers take `transition-fade-show`).
+  - One duration and one easing over a property list stays the lane rule: `transition-[a,b] dur-X ease-Y` (the compare expands each longhand list to the length of `transition-property`, as CSS does).
+  - Durations or easings from the element's own custom properties (ScreenEdges, EffortPips' fill, CompactionDivider, TabItem, PaneTabs' choose): `transition-[a,b]` with `duration-(--d)` and `ease-(--e)`, where `--d`/`--e` are the per-property lists set on the element in the source's order (`style:--edge-top-durs="var(--edge-top-fade), var(--edge-show-fade)"`); `delay-(--x)` likewise. No root token can hold them: a custom property's `var()` resolves where it is declared.
+  - `transition: none` is app.css's `transition-off`. Tailwind's `transition-none` sets only `transition-property`; the element's other durations would stay.
+  - Different durations per property, all of them tokens, with no token yet: a `needs transition token:` line; it is not written as a literal.
+- **Borders, the R2 form.** `border: 0` / `border: none` is `border-none border-current` (R2), and a side added to it follows R5 above.
+- **Kit variants (K1, K2).** A variant is named for what it means, in the part's recipe (`tv`/`cva` in the kit file), and draws exactly the classes the consumers pass today. Where consumers pass different looks to one part, each look is its own variant value, never a merged one. A consumer's layout classes stay on it (no-restyle allows `layout`).

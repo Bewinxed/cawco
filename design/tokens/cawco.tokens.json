@@ -5499,20 +5499,6 @@
         }
       }
     },
-    "transition-control-scale": {
-      "$type": "transition",
-      "$value": {
-        "duration": "{motion.dur-control}",
-        "delay": { "value": 0, "unit": "ms" },
-        "timingFunction": "{motion.ease-out}"
-      },
-      "$description": "transition-control, and the press's scale property on the toggle's beat.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, scale {motion.dur-toggle} {motion.ease-out}"
-        }
-      }
-    },
     "transition-control-slide": {
       "$type": "transition",
       "$value": {
@@ -5541,17 +5527,17 @@
         }
       }
     },
-    "transition-tint-scale": {
+    "transition-chip-settle": {
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
         "delay": { "value": 0, "unit": "ms" },
         "timingFunction": "{motion.ease-out}"
       },
-      "$description": "A chip whose fill and ink settle on the panel's beat, its press scale on the toggle's (a rollout's state chip).",
+      "$description": "A chip whose fill and ink settle on the panel's beat, its press (transform) on the toggle's (a rollout's state chip).",
       "$extensions": {
         "dev.cawco": {
-          "css": "background-color {motion.dur-panel} {motion.ease-out}, color {motion.dur-panel} {motion.ease-out}, scale {motion.dur-toggle} {motion.ease-out}"
+          "css": "background-color {motion.dur-panel} {motion.ease-out}, color {motion.dur-panel} {motion.ease-out}, transform {motion.dur-toggle} {motion.ease-out}"
         }
       }
     },
@@ -5562,10 +5548,10 @@
         "delay": { "value": 0, "unit": "ms" },
         "timingFunction": "{motion.ease-out}"
       },
-      "$description": "A choice card's outline and fill on the fade's beat, its press scale on the control's (the account strategy picker).",
+      "$description": "A choice card's outline and fill on the fade's beat, its press (transform) on the control's (the account strategy picker).",
       "$extensions": {
         "dev.cawco": {
-          "css": "border-color {motion.dur-fade} {motion.ease-out}, background-color {motion.dur-fade} {motion.ease-out}, scale {motion.dur-control} {motion.ease-out}"
+          "css": "border-color {motion.dur-fade} {motion.ease-out}, background-color {motion.dur-fade} {motion.ease-out}, transform {motion.dur-control} {motion.ease-out}"
         }
       }
     },
@@ -5692,6 +5678,34 @@
       "$extensions": {
         "dev.cawco": {
           "css": "transform {motion.dur-toggle} {motion.ease-out}, width {motion.dur-toggle} {motion.ease-out}, height {motion.dur-toggle} {motion.ease-out}, opacity {motion.dur-ghost} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-fold-fade": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-exit}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-exit} {motion.ease-out}, filter {motion.dur-exit} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-morph-fade": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-morph}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-morph} {motion.ease-out}, filter {motion.dur-morph} {motion.ease-out}"
         }
       }
     }

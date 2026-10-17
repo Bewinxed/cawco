@@ -365,13 +365,13 @@
   }
 </script>
 
-<!-- mark-line: a grid whose first row is the mark line; its words take
-     .mark-text, centred on the lead (the rows under it hold other things) -->
 <!-- The session's mark leading on the title's line; the title and its wait;
      what it wants, two lines at most; then the kind and where; a
      permission's peers under them. Its machine is offline: it stands,
      dimmed as every stale row is. -->
 <!-- literal: auto minmax(0, 1fr) auto; 44px; 24px -->
+<!-- mark-line: a grid whose first row is the mark line; its words take
+     .mark-text, centred on the lead (the rows under it hold other things) -->
 <div
   data-slot="row"
   class="group/row relative grid min-h-(--row-min) grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"

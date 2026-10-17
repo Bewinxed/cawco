@@ -43,7 +43,8 @@ const twMergeConfig = {
     classGroups: {
       "font-size": [{ "text-size": utilities("text-size") }],
       "bg-image": [{ bg: utilities("bg") }],
-      transition: [{ transition: utilities("transition") }],
+      // The theme's transition tokens, and app.css's `transition-off`.
+      transition: [{ transition: [...utilities("transition"), "off"] }],
       duration: [{ dur: durations }],
       "animation-duration": [{ "anim-dur": durations }],
       "type-role": [{ type: utilities("type") }],

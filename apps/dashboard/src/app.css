@@ -2288,6 +2288,13 @@
   border-top-style: dashed;
 }
 
+/* No transition, as `transition: none` writes it: every longhand back to its
+   initial value. Tailwind's `transition-none` sets only the property, and
+   leaves a duration and curve the element set elsewhere. */
+@utility transition-off {
+  transition: none;
+}
+
 /* A field that frames a borderless editor with its own controls beside it
    (a composer, a search box with an icon): the frame is the text field. Its
    border takes the ring while the text inside has focus, not while one of

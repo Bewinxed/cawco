@@ -191,8 +191,8 @@
         </button>
       {:else if kind === "video"}
         <!-- svelte-ignore a11y_media_has_caption -->
-        <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
         <!-- literal: 24rem -->
+        <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
         <video
           class="block w-full max-h-(--video-max) rounded-sm bg-surface-recess"
           controls

@@ -67,8 +67,8 @@
     style:--thumb-w="calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n))"
   ></span>
   {#each items as item (item.value)}
-    <!-- biome-ignore lint/a11y/useSemanticElements: a designed segmented control with a sliding thumb; native radios cannot render it -->
     <!-- literal: 6px gap, 10px inline padding -->
+    <!-- biome-ignore lint/a11y/useSemanticElements: a designed segmented control with a sliding thumb; native radios cannot render it -->
     <button
       data-slot="tab"
       aria-checked={item.value === value}

@@ -2242,11 +2242,13 @@
     :global([data-session-card]:not([data-vaul-drawer])[data-state="closed"]) {
       animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
     }
+    /* css-scope: this dialog's own scrim, the overlay primitive it renders, which takes no scoped class */
     :global(
       [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="open"]
     ) {
       animation: ns-scrim var(--dur-panel) var(--ease-out) both;
     }
+    /* css-scope: the same scrim, leaving */
     :global(
       [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="closed"]
     ) {

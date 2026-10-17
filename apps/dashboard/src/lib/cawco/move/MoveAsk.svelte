@@ -30,8 +30,9 @@
       <span
         data-slot="chev"
         aria-hidden="true"
-        class="inline-grid motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out data-open:rotate-90"
+        class="inline-grid motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out data-open:transform-(--chev-turn)"
         data-open={open || undefined}
+        style:--chev-turn="rotate(90deg)"
         data-box><IconChevronRight class="size-icon-sm" /></span
       >
     </Collapsible.Trigger>

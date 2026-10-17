@@ -1056,12 +1056,6 @@
       border-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
       transform var(--dur-toggle) var(--ease-out);
-    /* transition-control, and the press's scale property on the toggle's beat. */
-    --transition-control-scale:
-      background-color var(--dur-control) var(--ease-out),
-      border-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      scale var(--dur-toggle) var(--ease-out);
     /* transition-control, and a swiped row's translate home on the exit's beat. */
     --transition-control-slide:
       background-color var(--dur-control) var(--ease-out),
@@ -1074,16 +1068,16 @@
       border-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
       box-shadow var(--dur-control) var(--ease-out);
-    /* A chip whose fill and ink settle on the panel's beat, its press scale on the toggle's (a rollout's state chip). */
-    --transition-tint-scale:
+    /* A chip whose fill and ink settle on the panel's beat, its press (transform) on the toggle's (a rollout's state chip). */
+    --transition-chip-settle:
       background-color var(--dur-panel) var(--ease-out),
       color var(--dur-panel) var(--ease-out),
-      scale var(--dur-toggle) var(--ease-out);
-    /* A choice card's outline and fill on the fade's beat, its press scale on the control's (the account strategy picker). */
+      transform var(--dur-toggle) var(--ease-out);
+    /* A choice card's outline and fill on the fade's beat, its press (transform) on the control's (the account strategy picker). */
     --transition-pick-card:
       border-color var(--dur-fade) var(--ease-out),
       background-color var(--dur-fade) var(--ease-out),
-      scale var(--dur-control) var(--ease-out);
+      transform var(--dur-control) var(--ease-out);
     /* A frame gliding between cards: its leading edge moves at once, its trailing edge a ghost's beat later, so it stretches then settles (the channel cards). */
     --transition-frame-end-first:
       inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms,
@@ -1128,6 +1122,14 @@
       width var(--dur-toggle) var(--ease-out),
       height var(--dur-toggle) var(--ease-out),
       opacity var(--dur-ghost) var(--ease-out);
+    /* A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this. */
+    --transition-fold-fade:
+      opacity var(--dur-exit) var(--ease-out),
+      filter var(--dur-exit) var(--ease-out);
+    /* A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this. */
+    --transition-morph-fade:
+      opacity var(--dur-morph) var(--ease-out),
+      filter var(--dur-morph) var(--ease-out);
   }
 
   :root.dark {

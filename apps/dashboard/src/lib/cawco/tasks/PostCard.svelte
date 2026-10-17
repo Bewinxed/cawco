@@ -154,8 +154,8 @@
                 />
               {:else if kind === "video"}
                 <!-- svelte-ignore a11y_media_has_caption -->
-                <!-- biome-ignore lint/a11y/useMediaCaption: a post's media file carries no caption track -->
                 <!-- literal: 16rem -->
+                <!-- biome-ignore lint/a11y/useMediaCaption: a post's media file carries no caption track -->
                 <video
                   class="max-h-(--max-h) max-w-full rounded-sm"
                   controls

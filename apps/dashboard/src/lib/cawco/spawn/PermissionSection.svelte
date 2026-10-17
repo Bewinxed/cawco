@@ -94,8 +94,8 @@
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
     {@const on = row.value === value}
-    <!-- biome-ignore lint/a11y/useSemanticElements: the permission rows are designed tiles with a sliding fill; a native radio cannot render them -->
     <!-- literal: 10px gap, 6px 8px padding, 26px tile -->
+    <!-- biome-ignore lint/a11y/useSemanticElements: the permission rows are designed tiles with a sliding fill; a native radio cannot render them -->
     <button
       data-slot="row"
       aria-checked={on}

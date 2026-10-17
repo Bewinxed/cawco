@@ -126,8 +126,8 @@
         data-slot="strategy-picker-card"
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
-        class="group flex min-w-0 cursor-pointer flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] dur-fade ease-out hover:border-border-control aria-checked:border-focus-ring aria-checked:hover:border-focus-ring focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:active:scale-(--card-press)"
-        style:--card-press="0.995"
+        class="group flex min-w-0 cursor-pointer flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] dur-fade ease-out hover:border-border-control aria-checked:border-focus-ring aria-checked:hover:border-focus-ring focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:active:transform-(--card-press)"
+        style:--card-press="scale(0.995)"
         onclick={(event) => {
           if (!(event.target as HTMLElement).closest('select, [data-slot="order"]')) {
             choose(strategy);
@@ -226,7 +226,7 @@
       transition:
         border-color var(--dur-fade) var(--ease-out),
         background-color var(--dur-fade) var(--ease-out),
-        scale var(--dur-control) var(--ease-out);
+        transform var(--dur-control) var(--ease-out);
     }
   }
   [data-slot="strategy-picker-card"][aria-checked="true"] {

@@ -666,7 +666,7 @@
      waiting when there are several ("2 of 3"): they come one at a time.
      The title, the body and the foot come up with the shape one after the
      other, by opacity and translate alone, and sink back together as it
-     folds (`.part`; its transition stays in <style>). -->
+     folds (`.part`; its transition stays in the style block). -->
 {#snippet title(text: string)}
   <h2
     class="part mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"

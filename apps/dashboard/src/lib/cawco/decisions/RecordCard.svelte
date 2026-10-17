@@ -210,7 +210,7 @@
       >
         <div
           data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-[opacity,filter] dur-exit ease-out group-data-open/fold:opacity-100 group-data-open/fold:filter-none group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
         >
           <div class="flex flex-col gap-space-2 pt-space-3">
             {#if card.why}

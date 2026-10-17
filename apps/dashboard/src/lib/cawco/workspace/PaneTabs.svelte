@@ -1920,13 +1920,13 @@
   /* residual: foreign-dom — the details card's own box (HangCard's
      portalled bits-ui content, `data-session-details-popover`), its sizes
      set on the card (`--details-*`, the HangCard's style). */
-  /* css-scope: the details card, HangCard's portalled content, found by its data hook */
   /* The card is a HangCard on its tab (`tab`): one silhouette with it, its
      outline, its cast and its open and close the component's. Its content
      runs edge to edge; its head is its tab's surface. Its width is where
      it is placed (`placeOf`): 416px, the screen less its margins at most.
      A phone's card stands a margin in from each side, under its tab, and
      holds clear of the screen's foot. */
+  /* css-scope: the details card, HangCard's portalled content, found by its data hook */
   :global(.kit-pop[data-session-details-popover]) {
     display: flex;
     z-index: 60;
@@ -2159,6 +2159,7 @@
      everything the card holds, and each rewrite restyled all of it. Only
      the card reads them (its `max-height`): they stop at its children,
      which hold values of their own that no rewrite changes. */
+  /* css-scope: the same details card's children */
   :global(.kit-pop[data-session-details-popover] > *) {
     --bits-floating-transform-origin: initial;
     --bits-floating-available-width: initial;
@@ -2192,12 +2193,14 @@
      repaint of the card. The glide to another tab: the wrapper's move and
      the card's height together; the outline follows them frame by frame
      (HangCard). */
+  /* css-scope: bits-ui's floating wrapper, only while it holds the details card */
   :global(
     [data-bits-floating-content-wrapper]:has(> [data-session-details-popover])
   ) {
     will-change: transform;
   }
   @media (prefers-reduced-motion: no-preference) {
+    /* css-scope: the same wrapper, while the card glides between tabs */
     :global(
       [data-bits-floating-content-wrapper]:has(
         > [data-session-details-popover][data-morph]

@@ -294,8 +294,8 @@
             out:glyphOut
             >{#if d.favicon && !brokenIcons.has(d.favicon)}
               {@const src = d.favicon}
-              <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
               <!-- literal: 14px -->
+              <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
               <img
                 alt=""
                 class="col-start-1 row-start-1 size-(--fav) block rounded-xs"

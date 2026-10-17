@@ -85,11 +85,11 @@
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   bind:this={section}
 >
-  <!-- mark-line: its icons are controls at the head's end, each its own
-       button, not marks set beside the title -->
   <!-- One header: its first word, the switch's or the title's, stands on
        the well's left edge. -->
   <!-- literal: 44px, 30px -->
+  <!-- mark-line: its icons are controls at the head's end, each its own
+       button, not marks set beside the title -->
   <header
     data-slot="side-head"
     class="flex h-(--head-h) shrink-0 items-center gap-space-1 group-data-expanded-recessed/card:px-(--expanded-inset) motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
