@@ -129,7 +129,10 @@ const refusingServer = () => {
       if (request.method !== "POST") {
         return new Response(null, { status: 405 });
       }
-      const message = (await request.json()) as { id?: unknown; method?: string };
+      const message = (await request.json()) as {
+        id?: unknown;
+        method?: string;
+      };
       if (message.id === undefined) {
         return new Response(null, { status: 202 });
       }
@@ -232,7 +235,9 @@ async function run(kit: Kit): Promise<void> {
   /** One action proposed for the task by the project's session; its id. */
   const propose = async (text: string, reason: string): Promise<string> => {
     const before = new Set(
-      fleet.query<{ id: string }>("SELECT id FROM actions").map((filed) => filed.id)
+      fleet
+        .query<{ id: string }>("SELECT id FROM actions")
+        .map((filed) => filed.id)
     );
     sent += 1;
     const marker = String(sent);
@@ -262,8 +267,10 @@ async function run(kit: Kit): Promise<void> {
     return row.id;
   };
   const stateOf = (id: string) =>
-    fleet.query<{ state: string }>("SELECT state FROM actions WHERE id = ?", id)[0]
-      ?.state;
+    fleet.query<{ state: string }>(
+      "SELECT state FROM actions WHERE id = ?",
+      id
+    )[0]?.state;
 
   const web = await fleet.dashboard();
   const webPage = async (view: "iphone" | "ipad", theme: Theme) =>
@@ -334,7 +341,9 @@ async function run(kit: Kit): Promise<void> {
 
       const appShot = async (name: string) => {
         const file = join(keep, `${name}.png`);
-        await sh(`xcrun simctl io ${udid} screenshot "${file}" >/dev/null 2>&1`);
+        await sh(
+          `xcrun simctl io ${udid} screenshot "${file}" >/dev/null 2>&1`
+        );
         return file;
       };
       const heardSince = (start: number, test: (line: string) => boolean) =>
@@ -347,7 +356,8 @@ async function run(kit: Kit): Promise<void> {
        */
       const cardLeft = (id: string) => (line: string) =>
         line === `gone task-action-${id}` ||
-        (line.startsWith(`part task-action-${id} `) && line.includes("shows=false"));
+        (line.startsWith(`part task-action-${id} `) &&
+          line.includes("shows=false"));
       /**
        * The element whose accessibility identifier is `id`, tapped at its
        * activation point once it stands (axe waits up to 15 s). One that
@@ -383,8 +393,9 @@ async function run(kit: Kit): Promise<void> {
               heardSince(
                 from,
                 (line) =>
-                  line.includes(`probe catalog left out: machine ${machine} `) &&
-                  line.includes(" said ")
+                  line.includes(
+                    `probe catalog left out: machine ${machine} `
+                  ) && line.includes(" said ")
               ),
             Boolean,
             60_000
@@ -394,7 +405,9 @@ async function run(kit: Kit): Promise<void> {
             from,
             (line) =>
               line.startsWith("toast shown:") &&
-              line.includes(machine === FAILING ? "couldn't list" : "didn't answer")
+              line.includes(
+                machine === FAILING ? "couldn't list" : "didn't answer"
+              )
           );
           const shot = said ? await appShot(`${at}-toast-${machine}`) : "";
           const words =
@@ -403,7 +416,9 @@ async function run(kit: Kit): Promise<void> {
               : "didn't answer within 10 s, so its stored sessions are the ones it listed last."; // harnessDidntAnswer
           kit.check(
             `${at}: 1: ${machine}'s left-out harness is said in its own toast, in core's words`,
-            Boolean(said && toast?.includes("opencode on ") && toast.includes(words)),
+            Boolean(
+              said && toast?.includes("opencode on ") && toast.includes(words)
+            ),
             `${toast ?? said ?? "no toast"}${shot ? ` → ${shot}` : ""}`
           );
         }
@@ -428,15 +443,21 @@ async function run(kit: Kit): Promise<void> {
         const sheetShot = await appShot(`${at}-sheet`);
         const decided = heardSince(
           from,
-          (line) => line.includes("part task-decided ") && line.includes("says=Decided on ")
+          (line) =>
+            line.includes("part task-decided ") &&
+            line.includes("says=Decided on ")
         );
         kit.check(
           `${at}: 2: both actions stand in the sheet's needs, Deny and Approve on each`,
           cards &&
             [first, second].every(
               (id) =>
-                heardSince(from, (line) => line.includes(`part task-action-deny-${id} `)) &&
-                heardSince(from, (line) => line.includes(`part task-action-approve-${id} `))
+                heardSince(from, (line) =>
+                  line.includes(`part task-action-deny-${id} `)
+                ) &&
+                heardSince(from, (line) =>
+                  line.includes(`part task-action-approve-${id} `)
+                )
             ),
           `→ ${sheetShot}`
         );
@@ -467,7 +488,9 @@ async function run(kit: Kit): Promise<void> {
           .catch(() => "");
         await page.waitForTimeout(4500);
         const webSheet = await webShot(page, `${at}-web-sheet`);
-        kit.note(`${at}: web counterparts ${webToast || "(no toast)"} ${webSheet}`);
+        kit.note(
+          `${at}: web counterparts ${webToast || "(no toast)"} ${webSheet}`
+        );
         await page.close();
       }
 
@@ -505,8 +528,11 @@ async function run(kit: Kit): Promise<void> {
       const removeShown = await until(
         `${at}: 2: its card says it failed, with Remove`,
         () =>
-          heardSince(from, (line) =>
-            line.includes(`part task-action-remove-${left} `) && line.includes("shows=true")
+          heardSince(
+            from,
+            (line) =>
+              line.includes(`part task-action-remove-${left} `) &&
+              line.includes("shows=true")
           ),
         Boolean,
         30_000
@@ -524,7 +550,9 @@ async function run(kit: Kit): Promise<void> {
         "[data-slot='needs']"
       );
       await failedPage.waitForTimeout(4500);
-      kit.note(`${at}: web failed card ${await webShot(failedPage, `${at}-web-action-failed`)}`);
+      kit.note(
+        `${at}: web failed card ${await webShot(failedPage, `${at}-web-action-failed`)}`
+      );
       await failedPage.close();
       from = heard.length;
       const removed = await tap(`task-action-remove-${left}`);
@@ -549,7 +577,9 @@ async function run(kit: Kit): Promise<void> {
       const opened = await until(
         `${at}: 3: the decision's artifact opened`,
         () =>
-          heardSince(from, (line) => line.startsWith("decided opens artifact ")),
+          heardSince(from, (line) =>
+            line.startsWith("decided opens artifact ")
+          ),
         Boolean,
         30_000
       ).catch(() => undefined);
@@ -559,7 +589,11 @@ async function run(kit: Kit): Promise<void> {
       kit.check(
         `${at}: 3: "Decided on" opens the pricing page's artifact in its writer's session`,
         pressed &&
-          Boolean(opened?.includes(`artifact ${artifact} in ${seeded.writers.pricing}`)),
+          Boolean(
+            opened?.includes(
+              `artifact ${artifact} in ${seeded.writers.pricing}`
+            )
+          ),
         `${opened ?? `tapped ${pressed}; no open line`} → ${openedShot}`
       );
       await writeFile(join(keep, `${tag}.log`), heard.join("\n"));
@@ -569,7 +603,9 @@ async function run(kit: Kit): Promise<void> {
     }
   }
   await server.stop(true);
-  await cp(kit.out, join(keep, "kit-out"), { recursive: true }).catch(() => undefined);
+  await cp(kit.out, join(keep, "kit-out"), { recursive: true }).catch(
+    () => undefined
+  );
   kit.note(`captures: ${keep}`);
 }
 
