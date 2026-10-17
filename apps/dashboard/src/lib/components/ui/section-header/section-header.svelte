@@ -17,37 +17,23 @@
   } = $props();
 </script>
 
-<div data-slot="head" class={["head", { wrap }]}>
-  <div class="left">
-    <Icon style={`color:${hue}`} />
-    <span>{label}</span>
+<!-- literal: 8px -->
+<div
+  data-slot="head"
+  class="flex items-center justify-between gap-(--gap) data-wrap:flex-wrap"
+  data-wrap={wrap || undefined}
+  style:--gap="8px"
+>
+  <!-- literal: 8px -->
+  <div
+    class="flex items-center gap-(--gap)"
+    style:--gap="8px"
+    style:--hue={hue}
+  >
+    <Icon class="size-icon-md flex-none text-(--hue)" />
+    <span class="type-label">{label}</span>
   </div>
   {#if right}
     {@render right()}
   {/if}
 </div>
-
-<style>
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .wrap {
-    flex-wrap: wrap;
-  }
-  .left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .left :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .left span {
-    font: var(--type-label);
-  }
-</style>
