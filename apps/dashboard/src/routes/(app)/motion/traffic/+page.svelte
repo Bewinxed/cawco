@@ -354,29 +354,35 @@
 
 <svelte:head><title>Traffic bench · CawCo</title></svelte:head>
 
-<div class="bench">
-  <header>
-    <h1>Arrival traffic</h1>
-    <p>
+<!-- The page's box, never its rows': the bench stands in the shell's page,
+     shorter than the window, and a `100dvh` flex item with an automatic
+     minimum shrank only as far as its content let it, so the transcript's
+     scroller grew with the list until the list filled it. A pane's scroller
+     is a fixed box; virtua resizing it from inside its own measure was a
+     ResizeObserver loop no real pane has. -->
+<div class="flex min-h-0 flex-auto flex-col bg-surface-recess">
+  <header class="border-b border-border-hairline px-space-5 py-space-4">
+    <h1 class="text-size-title font-medium text-ink-strong">Arrival traffic</h1>
+    <p class="mt-space-1 text-size-body font-normal text-ink-muted">
       The real transcript, driven without a model. Sequence it from
-      <code>window.__traffic</code>, or use these.
+      <code class="font-mono">window.__traffic</code>, or use these.
     </p>
-    <div data-slot="controls" class="controls">
-      <button onclick={() => reset(14)} type="button">load history</button>
-      <button onclick={() => run(6, 900)} type="button">6 tools @900ms</button>
-      <button onclick={() => run(6, 120)} type="button">6 tools @120ms</button>
-      <button onclick={() => assistant("A settled turn.")} type="button">
+    <div data-slot="controls" class="mt-space-3 flex flex-wrap items-center gap-space-2">
+      <button class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong hover:bg-surface-hover" onclick={() => reset(14)} type="button">load history</button>
+      <button class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong hover:bg-surface-hover" onclick={() => run(6, 900)} type="button">6 tools @900ms</button>
+      <button class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong hover:bg-surface-hover" onclick={() => run(6, 120)} type="button">6 tools @120ms</button>
+      <button class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong hover:bg-surface-hover" onclick={() => assistant("A settled turn.")} type="button">
         assistant
       </button>
-      <button onclick={() => note("task done")} type="button">note</button>
-      <button onclick={() => reset(0)} type="button">reset</button>
-      <span data-slot="count" class="count"
+      <button class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong hover:bg-surface-hover" onclick={() => note("task done")} type="button">note</button>
+      <button class="cursor-pointer rounded-xs border border-border-hairline bg-transparent px-space-2 py-space-1 text-size-label font-medium text-ink-strong hover:bg-surface-hover" onclick={() => reset(0)} type="button">reset</button>
+      <span data-slot="count" class="num text-size-meta font-normal text-ink-muted"
         >{session.messages.length} messages</span
       >
     </div>
   </header>
 
-  <div data-slot="pane" class="pane">
+  <div data-slot="pane" class="flex min-h-0 flex-auto flex-col">
     {#key generation}
       <Transcript
         agentName="Traffic"
@@ -390,72 +396,3 @@
     {/key}
   </div>
 </div>
-
-<style>
-  /* The page's box, never its rows': the bench stands in the shell's page,
-     shorter than the window, and a `100dvh` flex item with an automatic
-     minimum shrank only as far as its content let it, so the transcript's
-     scroller grew with the list until the list filled it. A pane's scroller
-     is a fixed box; virtua resizing it from inside its own measure was a
-     ResizeObserver loop no real pane has. */
-  .bench {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    background: var(--surface-recess);
-  }
-  header {
-    padding: var(--space-4) var(--space-5);
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  h1 {
-    font-size: var(--text-title);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  header p {
-    margin-top: var(--space-1);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  code {
-    font-family: var(--font-mono);
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-top: var(--space-3);
-  }
-  button {
-    border-radius: var(--radius-xs);
-    border: 1px solid var(--border-hairline);
-    background: transparent;
-    padding: var(--space-1) var(--space-2);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    cursor: pointer;
-  }
-  button:hover {
-    background: var(--surface-hover);
-  }
-  .count {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* A bounded scroller: scroll position decides whether the transcript
-     follows the tail, and a transcript that cannot scroll cannot reproduce
-     what the operator sees. */
-  .pane {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-</style>

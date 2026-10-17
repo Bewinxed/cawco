@@ -50,7 +50,7 @@
 
 <svelte:head><title>Finishing sign-in · CawCo</title></svelte:head>
 
-<div class="page">
+<div class="min-w-0 flex-auto overflow-y-auto p-space-6">
   {#if failure}
     <EmptyState
       icon={IconWarningTriangle}
@@ -62,24 +62,12 @@
       {/snippet}
     </EmptyState>
   {:else if signedIn}
-    <p class="working" role="status">
+    <p class="type-body text-ink-muted" role="status">
       {signedIn}
       is signed in for the whole fleet. You can close this tab.
     </p>
   {:else}
-    <p class="working" role="status">Finishing sign-in…</p>
+    <p class="type-body text-ink-muted" role="status">Finishing sign-in…</p>
   {/if}
 </div>
 
-<style>
-  .page {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-y: auto;
-    padding: var(--space-6);
-  }
-  .working {
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-</style>

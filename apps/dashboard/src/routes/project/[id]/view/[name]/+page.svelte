@@ -79,22 +79,19 @@
 <!-- Named as the project page's tab names it. -->
 <svelte:head><title>{stageLabel(name)} · CawCo</title></svelte:head>
 
-<main class="view-alone" data-view-alone={name}>
+<main
+  class="min-h-(--min-h) bg-surface-recess pt-space-4 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left)"
+  data-view-alone={name}
+  style:--min-h="100dvh"
+  style:--pad-bottom="max(var(--space-4), var(--safe-bottom))"
+  style:--pad-left="max(var(--space-4), env(safe-area-inset-left))"
+  style:--pad-right="max(var(--space-4), env(safe-area-inset-right))"
+>
   {#if problem}
     <EmptyState icon={IconAlert} line={problem} title="This view didn't open" />
   {:else if view}
     <ViewOpenUi {hrefOf} onopen={open} {projectId} {view} />
   {:else}
-    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+    <Skeleton class="h-64 w-full rounded-lg" />
   {/if}
 </main>
-
-<style>
-  .view-alone {
-    min-block-size: 100dvh;
-    padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right))
-      max(var(--space-4), var(--safe-bottom))
-      max(var(--space-4), env(safe-area-inset-left));
-    background: var(--surface-recess);
-  }
-</style>
