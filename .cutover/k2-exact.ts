@@ -229,6 +229,14 @@ const REWRITES: Record<
         "ArtifactMenu.svelte:306's unlayered `[aria-current=\"true\"]` ink outranks the kit's destructive ink (layer)",
     },
   ],
+  Tabs: [
+    {
+      from: ["bg-transparent"],
+      to: ["background-none"],
+      source:
+        'WorkTabs.svelte:28 at T, `:global(.work-tabs[data-slot="tabs"]) { background: none }`: the shorthand, every longhand reset',
+    },
+  ],
   ProviderLogo: [
     {
       from: ["text-hue-amber-500", "opacity-80"],

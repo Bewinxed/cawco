@@ -287,15 +287,13 @@
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
     "motion-safe:dur-ghost motion-safe:transition-[color] motion-safe:ease-out",
-    "in-variant-folder:motion-safe:transition-[color,--pick] in-variant-folder:motion-safe:duration-(--pick-durs) in-variant-folder:motion-safe:ease-(--pick-eases)",
+    "in-variant-folder:motion-safe:[transition:color_var(--dur-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "hit-pressed:bg-press-fill in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
     className
   )}
   data-flush={flush}
   data-tab-index={index}
   bind:this={node}
-  style:--pick-durs="var(--dur-ghost), var(--choose-dur)"
-  style:--pick-eases="var(--ease-out), var(--choose-ease)"
   style:--pick={pick}
   style:--z-rest={restAt}
   style:--end-pad="calc(var(--px) - 6px)"

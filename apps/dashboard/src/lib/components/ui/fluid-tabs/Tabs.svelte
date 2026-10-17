@@ -2,10 +2,11 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: a root that draws no well of its own (no fill, no
-      padding), the host's surface showing through. */
+  /** Its callers' looks: a root that draws no well of its own (no
+      background, as `background: none` writes it, and no padding), the
+      host's surface showing through. */
   export const tabsVariants = tv({
-    variants: { fill: { none: "bg-transparent p-0" } },
+    variants: { fill: { none: "background-none p-0" } },
   });
 
   export type TabsLooks = VariantProps<typeof tabsVariants>;

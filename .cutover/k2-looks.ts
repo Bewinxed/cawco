@@ -995,10 +995,18 @@ const BACKGROUND = [
         &:last-child { padding-inline-end: var(--px); }
       }`,
     cases: grid({
+      host: ["rail", "task sheet"],
       tag: ["button", "a"],
       state: ["rest", "hover", "focus-visible", "active"],
       media: MEDIA,
     }).map((c) => {
+      // The rail's tabs (WorkTabs `variant="rail"`), and the task sheet's
+      // Review and Details (TaskPane, compact Tabs, an unchosen tab's muted
+      // ink, the colour `outline: none` hands the outline).
+      const host =
+        c.host === "rail"
+          ? '<div data-variant="rail">'
+          : '<div data-slot="tabs" data-size="compact" class="text-ink-muted">';
       const pseudo = {
         rest: [],
         hover: ["hover"],
@@ -1014,8 +1022,8 @@ const BACKGROUND = [
         label: labelOf(c),
         media: c.media as Media,
         force: pseudo.length > 0 ? [["t", pseudo]] : [],
-        ref: `<div data-variant="rail">${hit("hit sv touch-hit")}</div>`,
-        next: `<div data-variant="rail">${hit(now)}</div>`,
+        ref: `${host}${hit("hit sv touch-hit")}</div>`,
+        next: `${host}${hit(now)}</div>`,
       };
     }),
   });
