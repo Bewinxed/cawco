@@ -99,7 +99,7 @@
       >
       <!-- literal: 40% -->
       <span
-        class="font-mono text-ink-strong group-hover/bhead:text-ink-strong text-size-label flex-none overflow-clip text-ellipsis whitespace-nowrap max-w-(--tk-max)"
+        class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-ink-strong text-size-label flex-none overflow-clip text-ellipsis whitespace-nowrap max-w-(--tk-max)"
         style:--tk-max="40%">{branch.subagentType}</span
       >
       <!-- The disclosure affordance: one glyph in currentColor, rotated by
@@ -158,7 +158,8 @@
     {#if view.running}
       <!-- literal: 68ch -->
       <p
-        class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
+        data-slot="now"
+        class="rail-line mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
         style:--measure="68ch"
       >
         <!-- literal: 5px -->
@@ -174,12 +175,14 @@
     {:else if failed && branch.error}
       <!-- literal: 68ch -->
       <p
-        class="rail-hang items-start mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink leading-body max-w-(--measure)"
+        data-slot="now"
+        class="rail-hang mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink leading-body max-w-(--measure)"
         style:--measure="68ch">{headline(branch.error)}</p>
     {:else if view.report}
       <!-- literal: 68ch -->
       <p
-        class="rail-hang items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
+        data-slot="now"
+        class="rail-hang mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
         style:--measure="68ch">{headline(view.report)}</p>
     {/if}
 
@@ -249,5 +252,12 @@
   [data-slot="rail-row"] :global(*) {
     --rail-head: var(--rail);
     --rail-gap: var(--space-4);
+  }
+
+  /* residual: unmapped */
+  /* The live line's words start the cross axis at `start`; items-start
+     writes `flex-start`, a different computed value. */
+  [data-slot="now"] {
+    align-items: start;
   }
 </style>

@@ -322,7 +322,7 @@
               <span class="flex-none font-medium">{row.verb}</span>
             {/if}
             <span
-              class="flex-initial min-w-0 overflow-clip text-ellipsis font-mono text-ink-muted"
+              class="flex-initial min-w-0 overflow-clip text-ellipsis font-(family-name:--font-mono) text-ink-muted"
               >{row.arg}</span
             >
           {:else if row?.kind === "reason"}

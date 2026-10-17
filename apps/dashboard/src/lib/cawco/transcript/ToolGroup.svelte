@@ -324,7 +324,7 @@
         >
       {/if}
       <span
-        class="font-mono text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-auto"
+        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-auto"
         title={[d.object, d.detail].filter(Boolean).join(" ") || undefined}
       >
         {#if d.object}
