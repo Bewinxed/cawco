@@ -1739,11 +1739,14 @@
       return false;
     }
     const { foot: clear, parked, shelf } = rooms;
-    if (height + clear <= viewport) {
-      return false;
-    }
+    // A list that fits its view has no scroll range to make whole, and no
+    // spare: one taken while the view was shorter (a panel still opening)
+    // is let go, not kept as a stray part of a pixel over the first row.
     const over =
-      (((viewport - olderRoom - height - parked - shelf - clear) % 1) + 1) % 1;
+      height + clear <= viewport
+        ? 0
+        : (((viewport - olderRoom - height - parked - shelf - clear) % 1) + 1) %
+          1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - spare) <= 0.001) {
       return false;
