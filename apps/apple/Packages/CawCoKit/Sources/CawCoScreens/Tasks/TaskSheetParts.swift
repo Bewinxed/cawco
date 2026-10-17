@@ -36,6 +36,11 @@ final class HostCell: UICollectionViewCell {
         view.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(view)
         hosted = view
+        // Assistive tech holds a cell's children from its first reading: a
+        // view drawn anew in the same cell (an action decided, a to-do
+        // added) left VoiceOver on the old one's elements, off screen at
+        // 0×0, and the new one unreachable. The cell names its view outright.
+        accessibilityElements = [view]
         let topConstraint = view.topAnchor.constraint(equalTo: contentView.topAnchor, constant: top)
         self.topConstraint = topConstraint
         NSLayoutConstraint.activate([
