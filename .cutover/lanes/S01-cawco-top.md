@@ -68,3 +68,9 @@ none
 - LawsBroken: `popover-open:flex` is not a variant here; `open:flex` (Tailwind's `:is([open], :popover-open, :open)`) stands in.
 - `style:` cannot sit on a component: KeyValueRows' Input and GlassCard's HangCard take `style="--…"`.
 - Process note: AddMachineDialog was converted through a Python script before I read the fleet rule against it; the other 19 files by Edit/sed.
+
+## Contracts
+contract: apps/dashboard/src/lib/cawco/ContextMeter.svelte:113 shadcn/require-static-classes | components/ui/popover/popover-trigger.svelte (kit owns its variants) | a static class string or a trigger variant for the compacting/band tone
+contract: apps/dashboard/src/lib/cawco/GlassCard.svelte:410 shadcn/require-static-classes | components/ui/hang-card (kit) | a static frame class per face (FRAME map) or a hang-card variant
+contract: apps/dashboard/src/lib/cawco/HookTester.svelte:57 shadcn/require-static-classes | components/ui/badge (kit) | a badge tone variant for all/exact/regex
+contract: apps/dashboard/src/lib/cawco/MachinesButton.svelte:79 shadcn/no-unknown-classes | cawco/Shell.svelte:1645 `.tools :global(.bar-item)` | Shell's lane turns `bar-item` into utilities or `[data-bar-item]`; `data-bar-item` hook is already on the button
