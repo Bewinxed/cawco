@@ -81,6 +81,7 @@ public struct HubAPI: Sendable {
         public func join(_ input: Operations.GetApiJoin.Input = .init()) async throws -> Operations.GetApiJoin.Output { try await client.getApiJoin(input) }
         public func connectSSH(_ input: Operations.PostApiMachinesSsh.Input) async throws -> Operations.PostApiMachinesSsh.Output { try await client.postApiMachinesSsh(input) }
         public func sshStatus(_ input: Operations.GetApiMachinesSshById.Input) async throws -> Operations.GetApiMachinesSshById.Output { try await client.getApiMachinesSshById(input) }
+        public func stopSSH(_ input: Operations.PostApiMachinesSshByIdStop.Input) async throws -> Operations.PostApiMachinesSshByIdStop.Output { try await client.postApiMachinesSshByIdStop(input) }
     }
     public struct Instances: Sendable {
         let client: Client

@@ -23,7 +23,19 @@
  *     No process's argv or environment held the password while it signed in.
  * (d) The right password again: the key is still there once.
  * (e) A key add with no password now signs in with the key (BatchMode).
+ * (g) An add stopped while it signs in: the stop answers `stopped`, its
+ *     `ssh` and every process of its group are gone, and a fresh add works.
+ * (h) A wrong password the machine answers with silence (as a firewall that
+ *     bans the address after a failed password) ends the add within
+ *     {@link SILENT_MS}, as a machine that stopped answering.
+ * (i) An add that signed in and hangs on a hub address that never answers
+ *     (the owner's: a tailnet address from a machine off the tailnet) says
+ *     it signed in, and Stop ends it.
+ * (j) Left alone, that download ends within {@link DOWNLOAD_MS}, as the
+ *     machine unable to reach the hub.
  * (f) The password is in no job's lines, the hub's log or its database.
+ *
+ * (b) and (h) are timed: a wrong password ends the add, it never spins.
  *
  *   bun scripts/probe-kit/run.ts ssh-password-join
  */
@@ -47,16 +59,51 @@ import {
 } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const USER = "probe";
 /** Quotes, `$`, a backslash, `!` and spaces: any shell that read it would change it. */
 const PASSWORD = `pw '1" $HOME \\ !x ${crypto.randomUUID()}`;
 const WRONG = `wrong ${crypto.randomUUID()}`;
-/** How long one add gets to end: a refused sign-in or a failed download. */
+/** A password the scratch target never answers: it says nothing more on that connection. */
+const SILENCED = `silenced ${crypto.randomUUID()}`;
+/** How long one add gets to end before the spec reads it as still spinning. */
 const ADD_MS = 60_000;
+/** How long a refused password may take to end the add: ssh's own round trips. */
+const REFUSED_MS = 15_000;
+/** How long a silenced sign-in may take: the hub's 10 s ServerAliveInterval, three asks, and slack. */
+const SILENT_MS = 45_000;
+/** How long a download the hub address never answers may take: curl's 60 s `--max-time`, and slack. */
+const DOWNLOAD_MS = 80_000;
 
 const PROCESS_ID = /^\d+$/;
+
+/** A process's group, from /proc/<pid>/stat (the third field after the name). */
+const groupOf = (pid: number): number | null => {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+  } catch {
+    return null;
+  }
+};
+
+/** Every live process whose argv holds all of `parts`, or whose group is `group`. */
+const processes = (match: { parts: string[] } | { group: number }): number[] =>
+  readdirSync("/proc")
+    .filter((entry) => PROCESS_ID.test(entry))
+    .map(Number)
+    .filter((pid) => {
+      if ("group" in match) {
+        return groupOf(pid) === match.group;
+      }
+      try {
+        const argv = readFileSync(`/proc/${pid}/cmdline`, "utf8");
+        return match.parts.every((part) => argv.includes(part));
+      } catch {
+        return false;
+      }
+    });
 
 /** Every process's argv and environment that holds `secret`, read from /proc. */
 const holders = (secret: string): string[] => {
@@ -78,6 +125,78 @@ const holders = (secret: string): string[] => {
   return found;
 };
 
+/** One add as a reviewer reads it in a PASS or FAIL line. */
+const seen = (job: SshJoinJob) =>
+  `${job.state} ${JSON.stringify(job.problem)} ${JSON.stringify(job.passwordProblem)}, exit ${job.exitCode}; lines ${JSON.stringify(job.lines.slice(-6))}`;
+
+/** Stops the add `id` as the dialog's Stop does: the hub's answer, or its refusal, and either said. */
+const stopAdd = (fleet: KitFleet, id: string) =>
+  fleet.api<SshJoinJob>(`/api/machines/ssh/${id}/stop`, {}).then(
+    (job) => ({ job, said: seen(job) }),
+    (error: Error) => ({ job: null, said: error.message })
+  );
+
+/** The group of the first live process whose argv holds all of `parts`. */
+const sshGroup = (parts: string[]): number | null => {
+  const pid = processes({ parts }).at(0);
+  return pid === undefined ? null : groupOf(pid);
+};
+
+/** `dir`'s and `file`'s permission bits, as `700 600`, or `none` when the file is missing. */
+const modesOf = (dir: string, file: string): string =>
+  existsSync(file)
+    ? `${statSync(dir).mode.toString(8).slice(-3)} ${statSync(file).mode.toString(8).slice(-3)}`
+    : "none";
+
+const OVER_SSH = /Over SSH/;
+
+/** (k) The dialog's password field: masked, and its toggle flips it. */
+async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
+  const page = await kit.page("desk");
+  await open(page, `${await fleet.dashboard()}/`, "button[aria-haspopup]");
+  await page.getByRole("button", { name: OVER_SSH }).first().click();
+  await page.waitForSelector("#join-password");
+  const fieldNow = () =>
+    page.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>("#join-password");
+      const toggle = document.querySelector<HTMLButtonElement>(
+        'button[aria-controls="join-password"]'
+      );
+      return {
+        type: input?.type,
+        autocomplete: input?.getAttribute("autocomplete"),
+        spellcheck: input?.getAttribute("spellcheck"),
+        autocapitalize: input?.getAttribute("autocapitalize"),
+        name: toggle?.getAttribute("aria-label"),
+        pressed: toggle?.getAttribute("aria-pressed"),
+        inside: Boolean(
+          toggle && input?.closest("[data-slot=input-group]")?.contains(toggle)
+        ),
+      };
+    });
+  const masked = await fieldNow();
+  await page.getByRole("button", { name: "Show password" }).click();
+  const shown = await fieldNow();
+  await page.getByRole("button", { name: "Hide password" }).click();
+  const maskedAgain = await fieldNow();
+  kit.check(
+    "k: the password field is masked with its attributes, and its toggle inside it flips type, name and aria-pressed",
+    masked.type === "password" &&
+      masked.autocomplete === "current-password" &&
+      masked.spellcheck === "false" &&
+      masked.autocapitalize === "off" &&
+      masked.name === "Show password" &&
+      masked.pressed === "false" &&
+      masked.inside &&
+      shown.type === "text" &&
+      shown.name === "Hide password" &&
+      shown.pressed === "true" &&
+      maskedAgain.type === "password" &&
+      maskedAgain.pressed === "false",
+    `masked ${JSON.stringify(masked)}; shown ${JSON.stringify(shown)}; masked again ${JSON.stringify(maskedAgain)}`
+  );
+}
+
 async function run(kit: Kit): Promise<void> {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const dir = join(fleet.sandbox, "ssh-target");
@@ -93,7 +212,7 @@ async function run(kit: Kit): Promise<void> {
   const hubBlob = hubPublic.split(" ").slice(0, 2).join(" ");
   writeFileSync(
     join(dir, "ssh_config"),
-    `UserKnownHostsFile ${join(dir, "known_hosts")}\nIdentityFile ${hubKey}\nIdentitiesOnly yes\nLogLevel ERROR\n`
+    `UserKnownHostsFile ${join(dir, "known_hosts")}\nIdentityFile ${hubKey}\nIdentitiesOnly yes\n`
   );
   writeFileSync(
     join(bin, "ssh"),
@@ -102,12 +221,15 @@ async function run(kit: Kit): Promise<void> {
   chmodSync(join(bin, "ssh"), 0o755);
   // Inside a workspace boundary the hub's machine has no address but
   // loopback, so `/api/join` lists none to choose. This `tailscale` gives it
-  // one, 127.0.0.2, where the hub (bound to 127.0.0.1) does not answer: the
+  // two. 127.0.0.2, where the hub (bound to 127.0.0.1) does not answer: the
   // target's `curl` of the install script is refused, which shows the
-  // install ran in the session without installing a build there.
+  // install ran in the session without installing a build there. And
+  // 127.0.0.3, its "DNS name", where a socket of this spec's accepts and
+  // never answers: a hub address that holds the download, as a tailnet
+  // address does for a machine off the tailnet.
   writeFileSync(
     join(bin, "tailscale"),
-    `#!/bin/sh\ncase "$1" in ip) echo 127.0.0.2 ;; *) echo '{}' ;; esac\n`
+    `#!/bin/sh\ncase "$1" in ip) echo 127.0.0.2 ;; *) echo '{"Self":{"DNSName":"127.0.0.3."}}' ;; esac\n`
   );
   chmodSync(join(bin, "tailscale"), 0o755);
 
@@ -115,6 +237,8 @@ async function run(kit: Kit): Promise<void> {
   const signedIn: string[] = [];
   const triedPasswords: string[] = [];
   const holdersAtSignIn: string[] = [];
+  /** How many sign-ins were met with silence ({@link SILENCED}). */
+  let silenced = 0;
   /** Whether `password` signs in by `way`, noting every try and, as it signs in, who held it. */
   const accepts = (password: string, way: string): boolean => {
     triedPasswords.push(password);
@@ -172,6 +296,10 @@ async function run(kit: Kit): Promise<void> {
     }
     switch (ctx.method) {
       case "password":
+        if (ctx.password === SILENCED) {
+          silenced += 1;
+          break;
+        }
         answer(accepts(ctx.password, "password"));
         break;
       case "keyboard-interactive":
@@ -202,13 +330,20 @@ async function run(kit: Kit): Promise<void> {
                 stdout: "pipe",
                 stderr: "pipe",
               });
+              // As sshd does: output as it comes, the exit once both ends close.
+              const relay = async (
+                from: ReadableStream<Uint8Array>,
+                to: { write: (chunk: Uint8Array) => unknown }
+              ) => {
+                for await (const chunk of from) {
+                  to.write(chunk);
+                }
+              };
               Promise.all([
-                new Response(child.stdout).text(),
-                new Response(child.stderr).text(),
+                relay(child.stdout, channel),
+                relay(child.stderr, channel.stderr),
                 child.exited,
-              ]).then(([out, err, code]) => {
-                channel.write(out);
-                channel.stderr.write(err);
+              ]).then(([, , code]) => {
                 channel.exit(code);
                 channel.end();
               });
@@ -230,30 +365,44 @@ async function run(kit: Kit): Promise<void> {
     await fleet.hubUp();
     const info = await fleet.api<{ addresses: { url: string }[] }>("/api/join");
     const hubUrl = info.addresses[0]?.url ?? "";
+    const holdingUrl = info.addresses[1]?.url ?? "";
     kit.check(
-      "the hub lists an address to hand the install",
-      hubUrl !== "",
+      "the hub lists the two addresses to hand the install",
+      hubUrl.includes("127.0.0.2") && holdingUrl.includes("127.0.0.3"),
       JSON.stringify(info.addresses)
     );
-    /** One add through the hub API, read until it ends. */
-    const add = async (password?: string): Promise<SshJoinJob> => {
-      const started = await fleet.api<SshJoinJob>("/api/machines/ssh", {
+    // Accepts the machine's `curl` and never answers it.
+    const holding = Bun.listen({
+      hostname: "127.0.0.3",
+      port: Number(new URL(fleet.base).port),
+      socket: { data: () => undefined },
+    });
+    const begin = (password?: string, address = hubUrl) =>
+      fleet.api<SshJoinJob>("/api/machines/ssh", {
         target: `${USER}@127.0.0.1`,
         port,
-        hubUrl,
+        hubUrl: address,
         ...(password === undefined ? {} : { password }),
       });
+    const read = (id: string) =>
+      fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
+    /**
+     * One add through the hub API, read until it ends, and how long that
+     * took. One still running after {@link ADD_MS} is answered as it reads.
+     */
+    const timedAdd = async (password?: string, address = hubUrl) => {
+      const from = Date.now();
+      const started = await begin(password, address);
       const ended = await until(
         `the add ${started.id} ended`,
-        () => fleet.api<SshJoinJob>(`/api/machines/ssh/${started.id}`),
+        () => read(started.id),
         (job) => job.state !== "running",
         ADD_MS
-      );
+      ).catch(() => read(started.id));
       jobs.push(ended);
-      return ended;
+      return { job: ended, ms: Date.now() - from };
     };
-    const seen = (job: SshJoinJob) =>
-      `${job.state} ${JSON.stringify(job.problem)} ${JSON.stringify(job.passwordProblem)}, exit ${job.exitCode}; lines ${JSON.stringify(job.lines.slice(-6))}`;
+    const add = async (password?: string) => (await timedAdd(password)).job;
     const keyLines = () =>
       existsSync(authorized)
         ? readFileSync(authorized, "utf8")
@@ -274,30 +423,27 @@ async function run(kit: Kit): Promise<void> {
     );
 
     // (b) A wrong password.
-    const wrong = await add(WRONG);
+    const { job: wrong, ms: wrongMs } = await timedAdd(WRONG);
     kit.check(
-      "b: a wrong password is refused and classified as the password (asked, beside a null problem while the bridge stands), and nothing is added",
+      `b: a wrong password is refused within ${REFUSED_MS / 1000} s and classified as the password (asked, beside a null problem while the bridge stands), and nothing is added`,
       wrong.problem === null &&
         wrong.passwordProblem?.asked === true &&
+        wrongMs < REFUSED_MS &&
         triedPasswords.includes(WRONG) &&
         keyLines().length === 0,
-      `${seen(wrong)}; passwords tried ${triedPasswords.length}`
+      `${seen(wrong)}; ended after ${wrongMs} ms; passwords tried ${triedPasswords.length}`
     );
 
     // (c) The right password.
     const first = await add(PASSWORD);
-    const sshDir = join(home, ".ssh");
-    const modes = existsSync(authorized)
-      ? `${statSync(sshDir).mode.toString(8).slice(-3)} ${statSync(authorized).mode.toString(8).slice(-3)}`
-      : "none";
+    const modes = modesOf(join(home, ".ssh"), authorized);
     kit.check(
       "c: the password signs in, the hub's key is added once (.ssh 700, the file 600), and the install runs in the same session",
-      signedIn.includes("password") || signedIn.includes("keyboard-interactive")
-        ? keyLines().length === 1 &&
-            keyLines()[0] === hubPublic &&
-            modes === "700 600" &&
-            installed(first)
-        : false,
+      signedIn.includes("password") &&
+        keyLines().length === 1 &&
+        keyLines()[0] === hubPublic &&
+        modes === "700 600" &&
+        installed(first),
       `${seen(first)}; signed in by ${signedIn.join(", ")}; key lines ${JSON.stringify(keyLines())}; modes ${modes}`
     );
     kit.check(
@@ -321,6 +467,88 @@ async function run(kit: Kit): Promise<void> {
       signedIn.at(-1) === "publickey" && installed(byKey),
       `${seen(byKey)}; signed in by ${signedIn.join(", ")}`
     );
+
+    // (g) Stopped while it signs in: the machine never answers the password.
+    const held = await begin(SILENCED);
+    const sshArgv = ["/usr/bin/ssh", `${USER}@127.0.0.1`, String(port)];
+    const pid = await until(
+      "the add's ssh signing in",
+      () => (silenced > 0 ? processes({ parts: sshArgv }).at(0) : undefined),
+      Boolean,
+      15_000
+    ).catch(() => undefined);
+    const group = sshGroup(sshArgv);
+    const stopped = await stopAdd(fleet, held.id);
+    const left = processes({ group: group ?? -1 });
+    const reread = await read(held.id);
+    jobs.push(reread);
+    kit.check(
+      "g: Stop ends an add that signs in: it reads stopped, its ssh and every process of its group are gone, and no step ran",
+      stopped.job?.state === "stopped" &&
+        reread.state === "stopped" &&
+        group === pid &&
+        left.length === 0 &&
+        processes({ parts: sshArgv }).length === 0 &&
+        !reread.lines.some((line) => line.startsWith("cawco-install: ")),
+      `stop answered ${stopped.said}; ssh pid ${pid}, group ${group}, left in the group ${JSON.stringify(left)}`
+    );
+    const afterStop = await add(PASSWORD);
+    kit.check(
+      "g: a fresh add after the stop signs in and runs the install",
+      installed(afterStop),
+      seen(afterStop)
+    );
+
+    // (h) A wrong password met with silence: the add ends, it never spins.
+    const { job: silent, ms: silentMs } = await timedAdd(SILENCED);
+    kit.check(
+      `h: a sign-in the machine stops answering ends within ${SILENT_MS / 1000} s, as a machine that did not answer (timed out)`,
+      silent.state === "failed" &&
+        silent.problem?.kind === "unreachable" &&
+        silent.problem.detail.includes("timed out") &&
+        silentMs < SILENT_MS,
+      `${seen(silent)}; ended after ${silentMs} ms`
+    );
+
+    // (i) Signed in, the download held by a hub address that never answers:
+    // the job says it has signed in, and Stop ends it.
+    const downloading = await begin(PASSWORD, holdingUrl);
+    const signedInRead = await until(
+      "the add past its sign-in, on its download step",
+      () => read(downloading.id),
+      (job) =>
+        job.lines.some((line) =>
+          line.startsWith("cawco-install: downloading the install script")
+        ),
+      15_000
+    ).catch(() => read(downloading.id));
+    const downloadGroup = sshGroup(sshArgv);
+    const stoppedDownload = await stopAdd(fleet, downloading.id);
+    jobs.push(await read(downloading.id));
+    kit.check(
+      "i: once signed in the job says so (its download step) while it runs, and Stop ends a download that hangs: stopped, its ssh group gone",
+      signedInRead.state === "running" &&
+        signedInRead.lines.some((line) =>
+          line.startsWith("cawco-install: downloading the install script")
+        ) &&
+        stoppedDownload.job?.state === "stopped" &&
+        downloadGroup !== null &&
+        processes({ group: downloadGroup }).length === 0,
+      `while running ${seen(signedInRead)}; stop answered ${stoppedDownload.said}; group ${downloadGroup}`
+    );
+
+    // (j) The same hanging download, left alone, ends within curl's limits.
+    const { job: held2, ms: heldMs } = await timedAdd(PASSWORD, holdingUrl);
+    kit.check(
+      `j: a download the hub address never answers ends within ${DOWNLOAD_MS / 1000} s, as the machine unable to reach the hub`,
+      held2.state === "failed" &&
+        held2.problem?.kind === "download" &&
+        heldMs < DOWNLOAD_MS,
+      `${seen(held2)}; ended after ${heldMs} ms`
+    );
+    holding.stop(true);
+
+    await passwordField(kit, fleet);
 
     // (f) Nowhere kept.
     const reads = await Promise.all(

@@ -26,12 +26,20 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { followTail } from "#lib/hooks/follow-tail.js";
-  import { IconChevronRight, IconError, IconSuccess } from "#lib/icons.js";
+  import {
+    IconChevronRight,
+    IconError,
+    IconEye,
+    IconEyeClosed,
+    IconSuccess,
+  } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
   import { failureWords } from "./hub-read";
@@ -57,10 +65,13 @@
   let port = $state("");
   /** Sent with the one add it is typed for, then cleared: nothing here keeps it. */
   let password = $state("");
+  /** The password shown as typed; masked again each time one is sent. */
+  let passwordShown = $state(false);
   let hubUrl = $state("");
   let keyOpen = $state(false);
   let checkIn = $state<CheckIn | null>(null);
   let starting = $state(false);
+  let stopping = $state(false);
   /** A waiting machine's Admit on its way, and the hub's refusal of the last. */
   let admitting = $state<string | null>(null);
   let admitRefused = $state<string | null>(null);
@@ -151,6 +162,7 @@
     starting = true;
     const typed = password;
     password = "";
+    passwordShown = false;
     try {
       await sshJoin.start({
         target: target.trim(),
@@ -184,8 +196,34 @@
       : null;
   });
 
-  /** The SSH form shows while nothing runs, and again after a failure so it can be fixed. */
+  /** The SSH form shows while nothing runs, and again after a failure or a stop so it can be fixed. */
   const view = $derived(job?.state === "running" ? "running" : "form");
+
+  /**
+   * Whether the run has signed in: the remote command prints a step line
+   * before anything else it does. Until then nothing has run on the machine,
+   * so closing the dialog leaves only a sign-in going.
+   */
+  const signedIn = $derived(job ? stepsOf(job).length > 0 : false);
+
+  async function stop() {
+    stopping = true;
+    try {
+      await sshJoin.stop();
+    } finally {
+      stopping = false;
+    }
+  }
+
+  /** A stopped run, said once the hub has ended its `ssh`. */
+  const stopped = $derived.by(() => {
+    if (job?.state !== "stopped") {
+      return null;
+    }
+    return signedIn
+      ? `Stopped the install on ${job.target}. It ends there at its next step. Retry starts it again.`
+      : `Stopped before signing in to ${job.target}. Nothing on that machine changed.`;
+  });
 
   const close = () => {
     if (joined) {
@@ -243,7 +281,7 @@
         };
       case "download":
         return {
-          text: `SSH got into ${where}, but it could not download the install script from ${job.hubUrl}. Pick a hub address that machine can reach, then Retry.`,
+          text: `${hostOf(where)} can't reach this hub at ${job.hubUrl}. Pick an address it can reach, then Retry.`,
           tail: job.lines.slice(-20),
         };
       case "step":
@@ -376,7 +414,11 @@
         {@const steps = stepsOf(job)}
         <div class="flex flex-col gap-[var(--space-3)]">
           <p class="text-body text-[var(--ink-muted)]">
-            Adding {job.target}. It keeps installing if you close this.
+            {#if signedIn}
+              Adding {job.target}. It keeps installing if you close this.
+            {:else}
+              Signing in to {job.target} over SSH.
+            {/if}
           </p>
           <ol aria-live="polite" class="steps">
             {#each steps as step, index (index)}
@@ -408,6 +450,12 @@
             </summary>
             <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
+          {#if sshJoin.refused}
+            <Alert.Root role="alert" variant="destructive">
+              <IconError aria-hidden="true" />
+              <Alert.Description>{sshJoin.refused}</Alert.Description>
+            </Alert.Root>
+          {/if}
         </div>
       {:else}
         <form
@@ -445,13 +493,36 @@
               class="field col-span-full"
             >
               <Label for="join-password">Password (optional)</Label>
-              <Input
-                aria-describedby="join-password-hint"
-                autocomplete="current-password"
-                id="join-password"
-                type="password"
-                bind:value={password}
-              />
+              <InputGroup.Root>
+                <InputGroup.Input
+                  aria-describedby="join-password-hint"
+                  autocapitalize="off"
+                  autocomplete="current-password"
+                  id="join-password"
+                  spellcheck="false"
+                  type={passwordShown ? "text" : "password"}
+                  bind:value={password}
+                />
+                <InputGroup.Addon align="inline-end">
+                  <InputGroup.Button
+                    aria-controls="join-password"
+                    aria-label={passwordShown
+                      ? "Hide password"
+                      : "Show password"}
+                    aria-pressed={passwordShown}
+                    onclick={() => {
+                      passwordShown = !passwordShown;
+                    }}
+                    size="icon-xs"
+                  >
+                    {#if passwordShown}
+                      <IconEyeClosed />
+                    {:else}
+                      <IconEye />
+                    {/if}
+                  </InputGroup.Button>
+                </InputGroup.Addon>
+              </InputGroup.Root>
               <span id="join-password-hint" class="hint">
                 Used once to add this hub's key to the machine, and not kept.
                 Leave it empty if the machine already accepts the key.
@@ -474,6 +545,10 @@
             <Alert.Root role="alert" variant="destructive">
               <IconError aria-hidden="true" />
               <Alert.Description>{sshJoin.refused}</Alert.Description>
+            </Alert.Root>
+          {:else if stopped}
+            <Alert.Root role="status">
+              <Alert.Description>{stopped}</Alert.Description>
             </Alert.Root>
           {/if}
 
@@ -531,8 +606,15 @@
       {#if starting}
         <Spinner class="size-4" />
       {/if}
-      <span>{job?.state === "failed" ? "Retry" : "Add machine"}</span>
+      <span
+        >{job?.state === "failed" || job?.state === "stopped"
+          ? "Retry"
+          : "Add machine"}</span
+      >
     </Button>
+  {:else if tab === "ssh" && view === "running" && !joined}
+    <Button label="Stop" onclick={stop} pending={stopping} variant="outline" />
+    <Button onclick={close} variant="outline">Close</Button>
   {:else}
     <Button onclick={close} variant="outline">Close</Button>
   {/if}

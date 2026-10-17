@@ -169,6 +169,30 @@ export const sshJoin = {
     }
     ssh.job = (await response.json()) as SshJoinJob;
   },
+  /**
+   * Stops the run in flight: the hub ends its `ssh` and answers once the run
+   * reads `stopped`. A refusal (it ended meanwhile) is said like a start's.
+   */
+  async stop(): Promise<void> {
+    const current = ssh.job;
+    if (current?.state !== "running") {
+      return;
+    }
+    const response = await fetch(
+      `/api/machines/ssh/${encodeURIComponent(current.id)}/stop`,
+      { method: "POST" }
+    ).catch(() => undefined);
+    if (ssh.job?.id !== current.id) {
+      return;
+    }
+    if (response?.ok) {
+      ssh.job = (await response.json()) as SshJoinJob;
+      return;
+    }
+    ssh.refused = response
+      ? (await response.text()) || `The hub answered ${response.status}.`
+      : "The hub did not answer, so the add was not stopped. Check that it is running, then Stop again.";
+  },
   /** One read of the run in flight; the dialog calls it every second while it is open. */
   async poll(): Promise<void> {
     const current = ssh.job;
