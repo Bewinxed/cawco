@@ -299,8 +299,8 @@ public final class ThreadsStore {
         adopt(read.thread)
         draw(threadId, history: true)
         #if DEBUG
-        let said = (messages[threadId] ?? []).map { "\($0.author)" }.joined(separator: ",")
-        log.notice("probe thread \(threadId, privacy: .public) read: \(read.messages.count, privacy: .public) messages [\(said, privacy: .public)]")
+        // Its own prefix and a count, never the list: a thread's `probe thread <id> …` line is the pane's state.
+        log.notice("probe thread-read \(threadId, privacy: .public) \(read.messages.count, privacy: .public) messages, \((self.messages[threadId] ?? []).count, privacy: .public) held")
         #endif
     }
 

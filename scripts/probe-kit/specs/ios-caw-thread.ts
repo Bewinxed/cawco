@@ -5,7 +5,8 @@
  * iPhone and one on an iPad, each reading the app's DEBUG log lines:
  *
  * 1. Opened at `thread:<id>`, the app lists the thread's messages in the
- *    hub's order (`probe thread … messages N [author:words | …]`), an event
+ *    hub's order (`probe thread-message <id> <n>/<count> author:words`, a
+ *    line each, so no line grows with the thread), an event
  *    that woke him (its note's title) and his words naming a file among them
  *    (rows written into the hub's store: no turn here makes them).
  * 2. Words sent from the app's composer land in the hub's thread
@@ -305,6 +306,37 @@ const SEEDED: {
   },
 ];
 
+/** ThreadViewController `probe`'s message line: its place among them, their count, and its words. */
+const MESSAGE_LINE = /^(\d+)\/(\d+) (.*)$/;
+
+/**
+ * The app's newest whole listing of the thread's messages, joined " | " in
+ * order: the pane logs each on its own line (`probe thread-message <id>
+ * <n>/<count> <author>:<words>`) whenever they change, so the newest block
+ * ending at `<count>/<count>` with every place before it is the listing.
+ */
+const listingOf = (heard: string[], threadId: string): string | undefined => {
+  const head = `probe thread-message ${threadId} `;
+  const lines = heard
+    .filter((line) => line.startsWith(head))
+    .map((line) => line.slice(head.length).match(MESSAGE_LINE))
+    .filter((m): m is RegExpMatchArray => !!m);
+  for (let end = lines.length - 1; end >= 0; end -= 1) {
+    const [, at, count] = lines[end];
+    if (at !== count) {
+      continue;
+    }
+    const block = lines.slice(end - Number(count) + 1, end + 1);
+    if (
+      block.length === Number(count) &&
+      block.every((m, i) => m[1] === String(i + 1) && m[2] === count)
+    ) {
+      return block.map((m) => m[3]).join(" | ");
+    }
+  }
+  return undefined;
+};
+
 const shown = (row: Row) =>
   `${row.author}:${(row.body ?? "").slice(0, 40).replaceAll("\n", " ")}`;
 
@@ -533,7 +565,7 @@ async function onDevice(
         `${AXE} tap -x ${Math.round(f.x + f.width / 2)} -y ${Math.round(f.y + f.height / 2)} --udid ${udid}`
       );
     };
-    /** The app's newest line about this thread. */
+    /** The app's newest line of the thread's state: its status, its count of messages, the asks on its composer. */
     const probeLine = () =>
       heard.findLast((l) => l.includes(`probe thread ${threadId} `));
     const listed = (want: (line: string) => boolean, label: string) =>
@@ -543,6 +575,17 @@ async function onDevice(
         (line) => !!line && want(line),
         90_000
       ).catch(() => probeLine());
+    /** The app's newest whole listing of the thread's messages, once `want` holds of it. */
+    const messagesListed = (
+      want: (listing: string) => boolean,
+      label: string
+    ) =>
+      until(
+        `${tag}: ${label}`,
+        () => listingOf(heard, threadId),
+        (listing) => !!listing && want(listing),
+        90_000
+      ).catch(() => listingOf(heard, threadId));
     const launch = (args: string) =>
       until(
         `${tag}: the app launched`,
@@ -557,7 +600,7 @@ async function onDevice(
     // 1. The thread lists the web's messages in order.
     await launch(`-open-session thread:${threadId}`);
     const hubOrder = ctx.rows().map(shown);
-    const first = await listed(
+    const first = await messagesListed(
       (l) => hubOrder.every((m) => l.includes(m)),
       "the thread's messages listed"
     );
@@ -612,7 +655,7 @@ async function onDevice(
 
     // 3. Caw's reply appears in the app's thread.
     await ctx.said("caw", `PROBE-REPLY-${TAG} done`);
-    const replied = await listed(
+    const replied = await messagesListed(
       (l) => l.includes(`caw:PROBE-REPLY-${TAG} done`),
       "Caw's reply in the thread"
     );
@@ -720,7 +763,7 @@ async function onDevice(
       `5 ${tag}: with two asks waiting, the thread's composer shows one card, the first, "1 of 2"`,
       !!proposed?.includes(`asks [${proposal?.requestId}]`) &&
         !!proposed?.includes("place 1 of 2"),
-      proposed
+      `proposal ${proposal?.requestId}, beside ${beside?.requestId}; ${proposed}`
     );
     await tap("prompt-approve");
     const settled = await until(
@@ -746,7 +789,7 @@ async function onDevice(
       `5 ${tag}: answered, the next ask moves in, "2 of 2"`,
       !!next?.includes(`asks [${beside?.requestId}]`) &&
         !!next?.includes("place 2 of 2"),
-      next
+      `beside ${beside?.requestId}; ${next}`
     );
     await tap("prompt-option-1-1");
     await tap("prompt-answer");
