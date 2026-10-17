@@ -108,7 +108,7 @@
 <!-- literal: 12px 12px; rotate(-90deg) -->
 <svg
   aria-hidden="true"
-  class="group block flex-none overflow-visible"
+  class="group/rings block flex-none overflow-visible"
   data-account={ring.id}
   data-disc={disc}
   data-limit={ring.state === "limit" || undefined}
@@ -131,7 +131,7 @@
     r={geometry.rd.toFixed(3)}
   />
   <circle
-    class="arc fill-none stroke-(--c) origin-(--ring-origin) transform-(--ring-turn) group-data-stale:opacity-(--account-stale-opacity)"
+    class="arc fill-none stroke-(--c) origin-(--ring-origin) transform-(--ring-turn) group-data-stale/rings:opacity-(--account-stale-opacity)"
     cx="12"
     cy="12"
     data-arc="disc"
@@ -150,7 +150,7 @@
     stroke-width={geometry.w.toFixed(3)}
   />
   <circle
-    class="arc week fill-none origin-(--ring-origin) transform-(--ring-turn) group-data-stale:opacity-(--account-stale-opacity)"
+    class="arc week fill-none origin-(--ring-origin) transform-(--ring-turn) group-data-stale/rings:opacity-(--account-stale-opacity)"
     cx="12"
     cy="12"
     data-arc="rim"
@@ -161,7 +161,7 @@
     style:--arc-offset={off(rim)}
   />
   <circle
-    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) group-data-stale:opacity-(--account-stale-opacity) data-off:opacity-0 data-off:group-data-stale:opacity-(--account-stale-opacity)"
+    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 data-off:group-data-stale/rings:opacity-(--account-stale-opacity)"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}
