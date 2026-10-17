@@ -62,3 +62,9 @@ See the table; each sits directly above its element.
 - decisions/DecisionsView.svelte:343 `<Skeleton>`: rounded-lg
 - blocks/Block.svelte:170 and blocks/BlockPage.svelte:337 `<DropdownMenu.Content>`: min-w-48 (kept as written)
 - shadcn/require-static-classes (not no-restyle, present before): blocks/Block.svelte:163 and blocks/BlockPage.svelte:326 `<DropdownMenu.Trigger class="{buttonVariants(...)} touch-hit">`; fixing it means restructuring, so left for integration.
+
+## Contracts
+contract: apps/dashboard/src/lib/cawco/blocks/Block.svelte:161 shadcn/require-static-classes | apps/dashboard/src/lib/components/ui/dropdown-menu (trigger as a Button) | the trigger takes buttonVariants() through a dynamic class string; a static form needs the kit's trigger to carry the ghost icon-sm variant
+contract: apps/dashboard/src/lib/cawco/blocks/BlockPage.svelte:326 shadcn/require-static-classes | apps/dashboard/src/lib/components/ui/dropdown-menu (trigger as a Button) | same as Block.svelte:161
+
+important kept: none.
