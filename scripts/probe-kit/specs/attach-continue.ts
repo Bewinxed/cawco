@@ -294,6 +294,18 @@ const attempted = async (
   return { item, task: task.id };
 };
 
+/**
+ * The hub's log lines naming any of `ids` (a session, its workspace, a
+ * task), the last 40: what a failed check carries, as the fleet's sandbox
+ * and its log go when the run ends.
+ */
+const trail = async (fleet: KitFleet, ...ids: string[]): Promise<string> =>
+  (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) => ids.some((id) => line.includes(id.slice(0, 8))))
+    .slice(-40)
+    .join(" | ");
+
 const comment = (
   fleet: KitFleet,
   projectId: string,
@@ -339,7 +351,7 @@ const coldContinues = async (
   check(
     "a: the hub API lists a continuation whose source is the attempt's session and whose new session is another",
     !!job && job.targetInstanceId !== old,
-    JSON.stringify(await fleet.api<Job[]>("/api/continuations"))
+    `${JSON.stringify(await fleet.api<Job[]>("/api/continuations"))} ${job ? "" : await trail(fleet, old, item.workspace_id, task)}`
   );
   if (!job) {
     return;
@@ -431,11 +443,11 @@ const warmAttaches = async (
       yours.some((send) => send.content.includes(YOURS)) &&
       itemsOf(fleet, task).length === 1 &&
       (await continuationsFrom(fleet, old)).length === 0,
-    JSON.stringify({
+    `${JSON.stringify({
       ended,
       yours: yours.map((send) => send.state),
       continuations: await continuationsFrom(fleet, old),
-    })
+    })} ${ended?.headline === HEADLINE.attachedB ? "" : await trail(fleet, old, item.workspace_id)}`
   );
 };
 
@@ -512,7 +524,7 @@ const offContinues = async (
       job.targetInstanceId !== old &&
       ended?.instance_id === job.targetInstanceId &&
       itemsOf(fleet, task).length === 1,
-    JSON.stringify({ ruled, job, ended, attempts: itemsOf(fleet, task).length })
+    `${JSON.stringify({ ruled, job, ended, attempts: itemsOf(fleet, task).length })} ${ended ? "" : await trail(fleet, old, item.workspace_id, task)}`
   );
 };
 
@@ -578,7 +590,7 @@ const routeCarries = async (
       of(target) === leaf.workItemId &&
       of(leaf.instanceId) === null &&
       finishedThere?.instance_id === target,
-    JSON.stringify({ carried, rows, finishedThere, looked: [...looked] })
+    `${JSON.stringify({ old: leaf.instanceId, target, carried, rows, finishedThere, looked: [...looked] })} ${finishedThere ? "" : await trail(fleet, leaf.instanceId, target)}`
   );
 };
 

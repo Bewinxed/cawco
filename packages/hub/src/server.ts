@@ -7833,6 +7833,32 @@ export const createServer = (
     }
   };
 
+  /**
+   * Whether an owed send stays kept for its session's account limit, its
+   * machine's pause, or its item's hold ({@link WorkItems.heldFor}). Held for
+   * its workspace's turn or cut, the wait that releases it is asked for
+   * here too, as the send path asks for it.
+   */
+  const owedHeld = (
+    instanceId: string,
+    machineId: string,
+    origin: SentMessage["origin"]
+  ): boolean => {
+    if (
+      heldAtLimit(instanceId, origin) ||
+      machinePause.until(machineId) !== undefined
+    ) {
+      return true;
+    }
+    if (!workItems.heldFor(instanceId, origin)) {
+      return false;
+    }
+    if (workItems.recutHold(instanceId, origin)) {
+      workItems.recutFor(instanceId);
+    }
+    return true;
+  };
+
   /** One owed send, as {@link releaseOwed} hands it over. */
   const releaseOne = (send: SentMessageRow): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
@@ -7853,11 +7879,7 @@ export const createServer = (
     // against this sender: it goes once the pause ends, or one who may wake
     // it writes to it.
     const { origin } = envelope.payload.message;
-    if (
-      heldAtLimit(send.instanceId, origin) ||
-      machinePause.until(row.machineId) !== undefined ||
-      workItems.heldFor(send.instanceId, origin)
-    ) {
+    if (owedHeld(send.instanceId, row.machineId, origin)) {
       return;
     }
     const refused = inputRefusal(send.instanceId, origin);
@@ -11584,7 +11606,9 @@ export const createServer = (
     machineId: string,
     asked: SpawnPayload,
     kind: InstanceKind,
-    fallbackMode?: string
+    fallbackMode?: string,
+    /** The work item its row names from its first listing on: a continuation's, taken on from its source. */
+    workItemId?: string
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -11619,6 +11643,7 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: payload.model,
       ...peekParent(payload),
+      ...(workItemId ? { workItemId } : {}),
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
@@ -12796,15 +12821,17 @@ export const createServer = (
 
   /**
    * A source that holds a work item has its workspace's clone there before
-   * its continuation reads it (a retired one cut again): its new session
-   * takes the item on and starts in that clone ({@link startTarget}).
-   * Throws why there is none.
+   * its continuation reads it (a retired one cut again), held until the
+   * answered release: its new session takes the item on and starts in that
+   * clone ({@link startTarget}). The caller releases once the job is filed,
+   * whose record holds the workspace from then on, or once it is refused.
+   * Throws why there is no clone.
    */
-  const cloneForContinuation = async (sourceId: string): Promise<void> => {
+  const cloneForContinuation = async (
+    sourceId: string
+  ): Promise<() => void> => {
     const itemId = db.getInstancesByIds([sourceId])[0]?.workItemId;
-    if (itemId) {
-      await workItems.continuable(itemId);
-    }
+    return itemId ? await workItems.continuable(itemId) : () => undefined;
   };
 
   /**
@@ -13302,8 +13329,8 @@ export const createServer = (
     }
     const ready = moveContinuation(row.id, { openItems: open }) ?? row;
     // The source's own work item goes on in the new session, whoever asked:
-    // its opening is the item's, and the publish below has its tools
-    // listed again with finish_item.
+    // its opening is the item's (its row has named the item since its
+    // start, {@link spawnTarget}, so it lists finish_item from its first turn).
     if (source?.workItemId) {
       workItems.continuedIn(source.workItemId, row.targetInstanceId);
     }
@@ -13339,7 +13366,11 @@ export const createServer = (
           : null
       ),
       request.target.scratch ? "scratch" : "mainline",
-      request.target.fallbackPermissionMode
+      request.target.fallbackPermissionMode,
+      // Its row names the source's item before its process lists its tools,
+      // so its first turn has finish_item; the item moves to it before its
+      // opening ({@link startTarget}).
+      source?.workItemId ?? undefined
     );
   };
 
@@ -17866,6 +17897,19 @@ export const createServer = (
     // and leaves a session to the send already on its way to it.
     inputRefusal,
     awaitsSend: (instanceId) => awaitsSend(instanceId),
+    // A send that wakes its session holds its finished item's workspace.
+    sendWakes: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return (
+        !!row &&
+        db.sendsIn(instanceId, ["pending"]).some((send) => {
+          const origin = (send.body as SentMessage | null)?.origin;
+          return (
+            !isKeepAlive(send.body) && !!origin && startsTurnIn(row, origin)
+          );
+        })
+      );
+    },
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     leadPlace: leadPlaceRef,
     report: (row, body, failed, notice, headline) => {
@@ -18793,28 +18837,30 @@ export const createServer = (
     ended: Promise<string | undefined>;
     targetInstanceId: string;
   }> => {
-    await cloneForContinuation(row.id);
-    const prepared = await prepareContinuation(row.id, comment);
-    const { harness } = prepared.source;
-    const request: ContinueRequest = {
-      summarizer: { harness },
-      target: {
-        harness,
-        ...(row.model ? { model: row.model } : {}),
-        ...(row.permissionMode
-          ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
-          : {}),
-      },
-      note: comment,
-    };
-    const refusal = await continuationRefusal(prepared, request);
-    if (refusal) {
-      throw new Error(refusal);
+    const release = await cloneForContinuation(row.id);
+    let job: ContinuationRow;
+    try {
+      const prepared = await prepareContinuation(row.id, comment);
+      const { harness } = prepared.source;
+      const request: ContinueRequest = {
+        summarizer: { harness },
+        target: {
+          harness,
+          ...(row.model ? { model: row.model } : {}),
+          ...(row.permissionMode
+            ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
+            : {}),
+        },
+        note: comment,
+      };
+      const refusal = await continuationRefusal(prepared, request);
+      if (refusal) {
+        throw new Error(refusal);
+      }
+      job = startContinuation(prepared, request, { kind: "task", id: taskId });
+    } finally {
+      release();
     }
-    const job = startContinuation(prepared, request, {
-      kind: "task",
-      id: taskId,
-    });
     return {
       targetInstanceId: job.targetInstanceId,
       ended: settledContinuation(job.id).then((settled) => {
@@ -21940,8 +21986,9 @@ export const createServer = (
           }
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
+          let release: () => void = () => undefined;
           try {
-            await cloneForContinuation(params.id);
+            release = await cloneForContinuation(params.id);
             prepared = await prepareContinuation(
               params.id,
               body.note,
@@ -21949,12 +21996,14 @@ export const createServer = (
             );
             refusal = await continuationRefusal(prepared, request);
           } catch (error) {
+            release();
             return status(
               422,
               error instanceof Error ? error.message : String(error)
             );
           }
           if (refusal) {
+            release();
             return status(409, refusal);
           }
           const row = startContinuation(
@@ -21962,6 +22011,8 @@ export const createServer = (
             request,
             askedBy ? { kind: "session", id: askedBy } : { kind: "person" }
           );
+          // Its record holds the source's workspace from here (work-items.ts `holdOn`).
+          release();
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,

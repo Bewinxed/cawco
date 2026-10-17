@@ -871,6 +871,13 @@ export interface WorkItemDeps {
     reason: string | null;
     state: string;
   };
+  /**
+   * Whether a send pending for the session may start a turn in it (server.ts
+   * `startsTurnIn`): it wakes the session in its workspace, which holds the
+   * workspace ({@link holdOn}). One kept for a stopped session no such send
+   * has woken holds nothing.
+   */
+  readonly sendWakes: (instanceId: string) => boolean;
   /** Where a reader opens a session in the dashboard: the link a pull request carries back. */
   readonly sessionUrl?: (instanceId: string) => string;
   /**
@@ -1868,6 +1875,7 @@ export const createWorkItems = ({
   modelRefusal,
   online,
   send,
+  sendWakes,
   sessionUrl,
   spawn,
   spawnedUnder,
@@ -3001,6 +3009,42 @@ export const createWorkItems = ({
     "stopping",
   ]);
 
+  /** Sessions whose kept sends wait for their workspace's turn and cut ({@link recutFor}): one wait each. */
+  const recutWaits = new Set<string>();
+
+  /** Items whose session's continuation is being prepared, by count: their workspace is held ({@link holdOn}). */
+  const continuing = new Map<string, number>();
+
+  /** A continuation's stages before it settles: its job still reads or starts in the clone. */
+  const CONTINUING = new Set(["filing", "summarising", "starting"]);
+
+  /**
+   * What the sessions of a workspace's ended items hold it by ({@link holdOn}):
+   * a process that may still run there, a message on its way to one, or a
+   * continuation of one being prepared or under way.
+   */
+  const sessionsHold = (items: readonly WorkItemRow[]): string | undefined => {
+    const sessions = new Set(items.map((item) => item.instanceId));
+    const rows = db.getInstancesByIds([...sessions]);
+    const attached = rows.find((row) => ATTACHED.has(row.status));
+    if (attached) {
+      return `its session ${attached.id} is ${attached.status === "stopping" ? "stopping" : "attached"}`;
+    }
+    const awaited = rows.find((row) => sendWakes(row.id));
+    if (awaited) {
+      return `a message to its session ${awaited.id} is on its way`;
+    }
+    const prepared = items.find((item) => continuing.has(item.id));
+    const job = db
+      .continuationRows()
+      .find(
+        (row) => CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)
+      );
+    if (prepared || job) {
+      return `a continuation of its session ${job?.sourceInstanceId ?? prepared?.instanceId} is under way`;
+    }
+  };
+
   /**
    * What the hub knows that points into a workspace's clone or its scratch
    * dir (its commands' `TMPDIR`, which goes with it), in words, or nothing:
@@ -3053,7 +3097,13 @@ export const createWorkItems = ({
    * the landing of one of its items still running (its run settles the
    * workspace again as it ends, {@link settleLanding}), a session of its
    * items whose process may still run there (one asleep, stopped or failed
-   * has none), or what points into it ({@link pointedAt}). A hold defers
+   * has none), a message on its way that wakes one of those sessions there,
+   * a continuation of one of them being prepared or under way (it reads the
+   * clone and its new session starts there, taking the item on:
+   * {@link sessionsHold}), or what points into it ({@link pointedAt}). On
+   * 2026-10-17 one was retired between the check that its clone was there
+   * and a continuation's read of it (attach-continue, "could not read git …
+   * ENOENT"). A hold defers
    * retirement until it goes, never cancels it.
    */
   const holdOn = (
@@ -3067,12 +3117,9 @@ export const createWorkItems = ({
     if (landing) {
       return `the landing of its item ${landing.id} still runs`;
     }
-    const rows = db.getInstancesByIds([
-      ...new Set(items.map((item) => item.instanceId)),
-    ]);
-    const attached = rows.find((row) => ATTACHED.has(row.status));
-    if (attached) {
-      return `its session ${attached.id} is ${attached.status === "stopping" ? "stopping" : "attached"}`;
+    const held = sessionsHold(items);
+    if (held) {
+      return held;
     }
     return pointedAt(workspace);
   };
@@ -3448,9 +3495,11 @@ export const createWorkItems = ({
 
   /**
    * Whether a send from `origin` to session `instanceId` reopens a finished
-   * item whose workspace retired ({@link recuttable}): from one who may
-   * reopen it ({@link mayReopen}), to its workspace's latest item. Such a
-   * send waits at the hub while the workspace is cut again ({@link recut}).
+   * item whose workspace retired ({@link recuttable}), or is in a turn that
+   * may be retiring it (its settle, run as its session fell asleep): from
+   * one who may reopen it ({@link mayReopen}), to its workspace's latest
+   * item. Such a send waits at the hub for that turn, and while the
+   * workspace is cut again ({@link recutFor}).
    */
   const retiredFor = (instanceId: string, origin: NeutralOrigin): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
@@ -3461,7 +3510,7 @@ export const createWorkItems = ({
     const [workspace] = db.workspacesNamed(item.workspaceId);
     return (
       workspace !== undefined &&
-      recuttable(workspace) &&
+      (recuttable(workspace) || workspaceTurns.has(workspace.id)) &&
       db.workItemsIn(workspace.id)[0]?.id === item.id
     );
   };
@@ -6429,26 +6478,45 @@ export const createWorkItems = ({
       retiredFor(instanceId, origin),
 
     /**
-     * A send kept for {@link recutHold}: the session's retired workspace cut
-     * again at its own path ({@link recut}), then what was kept for it goes
-     * ({@link WorkItemDeps.recutDone}), or fails with why the cut could not
-     * be made ({@link WorkItemDeps.recutFailed}). Nothing for a session
-     * whose workspace is not retired. Never throws.
+     * A send kept for {@link recutHold}: after whatever runs in the
+     * workspace's turn (a settle that may be retiring it as the send came),
+     * the workspace retired is cut again at its own path ({@link recut}),
+     * then what was kept for it goes ({@link WorkItemDeps.recutDone}); its
+     * settle meanwhile is deferred by the send on its way ({@link holdOn}).
+     * Fails it with why the cut could not be made
+     * ({@link WorkItemDeps.recutFailed}). Nothing for a session whose
+     * workspace is neither retired nor in a turn. Never throws.
      */
     recutFor(instanceId: string): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
       const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-      if (!(item && workspace && recuttable(workspace))) {
+      if (
+        !(
+          item &&
+          workspace &&
+          (recuttable(workspace) || workspaceTurns.has(workspace.id))
+        ) ||
+        recutWaits.has(instanceId)
+      ) {
         return;
       }
-      recut(workspace, () => recutDone?.(instanceId)).catch(
-        (error: unknown) => {
-          const reason = `Its workspace ${workspace.id} retired and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
-          console.warn(`[workspaces] ${instanceId}: ${reason}`);
-          recutFailed?.(instanceId, reason);
+      recutWaits.add(instanceId);
+      inWorkspaceTurn(workspace.id, async () => {
+        const [now] = db.workspacesNamed(workspace.id);
+        if (now && recuttable(now)) {
+          await recut(now);
         }
-      );
+      })
+        .finally(() => recutWaits.delete(instanceId))
+        .then(
+          () => recutDone?.(instanceId),
+          (error: unknown) => {
+            const reason = `Its workspace ${workspace.id} retired and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
+            console.warn(`[workspaces] ${instanceId}: ${reason}`);
+            recutFailed?.(instanceId, reason);
+          }
+        );
     },
 
     /**
@@ -6562,24 +6630,49 @@ export const createWorkItems = ({
     },
 
     /**
-     * Item `itemId`'s workspace with its clone there ({@link withClone}, a
-     * retired one cut again): the folder a continuation of its session is
-     * read in and starts in. Throws why there is none.
+     * Item `itemId`'s workspace with its clone there, held for a
+     * continuation of its session: in the workspace's turn, after any settle
+     * already under way, a retired one cut again ({@link withClone}), and
+     * from then on held ({@link holdOn}) until the answered release, called
+     * once the continuation's job is filed (its record holds it from there)
+     * or has failed to be. Throws why there is no clone.
      */
-    async continuable(itemId: string): Promise<void> {
+    async continuable(itemId: string): Promise<() => void> {
       const item = db.workItem(itemId);
-      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-      if (!(item && workspace)) {
+      if (!item) {
         throw new Error(`work item ${itemId} has no workspace`);
       }
-      if (workspace.state === "archived" && !recuttable(workspace)) {
-        throw new Error(archivedWords(workspace));
-      }
-      if (!(await withClone(workspace))) {
-        throw new Error(
-          `the clone of workspace ${workspace.id} is gone from ${machineName(workspace.machineId)}`
-        );
-      }
+      const { workspaceId } = item;
+      await inWorkspaceTurn(workspaceId, async () => {
+        const [workspace] = db.workspacesNamed(workspaceId);
+        if (!workspace) {
+          throw new Error(`work item ${itemId} has no workspace`);
+        }
+        if (workspace.state === "archived" && !recuttable(workspace)) {
+          throw new Error(archivedWords(workspace));
+        }
+        if (!(await withClone(workspace))) {
+          throw new Error(
+            `the clone of workspace ${workspace.id} is gone from ${machineName(workspace.machineId)}`
+          );
+        }
+        continuing.set(itemId, (continuing.get(itemId) ?? 0) + 1);
+      });
+      let released = false;
+      return () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        const left = (continuing.get(itemId) ?? 1) - 1;
+        if (left > 0) {
+          continuing.set(itemId, left);
+        } else {
+          continuing.delete(itemId);
+        }
+        // Held no longer by this, it settles as it stands.
+        settleSoon(workspaceId);
+      };
     },
 
     /**
