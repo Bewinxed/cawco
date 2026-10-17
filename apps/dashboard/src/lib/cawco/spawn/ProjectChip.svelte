@@ -88,7 +88,7 @@
   {open}
   rows="[data-fh]"
   triggerClass="ns-chip-btn"
-  triggerStyle={project ? "" : "color:var(--ink-muted)"}
+  triggerTone={project ? undefined : "muted"}
 >
   {#snippet trigger()}
     <Files class="text-hue-amber-500" />

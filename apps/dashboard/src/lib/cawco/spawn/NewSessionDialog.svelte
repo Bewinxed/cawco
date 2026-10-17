@@ -36,7 +36,6 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     machineHue,
     machineIcon,
@@ -1755,7 +1754,7 @@
     <DrawerContent
       data-session-card
       aria-label="New Session"
-      class="ns-theme fixed z-81 flex origin-center flex-col outline-none m-0 motion-reduce:animate-none motion-reduce:transition-none"
+      class="ns-theme fixed z-81 flex origin-center flex-col outline-none m-0 motion-reduce:animate-none! motion-reduce:transition-none!"
       data-ns-dialog
       onCloseAutoFocus={(event) => {
         event.preventDefault();
@@ -1788,20 +1787,21 @@
            presses through (floating-presence). -->
       <DialogPrimitive.Overlay
         data-slot="session-scrim"
-        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none motion-reduce:transition-none"
+        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none! motion-reduce:transition-none!"
       >
         {#snippet child({ props, open: shown })}
           <div
             {...props}
-            class="{props.class} pointer-events-(--press)"
-            style:--press={pressable(shown)}
+            class="{props.class} {shown
+              ? 'pointer-events-auto'
+              : 'pointer-events-none'}"
           ></div>
         {/snippet}
       </DialogPrimitive.Overlay>
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="ns-theme fixed z-81 flex origin-center flex-col outline-none inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none motion-reduce:transition-none"
+        class="ns-theme fixed z-81 flex origin-center flex-col outline-none inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-none!"
         data-ns-dialog
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -1819,8 +1819,9 @@
         {#snippet child({ props, open: shown })}
           <div
             {...props}
-            class="{props.class} pointer-events-(--press)"
-            style:--press={pressable(shown)}
+            class="{props.class} {shown
+              ? 'pointer-events-auto'
+              : 'pointer-events-none'}"
           >
             <DialogTitle class="sr-only">New session</DialogTitle>
             {@render formContent()}

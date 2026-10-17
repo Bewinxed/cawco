@@ -71,7 +71,7 @@
   {onclosefocus}
   {open}
   triggerClass="ns-chip-btn"
-  triggerStyle={empty ? "color:var(--ink-muted)" : ""}
+  triggerTone={empty ? "muted" : undefined}
   width={440}
 >
   {#snippet trigger()}

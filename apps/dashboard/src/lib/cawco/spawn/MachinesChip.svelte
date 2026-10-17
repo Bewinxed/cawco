@@ -74,9 +74,7 @@
   {open}
   rows="[data-fh]"
   triggerClass="ns-chip-btn"
-  triggerStyle={picked.length
-    ? ""
-    : "color:var(--status-fail-ink);border-color:var(--status-fail-ink)"}
+  triggerTone={picked.length ? undefined : "fail"}
 >
   {#snippet trigger()}
     <Server class="text-hue-cyan-500" />

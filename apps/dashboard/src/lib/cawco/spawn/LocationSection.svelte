@@ -463,10 +463,12 @@
       <!-- literal: 8px gap, -12px rise -->
       <div
         data-slot="repo"
-        class="grid gap-(--gap) transform-(--t) pointer-events-(--pe) opacity-(--o) transition-[opacity] dur-panel ease-out"
+        class={[
+          "grid gap-(--gap) transform-(--t) opacity-(--o) transition-[opacity] dur-panel ease-out",
+          mode === "repo" ? "pointer-events-auto" : "pointer-events-none",
+        ]}
         style:--gap="8px"
         style:--o={mode === "repo" ? 1 : 0}
-        style:--pe={mode === "repo" ? "auto" : "none"}
         style:--t={`translateY(${mode === "repo" ? 0 : -12}px)`}
       >
         <div
