@@ -55,8 +55,9 @@ Usage
                                             run cawco as per-user services
   cawco binary-install <hub|agent> ...    setup step of the install script; not run by hand
   cawco tools [--session <id>]            list the cawco tools that session's role has
-  cawco tool <name> [json] [--session <id>]
-                                          call one, under the same role checks as MCP
+  cawco tool <name> [json|-] [--session <id>]
+                                          call one, under the same role checks as MCP;
+                                          - reads the JSON from stdin, for large arguments
                                           (session: --session or CAWCO_INSTANCE_ID;
                                           credential: CAWCO_SESSION_CREDENTIAL)
   cawco connections set-key <name> [--hub <url>]
@@ -312,7 +313,8 @@ const parseArgs = (argv: string[]): Args => {
         args.version = true;
         break;
       default:
-        if (arg.startsWith("-")) {
+        // A lone `-` is stdin (`cawco tool <name> -`), not an option.
+        if (arg.startsWith("-") && arg !== "-") {
           throw new UsageError(`unknown option ${arg}`);
         }
         if (!args.command) {
@@ -717,7 +719,10 @@ const runTool = async (args: Args): Promise<number> => {
   if (!args.action) {
     throw new UsageError("tool needs a tool name, then its arguments as JSON");
   }
-  console.log(await callTool(at, instanceId, args.action, args.rest[0]));
+  // `-` reads the arguments from stdin: one argv string stops at 128 KiB
+  // (Linux's MAX_ARG_STRLEN), well under what a tool's arguments may weigh.
+  const json = args.rest[0] === "-" ? await Bun.stdin.text() : args.rest[0];
+  console.log(await callTool(at, instanceId, args.action, json));
   return 0;
 };
 

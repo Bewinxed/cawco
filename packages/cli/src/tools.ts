@@ -1,6 +1,7 @@
 /**
  * The `cawco` MCP tools from a terminal (Projects spec §5.3): `cawco tools`
- * lists what a session's role has, `cawco tool <name> [json]` calls one. Both
+ * lists what a session's role has, `cawco tool <name> [json]` calls one (its
+ * JSON from stdin when it is `-`, past one argument's 128 KiB). Both
  * go through the hub's own list and call doors (`/api/delegation/tools`,
  * `/api/delegation/call/:instanceId`), which resolve the session and refuse
  * what its role does not have exactly as the MCP server does: one role check,

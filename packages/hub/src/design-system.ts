@@ -123,7 +123,7 @@ const HEADER = [
   "   Do not edit: change the token files and write them again with design_write. */",
 ].join("\n");
 
-/** A project's token system built: the dashboard's generator, in a `tokens` layer, both schemes. */
+/** A project's token system built: the dashboard's generator, in a `tokens` layer, the schemes it has declared. */
 export const buildDesignTokens = (
   read: (path: string) => Promise<unknown>
 ): Promise<BuiltTokens> =>
@@ -232,6 +232,12 @@ export interface DesignStore {
   /** Each path's bytes now (relative to `design/`), or null when there is none. */
   read: (paths: string[]) => Promise<Map<string, Uint8Array | null>>;
   /**
+   * A file's bytes from anywhere in the place the session works (its
+   * repository, or the project's folder), by a path from that root or an
+   * absolute one inside it: a `design_write` file's `from`.
+   */
+  source: (path: string) => Promise<Uint8Array>;
+  /**
    * Whether a system here is the project's, not one the writing session is
    * building: its manifest on the repository's base commit, or first
    * committed to the folder by anyone but that session. A change to it is a
@@ -249,6 +255,70 @@ export interface DesignFile {
   encoding?: "utf8" | "base64";
   path: string;
 }
+
+/**
+ * A file as `design_write` takes it: its `content`, or `from`, a file where
+ * the session works whose bytes the hub reads ({@link DesignStore.source}),
+ * so a font or a clip never passes through the model or a shell argument.
+ */
+export type DesignFileIn = Omit<DesignFile, "content"> & {
+  content?: string;
+  from?: string;
+};
+
+/** A path inside `root`, from it: relative, or absolute under it; undefined when it leaves it. */
+const insideRoot = (root: string, raw: string): string | undefined => {
+  const trimmed = raw.trim().replaceAll("\\", "/");
+  const rel = posix.normalize(
+    trimmed.startsWith(`${root}/`) ? trimmed.slice(root.length + 1) : trimmed
+  );
+  return rel.startsWith("/") ||
+    rel === "." ||
+    rel === ".." ||
+    rel.startsWith("../")
+    ? undefined
+    : rel;
+};
+
+/**
+ * The call's files with each `from` read where the session works, as base64
+ * content: what is planned, what a proposal keeps and what Approve writes.
+ * Refused whole, every problem named, when one does not hold.
+ */
+const withSources = async (
+  store: DesignStore,
+  files: DesignFileIn[]
+): Promise<DesignFile[]> => {
+  const problems: string[] = [];
+  const out: DesignFile[] = [];
+  for (const file of files) {
+    if ((file.content === undefined) === (file.from === undefined)) {
+      problems.push(`${file.path}: give its content or from, one of the two.`);
+      continue;
+    }
+    if (file.content !== undefined) {
+      out.push({ ...file, content: file.content });
+      continue;
+    }
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one file after another, each a read on its machine
+      const bytes = await store.source(file.from ?? "");
+      out.push({
+        path: file.path,
+        content: Buffer.from(bytes).toString("base64"),
+        encoding: "base64",
+      });
+    } catch (error) {
+      problems.push(
+        `${file.path}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(`Nothing was written. ${problems.join(" ")}`);
+  }
+  return out;
+};
 
 export interface DesignWritten {
   kept: { path: string; why: string }[];
@@ -640,25 +710,41 @@ const repositoryStore = (
       return result.stdout.trim().split("\n").at(-1) ?? "";
     },
     read: async (paths) => {
-      const result = await sh(
-        `for p in ${paths.map((path) => quote(`${DESIGN_DIR}/${path}`)).join(" ")}; do if [ -f "$p" ]; then printf 'F\\t%s\\t' "$p"; base64 < "$p" | tr -d '\\n'; echo; fi; done`
-      );
-      if (result.exitCode !== 0) {
-        throw failed("design/ could not be read", result);
-      }
-      const found = new Map<string, Uint8Array | null>(
-        paths.map((path) => [path, null])
-      );
-      for (const line of result.stdout.split("\n")) {
-        const [mark, path, body] = line.split("\t");
-        if (mark === "F" && path) {
-          found.set(
-            path.slice(DESIGN_DIR.length + 1),
-            new Uint8Array(Buffer.from(body ?? "", "base64"))
-          );
+      // A command a file: one command's output is held to the agent's
+      // 8 MiB (workflow-command.ts), and a system's assets together pass it.
+      const found = new Map<string, Uint8Array | null>();
+      for (const path of paths) {
+        // biome-ignore lint/performance/noAwaitInLoops: one file after another
+        const result = await sh(
+          `p=${quote(`${DESIGN_DIR}/${path}`)}; if [ -f "$p" ]; then echo F; base64 < "$p" | tr -d '\\n'; fi`
+        );
+        if (result.exitCode !== 0) {
+          throw failed("design/ could not be read", result);
         }
+        const [mark, body] = result.stdout.split("\n");
+        found.set(
+          path,
+          mark === "F"
+            ? new Uint8Array(Buffer.from(body ?? "", "base64"))
+            : null
+        );
       }
       return found;
+    },
+    source: async (raw) => {
+      const path = insideRoot(at.root, raw);
+      if (!path) {
+        throw new Error(
+          `from ${raw} is not inside ${at.root}: name a file in the repository you work in.`
+        );
+      }
+      const result = await sh(
+        `f=${quote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit 2; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
+      );
+      if (result.exitCode !== 0) {
+        throw failed("it could not be read", result);
+      }
+      return new Uint8Array(Buffer.from(result.stdout.trim(), "base64"));
     },
     write: async (files) => {
       // Each file to a temporary name first, then all moved into place.
@@ -750,6 +836,15 @@ const folderStore = (
         })
       )
     ),
+  source: async (raw) => {
+    const path = insideRoot(projectRoot(projectId), raw);
+    if (!path) {
+      throw new Error(
+        `from ${raw} is not inside the project's folder: name a file in it.`
+      );
+    }
+    return (await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT)).bytes;
+  },
   write: async (files) => {
     await writeFolderFiles(
       projectId,
@@ -1175,13 +1270,14 @@ export const createDesignSystem = (deps: {
      */
     write: async (
       actor: InstanceRow,
-      files: DesignFile[],
+      given: DesignFileIn[],
       why: string | undefined,
       toolUseId: string | undefined
     ): Promise<DesignWritten | Awaited<ReturnType<typeof propose>>> => {
       const place = await placeOf(actor);
       const projectId = actor.projectId as string;
       const store = storeAt(projectId, place, actor.id, actor.title ?? "CawCo");
+      const files = await withSources(store, given);
       if (await store.theirs()) {
         return propose(actor, projectId, place, files, why, toolUseId);
       }

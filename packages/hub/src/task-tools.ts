@@ -24,12 +24,14 @@ import {
 } from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
+import { BUILD_TITLE } from "./design-offers";
 import type { AttemptStart } from "./dispatch";
 import { appleSuggestion } from "./runs-on";
 import { EDGES, normaliseTaskRef } from "./task-file";
 import {
   type StagesView,
   sessionActor,
+  type TaskActor,
   type TaskList,
   type Tasks,
   type TaskView,
@@ -51,6 +53,15 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
 
 export interface TaskToolContext {
   actor: InstanceRow;
+  /**
+   * Files "Build the design system" in the hub's words (design-offers.ts
+   * `fileBuild`): a `task_create` with that title gives only its stage.
+   */
+  designBuild?: (
+    projectId: string,
+    actor: TaskActor,
+    stage: string | undefined
+  ) => Promise<TaskView>;
   /**
    * Duplicates (§5.9) for a task this session just filed (jev-tasks.ts
    * `filed`): Jev's verdict, or the candidates the session compares.
@@ -434,6 +445,10 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ found_in, runs_on, ...draft }) => {
         const { projectId, tasks, actor } = scope();
+        // The design system's build carries the hub's words, never the filer's.
+        if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
+          return ok(await context.designBuild(projectId, actor, draft.stage));
+        }
         const task = await tasks.create(
           projectId,
           { ...draft, foundIn: found_in, runsOn: runs_on },

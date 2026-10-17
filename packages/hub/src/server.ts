@@ -19153,6 +19153,8 @@ export const createServer = (
     hubTools,
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
+    designBuild: (projectId, actor, stage) =>
+      designOffers.fileBuild(projectId, actor, stage),
     duplicates: (projectId, task) => jevTasks.filed(projectId, task, "session"),
     projectRunsOn: (projectId) => db.project(projectId)?.runsOn ?? null,
     startAttempt: (projectId, ref, parent) =>

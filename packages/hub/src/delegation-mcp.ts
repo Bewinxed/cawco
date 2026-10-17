@@ -214,6 +214,8 @@ export function createDelegationMcp(options: {
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a work item lands: what its session's finish_item says happens. */
   workItemLands?: (workItemId: string) => LandsMode | undefined;
+  /** "Build the design system" filed in the hub's words (design-offers.ts `fileBuild`). */
+  designBuild?: TaskToolContext["designBuild"];
   /** Duplicates for a task a session filed with `task_create` (jev-tasks.ts). */
   duplicates?: TaskToolContext["duplicates"];
   /** A project's own `runs_on`, for `task_create`'s suggestion (runs-on.ts). */
@@ -555,6 +557,7 @@ export function createDelegationMcp(options: {
       taskTools({
         actor,
         mainline,
+        designBuild: options.designBuild,
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
         startAttempt: options.startAttempt,

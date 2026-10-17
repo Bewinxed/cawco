@@ -29,8 +29,15 @@ const PLAIN_NUMBER = /^-?\d*\.?\d+$/;
 const OKLCH =
   /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+|none)\s*(?:\/\s*([\d.]+))?\s*\)$/;
 const HEX = /^#([0-9a-f]{6})$/i;
+/**
+ * The family keywords CSS never quotes: "<generic-font-family> keywords
+ * cannot be quoted (otherwise they are interpreted as a <font-family-name>)"
+ * (https://www.w3.org/TR/css-fonts-4/#family-name-syntax). Its complete,
+ * incomplete (`ui-*`) and script-specific (`generic(…)`) generics, the
+ * earlier drafts' `emoji` and `fangsong`, and WebKit's `-apple-system`.
+ */
 const GENERIC_FAMILY =
-  /^(-apple-system|ui-[a-z]+|system-ui|sans-serif|serif|monospace|cursive|fantasy|emoji|math|fangsong)$/;
+  /^(-apple-system|ui-(?:serif|sans-serif|monospace|rounded)|generic\([a-z-]+\)|system-ui|sans-serif|serif|monospace|cursive|fantasy|emoji|math|fangsong)$/;
 const QUOTES = /^["']|["']$/g;
 const ZERO = /^0$/;
 

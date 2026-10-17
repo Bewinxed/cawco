@@ -39,8 +39,6 @@
  * (`starters.changed`).
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   CAWCO_ENV,
   type CommandResult,
@@ -50,19 +48,14 @@ import {
   type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core";
-import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { Elysia, t } from "elysia";
 import type { DbShape, WorkItemRow } from "./db";
 import { designShaped } from "./design-offers";
 import { jevAccess } from "./jev";
 import { JevFailed, jevStarters, startersOff } from "./jev-placement";
+import { projectDesign } from "./landed";
 import { AGENTS_FILE, fileOr, KNOWLEDGE_DIR } from "./memory";
-import {
-  FolderRefusal,
-  listFolder,
-  projectRoot,
-  refused,
-} from "./project-folder";
+import { FolderRefusal, listFolder, refused } from "./project-folder";
 import {
   boundStarterInputs,
   STARTER_OFTEN,
@@ -96,10 +89,8 @@ export const QUIET_MS = pace.quiet;
 export const GAP_MS = pace.gap;
 /** A set older than this is asked again when it is read: 24 h. */
 export const STALE_MS = DAY_MS;
-/** A read of a checkout's branch, commits and design/; past this the machine is not going to answer. */
-const READ_MS = 10_000;
-/** `origin/main` as the branch it names. */
-const ORIGIN = /^origin\//;
+/** The latest commits of the landed branch Jev reads (landed.ts). */
+const COMMITS_READ = 5;
 /** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */
 const UNROUTED_READ = 200;
 
@@ -158,47 +149,6 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   const checked = new Map<string, number>();
   /** Projects being written now: an ask that lands meanwhile waits for the next turn. */
   const writing = new Set<string>();
-
-  /** The project's repository as one checkout online reads it: its default branch, last commits, and design/. */
-  const repository = async (
-    projectId: string
-  ): Promise<
-    | {
-        branch: string;
-        commits: { sha: string; subject: string }[];
-        design: boolean;
-      }
-    | undefined
-  > => {
-    const place = (db.project(projectId)?.places ?? []).find(
-      (each) => each.kind === "checkout" && deps.online(each.machineId)
-    );
-    if (!place) {
-      return;
-    }
-    const read = await deps
-      .run(
-        place.machineId,
-        place.path,
-        `${SAFE_GIT_SHELL}cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && b=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || git symbolic-ref --quiet --short HEAD) && printf '%s\\n' "$b" && if [ -d design ]; then echo yes; else echo no; fi && git log -5 --format='%H%x09%s' "$b" --`,
-        READ_MS
-      )
-      .catch(() => undefined);
-    if (read?.exitCode !== 0) {
-      return;
-    }
-    const [branch = "", design = "", ...log] = read.stdout.trim().split("\n");
-    return {
-      branch: branch.replace(ORIGIN, ""),
-      design: design === "yes",
-      commits: log
-        .map((line) => {
-          const tab = line.indexOf("\t");
-          return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
-        })
-        .filter((commit) => commit.sha.length > 0),
-    };
-  };
 
   /** The files under a folder of the project's, by path; none when it has no such folder. */
   const filesIn = async (
@@ -291,15 +241,15 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   const gather = async (projectId: string): Promise<StarterInputs> => {
     const project = db.project(projectId);
     const template = project?.template ?? null;
-    const [{ tasks: all }, agents, knowledge, drafts, repo] = await Promise.all(
-      [
+    const [{ tasks: all }, agents, knowledge, drafts, landed] =
+      await Promise.all([
         tasks.list(projectId),
         fileOr(projectId, AGENTS_FILE),
         filesIn(projectId, KNOWLEDGE_DIR, true),
         filesIn(projectId, DRAFTS_DIR, false),
-        repository(projectId),
-      ]
-    );
+        projectDesign(deps, projectId, COMMITS_READ),
+      ]);
+    const { repo } = landed;
     const now = Date.now();
     const open = all
       .filter((task) => task.kind !== null && OPEN_KINDS.has(task.kind))
@@ -356,9 +306,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       designWork:
         designShaped(template, { labels: [], outputs: [] }) ||
         starterTasks.some((task) => task.design),
-      hasDesign:
-        existsSync(join(projectRoot(projectId), "design")) ||
-        (repo ? repo.design : null),
+      hasDesign: landed.hasDesign,
       failures: [...routineFailures, ...attemptFailures]
         .sort((a, b) => b.at - a.at)
         .map(({ at: _at, ...failure }) => failure),
