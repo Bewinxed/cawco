@@ -10,28 +10,17 @@
   const group = $derived(data as { name: string });
 </script>
 
+<!-- literal: inset 0 0 0 1px (frame ring) -->
 <div
   data-slot="decision-group"
-  class="decision-group"
-  style:block-size="{height}px"
-  style:inline-size="{width}px"
+  class="pointer-events-none relative rounded-lg shadow-(--group-ring) h-(--group-h) w-(--group-w)"
+  style:--group-ring="inset 0 0 0 1px var(--border-control)"
+  style:--group-h="{height}px"
+  style:--group-w="{width}px"
 >
-  <span data-slot="decision-group-label" class="label">{group.name}</span>
+  <span
+    data-slot="decision-group-label"
+    class="type-label absolute start-space-1 bottom-(--label-off) whitespace-nowrap text-ink-muted"
+    style:--label-off="calc(100% + var(--space-1))">{group.name}</span
+  >
 </div>
-
-<style>
-  .decision-group {
-    position: relative;
-    border-radius: var(--radius-lg);
-    box-shadow: inset 0 0 0 1px var(--border-control);
-    pointer-events: none;
-  }
-  .label {
-    position: absolute;
-    inset-block-end: calc(100% + var(--space-1));
-    inset-inline-start: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-</style>

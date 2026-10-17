@@ -129,13 +129,14 @@
   });
 </script>
 
-<div class="view-calendar">
+<div data-slot="view-calendar">
   <Calendar {options} plugins={[TimeGrid, DayGrid, List]} />
 </div>
 
 <style>
   /* The library's variables, from the tokens (its theme.css is not loaded). */
-  .view-calendar :global(.ec) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec) {
     --ec-bg-color: var(--surface-raised);
     --ec-text-color: var(--ink-strong);
     --ec-border-color: var(--border-hairline);
@@ -162,42 +163,50 @@
     color: var(--ink-strong);
     font: var(--type-meta);
   }
-  .view-calendar :global(.ec-toolbar) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-toolbar) {
     margin-block-end: var(--space-3);
   }
-  .view-calendar :global(.ec-title) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-title) {
     font: var(--type-title);
   }
-  .view-calendar :global(.ec-button) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-button) {
     block-size: var(--c-btn-h-sm);
     padding-inline: var(--space-3);
     border-radius: var(--radius-md);
     font: var(--type-label);
     transition: background-color var(--dur-control) var(--ease-out);
   }
-  .view-calendar :global(.ec-button-group .ec-button:first-child) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-button-group .ec-button:first-child) {
     border-start-end-radius: 0;
     border-end-end-radius: 0;
   }
-  .view-calendar :global(.ec-button-group .ec-button:last-child) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-button-group .ec-button:last-child) {
     border-start-start-radius: 0;
     border-end-start-radius: 0;
   }
-  .view-calendar :global(.ec-main) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-main) {
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
   }
-  .view-calendar :global(.ec-day-head),
-  .view-calendar :global(.ec-slots),
-  .view-calendar :global(.ec-all-day) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-day-head),
+  [data-slot="view-calendar"] :global(.ec-slots),
+  [data-slot="view-calendar"] :global(.ec-all-day) {
     font: var(--type-meta);
     color: var(--ink-muted);
   }
   /* A chip: as tall as the library makes its slot (a task is a half-hour
      event, one slot), the time and title in the label role on one line,
      the title cut short with an ellipsis where the slot is narrow. */
-  .view-calendar :global(.ec-event.chip) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-event.chip) {
     padding: 0 var(--space-2);
     align-items: center;
     overflow: hidden;
@@ -207,45 +216,55 @@
     cursor: pointer;
     box-shadow: none;
   }
-  .view-calendar :global(.ec-time-grid .ec-event.chip .ec-event-body) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"]
+    :global(.ec-time-grid .ec-event.chip .ec-event-body) {
     flex-direction: row;
     align-items: center;
     min-inline-size: 0;
   }
   /* In the week's grid the chip's place is its time: the title has the
      whole line. The list keeps the time, in its own column. */
-  .view-calendar :global(.ec-time-grid .ec-event.chip .ec-event-time) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"]
+    :global(.ec-time-grid .ec-event.chip .ec-event-time) {
     display: none;
   }
-  .view-calendar :global(.ec-event.chip .ec-event-title) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-event.chip .ec-event-title) {
     min-inline-size: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .view-calendar :global(.ec-event.chip-set) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-event.chip-set) {
     background: var(--surface-raised);
     color: var(--ink-strong);
     box-shadow: inset 0 0 0 1px var(--border-control);
   }
-  .view-calendar :global(.ec-event.chip-done) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-event.chip-done) {
     background: var(--status-done-bg);
     color: var(--status-done-ink);
   }
-  .view-calendar :global(.ec-event.chip-attn) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-event.chip-attn) {
     background: var(--status-attn-bg);
     color: var(--status-attn-ink);
   }
   /* In the phone's list a chip is inset on both sides of its day: the
      library sizes an event at its day's full width, so its width gives way
      to the margins rather than pushing the far one past the card's edge. */
-  .view-calendar :global(.ec-list .ec-event.chip) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-list .ec-event.chip) {
     box-sizing: border-box;
     inline-size: auto;
     min-block-size: var(--c-btn-h-lg);
     margin-inline: var(--space-2);
     border-radius: var(--radius-xs);
   }
-  .view-calendar :global(.ec-event-time) {
+  /* residual: foreign-dom */
+  [data-slot="view-calendar"] :global(.ec-event-time) {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-variant-ligatures: none;

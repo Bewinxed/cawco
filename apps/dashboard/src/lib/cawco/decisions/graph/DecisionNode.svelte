@@ -11,10 +11,13 @@
   const node = $derived(data as { name: string; picked: boolean });
 </script>
 
+<!-- literal: 148px, 56px -->
 <div
   data-slot="decision-node"
-  class="decision-node"
+  class="group flex w-(--node-w) min-h-(--node-min-h) cursor-grab items-center gap-space-2 rounded-lg bg-surface-raised px-space-3 py-space-2 shadow-tile"
   data-picked={node.picked || undefined}
+  style:--node-w="148px"
+  style:--node-min-h="56px"
 >
   <Handle
     id="in-left"
@@ -28,8 +31,18 @@
     position={Position.Top}
     type="target"
   />
-  <span data-slot="name" class="name">{node.name}</span>
-  <span aria-hidden="true" class="ring"></span>
+  <span
+    data-slot="name"
+    class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong"
+    >{node.name}</span
+  >
+  <!-- literal: 12px, 1.5px, 50% -->
+  <span
+    aria-hidden="true"
+    class="size-icon-sm flex-none rounded-(--ring-r) border-(length:--ring-border) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
+    style:--ring-border="1.5px"
+    style:--ring-r="50%"
+  ></span>
   <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
   <Handle
     id="out-right"
@@ -46,42 +59,8 @@
 </div>
 
 <style>
-  .decision-node {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 148px;
-    min-block-size: 56px;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    cursor: grab;
-  }
-  .name {
-    display: -webkit-box;
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .ring {
-    flex: none;
-    inline-size: 12px;
-    block-size: 12px;
-    border: 1.5px solid var(--ink-muted);
-    border-radius: 50%;
-  }
-  .decision-node[data-picked] .ring {
-    border-color: var(--status-done-glyph);
-    background: var(--status-done-glyph);
-  }
-  .decision-node :global(.svelte-flow__handle) {
+  /* residual: foreign-dom */
+  [data-slot="decision-node"] :global(.svelte-flow__handle) {
     inline-size: 1px;
     block-size: 1px;
     min-inline-size: 0;

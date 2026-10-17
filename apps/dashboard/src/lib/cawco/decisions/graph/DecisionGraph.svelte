@@ -140,8 +140,15 @@
   }
 </script>
 
-<section aria-label="Decision graph" class="graph">
-  <svg aria-hidden="true" class="defs">
+<!-- literal: 24rem, inset 0 0 0 1px (the frame's ring) -->
+<section
+  aria-label="Decision graph"
+  class="relative min-h-(--graph-min-h) min-w-0 flex-auto overflow-hidden rounded-lg bg-surface-recess shadow-(--graph-ring)"
+  data-slot="decision-graph"
+  style:--graph-min-h="24rem"
+  style:--graph-ring="inset 0 0 0 1px var(--border-hairline)"
+>
+  <svg aria-hidden="true" class="absolute size-0">
     <defs>
       <marker
         id={marker}
@@ -152,7 +159,7 @@
         refY="5"
         viewBox="0 0 10 10"
       >
-        <path class="arrow" d="M0,0 L10,5 L0,10 z" />
+        <path class="fill-ink-muted" d="M0,0 L10,5 L0,10 z" />
       </marker>
     </defs>
   </svg>
@@ -209,27 +216,10 @@
 </section>
 
 <style>
-  .graph {
-    position: relative;
-    flex: 1 1 auto;
-    min-block-size: 24rem;
-    min-inline-size: 0;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .defs {
-    position: absolute;
-    inline-size: 0;
-    block-size: 0;
-  }
-  .arrow {
-    fill: var(--ink-muted);
-  }
   /* A card new to the graph fades up where it lands. */
   @media (prefers-reduced-motion: no-preference) {
-    .graph :global(.svelte-flow__node-decision) {
+    /* residual: foreign-dom */
+    [data-slot="decision-graph"] :global(.svelte-flow__node-decision) {
       transition: opacity var(--dur-fade) var(--ease-out);
 
       @starting-style {

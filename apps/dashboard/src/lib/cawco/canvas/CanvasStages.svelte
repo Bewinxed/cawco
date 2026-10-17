@@ -127,12 +127,10 @@
       data-standing={stage.at === "composer" || undefined}
       data-canvas-stages-docked={stage.at === "panel" || undefined}
       data-slot="canvas-stage"
-      class="canvas-stage"
+      class="fixed z-15 overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-standing:border-b data-standing:border-border-hairline"
       data-artifact={stage.id}
       hidden
       bind:this={stage.el}
-      class:docked={stage.at === "panel"}
-      class:standing={stage.at === "composer"}
       {@attach () => {
         stage.place();
       }}
@@ -141,6 +139,7 @@
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
         <iframe
           allow="clipboard-write"
+          class="block size-full border-0"
           onload={(event) =>
             loaded(stage, event.currentTarget as HTMLIFrameElement)}
           src={stage.src}
@@ -148,7 +147,9 @@
           bind:this={stage.frame}
         ></iframe>
       {:else if stage.unreached}
-        <p class="unreached" role="alert">{stage.unreached}</p>
+        <p class="m-0 p-space-4 text-size-body text-data-bad" role="alert">
+          {stage.unreached}
+        </p>
       {/if}
       {#if stage.at === "composer" && stage.grab && stage.grabValue}
         {@render grip(stage, "top")}
@@ -174,7 +175,15 @@
     aria-valuetext={stage.grabValue && handle !== "top"
       ? stage.grabValue.corner.text
       : undefined}
-    class="grab grab-{handle}"
+    class={[
+      "group/grab absolute flex touch-none outline-none",
+      handle === "top" &&
+        "start-(--grab-x) top-0 h-c-btn-h-lg w-(--grab-w) translate-x-(--grab-shift) cursor-ns-resize justify-center pt-space-1",
+      handle === "top-left" &&
+        "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] dur-grow ease-out starting:opacity-0",
+      handle === "top-right" &&
+        "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] dur-grow ease-out starting:opacity-0",
+    ]}
     data-canvas-stages-grab={handle}
     onkeydown={(event) => stage.grab?.key(handle, event)}
     onpointerdown={(event) => stage.grab?.down(handle, event)}
@@ -182,123 +191,40 @@
     tabindex="0"
     style:--corner-in={`${stage.corner.inset}px`}
     style:--corner-r={`${stage.corner.radius}px`}
+    style:--grab-shift="-50%"
+    style:--grab-w="160px"
+    style:--grab-x="50%"
   >
+    <!-- literal: 100px, 6px (the drawer's grabber); 160px, 50%, -50% (the top grab) -->
     <span
       aria-hidden="true"
-      class={handle === "top" ? "grabber" : "corner-grip"}
+      class={[
+        "group-focus-visible/grab:outline-(length:--focus-ring-width) group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-focus-ring group-focus-visible/grab:outline-solid",
+        handle === "top" &&
+          "h-(--grabber-h) w-(--grabber-w) rounded-pill bg-border-control",
+        handle !== "top" &&
+          "m-c-corner-grip-inset size-c-corner-grip-leg border-t-(length:--c-corner-grip-stroke) border-t-border-control",
+        handle === "top-left" &&
+          "rounded-ss-(--grip-r) border-s-(length:--c-corner-grip-stroke) border-s-border-control",
+        handle === "top-right" &&
+          "rounded-se-(--grip-r) border-e-(length:--c-corner-grip-stroke) border-e-border-control",
+      ]}
+      style:--grabber-h="6px"
+      style:--grabber-w="100px"
+      style:--grip-r="max(0px, calc(var(--corner-r) - var(--c-corner-grip-inset)))"
     ></span>
   </div>
 {/snippet}
 
 <style>
-  /* Over the transcript and the side card, under the composer's own
-     floating parts (its `/` menu, z 20) and every popover. */
-  .canvas-stage {
-    position: fixed;
-    z-index: 15;
-    overflow: hidden;
-    background: var(--surface-raised);
-  }
-  .canvas-stage[hidden] {
-    display: none;
-  }
-  /* In the panel it fills the well, inside its edge. */
-  .canvas-stage.docked {
-    border-radius: var(--radius-sm);
-  }
-  /* The phone's panel is the sheet (z 40): the canvas stands in it. */
-  .canvas-stage:global(.over-sheet) {
+  /* The phone's panel is the sheet (z 40): the canvas stands in it. stage.svelte.ts
+     toggles the class. */
+  /* residual: unmapped */
+  [data-slot="canvas-stage"]:global(.over-sheet) {
     z-index: 41;
   }
-  /* Over the field, its foot meets the field on a hairline. */
-  .canvas-stage.standing {
-    border-block-end: 1px solid var(--border-hairline);
-  }
+  /* residual: unmapped */
   iframe {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border: 0;
     color-scheme: inherit;
-  }
-  /* The hub named no origin for it: its sentence, where the canvas would be. */
-  .unreached {
-    margin: 0;
-    padding: var(--space-4);
-    color: var(--data-bad);
-    font-size: var(--text-body);
-  }
-  .grabber {
-    inline-size: 100px;
-    block-size: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--border-control);
-  }
-  /* A top corner's grip (the corner handles below): an L along its corner's
-     two edges, concentric with the corner's radius. */
-  .corner-grip {
-    --grip-r: max(0px, calc(var(--corner-r) - var(--c-corner-grip-inset)));
-    margin: var(--c-corner-grip-inset);
-    inline-size: var(--c-corner-grip-leg);
-    block-size: var(--c-corner-grip-leg);
-    border-block-start: var(--c-corner-grip-stroke) solid var(--border-control);
-  }
-  .grab-top-left .corner-grip {
-    border-inline-start: var(--c-corner-grip-stroke) solid var(--border-control);
-    border-start-start-radius: var(--grip-r);
-  }
-  .grab-top-right .corner-grip {
-    border-inline-end: var(--c-corner-grip-stroke) solid var(--border-control);
-    border-start-end-radius: var(--grip-r);
-  }
-  .grab {
-    position: absolute;
-    display: flex;
-    touch-action: none;
-    outline: none;
-
-    &:focus-visible .grabber,
-    &:focus-visible .corner-grip {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-  }
-  /* The top edge's grab: in the middle of the 44px band over the canvas
-     (the page's rail stands under it), the drawer's 100×6 grabber in it. */
-  .grab-top {
-    inset-block-start: 0;
-    inset-inline-start: 50%;
-    translate: -50% 0;
-    justify-content: center;
-    inline-size: 160px;
-    block-size: var(--c-btn-h-lg);
-    padding-block-start: var(--space-1);
-    cursor: ns-resize;
-  }
-  /* A top corner's resize handle: a 44px zone at the shape's corner
-     (`--corner-in` in from the box's side, where the shoulder's curve puts
-     it), drawn as the typical corner grip: an L whose legs run along the
-     corner's two edges, --c-corner-grip-inset inside it and concentric with
-     its radius (`--corner-r`), so it sits under the curve. It comes in with
-     the grown shape, which cuts it, fades in, and stays. */
-  .grab-top-left,
-  .grab-top-right {
-    inset-block-start: 0;
-    inline-size: var(--c-btn-h-lg);
-    block-size: var(--c-btn-h-lg);
-    transition: opacity var(--dur-grow) var(--ease-out);
-
-    @starting-style {
-      opacity: 0;
-    }
-  }
-  .grab-top-left {
-    inset-inline-start: var(--corner-in);
-    cursor: nwse-resize;
-  }
-  .grab-top-right {
-    inset-inline-end: var(--corner-in);
-    justify-content: flex-end;
-    cursor: nesw-resize;
   }
 </style>
