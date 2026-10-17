@@ -70,7 +70,8 @@
         <Input
           data-num
           data-field
-          class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
+          class="num h-c-btn-h-sm w-(--field-w) flex-none text-center"
+          pad="tight"
           id="{id}-wait"
           inputmode="numeric"
           min="0"
@@ -89,7 +90,8 @@
         <Input
           data-num
           data-field
-          class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
+          class="num h-c-btn-h-sm w-(--field-w) flex-none text-center"
+          pad="tight"
           id="{id}-over"
           inputmode="numeric"
           min="0"

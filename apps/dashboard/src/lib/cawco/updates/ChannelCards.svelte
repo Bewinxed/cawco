@@ -88,7 +88,7 @@
       <span
         data-slot="frame"
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess"
+        class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
         data-dir={index === 1 ? "end" : "start"}
         style:--frame-end={index === 0 ? HALF : "0"}
         style:--frame-start={index === 0 ? "0" : HALF}
@@ -110,7 +110,7 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item
-        class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-7 pb-space-4 type-meta text-start text-ink-strong transition-control cursor-pointer hover:bg-surface-hover active:bg-surface-fill hover:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+        class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-7 pb-space-4 type-meta text-start text-ink-strong transition-control cursor-pointer hover:bg-surface-hover no-hover:active:bg-surface-fill unhovered:active:bg-surface-fill focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
         value={card.channel}
       >
         <span data-slot="name" class="relative z-2 type-label text-ink-strong"
@@ -196,20 +196,6 @@
 </div>
 
 <style>
-  /* residual: unmapped — the frame's leading edge starts at once, the trailing edge after --dur-ghost (needs transition token: a different delay per property) */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="frame"][data-dir="end"] {
-      transition:
-        inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms,
-        inset-inline-start var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
-    }
-    [data-slot="frame"][data-dir="start"] {
-      transition:
-        inset-inline-start var(--dur-fade) var(--ease-in-out) 0ms,
-        inset-inline-end var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
-    }
-  }
-
   /* residual: svg-paint */
   [data-slot="check"] {
     stroke-linecap: round;

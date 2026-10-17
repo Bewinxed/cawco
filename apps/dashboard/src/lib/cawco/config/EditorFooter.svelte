@@ -129,7 +129,8 @@
     {#if ondelete && deleteLabel}
       <Button
         data-delete
-        class="text-ink-muted max-phone:hidden"
+        class="max-phone:hidden"
+        tone="muted"
         disabled={down !== null || saving}
         {failed}
         icon={IconTrash}

@@ -322,7 +322,7 @@
     >
       CawCo reads what a session writes, not what you write to it.
     </p>
-    <div data-slot="fold" class="flex flex-col">
+    <div data-slot="fold" class="flex flex-col gap-inherit">
       <Choice
         label="Match"
         onchange={(next) => setMatchKind(next as RuleMatchKind)}
@@ -370,7 +370,7 @@
           <Input
             aria-invalid={shown("pattern") ? "true" : undefined}
             autocomplete="off"
-            class="font-mono"
+            face="mono"
             id="rule-pattern"
             onblur={() => {
               touched.pattern = true;
@@ -386,7 +386,7 @@
       <!-- Text-matching options fold away for a meaning rule rather than popping. -->
       <div
         data-slot="fold"
-        class="flex flex-col"
+        class="flex flex-col gap-inherit"
         inert={draft.matchKind === "meaning"}
         {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
       >
@@ -421,7 +421,7 @@
       {/if}
       <div
         data-slot="fold"
-        class="flex flex-col"
+        class="flex flex-col gap-inherit"
         inert={draft.matchKind === "meaning"}
         {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
       >
@@ -440,7 +440,7 @@
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
-    <div data-slot="fold" class="flex flex-col">
+    <div data-slot="fold" class="flex flex-col gap-inherit">
       <Field id="rule-reply" label="Reply" problem={shown("reply")}>
         <Textarea
           aria-invalid={shown("reply") ? "true" : undefined}
@@ -538,7 +538,7 @@
     </div>
   </EditorSection>
 
-  <div data-slot="fold" class="flex flex-col">
+  <div data-slot="fold" class="flex flex-col gap-inherit">
     <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
       <SwitchField
         id="rule-repeat"
@@ -575,12 +575,3 @@
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  /* residual: unmapped */
-  /* Folds shut to nothing, taking the section's 8px gap with it, then opens
-     back to its content's height (motion/fold.svelte.ts). */
-  [data-slot="fold"] {
-    gap: inherit;
-  }
-</style>

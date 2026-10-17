@@ -48,6 +48,7 @@
     data-picker-chip
     aria-label="{label}: {chosen}"
     class="inline-flex items-center gap-(--chip-gap) max-w-full h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:transform-(--tpress) mark-line"
+    motion="press"
     style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px; --tpress: scale(var(--press-scale))"
   >
     <span class="text-ink-muted">{label}</span>
@@ -58,7 +59,13 @@
     >
     <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
   </Popover.Trigger>
-  <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
+  <Popover.Content
+    align="start"
+    class="overflow-y-auto"
+    gap="none"
+    height="capped"
+    width="narrow"
+  >
     <!-- The kit's ghost and pill: the pill is the choice, and a pick takes
          the ghost's place under the pointer while the popover closes. -->
     <!-- literal: 8px, 10px -->
@@ -108,14 +115,3 @@
     </div>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  /* residual: unmapped */
-  @media (prefers-reduced-motion: no-preference) {
-    :global([data-picker-chip]) {
-      transition:
-        var(--transition-control),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-  }
-</style>

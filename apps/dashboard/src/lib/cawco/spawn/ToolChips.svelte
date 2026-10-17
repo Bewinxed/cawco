@@ -146,12 +146,13 @@
   {/if}
 {/snippet}
 
-<!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut). -->
-<span class="tool-chips relative inline-flex flex-none">
+<!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut).
+     The chips keep the gap of the row they sit in (gap-inherit). -->
+<span data-slot="tool-chips" class="relative inline-flex flex-none gap-inherit">
   {#if readonly}
     <span
       data-slot="swap"
-      class="swap inline-flex items-center"
+      class="inline-flex items-center gap-inherit"
       in:crossIn
       out:crossOut
     >
@@ -169,7 +170,7 @@
   {:else}
     <span
       data-slot="swap"
-      class="swap inline-flex items-center"
+      class="inline-flex items-center gap-inherit"
       in:crossIn
       out:crossOut
     >
@@ -249,15 +250,3 @@
     </span>
   {/if}
 </span>
-
-<style>
-  /* residual: unmapped */
-  /* The chips keep the gap of the row they sit in, and never shrink or wrap
-     in it: a row that runs short gives the room up from its other chips. */
-  .tool-chips {
-    gap: inherit;
-  }
-  .swap {
-    gap: inherit;
-  }
-</style>

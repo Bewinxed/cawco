@@ -303,7 +303,7 @@
   <!-- literal: rail 40px step (44px on a coarse pointer), 36px radio, 6px padding -->
   <div
     data-slot="picker"
-    class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs data-railed:grid-cols-(--cols)"
+    class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--rail-step-coarse) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
     style:--hit-gap-x="calc(var(--rail-step) - var(--rail-radio))"
@@ -433,7 +433,7 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) transition-[opacity] dur-control ease-out"
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
           style:--h={`${chosenHeight}px`}
           style:--o={hiOpacity}
           style:--shift={`translateY(calc(${modelIdx} * 46px))`}
@@ -624,23 +624,6 @@
 {/snippet}
 
 <style>
-  /* residual: unmapped */
-  /* One 36px radio plus its gap, which the thumb and the tip travel by: 40px, and 44px on a coarse pointer, so each radio's touch area reaches 44px before meeting its neighbour's. */
-  [data-slot="picker"] {
-    --rail-step: var(--rail-step-fine);
-    @media (pointer: coarse) {
-      --rail-step: var(--rail-step-coarse);
-    }
-  }
-  /* needs transition token: transform var(--dur-toggle) var(--ease-in-out), height var(--dur-toggle) var(--ease-in-out), opacity var(--dur-control) var(--ease-out) */
-  [data-slot="fill"] {
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-toggle) var(--ease-in-out),
-        height var(--dur-toggle) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
-    }
-  }
   /* residual: foreign-dom */
   [data-slot="tools"] :global(.ns-chip-btn[data-tool]) {
     height: var(--chip-h);

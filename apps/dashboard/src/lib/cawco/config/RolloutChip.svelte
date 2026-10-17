@@ -118,8 +118,9 @@
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="rollout-chip mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink data-fail:hover:bg-status-fail-bg motion-safe:active:transform-(--tpress)"
+    class="mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:transform-(--tpress)"
     data-fail={failed > 0 ? "" : undefined}
+    motion="settle"
     style="--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px; --tpress: scale(var(--press-scale))"
   >
     <!-- literal: 5px -->
@@ -141,8 +142,9 @@
       />
       <Spinner
         aria-hidden="true"
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none"
         data-for="busy"
+        reveal="glyph-busy"
         role="presentation"
       />
     </span>
@@ -155,7 +157,8 @@
   <!-- literal: 360px, calc(100vw - 2rem) -->
   <Popover.Content
     align="end"
-    class="w-(--pop-w) max-w-(--pop-max) gap-space-1"
+    class="w-(--pop-w) max-w-(--pop-max)"
+    gap="tight"
     style="--pop-w: 360px; --pop-max: calc(100vw - 2rem)"
   >
     {#if machines.length === 0}
@@ -212,7 +215,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:active:enabled:not-aria-busy:transform-(--tpress)"
+                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:transform-(--tpress)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
@@ -314,25 +317,6 @@
 </Popover.Root>
 
 <style>
-  /* residual: unmapped */
-  /* needs transition token: background-color var(--dur-panel) var(--ease-out), color var(--dur-panel) var(--ease-out), transform var(--dur-toggle) var(--ease-out) (the press is `transform-(--tpress)`, as the source's `transform: scale(…)`) */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.rollout-chip) {
-      transition:
-        background-color var(--dur-panel) var(--ease-out),
-        color var(--dur-panel) var(--ease-out),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-    [data-slot="sync"] {
-      transition:
-        var(--transition-control),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-  }
-  /* A glyph that is not showing does not spin: the busy spinner's animation holds. */
-  [data-slot="glyph"]:not([data-glyph="busy"]) > :global([data-for="busy"]) {
-    animation-play-state: paused;
-  }
   /* residual: foreign-dom */
   /* PendingContent draws the sync icon and takes no class. */
   [data-slot="sync"] :global(svg) {

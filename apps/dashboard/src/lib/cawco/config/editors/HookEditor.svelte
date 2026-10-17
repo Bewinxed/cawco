@@ -597,7 +597,7 @@
           <Input
             aria-invalid={shown("matcher") ? "true" : undefined}
             autocomplete="off"
-            class="font-mono"
+            face="mono"
             id="hook-matcher"
             onblur={() => {
               touched.matcher = true;
@@ -655,7 +655,8 @@
           >
             <Textarea
               aria-invalid={shown("script") ? "true" : undefined}
-              class="resize-y font-mono"
+              class="resize-y"
+              face="mono"
               id="hook-script"
               onblur={() => {
                 touched.script = true;
@@ -669,7 +670,7 @@
           <Field id="hook-args" label="Arguments (optional)">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-args"
               placeholder="--flag value"
               spellcheck="false"
@@ -720,7 +721,7 @@
             <Input
               aria-invalid={shown("url") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-url"
               onblur={() => {
                 touched.url = true;
@@ -732,10 +733,11 @@
           </Field>
         </div>
       {:else if draft.handler.type === "mcp_tool"}
-        <!-- literal: 8px, 12px -->
+        <!-- literal: 8px, 12px, 1fr 1fr -->
         <div
           data-slot="pair"
-          class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)"
+          class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y) phone:grid-cols-(--pair-cols)"
+          style:--pair-cols="1fr 1fr"
           style:--pair-gap-x="12px"
           style:--pair-gap-y="8px"
           in:crossIn
@@ -749,7 +751,7 @@
             <Input
               aria-invalid={shown("mcp_server_name") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-server"
               onblur={() => {
                 touched.mcp_server_name = true;
@@ -763,7 +765,7 @@
             <Input
               aria-invalid={shown("tool_name") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-tool"
               onblur={() => {
                 touched.tool_name = true;
@@ -808,7 +810,7 @@
               <Field id="hook-agent" label="Subagent (optional)">
                 <Input
                   autocomplete="off"
-                  class="font-mono"
+                  face="mono"
                   id="hook-agent"
                   placeholder="Inherits Claude Code's default"
                   spellcheck="false"
@@ -832,7 +834,7 @@
       <Input
         aria-invalid={shown("if") ? "true" : undefined}
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="hook-if"
         onblur={() => {
           touched.if = true;
@@ -845,10 +847,11 @@
         value={draft.handler.if ?? ""}
       />
     </Field>
-    <!-- literal: 8px, 12px -->
+    <!-- literal: 8px, 12px, 1fr 1fr -->
     <div
       data-slot="pair"
-      class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)"
+      class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y) phone:grid-cols-(--pair-cols)"
+      style:--pair-cols="1fr 1fr"
       style:--pair-gap-x="12px"
       style:--pair-gap-y="8px"
     >
@@ -859,7 +862,7 @@
       >
         <Input
           aria-invalid={shown("timeout") ? "true" : undefined}
-          class="font-mono"
+          face="mono"
           id="hook-timeout"
           min="1"
           oninput={(event) => {
@@ -1112,13 +1115,3 @@
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  /* residual: unmapped */
-  /* grid-template-columns: 1fr 1fr is not repeat(2, minmax(0, 1fr)): a column holding something wide would differ. */
-  @media (min-width: 640px) {
-    [data-slot="pair"] {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-</style>

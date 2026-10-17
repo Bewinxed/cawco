@@ -29,7 +29,7 @@
   >
     <IconMore />
   </DropdownMenu.Trigger>
-  <DropdownMenu.Content align="end" class="w-auto min-w-44">
+  <DropdownMenu.Content align="end" class="w-auto" min="regular">
     {#each actions as action (action.label)}
       <DropdownMenu.Item
         disabled={action.disabled}

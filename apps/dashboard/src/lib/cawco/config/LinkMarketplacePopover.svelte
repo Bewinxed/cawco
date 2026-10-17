@@ -147,7 +147,9 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-(--pop-w) max-w-(--pop-max) gap-3 p-3"
+    class="w-(--pop-w) max-w-(--pop-max)"
+    gap="form"
+    pad="form"
     style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
@@ -166,7 +168,7 @@
         {/snippet}
         <Input
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="market-source"
           placeholder="anthropics/skills"
           spellcheck="false"
@@ -190,7 +192,7 @@
         <Input
           aria-invalid={clash ? "true" : undefined}
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="market-name"
           placeholder="skills"
           spellcheck="false"

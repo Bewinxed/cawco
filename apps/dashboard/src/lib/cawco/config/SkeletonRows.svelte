@@ -16,6 +16,6 @@
   role="status"
 >
   {#each rows as row (row)}
-    <Skeleton class="h-14 w-full group-data-fill:flex-none" />
+    <Skeleton class="w-full group-data-fill:flex-none" height="row" />
   {/each}
 </div>

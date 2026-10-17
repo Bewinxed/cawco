@@ -30,8 +30,7 @@
   /** The machine's whole error, unfolded in place under the cell. */
   let reading = $state(false);
   const refused = $derived(updates.refused.get(machine.machineId));
-  const CHIP =
-    "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start";
+  const CHIP = "h-auto whitespace-normal text-start";
 </script>
 
 <div class="overflow-hidden" {@attach morph()}>
@@ -45,11 +44,15 @@
       {:else if cell.text}
         {#if cell.icon === "spinner"}
           <span class="mark-line inline-flex items-center gap-space-2">
-            <Spinner class="size-icon-md shrink-0 text-ink-muted" />
+            <Spinner class="size-icon-md shrink-0" tone="muted" />
             <span data-slot="words">{cell.text}</span>
           </span>
         {:else}
-          <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
+          <Badge
+            class={CHIP}
+            size="cell-tall"
+            variant={cell.fail ? "destructive" : "ghost"}
+          >
             {#if cell.fail}
               <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
               ></span>
@@ -69,7 +72,7 @@
         {#each cell.buttons as button (button)}
           {#if button === "retry"}
             <Button
-              class="text-ink-muted"
+              tone="muted"
               label="Retry"
               onclick={() => updates.installNow(machine)}
               size="xs"
@@ -78,7 +81,7 @@
           {:else if button === "error"}
             <Button
               aria-expanded={reading}
-              class="text-ink-muted"
+              tone="muted"
               label={reading ? "Hide the error" : "Read the error"}
               onclick={() => {
                 reading = !reading;
@@ -88,7 +91,7 @@
             />
           {:else if button === "cancel"}
             <Button
-              class="text-ink-muted"
+              tone="muted"
               label="Cancel"
               onclick={() => updates.cancel(machine)}
               size="xs"

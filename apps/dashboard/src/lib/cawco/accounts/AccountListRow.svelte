@@ -32,16 +32,19 @@
 >
   <!-- literal: 10px 16px 2px -->
   <a
-    class="link grid min-w-0 flex-auto grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill"
+    data-slot="account-list-row-link"
+    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill data-two:grid-areas-(--link-areas-two)"
     data-two={Boolean(problem) || undefined}
     {href}
+    style:--link-areas={'"dot name chev"'}
+    style:--link-areas-two={'"dot name chev" ". problem chev"'}
     style:--link-cols="10px minmax(0, 1fr) 16px"
   >
     <!-- literal: 10px, 50% -->
     <i
       data-slot="dot"
       aria-hidden="true"
-      class="size-(--dot) rounded-(--dot-r) bg-(--c) transition-[background-color] dur-fade ease-out"
+      class="col-(--area) row-(--area) size-(--dot) rounded-(--dot-r) bg-(--c) transition-[background-color] dur-fade ease-out"
       style:--area="dot"
       style:--c={hueVar(account.hue)}
       style:--dot="10px"
@@ -49,7 +52,7 @@
     ></i>
     <span
       data-slot="name"
-      class="type-label flex min-w-0 text-ink-row"
+      class="col-(--area) row-(--area) type-label flex min-w-0 text-ink-row"
       style:--area="name"
       ><span data-slot="words" class="truncate" data-share="title:{href}"
         >{name}</span
@@ -57,7 +60,7 @@
     >
     {#if problem}
       <span
-        class="mark-line flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] dur-panel ease-out"
+        class="mark-line col-(--area) row-(--area) flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] dur-panel ease-out"
         data-flip
         style:--area="problem"
       >
@@ -71,29 +74,8 @@
     <span
       data-slot="chev"
       aria-hidden="true"
-      class="flex text-ink-subtle"
+      class="col-(--area) row-(--area) flex text-ink-subtle @max-kinds/arow:row-1"
       style:--area="chev"><IconChevronRight class="size-icon-md" /></span
     >
   </a>
 </li>
-
-<style>
-  /* residual: unmapped */
-  .link {
-    grid-template-areas: "dot name chev";
-  }
-  .link[data-two] {
-    grid-template-areas:
-      "dot name chev"
-      ". problem chev";
-  }
-  .link > * {
-    grid-area: var(--area);
-  }
-  /* At a phone's width the chevron stands on the name's line. */
-  @container arow (width < 480px) {
-    [data-slot="chev"] {
-      grid-row: 1;
-    }
-  }
-</style>

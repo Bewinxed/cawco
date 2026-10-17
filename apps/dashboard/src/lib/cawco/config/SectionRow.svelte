@@ -107,7 +107,7 @@
   <!-- literal: 44px, 56px, 10px, 8px, 6px -->
   <div
     data-slot="row"
-    class="group/row relative flex min-h-(--row-h) items-center gap-(--row-gap) rounded-sm px-(--row-px) py-(--row-py) transition-control data-two:min-h-(--row-h-two) has-data-link:cursor-pointer max-phone:flex-wrap"
+    class="group/row relative flex min-h-(--row-h) items-center gap-(--row-gap) rounded-sm px-(--row-px) py-(--row-py) transition-control data-two:min-h-(--row-h-two) has-data-link:cursor-pointer has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:flex-wrap"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
     style:--row-gap="10px"
@@ -182,7 +182,7 @@
     <!-- literal: 8px, 14px, 36px -->
     <span
       data-slot="controls"
-      class="relative z-1 flex flex-none items-center gap-(--hit-gap-x) max-phone:ml-(--controls-ml)"
+      class="relative z-1 flex flex-none items-center gap-(--hit-gap-x) coarse:hit-gap-coarse-(--hit-gap-wide) max-phone:ml-(--controls-ml)"
       style:--controls-ml="36px"
       style:--hit-gap-wide="14px"
       style:--hit-gap-x="var(--hit-gap-coarse, 8px)"
@@ -250,26 +250,6 @@
   @keyframes row-flash {
     from {
       opacity: 0.35;
-    }
-  }
-  /* residual: unmapped */
-  /* The whole row is the link's hit area, so the whole row takes the press:
-     the tint .press-tint gives (app.css), keyed on the link rather than the
-     row, because the row's own switch and buttons are pressed inside it too. */
-  [data-slot="row"]:has([data-link]:active) {
-    background-color: var(--surface-fill);
-  }
-  /* By day the press is the step past the ghost the row already stands on,
-     and the row's muted inks go strong on it (app.css .press-tint). */
-  :global(:root:not(.dark)) [data-slot="row"]:has([data-link]:active) {
-    --ink-muted: var(--ink-strong);
-    --ink-subtle: var(--ink-strong);
-    background-color: var(--surface-fill-strong);
-  }
-  /* On a coarse pointer the controls' gap opens to 14px (--hit-gap-x reads it). */
-  @media (pointer: coarse) {
-    [data-slot="controls"] {
-      --hit-gap-coarse: var(--hit-gap-wide);
     }
   }
   /* residual: foreign-dom */

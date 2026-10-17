@@ -97,7 +97,9 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-(--pop-w) max-w-(--pop-max) gap-3 p-3"
+    class="w-(--pop-w) max-w-(--pop-max)"
+    gap="form"
+    pad="form"
     style="--pop-w: 360px; --pop-max: calc(100vw - 2rem)"
   >
     <!-- literal: 12px -->
@@ -118,7 +120,7 @@
         <Input
           aria-invalid={problem ? "true" : undefined}
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="memory-path"
           placeholder="models/deepseek-v4.md"
           spellcheck="false"

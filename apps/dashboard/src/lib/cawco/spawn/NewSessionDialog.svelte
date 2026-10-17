@@ -1757,8 +1757,9 @@
     <DrawerContent
       data-session-card
       aria-label="New Session"
-      class="ns-theme fixed z-81 flex origin-center flex-col outline-none m-0 motion-reduce:animate-none! motion-reduce:transition-none!"
+      class="fixed z-81 flex origin-center flex-col"
       data-ns-dialog
+      look="new-session"
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         opener?.focus({ preventScroll: true });
@@ -1949,7 +1950,7 @@
           <!-- literal: 6px gap, 14px row gap on a coarse pointer, 8px 10px 10px padding -->
           <div
             data-slot="chips"
-            class="flex flex-wrap items-center gap-(--gap) px-(--pad-x) pt-(--pad-t) pb-(--pad-b) coarse:gap-y-(--gap-y-coarse)"
+            class="flex flex-wrap items-center gap-(--gap) px-(--pad-x) pt-(--pad-t) pb-(--pad-b) hit-gap-y-(--hit-gap-y-fine) coarse:gap-y-(--gap-y-coarse) coarse:hit-gap-y-(--hit-gap-y-coarse)"
             inert={moveStep}
             style:--gap="6px"
             style:--gap-y-coarse="14px"
@@ -2293,15 +2294,6 @@
   @keyframes ns-scrim-out {
     to {
       opacity: 0;
-    }
-  }
-  /* residual: unmapped */
-  /* 30px chips that wrap: on a coarse pointer the rows open to 14px apart,
-     so each chip's touch area reaches 44px tall. */
-  [data-slot="chips"] {
-    --hit-gap-y: var(--hit-gap-y-fine);
-    @media (pointer: coarse) {
-      --hit-gap-y: var(--hit-gap-y-coarse);
     }
   }
 </style>

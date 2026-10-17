@@ -197,7 +197,7 @@
           <Folder class="text-hue-amber-500" />
         {:else}
           <ProviderLogo
-            class="opacity-(--o)"
+            fade="set"
             provider="github"
             size={null}
             style={`--o:${on ? 1 : 0.6}`}
@@ -268,10 +268,11 @@
         <button
           data-slot="browse"
           aria-expanded={browsing}
-          class="ns-in inline-flex h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer items-center justify-start gap-(--gap) rounded-sm border border-border-control bg-surface-recess px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong opacity-(--o) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
+          class="ns-in inline-flex h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer items-center justify-start gap-(--gap) rounded-sm border border-border-control bg-surface-recess px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong opacity-(--o) shadow-(--browse-shadow) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
+          style:--browse-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
           style:--gap="6px"
           style:--h="30px"
           style:--h-phone="44px"
@@ -341,7 +342,7 @@
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-none border-current bg-surface-lift p-(--pad) text-left wrap-anywhere text-ink-strong hover:bg-surface-hover"
+                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-none border-current bg-surface-lift p-(--pad) text-left font-medium wrap-anywhere text-ink-strong hover:bg-surface-hover"
                 onclick={() => list(path)}
                 style:--min="44px"
                 style:--pad="8px"
@@ -466,7 +467,7 @@
       <div
         data-slot="repo"
         class={[
-          "grid gap-(--gap) transform-(--t) opacity-(--o) transition-[opacity] dur-panel ease-out",
+          "grid gap-(--gap) transform-(--t) opacity-(--o) transition-[opacity] dur-panel ease-out motion-safe:transition-panel-travel",
           mode === "repo" ? "pointer-events-auto" : "pointer-events-none",
         ]}
         style:--gap="8px"
@@ -487,8 +488,9 @@
             style:--pad-x="12px"
           >
             <ProviderLogo
-              class="size-icon-md flex-none text-hue-amber-500 opacity-80"
+              class="size-icon-md flex-none"
               provider="github"
+              fade="dim"
               size={null}
             />
             <!-- literal: 30px / 44px minimum height, 1.4 line height, 1rem on a phone -->
@@ -545,27 +547,6 @@
 </section>
 
 <style>
-  /* residual: unmapped */
-  [data-slot="crumb"] {
-    font: inherit;
-  }
-  [data-slot="crumb"][aria-current] {
-    font-weight: var(--weight-strong);
-  }
-  /* The inset ring and raised shadow together. */
-  [data-slot="browse"] {
-    box-shadow:
-      inset 0 0 0 1px var(--neutral-8),
-      var(--shadow-raised);
-  }
-  /* needs transition token: transform var(--dur-panel) var(--ease-in-out), opacity var(--dur-panel) var(--ease-out) */
-  [data-slot="repo"] {
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-panel) var(--ease-in-out),
-        opacity var(--dur-panel) var(--ease-out);
-    }
-  }
   /* residual: keyframes */
   [data-slot="browse"]:disabled {
     animation: none;
