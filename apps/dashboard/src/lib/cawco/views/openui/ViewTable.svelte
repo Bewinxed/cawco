@@ -57,15 +57,16 @@
   data-slot="ledger"
   class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
 >
-  <Table.Root ghostRows="tbody tr" scrollClass="kit-edge-fade">
+  <Table.Root fadeEdges ghostRows="tbody tr">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
-        <Table.Row class="border-0 bg-surface-band">
+        <Table.Row variant="band">
           {#each group.headers as header (header.id)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
-              scope="col">{header.column.columnDef.header}</Table.Head
+              class="h-c-toolbar-ctl"
+              scope="col"
+              variant="caps">{header.column.columnDef.header}</Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the head above -->
           {/each}
@@ -78,11 +79,11 @@
           {#each row.getAllCells() as cell, i (cell.id)}
             <!-- literal: 9rem -->
             <Table.Cell
-              class="h-c-btn-h-lg border-b border-border-hairline px-space-3 type-label text-ink-muted {i ===
-              0
-                ? 'min-w-(--first-min) py-space-2 whitespace-normal'
+              class="h-c-btn-h-lg {i === 0
+                ? 'min-w-(--first-min) whitespace-normal'
                 : ''}"
               style="--first-min: 9rem"
+              variant={i === 0 ? "view-lead" : "view"}
             >
               {#if i === 0}
                 <a
