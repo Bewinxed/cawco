@@ -34,8 +34,6 @@ Incremental builds still to do (dry run on the real chat: the batch tree's lines
 | minimal | cawco, cc-real+C-filed, tree | 0 | 54 | 92,071 | 0 | 21,600 | 0.40 | 0.40 |
 | incremental (chosen) | tree, cc-real+C-filed, tree-B | 125 | 54 | 4,282,065 | 3,978,455 | 59,100 | 1.70 | 36.17 |
 
-Chosen scope incremental: about $36.17 still to spend; the budget is $40 (EVAL_BUDGET).
+Chosen scope incremental: about $36.17 still to spend, $1.30 already spent by this measurement, $37.47 in all; the budget is $40 (EVAL_BUDGET): within it.
 
 Prices: $2 input, $2.50 5-minute cache write, $0.10 cache read, $10 output per MTok (https://platform.claude.com/docs/en/about-claude/pricing). On a subscription the run uses up usage allowance rather than dollars.
-
-Budget: $1.30 already spent by this measurement plus the plan's $36.17 is $37.47 of $40 (EVAL_BUDGET): within it.
