@@ -140,7 +140,7 @@
   let pane = $state<HTMLDivElement | null>(null);
   function back() {
     for (const piece of pane?.querySelectorAll<HTMLElement>(
-      ".page-head [data-share]"
+      '[data-slot="page-head"] [data-share]'
     ) ?? []) {
       depart(piece);
     }
@@ -183,11 +183,12 @@
 <div
   data-slot="decisions"
   bind:this={pane}
-  class="decisions"
+  class="group/decisions @container/decisions relative flex min-h-0 flex-auto flex-col"
   data-mode={page ? "page" : view}
+  style:--seg-h="36px"
 >
   {#if graphed && !page}
-    <div data-slot="seg-row" class="seg-row">
+    <div data-slot="seg-row" class="absolute end-0 top-0 z-1 flex">
       <ToggleGroup.Root
         aria-label="Show the decisions as"
         onValueChange={(next) => {
@@ -203,12 +204,18 @@
       </ToggleGroup.Root>
     </div>
   {/if}
-  <div class="dswap">
+  <div
+    data-slot="dswap"
+    class="relative flex min-h-0 min-w-0 flex-col group-mode-graph/decisions:flex-auto group-mode-page/decisions:flex-auto"
+  >
     {#key shown}
       <div
-        class={["dview", graphed && !page && "under-seg"]}
+        data-slot="dview"
+        class="flex min-h-0 animate-(--row-anim) flex-col gap-space-3 group-mode-graph/decisions:flex-auto group-mode-page/decisions:flex-auto data-under-seg:pt-(--seg-pad)"
+        data-under-seg={(graphed && !page) || undefined}
         out:leave
-        style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+        style:--row-anim={swap.rowAnim(0, ListSwap.leaveEnd(0))}
+        style:--seg-pad="calc(var(--seg-h) + var(--space-3))"
       >
         {#if page}
           <DecisionPage
@@ -224,7 +231,9 @@
           />
         {:else if view === "graph"}
           {#if graphProblem}
-            <p class="problem" role="alert">{graphProblem}</p>
+            <p class="type-meta m-0 text-error-11" role="alert">
+              {graphProblem}
+            </p>
           {/if}
           {#if graph}
             <DecisionGraph
@@ -233,10 +242,15 @@
               onplace={place}
             />
           {:else}
-            <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+            <Skeleton class="h-64 w-full rounded-lg" />
           {/if}
         {:else if decisions.problem && !list}
-          <div class="state">
+          <!-- literal: 72ch -->
+          <div
+            class="max-w-(--measure)"
+            data-slot="state"
+            style:--measure="72ch"
+          >
             <EmptyState
               icon={IconDecisions}
               line="The decision pages for {projectName} could not be read: {decisions.problem}"
@@ -250,7 +264,12 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div data-slot="caw-empty" class="state caw-empty">
+          <!-- literal: 36rem -->
+          <div
+            data-slot="caw-empty"
+            class="mx-auto w-full max-w-(--measure)"
+            style:--measure="36rem"
+          >
             <EmptyState
               line="Caw writes a decision page: the choices this project needs you to make, each with its options."
               title="No decisions yet"
@@ -258,7 +277,7 @@
               {#snippet mark()}
                 <div
                   data-slot="caw-80"
-                  class="caw-80"
+                  class="mb-space-3 grid place-items-center"
                   data-share="caw:{projectId}"
                   out:sitDown|global
                 >
@@ -279,7 +298,12 @@
             </EmptyState>
           </div>
         {:else if empty}
-          <div class="state">
+          <!-- literal: 72ch -->
+          <div
+            class="max-w-(--measure)"
+            data-slot="state"
+            style:--measure="72ch"
+          >
             <EmptyState
               icon={IconDecisions}
               line="A session writes decision pages; start one and ask for a page."
@@ -296,10 +320,14 @@
         {:else}
           <!-- A page published while the list is open arrives as rows do
                (motion/rows); the tiles it moves slide to their places. -->
-          <div data-slot="grid" class="grid" {@attach reflow()}>
+          <div
+            data-slot="grid"
+            class="grid grid-cols-1 gap-space-3 @decisions-520px/decisions:grid-cols-2 @decisions-900px/decisions:grid-cols-4"
+            {@attach reflow()}
+          >
             {#if list}
               {#each pages as each (each.name)}
-                <div class="cell" data-flip>
+                <div data-slot="cell" class="flex min-w-0 flex-col" data-flip>
                   <DecisionTile
                     href={hrefOf({ page: each.name, card: null })}
                     {now}
@@ -310,7 +338,11 @@
               {/each}
             {:else}
               {#each [0, 1, 2, 3] as slot (slot)}
-                <Skeleton class="h-[90px] w-full rounded-[var(--radius-lg)]" />
+                <!-- literal: 90px -->
+                <Skeleton
+                  class="h-(--skeleton-h) w-full rounded-lg"
+                  style="--skeleton-h: 90px"
+                />
               {/each}
             {/if}
           </div>
@@ -321,90 +353,17 @@
 </div>
 
 <style>
-  .decisions {
-    --seg-h: 36px;
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    container: decisions / inline-size;
-  }
-  .dswap {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    min-inline-size: 0;
-  }
-  .dview {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-block-size: 0;
-  }
-  .decisions:is([data-mode="graph"], [data-mode="page"]) .dswap,
-  .decisions:is([data-mode="graph"], [data-mode="page"]) .dview {
+  /* residual: foreign-dom */
+  [data-slot="cell"] > :global([data-slot="tile"]) {
     flex: 1 1 auto;
   }
-  /* The segment stands over the list's top-right: the grid keeps its place
-     whether or not the decisions form a graph. */
-  .seg-row {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-end: 0;
-    z-index: 1;
-    display: flex;
-  }
-  .dview.under-seg {
-    padding-block-start: calc(var(--seg-h) + var(--space-3));
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
-  }
-  @container decisions (width >= 520px) {
-    .grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @container decisions (width >= 900px) {
-    .grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  .cell {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-  }
-  .cell > :global(.tile) {
-    flex: 1 1 auto;
-  }
-  .state {
-    max-inline-size: 72ch;
-  }
-  .caw-empty {
-    inline-size: 100%;
-    max-inline-size: 36rem;
-    margin-inline: auto;
-  }
-  .caw-empty :global(.kit-empty) {
+  /* residual: foreign-dom */
+  [data-slot="caw-empty"] :global(.kit-empty) {
     align-items: center;
     text-align: center;
   }
-  .caw-empty :global(.kit-empty-action) {
+  /* residual: foreign-dom */
+  [data-slot="caw-empty"] :global(.kit-empty-action) {
     align-self: stretch;
-  }
-  .caw-80 {
-    display: grid;
-    place-items: center;
-    margin-block-end: var(--space-3);
-  }
-  .problem {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--error-11);
   }
 </style>
