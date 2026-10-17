@@ -126,11 +126,12 @@
     <div
       data-slot="instruction"
       bind:this={body}
-      class="type-body text-ink-strong data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden"
+      class="type-body text-ink-strong data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden data-clamped:mask-(--fade-mask)"
       data-clamped={whole ? undefined : ""}
       id="instruction-{routine.id}"
       style:--clamp-h="calc(var(--lines) * 1lh)"
       style:--fade-from="calc(100% - 1lh)"
+      style:--fade-mask={"linear-gradient(to bottom, var(--mask-opaque) var(--fade-from), transparent)"}
       style:--lines="4"
     >
       <Markdown source={routine.prompt} />
@@ -164,9 +165,11 @@
       <!-- literal: 11rem -->
       <!-- literal: 8rem -->
       <!-- literal: 5rem -->
+      <!-- literal: 0 -->
       <div
         data-slot="runs-ledger"
         class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
+        style:--none="0"
         style:--outcome-w="11rem"
         style:--outcome-w-narrow="8rem"
         style:--took-w="5rem"
@@ -176,7 +179,7 @@
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
-          class="table-fixed border-separate"
+          class="table-fixed border-separate border-spacing-(--none)"
         >
           <Table.Header>
             <Table.Row class="border-0 bg-surface-band">
@@ -285,17 +288,5 @@
   /* residual: foreign-dom — the Markdown's own first block */
   [data-slot="instruction"] :global([data-slot="md"] > :first-child) {
     margin-block-start: 0;
-  }
-
-  /* residual: unmapped */
-  [data-slot="runs-ledger"] :global([data-runs]) {
-    border-spacing: 0;
-  }
-  [data-slot="instruction"][data-clamped] {
-    mask-image: linear-gradient(
-      to bottom,
-      var(--mask-opaque) var(--fade-from),
-      transparent
-    );
   }
 </style>

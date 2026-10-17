@@ -76,15 +76,17 @@
 </script>
 
 <!-- literal: 6rem -->
+<!-- literal: 0 -->
 <div
   data-slot="actions-ledger"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
+  style:--none="0"
   style:--when-w="6rem"
 >
   <Table.Root
     data-actions
     aria-label={label}
-    class="table-fixed border-separate"
+    class="table-fixed border-separate border-spacing-(--none)"
   >
     <Table.Header>
       <Table.Row class="border-0 bg-surface-band">
@@ -168,10 +170,3 @@
     </Table.Body>
   </Table.Root>
 </div>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="actions-ledger"] :global([data-actions]) {
-    border-spacing: 0;
-  }
-</style>

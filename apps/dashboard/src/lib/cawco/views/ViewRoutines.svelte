@@ -1183,13 +1183,9 @@
     gap: var(--space-3);
     align-self: stretch;
   }
-  /* residual: unmapped */
+  /* residual: pseudo */
   /* The name opens the routine; its box reaches every cell, so the whole
      row is the opener, its ⋯ above it. */
-  [data-slot="ledger"] :global([data-opener]) {
-    font: inherit;
-  }
-  /* residual: pseudo */
   [data-slot="ledger"] :global([data-opener]::after) {
     position: absolute;
     inset: 0;

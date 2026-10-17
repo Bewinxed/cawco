@@ -50,7 +50,8 @@
     >
       <span
         data-slot="name"
-        class="mark-line flex min-w-0 items-center gap-space-1 type-label group-kind-dropped:text-ink-muted group-kind-you:text-brand-ink"
+        class="mark-line flex min-w-0 items-center gap-space-1 type-label group-kind-dropped:text-ink-muted group-kind-you:text-brand-ink max-phone:row-(--area) max-phone:col-(--area)"
+        style:--area="name"
       >
         {#if stage.kind === "you"}
           <IconNeedsYou
@@ -72,7 +73,8 @@
       <span
         data-slot="track"
         aria-hidden="true"
-        class="block h-(--track-h) rounded-pill"
+        class="block h-(--track-h) rounded-pill max-phone:row-(--area) max-phone:col-(--area)"
+        style:--area="track"
         style:--track-h="8px"
       >
         <!-- literal: 2px -->
@@ -85,7 +87,8 @@
       <span
         data-num
         data-slot="count"
-        class="num type-label text-end text-ink-muted"
+        class="num type-label text-end text-ink-muted max-phone:row-(--area) max-phone:col-(--area)"
+        style:--area="count"
         ><MorphText text={String(count)} /></span
       >
     </div>
@@ -115,15 +118,6 @@
   @media (max-width: 639px) {
     [data-slot="row"] {
       grid-template-areas: "name count" "track track";
-    }
-    [data-slot="name"] {
-      grid-area: name;
-    }
-    [data-slot="track"] {
-      grid-area: track;
-    }
-    [data-slot="count"] {
-      grid-area: count;
     }
   }
 </style>
