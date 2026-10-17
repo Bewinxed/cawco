@@ -204,30 +204,51 @@
   });
 </script>
 
-<div class="page-view">
+<div class="relative flex min-h-0 flex-auto flex-col" data-slot="page-view">
+  <!-- Its own stacking (isolate): nothing in it rises over the foot fade. The
+       live page scrolls itself and pads for the dock (its inset): it runs
+       under the dock to the pane's foot. -->
   <div
-    class="page-scroll"
+    class="flex min-h-0 flex-auto isolate flex-col gap-space-3 overflow-y-auto pb-(--scroll-pad) data-live:overflow-hidden data-live:pb-0"
     data-live={!decided || undefined}
+    data-slot="page-scroll"
     style:--dock-room="{dockRoom}px"
+    style:--scroll-pad="calc(var(--dock-room) + var(--space-4))"
     bind:this={scroller}
   >
-    <div data-slot="page-head" class="page-head">
-      <div class="head-row">
-        <Button class="back" onclick={onback} size="sm" variant="ghost">
+    <!-- The draft-bar recipe: surface-band, a hairline inside, 12px.
+         literal: inset 0 0 0 1px -->
+    <div
+      data-slot="page-head"
+      class="flex flex-none flex-col gap-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 shadow-(--head-ring)"
+      style:--head-ring="inset 0 0 0 1px var(--border-hairline)"
+    >
+      <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2">
+        <Button
+          class="-ms-space-2 flex-none"
+          onclick={onback}
+          size="sm"
+          variant="ghost"
+        >
           <IconChevronLeft />
           <span>Decisions</span>
         </Button>
-        <div data-slot="what" class="what">
+        <!-- literal: 1 1 14rem -->
+        <div
+          data-slot="what"
+          class="flex min-w-0 flex-(--what-flex) flex-wrap items-center gap-x-space-3 gap-y-space-1"
+          style:--what-flex="1 1 14rem"
+        >
           <span
             data-slot="title"
-            class="title"
+            class="type-label text-ink-strong"
             data-share="dpage:{name}:title"
             {@attach land(() => `dpage:${name}:title`)}
             >{shown?.title ?? name}</span
           >
           {#if shown}
             <span
-              class="progress mark-line"
+              class="mark-line inline-flex items-center gap-space-2 text-ink-strong"
               data-share="dpage:{name}:progress"
               {@attach land(() => `dpage:${name}:progress`)}
             >
@@ -235,11 +256,16 @@
                 done={isDecided(shown) ? 1 : shown.picked}
                 total={isDecided(shown) ? 1 : shown.cards}
               />
-              <span data-slot="num" class="num">{figure}</span>
+              <span data-slot="num" class="type-meta num text-ink-muted"
+                >{figure}</span
+              >
             </span>
           {/if}
           {#if pill}
-            <span class="pill-end" data-box>
+            <!-- The pill ends the title's group: at the row's end on a desk,
+                 and on a phone, where the group wraps, beside the figure or
+                 under the title, never alone under the back button. -->
+            <span class="ms-auto flex" data-box>
               <StatePill
                 tone={pill.tone}
                 title={pill.title}
@@ -253,9 +279,13 @@
     </div>
 
     {#if unread && !read}
-      <p class="problem" role="alert">This page didn't read: {unread}</p>
+      <p class="type-body m-0 py-space-5 text-ink-muted" role="alert">
+        This page didn't read: {unread}
+      </p>
     {:else if read?.record}
-      <div class="records">
+      <!-- The record on the page's own grid: two across on a desk, one under;
+           the cards stretch to their row, their content at its top. -->
+      <div class="grid grid-cols-1 gap-space-3 wide:grid-cols-2">
         {#each read.record.cards as each (each.id)}
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
@@ -270,24 +300,30 @@
         title={read.title}
       />
     {:else if read}
-      <p class="problem">
+      <p class="type-body m-0 py-space-5 text-ink-muted">
         This page's session is gone from the hub, so the page can't be shown
         here.
       </p>
     {:else}
-      <div aria-hidden="true" class="opening">
+      <div aria-hidden="true" class="p-space-5">
+        <!-- literal: 11px, 42% -->
         <span
           data-slot="block"
-          class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+          class="kit-skeleton block h-(--skeleton-h) w-(--skeleton-w) rounded-xs"
+          style:--skeleton-h="11px"
+          style:--skeleton-w="42%"
         ></span>
       </div>
     {/if}
   </div>
 
   <FootFade solid="calc({dockRoom}px)" />
+  <!-- The Composer recipe, docked: 720 wide, centred, 14px above the foot;
+       the pane's width under 900. -->
   <form
     data-slot="dock"
-    class="dock"
+    class="absolute inset-x-0 bottom-(--dock-bottom) z-20 mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-desk:w-full"
+    style:--dock-bottom="calc(var(--space-4) + var(--safe-bottom))"
     onsubmit={(event) => {
       event.preventDefault();
       sendNote();
@@ -295,15 +331,26 @@
     bind:this={dock}
   >
     {#if refusal}
-      <p data-slot="feedback" class="feedback" role="alert" in:appear>
+      <p
+        data-slot="feedback"
+        class="type-meta m-0 px-space-3 text-error-11"
+        role="alert"
+        in:appear
+      >
         {refusal}
       </p>
     {/if}
-    <div data-slot="cin" class="cin kit-dock-shell">
+    <!-- Its shell is the composer's (app.css `.kit-dock-shell`). -->
+    <div
+      data-slot="cin"
+      class="kit-dock-shell flex items-end gap-space-2 p-c-composer-inset ps-space-3"
+    >
+      <!-- literal: 200px, 1.25, max(16px, var(--text-body)) -->
       <Textarea
         data-note
         aria-label="Add a note for the session"
-        class="note"
+        class="max-h-(--note-max-h) min-h-c-composer-field min-w-0 flex-auto border-transparent bg-transparent px-0 py-space-2 leading-(--note-leading) shadow-none coarse:text-(length:--note-fs) max-phone:text-(length:--note-fs) placeholder-shown:truncate"
+        style="--note-max-h: 200px; --note-leading: 1.25; --note-fs: max(16px, var(--text-body))"
         oninput={() => {
           refusal = null;
         }}
@@ -319,19 +366,20 @@
       />
       <Button
         aria-label="Send"
-        class="ctl"
+        class="size-c-composer-field flex-none rounded-xs"
         disabled={!note.trim()}
         icon={IconSend}
         pending={sendingNote}
         size="icon"
+        style="--btn-icon: 16px"
         type="submit"
         variant="outline"
       />
       {#if primary}
-        <span class="primary-slot">
+        <span class="flex flex-none overflow-hidden">
           <Button
             data-primary
-            class="primary"
+            class="h-c-composer-field rounded-xs"
             {failed}
             label={primary.label}
             onclick={() => act(primary.act)}
@@ -343,174 +391,3 @@
     </div>
   </form>
 </div>
-
-<style>
-  .page-view {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  .page-scroll {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-block-size: 0;
-    padding-block-end: calc(var(--dock-room) + var(--space-4));
-    overflow-y: auto;
-    /* Its own stacking: nothing in it rises over the foot fade. */
-    isolation: isolate;
-  }
-  /* The live page scrolls itself and pads for the dock (its inset): it runs
-     under the dock to the pane's foot. */
-  .page-scroll[data-live] {
-    padding-block-end: 0;
-    overflow: hidden;
-  }
-  /* The draft-bar recipe: surface-band, a hairline inside, 12px. */
-  .page-head {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-lg);
-    background: var(--surface-band);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .head-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2) var(--space-3);
-  }
-  .head-row :global(.back) {
-    flex: none;
-    margin-inline-start: calc(var(--space-2) * -1);
-  }
-  .what {
-    display: flex;
-    flex: 1 1 14rem;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-3);
-    min-inline-size: 0;
-  }
-  .title {
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .progress {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--ink-strong);
-  }
-  .num {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* The pill ends the title's group: at the row's end on a desk, and on a
-     phone, where the group wraps, beside the figure or under the title,
-     never alone under the back button. */
-  .pill-end {
-    display: flex;
-    margin-inline-start: auto;
-  }
-  /* The record on the page's own grid: two across on a desk, one under; the
-     cards stretch to their row, their content at its top. */
-  .records {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
-  }
-  @media (min-width: 1024px) {
-    .records {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  .opening {
-    padding: var(--space-5);
-  }
-  .problem {
-    margin: 0;
-    padding: var(--space-5) 0;
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  /* The Composer recipe, docked: 720 wide, centred, 14px above the foot;
-     the pane's width under 900. */
-  .dock {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-end: calc(var(--space-4) + var(--safe-bottom));
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    inline-size: var(--c-composer-w);
-    max-inline-size: 100%;
-    margin-inline: auto;
-  }
-  /* Its shell is the composer's (app.css `.kit-dock-shell`). */
-  .cin {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-2);
-    padding: var(--c-composer-inset) var(--c-composer-inset)
-      var(--c-composer-inset) var(--space-3);
-  }
-  .cin :global(.note) {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    min-block-size: var(--c-composer-field);
-    max-block-size: 200px;
-    padding-block: 7px;
-    padding-inline: 0;
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    line-height: 1.25;
-  }
-  .cin :global(.note:placeholder-shown) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .cin :global(.ctl) {
-    --btn-icon: 16px;
-    flex: none;
-    inline-size: var(--c-composer-field);
-    block-size: var(--c-composer-field);
-    border-radius: var(--radius-xs);
-  }
-  .primary-slot {
-    display: flex;
-    flex: none;
-    overflow: hidden;
-  }
-  .primary-slot :global(.primary) {
-    block-size: var(--c-composer-field);
-    border-radius: var(--radius-xs);
-  }
-  .feedback {
-    margin: 0;
-    padding-inline: var(--space-3);
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-  @media (pointer: coarse), (max-width: 639px) {
-    .cin :global(.note) {
-      font-size: max(16px, var(--text-body));
-    }
-  }
-  @media (max-width: 899px) {
-    .dock {
-      inline-size: 100%;
-    }
-  }
-</style>
