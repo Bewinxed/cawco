@@ -118,20 +118,34 @@
 </script>
 
 {#if asks.length > 0 || actions.length > 0 || failed || blockers.length > 0}
-  <div class="needs-stack">
+  <div data-slot="task-needs-needs-stack" class="flex flex-col gap-space-3">
     {#each asks as blocked (blocked.request.requestId)}
-      <section data-slot="needs" aria-label="Its session asks" class="needs">
-        <h3 data-slot="head" class="head mark-line">
-          <IconNeedsYou data-task-needs-glyph class="glyph" />
+      <section
+        data-slot="needs"
+        aria-label="Its session asks"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
+      >
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+        >
+          <IconNeedsYou
+            data-task-needs-glyph
+            class="flex-none size-icon-md text-status-attn-glyph"
+          />
           <span>Its session asks you</span>
-          <span data-slot="when" class="when"
+          <span
+            data-slot="when"
+            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
             >{blocked.request.raisedAt
               ? ago(blocked.request.raisedAt)
               : ""}</span
           >
         </h3>
-        <p class="line">{blocked.request.presentation.summary}</p>
-        <div data-slot="acts" class="acts">
+        <p class="m-0 type-body text-ink-strong">
+          {blocked.request.presentation.summary}
+        </p>
+        <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
           <Button href={rowHref(blocked.instanceId)} label="Answer" size="sm" />
         </div>
       </section>
@@ -139,24 +153,39 @@
 
     {#each actions as action (action.id)}
       {@const proposed = action.state === "proposed"}
-      <section data-slot="needs" aria-label="An approved action" class="needs">
-        <h3 data-slot="head" class="head mark-line">
+      <section
+        data-slot="needs"
+        aria-label="An approved action"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
+      >
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+        >
           {#if proposed}
-            <IconNeedsYou data-task-needs-glyph class="glyph" />
+            <IconNeedsYou
+              data-task-needs-glyph
+              class="flex-none size-icon-md text-status-attn-glyph"
+            />
             <span>Approve {action.tool} on {action.connection}</span>
           {:else}
-            <IconError data-task-needs-glyph class="glyph fail" />
+            <IconError
+              data-task-needs-glyph
+              class="flex-none size-icon-md text-status-fail-glyph"
+            />
             <span
               >{action.state === "unknown"
                 ? `${action.tool} may or may not have happened`
                 : `${action.tool} failed`}</span
             >
           {/if}
-          <span data-slot="when" class="when"
+          <span
+            data-slot="when"
+            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
             >{ago(action.endedAt ?? action.createdAt)}</span
           >
         </h3>
-        <p class="line">
+        <p class="m-0 type-body text-ink-strong">
           {#if action.state === "unknown"}
             Check {action.service}.
           {:else if action.state === "failed"}
@@ -166,15 +195,23 @@
           {/if}
         </p>
         {#if proposed}
-          <pre data-slot="args" class="args">{action.args}</pre>
+          <!-- literal: 12rem -->
+          <pre
+            data-slot="args"
+            class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well text-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
+            style:--args-max="12rem">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
-        <div data-slot="peers" data-acts class="acts peers">
+        <div
+          data-slot="peers"
+          data-acts
+          class="flex flex-wrap items-center gap-space-2 coarse:gap-space-4"
+        >
           {#if proposed}
             <Button
               data-deny
               aria-label="Deny {action.tool} on {action.connection}"
-              class="peer deny"
+              class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
               disabled={deciding !== null}
               onclick={() => decide(action, "deny")}
               size="sm"
@@ -186,7 +223,7 @@
             <Button
               data-approve
               aria-label="Approve {action.tool} on {action.connection}"
-              class="peer approve"
+              class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
               disabled={deciding !== null}
               onclick={() => decide(action, "approve")}
               size="sm"
@@ -214,25 +251,33 @@
       <section
         data-slot="needs"
         aria-label="Its session"
-        class="needs"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
         data-reason="failed"
       >
-        <h3 data-slot="head" class="head mark-line">
-          <IconError data-task-needs-glyph class="glyph fail" />
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+        >
+          <IconError
+            data-task-needs-glyph
+            class="flex-none size-icon-md text-status-fail-glyph"
+          />
           <span
             >{lastAttempt.state === "cancelled"
               ? "Its session was stopped"
               : "Its session failed"}</span
           >
-          <span data-slot="when" class="when"
+          <span
+            data-slot="when"
+            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
             >{ago(lastAttempt.endedAt ?? lastAttempt.startedAt)}</span
           >
         </h3>
         {#if lastAttempt.endedHow}
-          <p class="line">{lastAttempt.endedHow}</p>
+          <p class="m-0 type-body text-ink-strong">{lastAttempt.endedHow}</p>
         {/if}
         <RowFault reason={retryProblem} />
-        <div data-slot="acts" class="acts">
+        <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
           <Button
             label="Try again"
             onclick={retry}
@@ -251,20 +296,36 @@
     {/if}
 
     {#if blockers.length > 0}
-      <section data-slot="needs" aria-label="Waits on" class="needs quiet">
-        <h3 data-slot="head" class="head mark-line">
-          <IconLock data-task-needs-glyph class="glyph" />
+      <section
+        data-slot="needs"
+        aria-label="Waits on"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-md bg-surface-recess"
+      >
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-ink-strong mark-line"
+        >
+          <IconLock
+            data-task-needs-glyph
+            class="flex-none size-icon-md text-ink-muted"
+          />
           <span
             >Waits on {blockers.length === 1
               ? "a task that has not landed"
               : `${blockers.length} tasks that have not landed`}</span
           >
         </h3>
-        <ul class="blockers">
+        <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
           {#each blockers as id (id)}
-            <li class="blocker">
-              <span class="ref-id">{id}</span>
-              <span class="ref-title">{titleOf(id) ?? ""}</span>
+            <li class="flex items-center gap-space-2 min-w-0">
+              <span
+                class="flex-none text-meta font-mono liga-none text-ink-muted"
+                >{id}</span
+              >
+              <span
+                class="flex-auto min-w-0 type-label text-ink-strong truncate"
+                >{titleOf(id) ?? ""}</span
+              >
               <Button
                 label="Open"
                 onclick={() => onopen(id)}
@@ -280,133 +341,12 @@
 {/if}
 
 <style>
-  .needs-stack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  /* What needs you, marked in the needs-you tint: spark, never coral (The
-     Coral Is Where You Act Rule); its one action is the coral. A wash of
-     the tint, not its fill. */
-  .needs {
+  /* residual: unmapped */
+  [data-slot="needs"] {
     --needs-ground: color-mix(
       in oklab,
       var(--status-attn-bg) 45%,
       var(--surface-raised)
     );
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4) var(--space-4);
-    border: 1px solid
-      color-mix(in oklab, var(--status-attn-glyph) 40%, transparent);
-    border-radius: var(--radius-md);
-    background: var(--needs-ground);
-  }
-  .needs.quiet {
-    border-color: var(--border-hairline);
-    background: var(--surface-recess);
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    font: var(--type-label);
-    color: var(--status-attn-ink);
-  }
-  .quiet .head {
-    color: var(--ink-strong);
-  }
-  .head :global(.glyph) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--status-attn-glyph);
-  }
-  .head :global(.glyph.fail) {
-    color: var(--status-fail-glyph);
-  }
-  .quiet .head :global(.glyph) {
-    color: var(--ink-muted);
-  }
-  .when {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .line {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .args {
-    max-block-size: 12rem;
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    overflow: auto;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .peers > :global(.peer) {
-    border-color: transparent;
-  }
-  .peers > :global(.deny),
-  .peers > :global(.deny:hover) {
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
-  }
-  .peers > :global(.approve),
-  .peers > :global(.approve:hover) {
-    background: var(--status-done-bg);
-    color: var(--status-done-ink);
-  }
-  @media (pointer: coarse) {
-    .peers {
-      gap: var(--space-4);
-    }
-  }
-  .blockers {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .blocker {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .ref-id {
-    flex: none;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  .ref-title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 </style>

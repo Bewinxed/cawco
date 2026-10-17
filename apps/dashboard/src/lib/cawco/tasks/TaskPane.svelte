@@ -380,9 +380,16 @@
 </script>
 
 {#snippet content()}
-  <div class="task-frame" data-task-pane={taskId}>
-    <header data-slot="head" class="head">
-      <div data-slot="meta" class="meta">
+  <div
+    class="@container/task-frame flex flex-auto flex-col min-h-0 overflow-hidden"
+    data-task-pane={taskId}
+    style:--pane-inline={page ? "var(--space-5)" : "var(--space-3)"}
+  >
+    <header
+      data-slot="head"
+      class="flex flex-none flex-col gap-space-2 pt-space-2 px-(--pane-inline) pb-space-3"
+    >
+      <div data-slot="meta" class="flex flex-wrap items-center gap-space-2">
         {#if shown}
           <Select.Root
             disabled={moving}
@@ -403,7 +410,7 @@
                 >
                   <span>{stageLabel(stage.name)}</span>
                   {#if stage.kind === "you"}
-                    <IconNeedsYou class="text-[var(--status-attn-glyph)]" />
+                    <IconNeedsYou class="text-status-attn-glyph" />
                   {/if}
                 </Select.Item>
               {/each}
@@ -414,7 +421,7 @@
           {:else if flags.queued}
             <Badge variant="secondary"><span>Queued</span></Badge>
           {/if}
-          <span class="dates">
+          <span class="type-meta text-ink-muted whitespace-nowrap">
             Created
             <time
               datetime={new Date(shown.createdAt).toISOString()}
@@ -431,14 +438,18 @@
           {#if shown.labels.length > 0}
             <!-- Its labels, as the board's card draws them: facts at the
                  line's end, never a row of their own. -->
-            <span class="labels">
+            <span class="flex flex-wrap gap-space-1 ms-auto">
               {#each shown.labels as label (label)}
                 <Badge variant="secondary"><span>{label}</span></Badge>
               {/each}
             </span>
           {/if}
         {:else}
-          <Skeleton class="h-[var(--c-btn-h-sm)] w-24" />
+          <!-- literal: 6rem -->
+          <Skeleton
+            class="h-c-btn-h-sm w-(--skeleton-w)"
+            style="--skeleton-w: 6rem"
+          />
         {/if}
       </div>
       {#if titleDraft !== null}
@@ -465,9 +476,9 @@
           />
         </form>
       {:else}
-        <h2 data-slot="title" class="title">
+        <h2 data-slot="title" class="m-0 type-title">
           <button
-            class="title-button press-tint focus-inset"
+            class="block w-full -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
             disabled={!shown}
             onclick={() => {
               titleDraft = shown?.title ?? "";
@@ -481,8 +492,8 @@
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
       {#if decided}
-        <p data-slot="decided" class="decided">
-          Decided on <a href={decided.href}
+        <p data-slot="decided" class="m-0 type-meta text-ink-muted">
+          Decided on <a class="text-link-ink" href={decided.href}
             >{decided.question
               ? `${decided.page} › ${decided.question}`
               : decided.page}</a
@@ -510,18 +521,32 @@
       <Alert variant="destructive">
         <AlertDescription>
           {readProblem}
+          <!-- literal: 0.5rem -->
           <Button
-            class="mt-2"
+            class="mt-(--retry-gap)"
             onclick={() => read(taskId)}
+            style="--retry-gap: 0.5rem"
             size="sm"
             variant="outline">Retry</Button
           >
         </AlertDescription>
       </Alert>
     {:else if !shown}
-      <div data-slot="task-pane-skeleton" aria-hidden="true" class="skeleton">
-        <Skeleton class="h-24 w-full rounded-[var(--radius-md)]" />
-        <Skeleton class="mt-2 h-icon-md w-1/3" />
+      <div
+        data-slot="task-pane-skeleton"
+        aria-hidden="true"
+        class="flex flex-col gap-space-2 mx-(--pane-inline)"
+      >
+        <!-- literal: 6rem -->
+        <Skeleton
+          class="h-(--skeleton-h) w-full rounded-md"
+          style="--skeleton-h: 6rem"
+        />
+        <!-- literal: 0.5rem -->
+        <Skeleton
+          class="mt-(--skeleton-gap) h-icon-md w-1/3"
+          style="--skeleton-gap: 0.5rem"
+        />
         <Skeleton class="h-space-4 w-full" />
         <Skeleton class="h-space-4 w-11/12" />
         <Skeleton class="h-space-4 w-3/5" />
@@ -535,7 +560,10 @@
         task={shown}
       />
     {:else}
-      <div data-slot="task-body" class="task-body">
+      <div
+        data-slot="task-body"
+        class="flex flex-auto flex-col gap-space-5 min-h-0 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline overflow-y-auto overscroll-contain"
+      >
         <TaskNeeds
           ended={false}
           onchanged={took}
@@ -592,8 +620,8 @@
           todos={shown.todos}
         />
 
-        <section class="part">
-          <h3 class="kit-section-head">Labels</h3>
+        <section class="flex flex-col gap-space-2">
+          <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">Labels</h3>
           <TaskLabels
             {known}
             labels={shown.labels}
@@ -614,14 +642,14 @@
           }}
         />
 
-        <div class="part">
+        <div class="flex flex-col gap-space-2">
           <TaskRelations onlink={link} {onopen} task={shown} {tasks} />
           <RowFault reason={edgeProblem} />
         </div>
 
         {#if shown.attempts.length > 0 || flags.startProblem}
-          <section class="part">
-            <h3 class="kit-section-head">
+          <section class="flex flex-col gap-space-2">
+            <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">
               Sessions
               {#if shown.attempts.length > 0}
                 <span data-num data-slot="count" class="count num"
@@ -630,13 +658,16 @@
               {/if}
             </h3>
             <RowFault reason={flags.startProblem} />
-            <ol data-slot="sessions" class="sessions">
+            <ol
+              data-slot="sessions"
+              class="flex flex-col gap-space-1 m-0 p-0 list-none"
+            >
               {#each shown.attempts as attempt (attempt.workItemId)}
                 {@const word = attemptWord(attempt.state)}
                 <li>
                   <a
                     data-slot="session"
-                    class="session mark-line press-tint focus-inset"
+                    class="flex flex-wrap items-center gap-space-2 py-space-2 px-space-3 rounded-sm bg-surface-recess text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
                     href={rowHref(attempt.instanceId)}
                     onclick={(event) => {
                       event.preventDefault();
@@ -649,7 +680,8 @@
                         ?.cwd ?? attempt.instanceId}
                       status={TONE[word] ?? "idle"}
                     />
-                    <span class="session-name"
+                    <span
+                      class="flex-initial min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap"
                       >{sessionName(attempt.instanceId)}</span
                     >
                     <Badge data-box variant={TINT[word] ?? "secondary"}>
@@ -659,7 +691,7 @@
                       <span>{word}</span>
                     </Badge>
                     <time
-                      class="session-when"
+                      class="ms-auto type-meta text-ink-muted"
                       datetime={new Date(
                         attempt.endedAt ?? attempt.startedAt
                       ).toISOString()}
@@ -668,7 +700,10 @@
                       )}</time
                     >
                     {#if attempt.endedHow}
-                      <span class="session-how">{attempt.endedHow}</span>
+                      <span
+                        class="basis-full type-meta text-ink-muted wrap-anywhere"
+                        >{attempt.endedHow}</span
+                      >
                     {/if}
                   </a>
                 </li>
@@ -695,19 +730,23 @@
 {/snippet}
 
 {#if page}
-  <section aria-label="Task {taskId}" class="task-page">
-    <header data-slot="page-head" class="page-head">
+  <section aria-label="Task {taskId}" class="flex flex-1 flex-col min-h-0">
+    <header
+      data-slot="page-head"
+      class="flex flex-none items-center gap-space-2 pt-0 pe-space-5 pb-space-2 ps-space-3"
+    >
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />
         <span>{backLabel}</span>
       </Button>
-      <span class="page-id">{taskId}</span>
+      <span class="ms-auto text-meta font-mono liga-none text-ink-subtle"
+        >{taskId}</span
+      >
     </header>
     {@render content()}
   </section>
 {:else}
   <SideSurface
-    class="task-card"
     label="Task {taskId}"
     {onclose}
     recessed={false}
@@ -717,173 +756,3 @@
     {@render content()}
   </SideSurface>
 {/if}
-
-<style>
-  .task-page {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  .page-head {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 0 var(--space-5) var(--space-2) var(--space-3);
-  }
-  .page-id {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  /* The pane never scrolls as a whole: its head stands, and the review's
-     stage or the details' body scrolls under it. `--pane-inline` is the
-     pane's inline padding, which the review's bands (TaskReview) share. */
-  .task-frame {
-    --pane-inline: var(--space-3);
-    /* The review's two columns ask its width (TaskReview). */
-    container: task-frame / inline-size;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    overflow: hidden;
-  }
-  .task-page .task-frame {
-    --pane-inline: var(--space-5);
-  }
-  .task-body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--space-5);
-    min-block-size: 0;
-    padding: var(--space-3) var(--pane-inline) var(--space-6);
-    border-block-start: 1px solid var(--border-hairline);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .head {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--pane-inline) var(--space-3);
-  }
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* The decision it was made from: a meta line under the title, its card a link. */
-  .decided {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .decided a {
-    color: var(--link-ink);
-  }
-  .dates {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .title {
-    margin: 0;
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-  }
-  .title-button {
-    display: block;
-    inline-size: 100%;
-    margin-inline: calc(var(--space-1) * -1);
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-    font: inherit;
-    color: var(--ink-strong);
-    text-align: start;
-    text-wrap: balance;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .title-button:hover:not(:disabled) {
-      background: var(--surface-hover);
-    }
-  }
-  /* Its labels end the facts line, wrapping under the dates when tight. */
-  .labels {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    margin-inline-start: auto;
-  }
-  .skeleton {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .task-frame > :global(.alert),
-  .task-frame > .skeleton {
-    margin-inline: var(--pane-inline);
-  }
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .part :global(.kit-section-head) {
-    min-block-size: var(--c-btn-h-xs);
-    margin: 0;
-    padding-inline: 0;
-  }
-  /* One row per session that worked it, opening that session with this
-     task beside it. */
-  .sessions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .session {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    text-decoration: none;
-  }
-  .session-name {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .session-when {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* How it ended, on its own line under the session's name. */
-  .session-how {
-    flex-basis: 100%;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .session:hover {
-      background: var(--surface-hover);
-    }
-  }
-</style>

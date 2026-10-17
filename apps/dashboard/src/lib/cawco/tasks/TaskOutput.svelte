@@ -111,34 +111,51 @@
   }
 </script>
 
-<figure class="output" data-kind={kind} class:compact>
-  <figcaption data-slot="row" class="row mark-line">
-    <IconDocument class="icon" />
-    <bdi data-slot="path" class="path" title={path}>{compact ? name : path}</bdi
+<figure
+  class="group flex flex-col min-w-0 m-0 border border-border-well rounded-sm bg-surface-well overflow-hidden"
+  data-kind={kind}
+  data-compact={compact || undefined}
+>
+  <figcaption
+    data-slot="row"
+    data-with-body={kind !== "file" || undefined}
+    class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-border-well mark-line"
+  >
+    <IconDocument class="flex-none size-icon-md" />
+    <bdi
+      data-slot="path"
+      class="flex-auto min-w-0 overflow-clip type-meta text-ellipsis whitespace-nowrap"
+      title={path}>{compact ? name : path}</bdi
     >
     {#if kind === "file"}
       <a
-        class="open mark-line press-tint focus-inset"
+        class="inline-flex flex-none items-center gap-space-1 h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
         data-box
         href={raw}
         rel="noopener"
         target="_blank"
       >
         <span>Open</span>
-        <IconArrowUpRight data-task-output-glyph class="glyph" />
+        <IconArrowUpRight data-task-output-glyph class="size-icon-sm" />
       </a>
     {/if}
   </figcaption>
   {#if kind !== "file"}
     <!-- mark-line: the body stacks the output itself; no mark sits beside words in it -->
-    <div data-slot="body" class="body">
+    <div
+      data-slot="body"
+      data-roomy={(kind === "markdown" && !compact) || undefined}
+      class="p-space-3 group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
+    >
       {#if problem || postProblem}
-        <p class="problem">{problem ?? postProblem}</p>
+        <p class="m-0 type-meta text-status-fail-ink">
+          {problem ?? postProblem}
+        </p>
       {:else if read && content === null}
         <div
           data-slot="task-output-skeleton"
           aria-hidden="true"
-          class="skeleton"
+          class="flex flex-col gap-space-2"
         >
           <Skeleton class="h-space-4 w-full" />
           <Skeleton class="h-space-4 w-11/12" />
@@ -147,137 +164,57 @@
       {:else if post}
         <PostCard {compact} {post} {projectId} />
       {:else if kind === "markdown" && content !== null}
-        <div class="markdown">
+        <!-- literal: 6rem -->
+        <div
+          data-slot="markdown"
+          style:--markdown-max="6rem"
+          class="group-data-compact:max-h-(--markdown-max) group-data-compact:overflow-hidden"
+        >
           <MessageBody source={content} />
         </div>
       {:else if kind === "image"}
         <button
           aria-label="Open {name}"
-          class="image press-tint focus-inset"
+          class="block p-0 rounded-sm cursor-zoom-in press-tint focus-inset"
           onclick={openImage}
           type="button"
         >
-          <img alt={name} src={raw} bind:this={image} />
+          <!-- literal: 20rem, 6rem -->
+          <img
+            alt={name}
+            class="block max-w-full max-h-(--image-max) group-data-compact:max-h-(--image-max-compact) rounded-sm"
+            src={raw}
+            style:--image-max="20rem"
+            style:--image-max-compact="6rem"
+            bind:this={image}
+          />
         </button>
       {:else if kind === "video"}
         <!-- svelte-ignore a11y_media_has_caption -->
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <video controls preload="metadata" src={raw}></video>
+        <!-- literal: 24rem -->
+        <video
+          class="block w-full max-h-(--video-max) rounded-sm bg-surface-recess"
+          controls
+          preload="metadata"
+          src={raw}
+          style:--video-max="24rem"
+        ></video>
       {:else if kind === "audio"}
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <audio controls preload="metadata" src={raw}></audio>
+        <audio class="w-full" controls preload="metadata" src={raw}></audio>
       {/if}
     </div>
   {/if}
 </figure>
 
 <style>
-  .output {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-    margin: 0;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-    overflow: hidden;
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-3) var(--space-1);
-    color: var(--ink-muted);
-  }
-  .output:has(.body) .row {
-    border-block-end: 1px solid var(--border-well);
-  }
-  .row :global(.icon) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .path {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-meta);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .open {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-1);
-    block-size: var(--c-btn-h-xs);
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-decoration: none;
-  }
-  .open :global(.glyph) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .open:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .body {
-    padding: var(--space-3);
-  }
-  .output.compact .body {
-    padding: var(--space-2);
-  }
-  .output[data-kind="markdown"]:not(.compact) .body {
-    padding: var(--space-3) var(--space-4) var(--space-4);
-  }
-  .compact .markdown {
-    max-block-size: 6rem;
-    overflow: hidden;
+  /* residual: unmapped */
+  figure[data-compact] [data-slot="markdown"] {
     mask-image: linear-gradient(
       to bottom,
-      black calc(100% - var(--space-6)),
+      var(--mask-opaque) calc(100% - var(--space-6)),
       transparent
     );
-  }
-  .image {
-    display: block;
-    padding: 0;
-    border-radius: var(--radius-sm);
-    cursor: zoom-in;
-  }
-  .image img {
-    display: block;
-    max-inline-size: 100%;
-    max-block-size: 20rem;
-    border-radius: var(--radius-sm);
-  }
-  .compact .image img {
-    max-block-size: 6rem;
-  }
-  video {
-    display: block;
-    inline-size: 100%;
-    max-block-size: 24rem;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  audio {
-    inline-size: 100%;
-  }
-  .skeleton {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .problem {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
   }
 </style>

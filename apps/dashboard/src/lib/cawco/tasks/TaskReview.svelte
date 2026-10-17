@@ -131,9 +131,9 @@
     }
     // Clipped: the summary past its two lines, or the check past its one.
     const measure = () => {
-      clipped = [...node.querySelectorAll(".summary, .check")].some(
-        (line) => line.scrollHeight > line.clientHeight + 1
-      );
+      clipped = [
+        ...node.querySelectorAll('[data-slot="summary"], [data-slot="check"]'),
+      ].some((line) => line.scrollHeight > line.clientHeight + 1);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(node);
@@ -254,36 +254,47 @@
 {#snippet attachment(one: ResultArtifact)}
   {@const Icon = GLYPH[one.kind]}
   {#if compact}
+    <!-- literal: 44px -->
     <button
       data-slot="attachment"
       aria-label="Open {task.id}: {nameOf(one)}"
-      class="attachment press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) press-tint focus-inset"
       onclick={() => onopen?.(task.id)}
+      style:--hit="44px"
       title={titleOf(one)}
       type="button"
     >
-      <Icon class="attachment-glyph" />
-      <span class="attachment-name">{nameOf(one)}</span>
+      <Icon class="flex-none size-icon-sm" />
+      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{nameOf(one)}</span
+      >
     </button>
   {:else}
+    <!-- literal: 44px -->
     <a
       data-slot="attachment"
-      class="attachment press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) press-tint focus-inset"
       href={hrefOf(one)}
       rel="noopener"
+      style:--hit="44px"
       target="_blank"
       title={titleOf(one)}
     >
-      <Icon class="attachment-glyph" />
-      <span class="attachment-name">{nameOf(one)}</span>
+      <Icon class="flex-none size-icon-sm" />
+      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{nameOf(one)}</span
+      >
     </a>
   {/if}
 {/snippet}
 
 {#snippet checkList()}
   {#if check.length > 0}
-    <h4 class="check-head">Check</h4>
-    <ul data-slot="check-list" class="check-list">
+    <h4 class="mt-space-2 mx-0 mb-0 type-label text-ink-strong">Check</h4>
+    <ul
+      data-slot="check-list"
+      class="m-0 ps-space-5 type-body text-ink-strong list-disc marker:text-ink-muted"
+    >
       {#each check as line, index (index)}
         <li>{line}</li>
       {/each}
@@ -291,18 +302,27 @@
   {/if}
 {/snippet}
 
+<!-- literal: auto minmax(0, 1fr) auto; minmax(0, 1fr) auto; var(--c-review-words) minmax(0, 1fr) -->
 <section
   aria-label="Review {task.id}"
-  class="review"
-  class:compact
-  class:words-staged={wordsStage}
+  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
+  data-compact={compact || undefined}
+  data-words-staged={wordsStage || undefined}
+  style:--review-rows="auto minmax(0, 1fr) auto"
+  style:--review-rows-wide="minmax(0, 1fr) auto"
+  style:--review-cols="var(--c-review-words) minmax(0, 1fr)"
 >
   <!-- Band 1: the session, its words, what it attached -->
-  <div data-slot="result" class="band result" data-band="result">
+  <div
+    data-slot="result"
+    class="flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
+    data-band="result"
+    data-compact={compact || undefined}
+  >
     {#if from}
       <div
         data-slot="session"
-        class="session mark-line"
+        class="flex items-center gap-space-2 min-w-0 mark-line"
         data-session={from.instanceId}
       >
         <SessionMark
@@ -310,7 +330,10 @@
           place={row?.cwd ?? from.instanceId}
           status={markStatus}
         />
-        <span class="session-name">{fromName}</span>
+        <span
+          class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+          >{fromName}</span
+        >
         {#if ended && newest}
           {#if newest.state === "failed"}
             <Badge data-box variant="fail"
@@ -322,7 +345,7 @@
         {/if}
         <a
           aria-label="Open its session beside this task"
-          class="open mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 ms-auto h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover hover:text-ink-strong mark-line press-tint focus-inset"
           data-box
           href={rowHref(from.instanceId)}
           onclick={(event) => {
@@ -331,14 +354,14 @@
           }}
         >
           <span>Open</span>
-          <IconArrowUpRight class="open-glyph" />
+          <IconArrowUpRight class="size-icon-sm" />
         </a>
       </div>
       {#if ended && newest?.endedHow}
         <p
           data-slot="ended"
-          class="ended"
-          class:fail={newest.state === "failed"}
+          class="m-0 type-body text-ink-muted wrap-anywhere data-fail:text-status-fail-ink"
+          data-fail={newest.state === "failed" || undefined}
         >
           {newest.endedHow}
         </p>
@@ -347,16 +370,25 @@
     {#if summary && !wordsStage}
       <div
         data-slot="words"
-        class="words"
+        class="group/words flex flex-col @task-frame/task-frame:not-data-compact:hidden"
+        data-compact={compact || undefined}
+        data-more={more || undefined}
         bind:this={wordsBox}
-        class:open={more}
       >
-        <p class="summary">{summary}</p>
+        <p
+          data-slot="summary"
+          class="m-0 type-body text-ink-strong text-pretty line-clamp-2 group-data-more/words:block"
+        >
+          {summary}
+        </p>
         <!-- The last line: what to check, and More at its end. -->
-        <div class="tail">
+        <div class="flex items-baseline gap-space-2">
           {#if check.length > 0}
-            <p class="check">
-              <span class="check-label">Check:</span>
+            <p
+              data-slot="check"
+              class="flex-auto min-w-0 m-0 type-body text-ink-muted text-pretty line-clamp-1 group-data-more/words:block"
+            >
+              <span class="font-medium text-ink-strong">Check:</span>
               {check.join(" · ")}
             </p>
           {/if}
@@ -364,7 +396,7 @@
             <button
               data-slot="more"
               aria-expanded={more}
-              class="more press-tint focus-inset"
+              class="flex-none ms-auto px-space-2 py-0 rounded-sm type-label text-ink-strong underline underline-offset-2 hover:bg-surface-hover hover:text-ink-strong press-tint focus-inset"
               onclick={() => {
                 more = !more;
               }}
@@ -376,13 +408,19 @@
         </div>
       </div>
       <!-- Two columns: the words whole, what to check as the list. -->
-      <div class="words-whole">
+      <div
+        class="hidden flex-col gap-space-2 @task-frame/task-frame:not-data-compact:flex"
+        data-compact={compact || undefined}
+      >
         <MessageBody source={whole} />
         {@render checkList()}
       </div>
     {/if}
     {#if listed.length > 0}
-      <div class="attachments" data-band-part="attachments">
+      <div
+        class="flex flex-wrap gap-x-space-3 gap-y-space-1"
+        data-band-part="attachments"
+      >
         {#each listed as one, index (index)}
           {@render attachment(one)}
         {/each}
@@ -394,20 +432,20 @@
   {#if !compact}
     <div
       data-slot="stage"
-      class="band stage"
-      class:framed={!!presented}
+      class="flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-0"
       data-band="stage"
+      data-framed={!!presented || undefined}
       id="stage-{task.id}"
     >
       {#if presented}
         <Presented {presented} />
       {:else if wordsStage}
-        <div class="stage-words">
+        <div class="flex flex-col gap-space-2">
           <MessageBody source={whole} />
           {@render checkList()}
         </div>
       {:else}
-        <p class="none">
+        <p class="m-0 type-body text-ink-muted">
           {#if attached.length > 0}
             Nothing presented, only its files.
           {:else if from}
@@ -422,10 +460,15 @@
 
   <!-- Band 3: the decision, pinned -->
   {#if ended || (deciding && (approveTo || backTo))}
-    <div class="band decide" data-band="decide">
+    <!-- literal: max(var(--space-3), env(safe-area-inset-bottom)) -->
+    <div
+      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-4 group-data-compact:border-t group-data-compact:border-t-border-hairline col-span-full @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
+      data-band="decide"
+      style:--decide-end="max(var(--space-3), env(safe-area-inset-bottom))"
+    >
       <RowFault reason={problem} />
       {#if note === null}
-        <div data-slot="acts" class="acts">
+        <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
           {#if ended}
             <Button
               label="Try again"
@@ -458,7 +501,7 @@
         </div>
       {:else if backTo}
         <form
-          class="send-back"
+          class="flex flex-col gap-space-2"
           onsubmit={(event) => {
             event.preventDefault();
             sendBack();
@@ -485,10 +528,10 @@
             bind:ref={noteField}
             bind:value={note}
           />
-          <p class="send-goes" id="send-back-{task.id}-goes">
+          <p class="m-0 type-meta text-ink-muted" id="send-back-{task.id}-goes">
             Goes on the task as your comment.
           </p>
-          <div data-slot="acts" class="acts">
+          <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
             <Button
               disabled={!note.trim()}
               label="Send back → {stageLabel(backTo.name)}"
@@ -512,280 +555,3 @@
     </div>
   {/if}
 </section>
-
-<style>
-  /* Bands in one fixed frame: only the stage scrolls. */
-  .review {
-    display: grid;
-    flex: 1 1 auto;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: "result" "stage" "decide";
-    min-block-size: 0;
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .review.compact {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    border: 1px solid
-      color-mix(in oklab, var(--status-attn-glyph) 40%, transparent);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    overflow: hidden;
-  }
-  /* The bands share the pane's inline padding (TaskPane `--pane-inline`). */
-  .band {
-    padding-inline: var(--pane-inline);
-  }
-  .compact .band {
-    padding-inline: var(--space-4);
-  }
-
-  /* Band 1 */
-  .result {
-    grid-area: result;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block: var(--space-3);
-  }
-  .session {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .session-name {
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .open {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-1);
-    margin-inline-start: auto;
-    block-size: var(--c-btn-h-xs);
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-decoration: none;
-  }
-  .open :global(.open-glyph) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  .ended {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .ended.fail {
-    color: var(--status-fail-ink);
-  }
-  /* Three lines at most until More: two of the summary, then one of what to
-     check, so the check is never the line clipped away. */
-  .words {
-    display: flex;
-    flex-direction: column;
-  }
-  .summary,
-  .check {
-    margin: 0;
-    overflow: hidden;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-wrap: pretty;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-  }
-  .summary {
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-  .check {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-    color: var(--ink-muted);
-  }
-  .words.open .summary,
-  .words.open .check {
-    display: block;
-  }
-  .tail {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-  }
-  .check-label {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  /* More stands at the end of the last line. */
-  .more {
-    flex: none;
-    margin-inline-start: auto;
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  /* The words whole stand only in two columns. */
-  .words-whole {
-    display: none;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  /* What it attached: one wrapping row, no heading. */
-  .attachments {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-3);
-  }
-  .attachment {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    max-inline-size: 100%;
-    min-block-size: var(--c-btn-h-xs);
-    padding-inline: var(--space-1);
-    margin-inline: calc(var(--space-1) * -1);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    text-decoration: none;
-  }
-  .attachment :global(.attachment-glyph) {
-    flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  .attachment-name {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  @media (pointer: coarse) {
-    .attachment {
-      min-block-size: 44px;
-    }
-  }
-
-  /* Band 2: the stage */
-  .stage {
-    grid-area: stage;
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    padding-block: var(--space-3);
-    border-block: 1px solid var(--border-hairline);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* A presented artifact fills the stage; its page scrolls inside its frame. */
-  .stage.framed {
-    overflow: hidden;
-  }
-  .stage-words {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .check-head {
-    margin: var(--space-2) 0 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .check-list {
-    margin: 0;
-    padding-inline-start: var(--space-5);
-    font: var(--type-body);
-    color: var(--ink-strong);
-    list-style: disc;
-  }
-  .check-list li::marker {
-    color: var(--ink-muted);
-  }
-  .none {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-
-  /* Band 3: the decision, pinned at the foot */
-  .decide {
-    grid-area: decide;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block: var(--space-3);
-    padding-block-end: max(var(--space-3), env(safe-area-inset-bottom));
-  }
-  .compact .decide {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .send-back {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .send-goes {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .more:hover,
-    .open:hover,
-    .attachment:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-
-  /* Wide enough for two columns (the pane expanded, the task's own page):
-     the words whole beside the stage, the decision under both. */
-  @container task-frame (min-width: 56rem) {
-    .review:not(.compact) {
-      grid-template-columns: var(--c-review-words) minmax(0, 1fr);
-      grid-template-areas: "result stage" "decide decide";
-      grid-template-rows: minmax(0, 1fr) auto;
-    }
-    .review:not(.compact) .result {
-      min-block-size: 0;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      border-inline-end: 1px solid var(--border-hairline);
-    }
-    .review:not(.compact) .words {
-      display: none;
-    }
-    .review:not(.compact) .words-whole {
-      display: flex;
-    }
-    .review:not(.compact) .stage {
-      border-block-end: 0;
-    }
-    .review:not(.compact) .decide {
-      border-block-start: 1px solid var(--border-hairline);
-    }
-  }
-</style>

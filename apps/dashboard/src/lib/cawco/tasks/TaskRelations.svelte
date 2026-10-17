@@ -63,16 +63,23 @@
 </script>
 
 {#snippet ref(id: string, remove?: () => void)}
-  <span class="ref">
+  <span
+    class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 pe-space-1 rounded-sm bg-surface-recess"
+  >
     <button
-      class="ref-open press-tint focus-inset"
+      class="flex flex-auto items-center gap-space-2 min-w-0 min-h-c-btn-h-sm px-space-2 border-0 rounded-sm bg-transparent text-start cursor-pointer press-tint focus-inset"
       onclick={() => onopen(id)}
       title={byId.get(id)?.title}
       type="button"
     >
-      <span class="ref-id">{id}</span>
+      <span class="flex-none text-meta font-mono liga-none text-ink-muted"
+        >{id}</span
+      >
       {#if byId.get(id)}
-        <span class="ref-title">{byId.get(id)?.title}</span>
+        <span
+          class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+          >{byId.get(id)?.title}</span
+        >
       {/if}
     </button>
     {#if remove}
@@ -87,24 +94,30 @@
 {/snippet}
 
 {#snippet row(name: string, ids: string[], edgeName: TaskEdge | null)}
-  <div class="edge">
-    <span class="edge-name">{name}</span>
-    <div data-slot="edge-list" class="edge-list">
+  <!-- literal: 6rem minmax(0, 1fr) -->
+  <div
+    class="grid grid-cols-(--edge-cols) items-start gap-space-2"
+    style:--edge-cols="6rem minmax(0, 1fr)"
+  >
+    <span class="pt-space-1 type-label text-ink-muted">{name}</span>
+    <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
       {#each ids as id (id)}
         {@render ref(
           id,
           edgeName ? () => onlink(edgeName, id, true) : undefined
         )}
       {:else}
-        <span class="none">None</span>
+        <span class="pt-space-1 type-meta text-ink-subtle">None</span>
       {/each}
     </div>
   </div>
 {/snippet}
 
-<section class="part">
-  <div class="part-head">
-    <h3 class="kit-section-head">Relations</h3>
+<section class="flex flex-col gap-space-2">
+  <div class="flex items-end gap-space-2">
+    <h3 class="kit-section-head flex-auto min-h-c-btn-h-xs m-0 px-0">
+      Relations
+    </h3>
     <Popover.Root bind:open>
       <Popover.Trigger>
         {#snippet child({ props })}
@@ -113,8 +126,13 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="end" class="w-80">
-        <div data-slot="pick" class="pick">
+      <!-- literal: 20rem -->
+      <Popover.Content
+        align="end"
+        class="w-(--popover-w)"
+        style="--popover-w: 20rem"
+      >
+        <div data-slot="pick" class="flex flex-col gap-space-2">
           <Choice
             label="Edge"
             onchange={(next) => {
@@ -129,11 +147,15 @@
             placeholder="Find a task…"
             bind:value={query}
           />
-          <ul class="candidates">
+          <!-- literal: 14rem -->
+          <ul
+            class="flex flex-col max-h-(--candidates-max) m-0 p-0 overflow-y-auto list-none"
+            style:--candidates-max="14rem"
+          >
             {#each candidates as each (each.id)}
               <li>
                 <button
-                  class="kit-item candidate"
+                  class="kit-item flex items-center gap-space-2 w-full text-start"
                   onclick={async () => {
                     open = false;
                     query = "";
@@ -141,12 +163,20 @@
                   }}
                   type="button"
                 >
-                  <span class="ref-id">{each.id}</span>
-                  <span class="ref-title">{each.title}</span>
+                  <span
+                    class="flex-none text-meta font-mono liga-none text-ink-muted"
+                    >{each.id}</span
+                  >
+                  <span
+                    class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+                    >{each.title}</span
+                  >
                 </button>
               </li>
             {:else}
-              <li class="none">No task matches.</li>
+              <li class="pt-space-1 type-meta text-ink-subtle">
+                No task matches.
+              </li>
             {/each}
           </ul>
         </div>
@@ -171,104 +201,3 @@
     {@render row("Waited on by", waitedOnBy, null)}
   {/if}
 </section>
-
-<style>
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .part-head {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-2);
-  }
-  .part :global(.kit-section-head) {
-    flex: 1 1 auto;
-    min-block-size: var(--c-btn-h-xs);
-    margin: 0;
-    padding-inline: 0;
-  }
-  .edge {
-    display: grid;
-    grid-template-columns: 6rem minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-2);
-  }
-  .edge-name {
-    padding-block-start: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .edge-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .none {
-    padding-block-start: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .ref {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-block-size: var(--c-btn-h-sm);
-    min-inline-size: 0;
-    padding-inline-end: var(--space-1);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .ref-open {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    min-block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    text-align: start;
-    cursor: pointer;
-  }
-  .ref-id {
-    flex: none;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  .ref-title {
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .pick {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .candidates {
-    display: flex;
-    flex-direction: column;
-    max-block-size: 14rem;
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
-    list-style: none;
-  }
-  .candidate {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    text-align: start;
-  }
-</style>
