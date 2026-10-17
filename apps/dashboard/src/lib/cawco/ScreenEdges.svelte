@@ -127,19 +127,44 @@
      bar, or the wide bar hosting them on their shelf. Under the narrow
      query the bar draws itself raised even while hosting (Shell). */
   /* The bar is read down its own line of parents, the page's root to the
-     Shell's (app.html's body div, Shell `.shell` > `.main` > `.top`): asked
-     as `:root:has(.top.floating)`, every style pass after anything went into
+     Shell's (app.html's body div, Shell's shell > main > top, by their
+     data-slot hooks, and the bar's state attributes): asked as
+     `:root:has(.top.floating)`, every style pass after anything went into
      the page searched the whole document for it, twice — every streamed
      message, every forced read in a tab switch. Down a line of children it
      is four elements, and it is answered in the page the server sends. */
   /* css-scope: reads the Shell's bar from the root to colour the top edge */
-  :global(:root:has(> body > div > .shell > .main > .top.floating)),
-  :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
+  :global(
+    :root:has(
+      > body
+        > div
+        > [data-slot="shell"]
+        > [data-slot="shell-main"]
+        > [data-slot="top"][data-floating]
+    )
+  ),
+  :global(
+    :root:has(
+      > body
+        > div
+        > [data-slot="shell"]
+        > [data-slot="shell-main"]
+        > [data-slot="top"][data-hosting]
+    )
+  ) {
     --edge-top-under: var(--surface-shelf);
   }
   @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
     /* css-scope: reads the Shell's bar from the root to colour the top edge */
-    :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
+    :global(
+      :root:has(
+        > body
+          > div
+          > [data-slot="shell"]
+          > [data-slot="shell-main"]
+          > [data-slot="top"][data-hosting]
+      )
+    ) {
       --edge-top-under: var(--surface-raised);
     }
   }
@@ -199,7 +224,7 @@
   /* css-scope: reads the Shell's sidebar sheet from the root */
   :global(
     :root:has(
-      > body > [data-slot="sheet-content"].rail-sheet[data-state="open"]
+      > body > [data-slot="sheet-content"][data-rail-sheet][data-state="open"]
     )
   ) {
     --edge-top-background: var(--sidebar);
