@@ -3763,24 +3763,36 @@ export class ClaudeHarness implements Harness {
    * responses report and the hub keeps. A version below the floor is the
    * machine's sentence on why no session starts ({@link versionRefusal}).
    * Read on every report and each minute's re-read, which is where a
-   * `claude update` is seen ({@link claudeHostVersion}).
+   * `claude update` is seen ({@link claudeHostVersion}). With no Claude Code
+   * on PATH it is not installed and unauthenticated, as pi and OpenCode say
+   * of theirs, and no dir is asked: there is no CLI to ask, so the report
+   * carries no `accounts` and the hub leaves each dir's sign-in as it was.
    */
   async detect(): Promise<MachineHarnessReport> {
     probeStarted();
-    const installed = resolveClaudeExecutable() !== undefined;
+    if (resolveClaudeExecutable() === undefined) {
+      this.auth = "unauthenticated";
+      return {
+        harness: "claude",
+        installed: false,
+        auth: "unauthenticated",
+        authReason: CLAUDE_NOT_INSTALLED,
+        capabilities: CLAUDE_CAPABILITIES,
+      };
+    }
     // Side by side: each is bounded on its own (`auth status` 20 s, the wait for `--version` 5 s).
     const [read, said] = await Promise.all([
       accountReports(),
-      installed ? claudeHostVersion() : undefined,
+      claudeHostVersion(),
     ]);
     const signins = claudeSignins(read);
     // Dirs that gave no answer leave the machine's word as it was.
     this.auth = signins.auth ?? this.auth;
-    const version = said?.kind === "answered" ? said.value : undefined;
-    const refused = said ? versionRefusal(said) : CLAUDE_NOT_INSTALLED;
+    const version = said.kind === "answered" ? said.value : undefined;
+    const refused = versionRefusal(said);
     return {
       harness: "claude",
-      installed,
+      installed: true,
       ...(version ? { version } : {}),
       ...signins,
       ...(refused ? { authReason: refused } : {}),
