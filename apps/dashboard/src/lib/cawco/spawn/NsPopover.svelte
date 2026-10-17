@@ -8,10 +8,14 @@
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { type PopoverMember, popoverGroup } from "./popover-group.svelte";
+
+  const TONES = {
+    muted: "text-ink-muted",
+    fail: "border-status-fail-ink text-status-fail-ink",
+  } as const;
 
   let {
     id,
@@ -27,7 +31,7 @@
     anchor = null,
     label,
     triggerClass = "",
-    triggerStyle,
+    triggerTone,
     haspopup,
     rows,
     ...rest
@@ -49,7 +53,8 @@
     anchor?: { getBoundingClientRect: () => DOMRect } | HTMLElement | null;
     label?: string;
     triggerClass?: string;
-    triggerStyle?: string;
+    /** A trigger that reads off its neighbours: quiet (nothing chosen), or a failing pick. */
+    triggerTone?: keyof typeof TONES;
     /** What the trigger opens, when it is not a dialog. */
     haspopup?: "listbox" | "menu";
     /** The rows the hover ghost glides between (components/ui/highlight). */
@@ -118,12 +123,11 @@
       aria-expanded={open}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit {triggerClass}"
+      class={["touch-hit", triggerClass, triggerTone && TONES[triggerTone]]}
       data-ns-popover-trigger-class={triggerClass}
       data-state={open ? "open" : "closed"}
       {id}
       onclick={toggle}
-      style={triggerStyle}
       type="button"
       bind:this={triggerEl}
     >
@@ -135,10 +139,9 @@
     {#if trigger}
       <PopoverPrimitive.Trigger
         aria-label={label}
-        class="touch-hit {triggerClass}"
+        class={["touch-hit", triggerClass, triggerTone && TONES[triggerTone]]}
         data-ns-popover-trigger-class={triggerClass}
         {id}
-        style={triggerStyle}
       >
         {#snippet child({ props })}
           <!-- bits-ui marks every trigger as opening a dialog; a list says so. -->
@@ -176,14 +179,16 @@
           <!-- Closing, it lets presses through to the page (floating-presence). -->
           <div
             {...wrapperProps}
-            class="ns-pop-shell"
-            style:pointer-events={pressable(open)}
+            class={[
+              "ns-pop-shell",
+              open ? "pointer-events-auto" : "pointer-events-none",
+            ]}
           >
             <div
               {...props}
               id={`${id}-popover`}
               role="presentation"
-              style:pointer-events={pressable(open)}
+              class={open ? "pointer-events-auto" : "pointer-events-none"}
               {@attach rows ? highlight({ rows }) : undefined}
               {@attach morph()}
             >

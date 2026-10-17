@@ -71,20 +71,20 @@
   {onclosefocus}
   {open}
   triggerClass="ns-chip-btn"
-  triggerStyle={empty ? "color:var(--ink-muted)" : ""}
+  triggerTone={empty ? "muted" : undefined}
   width={440}
 >
   {#snippet trigger()}
     {#if mode === "repo"}
       <ProviderLogo provider="github" size={null} />
     {:else}
-      <FolderOpen style="color:var(--hue-amber-500)" />
+      <FolderOpen class="text-hue-amber-500" />
     {/if}
     <span
       data-slot="chip-label"
-      class="chip-label"
-      title={mode === "repo" ? repo : dir}
-      class:mono={!empty}>{label}</span
+      class="chip-label data-mono:font-mono"
+      data-mono={!empty || undefined}
+      title={mode === "repo" ? repo : dir}>{label}</span
     >
     <Down class="chevron" />
   {/snippet}
@@ -105,9 +105,3 @@
     {repo}
   />
 </NsPopover>
-
-<style>
-  .mono {
-    font-family: var(--font-mono);
-  }
-</style>

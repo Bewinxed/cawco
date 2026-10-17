@@ -77,130 +77,85 @@
 >
   {#snippet trigger()}
     {#if shown}
-      <span data-slot="dot" class="dot" style:--c={shown.color}></span>
+      <!-- literal: 6px -->
+      <span
+        data-slot="dot"
+        class="size-(--dot) flex-none rounded-(--round) bg-(--c)"
+        style:--c={shown.color}
+        style:--dot="6px"
+        style:--round="50%"
+      ></span>
     {/if}
     <span data-slot="chip-label" class="chip-label" data-account-chip
       >{label}</span
     >
     <Down class="chevron" />
   {/snippet}
-  <div data-slot="list" aria-label="Account" class="list" role="listbox">
+  <div
+    data-slot="list"
+    aria-label="Account"
+    class="flex flex-col p-space-2"
+    role="listbox"
+    style:--ring-ground="var(--surface-lift)"
+  >
+    <!-- literal: 40px; 16px column tracks -->
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="option auto"
+      class="group type-label grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-0 bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
+      style:--cols="minmax(0, 1fr) 16px"
+      style:--min-h="40px"
       type="button"
     >
-      <span class="auto-label"
+      <span class="min-w-0 wrap-anywhere"
         >Auto{tool.auto.why ? ` · ${tool.auto.why}` : ""}</span
       >
-      <Check class="check" />
+      <Check
+        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] dur-control ease-out group-aria-selected:opacity-100 motion-reduce:transition-none"
+      />
     </button>
     {#each tool.options as option (option.id)}
+      <!-- literal: 40px; 16px column tracks -->
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="option"
+        class="group grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-0 bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
         role="option"
+        style:--cols="16px minmax(0, 1fr) 16px"
+        style:--min-h="40px"
         type="button"
       >
         {#if option.ring}
           <Rings ring={option.ring} size={16} />
         {:else}
+          <!-- literal: 8px -->
           <span
             data-account-chip-lead
             data-slot="dot"
-            class="dot lead"
+            class="mx-space-1 size-(--dot) flex-none rounded-(--round) bg-(--c)"
             style:--c={option.color}
+            style:--dot="8px"
+            style:--round="50%"
           ></span>
         {/if}
-        <span data-slot="words" class="words">
+        <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
           <AccountName account={nameFields(option)} row wrap />
           {#if option.line.length > 0}
-            <span class="line"><Words parts={option.line} /></span>
+            <span class="type-meta text-ink-muted"
+              ><Words parts={option.line} /></span
+            >
           {/if}
         </span>
-        <Check class="check" />
+        <Check
+          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] dur-control ease-out group-aria-selected:opacity-100 motion-reduce:transition-none"
+        />
       </button>
     {/each}
   </div>
 </NsPopover>
-
-<style>
-  .dot {
-    flex: none;
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  .dot.lead {
-    inline-size: 8px;
-    block-size: 8px;
-    margin-inline: 4px;
-  }
-  .list {
-    --ring-ground: var(--surface-lift);
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-2);
-  }
-  .option {
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr) 16px;
-    gap: var(--space-3);
-    align-items: center;
-    inline-size: 100%;
-    min-block-size: 40px;
-    padding: var(--space-2) var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    text-align: start;
-    cursor: pointer;
-  }
-  .option.auto {
-    grid-template-columns: minmax(0, 1fr) 16px;
-    font: var(--type-label);
-  }
-  .option:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-  .auto-label {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .option :global(.check) {
-    inline-size: 16px;
-    block-size: 16px;
-    color: var(--selected-icon);
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .option[aria-selected="true"] :global(.check) {
-    opacity: 1;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .option :global(.check) {
-      transition: none;
-    }
-  }
-</style>

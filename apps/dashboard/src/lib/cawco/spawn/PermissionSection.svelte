@@ -76,48 +76,58 @@
 
 <div
   aria-label="Permission mode"
-  class={["perms", { embedded }]}
+  class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:border-0 data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
+  data-embedded={embedded || undefined}
   role="radiogroup"
+  style:--row-h="44px"
   tabindex="-1"
   {@attach highlight({ rows: "[data-fh]" })}
 >
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="fill"
-    style={`transform:translateY(calc(${index} * (var(--row-h) + 2px)));opacity:${rows.some((row) => row.value === value) ? 1 : 0}`}
+    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--row-h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) group-data-embedded:top-0 group-data-embedded:inset-x-0 motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-in-out"
+    style:--o={rows.some((row) => row.value === value) ? 1 : 0}
+    style:--shift={`translateY(calc(${index} * (var(--row-h) + 2px)))`}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
     {@const on = row.value === value}
     <!-- biome-ignore lint/a11y/useSemanticElements: the permission rows are designed tiles with a sliding fill; a native radio cannot render them -->
+    <!-- literal: 10px gap, 6px 8px padding, 26px tile -->
     <button
       data-slot="row"
       aria-checked={on}
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="row ns-in press-tint"
+      class="ns-in press-tint relative flex h-(--row-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border border-transparent bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed disabled:opacity-55"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
       onclick={() => pick(row.value)}
       role="radio"
       style={`--delay:${i * 35}ms`}
+      style:--gap="10px"
+      style:--pad-x="8px"
+      style:--pad-y="6px"
       type="button"
     >
-      <span data-slot="tile" class="ns-tile tile" style={`color:${row.hue}`}
-        ><Icon /></span
+      <span
+        data-slot="tile"
+        class="ns-tile size-(--tile) text-(--hue)"
+        style:--hue={row.hue}
+        style:--tile="26px"><Icon class="size-icon-md" /></span
       >
-      <span data-slot="text" class="text">
-        <span data-slot="name" class="name">{row.name}</span>
-        <span class="desc">{row.desc}</span>
+      <span data-slot="text" class="min-w-0 flex-1">
+        <span data-slot="name" class="type-label block">{row.name}</span>
+        <span class="type-meta block truncate text-ink-subtle">{row.desc}</span>
       </span>
       <!-- Every row keeps the check's slot, so the rows share one width
            whichever mode is chosen. -->
-      <span aria-hidden="true" class="check-slot">
+      <span aria-hidden="true" class="grid size-icon-md flex-none">
         {#if on}
-          <Check class="check ns-check" />
+          <Check class="ns-check size-icon-md text-ink-strong" />
         {/if}
       </span>
       {#if row.reason}
@@ -131,95 +141,3 @@
 <!-- Full Send's question, under the rows: they place their fill by index,
      so it stands after them, not between. -->
 <AskHere asker={asks} at="fullSend" />
-
-<style>
-  .perms {
-    /* One row's height: the rows and the fill that slides under them. */
-    --row-h: 44px;
-    position: relative;
-    display: grid;
-    gap: 2px;
-    padding: 4px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
-  }
-  .perms.embedded {
-    padding: 0;
-    border: 0;
-    box-shadow: none;
-    background: transparent;
-  }
-  .fill {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    height: var(--row-h);
-    background: var(--surface-fill);
-    border-radius: var(--radius-sm);
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-  .embedded .fill {
-    inset-inline: 0;
-    top: 0;
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    height: var(--row-h);
-    padding: 6px 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .row:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  .tile {
-    width: 26px;
-    height: 26px;
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    font: var(--type-label);
-  }
-  .desc {
-    display: block;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .check-slot {
-    display: grid;
-    flex: none;
-    width: 16px;
-    height: 16px;
-  }
-  .row :global(svg.check) {
-    width: 16px;
-    height: 16px;
-    color: var(--ink-strong);
-  }
-</style>

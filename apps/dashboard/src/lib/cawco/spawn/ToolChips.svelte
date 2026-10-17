@@ -92,6 +92,9 @@
   const effortPicker = $derived(
     !(readonly || effortOff) && tools.efforts.length > 0
   );
+  /** The consequential grant's warning tint on a Full Send chip, hover included. */
+  const FULL_SEND =
+    "border-status-attn-ink bg-status-attn-bg text-status-attn-ink hover:bg-status-attn-bg";
   /** Apply the level now, but keep the picker open while the chip settles on it. */
   const SETTLE_MS = 260;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -106,8 +109,8 @@
 </script>
 
 {#snippet effortChip()}
-  <Tuning style="color:var(--hue-orange-500)" />
-  <span data-slot="chip-label" class="chip-label level"
+  <Tuning class="text-hue-orange-500" />
+  <span data-slot="chip-label" class="chip-label capitalize"
     >{tools.effort ?? "Default"}</span
   >
 {/snippet}
@@ -118,10 +121,14 @@
       data-tool
       data-slot="ns-chip-btn"
       aria-disabled="true"
-      class={["ns-chip-btn tool off", readonly && "static"]}
+      class={[
+        "ns-chip-btn tool off cursor-not-allowed opacity-55 hover:bg-surface-raised data-static:hover:bg-surface-recess",
+        readonly && "static",
+      ]}
+      data-static={readonly || undefined}
       title={effortOff.reason}
     >
-      <Tuning style="color:var(--hue-orange-500)" />
+      <Tuning class="text-hue-orange-500" />
       <span data-slot="chip-label" class="chip-label">{effortOff.label}</span>
       <span class="sr-only">: {effortOff.reason}</span>
     </span>
@@ -134,27 +141,37 @@
 {#snippet permissionChip()}
   {#if look}
     {@const Icon = look.icon}
-    <Icon style={`color:${look.hue}`} />
+    <Icon class="text-(--hue)" style={`--hue:${look.hue}`} />
     <span data-slot="chip-label" class="chip-label">{look.name}</span>
   {/if}
 {/snippet}
 
 <!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut). -->
-<span class="tool-chips">
+<span class="tool-chips relative inline-flex flex-none">
   {#if readonly}
-    <span data-slot="swap" class="swap" in:crossIn out:crossOut>
+    <span
+      data-slot="swap"
+      class="swap inline-flex items-center"
+      in:crossIn
+      out:crossOut
+    >
       {@render effortStatic()}
       {#if tools.modes.length && tools.permission}
         <span
           data-tool
           data-slot="ns-chip-btn"
-          class={["ns-chip-btn tool static", fullSend && "full-send"]}
+          class={["ns-chip-btn tool static", fullSend && FULL_SEND]}
           title={look?.desc || undefined}>{@render permissionChip()}</span
         >
       {/if}
     </span>
   {:else}
-    <span data-slot="swap" class="swap" in:crossIn out:crossOut>
+    <span
+      data-slot="swap"
+      class="swap inline-flex items-center"
+      in:crossIn
+      out:crossOut
+    >
       {#if !effortPicker}
         {@render effortStatic()}
       {/if}
@@ -175,7 +192,13 @@
               {@render effortChip()}
               <Down class="chevron" />
             {/snippet}
-            <div class="effort-pop">
+            <!-- literal: 8px 6px 6px padding -->
+            <div
+              class="pt-(--pt) pr-(--px) pb-(--pb) pl-(--px)"
+              style:--pb="6px"
+              style:--pt="8px"
+              style:--px="6px"
+            >
               <EffortPips
                 efforts={tools.efforts}
                 embedded
@@ -196,12 +219,12 @@
               pop = value ? "permission" : null;
             }}
             open={pop === "permission"}
-            triggerClass={`ns-chip-btn tool${fullSend ? " full-send" : ""}`}
+            triggerClass={`ns-chip-btn tool${fullSend ? ` ${FULL_SEND}` : ""}`}
             width={340}
           >
             {#snippet trigger()}
               {@render permissionChip()}
-              <Down class="chevron" />
+              <Down class={["chevron", fullSend && "text-status-attn-ink"]} />
             {/snippet}
             <PermissionSection
               embedded
@@ -222,49 +245,13 @@
 </span>
 
 <style>
+  /* residual: unmapped */
   /* The chips keep the gap of the row they sit in, and never shrink or wrap
      in it: a row that runs short gives the room up from its other chips. */
   .tool-chips {
-    position: relative;
-    display: inline-flex;
-    flex: none;
     gap: inherit;
-  }
-  /* Unavailable: the chip's own look, faded as a disabled control is. */
-  .off {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  @media (hover: hover) {
-    .tool-chips .off:hover {
-      background: var(--surface-raised);
-    }
-    .tool-chips .off.static:hover {
-      background: var(--surface-recess);
-    }
   }
   .swap {
-    display: inline-flex;
-    align-items: center;
     gap: inherit;
-  }
-  .level {
-    text-transform: capitalize;
-  }
-  .effort-pop {
-    padding: 8px 6px 6px;
-  }
-  .tool-chips :global(.ns-chip-btn.tool.full-send) {
-    background: var(--status-attn-bg);
-    border-color: var(--status-attn-ink);
-    color: var(--status-attn-ink);
-  }
-  .tool-chips :global(.ns-chip-btn.tool.full-send > svg.chevron) {
-    color: var(--status-attn-ink);
-  }
-  @media (hover: hover) {
-    .tool-chips :global(.ns-chip-btn.tool.full-send:hover) {
-      background: var(--status-attn-bg);
-    }
   }
 </style>

@@ -36,7 +36,6 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     machineHue,
     machineIcon,
@@ -1755,7 +1754,7 @@
     <DrawerContent
       data-session-card
       aria-label="New Session"
-      class="session-card ns-theme"
+      class="ns-theme fixed z-81 flex origin-center flex-col outline-none m-0 motion-reduce:animate-none! motion-reduce:transition-none!"
       data-ns-dialog
       onCloseAutoFocus={(event) => {
         event.preventDefault();
@@ -1766,6 +1765,7 @@
         event.preventDefault();
         card?.focus({ preventScroll: true });
       }}
+      style="--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), 24px))"
       bind:ref={card}
     >
       <DrawerTitle class="sr-only">New session</DrawerTitle>
@@ -1785,15 +1785,23 @@
       <!-- Drawn through `child`: bits-ui holds the body's lock only while it
            is open and clears it at once, and the leaving card and scrim let
            presses through (floating-presence). -->
-      <DialogPrimitive.Overlay class="session-scrim ns-theme">
+      <DialogPrimitive.Overlay
+        data-slot="session-scrim"
+        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none! motion-reduce:transition-none!"
+      >
         {#snippet child({ props, open: shown })}
-          <div {...props} style:pointer-events={pressable(shown)}></div>
+          <div
+            {...props}
+            class="{props.class} {shown
+              ? 'pointer-events-auto'
+              : 'pointer-events-none'}"
+          ></div>
         {/snippet}
       </DialogPrimitive.Overlay>
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="session-card ns-theme"
+        class="ns-theme fixed z-81 flex origin-center flex-col outline-none inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-none!"
         data-ns-dialog
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -1805,10 +1813,16 @@
           card?.focus({ preventScroll: true });
         }}
         restoreScrollDelay={0}
+        style="--card-max-h: calc(100dvh - 48px); --card-rise: 6px; --card-w: min(980px, 100vw - 48px)"
         bind:ref={card}
       >
         {#snippet child({ props, open: shown })}
-          <div {...props} style:pointer-events={pressable(shown)}>
+          <div
+            {...props}
+            class="{props.class} {shown
+              ? 'pointer-events-auto'
+              : 'pointer-events-none'}"
+          >
             <DialogTitle class="sr-only">New session</DialogTitle>
             {@render formContent()}
           </div>
@@ -1822,10 +1836,21 @@
   <!-- While a start runs the form takes no input; the footer stays live so
        the pending Start keeps its focus (a focused element in an inert
        subtree drops focus to the body). -->
-  <div data-slot="head" class="head kit-sheet-head" inert={busy}>
-    <div class="head-left">
-      <span class="bolt"><Bolt /></span>
-      <h2 data-slot="title" class="title">
+  <!-- literal: 10px gap, 3px 8px padding, 22px bolt -->
+  <div
+    data-slot="head"
+    class="kit-sheet-head gap-(--gap) px-space-1 pt-(--pad-t) pb-(--pad-b) max-phone:touch-none max-phone:px-0 max-phone:pt-0 max-phone:pb-space-3"
+    inert={busy}
+    style:--gap="10px"
+    style:--pad-b="8px"
+    style:--pad-t="3px"
+  >
+    <div class="flex min-w-0 items-center gap-(--gap)" style:--gap="10px">
+      <span
+        class="inline-flex size-(--box) flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
+        style:--box="22px"><Bolt class="size-icon-sm" /></span
+      >
+      <h2 data-slot="title" class="type-title m-0 truncate text-ink-strong">
         <MorphText text={headTitle} />
       </h2>
     </div>
@@ -1841,9 +1866,17 @@
           onclick={moveStep ? back : close}
           type="button"
         >
-          <span class="head-glyph" data-back={moveStep || undefined}>
-            <span data-slot="glyph" data-close class="glyph close"><X /></span>
-            <span data-slot="glyph" class="glyph back"><IconChevronLeft /></span
+          <span class="group grid" data-back={moveStep || undefined}>
+            <span
+              data-slot="glyph"
+              data-close
+              class="col-start-1 row-start-1 grid place-items-center transition-[opacity] dur-control ease-out group-data-back:opacity-0"
+              ><X /></span
+            >
+            <span
+              data-slot="glyph"
+              class="col-start-1 row-start-1 grid place-items-center opacity-0 transition-[opacity] dur-control ease-out group-data-back:opacity-100"
+              ><IconChevronLeft /></span
             >
           </span>
         </button>
@@ -1857,13 +1890,15 @@
   <!-- A capped body fades the edge it has more to scroll to (the house edge
        fade): where the system hides its scrollbar (macOS), that edge is
        what says the form runs on past it. -->
+  <!-- literal: 20px bottom padding -->
   <div
     data-slot="body"
-    class="body fai-scroll kit-sheet-scroll kit-edge-fade-block"
+    class="fai-scroll kit-sheet-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-(--pad-b) max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
+    data-stepped={moveStep || undefined}
     data-vaul-no-drag
     inert={busy}
     onscroll={bodyScroll}
-    class:stepped={moveStep}
+    style:--pad-b="20px"
   >
     <!-- One popover surface for every chip in the form: the composer's and
          the chosen model's effort and permission chips glide between each
@@ -1871,19 +1906,23 @@
     <NsPopoverGroup>
       <section
         data-slot="prompt-sec"
-        class="sec prompt-sec"
+        class="sec relative z-30 grid gap-(--gap)"
         style="--delay:0ms"
+        style:--gap="8px"
       >
-        <div class="prompt-head">
+        <div class="group-data-stepped:hidden">
           <SectionHeader
             hue="var(--hue-blue-500)"
             icon={Chat}
             label={continueFrom ? "Next step (optional)" : "First prompt"}
           />
         </div>
-        <div class="fai-comb"></div>
-        <div data-slot="composer" class="composer field-shell">
-          <div class="prompt-body">
+        <div class="fai-comb group-data-stepped:hidden"></div>
+        <div
+          data-slot="composer"
+          class="field-shell relative grid rounded-lg border border-border-control bg-surface-raised shadow-xs transition-control"
+        >
+          <div class="contents group-data-stepped:hidden">
             <PromptEditor
               lead={sourceChip}
               {menuItems}
@@ -1893,11 +1932,28 @@
               bind:element={editor}
               bind:value={firstMessage.text}
             />
-            <div class="prompt-atts">
+            <!-- literal: 10px inline inset -->
+            <div
+              class="px-(--pad-x) not-empty:pb-space-2"
+              style:--pad-x="calc(10px - var(--space-1))"
+            >
               <AttachmentChips draft={firstMessage} />
             </div>
           </div>
-          <div data-slot="chips" class="chips" inert={moveStep}>
+          <!-- literal: 6px gap, 14px row gap on a coarse pointer, 8px 10px 10px padding -->
+          <div
+            data-slot="chips"
+            class="flex flex-wrap items-center gap-(--gap) px-(--pad-x) pt-(--pad-t) pb-(--pad-b) coarse:gap-y-(--gap-y-coarse)"
+            inert={moveStep}
+            style:--gap="6px"
+            style:--gap-y-coarse="14px"
+            style:--hit-gap-x="6px"
+            style:--hit-gap-y-coarse="14px"
+            style:--hit-gap-y-fine="6px"
+            style:--pad-b="10px"
+            style:--pad-t="8px"
+            style:--pad-x="10px"
+          >
             <MachinesChip
               machines={machineItems}
               onchange={(value) => {
@@ -1913,7 +1969,7 @@
                 class="ns-chip-btn static"
                 title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
               >
-                <Files style="color:var(--hue-amber-500)" />
+                <Files class="text-hue-amber-500" />
                 <span data-slot="chip-label" class="chip-label"
                   >Starts in {sourceProject.name}</span
                 >
@@ -1989,34 +2045,44 @@
             />
             <!-- Attach acts on the prompt, not on where it runs: it stands
                  apart from the setting chips, at the row's end. -->
-            <span class="attach">
+            <span class="ms-auto inline-flex">
               <AttachButton draft={firstMessage} />
             </span>
           </div>
         </div>
         <!-- A move's line may take two lines; its height follows (morph). -->
+        <!-- literal: 16px minimum height -->
         <p
           data-why={readingSaysWhy || undefined}
           aria-live="polite"
-          class="reading"
+          class="type-meta m-0 min-h-(--min-h) truncate text-status-fail-ink group-data-stepped:not-data-why:hidden data-informational:text-ink-muted data-two:line-clamp-2 data-two:text-pretty data-two:whitespace-normal"
+          data-informational={locationInformational || undefined}
+          data-two={moveTo !== null || undefined}
+          style:--min-h="16px"
           title={reading}
-          class:informational={locationInformational}
-          class:two={moveTo !== null}
-          class:why={readingSaysWhy}
           {@attach readingMorph}
         >
           {reading || "\u00a0"}
         </p>
         {#if moveStep && moveEstimated?.ask}
-          <div data-slot="tray" class="tray" in:unfold out:unfold>
+          <div data-slot="tray" class="pt-space-2" in:unfold out:unfold>
             <MoveAskBody ask={moveEstimated.ask} />
           </div>
         {/if}
       </section>
-      <div class="fai-comb comb-gap"></div>
-      <div data-slot="stack" class="stack">
+      <div class="fai-comb mt-space-5 group-data-stepped:hidden"></div>
+      <div
+        data-slot="stack"
+        class="mt-space-5 grid gap-space-5 group-data-stepped:hidden"
+      >
         {#if continueFrom}
-          <div class="carry" in:unfold|global out:unfold>
+          <!-- literal: 8px row gap -->
+          <div
+            class="flex flex-wrap items-center gap-x-space-4 gap-y-(--gap-y)"
+            style:--gap-y="8px"
+            in:unfold|global
+            out:unfold
+          >
             <Segmented
               items={[
                 { value: "summary", label: "From a summary" },
@@ -2026,15 +2092,25 @@
               onchange={chooseCarry}
               value={carry}
             />
-            <p aria-live="polite" class="sizing">{sizing}</p>
+            <p aria-live="polite" class="type-meta m-0 text-ink-muted num">
+              {sizing}
+            </p>
           </div>
         {/if}
+        <!-- literal: two equal columns -->
         <div
-          class="models"
-          class:pair={Boolean(continueFrom) && carry === "summary"}
+          class="data-pair:grid data-pair:grid-cols-(--cols) data-pair:gap-space-4 max-phone:data-pair:grid-cols-(--cols-phone)"
+          data-pair={(Boolean(continueFrom) && carry === "summary") ||
+            undefined}
+          style:--cols="repeat(2, minmax(0, 1fr))"
+          style:--cols-phone="minmax(0, 1fr)"
         >
           {#if continueFrom && carry === "summary"}
-            <div class="sec" style="--delay:60ms">
+            <div
+              class="sec grid gap-(--gap)"
+              style="--delay:60ms"
+              style:--gap="8px"
+            >
               <ModelSection
                 harness={summarizerHarness}
                 installed={installedHarnesses}
@@ -2053,7 +2129,11 @@
               />
             </div>
           {/if}
-          <div class="sec" style="--delay:80ms">
+          <div
+            class="sec grid gap-(--gap)"
+            style="--delay:80ms"
+            style:--gap="8px"
+          >
             <ModelSection
               account={accountTool}
               {harness}
@@ -2095,13 +2175,19 @@
   <!-- No Claude account can take it on this machine: why, beside Start,
        and where to sign one in. -->
   {#if placementRefusal}
-    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+    <div
+      class="flex-none pt-space-2"
+      data-vaul-no-drag
+      in:unfold|global
+      out:unfold
+    >
       <Alert role="status" variant="warning">
         <IconKey />
         <AlertTitle>{placementRefusal}</AlertTitle>
         <AlertDescription>
-          <a class="accounts-link" href="/config/accounts"
-            >Open Configure → Accounts</a
+          <a
+            class="rounded-xs text-link-ink no-underline hover:text-link-hover"
+            href="/config/accounts">Open Configure → Accounts</a
           >
         </AlertDescription>
       </Alert>
@@ -2110,7 +2196,12 @@
   <!-- Full Send in the form, however it got there, stands outside the body's
        scroll, beside Start: it is in view whenever the form can start. -->
   {#if fullSendWarning}
-    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+    <div
+      class="flex-none pt-space-2"
+      data-vaul-no-drag
+      in:unfold|global
+      out:unfold
+    >
       <Alert role="status" variant="warning">
         <IconShield />
         <AlertTitle
@@ -2122,7 +2213,7 @@
       </Alert>
     </div>
   {/if}
-  <div class="footer" data-vaul-no-drag>
+  <div class="contents" data-vaul-no-drag>
     <SessionFooter
       busy={busy || pressedFor !== null}
       {busyLabel}
@@ -2137,297 +2228,48 @@
 {/snippet}
 
 <style>
-  .footer {
-    display: contents;
-  }
-  .full-send {
-    flex: none;
-    padding-top: var(--space-2);
-  }
-  .accounts-link {
-    border-radius: var(--radius-xs);
-    color: var(--link-ink);
-    text-decoration: none;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .accounts-link:hover {
-      color: var(--link-hover);
-    }
-  }
-  :global(.session-scrim) {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    background: var(--scrim);
-    backdrop-filter: blur(var(--scrim-blur));
-    -webkit-backdrop-filter: blur(var(--scrim-blur));
-  }
-  /* The dialog stands centred in the window, a recess tray holding the raised
-     body; the sheet's place, height and surface are the kit drawer's. */
-  :global(.session-card:not([data-vaul-drawer])) {
-    inset: 0;
-    margin: auto;
-    width: min(980px, 100vw - 48px);
-    height: fit-content;
-    max-height: calc(100dvh - 48px);
-    background: var(--surface-recess);
-    border-radius: var(--radius-lg);
-    padding: var(--space-2);
-    box-shadow: var(--shadow-modal);
-  }
-  :global(.session-card) {
-    position: fixed;
-    z-index: 81;
-    display: flex;
-    flex-direction: column;
-    outline: none;
-    transform-origin: center;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.session-card:not([data-vaul-drawer])[data-state="open"]) {
-      animation: ns-panel var(--dur-panel) var(--ease-out) both;
-    }
-    :global(.session-card:not([data-vaul-drawer])[data-state="closed"]) {
-      animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
-    }
-    :global(.session-scrim:not([data-vaul-overlay])[data-state="open"]) {
-      animation: ns-scrim var(--dur-panel) var(--ease-out) both;
-    }
-    :global(.session-scrim:not([data-vaul-overlay])[data-state="closed"]) {
-      animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
-    }
-  }
-  .head {
-    gap: 10px;
-    padding: 3px 4px 8px;
-  }
-  .head-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-  .bolt {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-xs);
-    background: var(--ink-solid);
-    color: var(--on-ink);
-    flex: none;
-  }
-  .bolt :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  /* The dialog's one title, in the title role, as every sheet's is. */
-  .title {
-    margin: 0;
-    font: var(--type-title);
-    letter-spacing: -0.01em;
-    color: var(--ink-strong);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  /* The body is as tall as what it holds and gives way when the card is
-     capped. A zero flex basis counts for nothing in WebKit's fit-content
-     height: on an iPhone in landscape the card came out 139px tall around a
-     body of padding alone, the prompt out of reach. */
-  .body {
-    flex: 0 1 auto;
-    min-height: 0;
-    overflow: auto;
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    padding: 18px 18px 20px;
-  }
+  /* residual: keyframes */
   .sec {
-    display: grid;
-    gap: 8px;
     @media (prefers-reduced-motion: no-preference) {
       animation: ns-in var(--dur-pop) var(--ease-out) both;
       animation-delay: var(--delay, 0ms);
     }
   }
-  .prompt-sec {
-    position: relative;
-    z-index: 30;
-  }
-  .comb-gap {
-    margin-top: 18px;
-  }
-  .stack {
-    display: grid;
-    gap: 18px;
-    margin-top: 18px;
-  }
-  /* Continue mode: what the new session opens on, and that start sized. */
-  .carry {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 14px;
-  }
-  .sizing {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Continue mode: who summarises beside who continues, read left to right. */
-  .models.pair {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-  .reading {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-height: 16px;
-  }
-  .reading.informational {
-    color: var(--ink-muted);
-  }
-  /* A move's line wraps to a second line, never a third. */
-  .reading.two {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    white-space: normal;
-    text-wrap: pretty;
-  }
-  /* The prompt's words and files stand in the composer as they always did. */
-  .prompt-body {
-    display: contents;
-  }
-  /* Step 2: the chips that say where it runs, and what moving does. The rest
-     of the form is kept out of sight as it was, for Back; the line under the
-     chips stays when it says why Move it can't go (`why`), as on the phone app. */
-  .stepped .prompt-head,
-  .stepped .prompt-sec > .fai-comb,
-  .stepped .prompt-body,
-  .stepped .reading:not(.why),
-  .stepped .comb-gap,
-  .stepped .stack {
-    display: none;
-  }
-  .tray {
-    padding-block-start: var(--space-2);
-  }
-  /* The × and the back chevron share one cell and cross-fade in it. */
-  .head-glyph {
-    display: grid;
-  }
-  .head-glyph .glyph {
-    grid-area: 1 / 1;
-    display: grid;
-    place-items: center;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .head-glyph .back,
-  .head-glyph[data-back] .close {
-    opacity: 0;
-  }
-  .head-glyph[data-back] .back {
-    opacity: 1;
-  }
-  .composer {
-    position: relative;
-    display: grid;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-xs);
-    transition: var(--transition-control);
-  }
-  /* 30px chips that wrap: on a coarse pointer the rows open to 14px apart,
-     so each chip's touch area reaches 44px tall. */
-  .chips {
-    --hit-gap-x: 6px;
-    --hit-gap-y: 6px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 8px 10px 10px;
-
-    @media (pointer: coarse) {
-      --hit-gap-y: 14px;
-      row-gap: 14px;
+  @media (prefers-reduced-motion: no-preference) {
+    :global([data-session-card]:not([data-vaul-drawer])[data-state="open"]) {
+      animation: ns-panel var(--dur-panel) var(--ease-out) both;
     }
-  }
-  /* The first prompt's attachments, between the words and the chips, their
-     edge on the chips' (the row pads its chips by --space-1). */
-  .prompt-atts {
-    padding-inline: calc(10px - var(--space-1));
-  }
-  /* What is attached and where it runs are two groups: a step more apart
-     than the chips inside either. */
-  .prompt-atts:not(:empty) {
-    padding-block-end: var(--space-2);
-  }
-  .attach {
-    display: inline-flex;
-    margin-inline-start: auto;
+    :global([data-session-card]:not([data-vaul-drawer])[data-state="closed"]) {
+      animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
+    }
+    :global(
+      [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="open"]
+    ) {
+      animation: ns-scrim var(--dur-panel) var(--ease-out) both;
+    }
+    :global(
+      [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="closed"]
+    ) {
+      animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
+    }
   }
   @media (max-width: 640px) {
-    /* The kit drawer (vaul) carries the sheet: it rises from the bottom,
-       follows the finger from the header down and lets go past vaul's
-       distance or flick thresholds. The kit rests it on the bottom of the
-       visible viewport and caps it there (app.css, the rule for bottom
-       sheets), so above a keyboard the header and Start stay on screen and
-       the body scrolls between them. */
-    :global(.session-card[data-vaul-drawer]) {
-      --drawer-max-height: calc(
-        var(--visible-height, 100dvh) - max(env(safe-area-inset-top), 24px)
-      );
-      margin: 0;
-    }
     /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
        its scrim, instead of vaul's 500ms slide. */
-    :global(.session-card[data-vaul-drawer][data-state="closed"]),
+    :global([data-session-card][data-vaul-drawer][data-state="closed"]),
     /* The sheet is portalled straight into <body>: asked of the body's own
        children, so a change anywhere in the page is not a search of it. */
     :global(
-      body:has(> .session-card[data-vaul-drawer])
+      body:has(> [data-session-card][data-vaul-drawer])
         [data-vaul-overlay][data-state="closed"]
     ) {
       animation-duration: var(--dur-exit);
       animation-timing-function: var(--ease-out);
     }
-    /* The sheet's header is every sheet's: the title and Close. */
-    .head {
-      padding: 0 0 var(--space-3);
-      touch-action: none;
-    }
-    .bolt {
-      display: none;
-    }
-    .models.pair {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    /* The form stands on the sheet itself: no card of its own. Its scroll
-       box keeps a step of room each side so focus rings are not clipped. */
-    .body {
-      margin-inline: calc(-1 * var(--space-1));
-      padding: var(--space-3) var(--space-1) var(--space-4);
-      background: none;
-      border-radius: 0;
-      touch-action: pan-y;
-      overscroll-behavior: contain;
-    }
   }
   @keyframes ns-panel-out {
     to {
-      transform: translateY(6px) scale(var(--press-scale));
+      transform: translateY(var(--card-rise)) scale(var(--press-scale));
       opacity: 0;
     }
   }
@@ -2444,11 +2286,13 @@
       opacity: 0;
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.session-card),
-    :global(.session-scrim) {
-      animation: none !important;
-      transition: none !important;
+  /* residual: unmapped */
+  /* 30px chips that wrap: on a coarse pointer the rows open to 14px apart,
+     so each chip's touch area reaches 44px tall. */
+  [data-slot="chips"] {
+    --hit-gap-y: var(--hit-gap-y-fine);
+    @media (pointer: coarse) {
+      --hit-gap-y: var(--hit-gap-y-coarse);
     }
   }
 </style>

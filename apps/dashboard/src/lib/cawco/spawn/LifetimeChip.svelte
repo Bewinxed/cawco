@@ -55,8 +55,16 @@
   {#snippet trigger()}
     {@const Icon = current.icon}
     {#key current.name}
-      <span data-slot="swap" class="swap">
-        <Icon style={`color:${current.hue}`} />
+      <!-- literal: 6px -->
+      <span
+        data-slot="swap"
+        class="swap inline-flex items-center gap-(--gap)"
+        style:--gap="6px"
+      >
+        <Icon
+          class="size-icon-md flex-none text-(--hue)"
+          style={`--hue:${current.hue}`}
+        />
         <span data-slot="chip-label" class="chip-label">{current.name}</span>
       </span>
     {/key}
@@ -65,91 +73,49 @@
   {#each OPTIONS as option, index (option.name)}
     {@const Icon = option.icon}
     {@const on = option.ephemeral === ephemeral}
+    <!-- literal: 10px gap, 48px height, 6px 8px padding, 26px tile -->
     <button
       data-slot="row"
       aria-pressed={on}
-      class="row ns-in press-tint"
+      class="ns-in press-tint relative flex min-h-(--min-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-pressed:bg-surface-fill"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);
         onchange(false);
       }}
       style={`--delay:${index * 35}ms`}
+      style:--gap="10px"
+      style:--min-h="48px"
+      style:--pad-x="8px"
+      style:--pad-y="6px"
       type="button"
-      class:on
     >
-      <span data-slot="tile" class="ns-tile tile" style={`color:${option.hue}`}
-        ><Icon /></span
+      <span
+        data-slot="tile"
+        class="ns-tile size-(--tile) text-(--hue)"
+        style:--hue={option.hue}
+        style:--tile="26px"><Icon class="size-icon-md" /></span
       >
-      <span data-slot="text" class="text">
-        <span data-slot="name" class="name">{option.name}</span>
-        <span data-slot="meta" class="meta">{option.desc}</span>
+      <span data-slot="text" class="min-w-0 flex-1">
+        <span data-slot="name" class="type-label block">{option.name}</span>
+        <span
+          data-slot="meta"
+          class="type-meta block text-pretty text-ink-subtle"
+          >{option.desc}</span
+        >
       </span>
       {#if on}
-        <Check class="check ns-check" />
+        <Check class="ns-check size-icon-md flex-none text-ink-strong" />
       {/if}
     </button>
   {/each}
 </NsPopover>
 
 <style>
+  /* residual: keyframes */
   .swap {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
     @media (prefers-reduced-motion: no-preference) {
       animation: ns-in var(--ns-row-ms) var(--ease-out) both;
     }
-  }
-  .swap :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    min-height: 48px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .row.on {
-    background: var(--surface-fill);
-  }
-  .tile {
-    width: 26px;
-    height: 26px;
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    font: var(--type-label);
-  }
-  .meta {
-    display: block;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    text-wrap: pretty;
-  }
-  .row :global(svg.check) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-strong);
   }
 </style>

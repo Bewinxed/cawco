@@ -162,14 +162,27 @@
   }
 </script>
 
-<div class={["box", { embedded }]}>
+<!-- literal: 56px / 64px height, 10px 12px padding, 30px / 38px track -->
+<div
+  class="relative grid h-(--h) max-phone:h-(--h-phone) overflow-hidden rounded-md border border-border-hairline bg-surface-recess px-(--pad-x) py-(--pad-y) data-embedded:h-auto data-embedded:border-0 data-embedded:bg-transparent data-embedded:p-0"
+  data-embedded={embedded || undefined}
+  style:--h="56px"
+  style:--h-phone="64px"
+  style:--pad-x="12px"
+  style:--pad-y="10px"
+>
   <div
-    class="slider"
-    style={`opacity:${n ? 1 : 0.55};pointer-events:${n ? "auto" : "none"}`}
+    class={[
+      "col-start-1 row-start-1 grid content-start opacity-(--o) transition-[opacity] dur-pop ease-out",
+      n ? "pointer-events-auto" : "pointer-events-none",
+    ]}
+    style:--o={n ? 1 : 0.55}
   >
     <div
+      data-slot="track"
+      data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="track"
+      class="relative h-(--track-h) max-phone:h-(--track-h-phone) cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none select-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -180,50 +193,73 @@
       onpointermove={move}
       onpointerup={up}
       role="presentation"
-      style={`--kw:${kw}px`}
-      class:focus={focused}
-      class:ready
+      style:--kw={`${kw}px`}
+      style:--track-h="30px"
+      style:--track-h-phone="38px"
       bind:clientWidth={trackWidth}
     >
       <div
         data-slot="fill"
-        class="fill"
-        style={`width:calc(var(--kw) + ${p} * (100% - var(--kw)))`}
+        class="pointer-events-none absolute top-0 bottom-0 left-0 flex w-(--w) items-center justify-end rounded-(--r) bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out"
+        style:--r="calc(var(--radius-md) - 1px)"
+        style:--w={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
       >
+        <!-- literal: 8px inline padding -->
         <div
-          class={["knob", { active }]}
-          style={`opacity:${n ? 1 : 0.7};--bars:${n}`}
+          data-slot="knob"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num opacity-(--o) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
+          data-active={active || undefined}
+          style:--bars={n}
+          style:--o={n ? 1 : 0.7}
+          style:--pad-x="8px"
           bind:offsetWidth={knobWidth}
         >
           <!-- The chip is as wide as its longest label so the rail never moves.
                The ghost holds that width; the icon and the label sit together,
                centred in it, so a short label leaves no gap beside it. -->
-          <span data-slot="ghost" aria-hidden="true" class="ghost">
+          <!-- literal: 4px / 2px / 5px bar pitch in the padding -->
+          <span
+            data-slot="ghost"
+            aria-hidden="true"
+            class="invisible col-start-1 row-start-1 grid justify-items-start ps-(--ps)"
+            style:--ps="calc(var(--bars) * 4px - 2px + 5px)"
+          >
             {#each efforts as level, i (level)}
-              <span>{level}</span>
+              <span class="col-start-1 row-start-1">{level}</span>
             {/each}
           </span>
-          <span class="content mark-line">
+          <!-- literal: 5px gap -->
+          <span
+            class="mark-line col-start-1 row-start-1 flex items-center gap-(--gap)"
+            style:--gap="5px"
+          >
             {#if n}
               <!-- One bar per level, all the same size on whole pixels; the lit
                    ones say where the level sits. -->
               <svg
                 aria-hidden="true"
-                class="level-bars"
+                class="block flex-none"
                 height="10"
                 viewBox={`0 0 ${n * 4 - 2} 10`}
                 width={n * 4 - 2}
               >
                 {#each efforts as level, i (level)}
-                  <rect class="bar" height="10" rx="1" width="2" x={i * 4} />
                   <rect
-                    class="bar-fill"
+                    class="fill-ink-strong opacity-22"
+                    height="10"
+                    rx="1"
+                    width="2"
+                    x={i * 4}
+                  />
+                  <rect
+                    data-slot="bar-fill"
+                    class="origin-bottom transform-(--t) fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:dur-morph motion-safe:ease-out"
                     height="10"
                     rx="1"
                     style={`--delay:${barDelay(i)}ms`}
+                    style:--t={i <= effortIdx ? "scaleY(1)" : "scaleY(0)"}
                     width="2"
                     x={i * 4}
-                    class:lit={i <= effortIdx}
                   />
                 {/each}
               </svg>
@@ -231,22 +267,30 @@
             {#if n}
               <!-- The word morphs letter by letter into the next. The chip is as wide
                    as its longest label, so the word never leaves it. -->
-              <span class="lvl"><MorphText text={capital(label)} /></span>
+              <span class="whitespace-nowrap normal-case"
+                ><MorphText text={capital(label)} /></span
+              >
             {:else}
-              <span class="lvl">{label}</span>
+              <span class="whitespace-nowrap normal-case">{label}</span>
             {/if}
           </span>
         </div>
       </div>
       {#each pips as pip, i (i)}
+        <!-- literal: 5px dot, -2.5px offset -->
         <span
-          class="pip"
-          style={`left:calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)));opacity:${pip.on ? 0.3 : 0}`}
+          data-slot="pip"
+          class="pointer-events-none absolute top-1/2 left-(--left) mt-(--mt) size-(--dot) rounded-pill bg-ink-strong opacity-(--o) transition-[opacity] dur-control ease-out"
+          style:--dot="5px"
+          style:--left={`calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)))`}
+          style:--mt="-2.5px"
+          style:--o={pip.on ? 0.3 : 0}
         ></span>
       {/each}
       <input
         aria-label="Effort"
         aria-valuetext={label}
+        class="pointer-events-none absolute inset-0 m-0 h-full w-full opacity-0"
         disabled={!n}
         max={Math.max(0, n - 1)}
         min="0"
@@ -267,180 +311,34 @@
 </div>
 
 <style>
-  .box {
-    position: relative;
-    display: grid;
-    height: 56px;
-    padding: 10px 12px;
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-  }
-  .box.embedded {
-    height: auto;
-    padding: 0;
-    border: 0;
-    background: transparent;
-  }
-  .slider {
-    grid-area: 1 / 1;
-    display: grid;
-    align-content: start;
-    transition: opacity var(--dur-pop) var(--ease-out);
-  }
-  .track {
-    position: relative;
-    height: 30px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    cursor: ew-resize;
-    user-select: none;
-    touch-action: none;
-    box-shadow: none;
+  /* residual: unmapped */
+  /* needs transition token: var(--transition-control), box-shadow var(--dur-control) var(--ease-out) */
+  [data-slot="track"] {
     transition:
       var(--transition-control),
       box-shadow var(--dur-control) var(--ease-out);
   }
-  /* The range input is invisible over the track, so the track is the
-     field: its border takes the ring. */
-  .track.focus {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .fill {
-    position: absolute;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 2px;
-    border-radius: calc(var(--radius-md) - 1px);
-    left: 0;
-    top: 0;
-    bottom: 0;
-    background: var(--surface-recess-deep);
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: width var(--ns-fill-ms) var(--ease-in-out);
-    }
-  }
-  .pip {
-    position: absolute;
-    top: 50%;
-    width: 5px;
-    height: 5px;
-    margin-top: -2.5px;
-    border-radius: var(--radius-pill);
-    background: var(--ink-strong);
-    transition: opacity var(--dur-control) var(--ease-out);
-    pointer-events: none;
+  /* needs transition token: left var(--ns-fill-ms) var(--ease-in-out), opacity var(--dur-control) var(--ease-out) */
+  [data-slot="pip"] {
     @media (prefers-reduced-motion: no-preference) {
       transition:
         left var(--ns-fill-ms) var(--ease-in-out),
         opacity var(--dur-control) var(--ease-out);
     }
   }
-  .knob {
-    flex-shrink: 0;
-    height: 100%;
-    display: grid;
-    place-items: center;
-    padding: 0 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-lift);
+  /* A compound box-shadow: an inset ring and the raised shadow. */
+  [data-slot="knob"] {
     box-shadow:
       inset 0 0 0 1px var(--neutral-8),
       var(--shadow-raised);
-    color: var(--ink-muted);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    text-transform: capitalize;
-    font-variant-numeric: tabular-nums;
-    transition:
-      color var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-out);
-    pointer-events: none;
-    white-space: nowrap;
   }
-  .knob > * {
-    grid-area: 1 / 1;
-  }
-  /* Every label stacked, so the chip is as wide as the longest and space
-     for the icon is held beside it. */
-  .ghost {
-    display: grid;
-    visibility: hidden;
-    padding-inline-start: calc(var(--bars) * 4px - 2px + 5px);
-  }
-  .ghost {
-    justify-items: start;
-  }
-  .ghost > span {
-    grid-area: 1 / 1;
-  }
-  .knob .lvl {
-    text-transform: none;
-    white-space: nowrap;
-  }
-  .content {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .knob.active {
-    color: var(--ink-strong);
-  }
-  /* As many bars as the model has levels, lit up to the one it sits on. The
-     ramp is set inline so it spans 4→12px whether the model offers three
-     levels or five. */
-  /* Equal bars on whole pixels, about as tall as a capital letter beside it. */
-  .level-bars {
-    display: block;
-    flex: none;
-  }
-  .bar {
-    fill: var(--ink-strong);
-    opacity: 0.22;
-  }
-  /* A lit bar fills up from its foot and drains back down into it; the wait
-     per bar (set inline) makes a rise climb bar by bar and a fall drain from
-     the top bar down. */
-  .bar-fill {
-    fill: var(--ink-strong);
+  [data-slot="bar-fill"] {
     transform-box: fill-box;
-    transform-origin: 50% 100%;
-    transform: scaleY(0);
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-morph) var(--ease-out) var(--delay, 0ms);
-    }
   }
-  .bar-fill.lit {
-    transform: scaleY(1);
-  }
+  /* residual: foreign-dom */
   /* Until the chip is measured nothing in the track moves. */
-  .track:not(.ready),
-  .track:not(.ready) * {
+  [data-slot="track"]:not([data-ready]),
+  [data-slot="track"]:not([data-ready]) :global(*) {
     transition: none;
-  }
-  input[type="range"] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
-  @media (max-width: 640px) {
-    .box {
-      height: 64px;
-    }
-    .track {
-      height: 38px;
-    }
-    .knob {
-      font-weight: var(--weight-strong);
-    }
   }
 </style>
