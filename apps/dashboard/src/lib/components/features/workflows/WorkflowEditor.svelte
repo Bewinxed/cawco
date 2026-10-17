@@ -453,7 +453,11 @@
 
 <svelte:window onkeydown={keys} />
 {#snippet palette()}
-  <div class="palette wf-stack" {@attach highlight({ rows: ".palette-item" })}>
+  <div
+    data-slot="palette"
+    class="wf-stack h-full overflow-y-auto px-space-3 py-space-4"
+    {@attach highlight({ rows: '[data-slot="palette-item"]' })}
+  >
     <div class="wf-row wf-spread">
       <h2>
         <MorphText text={paletteCollapsed ? "Add" : "Nodes"} />
@@ -473,18 +477,28 @@
       <section class="wf-stack">
         <h3>{group}</h3>
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
+          <!-- literal: 46px, 30px, 1.4 -->
           <button
-            class="palette-item press-tint"
+            data-slot="palette-item"
+            class="press-tint flex min-h-(--item-h) items-center gap-space-3 rounded-sm p-space-2 text-left"
             onclick={() => add(entry.kind)}
+            style:--item-h="46px"
+            style:--kind-mark="30px"
+            style:--small-leading="1.4"
             title={entry.meaning}
             type="button"
           >
-            <span class="kind-mark" class:filled={entry.kind === "step"}
+            <span
+              class="grid size-(--kind-mark) min-w-0 shrink-0 place-items-center rounded-sm border border-neutral-8 wrap-anywhere data-filled:bg-brand-solid data-filled:text-on-brand"
+              data-filled={entry.kind === "step" || undefined}
               ><entry.icon class="size-icon-md" /></span
             >
             {#if !paletteCollapsed || narrow.current}
-              <span transition:crossIn
-                >{entry.title}<small>{entry.meaning}</small></span
+              <span class="min-w-0 wrap-anywhere" transition:crossIn
+                >{entry.title}<small
+                  class="mt-space-1 block text-size-meta leading-(--small-leading) font-normal text-ink-muted"
+                  >{entry.meaning}</small
+                ></span
               >
             {/if}
           </button>
@@ -495,12 +509,21 @@
       <section class="wf-stack" transition:crossIn>
         <h3>Templates</h3>
         {#each types as type (type.name)}
+          <!-- literal: 46px, 1.4 -->
           <button
-            class="palette-item press-tint"
+            data-slot="palette-item"
+            class="press-tint flex min-h-(--item-h) items-center gap-space-3 rounded-sm p-space-2 text-left"
             onclick={() => add("step", type)}
+            style:--item-h="46px"
+            style:--small-leading="1.4"
             type="button"
           >
-            <span>{type.name}<small>{type.harness} · {type.model}</small></span>
+            <span class="min-w-0 wrap-anywhere"
+              >{type.name}<small
+                class="mt-space-1 block text-size-meta leading-(--small-leading) font-normal text-ink-muted"
+                >{type.harness} · {type.model}</small
+              ></span
+            >
           </button>
         {/each}
       </section>
@@ -530,10 +553,14 @@
   />
 {/snippet}
 {#snippet canvas()}
-  <div class="canvas-wrap">
+  <!-- literal: 300px -->
+  <div
+    class="relative h-full min-h-(--canvas-min) flex-1"
+    style:--canvas-min="300px"
+  >
     {#if bodyPath.length}
       <button
-        class="wf-btn back-body"
+        class="wf-btn absolute top-space-2 left-space-2 z-5"
         onclick={() => {
           bodyPath = bodyPath.slice(0, -1);
           selected = undefined;
@@ -555,18 +582,37 @@
       {undo}
     />
     {#if graph.nodes.length === 1 && graph.nodes[0].kind === "start"}
-      <p class="hint">
+      <p
+        class="pointer-events-none absolute inset-x-space-4 top-space-4 text-center text-size-meta font-normal text-ink-muted"
+      >
         Choose a step from the palette, or press <kbd>A</kbd> to add one.
       </p>
     {/if}
   </div>
 {/snippet}
-<div data-slot="editor" class="wf editor" bind:clientWidth={panelWidth}>
-  <header class="wf-stack">
+<div
+  data-slot="editor"
+  class="wf flex h-full min-h-0 flex-1 flex-col"
+  bind:clientWidth={panelWidth}
+>
+  <header
+    class="wf-stack border-b border-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"
+  >
     <div class="wf-row wf-spread">
-      <div class="breadcrumb">
-        <a href="/workflows">Workflows</a><span>/</span>
+      <!-- literal: 220px, 24px, 44px, 300px -->
+      <div
+        class="flex min-w-0 shrink grow basis-(--crumb-basis) items-center gap-space-2"
+        style:--crumb-basis="220px"
+        style:--link-min="24px"
+        style:--link-min-coarse="44px"
+        style:--name-max="300px"
+      >
+        <a
+          class="inline-flex min-h-(--link-min) items-center text-ink-muted coarse:min-h-(--link-min-coarse)"
+          href="/workflows">Workflows</a
+        ><span>/</span>
         <input
+          class="max-w-(--name-max) border-transparent text-size-body font-medium"
           aria-label="Workflow name"
           disabled={!workflow}
           bind:value={name}
@@ -624,7 +670,7 @@
              buttons on hydration wrapped and pushed the page down. -->
         {#if tab === "editor"}
           <button
-            class="wf-btn narrow-only"
+            class="wf-btn hidden max-wide:inline-flex"
             onclick={() => {
               paletteOpen = true;
             }}
@@ -633,7 +679,7 @@
             + Add node
           </button><button
             data-slot="num"
-            class="wf-btn narrow-only num"
+            class="wf-btn num hidden max-wide:inline-flex"
             onclick={openInspector}
             type="button"
           >
@@ -641,8 +687,12 @@
           </button>
         {/if}
       </div>
-      <span data-slot="num" class="wf-muted num save-state" role="status"
-        ><MorphText text={saveState} /></span
+      <!-- literal: 24ch -->
+      <span
+        data-slot="num"
+        class="wf-muted num ms-auto w-(--save-w) text-end"
+        role="status"
+        style:--save-w="24ch"><MorphText text={saveState} /></span
       >
     </div>
   </header>
@@ -669,18 +719,22 @@
     </div>
   {/if}
   {#if !workflow}
-    <div class="loading wf-stack">
-      <Skeleton class="h-20 w-full" />
-      <Skeleton class="h-20 w-full" />
+    <!-- literal: 5rem -->
+    <div class="wf-stack p-space-6" style:--skeleton-h="5rem">
+      <Skeleton class="h-(--skeleton-h) w-full" />
+      <Skeleton class="h-(--skeleton-h) w-full" />
     </div>
   {:else}
     <!-- One tab's pane gives way to the next in one cell, sliding across in
          tab order (pane-slide). -->
-    <div class="panes">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-(--track) grid-rows-(--track) overflow-hidden"
+      style:--track="minmax(0, 1fr)"
+    >
       {#key tab}
         <div
           data-slot="pane"
-          class="pane"
+          class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col"
           in:paneSlide={{ dir }}
           out:paneSlide={{ dir }}
         >
@@ -721,7 +775,7 @@
                   defaultSize={(360 / panelWidth) * 100}
                   maxSize={50}
                   minSize={25}
-                  ><div class="inspector-scroll">
+                  ><div class="h-full overflow-y-auto bg-surface-raised">
                     {@render inspector()}
                   </div></Resizable.Pane
                 ></Resizable.PaneGroup
@@ -730,17 +784,23 @@
           {:else}
             <div
               data-slot="runs"
-              class="runs"
-              {@attach highlight({ rows: ".run-entry" })}
+              class="flex min-h-0 flex-1 max-wide:flex-col max-wide:overflow-y-auto"
+              {@attach highlight({ rows: '[data-slot="run-entry"]' })}
             >
               <!-- A run that starts, or a filter that changes what is
                    listed, moves the rows the house way (motion/rows). -->
-              <aside class="run-list wf-stack" {@attach reflow()}>
+              <!-- literal: 300px -->
+              <aside
+                class="wf-stack w-(--list-w) shrink-0 overflow-y-auto border-r border-border-hairline p-space-3 max-wide:w-full max-wide:border-r-0"
+                style:--list-w="300px"
+                {@attach reflow()}
+              >
                 <!-- The kit's ghost and pill: hover glides, and the pill
                      follows the choice (the chips draw no fill of their own
                      here). -->
                 <div
-                  class="wf-row filters"
+                  data-slot="filters"
+                  class="wf-row"
                   {@attach highlight({
                     rows: ".wf-btn",
                     selected: '[aria-pressed="true"]',
@@ -750,7 +810,7 @@
                   {#each [{ value: "all", label: "All" }, { value: "waiting", label: "Needs you" }, { value: "failed", label: "Failed" }] as item (item.value)}
                     <button
                       aria-pressed={filter === item.value}
-                      class="wf-btn"
+                      class="wf-btn bg-transparent"
                       onclick={() => {
                         filter = item.value;
                       }}
@@ -772,7 +832,8 @@
                     ? cawco.instanceIndex.byId.get(run.supervisorInstanceId)
                     : undefined}
                   <a
-                    class="run-entry wf-stack"
+                    data-slot="run-entry"
+                    class="wf-stack border-b border-border-hairline p-space-3 text-left text-inherit no-underline"
                     data-flip
                     href={runHref(run.id)}
                   >
@@ -806,8 +867,11 @@
   />
 {/if}
 {#if narrow.current}
+  <!-- literal: 85dvh -->
   <Dialog.Root bind:open={paletteOpen}
-    ><Dialog.Content class="max-h-[85dvh] overflow-y-auto"
+    ><Dialog.Content
+      class="max-h-(--palette-max) overflow-y-auto"
+      style="--palette-max: 85dvh"
       ><Dialog.Title>Add node</Dialog.Title><Dialog.Description
         >Choose a kind or a delegate template.</Dialog.Description
       >
@@ -818,136 +882,23 @@
        drawn on (from the bottom for the settings), and follows a drag 1:1
        back out. -->
   <Drawer.Root direction={inspectorSide} bind:open={inspectorOpen}>
-    <Drawer.Content class="inspector-sheet">
+    <Drawer.Content class="min-h-0">
       <Drawer.Title class="sr-only">Workflow inspector</Drawer.Title>
       <Drawer.Description class="sr-only"
         >Edit the selected node or workflow settings.</Drawer.Description
       >
-      <div class="sheet-scroll">{@render inspector()}</div>
+      <div class="min-h-0 touch-pan-y overflow-y-auto">{@render inspector()}</div>
     </Drawer.Content>
   </Drawer.Root>
 {/if}
 
 <style>
-  .editor {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    height: 100%;
-  }
-  header {
-    padding: var(--space-3) var(--space-5);
-    border-bottom: 1px solid var(--border-hairline);
-    background: var(--surface-raised);
-  }
-  .breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-    flex: 1 1 220px;
-  }
-  .breadcrumb a {
-    color: var(--ink-muted);
-    min-height: 24px;
-    display: inline-flex;
-    align-items: center;
-  }
-  .breadcrumb input {
-    max-width: 300px;
-    border-color: transparent;
-    font-size: var(--text-body);
-    font-weight: var(--weight-strong);
-  }
-  .palette {
-    padding: var(--space-4) var(--space-3);
-    height: 100%;
-    overflow-y: auto;
-  }
-  .palette-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    text-align: left;
-    min-height: 46px;
-    border-radius: var(--radius-sm);
-    padding: var(--space-2);
-  }
-  .palette-item span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .palette-item small {
-    display: block;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    line-height: 1.4;
-    margin-top: var(--space-1);
-  }
-  .kind-mark {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    flex-shrink: 0;
-    border: 1px solid var(--neutral-8);
-    border-radius: var(--radius-sm);
-  }
-  .filled {
-    background: var(--brand-solid);
-    color: var(--on-brand);
-  }
-  .inspector-scroll {
-    height: 100%;
-    overflow-y: auto;
-    background: var(--surface-raised);
-  }
-  .canvas-wrap {
-    height: 100%;
-    min-height: 300px;
-    position: relative;
-    flex: 1;
-  }
-  .hint {
-    position: absolute;
-    top: var(--space-4);
-    inset-inline: var(--space-4);
-    text-align: center;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    pointer-events: none;
-    color: var(--ink-muted);
-  }
-  .back-body {
-    position: absolute;
-    z-index: 5;
-    top: var(--space-2);
-    left: var(--space-2);
-  }
-  .loading {
-    padding: var(--space-6);
-  }
-  .panes {
-    display: grid;
-    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .pane {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-  /* The palette's toggle: while paneforge marks a pane collapsing or
-     expanding, every pane of the group glides to its new width together,
-     so their sum stays whole on every frame. A drag is left 1:1. */
+  /* residual: foreign-dom — the palette's toggle: while paneforge marks a
+     pane collapsing or expanding, every pane of the group glides to its new
+     width together, so their sum stays whole on every frame. A drag is left
+     1:1. */
   @media (prefers-reduced-motion: no-preference) {
-    .pane
+    [data-slot="pane"]
       :global(
         [data-pane-group]:has(
             > [data-pane-state="collapsing"],
@@ -958,72 +909,8 @@
       transition: flex-grow var(--dur-panel) var(--ease-in-out);
     }
   }
-  :global(.inspector-sheet) {
-    min-height: 0;
-  }
-  /* The inspector scrolls up and down on its own; a sideways drag is the
-     drawer's (vaul), which a scroll box that claimed every pan cancelled
-     after its first move. */
-  .sheet-scroll {
-    min-height: 0;
-    overflow-y: auto;
-    touch-action: pan-y;
-  }
-  .wf-btn.narrow-only {
-    display: none;
-  }
-  /* The save state changes its words as the editor works; a box as wide as
-     the longest ("Not saved · 12 problems") keeps its edge still. */
-  .save-state {
-    inline-size: 24ch;
-    margin-inline-start: auto;
-    text-align: end;
-  }
-  @media (max-width: 1023px) {
-    .wf-btn.narrow-only {
-      display: inline-flex;
-    }
-  }
-  .runs {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-  }
-  .run-list {
-    width: 300px;
-    flex-shrink: 0;
-    padding: var(--space-3);
-    overflow-y: auto;
-    border-right: 1px solid var(--border-hairline);
-  }
-  .run-entry {
-    padding: var(--space-3);
-    text-align: left;
-    color: inherit;
-    text-decoration: none;
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  .filters :global(.wf-btn),
-  .filters :global(.wf-btn[aria-pressed="true"]) {
-    background: transparent;
+  /* residual: unmapped */
+  [data-slot="filters"] button {
     filter: none;
-  }
-  @media (pointer: coarse) {
-    .breadcrumb a {
-      min-height: 44px;
-    }
-  }
-  @media (max-width: 1023px) {
-    header {
-      padding: var(--space-3);
-    }
-    .runs {
-      flex-direction: column;
-      overflow-y: auto;
-    }
-    .run-list {
-      width: 100%;
-      border-right: 0;
-    }
   }
 </style>
