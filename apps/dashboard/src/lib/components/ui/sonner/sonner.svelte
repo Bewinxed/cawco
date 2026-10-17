@@ -120,11 +120,24 @@
      set, and an unresolved `var()` left every toast transparent — the page
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
-<div class="toast-home" bind:this={home}>
-  <div class="toast-layer" bind:this={layer} class:under-nav={navSheet.open}>
+<div class="contents" bind:this={home}>
+  <!-- literal: 12px (a phone toast's inset from each side) -->
+  <!-- A sheet over the viewport, above the app chrome (the highest is the
+       shell's 100), that takes no taps itself; the toasts take their own.
+       Navigation stays above a toast. While the burger's sheet is open (its
+       scrim and panel stand at 50), the layer goes under the scrim: a toast
+       arriving then waits dimmed in the content area, and the sheet that
+       covers it on a phone or a narrow tablet is never painted over. -->
+  <div
+    class="pointer-events-none fixed inset-0 z-1000 data-under-nav:z-49"
+    bind:this={layer}
+    data-slot="toast-layer"
+    data-under-nav={navSheet.open || undefined}
+    style:--toast-edge="12px"
+  >
     <Sonner
       data-sonner-group
-      class="toaster group"
+      class="group"
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
       theme={theme.current}
       {...restProps}
@@ -149,28 +162,9 @@
 </div>
 
 <style>
-  /* Where the layer lives when no modal dialog has it; no box of its own. */
-  .toast-home {
-    display: contents;
-  }
-
-  /* A sheet over the viewport, above the app chrome (the highest is the
-     shell's 100), that takes no taps itself; the toasts take their own. */
-  .toast-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    pointer-events: none;
-  }
-  .toast-layer :global([data-sonner-toast]) {
+  /* residual: foreign-dom */
+  [data-slot="toast-layer"] :global([data-sonner-toast]) {
     pointer-events: auto;
-  }
-  /* Navigation stays above a toast. While the burger's sheet is open (its
-     scrim and panel stand at 50), the layer goes under the scrim: a toast
-     arriving then waits dimmed in the content area, and the sheet that
-     covers it on a phone or a narrow tablet is never painted over. */
-  .toast-layer.under-nav {
-    z-index: 49;
   }
 
   /* The kit's floating surface, over sonner's own box. One attribute more
@@ -276,8 +270,8 @@
       [data-sonner-toaster][data-y-position="top"][data-x-position="center"]
     ) {
       top: calc(env(safe-area-inset-top) + var(--c-top-bar-h) + var(--space-2));
-      right: 12px;
-      left: 12px;
+      right: var(--toast-edge);
+      left: var(--toast-edge);
       width: auto;
       transform: none;
     }
