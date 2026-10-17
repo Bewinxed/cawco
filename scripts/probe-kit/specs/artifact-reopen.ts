@@ -10,14 +10,15 @@
  * 2. The panel's Close closes it: no preview pane, the hub shows nothing.
  * 3. Pressing A's tool row opens the panel on A: the pane's frame reads A's
  *    heading, and the hub says A is shown.
- * 4. Pressing B's tool row switches the open panel to B, the same way.
+ * 4. Pressing B's tool row switches the open panel to B, the same way; on
+ *    the phone, whose sheet covers the row, after closing the sheet.
  * 5. After a reload (rows read back from the stored transcript) and Close,
  *    A's row opens the panel on A again.
  */
 import type { Page } from "playwright-core";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -87,12 +88,29 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const session = await fleet.spawn("claude", "Reopen", fleet.repo);
-
+  const base = await fleet.dashboard();
   let sent = 0;
+  for (const view of ["desk", "phone"] as const) {
+    await leg(kit, fleet, base, view, () => {
+      sent += 1;
+      return String(sent);
+    });
+  }
+};
+
+/** Checks 1–5 at `view`, on a session of its own; `next` numbers each call. */
+const leg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  view: "desk" | "phone",
+  next: () => string
+) => {
+  const session = await fleet.spawn("claude", `Reopen ${view}`, fleet.repo);
+  const check = (name: string, ok: boolean, detail: string) =>
+    kit.check(`${view}: ${name}`, ok, detail);
   const call = async (tool: string, input: object): Promise<string> => {
-    sent += 1;
-    const marker = String(sent);
+    const marker = next();
     asks.set(marker, { name: tool, input });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     return (await until(
@@ -105,8 +123,7 @@ const run = async (kit: Kit) => {
   const shownOnHub = async (id: string) =>
     (await fleet.api<{ shown: boolean }>(`/api/artifacts/${id}`)).shown;
 
-  const base = await fleet.dashboard();
-  const page = await kit.page("desk");
+  const page = await kit.page(view);
   // The panel's menu comes with the first artifact: the session's pane is the page's readiness.
   await open(page, `${base}/session/${session}`, '[data-slot="pane"]');
 
@@ -118,7 +135,7 @@ const run = async (kit: Kit) => {
     await call(CREATE, { kind: "page", name: "beta", html: pageOf("Beta") })
   ).match(ANSWERED_ID)?.[1];
   if (!(a && b)) {
-    kit.check("1: artifact_create answers both ids", false, `${a} ${b}`);
+    check("1: artifact_create answers both ids", false, `${a} ${b}`);
     return;
   }
   const first = await until(
@@ -127,7 +144,7 @@ const run = async (kit: Kit) => {
     (now) => now.heading === "Beta",
     30_000
   ).catch(() => panel(page));
-  kit.check(
+  check(
     "1: the panel shows the newest artifact",
     first.panes === 1 && first.heading === "Beta",
     JSON.stringify(first)
@@ -143,7 +160,7 @@ const run = async (kit: Kit) => {
     10_000
   ).catch(() => panel(page));
   const closedOnHub = (await shownOnHub(a)) || (await shownOnHub(b));
-  kit.check(
+  check(
     "2: Close takes the pane away and the hub shows nothing",
     closed.panes === 0 && !closedOnHub,
     `${JSON.stringify(closed)}; hub shows one: ${closedOnHub}`
@@ -152,8 +169,10 @@ const run = async (kit: Kit) => {
   // A closed artifact's card reads as pressable: drawn whole, never faded as a disabled control is.
   const cards = await page
     .locator(".preview-tool")
-    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).opacity));
-  kit.check(
+    .evaluateAll((nodes) =>
+      nodes.map((node) => getComputedStyle(node).opacity)
+    );
+  check(
     "2: with the panel closed every artifact card is drawn at full opacity",
     cards.length === 2 && cards.every((opacity) => opacity === "1"),
     JSON.stringify(cards)
@@ -188,7 +207,7 @@ const run = async (kit: Kit) => {
 
   // 3. A's row opens the closed panel on A.
   const reopened = await press(a, "Alpha");
-  kit.check(
+  check(
     "3: pressing A's tool row with the panel closed opens it on A",
     reopened.rows === 1 &&
       reopened.now.panes === 1 &&
@@ -197,10 +216,21 @@ const run = async (kit: Kit) => {
     JSON.stringify(reopened)
   );
 
-  // 4. B's row switches the open panel to B.
+  // 4. B's row switches the open panel to B. A phone's sheet covers the
+  // transcript at its middle snap: the person closes it to reach B's row.
+  if (view === "phone") {
+    await page.locator(`${PANE} [data-slot="close"]`).click();
+    await until(
+      "the sheet gone",
+      () => panel(page),
+      (now) => now.panes === 0,
+      10_000
+    ).catch(() => undefined);
+    await settle(page);
+  }
   const switched = await press(b, "Beta");
-  kit.check(
-    "4: pressing B's tool row switches the open panel to B",
+  check(
+    "4: pressing B's tool row shows B in the panel",
     switched.rows === 1 &&
       switched.now.panes === 1 &&
       switched.now.heading === "Beta" &&
@@ -221,7 +251,7 @@ const run = async (kit: Kit) => {
   ).catch(() => undefined);
   await settle(page);
   const stored = await press(a, "Alpha");
-  kit.check(
+  check(
     "5: after a reload and Close, A's row from the stored transcript opens the panel on A",
     stored.rows === 1 &&
       stored.now.panes === 1 &&
