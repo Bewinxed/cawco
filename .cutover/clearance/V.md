@@ -157,3 +157,13 @@ Invariant: no style rule the cutover keeps is pruned by Svelte without anyone kn
 - This branch (1a plus V): `svelte-unused-css: 610 file(s), no style rule pruned`.
 
 So no declaration the cutover kept is pruned on this branch, and nothing was already pruned at ac7b79de8. There is nothing to fix and nothing to list per owner. A set's merge that drops the class a kept rule names now fails `lint:changed`.
+
+## Guards that need their group: `house/group-not-needs-ancestor`
+
+`group-not-x/name:` compiles to `:is(:where(.group/name):not(x) *)`: it holds only inside a `group/name` element whose x is off, so with no such ancestor it never matches. `not-group-x/name:` compiles to `:not(:is(:where(.group/name)x *))`, which also holds where there is no ancestor. The same goes for `peer-not-` against a preceding `peer/name`.
+
+**house/variant-order and the `not-` forms.** `not-group-…` against `group-…` and `not-peer-…` against `peer-…` were already read as exclusive. `not-in-…` against `in-…` was not, because `in-x:` compiles to `x &` and `not-in-x:` to `&:not(x *)`. The rule now writes `x &` as `&:is(x *)` before comparing, so all three pass. The scratch file holding the seven pairs (`group-data-[disabled=true]/field`, `group-data-picked/card`, `peer-checked`, `peer-data-open/x`, `in-data-open`, `in-data-[state=open]` and `group-hover/card`, each with its `not-` form) gives `exit 0`. The 48 variant-order pairs above are unchanged.
+
+**The check.** The rule is in `eslint-plugin-house.mjs`, on the same files as variant-order. It flags a `group-not-*/name:` (or a bare `group-not-*:`) whose `group/name` (`group`) is not on an ancestor element, and a `peer-not-*` whose `peer/name` is not on a preceding sibling, in DOM order through `{#if}`/`{#each}`. The class must be in the same file. A `{#snippet}` stands at each of its `{@render}` sites, and the check flags when any render site lacks the group or peer. A class string no markup in the file carries (a `tv`/`cva` recipe, a helper call in a `.ts` module) stands on no element there, so it is flagged. The message says to write `not-group-…` (`not-peer-…`) if the condition should not require the group (peer).
+
+**On this branch: 0 hits.** All 17 `group-not-` uses (AccountSetup ×4, ActionsTable ×8, RecallWheel ×1, SessionRow ×4) stand under their group in the file. SessionRow's title is in `{#snippet inner()}`, rendered only inside the `group/session-row` item. There is nothing to fix or list per owner. Set 3's kit look comes with its own work, and the check flags it there.

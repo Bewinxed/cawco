@@ -398,14 +398,21 @@ function atRulesExclusive(a, b) {
 }
 
 const COMMA_SPACE = /,\s+/g;
+const DESCENDANT_OF = /^(.+)\s+&$/;
 
-/** `&X, &Y` → `&:is(X,Y)`; whitespace after commas dropped. */
+/**
+ * `&X, &Y` → `&:is(X,Y)`, and `X &` (`in-`) → `&:is(X *)`, the form
+ * `not-in-` negates; whitespace after commas dropped.
+ */
 function normalSelector(selector) {
   const parts = splitList(selector);
-  const s =
-    parts.length > 1 && parts.every((p) => p.startsWith("&"))
-      ? `&:is(${parts.map((p) => p.slice(1)).join(",")})`
-      : selector;
+  const inside = parts.length === 1 ? selector.match(DESCENDANT_OF) : null;
+  let s = selector;
+  if (parts.length > 1 && parts.every((p) => p.startsWith("&"))) {
+    s = `&:is(${parts.map((p) => p.slice(1)).join(",")})`;
+  } else if (inside && !inside[1].includes("&")) {
+    s = `&:is(${inside[1]} *)`;
+  }
   return s.replace(COMMA_SPACE, ",");
 }
 
@@ -1140,7 +1147,235 @@ const variantOrder = {
   },
 };
 
+/* ------------------------------------- house/group-not-needs-ancestor */
+
+// `group-not-x/name:` is `:is(:where(.group/name):not(x) *)`: it holds only
+// inside a `group/name` element whose x is off, so with no such ancestor it
+// never matches. `not-group-x/name:` (`:not(:is(.group/name x *))`) holds
+// there too. The same for `peer-not-` against a preceding `peer/name`.
+const NOT_RELATION = /^(group|peer)-not-.*?(?:\/([\w-]+))?$/;
+const BRANCHES = ["children", "else", "pending", "then", "catch"];
+const CONTAINERS = [...BRANCHES, "body"];
+
+const relations = new Map();
+/** A class's `group-not-`/`peer-not-` variants, with the class each needs. */
+function relationsOf(name) {
+  if (!relations.has(name)) {
+    const [parsed] = ds.parseCandidate(name);
+    const found = (parsed?.variants ?? []).flatMap((v) => {
+      const variant = ds.printVariant(v);
+      const match = variant.match(NOT_RELATION);
+      if (!match) {
+        return [];
+      }
+      const [, kind, modifier] = match;
+      const marker = modifier ? `${kind}/${modifier}` : kind;
+      return [{ variant, kind, marker }];
+    });
+    relations.set(name, found);
+  }
+  return relations.get(name);
+}
+
+/** The elements a node renders at its own level, through blocks only. */
+function elementsWithin(node) {
+  if (node?.type === "SvelteElement") {
+    return [node];
+  }
+  return BRANCHES.flatMap((key) => {
+    const value = node?.[key];
+    if (Array.isArray(value)) {
+      return value.flatMap(elementsWithin);
+    }
+    return value?.type ? elementsWithin(value) : [];
+  });
+}
+
+/** The name a `{@render name(…)}` calls. */
+function renderedName(tag) {
+  const call =
+    tag.expression?.type === "ChainExpression"
+      ? tag.expression.expression
+      : tag.expression;
+  return call?.callee?.type === "Identifier" ? call.callee.name : null;
+}
+
+/**
+ * Where a snippet stands when rendered: each `{@render name()}` in the file.
+ * A snippet passed to a component (`{#snippet children()}` inside its tag)
+ * stands where it is written, so none.
+ */
+function renderSites(snippet, renders) {
+  if (snippet.parent?.type === "SvelteElement") {
+    return [];
+  }
+  const name = snippet.id?.name;
+  return renders.filter((tag) => renderedName(tag) === name);
+}
+
+const MAX_HOPS = 8;
+
+/**
+ * The ancestor elements of a node, one list per way it is rendered: a
+ * snippet's elements stand under each of its render sites.
+ */
+function ancestorPaths(node, renders, hops = 0) {
+  const out = [];
+  for (let n = node.parent; n; n = n.parent) {
+    if (n.type === "SvelteElement") {
+      out.push(n);
+    }
+    const sites =
+      n.type === "SvelteSnippetBlock" && hops < MAX_HOPS
+        ? renderSites(n, renders)
+        : [];
+    if (sites.length) {
+      return sites.flatMap((site) =>
+        ancestorPaths(site, renders, hops + 1).map((way) => [...out, ...way])
+      );
+    }
+  }
+  return [out];
+}
+
+/**
+ * The elements before a node under the same parent element, in DOM order,
+ * one list per way it is rendered (a snippet's top level stands at each of
+ * its render sites).
+ */
+function precedingPaths(start, renders, hops = 0) {
+  const out = [];
+  let node = start;
+  while (node.parent && node.type !== "Program") {
+    const { parent } = node;
+    for (const key of CONTAINERS) {
+      const list = parent[key];
+      if (Array.isArray(list) && list.includes(node)) {
+        out.push(...list.slice(0, list.indexOf(node)).flatMap(elementsWithin));
+      }
+    }
+    if (parent.type === "SvelteElement") {
+      break;
+    }
+    const sites =
+      parent.type === "SvelteSnippetBlock" && hops < MAX_HOPS
+        ? renderSites(parent, renders)
+        : [];
+    if (sites.length) {
+      return sites.flatMap((site) =>
+        precedingPaths(site, renders, hops + 1).map((way) => [...out, ...way])
+      );
+    }
+    node = parent;
+  }
+  return [out];
+}
+
+const groupNotNeedsAncestor = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "A group-not-/peer-not- variant matches only when its group/peer is there; flag it where this file renders none.",
+    },
+    schema: [],
+    messages: {
+      alone:
+        '"{{name}}" uses {{variant}}, which matches only {{where}} carrying "{{marker}}"; this file renders none there, so on its own it never matches. If the condition should not require the {{kind}}, write not-{{kind}}-… instead.',
+    },
+  },
+  create(context) {
+    const read = reader(context);
+    const carried = new WeakMap();
+    const inMarkup = new Set();
+    const scripted = [];
+    const elements = [];
+    const renders = [];
+
+    const classesOf = (element) => {
+      if (!carried.has(element)) {
+        const [own] = startTagLists(element.startTag, read);
+        carried.set(element, new Set(own.map((entry) => entry.name)));
+      }
+      return carried.get(element);
+    };
+
+    const report = (entry, relation) =>
+      context.report({
+        loc: {
+          start: context.sourceCode.getLocFromIndex(entry.start),
+          end: context.sourceCode.getLocFromIndex(entry.end),
+        },
+        messageId: "alone",
+        data: {
+          name: entry.name,
+          variant: relation.variant,
+          marker: relation.marker,
+          kind: relation.kind,
+          where:
+            relation.kind === "group"
+              ? "inside an ancestor"
+              : "after a preceding sibling",
+        },
+      });
+
+    /** Whether every way the element is rendered has the class it needs. */
+    const backed = (element, relation) => {
+      const ways =
+        relation.kind === "group"
+          ? ancestorPaths(element, renders)
+          : precedingPaths(element, renders);
+      return ways.every((way) =>
+        way.some((el) => classesOf(el).has(relation.marker))
+      );
+    };
+
+    const checkElement = (element) => {
+      for (const entry of startTagLists(element.startTag, read).flat()) {
+        inMarkup.add(entry.start);
+        for (const relation of relationsOf(entry.name)) {
+          if (!backed(element, relation)) {
+            report(entry, relation);
+          }
+        }
+      }
+    };
+
+    return {
+      SvelteElement(element) {
+        elements.push(element);
+      },
+      SvelteRenderTag(tag) {
+        renders.push(tag);
+      },
+      CallExpression(node) {
+        if (isClassCall(node) && !insideClassSite(node)) {
+          scripted.push(...read(node));
+        }
+      },
+      // Elements are judged once every render site is known. A class string
+      // no markup in this file carries (a recipe, a helper call in a .ts
+      // module) stands on no element here.
+      "Program:exit"() {
+        for (const element of elements) {
+          checkElement(element);
+        }
+        for (const entry of scripted) {
+          if (!inMarkup.has(entry.start)) {
+            for (const relation of relationsOf(entry.name)) {
+              report(entry, relation);
+            }
+          }
+        }
+      },
+    };
+  },
+};
+
 export const house = {
   meta: { name: "house" },
-  rules: { "variant-order": variantOrder },
+  rules: {
+    "variant-order": variantOrder,
+    "group-not-needs-ancestor": groupNotNeedsAncestor,
+  },
 };
