@@ -1,0 +1,3 @@
+site-states: same 1347, DIFFERS 28, not rendered 0
+    186 rule does not match (rest of a stateful selector) |
+   1189 rule matches |

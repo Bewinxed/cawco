@@ -14,9 +14,9 @@ T is ac7b79de8, the base of record. A "site" is a `font: var(--type-*)` (or `out
 - **nonok-sites.txt:** the sites that weren't ok before d1bc87e3c, with their T font declarations in order and their classes then.
 - **role-extras.md:** the per-role extras table, and the 16 extras sites with head lines.
 - **shorthand-inventory.md:** the other resetting shorthands, static and computed.
-- **outline-sites.md:** all 43 outline sites, with what differs at rest and at `:focus-visible`.
-- **background-sites.md:** every background site that differs or wasn't rendered.
-- **computed-pass.tsv:** the raw rows.
+- **outline-sites.md:** all 43 outline sites, rendered as whole components, T against now. Each element the rule matches is listed with its file:line on both sides, at rest, in the rule's state and at `:focus-visible`, with every longhand that differs.
+- **background-sites.md:** all 654 background sites, the same way.
+- **computed-pass.tsv:** one row per element and state, with what the first pass had done with the site. shorthand-inventory.md says how the pass renders and what it found.
 - **shadow-tile.md:** the `--x: var(--x)` cycle and its fix.
 - **proof/:** the Chromium, compile and check outputs these files quote.
 
