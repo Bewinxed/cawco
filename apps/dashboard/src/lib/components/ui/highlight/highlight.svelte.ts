@@ -328,6 +328,7 @@ export function highlight(options: HighlightOptions) {
         row?.removeAttribute("data-ghosted");
         show(ghost, false);
         ghostRow = null;
+        letGo();
         return;
       }
       // Out of view, the ghost lands where it is going without a glide;
@@ -350,6 +351,44 @@ export function highlight(options: HighlightOptions) {
      * box the ghost already has. A scroll is `aimScrolling`'s: the rows do
      * not move in the list's own space while it scrolls.
      */
+    /**
+     * A ghost that has faded holds no place. Kept, its place was wherever a
+     * pointer last crossed the list, measured as the list stood at that
+     * moment (the spawn sheet's model list, crossed on the way to the
+     * location chip as the sheet was still settling): a hidden layer at
+     * 142.469px or 142.016px down by the race. It fades where it is
+     * (`--hl-show`), then lets go, and its next showing lands without a glide
+     * as it always has (`ghostRow` is null).
+     */
+    const letGo = () => {
+      const drop = () => {
+        if (ghostRow !== null) {
+          return;
+        }
+        for (const property of [
+          "--hl-x",
+          "--hl-y",
+          "width",
+          "height",
+          "border-radius",
+        ]) {
+          ghost.style.removeProperty(property);
+        }
+        ghostBox = null;
+      };
+      const fades = ghost
+        .getAnimations()
+        .filter(
+          (run) =>
+            run instanceof CSSTransition && run.transitionProperty === "--hl-show"
+        );
+      if (fades.length === 0) {
+        drop();
+        return;
+      }
+      // A fade cancelled is a ghost shown again: its place is its own.
+      Promise.all(fades.map((run) => run.finished)).then(drop, () => undefined);
+    };
     let following = 0;
     const follow = () => {
       cancelAnimationFrame(following);
