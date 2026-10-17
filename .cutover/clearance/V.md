@@ -10,7 +10,7 @@ Invariant: on every element, when two of its utilities set the same CSS property
 - **Classes.** @shadcn/lint exports none of its readers, so the rule reads the same nodes itself. One list per element: `class="…"` plus every `class:x` directive. Each other `*class*` attribute is its own list, and so is every outermost `cn`/`clsx`/`cx`/`twMerge`/`twJoin`/`classNames`/`tv`/`cva` call outside markup. Strings, templates, arrays, object keys, same-file `const`s, `$derived(…)` and a named import of another `.ts`/`.js` module's `export const` are followed. An imported constant's classes stand where this file names it. The two sides of a ternary or `||`, two values of one recipe variant and two recipe slots never stand together.
 - **Per pair.** Each class's rules come from `candidatesToAst`. Each variant is compiled alone to get its condition, and `getClassOrder` gives the winner. Shorthands are expanded to physical longhands, so logical and physical forms of one side overlap. A pair is flagged when: both carry a variant; their declarations land on the same element (`*:`, `[&>svg]:` and `before:` move the subject); they write one longhand with different values; neither is `!important` alone; they have equal specificity; neither chain's states contain the other's; and no state of one excludes a state of the other.
 - **Exclusive** means: one attribute at the same place with different values; `x` and `not-x` (including `group-not-`, `peer-not-`, `has-not-` and `not-hover`'s two rules); queries that cannot both match (`not (…)`, a discrete feature such as `hover`/`pointer`/`prefers-reduced-motion` with two values, disjoint width ranges, so `min-[900px]`/`max-[900px]`, `desk`/`max-desk`, `coarse`/`fine`, `hover`/`no-hover`/`hover-none`, `motion-safe`/`motion-reduce`); variants.css's named complements `data-open`/`data-closed`, `data-checked`/`data-unchecked`, `dark`/`light`; and two values of one position count (`first:` is `:nth-child(1)` and `last:` is `:nth-last-child(1)`, so `last:`/`nth-last-2:` and `odd:`/`even:` are exclusive, while `first:`/`last:` both hold on an only child).
-- **Not seen:** a class prop passed to a component; the sweep below covers that. A `.ts` string that no class site in its module or in an importer reaches is no element's class.
+- **A class passed to a component** is paired with the classes on the component's root (the section below). A `.ts` string that no class site in its module or in an importer reaches is no element's class.
 
 ## The source of record
 
@@ -34,11 +34,25 @@ Every flagged pair in files outside sets 1–9 and the kit: 7 pairs in 5 files. 
 
 In JoinedRow and Who the two states come from one value (`line.hue`, and `you`/`!you`), so they never hold together at run time. The fix makes the order the source's anyway.
 
-## Cross-file sweep: a class prop on a component root's state variants
+## A class passed to a component, against its root
 
-Every `<Component class=…>` whose classes carry a variant (184 site × root pairs) was joined with the classes on the root element that takes the component's `class` prop, then run through the rule. 14 cross pairs at 5 sites came back. Every consumer is in a set file and every root in the kit, so none is fixed here; the fix goes on the loser, in whichever file its owner holds.
+The rule itself now checks this; it is no longer a one-off sweep. For `<Component class=…>`, it resolves the component through the file's imports: a default import of a `.svelte` file, or a named or namespace import through a `.ts` barrel's `export { default as X } from "./x.svelte"`. It then finds the elements in the component whose `class` uses the `$props()` `class: x` binding. It pairs each class passed with each class on those elements: their string literals, plus the classes of any `tv`/`cva` recipe they call. A recipe class is counted only when the tag's props pick its value. A literal prop picks that value; a missing prop picks the recipe's `defaultVariants`; a prop given by expression, or any prop under a spread, may pick any value. A hit reports at the passed class, naming the root as file:line (`"…", passed here, and "…", on the root of <file>:<line>, …`).
 
-At ac7b79de8 every consumer class here came from the consumer's own scoped `<style>` (unlayered), and every root class was a utility in the kit's `cn(…)` (`@layer utilities`). By the layer step above, **the source winner in all 14 is the consumer's class**, whatever the specificity. Tailwind today picks the root's class in 13 of them.
+Scratch proof: a component whose recipe has `tone: { plain: "hover:bg-surface-hover", loud: "aria-pressed:bg-brand-wash" }` (default `plain`) and four consumers passing a tied `data-[state=open]:bg-surface-fill`. `tone="loud"` pairs only with the loud class. No `tone` pairs only with plain's. `tone={which}` pairs with both. Passing the root's own class pairs with nothing.
+
+On this branch: **21 pairs at 10 sites**: set 3 has 13, set 5 has 6 and set 7 has 2; the kit has none, and no file outside the sets has any. These are the 14 the sweep found, plus 7 through Button's recipe, which the sweep could not see. Every consumer is in a set file and every root in the kit, so none is fixed here; the fix goes on the loser, in whichever file its owner holds.
+
+At ac7b79de8 every consumer class here, the 7 new ones included, came from the consumer's own scoped `<style>` (unlayered). Every root class was a utility in the kit's `cn(…)`/`tv(…)` (`@layer utilities`). By the layer step above, **the source winner in all 21 is the consumer's class**, whatever the specificity. Tailwind today picks the root's class in 17 of them.
+
+| consumer site | root | class passed (source winner) | root class | property | Tailwind's pick |
+|---|---|---|---|---|---|
+| `src/lib/cawco/PeekPane.svelte:434` (set 7) `<Button>` | `ui/button/button.svelte:154` | `hover:border-status-fail-ink` | `aria-invalid:border-error-9` | border colour | the root's, reversed |
+| `src/lib/cawco/PeekPane.svelte:445` (set 7) `<Button>` | `ui/button/button.svelte:154` | `hover:border-status-done-ink` | `aria-invalid:border-error-9` | border colour | the root's, reversed |
+| `src/lib/cawco/home/MovedLogins.svelte:119` (set 5) `<Button>` | `ui/button/button.svelte:154` | `aria-expanded:bg-transparent` | `hover:bg-[var(--surface-hover)]` | background-color | the consumer's, as the source |
+| `src/lib/cawco/tasks/TaskFields.svelte:115` (set 3) `<Button>` | `ui/button/button.svelte:154` | `group-hover/value:opacity-100`, `focus-visible:opacity-100` | `disabled:opacity-50` | opacity (2 pairs) | the root's, reversed |
+| `src/lib/cawco/tasks/TodoList.svelte:238` (set 3) `<Button>` | `ui/button/button.svelte:154` | `can-hover:group-hover:opacity-100`, `can-hover:focus-visible:opacity-100` | `disabled:opacity-50` | opacity (2 pairs) | the consumer's, as the source |
+
+The 14 the sweep had already found, with their source rules:
 
 | consumer site | consumer's source rule at T | root (kit) | consumer class (source winner) | root class | property | Tailwind's pick |
 |---|---|---|---|---|---|---|
@@ -50,7 +64,7 @@ At ac7b79de8 every consumer class here came from the consumer's own scoped `<sty
 
 ## Left in set and kit files
 
-47 flagged pairs remain, 33 in set files and 14 in the kit. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step.
+68 flagged pairs remain: 47 within one element (33 in set files, 14 in the kit), listed here, and the 21 classes passed to a component, listed above. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step.
 - `field-description`'s `nth-last-2:`/`last:` pair is no longer flagged: the rule reads `last:` as `:nth-last-child(1)`, which can't be the same element as `:nth-last-child(2)`. Its two pairs against `[[data-variant=legend]+&]:` remain.
 - `switch`'s `data-unchecked:` against `data-[state=checked]:` is flagged correctly: `data-unchecked` also matches a bare `[data-unchecked]`, so by selector the two can hold together. K1/K2 make them exclusive like any other pair.
 

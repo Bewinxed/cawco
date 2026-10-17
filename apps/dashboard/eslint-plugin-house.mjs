@@ -26,6 +26,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseModule } from "@typescript-eslint/parser";
+import { parse as parseSvelte } from "svelte/compiler";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const THEME = path.join(HERE, "src/app.css");
@@ -1197,6 +1198,284 @@ function startTagLists(tag, read) {
   return lists;
 }
 
+/* ---------------------------- a class passed to a component's root */
+
+const SVELTE_FILE = /\.svelte$/;
+const PROPS_BINDING = /let\s*\{([\s\S]*?)\}\s*(?::[^=]*)?=\s*\$props\(\)/;
+const CLASS_PROP = /\bclass\s*:\s*(\w+)/;
+const QUOTED = /"([^"]*)"|'([^']*)'|`([^`]*)`/g;
+const CALLED = /\b([A-Za-z_$][\w$]*)\s*\(/g;
+const CLASS_EQUALS = /^class=/;
+const SPACE_RUN = /\s+/;
+
+/** The `.svelte` file a specifier names, in this repo, or null. */
+function svelteFile(specifier, from) {
+  if (!SVELTE_FILE.test(specifier)) {
+    return null;
+  }
+  const file = LIB_ALIAS.test(specifier)
+    ? path.join(SRC_LIB, specifier.slice(5))
+    : path.resolve(path.dirname(from), specifier);
+  return fs.statSync(file, { throwIfNoEntry: false })?.isFile() ? file : null;
+}
+
+const barrels = new Map();
+/** A barrel's components by exported name (`export { default as X } from "./x.svelte"`). */
+function barrelComponents(file) {
+  if (!barrels.has(file)) {
+    const found = new Map();
+    barrels.set(file, found);
+    const ast = parseModule(fs.readFileSync(file, "utf8"), { range: true });
+    for (const statement of ast.body) {
+      if (statement.type === "ExportNamedDeclaration" && statement.source) {
+        reExports(statement, file, found);
+      }
+    }
+  }
+  return barrels.get(file);
+}
+
+/** The components one `export { … } from "…"` names, into `found`. */
+function reExports(statement, file, found) {
+  const source = statement.source.value;
+  const component = svelteFile(source, file);
+  const module = component ? null : moduleFile(source, file);
+  for (const specifier of statement.specifiers) {
+    const local = specifier.local.name ?? specifier.local.value;
+    const exported = specifier.exported.name ?? specifier.exported.value;
+    const target =
+      component && local === "default"
+        ? component
+        : module && barrelComponents(module).get(local);
+    if (target) {
+      found.set(exported, target);
+    }
+  }
+}
+
+/** The component file a tag name (`Button`, `Table.Cell`) stands for. */
+function componentFile(name, imports, from) {
+  const [first, member] = name.split(".");
+  const binding = imports.get(first);
+  if (!binding) {
+    return null;
+  }
+  if (binding.kind === "default" && !member) {
+    return svelteFile(binding.source, from);
+  }
+  const barrel = moduleFile(binding.source, from);
+  if (!barrel) {
+    return null;
+  }
+  const exported = binding.kind === "namespace" ? member : binding.imported;
+  return (binding.kind === "namespace") === Boolean(member)
+    ? (barrelComponents(barrel).get(exported) ?? null)
+    : null;
+}
+
+function quotedClasses(text) {
+  return [...text.matchAll(QUOTED)].flatMap((m) =>
+    (m[1] ?? m[2] ?? m[3]).split(SPACE_RUN).filter(Boolean)
+  );
+}
+
+/** Every class word in the string literals under a node. */
+function literalClasses(node) {
+  if (!node || typeof node !== "object") {
+    return [];
+  }
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return node.value.split(SPACE_RUN).filter(Boolean);
+  }
+  if (node.type === "TemplateElement") {
+    return (node.value.cooked ?? "").split(SPACE_RUN).filter(Boolean);
+  }
+  return Object.entries(node).flatMap(([key, value]) =>
+    key === "range" ? [] : literalClasses(value)
+  );
+}
+
+function objectProps(node) {
+  return new Map(
+    (node?.type === "ObjectExpression" ? node.properties : [])
+      .filter((p) => p.type === "Property")
+      .map((p) => [p.key.name ?? String(p.key.value), p.value])
+  );
+}
+
+/** A recipe's classes, each with the variant values it needs. */
+function recipeOf(config, base) {
+  const props = objectProps(config);
+  const worn = literalClasses(base ?? props.get("base")).map((name) => ({
+    name,
+    when: {},
+  }));
+  for (const [axis, values] of objectProps(props.get("variants"))) {
+    for (const [value, node] of objectProps(values)) {
+      for (const name of literalClasses(node)) {
+        worn.push({ name, when: { [axis]: value } });
+      }
+    }
+  }
+  for (const entry of props.get("compoundVariants")?.elements ?? []) {
+    const when = {};
+    let names = [];
+    for (const [key, node] of objectProps(entry)) {
+      if (key === "class" || key === "className") {
+        names = literalClasses(node);
+      } else if (node.type === "Literal") {
+        when[key] = String(node.value);
+      }
+    }
+    worn.push(...names.map((name) => ({ name, when })));
+  }
+  const defaults = Object.fromEntries(
+    [...objectProps(props.get("defaultVariants"))]
+      .filter(([, node]) => node.type === "Literal")
+      .map(([axis, node]) => [axis, String(node.value)])
+  );
+  return { classes: worn, defaults };
+}
+
+/** The classes of the `tv`/`cva` recipes a class expression calls. */
+function recipeClasses(expression, text) {
+  return [...expression.matchAll(CALLED)].flatMap(([, name]) => {
+    const recipe = new RegExp(
+      `\\b(?:const|let)\\s+${name.replace("$", "\\$")}\\s*=\\s*(tv|cva)\\(`
+    ).exec(text);
+    if (!recipe) {
+      return [];
+    }
+    const open = recipe.index + recipe[0].length - 1;
+    const call = parseModule(`f(${parenthesised(text, open)})`, {
+      range: true,
+    }).body[0]?.expression;
+    const [first, second] = call?.arguments ?? [];
+    return [recipe[1] === "tv" ? recipeOf(first) : recipeOf(second, first)];
+  });
+}
+
+function svelteNodes(node, visit) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      svelteNodes(child, visit);
+    }
+    return;
+  }
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (node.type) {
+    visit(node);
+  }
+  for (const [key, value] of Object.entries(node)) {
+    if (
+      key !== "parent" &&
+      key !== "metadata" &&
+      value &&
+      typeof value === "object"
+    ) {
+      svelteNodes(value, visit);
+    }
+  }
+}
+
+const roots = new Map();
+/**
+ * The elements of a component that wear its `class` prop, each with its
+ * line and the classes it carries itself (its strings and its recipes').
+ */
+function componentRoots(file) {
+  if (!roots.has(file)) {
+    const text = fs.readFileSync(file, "utf8");
+    const binding = text.match(PROPS_BINDING)?.[1].match(CLASS_PROP)?.[1];
+    const found = [];
+    if (binding) {
+      const uses = new RegExp(`\\b${binding.replace("$", "\\$")}\\b`);
+      svelteNodes(parseSvelte(text, { modern: true }).fragment, (node) => {
+        const attribute = node.attributes?.find(
+          (a) => a.type === "Attribute" && a.name === "class"
+        );
+        const expression = attribute
+          ? text.slice(attribute.start, attribute.end).replace(CLASS_EQUALS, "")
+          : "";
+        if (attribute && uses.test(expression)) {
+          const recipes = recipeClasses(expression, text);
+          found.push({
+            line: text.slice(0, attribute.start).split("\n").length,
+            classes: [
+              ...quotedClasses(expression).map((name) => ({ name, when: {} })),
+              ...recipes.flatMap((recipe) => recipe.classes),
+            ],
+            defaults: Object.assign({}, ...recipes.map((r) => r.defaults)),
+          });
+        }
+      });
+    }
+    roots.set(file, found);
+  }
+  return roots.get(file);
+}
+
+const ANY = Symbol("any value");
+
+/**
+ * The recipe values a component tag picks: a literal prop is its value; a
+ * prop given by expression, or any prop under a spread, may be any.
+ */
+function chosenVariants(tag) {
+  const props = new Map();
+  let spread = false;
+  for (const attribute of tag.attributes) {
+    if (attribute.type === "SvelteSpreadAttribute") {
+      spread = true;
+    } else if (attribute.type === "SvelteShorthandAttribute") {
+      props.set(attribute.key.name, ANY);
+    } else if (attribute.type === "SvelteAttribute") {
+      const [only, ...more] = attribute.value;
+      const literal = only?.type === "SvelteLiteral" && more.length === 0;
+      props.set(attribute.key.name, literal ? only.value : ANY);
+    }
+  }
+  return { props, spread };
+}
+
+/** Whether a recipe class is worn under the values a tag picks. */
+function wears(when, { props, spread }, defaults) {
+  return Object.entries(when).every(([axis, value]) => {
+    let picked = spread ? ANY : defaults[axis];
+    if (props.has(axis)) {
+      picked = props.get(axis);
+    }
+    return picked === ANY || picked === value;
+  });
+}
+
+function tagName(element) {
+  const name = element?.name;
+  if (name?.type === "SvelteMemberExpressionName") {
+    return `${tagName({ name: name.object })}.${name.property.name}`;
+  }
+  return name?.name ?? "";
+}
+
+/** A file's imports, by local name. */
+function importBinding(declaration, bindings) {
+  const source = declaration.source.value;
+  for (const specifier of declaration.specifiers) {
+    const kind = {
+      ImportDefaultSpecifier: "default",
+      ImportNamespaceSpecifier: "namespace",
+    }[specifier.type];
+    const imported = specifier.imported?.name ?? specifier.imported?.value;
+    bindings.set(specifier.local.name, {
+      source,
+      kind: kind ?? "named",
+      imported,
+    });
+  }
+}
+
 const variantOrder = {
   meta: {
     type: "problem",
@@ -1208,12 +1487,54 @@ const variantOrder = {
     messages: {
       sorted:
         '"{{a}}" and "{{b}}" both set {{property}} under states that can hold together, at equal specificity, so Tailwind\'s variant sort picks "{{winner}}". Make the states exclusive: the loser takes the winner\'s negation.',
+      sortedAcross:
+        '"{{a}}", passed here, and "{{b}}", on the root of {{root}}, both set {{property}} under states that can hold together, at equal specificity, so Tailwind\'s variant sort picks "{{winner}}". Make the states exclusive: the loser takes the winner\'s negation, in the file it stands in.',
     },
   },
   create(context) {
     const read = reader(context);
     const lists = [];
     const done = new Set();
+    const imports = new Map();
+    const passed = [];
+    const from = context.physicalFilename;
+
+    /** A class passed to a component against each class on its root. */
+    const reportPassed = ({ tag, entries }) => {
+      const file = componentFile(tagName(tag.parent), imports, from);
+      const chosen = chosenVariants(tag);
+      for (const root of file ? componentRoots(file) : []) {
+        const where = `${path.relative(HERE, file)}:${root.line}`;
+        const worn = root.classes
+          .filter((c) => wears(c.when, chosen, root.defaults))
+          .map((c) => c.name);
+        for (const entry of entries) {
+          reportAcross(entry, [...new Set(worn)], where, file);
+        }
+      }
+    };
+
+    const reportAcross = (entry, rootClasses, where, file) => {
+      const info = classInfo(entry.name);
+      for (const other of info ? rootClasses : []) {
+        const otherInfo = other === entry.name ? null : classInfo(other);
+        const property = otherInfo ? conflict(info, otherInfo) : null;
+        const winner = property ? winnerOf(entry.name, other) : null;
+        // A component's roots (an `<a>` or a `<button>`) are one look.
+        const key = [entry.start, entry.name, file, other].join(":");
+        if (winner && !done.has(key)) {
+          done.add(key);
+          context.report({
+            loc: {
+              start: context.sourceCode.getLocFromIndex(entry.start),
+              end: context.sourceCode.getLocFromIndex(entry.end),
+            },
+            messageId: "sortedAcross",
+            data: { a: entry.name, b: other, root: where, property, winner },
+          });
+        }
+      }
+    };
 
     const reportPair = (x, y) => {
       if (x.entry.name === y.entry.name || separated(x.entry, y.entry)) {
@@ -1255,8 +1576,15 @@ const variantOrder = {
     };
 
     return {
+      ImportDeclaration(node) {
+        importBinding(node, imports);
+      },
       SvelteStartTag(tag) {
-        lists.push(...startTagLists(tag, read));
+        const tagLists = startTagLists(tag, read);
+        lists.push(...tagLists);
+        if (tag.parent?.kind === "component" && tagLists[0].length) {
+          passed.push({ tag, entries: tagLists[0] });
+        }
       },
       CallExpression(node) {
         if (isClassCall(node) && !insideClassSite(node)) {
@@ -1266,6 +1594,9 @@ const variantOrder = {
       "Program:exit"() {
         for (const list of lists) {
           reportList(list);
+        }
+        for (const site of passed) {
+          reportPassed(site);
         }
       },
     };
