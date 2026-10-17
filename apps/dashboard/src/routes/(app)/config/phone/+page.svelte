@@ -132,7 +132,14 @@
   ready={loaded}
   title={section.label}
 >
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--group-gap)"
+    style:--group-gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconPhone} label="Devices">
       {#snippet right()}
         <Button
@@ -145,39 +152,57 @@
         />
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       A push names the session or task and nothing else; the app reads the rest
       over your tailnet.
     </p>
     {#each testLines as line, index (index)}
+      <!-- literal: 8px -->
       <p
         data-slot="num"
-        class="status num mark-line"
+        class="num mark-line group type-body flex items-center gap-(--status-gap) text-ink-muted tone-ok:text-ink-strong"
         data-tone={line.tone}
+        style:--status-gap="8px"
         transition:unfold
       >
-        <span data-slot="dot" aria-hidden="true" class="dot" data-box></span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+          data-box
+        ></span>
         <span>{line.text}</span>
       </p>
     {/each}
     {#if devices.length === 0}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
         Your devices will appear here. Open the CawCo app on your phone and
         allow notifications to register it.
       </p>
     {:else}
-      <ul class="devices">
+      <ul class="flex flex-col">
         {#each devices as device (device.id)}
-          <li class="device">
-            <div data-slot="who" class="who">
-              <span data-slot="name" class="name">{device.name}</span>
-              <span data-num data-slot="meta" class="meta num"
+          <!-- literal: 12px, 10px -->
+          <li
+            data-slot="device"
+            class="grid items-center gap-(--device-gap) border-t border-border-hairline py-(--device-pad-y) first:border-t-0"
+            style:--device-gap="12px"
+            style:--device-pad-y="10px"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong"
+                >{device.name}</span
+              >
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
                 >{platformName(device.platform)}</span
               >
               <span
                 data-num
                 data-slot="meta"
-                class="meta num"
+                class="num type-meta wrap-anywhere text-ink-muted tone-bad:text-status-fail-ink"
                 data-tone={device.lastError ? "bad" : "ok"}
               >
                 {#if device.lastError}
@@ -208,90 +233,31 @@
       </ul>
     {/if}
     {#if deviceError}
-      <p class="problem" role="alert" transition:unfold>{deviceError}</p>
+      <p
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >{deviceError}</p>
     {/if}
   </div>
 </SectionFrame>
 
 <style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  .status[data-tone="ok"] {
-    color: var(--ink-strong);
-  }
-  .dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
-    border-radius: 50%;
-    background: var(--ink-muted);
-    opacity: 0.5;
-  }
-  [data-tone="ok"] .dot {
-    background: var(--status-live-glyph);
-    opacity: 1;
-  }
-  [data-tone="bad"] .dot {
-    background: var(--status-attn-glyph);
-    opacity: 1;
-  }
-  .devices {
-    display: flex;
-    flex-direction: column;
-  }
-  .device {
-    display: grid;
+  /* residual: unmapped */
+  [data-slot="device"] {
     grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
   }
-  .device + .device {
-    border-top: 1px solid var(--border-hairline);
-  }
-  .who {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .name {
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .meta[data-tone="bad"] {
-    color: var(--status-fail-ink);
+  /* residual: unmapped */
+  [data-slot="dot"] {
+    border-radius: 50%;
   }
   @media (max-width: 639px) {
-    .device {
+    /* residual: unmapped */
+    [data-slot="device"] {
       grid-template-columns: minmax(0, 1fr) auto;
     }
-    .device > :global(:nth-child(2)) {
+    /* residual: foreign-dom */
+    [data-slot="device"] > :global(:nth-child(2)) {
       grid-column: 1 / -1;
       grid-row: 2;
     }

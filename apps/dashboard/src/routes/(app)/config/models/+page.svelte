@@ -295,7 +295,14 @@
   {ready}
   title={section.label}
 >
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--gap)"
+    style:--gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">
       {#snippet right()}
         {#if openrouter?.connected}
@@ -321,19 +328,19 @@
         {/if}
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
-      class="morph"
-      style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
+      class="h-(--morph-size) overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
+      style:--morph-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
-      <div data-slot="stack" class="stack" bind:clientHeight={openrouterHeight}>
+      <div data-slot="stack" class="grid" bind:clientHeight={openrouterHeight}>
         {#key phase}
           <p
             data-slot="num"
             aria-live="polite"
-            class="status num mark-line"
+            class="num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
             in:blur={{
               duration: dur("--dur-panel"),
@@ -350,14 +357,28 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="dot pulse"
+                class="size-space-2 flex-none bg-ink-muted opacity-60 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
                 data-box
+                data-pulse
               ></span>
               <span>Finishing the connection with OpenRouter…</span>
             {:else if phase === "connected" && openrouter?.connectedAt}
-              <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="10"></circle>
-                <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
+              <svg
+                aria-hidden="true"
+                class="size-icon-md flex-none self-center fill-none"
+                data-slot="check"
+                viewBox="0 0 20 20"
+              >
+                <circle
+                  cx="10"
+                  cy="10"
+                  r="10"
+                  class="fill-status-live-bg stroke-none"
+                ></circle>
+                <path
+                  d="M6.2 10.4l2.5 2.5 5.1-5.6"
+                  class="stroke-status-live-glyph"
+                ></path>
               </svg>
               <span
                 >Connected {formatDistanceToNow(
@@ -365,7 +386,7 @@
                 )}</span
               >
             {:else}
-              <span data-slot="dot" aria-hidden="true" class="dot" data-box
+              <span data-slot="dot" aria-hidden="true" class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100" data-box
               ></span>
               <span>Not connected</span>
             {/if}
@@ -374,14 +395,23 @@
       </div>
     </div>
     {#if openrouterError}
-      <p class="problem" role="alert" transition:unfold>{openrouterError}</p>
+      <p class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink" role="alert" transition:unfold>{openrouterError}</p>
     {/if}
   </div>
 
-  <form data-slot="group" class="group" data-group="jev" onsubmit={saveKey}>
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <form
+    data-slot="group"
+    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    data-group="jev"
+    style:--gap="8px"
+    style:--note-measure="72ch"
+    onsubmit={saveKey}
+  >
     <SectionHeader hue={HUE} icon={IconJev} label="Jev">
       {#snippet right()}
-        <div data-slot="actions" class="actions">
+        <div data-slot="actions" class="flex gap-(--gap)">
           {#if jev?.typesafe}
             <Button
               disabled={savingKey}
@@ -405,18 +435,18 @@
         </div>
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       Answers the hub's yes/no questions: meaning rules, fleet watch,
       suggestions and its own judgments. It goes straight to TypeSafe while a
       key is held here, otherwise through OpenRouter.
     </p>
     <p
       aria-live="polite"
-      class="status mark-line"
+      class="mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
-      <span data-slot="dot" aria-hidden="true" class="dot" data-box></span>
+      <span data-slot="dot" aria-hidden="true" class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100" data-box></span>
       <span>{routeLine}</span>
     </p>
     <Field id="typesafe-key" label="TypeSafe key">
@@ -431,15 +461,15 @@
       />
     </Field>
     <div
-      class="morph"
-      style:block-size={keyHeight ? `${keyHeight}px` : undefined}
+      class="h-(--morph-size) overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
+      style:--morph-size={keyHeight ? `${keyHeight}px` : undefined}
     >
-      <div data-slot="stack" class="stack" bind:clientHeight={keyHeight}>
+      <div data-slot="stack" class="grid" bind:clientHeight={keyHeight}>
         {#key keyPhase}
           <p
             data-slot="num"
             aria-live="polite"
-            class="status num mark-line"
+            class="num mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={{
@@ -454,13 +484,26 @@
             }}
           >
             {#if jev?.typesafe}
-              <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="10"></circle>
-                <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
+              <svg
+                aria-hidden="true"
+                class="size-icon-md flex-none self-center fill-none"
+                data-slot="check"
+                viewBox="0 0 20 20"
+              >
+                <circle
+                  cx="10"
+                  cy="10"
+                  r="10"
+                  class="fill-status-live-bg stroke-none"
+                ></circle>
+                <path
+                  d="M6.2 10.4l2.5 2.5 5.1-5.6"
+                  class="stroke-status-live-glyph"
+                ></path>
               </svg>
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
-              <span data-slot="dot" aria-hidden="true" class="dot" data-box
+              <span data-slot="dot" aria-hidden="true" class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100" data-box
               ></span>
               <span>Not set</span>
             {/if}
@@ -479,13 +522,20 @@
       onchange={setSuggest}
     />
     {#if jevError}
-      <p class="problem" role="alert" transition:unfold>{jevError}</p>
+      <p class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink" role="alert" transition:unfold>{jevError}</p>
     {/if}
   </form>
 
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    style:--gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconRules} label="Fleet watch" />
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       Reads every session's stream for a loop or a stall. A yes from Jev, or a
       second signal while Jev is off, starts one triage that tells the session's
       lead. In a project whose Caw is off, it tells you instead.
@@ -501,7 +551,7 @@
       onchange={setWatch}
     />
     {#if watch}
-      <ul data-slot="num" class="facts num">
+      <ul data-slot="num" class="num type-meta m-0 flex list-none flex-col gap-space-1 p-0 text-ink-muted">
         <li>
           Same error {watch.limits.sameError} times in
           {watch.limits.errorTurns}
@@ -518,69 +568,35 @@
       </ul>
     {/if}
     {#if watchError}
-      <p class="problem" role="alert" transition:unfold>{watchError}</p>
+      <p class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink" role="alert" transition:unfold>{watchError}</p>
     {/if}
   </div>
 </SectionFrame>
 
 <style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  /* residual: unmapped */
+  [data-slot="dot"] {
+    border-radius: 50%;
   }
-  .group + .group {
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .actions {
-    display: flex;
-    gap: 8px;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  /* A status line that swaps: the box tweens to the new line's height while
-     the lines cross-fade over each other in one grid cell. */
-  .morph {
-    overflow: hidden;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: block-size var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  .stack {
-    display: grid;
-  }
-  .stack > :global(*) {
+  /* A status line that swaps: the lines cross-fade over each other in one grid cell. */
+  /* residual: unmapped */
+  [data-slot="stack"] > * {
     grid-area: 1 / 1;
   }
   /* Connected: the tick draws itself in. */
-  .check {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    align-self: center;
-    fill: none;
+  /* residual: svg-paint */
+  [data-slot="check"] {
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  .check circle {
-    fill: var(--status-live-bg);
-    stroke: none;
-  }
-  .check path {
-    stroke: var(--status-live-glyph);
+  /* residual: svg-paint */
+  [data-slot="check"] path {
     stroke-width: 1.8;
     stroke-dasharray: 12;
     stroke-dashoffset: 0;
+  }
+  /* residual: keyframes */
+  [data-slot="check"] path {
     @media (prefers-reduced-motion: no-preference) {
       animation: draw var(--dur-toggle) var(--ease-out) var(--dur-ghost) both;
     }
@@ -591,8 +607,8 @@
     }
   }
   /* Finishing the connection: the dot breathes while the hub works. */
-  .pulse {
-    opacity: 0.6;
+  /* residual: keyframes */
+  [data-pulse] {
     @media (prefers-reduced-motion: no-preference) {
       animation: breathe var(--breath) var(--ease-in-out) infinite;
     }
@@ -601,38 +617,5 @@
     50% {
       opacity: 0.2;
     }
-  }
-  /* Fleet watch's limits: read-only facts, one per line, in the note's face. */
-  .facts {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  .status[data-tone="ok"] {
-    color: var(--ink-strong);
-  }
-  .dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
-    border-radius: 50%;
-    background: var(--ink-muted);
-    opacity: 0.5;
-  }
-  [data-tone="ok"] .dot {
-    background: var(--status-live-glyph);
-    opacity: 1;
   }
 </style>

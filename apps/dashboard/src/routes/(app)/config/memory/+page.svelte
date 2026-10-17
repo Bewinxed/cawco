@@ -215,17 +215,31 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
-    <p data-slot="note" class="note">No file matches “{filter.trim()}”.</p>
+    <!-- literal: 72ch -->
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--note-measure) text-ink-muted"
+      style:--note-measure="72ch"
+    >
+      No file matches “{filter.trim()}”.
+    </p>
   {/if}
 
   {#if hookFailed.length > 0}
-    <div data-slot="group" class="group">
+    <!-- literal: 72ch -->
+    <!-- literal: 8px -->
+    <div
+      data-slot="group"
+      class="flex flex-col gap-(--group-gap) border-t border-border-hairline pt-space-5"
+      style:--group-gap="8px"
+      style:--note-measure="72ch"
+    >
       <SectionHeader
         hue="var(--status-attn-ink)"
         icon={IconWarningTriangle}
         label="Model documents are not being loaded everywhere"
       />
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
         The documents are put in front of a session by a SessionStart hook CawCo
         registers. Where it did not register, the files are on the machine and
         nothing reads them.
@@ -254,18 +268,3 @@
     </div>
   {/if}
 </SectionFrame>
-
-<style>
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-</style>

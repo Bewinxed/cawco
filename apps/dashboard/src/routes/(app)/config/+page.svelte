@@ -4,12 +4,4 @@
 
 <svelte:head><title>Configure · CawCo</title></svelte:head>
 
-<div data-slot="list" class="list"><ConfigRail variant="list" /></div>
-
-<style>
-  .list {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-  }
-</style>
+<div data-slot="list" class="min-h-0 flex-auto overflow-y-auto"><ConfigRail variant="list" /></div>

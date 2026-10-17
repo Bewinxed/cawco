@@ -442,10 +442,17 @@
     />
   {/snippet}
 
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--gap)"
+    style:--gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconBolt} label="Skills" />
     {#if skills.length === 0}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
         No skills fetched yet. Paste what you would otherwise have run and the
         hub downloads the files itself.
       </p>
@@ -516,7 +523,7 @@
                   <div
                     data-slot="listing"
                     aria-label="Reading {row.name}'s previous versions"
-                    class="listing"
+                    class="m-0 flex list-none flex-col gap-space-row p-0"
                     role="status"
                   >
                     {#each [0, 1] as line (line)}
@@ -539,16 +546,23 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       CawCo installs a skill's files. A skill that also ships hooks or subagents
       runs in its degraded mode until those are set up by hand.
     </p>
   </div>
 
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    style:--gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconShop} label="Marketplaces" />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
         No marketplaces linked yet. Link one and its plugins become browsable
         here.
       </p>
@@ -602,7 +616,7 @@
                   <div
                     data-slot="listing"
                     aria-label="Reading {row.name}"
-                    class="listing"
+                    class="m-0 flex list-none flex-col gap-space-row p-0"
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
@@ -610,38 +624,52 @@
                     {/each}
                   </div>
                 {:else if unread[row.name]}
-                  <p class="caution" role="alert">{unread[row.name]}</p>
+                  <p class="type-meta text-status-attn-ink" role="alert">{unread[row.name]}</p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p data-slot="note" class="note">
+                  <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
                     This marketplace lists no plugins.
                   </p>
                 {:else}
-                  <ul data-slot="listing" class="listing">
+                  <ul data-slot="listing" class="m-0 flex list-none flex-col gap-space-row p-0">
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
-                      <li class="offer">
-                        <span data-slot="text" class="text">
-                          <span class="line">
-                            <span class="pname">{plugin.name}</span>
+                      <!-- literal: 8px 10px -->
+                      <li
+                        class="flex flex-wrap items-center gap-(--gap) rounded-sm bg-surface-recess px-(--offer-pad-x) py-(--offer-pad-y)"
+                        style:--offer-pad-x="10px"
+                        style:--offer-pad-y="8px"
+                      >
+                        <!-- literal: 240px -->
+                        <span
+                          data-slot="text"
+                          class="flex min-w-0 flex-col gap-space-row"
+                          style:--text-basis="240px"
+                        >
+                          <span
+                            class="flex flex-wrap items-baseline gap-(--gap)"
+                          >
+                            <span class="type-label text-ink-strong"
+                              >{plugin.name}</span
+                            >
                             {#if plugin.version}
-                              <span data-slot="note" class="note font-mono"
+                              <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
-                              <span data-slot="note" class="note"
+                              <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted"
                                 >{plugin.category}</span
                               >
                             {/if}
                           </span>
                           {#if plugin.description}
-                            <span data-slot="note" class="note"
+                            <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span data-slot="note" class="note">Added</span>
+                          <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">Added</span>
                         {:else}
                           <Button
                             failed={id in installFailed}
@@ -653,10 +681,7 @@
                             variant="outline"
                           />
                         {/if}
-                        <RowFault
-                          class="install-fault"
-                          reason={installFailed[id]}
-                        />
+                        <RowFault reason={installFailed[id]} />
                       </li>
                     {/each}
                   </ul>
@@ -669,10 +694,17 @@
     {/if}
   </div>
 
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    style:--gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconLayers} label="Plugins" />
     {#if plugins.length === 0}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
         Nothing installed yet. Browse a marketplace above and add a plugin.
       </p>
     {:else}
@@ -733,7 +765,7 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       Disabling a plugin uninstalls it from the machines and keeps its row here.
     </p>
   </div>
@@ -747,56 +779,8 @@
 </SectionFrame>
 
 <style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .group + .group {
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .listing {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .text {
-    display: flex;
-    flex: 1 1 240px;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .pname {
-    font: var(--type-label);
-    color: var(--ink-strong);
+  /* residual: unmapped */
+  [data-slot="text"] {
+    flex: 1 1 var(--text-basis);
   }
 </style>

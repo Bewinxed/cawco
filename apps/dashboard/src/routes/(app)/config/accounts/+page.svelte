@@ -51,22 +51,29 @@
       {/snippet}
     </EmptyState>
   {:else}
-    <div class="groups" {@attach reflow()}>
+    <div class="flex min-w-0 flex-col gap-space-6" {@attach reflow()}>
       {#each groups as group (group.provider)}
         <section
           data-slot="group"
           aria-labelledby="provider-{group.provider}"
-          class="group"
+          class="flex min-w-0 flex-col gap-space-2"
           data-flip
         >
-          <header data-slot="head" class="head mark-line">
+          <header
+            data-slot="head"
+            class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2 px-space-2"
+          >
             <ProviderMark provider={group.provider} />
-            <h2 data-slot="name" class="name" id="provider-{group.provider}">
+            <h2
+              data-slot="name"
+              class="type-label min-w-0 flex-auto text-ink-muted"
+              id="provider-{group.provider}"
+            >
               {group.name}
             </h2>
             {#if hasRouting(group.accounts.length)}
               <a
-                class="routing mark-line"
+                class="mark-line type-label inline-flex flex-none items-center gap-space-row rounded-xs text-link-ink no-underline transition-[opacity] dur-control ease-out hover:text-link-hover active:opacity-72"
                 data-box
                 data-flip="pop"
                 href="/config/accounts/{encodeURIComponent(
@@ -74,13 +81,15 @@
                 )}/routing"
               >
                 <span>{words.routing}</span>
-                <IconChevronRight aria-hidden="true" />
+                <IconChevronRight class="size-icon-sm" aria-hidden="true" />
               </a>
             {/if}
           </header>
+          <!-- Flat rows on the section's own surface, as the live list draws
+               them: the rows' hairlines are the only rule. -->
           <ul
             aria-labelledby="provider-{group.provider}"
-            class="rows"
+            class="m-0 flex min-w-0 list-none flex-col p-0"
             data-flip="box"
             {@attach highlight({ rows: ".link" })}
           >
@@ -93,64 +102,3 @@
     </div>
   {/if}
 </SectionFrame>
-
-<style>
-  .groups {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    min-width: 0;
-  }
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: var(--c-btn-h-xs);
-    padding-inline: var(--space-2);
-  }
-  .name {
-    flex: 1 1 auto;
-    min-width: 0;
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .routing {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 2px;
-    border-radius: var(--radius-xs);
-    font: var(--type-label);
-    color: var(--link-ink);
-    text-decoration: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .routing:hover {
-      color: var(--link-hover);
-    }
-  }
-  .routing:active {
-    opacity: 0.72;
-  }
-  .routing :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  /* Flat rows on the section's own surface, as the live list draws them:
-     the rows' hairlines are the only rule. */
-  .rows {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-</style>

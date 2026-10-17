@@ -67,59 +67,39 @@
 </script>
 
 <Tooltip.Provider>
-  <div class="config">
+  <div class="flex min-h-0 min-w-0 flex-auto bg-surface-recess">
     {#if slug}
-      <div class="side"><ConfigRail current={slug} /></div>
+      <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
+        <ConfigRail current={slug} />
+      </div>
     {/if}
     <!-- Keyed on the path, so a section change or a drill into an editor
          swaps only this pane (motion/route.svelte.ts) while the rail beside
          it holds still and its pill glides to the new section. -->
-    <div data-slot="pane" class="pane">
+    <div
+      data-slot="pane"
+      class="grid min-h-0 min-w-0 flex-auto overflow-hidden"
+    >
       {#key page.url.pathname}
-        <div class="page" in:pageIn out:pageOut>{@render children()}</div>
+        <div
+          class="flex min-h-0 min-w-0 flex-col bg-surface-recess"
+          in:pageIn
+          out:pageOut
+        >{@render children()}</div>
       {/key}
     </div>
   </div>
 </Tooltip.Provider>
 
 <style>
-  .config {
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-recess);
-  }
-  /* The rail's panel is inset from the page's edges by the pages' own
-     gutter (SectionFrame's .ground: space-2 above and below, space-5 at the
-     side), so its top lines up with the section's card beside it. */
-  .side {
-    display: flex;
-    min-height: 0;
-    padding: var(--space-2) 0 var(--space-2) var(--space-5);
-  }
+  /* residual: unmapped */
   /* The two pages of a swap stand in one cell; a phone's push slides the
      new one in from off the pane's edge, so the pane clips it. */
-  .pane {
-    display: grid;
+  [data-slot="pane"] {
     grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
   }
-  /* Opaque, so a page pushed over another hides it. */
-  .page {
+  /* residual: unmapped */
+  [data-slot="pane"] > div {
     grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-recess);
-  }
-  @media (max-width: 900px) {
-    .side {
-      display: none;
-    }
   }
 </style>
