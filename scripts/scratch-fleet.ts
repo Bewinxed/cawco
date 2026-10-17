@@ -957,7 +957,20 @@ export interface SendSnapshot {
  * or the machine has no room. Under a run that holds one already (the probe
  * kit's), it counts once.
  */
+/**
+ * Where a fleet's hub listens (`bind`, its `HOST`) and the address its
+ * services and the probe reach it at (`at`): 127.0.0.1 for both unless a
+ * spec names others. hub-loopback binds every address (`::`) so an agent
+ * reaches it at each loopback name; hub-loopback-relay puts it on the host's
+ * own interface address, off loopback.
+ */
+export interface HubAddress {
+  at: string;
+  bind: string;
+}
+
 export async function scratchFleet(options: {
+  hub?: HubAddress;
   name: string;
   respond: (request: Seen) => Reply;
 }) {
@@ -973,10 +986,17 @@ export async function scratchFleet(options: {
 }
 
 async function standUp(
-  options: { name: string; respond: (request: Seen) => Reply },
+  options: {
+    hub?: HubAddress;
+    name: string;
+    respond: (request: Seen) => Reply;
+  },
   dirs: FleetDirs,
   heavy: HeavySlot
 ) {
+  const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
+  /** The hub's address as a URL names it: an IPv6 one in brackets. */
+  const hubAt = hub.at.includes(":") ? `[${hub.at}]` : hub.at;
   const root = resolve(import.meta.dir, "..");
   const { homes, scratch, short: shortRoot } = await fleetRoots();
   const sandbox = await dirs.own(
@@ -1035,7 +1055,7 @@ async function standUp(
   const dashboardPort = await freePort();
   // The dashboard's loopback port the hub names to every agent (core `localDashboardPort`).
   const localDashboardPort = await freePort();
-  const base = `http://127.0.0.1:${hubPort}`;
+  const base = `http://${hubAt}:${hubPort}`;
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
@@ -1276,8 +1296,8 @@ async function standUp(
     CAWCO_MCP_PORT: String(mcpPort),
     CAWCO_DASHBOARD_PORT: String(dashboardPort),
     CAWCO_LOCAL_DASHBOARD_PORT: String(localDashboardPort),
-    HOST: "127.0.0.1",
-    CAWCO_HUB_URL: `ws://127.0.0.1:${hubPort}/ws`,
+    HOST: hub.bind,
+    CAWCO_HUB_URL: `ws://${hubAt}:${hubPort}/ws`,
     CAWCO_NO_MDNS: "1",
     // The hub's debug lines, for a spec that reads its log (routine-results 4b).
     CAWCO_DEBUG: "1",
@@ -1539,7 +1559,7 @@ async function standUp(
         url: string,
         options?: { headers: Record<string, string> }
       ) => WebSocket
-    )(`ws://127.0.0.1:${hubPort}/ws/dashboard`, {
+    )(`ws://${hubAt}:${hubPort}/ws/dashboard`, {
       headers: ownerHeaders(),
     });
     await new Promise<void>((done, fail) => {
@@ -2067,8 +2087,10 @@ async function standUp(
   };
 
   return {
-    /** The hub's own address, `http://127.0.0.1:<port>`. */
+    /** The hub's own address, `http://127.0.0.1:<port>` (or where `hub.at` names). */
     base,
+    /** Where the hub listens and is reached at ({@link HubAddress}). */
+    hub,
     /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
     dashboardPort,
     /** The dashboard's loopback port the hub names to every agent (`CAWCO_LOCAL_DASHBOARD_PORT`). */

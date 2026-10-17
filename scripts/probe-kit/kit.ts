@@ -26,6 +26,7 @@ import { readWithin } from "../../packages/core/src/bounded";
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
+  type HubAddress,
   type Reply,
   type Seen,
   scratchFleet,
@@ -221,9 +222,14 @@ export interface Kit {
   /**
    * A scratch fleet (scratch-fleet.ts), nothing launched yet, answered once
    * the run's dashboard is built; its `dashboard()` serves that build
-   * against its hub once asked. Both go when the spec ends.
+   * against its hub once asked, where the hub is reached (`hub.at`). Both go
+   * when the spec ends. `hub`: where its hub listens and is reached
+   * (scratch-fleet.ts `HubAddress`), 127.0.0.1 unless named.
    */
-  fleet: (respond: (request: Seen) => Reply) => Promise<KitFleet>;
+  fleet: (
+    respond: (request: Seen) => Reply,
+    hub?: HubAddress
+  ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
   note: (line: string) => void;
   /** Where the spec writes what a reviewer reads after a failure. */
@@ -318,7 +324,9 @@ async function serve(
   how: "dev" | "preview",
   hub: string,
   /** The port to serve on: a fleet's `dashboardPort`, the one its hub names; any free one when unset. */
-  at?: number
+  at?: number,
+  /** The address to serve on: a fleet's hub's (`hub.at`); 127.0.0.1 when unset. */
+  host = "127.0.0.1"
 ) {
   const port = at ?? (await freePort());
   const child = Bun.spawn(
@@ -327,7 +335,7 @@ async function serve(
       "vite",
       how,
       "--host",
-      "127.0.0.1",
+      host,
       "--port",
       String(port),
       "--strictPort",
@@ -343,7 +351,7 @@ async function serve(
       stderr: "ignore",
     }
   );
-  const base = `http://127.0.0.1:${port}`;
+  const base = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
   await until(
     "the built dashboard answering",
     () => fetch(base).then((r) => r.ok),
@@ -399,10 +407,11 @@ export class Run {
   private async startServer(
     how: "dev" | "preview",
     hub: string,
-    port?: number
+    port?: number,
+    host?: string
   ): Promise<{ base: string; child: Bun.Subprocess }> {
     await this.heavy();
-    return serve(how, hub, port);
+    return serve(how, hub, port, host);
   }
 
   browser(
@@ -520,7 +529,7 @@ export class Run {
         });
         return (await served).base;
       },
-      fleet: async (respond) => {
+      fleet: async (respond, hub) => {
         // Under the run's slot, taken by the build: the fleet's own hold
         // (scratch-fleet.ts) counts once in this process.
         // Built before the fleet starts, never between its start and the
@@ -533,6 +542,7 @@ export class Run {
         const fleet = await scratchFleet({
           name: `probe-kit-${spec.name}`,
           respond,
+          ...(hub ? { hub } : {}),
         });
         let served: Promise<{ base: string; child: Bun.Subprocess }> | null =
           null;
@@ -549,7 +559,12 @@ export class Run {
         return Object.assign(fleet, {
           dashboard: () => {
             served ??= this.build().then(() =>
-              this.startServer("preview", fleet.base, fleet.dashboardPort)
+              this.startServer(
+                "preview",
+                fleet.base,
+                fleet.dashboardPort,
+                fleet.hub.at
+              )
             );
             return served.then((s) => s.base);
           },

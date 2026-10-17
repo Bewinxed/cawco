@@ -33,6 +33,12 @@ const HOP = "hub loopback";
 const LOOPBACK = ["127.0.0.1", "::1"];
 /** An IPv6 literal's brackets, as a URL's hostname carries them. */
 const BRACKETS = /^\[|\]$/g;
+/** 127.0.0.0/8, as itself or IPv4-mapped (`::ffff:127.0.0.1`). */
+const LOOPBACK_V4 = /^(?:::ffff:)?127\./i;
+
+/** Whether `address` (as `dns.lookup` answers it) is this computer's loopback: 127.0.0.0/8 or `::1`. */
+const loopbackAddress = (address: string): boolean =>
+  address === "::1" || LOOPBACK_V4.test(address);
 
 /**
  * The ports the hub's register answer names: the dashboard's on the hub
@@ -179,23 +185,21 @@ async function listenAll(
 /**
  * Serves the hub at `hubUrl` (the address the agent is connected to it on)
  * on this computer's loopback: the dashboard's loopback port, carried to its
- * port on the hub, and every preview port, each to its own. An address the hub itself is reached at is never bound: the hub is
- * on this computer there, its loopback already is the hub, and a listener of
- * its own would relay to itself. A port another listener holds (the hub's,
- * on its own computer) is said once and left to it.
+ * port on the hub, and every preview port, each to its own. A hub reached at
+ * a loopback address ({@link loopbackAddress}) is on this computer, whose
+ * dashboard socket listens on the loopback port itself: nothing is carried,
+ * as a listener of the agent's would only relay to its own computer. A port
+ * another listener holds is said once and left to it.
  */
 export async function startHubLoopback(
   hubUrl: string,
   ports: HubPorts
 ): Promise<HubLoopback> {
   const hubHost = new URL(hubUrl).hostname;
-  const hubAddresses = new Set(
-    (await lookup(hubHost.replace(BRACKETS, ""), { all: true })).map(
-      (one) => one.address
-    )
-  );
-  const hosts = LOOPBACK.filter((host) => !hubAddresses.has(host));
-  if (hosts.length === 0) {
+  const hubAddresses = (
+    await lookup(hubHost.replace(BRACKETS, ""), { all: true })
+  ).map((one) => one.address);
+  if (hubAddresses.some(loopbackAddress)) {
     console.info(
       `[${HOP}] the hub at ${hubHost} is on this computer: its own loopback is the hub, so nothing is carried`
     );
@@ -212,7 +216,7 @@ export async function startHubLoopback(
   ) {
     all.push([port, port]);
   }
-  const { servers, held, absent } = await listenAll(hubHost, hosts, all);
+  const { servers, held, absent } = await listenAll(hubHost, LOOPBACK, all);
   for (const hostname of absent) {
     console.info(
       `[${HOP}] this computer has no ${hostname}, so localhost is served without it`
@@ -220,11 +224,11 @@ export async function startHubLoopback(
   }
   for (const [hostname, taken] of held) {
     console.info(
-      `[${HOP}] ${hostname} ports ${portRuns(taken)} are held by another listener (the hub's own, on its computer): left to it`
+      `[${HOP}] ${hostname} ports ${portRuns(taken)} are held by another program on this computer: left to it`
     );
   }
   console.info(
-    `[${HOP}] the hub at ${hubHost} is served on ${hosts.filter((host) => !absent.includes(host)).join(" and ")}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
+    `[${HOP}] the hub at ${hubHost} is served on ${LOOPBACK.filter((host) => !absent.includes(host)).join(" and ")}: http://localhost:${ports.dashboard.local} (its dashboard at :${ports.dashboard.hub}), previews ${ports.previews.first}–${ports.previews.last} (${servers.length} listeners)`
   );
   return {
     stop: async () => {
