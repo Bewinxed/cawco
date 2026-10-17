@@ -17,39 +17,26 @@
 <!-- Comes and goes as "Jump to latest" does, which shares its dock. -->
 <div
   aria-busy="true"
-  class="catchup"
+  class="inline-flex items-center gap-space-2 py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong"
   role="status"
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  <span aria-hidden="true" class="beat"></span>Catching up…
+  <!-- literal: 6px, 50% -->
+  <span
+    aria-hidden="true"
+    class="size-(--dot) flex-none rounded-(--dot-r) bg-status-live-ink"
+    data-slot="beat"
+    style:--dot="6px"
+    style:--dot-r="50%"
+  ></span>Catching up…
 </div>
 
 <style>
-  /* The same raised surface as "Jump to latest", which shares its dock. */
-  .catchup {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
+  /* residual: keyframes */
   /* The one thing that moves, and only for a reader who has not asked for
      less: the dot beats on --breath. Still, the tag's presence carries it. */
-  .beat {
-    inline-size: 6px;
-    block-size: 6px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    background: var(--status-live-ink);
-
+  [data-slot="beat"] {
     @media (prefers-reduced-motion: no-preference) {
       animation: beat var(--breath) var(--ease-in-out) infinite;
     }
