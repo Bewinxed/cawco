@@ -472,12 +472,15 @@ if (document.readyState === "loading") {
  * Re-publish (`artifact_update` with new HTML): the doc's `meta` names the
  * page's new hash, and the page morphs to it in place (morph.ts), fetched
  * afresh from its own origin. The overlay's host and its own script are not
- * the page's, and stay as they are.
+ * the page's, and stay as they are; so is what the app's web view put in
+ * the page before it loaded (`data-cawco-host`: its viewport, as the web's
+ * iframe lays a page out).
  */
 const kept = (node: Node): boolean =>
   node === host ||
   node === ink.layer ||
   node === pins.layer ||
+  (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&
     OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
 

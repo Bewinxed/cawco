@@ -507,6 +507,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.viewport, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.add(WeakHandler(self), name: "cawco")
         configuration.allowsInlineMediaPlayback = true
         let web = PreviewPage(frame: .zero, configuration: configuration)
@@ -2010,9 +2011,33 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard PreviewProbe.on, heartbeat == nil else { return }
         heartbeat = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.web.evaluateJavaScript("typeof report === 'function' && report()")
+                self?.web.evaluateJavaScript(Self.docRead) { value, _ in
+                    MainActor.assumeIsolated { self?.sayDoc(value as? String) }
+                }
             }
         }
+    }
+
+    /// The probe page's `report`, then the document as it stands: its clock's
+    /// origin (`performance.timeOrigin`, new with every load, so a reload is
+    /// seen even where no navigation is), and its artifact doc's elements,
+    /// drawn and not deleted (a canvas's; 0 on a page, -1 before the overlay joins).
+    private static let docRead = """
+    (() => {
+      if (typeof report === "function") report();
+      const doc = window.cawcoArtifact?.doc;
+      const elements = doc ? doc.getArray("elements").toArray().filter((entry) => entry.get("el")?.isDeleted !== true).length : -1;
+      return `origin=${Math.round(performance.timeOrigin)} elements=${elements} width=${innerWidth} scale=${(visualViewport?.scale ?? 1).toFixed(2)}`;
+    })()
+    """
+
+    private var saidDoc = ""
+
+    /// `preview doc …`, logged when it changed.
+    private func sayDoc(_ read: String?) {
+        guard let read, read != saidDoc else { return }
+        saidDoc = read
+        PreviewProbe.say("preview doc \(read)")
     }
 
     /// The probe's page posts `cawco:probe` with its state and the viewport
@@ -2034,6 +2059,31 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             parts.append("\(Self.text(name, 40) ?? "")=\(Int(at.x.rounded())),\(Int(at.y.rounded()))")
         }
         PreviewProbe.say("preview page \(parts.joined(separator: " "))")
+        typeForProbe(rects["field"] as? [String: Any])
+    }
+
+    private var typedForProbe = false
+
+    /// `-preview-type`: the field the page reported takes the focus and the words, once.
+    private func typeForProbe(_ field: [String: Any]?) {
+        guard let words = PreviewProbe.typeWords, !typedForProbe, let field,
+              let x = field["x"] as? Double, let y = field["y"] as? Double,
+              let width = field["width"] as? Double, let height = field["height"] as? Double,
+              let quoted = try? JSONSerialization.data(withJSONObject: [words], options: .fragmentsAllowed) else { return }
+        typedForProbe = true
+        let script = """
+        (() => {
+          const field = document.elementFromPoint(\(x + width / 2), \(y + height / 2));
+          field?.focus();
+          document.execCommand("insertText", false, \(String(decoding: quoted, as: UTF8.self))[0]);
+          return document.activeElement?.id || "none";
+        })()
+        """
+        web?.evaluateJavaScript(script) { value, error in
+            MainActor.assumeIsolated {
+                PreviewProbe.say("preview typed into=\(value as? String ?? "none")\(error.map { " error=\($0.localizedDescription)" } ?? "")")
+            }
+        }
     }
     #endif
 
@@ -2068,6 +2118,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// what the page posts goes to the app, and what the app hands the page
     /// arrives at its message listeners from that same parent, on its own
     /// origin, as the overlay checks.
+    /// The page lays out at the panel's width, scale 1, as the web's iframe
+    /// lays it out: a page naming no viewport would otherwise stand at
+    /// Safari's default 980px and be drawn shrunk to the panel (Apple's
+    /// "Configuring the Viewport": "The default width is 980 pixels"). A
+    /// viewport the page names itself is parsed after this one and wins; a
+    /// re-publish's morph keeps this one (preview-overlay page.ts `kept`).
+    private static let viewport = """
+    (() => {
+      const meta = document.createElement("meta");
+      meta.setAttribute("data-cawco-host", "");
+      meta.name = "viewport";
+      meta.content = "width=device-width, initial-scale=1";
+      (document.head ?? document.documentElement)?.prepend(meta);
+    })();
+    """
+
     private static let host = """
     (() => {
       const listeners = new Set();

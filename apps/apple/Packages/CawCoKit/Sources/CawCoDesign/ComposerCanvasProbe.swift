@@ -43,10 +43,11 @@ import WebKit
 ///   listing it.
 @MainActor
 enum CanvasProbe {
-    private enum Pass { case pen, draw, wheel, still, sync, enter }
+    private enum Pass { case pen, draw, wheel, still, sync, enter, ink }
     private static var pass: Pass? = {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-canvas-probe") { return .pen }
+        if arguments.contains("-canvas-probe-ink") { return .ink }
         if arguments.contains("-canvas-probe-enter") { return .enter }
         if arguments.contains("-canvas-probe-draw") { return .draw }
         if arguments.contains("-canvas-probe-wheel") { return .wheel }
@@ -104,8 +105,58 @@ enum CanvasProbe {
         case .still: await stillPass(composer)
         case .sync: await syncPass(composer)
         case .enter: await enterPass(composer)
+        case .ink: await inkPass(composer, window)
         }
         say("done")
+    }
+
+    // MARK: The pen's stroke, sent (PRD §7 P4's live check)
+
+    /// `-canvas-probe-ink` (scripts/probe-kit/specs/ios-canvas.ts): the
+    /// canvas opens by the pencil's swipe (`-cawcoProbePencil`, the script's
+    /// finger standing in for the pencil the simulator lacks) or by Attach →
+    /// Draw; a pen stroke goes through Excalidraw's own pointer path
+    /// (`pointerType: "pen"`, as WebKit hands a pencil's touch to the page)
+    /// and syncs to the hub; Send carries the file, the outline and the
+    /// picture. The spec reads what the session's model received.
+    private static func inkPass(_ composer: ComposerView, _ window: UIWindow) async {
+        guard let binding = composer.binding, let host = binding.canvasHost else { return }
+        var carried: [[String]] = []
+        let send = binding.onSend
+        binding.onSend = { words, attachments in
+            carried.append(attachments.map(\.name))
+            send(words, attachments)
+        }
+        defer { binding.onSend = send }
+        let by = CanvasDebug.pencil ? "the pencil's swipe" : "Draw"
+        if CanvasDebug.pencil {
+            askForSwipe(composer, window)
+        } else {
+            composer.openCanvas()
+        }
+        guard await until(90, { composer.canvasRoom?.up == true && composer.canvasRoom?.moving == false }),
+              let web = composer.canvasRoom?.web, await until(30, { web.connected && web.drawn != nil }),
+              let canvas = binding.canvas else {
+            return check("ink: the canvas opens by \(by) and its page joins its doc", false, "note \(composer.probeCanvasNote ?? "none")")
+        }
+        check("ink: the canvas opens by \(by) and its page joins its doc", true, "canvas \(canvas.id), drawn \(web.drawn ?? -1)")
+        let drawn = await stroke(web)
+        var hubDrawn = -1
+        for _ in 0 ..< 40 where hubDrawn != drawn.count {
+            hubDrawn = (try? await host.hub.exportCanvas(canvas.id, name: canvas.name).drawn) ?? -1
+            if hubDrawn != drawn.count { await wait(0.25) }
+        }
+        check("ink: a pen stroke on the page is one element, synced to the hub",
+              drawn.count == 1 && hubDrawn == 1,
+              "the page's doc holds \(drawn.count)\(drawn.error.map { " (\($0))" } ?? ""), the hub's export \(hubDrawn)")
+        composer.probeType("P4: the pencil's drawing")
+        composer.returned()
+        let went = await until(30) { binding.canvas == nil && !composer.probeCanvasWorking }
+        let names = carried.last ?? []
+        check("ink: Send carries canvas.excalidraw, canvas.md and one image",
+              went && names.contains("canvas.excalidraw") && names.contains("canvas.md") && names.filter { $0.hasSuffix(".png") }.count == 1,
+              "sent \(carried.count) message, carrying \(names.joined(separator: ", ")); over the field: \(composer.probeCanvasNote ?? "none")")
+        say("ink sent canvas \(canvas.id) to \(binding.sessionId)")
     }
 
     // MARK: Host mode's entry
