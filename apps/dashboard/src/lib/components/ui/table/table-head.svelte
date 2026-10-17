@@ -6,8 +6,11 @@
     base: "h-12 whitespace-nowrap px-3 text-left align-middle text-ink-strong text-label [&:has([role=checkbox])]:pr-0",
     variants: {
       variant: {
-        /** A band's column heading: muted caps in the label role. */
-        caps: "type-label px-space-3 text-ink-muted uppercase tracking-caps",
+        /**
+         * A band's column heading: muted caps in the label role. Its inline
+         * padding holds beside a tick too, over the base's checkbox rule.
+         */
+        caps: "type-label px-space-3 text-ink-muted uppercase tracking-caps [&:has([role=checkbox])]:pr-space-3",
         /** The lead column's caps heading, flush against the next. */
         "caps-lead":
           "type-label px-space-3 pe-0 text-ink-muted uppercase tracking-caps",

@@ -18,12 +18,16 @@
         /** A ledger cell over a hairline that drops its box on a phone. */
         "ledger-stacks":
           "type-meta border-b border-b-border-hairline px-space-3 py-0 text-ink-muted max-phone:border-current max-phone:border-none max-phone:p-0",
-        /** A ledger cell of a pickable row (`group/row`), its hairline gone on the last row. */
+        /**
+         * A ledger cell of a pickable row (`group/row`), its hairline gone on
+         * the last row. Its inline padding holds beside a tick too, over the
+         * base's checkbox rule, as the ledger's own `td` rule did.
+         */
         "ledger-picks":
-          "type-meta border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent",
+          "type-meta border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent [&:has([role=checkbox])]:pr-space-3",
         /** `ledger-picks` that also drops its box on a phone. */
         "ledger-picks-stacks":
-          "type-meta border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg max-phone:min-w-0 max-phone:border-current max-phone:border-none max-phone:p-0 group-data-picked/row:max-phone:bg-transparent",
+          "type-meta border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg max-phone:min-w-0 max-phone:border-current max-phone:border-none max-phone:p-0 group-data-picked/row:max-phone:bg-transparent [&:has([role=checkbox])]:pr-space-3 max-phone:[&:has([role=checkbox])]:pr-0",
         /** A generated view's cell, label text over a hairline. */
         view: "type-label border-border-hairline border-b px-space-3 text-ink-muted",
         /** A generated view's lead column, on the row's spacing. */
