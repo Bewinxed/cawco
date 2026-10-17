@@ -281,6 +281,22 @@
       summary: "Run bun run build in apps/dashboard",
       minutes: 3,
     }),
+    // Another device asking to pair, as hub-auth lists it in Needs you.
+    {
+      kind: "pairing",
+      key: "pairing:JWK-HDQ",
+      href: "/config/devices",
+      place: "192.168.3.12",
+      raisedAt: Date.now() - 2 * 60_000,
+      title: "CawCo on iPad",
+      request: {
+        address: "192.168.3.12",
+        at: Date.now() - 2 * 60_000,
+        kind: "app",
+        name: "CawCo on iPad",
+        userCode: "JWK-HDQ",
+      },
+    },
   ];
 
   let needs = $state.raw<NeedsItem[]>([]);
