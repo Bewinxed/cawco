@@ -74,3 +74,7 @@ None.
 
 ## shadcn variant lines
 None (no data-open/closed/checked/unchecked/disabled/active/horizontal/vertical rule was moved).
+
+## Delta O lines
+- cross-file hook: (app)/motion/delegate-tray/+page.svelte:251 .leaf → [data-slot="leaf"] (the element already had it; the class is deleted); selected by apps/dashboard/src/lib/cawco/transcript/Composer.svelte:1547 and apps/dashboard/src/lib/cawco/side/SideSheet.svelte:226
+- needs colour token: none (no colour literal in any of the 13 files)
