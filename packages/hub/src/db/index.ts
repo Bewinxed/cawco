@@ -649,6 +649,12 @@ export interface DbShape {
   readonly capabilityUsageSince: (
     day: string
   ) => (typeof capabilityUsageDaily.$inferSelect)[];
+  /**
+   * Work item `itemId` moves from session `from` to session `to`, a
+   * continuation of it: the item and `to`'s row name each other, and
+   * `from`'s row no longer names it.
+   */
+  readonly carryWorkItem: (itemId: string, from: string, to: string) => void;
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
@@ -5110,6 +5116,21 @@ const make = async (path: string): Promise<DbShape> => {
           .map((row) => [row.id, row.now])
       ),
     priorConversations: (instanceId) => conversationsOf(db, instanceId),
+    carryWorkItem: (itemId, from, to) =>
+      db.transaction((tx) => {
+        tx.update(workItems)
+          .set({ instanceId: to })
+          .where(eq(workItems.id, itemId))
+          .run();
+        tx.update(instances)
+          .set({ workItemId: itemId })
+          .where(eq(instances.id, to))
+          .run();
+        tx.update(instances)
+          .set({ workItemId: null })
+          .where(and(eq(instances.id, from), eq(instances.workItemId, itemId)))
+          .run();
+      }),
     adoptChildren: (from, to) =>
       db.transaction((tx) => {
         const items = tx

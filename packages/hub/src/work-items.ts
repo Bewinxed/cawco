@@ -6503,6 +6503,53 @@ export const createWorkItems = ({
       }
     },
 
+    /**
+     * Attach or spawn's cold branch (jev-tasks.ts): ended item `itemId`'s
+     * workspace with its clone there ({@link withClone}, a retired one cut
+     * again), the folder its session's continuation starts in. Throws why
+     * there is none.
+     */
+    async continuable(itemId: string): Promise<void> {
+      const item = db.workItem(itemId);
+      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+      if (!(item && workspace)) {
+        throw new Error(`work item ${itemId} has no workspace`);
+      }
+      if (workspace.state === "archived" && !recuttable(workspace)) {
+        throw new Error(archivedWords(workspace));
+      }
+      if (!(await withClone(workspace))) {
+        throw new Error(
+          `the clone of workspace ${workspace.id} is gone from ${machineName(workspace.machineId)}`
+        );
+      }
+    },
+
+    /**
+     * Ended item `itemId` goes on in session `to`, the continuation of its
+     * session: the item and `to` name each other, its old session no longer
+     * does, and it runs again ({@link rerun}), so the continuation's opening
+     * and every turn after are the attempt's. Nothing when `to` holds it
+     * already (a restart in between); throws when it runs again in its old
+     * session.
+     */
+    continuedIn(itemId: string, to: string): void {
+      const item = db.workItem(itemId);
+      if (!item || item.instanceId === to) {
+        return;
+      }
+      if (LIVE.has(item.state)) {
+        throw new Error(
+          `${item.title} (${item.id}) is ${item.state} in its own session again; its continuation does not take it`
+        );
+      }
+      db.carryWorkItem(item.id, item.instanceId, to);
+      rerun(item);
+      console.log(
+        `[work-items] ${item.id}: goes on in ${to.slice(0, 8)}, the continuation of ${item.instanceId.slice(0, 8)}`
+      );
+    },
+
     /** Its session is up: the item is running. */
     started(row: InstanceRow): void {
       const item = itemOf(row);

@@ -1127,14 +1127,21 @@ const CONTINUATION_KEPT_MS = 5 * 60_000;
 /**
  * Who asked for a continuation: a person (the dashboard's "Continue in new
  * session", or the API with no session named), a session's
- * `continue_session`, or the at-limit controller.
+ * `continue_session`, the at-limit controller, or your comment on a task
+ * whose ended attempt's session is cold (jev-tasks.ts, Attach or spawn).
  */
 type ContinuationAsker =
-  { kind: "person" } | { kind: "session"; id: string } | { kind: "at-limit" };
+  | { kind: "person" }
+  | { kind: "session"; id: string }
+  | { kind: "at-limit" }
+  | { kind: "task"; id: string };
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
   if (by.kind === "session") {
     return `session ${by.id} (continue_session)`;
+  }
+  if (by.kind === "task") {
+    return `your comment on ${by.id} (attach or spawn)`;
   }
   return by.kind === "at-limit"
     ? "the at-limit controller"
@@ -13235,6 +13242,11 @@ export const createServer = (
       return false;
     }
     const ready = moveContinuation(row.id, { openItems: open }) ?? row;
+    // An attempt continued for your comment: its opening is the attempt's,
+    // and the publish below has its tools listed again with finish_item.
+    if (row.request.item) {
+      workItems.continuedIn(row.request.item, row.targetInstanceId);
+    }
     adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(ready);
     return true;
@@ -18702,11 +18714,66 @@ export const createServer = (
       refused: (row) => inputRefusal(row.id, { kind: "human" })?.reason,
     }).taskChanged
   );
+  /**
+   * Attach or spawn's cold branch (§5.3, jev-tasks.ts): an ended attempt's
+   * session `row`, its cache cold, compressed and continued in a new session
+   * in the attempt's own workspace, which takes on the attempt (item
+   * `attempt.item`) and opens on `comment` as its next step. The source is
+   * only read: it takes no filing turn. Our own call: the summary is written
+   * on the source's harness at its default model, and the new session runs
+   * on the source's harness and model, in its mode. Answers the new
+   * session's id and how the job ends (nothing once it started, else why
+   * not); throws why it could not begin.
+   */
+  const continueAttempt = async (
+    row: InstanceRow,
+    attempt: { item: string; task: string },
+    comment: string
+  ): Promise<{
+    ended: Promise<string | undefined>;
+    targetInstanceId: string;
+  }> => {
+    await workItems.continuable(attempt.item);
+    const prepared = await prepareContinuation(row.id, comment);
+    const { harness } = prepared.source;
+    const request: ContinueRequest = {
+      summarizer: { harness },
+      target: {
+        harness,
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.permissionMode
+          ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
+          : {}),
+      },
+      note: comment,
+      item: attempt.item,
+    };
+    const refusal = await continuationRefusal(prepared, request);
+    if (refusal) {
+      throw new Error(refusal);
+    }
+    const job = startContinuation(prepared, request, {
+      kind: "task",
+      id: attempt.task,
+    });
+    return {
+      targetInstanceId: job.targetInstanceId,
+      ended: settledContinuation(job.id).then((settled) => {
+        if (settled?.stage === "started") {
+          return;
+        }
+        return settled?.stage === "cancelled"
+          ? CONTINUATION_CANCELLED
+          : (settled?.error ?? "the continuation failed");
+      }),
+    };
+  };
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
-  // as a task is filed; Attach or fresh as you comment on a task (a live
+  // as a task is filed; Attach or spawn as you comment on a task (a live
   // attempt reads your comment as any message of yours); phone requests.
   const jevTasks = createJevTasks({
     caw,
+    continueAttempt,
     db,
     dispatcher,
     tasks,
