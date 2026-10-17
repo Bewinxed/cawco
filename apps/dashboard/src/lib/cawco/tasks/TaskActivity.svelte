@@ -13,9 +13,9 @@
    */
   import Choice from "#lib/cawco/config/Choice.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import {
-    commentId,
     stageLabel,
     type TaskComment,
     type TaskHistoryEvent,
@@ -67,12 +67,12 @@
   let commentFoot = $state(0);
   /** The comment goes; a refusal puts the words back with the hub's reason over them. */
   /** The words a comment that did not go through carried, and its id: the same words again are the same comment. */
-  let unsent: { text: string; id: string } | null = null;
+  let unsent: SentWords | null = null;
   async function sendComment(text: string) {
     commenting = true;
     commentRefused = "";
     commentAgain = false;
-    unsent = commentId(unsent, text);
+    unsent = idForWords(unsent, text);
     try {
       await oncomment(text, unsent.id);
       unsent = null;
@@ -80,7 +80,7 @@
       commentDraft.restore(text);
       commentAgain = unreachable(error);
       commentRefused = commentAgain
-        ? "Comment not sent: the dashboard couldn't reach the hub. Your words are back in the field. Send again once the hub answers."
+        ? "Your comment may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once."
         : failureWords(error);
     } finally {
       commenting = false;

@@ -23,6 +23,7 @@
     THREAD_SEND_UNREACHED,
     unreachable,
   } from "#lib/cawco/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import {
     fitOf,
@@ -124,18 +125,22 @@
    * The words go as a thread tab's send does (ThreadPane): a refusal puts
    * them back in the composer with the reason over them.
    */
-  async function start(text: string, id: string) {
+  /** The prompt a start that did not go through carried, and its id: the same prompt again is the same project. */
+  let unsent: SentWords | null = null;
+  async function start(text: string, fresh: string) {
     starting = true;
     refused = "";
     again = false;
+    unsent = idForWords(unsent, text, fresh);
     let created: Awaited<ReturnType<typeof createProject>>;
     try {
       created = await createProject({
         name: nameFrom(text) || text.trim().slice(0, 60),
         prompt: text,
-        promptId: id,
+        promptId: unsent.id,
         ...(selected ? { template: selected } : {}),
       });
+      unsent = null;
     } catch (error) {
       draft.restore(text);
       again = unreachable(error);

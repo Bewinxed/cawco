@@ -43,17 +43,17 @@ export interface RelayOptions {
 }
 
 export interface Relay {
-  readonly port: number;
-  /** The relay's address, which the app is given as its hub. */
-  readonly url: string;
+  cut: () => void;
+  cutAfter: (bytes: number) => void;
   /** The hub is gone to the app: why, and when it went. */
   readonly fault: { refused: boolean; cutAt?: number; mutedAt?: number };
-  cutAfter(bytes: number): void;
-  muteAfter(bytes: number): void;
-  cut(): void;
-  refuse(): void;
-  release(): void;
-  stop(): void;
+  muteAfter: (bytes: number) => void;
+  readonly port: number;
+  refuse: () => void;
+  release: () => void;
+  stop: () => void;
+  /** The relay's address, which the app is given as its hub. */
+  readonly url: string;
 }
 
 export function relay(hubBase: string, options: RelayOptions = {}): Relay {

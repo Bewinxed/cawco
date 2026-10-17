@@ -9507,6 +9507,9 @@
                   "position": {
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "id": {
+                    "type": "string"
                   }
                 },
                 "required": [

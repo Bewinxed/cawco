@@ -53,6 +53,7 @@
     THREAD_SEND_UNREACHED,
     unreachable,
   } from "#lib/cawco/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import {
     crossIn,
     crossOut,
@@ -1108,12 +1109,16 @@
    * The view is asked for, as a thread tab sends (ThreadPane): a refusal
    * puts the words back in the composer with the reason over them.
    */
+  /** The words a view ask that did not go through carried, and its id: the same words again are the same ask. */
+  let viewUnsent: SentWords | null = null;
   async function askView(text: string) {
     viewSending = true;
     viewRefused = "";
     viewAgain = false;
+    viewUnsent = idForWords(viewUnsent, text);
     try {
-      await requestView(projectId, text);
+      await requestView(projectId, text, viewUnsent.id);
+      viewUnsent = null;
       askOpen = false;
     } catch (error) {
       viewDraft.restore(text);

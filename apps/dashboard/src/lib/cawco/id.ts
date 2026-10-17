@@ -43,3 +43,22 @@ export function newId(source: Crypto = globalThis.crypto): string {
     hex.slice(10, 16).join(""),
   ].join("-");
 }
+
+/** Words a send carried, and the id it went under. */
+export interface SentWords {
+  id: string;
+  text: string;
+}
+
+/**
+ * The id words go to the hub under: the one the same words went under last
+ * time when that send did not go through (the hub may have kept them, and
+ * takes the same id again as the same message, comment or ask), else
+ * `fresh`. `kept` is the caller's own slot: it holds what this send carries
+ * and is cleared by the caller once the send went.
+ */
+export const idForWords = (
+  kept: SentWords | null,
+  text: string,
+  fresh: string = newId()
+): SentWords => (kept?.text === text ? kept : { text, id: fresh });

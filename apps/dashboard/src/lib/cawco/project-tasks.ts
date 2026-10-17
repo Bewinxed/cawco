@@ -17,7 +17,6 @@ import {
   type StarterPlace,
 } from "@cawco/core";
 import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
-import { newId } from "./id";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
 export type StageKind =
@@ -523,8 +522,8 @@ export const readHistory = (
 
 /**
  * A comment, written by the hub into the task's `## Comments` as yours.
- * `id` is the comment's, chosen here: the hub writes it once however often
- * it is sent ({@link commentId}).
+ * `id` is the comment's, chosen by its sender: the hub writes it once
+ * however often it is sent (id.ts `idForWords`).
  */
 export const addComment = (
   projectId: string,
@@ -533,18 +532,6 @@ export const addComment = (
   id: string
 ): Promise<TaskView> =>
   send(`${one(projectId, taskId)}/comments`, json("POST", { text, id }));
-
-/**
- * A comment's id for `text`: the one the same words went under last time
- * when that send did not go through (the hub may have written it), else a
- * new one. `kept` is the caller's own slot, set to what this send carries
- * and cleared by the caller once it went.
- */
-export const commentId = (
-  kept: { text: string; id: string } | null,
-  text: string
-): { text: string; id: string } =>
-  kept?.text === text ? kept : { text, id: newId() };
 
 export const addTodo = (
   projectId: string,

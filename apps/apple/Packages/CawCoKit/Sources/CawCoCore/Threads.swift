@@ -306,8 +306,10 @@ public final class ThreadsStore {
 
     /// A thread send that got no answer, in the error formula: what, why,
     /// what is kept, the way back (ThreadPane.svelte `THREAD_SEND_UNREACHED`).
+    /// It may have reached him: the same words go again under the id they
+    /// went as (ThreadViewController `unanswered`), the same message to the hub.
     public static let sendUnreached =
-        "Message not sent: the app couldn't reach the hub. Your words are back in the field. Send again once the hub answers."
+        "Your message may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once."
 
     /// A request that got no answer, in the error formula (hub-read.ts `HUB_UNREACHABLE`).
     public static let hubUnreached =

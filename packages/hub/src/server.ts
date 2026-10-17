@@ -17385,25 +17385,73 @@ export const createServer = (
     }
   };
 
-  const createOrJoinProject = async (asked: {
-    name: string;
-    checkout?: { machineId: string; cwd: string };
+  interface ProjectAsk {
     /** Made with Caw: a new project's Caw starts on. */
     caw?: boolean;
-    template?: StagesTemplate;
+    checkout?: { machineId: string; cwd: string };
+    name: string;
     /** What the Setup thread opens with: your prompt, or a note of where the project came from. */
     setup?: {
       note?: ThreadNote;
       prompt?: string;
       promptId?: string;
     };
-  }): Promise<{
-    project: ProjectRow;
+    template?: StagesTemplate;
+  }
+  interface ProjectMade {
+    joined: boolean;
     place: PlaceRow;
     placeAdded: boolean;
-    joined: boolean;
+    project: ProjectRow;
     setupThread?: ThreadSummary;
-  }> => {
+  }
+
+  /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
+  const projectsMaking = new Map<string, Promise<ProjectMade>>();
+
+  /** The place a project was made from: its checkout, else its folder on the hub. */
+  const madeFrom = (project: ProjectRow): PlaceRow =>
+    checkoutOf(project) ??
+    project.places.find((each) => each.kind === "hub") ??
+    (project.places[0] as PlaceRow);
+
+  /**
+   * A project made, or a folder joined to the one it belongs to. The same
+   * prompt again under the id it went as (a device sending again after its
+   * answer was lost) is the project it made, with its Setup thread: nothing
+   * is made twice, and one still being made answers both.
+   */
+  const createOrJoinProject = (asked: ProjectAsk): Promise<ProjectMade> => {
+    const promptId = asked.setup?.promptId;
+    if (!promptId) {
+      return makeOrJoinProject(asked);
+    }
+    const first = projectsMaking.get(promptId);
+    if (first !== undefined) {
+      return first;
+    }
+    const kept = db.threadMessage(promptId);
+    const thread = kept && db.thread(kept.threadId);
+    const project = thread && db.project(thread.projectId);
+    if (thread && project) {
+      return Promise.resolve({
+        project,
+        place: madeFrom(project),
+        placeAdded: false,
+        joined: false,
+        ...(lead
+          ? { setupThread: lead.read(project.id, thread.id).thread }
+          : {}),
+      });
+    }
+    const making = makeOrJoinProject(asked);
+    projectsMaking.set(promptId, making);
+    const done = () => projectsMaking.delete(promptId);
+    making.then(done, done);
+    return making;
+  };
+
+  const makeOrJoinProject = async (asked: ProjectAsk): Promise<ProjectMade> => {
     const checkout = asked.checkout && {
       machineId: asked.checkout.machineId,
       path: askedMachinePath(
@@ -17444,15 +17492,10 @@ export const createServer = (
     projectsChanged();
     projectStarters.touched(created.id, "project created");
     madeFromFolder(created.id, checkout || undefined, remote);
-    // The place it was made from: its checkout, else its folder on the hub.
-    const place =
-      checkoutOf(created) ??
-      created.places.find((each) => each.kind === "hub") ??
-      created.places[0];
     const setupThread = await startProject(created, asked);
     return {
       project: created,
-      place,
+      place: madeFrom(created),
       placeAdded: false,
       joined: false,
       ...(setupThread ? { setupThread } : {}),
@@ -17466,7 +17509,7 @@ export const createServer = (
    */
   const startProject = async (
     created: ProjectRow,
-    asked: Parameters<typeof createOrJoinProject>[0]
+    asked: ProjectAsk
   ): Promise<ThreadSummary | undefined> => {
     if (asked.template) {
       if (asked.template !== "code") {

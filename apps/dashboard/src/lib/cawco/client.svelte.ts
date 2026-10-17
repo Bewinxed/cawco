@@ -6180,11 +6180,13 @@ export async function wakeThread(
 /** "Ask Caw for a view": a new thread with your words, Caw woken to draft it. */
 export async function requestView(
   projectId: string,
-  text: string
+  text: string,
+  /** The ask's id: the hub takes the same id again as the same ask. */
+  id: string
 ): Promise<ThreadSaid> {
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/view-requests`,
-    json("POST", { text })
+    json("POST", { text, id })
   );
   state.threadMessages[said.thread.id] ??= [];
   adoptThreadMessage(said.thread.id, said.message);

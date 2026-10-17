@@ -23,14 +23,21 @@ export interface KeptSend {
   text: string;
 }
 
-/** Keeps a send until it settles; the same id again is the same record. */
+/**
+ * Keeps a send until it settles; the same id again is the same record, in
+ * the place it was first sent (a send going again keeps its `at`).
+ */
 export async function keepSend(send: KeptSend): Promise<void> {
   const db = await database();
   const transaction = db.transaction(SENDS, "readwrite");
+  const store = transaction.objectStore(SENDS);
   // Plain data, whatever the caller held it in (a `$state` proxy does not clone).
-  transaction
-    .objectStore(SENDS)
-    .put(JSON.parse(JSON.stringify(send)) as KeptSend);
+  const plain = JSON.parse(JSON.stringify(send)) as KeptSend;
+  const before = store.get(send.commandId);
+  before.onsuccess = () => {
+    const first = before.result as KeptSend | undefined;
+    store.put(first ? { ...plain, at: first.at } : plain);
+  };
   return done(transaction);
 }
 

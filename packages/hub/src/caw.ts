@@ -2630,22 +2630,29 @@ export const createCaw = ({
      * "Ask Caw for a view": a new thread with your words, answered once
      * kept, and Caw woken by `view-request` behind it. Asked from a page's
      * end (`place`), his draft stands on that page as a proposed block;
-     * from the strip, it is a draft tab.
+     * from the strip, it is a draft tab. The same `id` again is the same
+     * ask ({@link once}).
      */
-    requestView(
+    async requestView(
       projectId: string,
       raw: string,
-      place: ViewPlace | null = null
-    ): ThreadSaid {
-      const body = bodyOf(raw);
-      listening(projectId);
-      const opened = open(projectId, body);
-      wakeForYou(projectId, opened.row.id, opened.said.message.id, {
-        by: "you",
-        text: viewRequest(opened.row, body, place),
-        threadId: opened.row.id,
+      place: ViewPlace | null = null,
+      id?: string
+    ): Promise<ThreadSaid> {
+      return await once(projectId, undefined, id, () => {
+        const body = bodyOf(raw);
+        listening(projectId);
+        const opened = open(projectId, body, id);
+        wakeForYou(projectId, opened.row.id, opened.said.message.id, {
+          by: "you",
+          text: viewRequest(opened.row, body, place),
+          threadId: opened.row.id,
+        });
+        return Promise.resolve({
+          ...opened.said,
+          thread: summaryOf(opened.row),
+        });
       });
-      return { ...opened.said, thread: summaryOf(opened.row) };
     },
 
     /**
@@ -3433,6 +3440,8 @@ export const cawRoutes = (caw: Caw) =>
           text: t.String(),
           page: t.Optional(BLOCK_PAGE),
           position: t.Optional(t.Integer({ minimum: 0 })),
+          /** The ask's id, chosen by its device: the same id again is the same ask. */
+          id: t.Optional(t.String()),
         }),
       },
       async ({ params, body, request, server }) => {
@@ -3443,7 +3452,8 @@ export const cawRoutes = (caw: Caw) =>
             body.text,
             body.page
               ? { page: body.page, position: body.position ?? null }
-              : null
+              : null,
+            body.id
           );
         } catch (error) {
           return answer(error);
