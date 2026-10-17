@@ -264,6 +264,8 @@ enum Frame {
     case tailnetHttps(Components.Schemas.TailnetHttps)
     /// The hub's mode and what waits on the person to pair or admit, whole, on each change.
     case hubAuth(Components.Schemas.HubAuthFrame)
+    /// A plain session's "make this a project" offer, or nil once it was answered.
+    case projectOffer(instanceId: String, offer: Components.Schemas.ProjectOfferSummary?)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -321,6 +323,8 @@ enum Frame {
             self = .tailnetHttps(frame.tailnet)
         case .hubAuth(let frame):
             self = .hubAuth(frame)
+        case .projectOffer(let frame):
+            self = .projectOffer(instanceId: frame.instanceId, offer: frame.offer)
         default:
             self = .ignored
         }

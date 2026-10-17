@@ -243,6 +243,13 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                     status.isHidden = false
                 }
                 if !block.content.isEmpty { opened.addArrangedSubview(report(block.content)); openable = true }
+                // Caw asking whether to build a design system: Build and Not now under his line, `space-2` down, on the text column.
+                if let projectId = (block.meta["designOffer"] as? [String: Any])?["projectId"] as? String {
+                    let actions = DesignOfferActionsView(projectId: projectId, hub: env.hub, openTask: env.openTask)
+                    let spaced = UIView()
+                    spaced.pin(hung(actions), insets: UIEdgeInsets(top: Space.space2, left: 0, bottom: 0, right: 0))
+                    below.addArrangedSubview(spaced)
+                }
             case "ui.system_note" where block.string("subtype") == "moved_here":
                 // Where the project came from (core MOVED_HERE): what moved
                 // with the done glyph, and what stayed under it, open.

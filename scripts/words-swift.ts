@@ -88,6 +88,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/preview.ts", export: "previewWords", as: "" }],
   },
   {
+    // Caw's offers in a conversation: make this a project, and a design system.
+    swift: "Offers",
+    members: [{ file: "words/offers.ts", export: "offerWords", as: "" }],
+  },
+  {
     // A session's plan: its ring and its panel.
     swift: "Plan",
     members: [{ file: "words/plan.ts", export: "planWords", as: "" }],

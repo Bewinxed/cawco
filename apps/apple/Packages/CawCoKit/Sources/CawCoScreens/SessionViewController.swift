@@ -42,6 +42,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     var onReturnToFleet: () -> Void = {}
     /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
     var onOpenSession: (String) -> Void = { _ in }
+    /// A project's page: the one a "make this a project" answer joined.
+    var onOpenProject: (String) -> Void = { _ in }
+    /// The "make this a project" card, while the offer or what it joined stands.
+    private var offerCard: ProjectOfferCard?
 
     /// How far up from the pane's foot the group's composer (and the cards
     /// standing on it) reaches; the transcript's last line clears it.
@@ -1162,6 +1166,23 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             }
             #endif
             ordered.append(card)
+        }
+        // The quiet one: "make this a project", standing beside the parked asks (SessionPane.svelte `offer`).
+        let offer = hub.offers.offers[sessionId]
+        let joined = hub.offers.joins[sessionId]
+        if offer != nil || joined != nil {
+            let card = offerCard ?? {
+                let made = ProjectOfferCard(hub: hub, instanceId: sessionId, arriving: shownOnce && composerBinding.composer != nil)
+                made.onHeight = { [weak self] in self?.composerBinding.composer?.onHeight() }
+                made.onSetupThread = { [weak self] id in self?.onOpenSession(ThreadTabs.tabId(id)) }
+                made.onOpenProject = { [weak self] id in self?.onOpenProject(id) }
+                offerCard = made
+                return made
+            }()
+            card.show(offer: offer, joined: joined)
+            ordered.append(card)
+        } else {
+            offerCard = nil
         }
         composerBinding.prompts = ordered
         claimCardKeys()

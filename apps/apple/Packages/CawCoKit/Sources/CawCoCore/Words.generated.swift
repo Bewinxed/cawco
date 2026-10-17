@@ -770,6 +770,41 @@ public enum Words {
         public static let reloading = "Reloading…"
     }
 
+    public enum Offers {
+        // packages/core/src/words/offers.ts `offerWords`
+        public static let offerLabel = "Make this session a project"
+
+        public static let joinedLabel = "Joined a project"
+
+        /// Where the offer stood, once answering joined a project that already was.
+        public static func joined(name: String, filed: Int) -> String {
+            filed > 0 ? "Joined \(name), with \(filed) proposed \(filed == 1 ? "task" : "tasks") from the plan." : "Joined \(name)."
+        }
+
+        public static func openProject(name: String) -> String {
+            "Open \(name)"
+        }
+
+        public static let putAway = "Put this away"
+
+        public static let notNow = "Not now"
+
+        public static let createProject = "Create project"
+
+        public static let makingProject = "Making project…"
+
+        public static let build = "Build"
+
+        public static let filing = "Filing…"
+
+        public static let notNowPending = "Not now…"
+
+        /// What was answered: Build filed the task.
+        public static let filed = "Filed"
+
+        public static let open = "Open"
+    }
+
     public enum Plan {
         // packages/core/src/words/plan.ts `planWords`
         /// The ring's word, and the panel's title over steps or a spec.

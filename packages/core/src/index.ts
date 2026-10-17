@@ -1833,6 +1833,7 @@ export * from "./words/artifacts";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/helpers";
+export * from "./words/offers";
 export * from "./words/pairing";
 export * from "./words/plan";
 export * from "./words/preview";

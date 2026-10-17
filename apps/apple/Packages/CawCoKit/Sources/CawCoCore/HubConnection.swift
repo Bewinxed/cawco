@@ -183,6 +183,8 @@ public final class HubConnection {
     public private(set) var threads: ThreadsStore!
     /// The plans followed beside the sessions streamed: a thread's lead's.
     public let plans = PlanFollows()
+    /// The "make this a project" offers standing on plain sessions.
+    public let offers = ProjectOffers()
 
     @ObservationIgnored private var projectStopListeners: [UUID: (Components.Schemas.ProjectStopFrame) -> Void] = [:]
 
@@ -1046,6 +1048,8 @@ public final class HubConnection {
         async let waiting = try? await client.getApiActionsWaiting().ok.body.json.actions
         // The devices waiting to pair: the `hub_auth` frame keeps them from here.
         async let pairings = try? await client.getApiPairRequests().ok.body.json
+        // The "make this a project" offers standing: `project_offer` frames keep them from here.
+        async let offered = try? await client.getApiProjectOffers().ok.body.json
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -1058,6 +1062,7 @@ public final class HubConnection {
         let readTailnet = await tailnet
         let readWaiting = await waiting
         let readPairings = await pairings
+        let readOffers = await offered
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -1136,6 +1141,9 @@ public final class HubConnection {
             }
             if let readPairings {
                 hub.adopt(pairingRequests: readPairings)
+            }
+            if let readOffers {
+                hub.offers.replace(with: readOffers)
             }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
@@ -1504,6 +1512,8 @@ public final class HubConnection {
             }
         case let .hubAuth(frame):
             adopt(pairingRequests: frame.requests)
+        case let .projectOffer(instanceId, offer):
+            offers.adopt(instanceId, offer: offer)
         case .ignored:
             break
         }

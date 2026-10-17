@@ -6,7 +6,7 @@
    * attention hue, one sentence naming why, and two answers. Either answer is
    * the last word: a session is never offered again.
    */
-  import type { ProjectOfferSummary } from "@cawco/core";
+  import { offerWords, type ProjectOfferSummary } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFolder } from "#lib/icons.js";
@@ -34,17 +34,9 @@
   let pending = $state<"accept" | "dismiss" | null>(null);
   let refused = $state("");
 
-  const joinedLine = $derived.by(() => {
-    if (!joined) {
-      return "";
-    }
-    const filed = joined.tasks.length;
-    return `Joined ${joined.project.name}${
-      filed
-        ? `, with ${filed} proposed ${filed === 1 ? "task" : "tasks"} from the plan`
-        : ""
-    }.`;
-  });
+  const joinedLine = $derived(
+    joined ? offerWords.joined(joined.project.name, joined.tasks.length) : ""
+  );
 
   async function answer(which: "accept" | "dismiss"): Promise<void> {
     pending = which;
@@ -74,7 +66,7 @@
   <!-- The answer, where the question stood: what it joined, the way there,
        and a way to put the card away. -->
   <section
-    aria-label="Joined a project"
+    aria-label={offerWords.joinedLabel}
     class="offer"
     data-offer={instanceId}
     role="status"
@@ -87,10 +79,10 @@
       <Button
         class={btn}
         href="/project/{encodeURIComponent(joined.project.id)}"
-        variant="outline">Open {joined.project.name}</Button
+        variant="outline">{offerWords.openProject(joined.project.name)}</Button
       >
       <Button
-        aria-label="Put this away"
+        aria-label={offerWords.putAway}
         class={btn}
         icon={IconClose}
         onclick={() => dismissProjectJoin(instanceId)}
@@ -100,7 +92,7 @@
   </section>
 {:else if offer}
   <section
-    aria-label="Make this session a project"
+    aria-label={offerWords.offerLabel}
     class="offer"
     data-offer={instanceId}
   >
@@ -112,7 +104,7 @@
       <Button
         class={btn}
         disabled={pending !== null}
-        label="Not now"
+        label={offerWords.notNow}
         onclick={() => answer("dismiss")}
         pending={pending === "dismiss"}
         variant="ghost"
@@ -122,10 +114,10 @@
         disabled={pending !== null}
         failed={!!refused}
         icon={IconFolder}
-        label="Create project"
+        label={offerWords.createProject}
         onclick={() => answer("accept")}
         pending={pending === "accept"}
-        pendingLabel="Making project…"
+        pendingLabel={offerWords.makingProject}
       />
     </div>
     <RowFault data-project-offer-refused class="refused" reason={refused} />

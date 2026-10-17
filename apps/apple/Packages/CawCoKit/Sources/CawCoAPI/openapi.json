@@ -42242,6 +42242,18 @@
             "description": "The delegate's brief headline, carried beside {@link delegateInstanceId}.",
             "type": "string"
           },
+          "designOffer": {
+            "description": "A thread's note of Caw asking whether to build a design system: the\nproject it is for, whose Build and Not now the note draws under it\n(EventThreadMessage `designOffer`, as a thread's blocks carry it on the\ndashboard and in the app).",
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "projectId"
+            ]
+          },
           "errorTitle": {
             "description": "A failure card's heading (`ui.error`, `ui.session_error`); a missing\nsession's when unset on a session error, \"Turn failed\" otherwise.",
             "type": "string"

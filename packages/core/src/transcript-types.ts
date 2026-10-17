@@ -96,6 +96,13 @@ export interface BlockMetadata {
   /** The delegate's brief headline, carried beside {@link delegateInstanceId}. */
   delegateTitle?: string;
   /**
+   * A thread's note of Caw asking whether to build a design system: the
+   * project it is for, whose Build and Not now the note draws under it
+   * (EventThreadMessage `designOffer`, as a thread's blocks carry it on the
+   * dashboard and in the app).
+   */
+  designOffer?: { projectId: string };
+  /**
    * A failure card's heading (`ui.error`, `ui.session_error`); a missing
    * session's when unset on a session error, "Turn failed" otherwise.
    */
