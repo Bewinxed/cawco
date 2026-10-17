@@ -83,13 +83,19 @@ function report() {
 report();
 </script></body></html>`;
 
+/** A frame in global points, top left at the main display's top left. */
+interface Frame {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
 /**
  * What `see --json` says of its snapshot (peekaboo.sh/commands/see.html):
  * its reference, whether it may drive input, and `data.ui_elements` with
- * each one's opaque id and the AX words it is found by; and the receipt of
- * what it observed (`target_receipt`, Peekaboo 4.9.4
- * DesktopActionTargetReceipt): the process and the CGWindowID of the AX
- * window it pinned.
+ * each one's opaque id, its AX role, the AX words it is found by and its
+ * frame (UIElementSummary, Peekaboo 4.9.4).
  */
 interface Seen {
   data?: {
@@ -98,6 +104,8 @@ interface Seen {
     snapshot_id?: string | null;
     snapshot_reusable?: boolean;
     ui_elements?: {
+      ax_role?: string | null;
+      bounds?: Frame;
       description?: string | null;
       id: string;
       identifier?: string | null;
@@ -105,10 +113,9 @@ interface Seen {
       title?: string | null;
     }[];
   };
-  target_receipt?: { pid?: number; window_id?: number | null };
 }
 
-/** How long one Peekaboo call has before the run gives up on it. */
+/** How long one Peekaboo or osascript call has before the run gives up on it. */
 const CALL_MS = 60_000;
 
 /**
@@ -212,6 +219,62 @@ async function barrierRefused(): Promise<string | null> {
   } catch (error) {
     return `${folder}: ${error instanceof Error ? error.message : String(error)}`;
   }
+}
+
+/**
+ * The window server's own list of on-screen windows
+ * (`CGWindowListCopyWindowInfo`, on screen only, no desktop elements): each
+ * one's owner, CGWindowID, layer and frame. Read through JXA; it names no
+ * window titles, so it needs no Screen Recording.
+ */
+const WINDOWS = `ObjC.import("CoreGraphics");
+const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0));
+const out = [];
+for (let i = 0; i < list.count; i++) {
+  const w = list.objectAtIndex(i);
+  const b = w.objectForKey("kCGWindowBounds");
+  out.push({ pid: ObjC.unwrap(w.objectForKey("kCGWindowOwnerPID")), id: ObjC.unwrap(w.objectForKey("kCGWindowNumber")), layer: ObjC.unwrap(w.objectForKey("kCGWindowLayer")), x: ObjC.unwrap(b.objectForKey("X")), y: ObjC.unwrap(b.objectForKey("Y")), width: ObjC.unwrap(b.objectForKey("Width")), height: ObjC.unwrap(b.objectForKey("Height")) });
+}
+JSON.stringify(out);`;
+
+/**
+ * The CGWindowID of `pid`'s window at `frame`, the exact window Peekaboo's
+ * `press --window-id` takes ("An exact window selector enables
+ * receipt-pinned background press", peekaboo.sh/commands/press.html): the
+ * one window of the app at the normal layer (0) whose frame is the AX
+ * window's, within a point. AX frames and the window server's bounds are
+ * both global points from the main display's top left.
+ */
+async function windowAt(pid: number, frame: Frame): Promise<string> {
+  const run = await bounded(["osascript", "-l", "JavaScript", "-e", WINDOWS]);
+  if (run.exitCode !== 0) {
+    throw new Error(
+      `the window server's list: osascript exited ${run.exitCode}: ${run.stderr.trim()}`
+    );
+  }
+  const windows = (
+    JSON.parse(run.stdout) as (Frame & {
+      id: number;
+      layer: number;
+      pid: number;
+    })[]
+  ).filter((one) => one.pid === pid);
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const at = windows.filter(
+    (one) =>
+      one.layer === 0 &&
+      near(one.x, frame.x) &&
+      near(one.y, frame.y) &&
+      near(one.width, frame.width) &&
+      near(one.height, frame.height)
+  );
+  const [only] = at;
+  if (at.length !== 1 || !only) {
+    throw new Error(
+      `pid ${pid} has ${at.length} windows at layer 0 at the AX window's frame ${JSON.stringify(frame)}: ${JSON.stringify(windows)}`
+    );
+  }
+  return String(only.id);
 }
 
 const run = async (kit: Kit) => {
@@ -325,21 +388,24 @@ const keys = async (kit: Kit, binary: string) => {
      * and menu click before it advances the desktop-mutation watermark that
      * hides the implicit latest snapshot, while explicit snapshots are kept
      * (Peekaboo CHANGELOG: mutations "advance implicit-snapshot watermarks …
-     * and preserve explicit snapshot history"). The `see` names the app's
-     * first window as AX lists it (`--window-index 0`): without Screen
-     * Recording Peekaboo lists an app's windows from AX alone, each by the
-     * CGWindowID `_AXUIElementGetWindow` gives (ApplicationWindowEnumeration
-     * Context `buildAXOnlyResult`, Peekaboo 4.9.4), so the exact-window
-     * observation finds that very window, binds its receipt, and says its id
-     * in `target_receipt.window_id`, the window ⌘K goes to. A `see
-     * --window-id` of the window server's largest window of the app stood as
-     * `application_partial` with no snapshot (no AX window has that id), and
-     * a `see --pid` alone pins a window but keeps a process-scoped receipt
-     * with no window id. A `see` with no reusable snapshot or no pinned
-     * window is said as it is. The click names the
-     * process, never the window: a window selector on a click is resolved
-     * among the windows eligible for capture (InteractionCoordinateResolver,
-     * Peekaboo 4.9.4), which a shell without Screen Recording is never shown.
+     * and preserve explicit snapshot history"). The `see` names no window:
+     * Peekaboo pins the app's focused AX window, else its main, else its
+     * first (DetachedAXObservationWorker `resolveWindow`, Peekaboo 4.9.4),
+     * and publishes a reusable snapshot whose first element is that window
+     * (`ax_role` AXWindow) with its frame. Peekaboo gives no window id for
+     * it: without Screen Recording it lists an app's windows from AX alone,
+     * only those with a title and an `_AXUIElementGetWindow` id
+     * (ApplicationWindowEnumerationContext `buildAXOnlyResult`), and lists
+     * none of this app's (its scene names no title), so a `--window-index`
+     * finds none ("Available windows: 0--1"), a `--window-id` stands as
+     * `application_partial` with no snapshot, and a `--pid` see's receipt
+     * names only the process. So ⌘K's window is the
+     * window server's window of the app at that AX window's frame
+     * (`windowAt`). A `see` with no reusable snapshot or no AX window is said
+     * as it is. The click names the process, never the window: a window
+     * selector on a click is resolved among the windows eligible for capture
+     * (InteractionCoordinateResolver, Peekaboo 4.9.4), which a shell without
+     * Screen Recording is never shown.
      */
     const focus = async (field: string) => {
       const seen = JSON.parse(
@@ -347,14 +413,14 @@ const keys = async (kit: Kit, binary: string) => {
           "see",
           "--pid",
           String(app.pid),
-          "--window-index",
-          "0",
           "--tree",
           "--no-screenshot",
         ])
       ) as Seen;
       const snapshot = seen.data?.snapshot_id;
-      const pinned = seen.target_receipt?.window_id;
+      const pinned = seen.data?.ui_elements?.find(
+        (one) => one.ax_role === "AXWindow"
+      )?.bounds;
       if (
         !snapshot ||
         seen.data?.snapshot_reusable !== true ||
@@ -362,19 +428,21 @@ const keys = async (kit: Kit, binary: string) => {
         !pinned
       ) {
         throw new Error(
-          `see of the app gave no reusable snapshot on a pinned window to click ${field} in: ${JSON.stringify(
+          `see of the app gave no reusable snapshot of a window to click ${field} in: ${JSON.stringify(
             {
               mutation_targeting_available:
                 seen.data?.mutation_targeting_available,
+              roles: seen.data?.ui_elements
+                ?.slice(0, 5)
+                .map((one) => one.ax_role),
               semantic_scope: seen.data?.semantic_scope,
               snapshot_id: snapshot,
               snapshot_reusable: seen.data?.snapshot_reusable,
-              target_receipt: seen.target_receipt,
             }
           )}`
         );
       }
-      window = String(pinned);
+      window = await windowAt(app.pid, pinned);
       const element = seen.data?.ui_elements?.find((one) =>
         [one.label, one.description, one.title, one.identifier].includes(field)
       );
@@ -396,7 +464,7 @@ const keys = async (kit: Kit, binary: string) => {
       ]);
       return report(0, (m) => m[3] === field, 15_000);
     };
-    /** ⌘K as key events, in the background, to the window the newest `see` pinned. */
+    /** ⌘K as key events, in the background, to the window the newest `see` pinned, by its CGWindowID. */
     const commandK = async () => {
       if (!window) {
         throw new Error("⌘K before any see pinned the app's window");
