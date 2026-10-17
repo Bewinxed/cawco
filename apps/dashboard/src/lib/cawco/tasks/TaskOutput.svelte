@@ -213,7 +213,7 @@
   figure[data-compact] [data-slot="markdown"] {
     mask-image: linear-gradient(
       to bottom,
-      canvastext calc(100% - var(--space-6)),
+      var(--mask-opaque) calc(100% - var(--space-6)),
       transparent
     );
   }

@@ -265,9 +265,15 @@
                 >
                   <span>{column.columnDef.header}</span>
                   {#if sorted === "desc"}
-                    <IconChevronDown aria-hidden="true" class="size-icon-sm flex-none" />
+                    <IconChevronDown
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none"
+                    />
                   {:else if sorted === "asc"}
-                    <IconChevronUp aria-hidden="true" class="size-icon-sm flex-none" />
+                    <IconChevronUp
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none"
+                    />
                   {/if}
                 </button>
               {:else}

@@ -118,23 +118,33 @@
 </script>
 
 {#if asks.length > 0 || actions.length > 0 || failed || blockers.length > 0}
-  <div class="flex flex-col gap-space-3">
+  <div data-slot="task-needs-needs-stack" class="flex flex-col gap-space-3">
     {#each asks as blocked (blocked.request.requestId)}
       <section
         data-slot="needs"
         aria-label="Its session asks"
         class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
       >
-        <h3 data-slot="head" class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line">
-          <IconNeedsYou data-task-needs-glyph class="flex-none size-icon-md text-status-attn-glyph" />
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+        >
+          <IconNeedsYou
+            data-task-needs-glyph
+            class="flex-none size-icon-md text-status-attn-glyph"
+          />
           <span>Its session asks you</span>
-          <span data-slot="when" class="ms-auto type-meta text-ink-muted whitespace-nowrap"
+          <span
+            data-slot="when"
+            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
             >{blocked.request.raisedAt
               ? ago(blocked.request.raisedAt)
               : ""}</span
           >
         </h3>
-        <p class="m-0 type-body text-ink-strong">{blocked.request.presentation.summary}</p>
+        <p class="m-0 type-body text-ink-strong">
+          {blocked.request.presentation.summary}
+        </p>
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
           <Button href={rowHref(blocked.instanceId)} label="Answer" size="sm" />
         </div>
@@ -148,19 +158,30 @@
         aria-label="An approved action"
         class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
       >
-        <h3 data-slot="head" class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line">
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+        >
           {#if proposed}
-            <IconNeedsYou data-task-needs-glyph class="flex-none size-icon-md text-status-attn-glyph" />
+            <IconNeedsYou
+              data-task-needs-glyph
+              class="flex-none size-icon-md text-status-attn-glyph"
+            />
             <span>Approve {action.tool} on {action.connection}</span>
           {:else}
-            <IconError data-task-needs-glyph class="flex-none size-icon-md text-status-fail-glyph" />
+            <IconError
+              data-task-needs-glyph
+              class="flex-none size-icon-md text-status-fail-glyph"
+            />
             <span
               >{action.state === "unknown"
                 ? `${action.tool} may or may not have happened`
                 : `${action.tool} failed`}</span
             >
           {/if}
-          <span data-slot="when" class="ms-auto type-meta text-ink-muted whitespace-nowrap"
+          <span
+            data-slot="when"
+            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
             >{ago(action.endedAt ?? action.createdAt)}</span
           >
         </h3>
@@ -179,7 +200,6 @@
             data-slot="args"
             class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well text-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
             style:--args-max="12rem">{action.args}</pre>
-
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
         <div
@@ -234,14 +254,22 @@
         class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
         data-reason="failed"
       >
-        <h3 data-slot="head" class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line">
-          <IconError data-task-needs-glyph class="flex-none size-icon-md text-status-fail-glyph" />
+        <h3
+          data-slot="head"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+        >
+          <IconError
+            data-task-needs-glyph
+            class="flex-none size-icon-md text-status-fail-glyph"
+          />
           <span
             >{lastAttempt.state === "cancelled"
               ? "Its session was stopped"
               : "Its session failed"}</span
           >
-          <span data-slot="when" class="ms-auto type-meta text-ink-muted whitespace-nowrap"
+          <span
+            data-slot="when"
+            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
             >{ago(lastAttempt.endedAt ?? lastAttempt.startedAt)}</span
           >
         </h3>
@@ -290,10 +318,12 @@
         <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
           {#each blockers as id (id)}
             <li class="flex items-center gap-space-2 min-w-0">
-              <span class="flex-none text-meta font-mono liga-none text-ink-muted"
+              <span
+                class="flex-none text-meta font-mono liga-none text-ink-muted"
                 >{id}</span
               >
-              <span class="flex-auto min-w-0 type-label text-ink-strong truncate"
+              <span
+                class="flex-auto min-w-0 type-label text-ink-strong truncate"
                 >{titleOf(id) ?? ""}</span
               >
               <Button

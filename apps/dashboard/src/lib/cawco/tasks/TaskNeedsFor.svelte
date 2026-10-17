@@ -72,7 +72,7 @@
 </script>
 
 {#if task}
-  <div class="flex flex-col gap-space-3">
+  <div data-slot="task-needs-for-needs-for" class="flex flex-col gap-space-3">
     {#if task.kind === "you"}
       <TaskReview
         compact

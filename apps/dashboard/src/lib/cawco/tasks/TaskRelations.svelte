@@ -100,10 +100,7 @@
     style:--edge-cols="6rem minmax(0, 1fr)"
   >
     <span class="pt-space-1 type-label text-ink-muted">{name}</span>
-    <div
-      data-slot="edge-list"
-      class="flex flex-col gap-space-1 min-w-0"
-    >
+    <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
       {#each ids as id (id)}
         {@render ref(
           id,

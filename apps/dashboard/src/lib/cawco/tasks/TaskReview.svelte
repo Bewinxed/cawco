@@ -133,9 +133,7 @@
     const measure = () => {
       clipped = [
         ...node.querySelectorAll('[data-slot="summary"], [data-slot="check"]'),
-      ].some(
-        (line) => line.scrollHeight > line.clientHeight + 1
-      );
+      ].some((line) => line.scrollHeight > line.clientHeight + 1);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(node);
