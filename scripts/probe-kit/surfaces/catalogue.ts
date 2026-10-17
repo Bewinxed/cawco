@@ -120,9 +120,27 @@ const FILL_FIRST = /^Fill first/;
 /** The project's ⋯ menu. */
 const MORE_FOR_CAWCO = /More for cawco/;
 /** A session row's Peek (a wide layout's; the phone has none). */
-const PEEK_IDLE = /^Peek Fix tray chip overflow/;
+const PEEK = "[data-session-row-peek]";
 /** The picture riding on your words in Caw's thread (MessageRow's Shot). */
 const THREAD_PICTURE = "Attachment 1 sent with this message";
+
+/** The fleet memory's row menu (RowMenu's "More for ~/.claude/CLAUDE.md"). */
+const MORE_FOR_MEMORY = /^More for .*CLAUDE\.md$/;
+/** The dashboard's one socket, on the dashboard's own origin. */
+const DASHBOARD_SOCKET = /\/ws\/dashboard/;
+
+/**
+ * The route loaded again with `hold` routed first: what it holds the hub
+ * never answers, so the page stands as it does while the hub has not
+ * answered yet. The route stays the page's, so such a state comes last in
+ * its surface.
+ */
+const unanswered =
+  (hold: (page: Page) => Promise<unknown>) => async (page: Page) => {
+    await hold(page);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.kitHydrated === true);
+  };
 
 /** The project's ⋯ menu, then its row named `item`. */
 const fromMore = (item: string) => async (page: Page) => {
@@ -282,24 +300,20 @@ const EDITORS: Record<string, State[]> = {
     },
     // The fleet's memory in its editor.
     { name: "editor", route: () => "/config/memory/CLAUDE.md", root: "body" },
-  ],
-  connections: [
     {
-      // The add menu: a row per service, each with its logo.
-      name: "add",
-      act: press("Sign in to a service"),
-      root: LAYER,
-    },
-  ],
-  updates: [
-    {
-      // Connect a machine, on its one-command tab: the command and the wait for the machine.
-      name: "add-machine",
+      // The memory's Delete everywhere: the ask under its row.
+      name: "delete-ask",
       act: async (page) => {
-        await press(ADD_MACHINE)(page);
-        await page.getByRole("tab", { name: "With one command" }).click();
+        await press(MORE_FOR_MEMORY)(page);
+        await page.getByRole("menuitem", { name: "Delete everywhere" }).click();
       },
-      root: LAYER,
+      root: "body",
+    },
+    {
+      // The fleet not read yet: the section's skeleton rows. Last (its route stays).
+      name: "reading",
+      act: unanswered((page) => page.route("**/api/fleet", () => undefined)),
+      root: "body",
     },
   ],
   rules: [
@@ -370,14 +384,37 @@ export const SURFACES: Surface[] = [
         root: "body",
       },
       {
-        // A session row's Peek: the tail of it in the peek sheet.
+        // The machines list's Add machine: Connect a machine, on its
+        // one-command tab (the command, and the wait for the machine).
+        name: "add-machine",
+        widths: ["desk"],
+        act: async (page) => {
+          await press(MACHINES)(page);
+          await press(ADD_MACHINE)(page);
+          await page.getByRole("tab", { name: "With one command" }).click();
+        },
+        root: "body",
+      },
+      {
+        // Home's first session row's Peek (the rail's project rows have
+        // none): the tail of it in the peek sheet.
         name: "peek",
         widths: ["desk", "tablet"],
         act: async (page) => {
           await openRail(page);
-          await page.getByRole("link", { name: IDLE_ROW }).first().hover();
-          await press(PEEK_IDLE)(page);
+          const peek = page.locator(PEEK).filter({ visible: true }).first();
+          await peek.hover();
+          await peek.click();
         },
+        root: "body",
+      },
+      {
+        // The hub's socket open and silent: the status line, on the way.
+        // Last (its route stays).
+        name: "connecting",
+        act: unanswered((page) =>
+          page.routeWebSocket(DASHBOARD_SOCKET, () => undefined)
+        ),
         root: "body",
       },
     ],
