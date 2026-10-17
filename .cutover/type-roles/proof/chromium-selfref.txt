@@ -1,0 +1,102 @@
+== light: 50 keys, 50 resolve to a value on :root and a child, 0 empty
+  --shadow-xs: 0 1px 2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h 
+  --shadow-tile: 0 1px 2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h 
+  --shadow-raised: 0 1px 3px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h 
+  --shadow-hairline: 0 3px 7px -2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l
+  --shadow-stat: 0 3px 7px -2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l
+  --shadow-md: 0 3px 10px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h
+  --shadow-lg: 0 10px 30px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-xl: 0 24px 64px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-overlay: 0 18px 48px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-overlay-hung: 0 18px 48px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-modal: 0 18px 48px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-drawer: 0 12px 40px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-tab-start: -2px 0 5px -1px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) 
+  --shadow-tab-end: 2px 0 5px -1px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l
+  --shadow-tab-start-chosen: -2px 0 5px -1px light-dark(light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4
+  --shadow-tab-end-chosen: 2px 0 5px -1px light-dark(light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4%
+  --shadow-inset-sel: inset 0 1px 1px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) 
+  --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif
+  --font-body: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace
+  --font-display: "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif
+  --leading-meta: 1.35
+  --leading-label: 1.3
+  --leading-tight: 1.2
+  --leading-ui: 1.25
+  --leading-body: 1.45
+  --leading-prose: 1.55
+  --leading-code: 1.6
+  --leading-kpi: 1
+  --leading-root: 1.5
+  --leading-prose-sm: 1.71429
+  --leading-snug: 1.375
+  --leading-relaxed: 1.625
+  --radius-hair: 2px
+  --radius-xs: 5px
+  --radius-sm: 8px
+  --radius-md: 10px
+  --radius-lg: 12px
+  --radius-well: 7px
+  --radius-panel: 16px
+  --radius-modal: 18px
+  --radius-pill: 999px
+  --ease-out: cubic-bezier(.23, 1, .32, 1)
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1)
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1)
+  --ease-crossfade: cubic-bezier(.42, 0, .58, 1)
+  --ease-arrive: cubic-bezier(.2, 0, 0, 1)
+  --ease-figure: cubic-bezier(.2, .8, .2, 1)
+  --ease-glide-in: cubic-bezier(.3333, 0, .6667, .3333)
+  --ease-glide-out: cubic-bezier(.3333, .6667, .6667, 1)
+== dark: 50 keys, 50 resolve to a value on :root and a child, 0 empty
+  --shadow-xs: 0 1px 2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h 
+  --shadow-tile: 0 1px 2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h 
+  --shadow-raised: 0 1px 3px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h 
+  --shadow-hairline: 0 3px 7px -2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l
+  --shadow-stat: 0 3px 7px -2px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l
+  --shadow-md: 0 3px 10px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c h
+  --shadow-lg: 0 10px 30px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-xl: 0 24px 64px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-overlay: 0 18px 48px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-overlay-hung: 0 18px 48px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-modal: 0 18px 48px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-drawer: 0 12px 40px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l c 
+  --shadow-tab-start: -2px 0 5px -1px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) 
+  --shadow-tab-end: 2px 0 5px -1px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) l
+  --shadow-tab-start-chosen: -2px 0 5px -1px light-dark(light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4
+  --shadow-tab-end-chosen: 2px 0 5px -1px light-dark(light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4%
+  --shadow-inset-sel: inset 0 1px 1px light-dark(oklch(from light-dark(oklch(29.5% .01 70),oklch(93.4% .01 82)) 
+  --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif
+  --font-body: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace
+  --font-display: "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif
+  --leading-meta: 1.35
+  --leading-label: 1.3
+  --leading-tight: 1.2
+  --leading-ui: 1.25
+  --leading-body: 1.45
+  --leading-prose: 1.55
+  --leading-code: 1.6
+  --leading-kpi: 1
+  --leading-root: 1.5
+  --leading-prose-sm: 1.71429
+  --leading-snug: 1.375
+  --leading-relaxed: 1.625
+  --radius-hair: 2px
+  --radius-xs: 5px
+  --radius-sm: 8px
+  --radius-md: 10px
+  --radius-lg: 12px
+  --radius-well: 7px
+  --radius-panel: 16px
+  --radius-modal: 18px
+  --radius-pill: 999px
+  --ease-out: cubic-bezier(.23, 1, .32, 1)
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1)
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1)
+  --ease-crossfade: cubic-bezier(.42, 0, .58, 1)
+  --ease-arrive: cubic-bezier(.2, 0, 0, 1)
+  --ease-figure: cubic-bezier(.2, .8, .2, 1)
+  --ease-glide-in: cubic-bezier(.3333, 0, .6667, .3333)
+  --ease-glide-out: cubic-bezier(.3333, .6667, .6667, 1)

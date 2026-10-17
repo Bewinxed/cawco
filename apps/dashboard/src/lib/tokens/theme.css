@@ -251,23 +251,6 @@
   --color-tab-shade-chosen: var(--tab-shade-chosen);
   --color-night-ring: var(--night-ring);
 
-  --shadow-xs: var(--shadow-xs);
-  --shadow-tile: var(--shadow-tile);
-  --shadow-raised: var(--shadow-raised);
-  --shadow-hairline: var(--shadow-hairline);
-  --shadow-stat: var(--shadow-stat);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-  --shadow-overlay: var(--shadow-overlay);
-  --shadow-overlay-hung: var(--shadow-overlay-hung);
-  --shadow-modal: var(--shadow-modal);
-  --shadow-drawer: var(--shadow-drawer);
-  --shadow-tab-start: var(--shadow-tab-start);
-  --shadow-tab-end: var(--shadow-tab-end);
-  --shadow-tab-start-chosen: var(--shadow-tab-start-chosen);
-  --shadow-tab-end-chosen: var(--shadow-tab-end-chosen);
-  --shadow-inset-sel: var(--shadow-inset-sel);
   --shadow-surface-shadow-1: var(--surface-shadow-1);
   --shadow-surface-shadow-2: var(--surface-shadow-2);
   --shadow-surface-shadow-3: var(--surface-shadow-3);
@@ -283,29 +266,11 @@
   --drop-shadow-drop: var(--shadow-drop);
   --drop-shadow-drop-near: var(--shadow-drop-near);
 
-  --font-wordmark: var(--font-wordmark);
-  --font-body: var(--font-body);
-  --font-mono: var(--font-mono);
-  --font-display: var(--font-display);
-
   --tracking-wordmark: var(--track-wordmark);
   --tracking-display: var(--track-display);
   --tracking-title: var(--track-title);
   --tracking-caps: var(--track-caps);
   --tracking-widest: var(--track-widest);
-
-  --leading-meta: var(--leading-meta);
-  --leading-label: var(--leading-label);
-  --leading-tight: var(--leading-tight);
-  --leading-ui: var(--leading-ui);
-  --leading-body: var(--leading-body);
-  --leading-prose: var(--leading-prose);
-  --leading-code: var(--leading-code);
-  --leading-kpi: var(--leading-kpi);
-  --leading-root: var(--leading-root);
-  --leading-prose-sm: var(--leading-prose-sm);
-  --leading-snug: var(--leading-snug);
-  --leading-relaxed: var(--leading-relaxed);
 
   --font-weight-normal: var(--weight-body);
   --font-weight-medium: var(--weight-strong);
@@ -409,27 +374,9 @@
   --spacing-icon-md: var(--icon-md);
   --spacing-icon-lg: var(--icon-lg);
 
-  --radius-hair: var(--radius-hair);
-  --radius-xs: var(--radius-xs);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-well: var(--radius-well);
-  --radius-panel: var(--radius-panel);
-  --radius-modal: var(--radius-modal);
-  --radius-pill: var(--radius-pill);
   --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);
   --radius-tab-icon: var(--tab-icon-r);
-
-  --ease-out: var(--ease-out);
-  --ease-in-out: var(--ease-in-out);
-  --ease-drawer: var(--ease-drawer);
-  --ease-crossfade: var(--ease-crossfade);
-  --ease-arrive: var(--ease-arrive);
-  --ease-figure: var(--ease-figure);
-  --ease-glide-in: var(--ease-glide-in);
-  --ease-glide-out: var(--ease-glide-out);
 
   --duration-stagger: var(--dur-stagger);
   --duration-cascade: var(--dur-cascade);
@@ -483,6 +430,63 @@
       opacity: 0.5;
     }
   }
+}
+
+@theme inline reference {
+  --shadow-xs: var(--shadow-xs);
+  --shadow-tile: var(--shadow-tile);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-hairline: var(--shadow-hairline);
+  --shadow-stat: var(--shadow-stat);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-overlay-hung: var(--shadow-overlay-hung);
+  --shadow-modal: var(--shadow-modal);
+  --shadow-drawer: var(--shadow-drawer);
+  --shadow-tab-start: var(--shadow-tab-start);
+  --shadow-tab-end: var(--shadow-tab-end);
+  --shadow-tab-start-chosen: var(--shadow-tab-start-chosen);
+  --shadow-tab-end-chosen: var(--shadow-tab-end-chosen);
+  --shadow-inset-sel: var(--shadow-inset-sel);
+
+  --font-wordmark: var(--font-wordmark);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+
+  --leading-meta: var(--leading-meta);
+  --leading-label: var(--leading-label);
+  --leading-tight: var(--leading-tight);
+  --leading-ui: var(--leading-ui);
+  --leading-body: var(--leading-body);
+  --leading-prose: var(--leading-prose);
+  --leading-code: var(--leading-code);
+  --leading-kpi: var(--leading-kpi);
+  --leading-root: var(--leading-root);
+  --leading-prose-sm: var(--leading-prose-sm);
+  --leading-snug: var(--leading-snug);
+  --leading-relaxed: var(--leading-relaxed);
+
+  --radius-hair: var(--radius-hair);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-well: var(--radius-well);
+  --radius-panel: var(--radius-panel);
+  --radius-modal: var(--radius-modal);
+  --radius-pill: var(--radius-pill);
+
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+  --ease-drawer: var(--ease-drawer);
+  --ease-crossfade: var(--ease-crossfade);
+  --ease-arrive: var(--ease-arrive);
+  --ease-figure: var(--ease-figure);
+  --ease-glide-in: var(--ease-glide-in);
+  --ease-glide-out: var(--ease-glide-out);
 }
 
 @utility bg-mark-overlay {

@@ -1,0 +1,8 @@
+== light, built 0.C5tYhXbU.css
+src: oklch(0.295 0.01 70 / 0.07) 0px 1px 2px 0px, oklch(0.295 0.01 70 / 0.035) 0px 0px 0px 1px
+tile: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.295 0.01 70 / 0.07) 0px 1px 2px 0px, oklch(0.295 0.01 70 / 0.035) 0px 0px 0px 1px
+card: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0.295 0.01 70 / 0.07) 0px 1px 2px 0px, oklch(0.295 0.01 70 / 0.035) 0px 0px 0px 1px
+== dark, built 0.C5tYhXbU.css
+src: oklch(0 0 0 / 0.3) 0px 1px 2px 0px, oklch(0.934 0.01 82 / 0.06) 0px 0px 0px 1px
+tile: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0 0 0 / 0.3) 0px 1px 2px 0px, oklch(0.934 0.01 82 / 0.06) 0px 0px 0px 1px
+card: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklch(0 0 0 / 0.3) 0px 1px 2px 0px, oklch(0.934 0.01 82 / 0.06) 0px 0px 0px 1px
