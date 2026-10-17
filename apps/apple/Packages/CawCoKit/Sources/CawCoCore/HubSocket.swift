@@ -48,7 +48,8 @@ struct HubSocket: Sendable {
         let (events, continuation) = AsyncThrowingStream<Event, any Error>.makeStream()
         let delegate = Delegate(continuation)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        let task = session.webSocketTask(with: parts.url ?? hub)
+        // As the person, with this device's pass when the hub requires one.
+        let task = session.webSocketTask(with: URLRequest.hub(parts.url ?? hub))
         // No frame on the hub's sockets is larger (`WIRE_FRAME_LIMIT_BYTES`):
         // a longer message, a large board, comes as parts (`Wire.Assembler`).
         task.maximumMessageSize = Wire.frameLimitBytes

@@ -699,7 +699,7 @@ final class MemoryBody: UIView {
         guard let hub = env.hub, let base = hub.address else { return .missing("the hub is not connected") }
         var parts = URLComponents(url: base.appending(path: "/api/fleet/memory/history"), resolvingAgainstBaseURL: false)
         if action != "set", let path { parts?.queryItems = [URLQueryItem(name: "path", value: path)] }
-        guard let url = parts?.url, let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let url = parts?.url, let (data, _) = try? await URLSession.shared.data(for: .hub(url)),
               let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return .missing("the history could not be read")
         }
@@ -718,7 +718,7 @@ final class MemoryBody: UIView {
             if found == nil { return .missing("the hub no longer keeps the removed version") }
         }
         guard let id = found?["id"], let url = URL(string: "/api/fleet/memory/history/\(id)", relativeTo: base),
-              let (data, _) = try? await URLSession.shared.data(from: url),
+              let (data, _) = try? await URLSession.shared.data(for: .hub(url)),
               let version = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let content = version["content"] as? String else { return .missing("that version could not be read") }
         return .version(content)

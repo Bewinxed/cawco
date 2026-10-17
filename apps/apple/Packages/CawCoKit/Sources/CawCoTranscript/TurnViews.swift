@@ -615,7 +615,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         retrying = Task { [weak self] in
             var images: [(mediaType: String, data: Data)] = []
             for image in extras.images {
-                guard let url = self?.env.url(image.src), let fetched = try? await URLSession.shared.data(from: url) else {
+                guard let url = self?.env.url(image.src), let fetched = try? await URLSession.shared.data(for: .hub(url)) else {
                     self?.retryRefused("A picture it carries couldn't be read.")
                     return
                 }

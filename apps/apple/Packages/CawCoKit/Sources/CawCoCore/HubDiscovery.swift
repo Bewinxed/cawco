@@ -7,8 +7,9 @@ import dnssd
 /// The hubs on the local network, as they announce themselves: Bonjour
 /// `_cawco._tcp` (packages/hub/src/mdns.ts publishes it; the agent's
 /// discovery.ts browses it). Each service is resolved to an address and
-/// kept only once it answers as a hub does: `/api/agents` is the fleet, so a
-/// 200 carrying an array is the test (discovery.ts `probeHub`).
+/// kept only once it answers as a hub does: `/health` names the hub's id to
+/// anyone, a hub that requires paired devices too, so a 200 carrying a
+/// `hubId` is the test.
 ///
 /// Multicast is link-local: a hub across a router or only on a tailnet is not
 /// found here, and is entered by hand.
@@ -257,15 +258,17 @@ public final class HubDiscovery {
         return URL(string: "http://\(text):\(port.rawValue)")
     }
 
+    /// A CawCo hub answers `/health` with its id, to anyone: one that
+    /// requires paired devices refuses every other read until this app pairs.
     private nonisolated static func isHub(_ address: URL) async -> Bool {
-        var request = URLRequest(url: address.appending(path: "api/agents"))
+        var request = URLRequest.hub(address.appending(path: "health"))
         request.timeoutInterval = probeTimeout
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200
         else {
             return false
         }
-        return (try? JSONSerialization.jsonObject(with: data)) is [Any]
+        return ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["hubId"] is String
     }
 
     /// A continuation resumed exactly once, from whichever callback comes first.

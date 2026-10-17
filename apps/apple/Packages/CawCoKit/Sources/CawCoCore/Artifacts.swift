@@ -72,7 +72,7 @@ public extension HubConnection {
     /// (`URLError.timedOut` past it); without it, URLSession's own.
     func exportCanvas(_ id: String, name: String, within: Duration? = nil) async throws -> CanvasExport {
         guard let address else { throw TaskRefusal(message: "No hub is connected.") }
-        var request = URLRequest(url: address.appending(path: "api/artifacts/\(id)/export"))
+        var request = URLRequest.hub(address.appending(path: "api/artifacts/\(id)/export"))
         if let within {
             let parts = within.components
             request.timeoutInterval = Double(parts.seconds) + Double(parts.attoseconds) / 1e18

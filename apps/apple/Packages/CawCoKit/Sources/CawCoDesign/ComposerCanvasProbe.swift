@@ -446,7 +446,7 @@ enum CanvasProbe {
     /// Draws a rectangle with a word in it on the canvas, as `artifact_update` does.
     static func drawAsAgent(on id: String, in instanceId: String, hub: HubConnection) async -> Bool {
         guard let address = hub.address else { return false }
-        var request = URLRequest(url: address.appending(path: "api/instances/\(instanceId)/artifacts/\(id)"))
+        var request = URLRequest.hub(address.appending(path: "api/instances/\(instanceId)/artifacts/\(id)"))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = ["elements": [[
@@ -605,7 +605,7 @@ enum CanvasProbe {
     /// Whether the hub lists `id` among the session's artifacts (`GET /api/instances/:id/artifacts`).
     private static func listed(_ id: String, in instanceId: String, hub: HubConnection) async -> Bool {
         guard let address = hub.address,
-              let (data, _) = try? await URLSession.shared.data(from: address.appending(path: "api/instances/\(instanceId)/artifacts")),
+              let (data, _) = try? await URLSession.shared.data(for: .hub(address.appending(path: "api/instances/\(instanceId)/artifacts"))),
               let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return false }
         return rows.contains { $0["id"] as? String == id }
     }

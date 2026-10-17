@@ -273,7 +273,7 @@ public struct ProjectTasks: Sendable {
         var url = address.appending(path: "api/projects").appending(path: projectId).appending(path: "tasks")
             .appending(path: taskId).appending(path: "outputs/file")
         url.append(queryItems: [URLQueryItem(name: "name", value: name)])
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: .hub(url))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw TaskRefusal(message: Wire.words(data) ?? Wire.reason(data, status: status)) }
         return (data, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "")

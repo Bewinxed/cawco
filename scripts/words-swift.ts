@@ -82,6 +82,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     swift: "Preview",
     members: [{ file: "words/preview.ts", export: "previewWords", as: "" }],
   },
+  {
+    // A device asking to pair: its Needs you card and its push.
+    swift: "Pairing",
+    members: [{ file: "words/pairing.ts", export: "pairingWords", as: "" }],
+  },
 ];
 
 /** The helpers a word may call, and their Swift twins. */

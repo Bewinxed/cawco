@@ -443,7 +443,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard let url = env.url(ref) else { return }
         Task { [weak self, weak source] in
             do {
-                let (download, response) = try await URLSession.shared.download(from: url)
+                let (download, response) = try await URLSession.shared.download(for: .hub(url))
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw FileGone() }
                 let folder = FileManager.default.temporaryDirectory.appending(path: "cawco-files/\(UUID().uuidString)", directoryHint: .isDirectory)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

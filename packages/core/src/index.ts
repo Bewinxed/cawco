@@ -1797,6 +1797,7 @@ export * from "./words/accounts";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/helpers";
+export * from "./words/pairing";
 export * from "./words/preview";
 export * from "./words/sidebar";
 export * from "./workflow";

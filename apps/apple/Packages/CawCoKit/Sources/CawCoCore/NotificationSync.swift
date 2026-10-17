@@ -105,7 +105,7 @@ public enum NotificationSync {
         var parts = URLComponents(url: hub.appending(path: "api/notifications/cleared"), resolvingAgainstBaseURL: false)
         parts?.queryItems = [URLQueryItem(name: "since", value: String(Int(since)))]
         guard let url = parts?.url else { return nil }
-        var request = URLRequest(url: url)
+        var request = URLRequest.hub(url)
         request.timeoutInterval = 10
         do {
             let (data, response) = try await URLSession.shared.data(for: request)

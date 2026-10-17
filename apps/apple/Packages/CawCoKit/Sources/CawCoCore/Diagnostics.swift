@@ -76,7 +76,7 @@ public final class DiagnosticsReporter: NSObject, MXMetricManagerSubscriber, @un
                     "device": Self.model,
                     "payload": object,
                 ]
-                var request = URLRequest(url: hub.appending(path: "api/diagnostics/apple"))
+                var request = URLRequest.hub(hub.appending(path: "api/diagnostics/apple"))
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)

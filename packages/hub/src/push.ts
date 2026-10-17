@@ -60,8 +60,10 @@ import {
   type FleetWatchNotice,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
+  type PairingRequest,
   type PermissionRequestFrame,
   PROJECT_SETTINGS_TOOL,
+  pairingWords,
   questionsOf,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
@@ -77,6 +79,7 @@ import {
   messageCollapseId,
   type Notifications,
   needsCollapseId,
+  pairingCollapseId,
   runCollapseId,
   taskCollapseId,
   turnCollapseId,
@@ -113,7 +116,7 @@ const BACKGROUND_GAP_MS = 20 * 60_000;
  * question the app can answer inline goes as `question` with its options
  * sealed (`inlineOptions`): the app's notification service extension opens
  * them and gives that one push a category of its own, an action per option
- * and "Other…".
+ * and "Other…". A device asking to pair offers Approve and Deny.
  */
 export const PUSH_CATEGORIES = {
   permission: "CAWCO_PERMISSION",
@@ -124,6 +127,7 @@ export const PUSH_CATEGORIES = {
   taskOpenOnly: "CAWCO_TASK_OPEN",
   attempt: "CAWCO_ATTEMPT",
   needs: "CAWCO_NEEDS",
+  pairing: "CAWCO_PAIRING",
   test: "CAWCO_TEST",
 } as const;
 
@@ -244,6 +248,11 @@ export type PushData =
       /** Several things need you at once (a burst): opens Needs you. */
       kind: "needs";
       count: number;
+    }
+  | {
+      /** A device asks to pair: Approve and Deny answer it by its code. */
+      kind: "pairing";
+      userCode: string;
     }
   | { kind: "test" };
 
@@ -1760,6 +1769,35 @@ export const createPush = ({
         },
       });
       console.log(`[push] action ${action.id}: ${action.state}`);
+    },
+
+    /**
+     * A device asks to pair (hub-auth.ts `asked`): pushed at once and on its
+     * own, never folded into a burst, so its Approve and Deny always answer
+     * it from the lock screen. Named as its Needs you card names it, with
+     * the card's sentence and the code the asking device shows.
+     */
+    pairing(request: PairingRequest): void {
+      const alert = alertOf(
+        request.name,
+        null,
+        pairingWords.asks(request.userCode)
+      );
+      const collapseId = pairingCollapseId(request.userCode);
+      console.log(`[push] pairing ${request.userCode}: sent as ${collapseId}`);
+      replace({
+        shown: alert,
+        sealed: alert,
+        category: PUSH_CATEGORIES.pairing,
+        collapseId,
+        threadId: "pairing",
+        data: { kind: "pairing", userCode: request.userCode },
+      });
+    },
+
+    /** That pairing was answered, here or anywhere, or expired: its push comes down. */
+    pairingSettled(userCode: string): void {
+      notifications.clear([pairingCollapseId(userCode)], "settled");
     },
 
     /** A test: a push to the devices given, quiet ones too. */

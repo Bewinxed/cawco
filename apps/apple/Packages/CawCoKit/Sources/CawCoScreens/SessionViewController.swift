@@ -1296,7 +1296,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             var images: [(mediaType: String, data: Data)] = []
             for image in extras.images {
                 guard let self else { return }
-                guard let url = mediaURL(image.src), let fetched = try? await URLSession.shared.data(from: url) else {
+                guard let url = mediaURL(image.src), let fetched = try? await URLSession.shared.data(for: .hub(url)) else {
                     keepEdit(id, text, "Couldn't edit your queued message: a picture it carries couldn't be read. Your edit is back in the composer.")
                     return
                 }

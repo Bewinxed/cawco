@@ -50,6 +50,8 @@ public enum PushCategory {
     public static let attempt = "CAWCO_ATTEMPT"
     /// Several things that need you, as one push: it only opens Needs you.
     public static let needs = "CAWCO_NEEDS"
+    /// A device asking to pair: Approve and Deny, by the code it shows.
+    public static let pairing = "CAWCO_PAIRING"
     public static let test = "CAWCO_TEST"
     /// A question's own category: `CAWCO_QUESTION.` and a hash of its options.
     private static let answeringPrefix = question + "."
@@ -60,6 +62,9 @@ public enum PushCategory {
     /// Open runs without opening the app, and only on an unlocked device
     /// (`.authenticationRequired`). A permission the hub sends Open only
     /// (push.ts `OPEN_ONLY_TOOLS`) is read in full before it is answered.
+    /// A device asking to pair offers Approve, only on an unlocked device, and
+    /// Deny, destructive (Apple: `.authenticationRequired` is for an action
+    /// that "can be performed only on an unlocked device").
     public static func fixed() -> Set<UNNotificationCategory> {
         let open = UNNotificationAction(identifier: PushAction.open, title: "Open", options: [.foreground])
         let approve = UNNotificationAction(identifier: PushAction.approve, title: "Approve", options: [.authenticationRequired])
@@ -70,6 +75,7 @@ public enum PushCategory {
         let reply: UNNotificationAction = UNTextInputNotificationAction(
             identifier: PushAction.reply, title: "Reply", options: [.authenticationRequired],
             textInputButtonTitle: "Send", textInputPlaceholder: "Message")
+        let refuse = UNNotificationAction(identifier: PushAction.deny, title: "Deny", options: [.destructive])
         func category(_ id: String, _ actions: [UNNotificationAction]) -> UNNotificationCategory {
             UNNotificationCategory(identifier: id, actions: actions, intentIdentifiers: [], options: dismissable)
         }
@@ -82,6 +88,7 @@ public enum PushCategory {
             category(taskOpenOnly, [open]),
             category(attempt, [open, reply]),
             category(needs, [open]),
+            category(pairing, [approve, refuse]),
             category(test, []),
         ]
     }

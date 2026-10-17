@@ -112,7 +112,8 @@ public struct PushNote: Sendable {
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
             return .task(projectId: projectId, taskId: taskId)
         // Several at once: the list of what waits, each opened from there.
-        case "needs":
+        // A device asking to pair waits there too.
+        case "needs", "pairing":
             return .needs
         case TrialReminder.kind:
             return .keepPro
@@ -613,7 +614,8 @@ public final class PushRegistry {
     /// the one way (Wire `sentence`): the hub's plain text or problem
     /// `detail`, Cawrier's `{ error }`.
     private static func post<Body: Encodable & Sendable, Answer: Decodable & Sendable>(_ url: URL, _ body: Body, refused who: String) async throws -> Answer {
-        var request = URLRequest(url: url)
+        // The hub's routes take this device's pass; Cawrier holds none of the hub's.
+        var request = URLRequest.hub(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
@@ -705,6 +707,8 @@ enum PushPending {
 ///   card's Answer (`NeedsYouStore.answerQuestion`).
 /// - Reply: the operator's words to the push's session, the composer's `send`
 ///   (`SessionsStore.steer`); the hub's refusal is its reason.
+/// - A device's pairing: Approve or Deny by the code it shows, as its Needs
+///   you card answers it (`HubConnection.answerPairing`).
 ///
 /// Each waits up to `window` for the hub's word that it was applied (for a
 /// send, accepted). Anything short of that leaves a local notification in the
@@ -729,6 +733,10 @@ public enum PushActions {
     public static func perform(_ note: PushNote) async -> Performed {
         let sent: Bool
         switch note.action {
+        case PushAction.approve where note.kind == "pairing":
+            sent = await answerPairing(note, approve: true)
+        case PushAction.deny where note.kind == "pairing":
+            sent = await answerPairing(note, approve: false)
         case PushAction.approve:
             sent = await approve(note)
         case PushAction.deny:
@@ -795,6 +803,25 @@ public enum PushActions {
 
     private static func notDenied(_ note: PushNote, _ reason: String?) async {
         await post(note, title: nil, body: "\(note.title): not denied. \(sentence(reason))Open to answer.", category: PushCategory.permissionOpenOnly)
+    }
+
+    // MARK: Pairing
+
+    /// The pairing the push names, by the code its device shows, answered
+    /// through the app's own `HubConnection.answerPairing`, as Needs you
+    /// answers it. The hub's refusal is said in the push's place.
+    private static func answerPairing(_ note: PushNote, approve: Bool) async -> Bool {
+        guard let userCode = note.fields["userCode"], HubConnection.keptAddress != nil else { return false }
+        let connection = HubConnection()
+        defer { connection.disconnect() }
+        let answered = await connection.answerPairing(userCode, approve: approve)
+        log.notice("\(approve ? "approve" : "deny", privacy: .public) pairing \(userCode, privacy: .public): \(answered ? "answered" : "refused", privacy: .public)")
+        guard answered else {
+            let reason: String? = if case let .refused(words)? = connection.pairingAnswers[userCode] { words } else { nil }
+            await post(note, title: nil, body: "\(note.title): \(approve ? "not approved" : "not denied"). \(sentence(reason))Open to answer.", category: nil)
+            return false
+        }
+        return true
     }
 
     // MARK: Answer

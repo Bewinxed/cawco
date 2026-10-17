@@ -500,7 +500,7 @@ public final class ThreadsStore {
         if let harness { change["harness"] = harness }
         if let model { change["model"] = model ?? NSNull() }
         if let initiated { change["initiated"] = initiated }
-        var request = URLRequest(url: address.appending(path: "api/projects").appending(path: projectId).appending(path: "caw"))
+        var request = URLRequest.hub(address.appending(path: "api/projects").appending(path: projectId).appending(path: "caw"))
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: change)

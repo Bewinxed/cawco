@@ -719,4 +719,12 @@ public enum Words {
         /// Try again while the page loads.
         public static let reloading = "Reloading…"
     }
+
+    public enum Pairing {
+        // packages/core/src/words/pairing.ts `pairingWords`
+        /// A pairing waiting on the person: the code the asking device shows, and how to tell it is theirs.
+        public static func asks(userCode: String) -> String {
+            "Wants to run your fleet with code \(userCode). Approve only if it's the code on that device."
+        }
+    }
 }
