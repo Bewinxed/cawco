@@ -226,10 +226,10 @@
       style:--tiles="repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))"
     >
       {#each [0, 1, 2, 3, 4] as i (i)}
-        <Skeleton class="h-c-stat-h rounded-md" />
+        <Skeleton class="h-c-stat-h" radius="tile" />
       {/each}
     </div>
-    <Skeleton class="h-48 rounded-lg" />
+    <Skeleton height="chart" radius="card" />
   {:else}
     <!-- literal: 9.5rem -->
     <div
@@ -273,8 +273,9 @@
             </Popover.Trigger>
             <Popover.Content
               align="start"
-              class="w-80 max-w-(--cap-max-w)"
+              class="max-w-(--cap-max-w)"
               style="--cap-max-w: calc(100vw - 2 * var(--space-5))"
+              width="wide"
             >
               <form
                 class="flex flex-col gap-space-3"
@@ -387,7 +388,7 @@
                 >
               {/snippet}
             </Popover.Trigger>
-            <Popover.Content align="start" class="w-72">
+            <Popover.Content align="start">
               <form
                 class="flex flex-col gap-space-3"
                 onsubmit={(event) => {
@@ -466,28 +467,31 @@
         class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
       >
         <Table.Root
-          class="table-fixed border-separate border-spacing-(--none) max-phone:block"
+          class="table-fixed border-separate max-phone:block"
+          spacing="flush"
           style="--none: 0; --col-count: 8rem; --col-usd: 6rem; --col-last: 6rem; --row-cols: 1fr auto auto"
         >
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
             <Table.Header class="max-phone:block">
-              <Table.Row class="border-0 bg-surface-band max-phone:flex">
+              <Table.Row class="max-phone:flex" variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head
-                  class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
-                  scope="col">Caw</Table.Head
+                <Table.Head class="h-c-toolbar-ctl" variant="caps" scope="col"
+                  >Caw</Table.Head
                 >
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-count) px-space-3 type-label tracking-caps text-ink-muted uppercase max-phone:hidden"
+                  class="h-c-toolbar-ctl w-(--col-count) max-phone:hidden"
+                  variant="caps"
                   scope="col">Wakes</Table.Head
                 >
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-usd) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden"
+                  class="h-c-toolbar-ctl w-(--col-usd) text-end max-phone:hidden"
+                  variant="caps"
                   scope="col">Spent</Table.Head
                 >
                 <Table.Head
                   data-col-last
-                  class="h-c-toolbar-ctl w-(--col-last) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden"
+                  class="h-c-toolbar-ctl w-(--col-last) text-end max-phone:hidden"
+                  variant="caps"
                   scope="col">Last</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
@@ -497,10 +501,12 @@
               {#each spend.threads as thread (thread.id)}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                  variant="stacks"
                 >
                   <Table.Cell
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
                   >
                     <a
                       data-slot="name"
@@ -511,19 +517,22 @@
                   </Table.Cell>
                   <Table.Cell
                     data-num
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-count)"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-count)"
                     >{thread.wakes}
                     {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
                   >
                   <Table.Cell
                     data-num
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
                     >{usd(thread.usd)}</Table.Cell
                   >
                   <Table.Cell
                     data-num
                     data-col-last
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-last) text-end max-phone:text-start"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-last) text-end max-phone:text-start"
                     >{formatAgeShort(thread.lastAt, now)}</Table.Cell
                   >
                 </Table.Row>
@@ -531,10 +540,12 @@
               {#if spend.caw.unthreadedMonthUsd > 0}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                  variant="stacks"
                 >
                   <Table.Cell
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
                     ><span
                       data-slot="name"
                       class="type-label block truncate text-ink-row no-underline"
@@ -542,16 +553,19 @@
                     ></Table.Cell
                   >
                   <Table.Cell
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-count)"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-count)"
                   ></Table.Cell>
                   <Table.Cell
                     data-num
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
                     >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
                   ></Table.Cell>
                 </Table.Row>
               {/if}
@@ -559,23 +573,25 @@
           {/if}
           {#if spend.attempts.length > 0}
             <Table.Header class="max-phone:block">
-              <Table.Row class="border-0 bg-surface-band max-phone:flex">
+              <Table.Row class="max-phone:flex" variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head
-                  class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
-                  scope="col">Attempts</Table.Head
+                <Table.Head class="h-c-toolbar-ctl" variant="caps" scope="col"
+                  >Attempts</Table.Head
                 >
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-count) px-space-3 type-label tracking-caps text-ink-muted uppercase max-phone:hidden"
+                  class="h-c-toolbar-ctl w-(--col-count) max-phone:hidden"
+                  variant="caps"
                   scope="col">Tries</Table.Head
                 >
                 <Table.Head
-                  class="h-c-toolbar-ctl w-(--col-usd) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden"
+                  class="h-c-toolbar-ctl w-(--col-usd) text-end max-phone:hidden"
+                  variant="caps"
                   scope="col">Spent</Table.Head
                 >
                 <Table.Head
                   data-col-last
-                  class="h-c-toolbar-ctl w-(--col-last) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden"
+                  class="h-c-toolbar-ctl w-(--col-last) text-end max-phone:hidden"
+                  variant="caps"
                   scope="col">Now</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
@@ -585,10 +601,12 @@
               {#each spend.attempts as attempt (attempt.taskId)}
                 <Table.Row
                   data-project-spend-row
-                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                  class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                  variant="stacks"
                 >
                   <Table.Cell
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
                   >
                     <a
                       data-slot="name"
@@ -605,7 +623,8 @@
                   </Table.Cell>
                   <Table.Cell
                     data-num
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-count)"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-count)"
                     >{attempt.attempts}
                     {attempt.attempts === 1
                       ? "attempt"
@@ -613,12 +632,14 @@
                   >
                   <Table.Cell
                     data-num
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
                     >{usd(attempt.usd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
-                    class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"
+                    variant="ledger-stacks"
+                    class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
                     >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
                   >
                 </Table.Row>
@@ -629,10 +650,12 @@
             {#if spend.others.monthUsd > 0}
               <Table.Row
                 data-project-spend-row
-                class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+                class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+                variant="stacks"
               >
                 <Table.Cell
-                  class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                  variant="ledger-stacks"
+                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
                   ><span
                     data-slot="name"
                     class="type-label block truncate text-ink-row no-underline"
@@ -640,25 +663,30 @@
                   ></Table.Cell
                 >
                 <Table.Cell
-                  class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-count)"
+                  variant="ledger-stacks"
+                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-count)"
                 ></Table.Cell>
                 <Table.Cell
                   data-num
-                  class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
+                  variant="ledger-stacks"
+                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
                   >{usd(spend.others.monthUsd)}</Table.Cell
                 >
                 <Table.Cell
                   data-col-last
-                  class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"
+                  variant="ledger-stacks"
+                  class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
                 ></Table.Cell>
               </Table.Row>
             {/if}
             <Table.Row
               data-project-spend-row
-              class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2"
+              class="relative max-phone:grid max-phone:grid-cols-(--row-cols)"
+              variant="stacks"
             >
               <Table.Cell
-                class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                variant="ledger-stacks"
+                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto max-phone:col-span-full"
                 ><span
                   data-slot="name"
                   class="type-label block truncate text-ink-row no-underline"
@@ -666,16 +694,19 @@
                 ></Table.Cell
               >
               <Table.Cell
-                class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-count)"
+                variant="ledger-stacks"
+                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-count)"
               ></Table.Cell>
               <Table.Cell
                 data-num
-                class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
+                variant="ledger-stacks"
+                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto num w-(--col-usd) text-end max-phone:text-start"
                 >{usd(spend.monthUsd)}</Table.Cell
               >
               <Table.Cell
                 data-col-last
-                class="h-c-btn-h-lg border-b border-b-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"
+                variant="ledger-stacks"
+                class="h-c-btn-h-lg max-phone:block max-phone:h-auto max-phone:w-auto w-(--col-last) text-end max-phone:text-start"
               ></Table.Cell>
             </Table.Row>
           </Table.Body>
@@ -695,11 +726,5 @@
     position: absolute;
     inset: 0;
     content: "";
-  }
-  /* residual: unmapped */
-  @media (max-width: 639px) {
-    [data-slot="ledger"] :global(tr[data-project-spend-row]) {
-      border-block-end: 1px solid var(--border-hairline);
-    }
   }
 </style>

@@ -555,7 +555,7 @@
       data-slot="skeleton-rows"
     >
       {#each [0, 1, 2, 3, 4] as row (row)}
-        <Skeleton class="h-6 w-full" />
+        <Skeleton class="w-full" height="line" />
       {/each}
     </div>
   {:else if empty && !plan}

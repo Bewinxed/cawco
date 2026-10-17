@@ -190,13 +190,16 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-(--bits-popover-anchor-width) gap-0 overflow-hidden p-0 shadow-raised min-h-(--reach)"
+    class="w-(--bits-popover-anchor-width) overflow-hidden min-h-(--reach)"
     customAnchor={anchor}
     data-sessions-flyover
+    frame="raised"
+    gap="none"
     onCloseAutoFocus={keepFocus}
     onOpenAutoFocus={keepFocus}
     onpointerenter={rest}
     onpointerleave={leave}
+    pad="none"
     side="bottom"
     sideOffset={4}
     style={reach > 0 ? `--reach: ${reach}px` : undefined}

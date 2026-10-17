@@ -222,7 +222,7 @@
 
   {#if !read}
     <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
-      <Skeleton class="h-7 w-24" />
+      <Skeleton height="figure" width="name" />
       <Skeleton class="h-icon-md w-3/4" />
       <!-- literal: 15.5rem -->
       <div
@@ -231,7 +231,7 @@
         style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
       >
         {#each [0, 1, 2] as one (one)}
-          <Skeleton class="h-48 w-full" />
+          <Skeleton class="w-full" height="chart" />
         {/each}
       </div>
     </div>
