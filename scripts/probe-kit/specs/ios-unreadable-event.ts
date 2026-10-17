@@ -31,7 +31,7 @@ import { type Kit, ROOT, type Spec } from "../kit";
 import { type Pipe, relay } from "../relay";
 
 const TITLE = "Unreadable event probe";
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** A seq as the Ledger logs it: a Double, `13.000000`. */
 const seq = (n: number): string => `seq ${n.toFixed(6)}`;
 /** What a hole, a replay asked for or a history read again logs: none may follow the stand-ins. */

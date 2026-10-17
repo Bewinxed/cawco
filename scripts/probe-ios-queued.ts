@@ -368,7 +368,7 @@ const tapNode = async (node: Node | undefined) => {
 };
 
 /** A log line's stamp, process and category, up to what it says. */
-const LOG_PREFIX = /^.*\] /;
+const LOG_PREFIX = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** Every line the app logged that this probe reads, with when it heard it. */
 const heard: { at: number; line: string }[] = [];
 let stream: Subprocess | undefined;

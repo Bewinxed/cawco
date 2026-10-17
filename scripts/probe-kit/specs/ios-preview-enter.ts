@@ -71,7 +71,7 @@ const SIM = {
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const TICKET = /ticket=([^&]+)/;
 /** The canvas page an entry sends the web view on to. */
 const CANVAS_NEXT = /next=(\/__cawco\/canvas\/[0-9a-f-]{36}\/)/;

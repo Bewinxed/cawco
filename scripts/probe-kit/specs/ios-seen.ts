@@ -53,7 +53,7 @@ const SLOW = "SLOW";
 /** The session's title: its tab says it. */
 const TITLE = "Seen probe";
 /** A log line's stamp, process and category, up to what it says. */
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** The app's socket: `… after the heartbeat, read <s> seconds after asking`. */
 const READ_AFTER = /after the heartbeat, read ([\d.]+) seconds after asking/;
 /** HubConnection `heartbeatDeadline`: how long it sleeps before reading what it heard. */

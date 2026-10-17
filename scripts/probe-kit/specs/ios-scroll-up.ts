@@ -83,7 +83,7 @@ const MOST_FLINGS = 160;
 const REST_WAIT_MS = 700;
 const HITCH_MS_PER_S = 5;
 const STREAM_CPU = 0.5;
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const MARK = /(seed|stream)-mark-[0-9a-f]{6}/g;
 const PACE = /probe pace (.*)$/;
 const REST = /probe rest \w+: top=(\d) older=(\d) rows=(\d+)/;
