@@ -31,7 +31,7 @@ none (`group-state-open:` in MemoryBody uses state-open, not one of the eight)
 
 ## Not moved: classes whose rules live outside my files
 - `wf-stack wf-row wf-spread wf-btn wf-well wf-fields wf-check wf-mono` (SchemaBuilder, TemplateInput): defined in `workflows/workflows.css` under `.wf`, shared by other files; `shadcn/no-unknown-classes` errors remain (SchemaBuilder 11, TemplateInput 2). Integration.
-- `ln` (OutputBlock.svelte:64): no rule anywhere; `no-unknown-classes` error remains. Left as is.
+- `ln` (OutputBlock.svelte:64): no rule anywhere; the class became `data-slot="output-block-ln"`.
 
 ## Changed value expressions (equal computed)
 - DirectoryPicker `SKELETON_WIDTHS` `w-28/w-40/w-24` → `7rem/10rem/6rem` via `--skeleton-w` (dynamic class names are not lintable).

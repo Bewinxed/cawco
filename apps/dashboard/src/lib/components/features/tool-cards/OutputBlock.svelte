@@ -61,7 +61,7 @@
 >
   {#if lines}
     <pre class="m-0 whitespace-pre"><code
-        >{#each lines as line}<span class="ln"
+        >{#each lines as line}<span data-slot="output-block-ln"
           >{#each line as token}<span
             class="text-(color:--token-ink)"
             style:--token-ink={token.color}
