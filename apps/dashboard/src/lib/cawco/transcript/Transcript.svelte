@@ -3385,18 +3385,34 @@
 <!-- Off-screen, and the only thing on this surface that speaks. Two channels:
      what just arrived (polite, queued behind the reader), and what is blocking
      (assertive, because the run has stopped). -->
-<p aria-atomic="true" aria-live="polite" class="spoken" role="status">
+<p
+  aria-atomic="true"
+  aria-live="polite"
+  class="spoken absolute w-px h-px -m-px p-0 border-0 overflow-hidden whitespace-nowrap"
+  role="status"
+>
   {announcement}
 </p>
-<p aria-atomic="true" aria-live="assertive" class="spoken">
+<p
+  aria-atomic="true"
+  aria-live="assertive"
+  class="spoken absolute w-px h-px -m-px p-0 border-0 overflow-hidden whitespace-nowrap"
+>
   {blockedNote || trayAlert}
 </p>
 
+<!-- Asymmetric content padding is the DESIGN.md ledger signature: inline
+     start --space-7 (25), inline end --space-6 (21). The foot's height
+     (`.foot`), which what floats over it stands on, is --foot-room. What
+     scrolls here is its own stacking context, so nothing in it (a row's
+     raised mark, a card's z-index) rises over the pane's fades (FootFade,
+     HeadFade): every child but the dock is isolated. -->
 <div
   data-tx-columns
   data-slot="tr"
   aria-label="Session transcript"
-  class="tr tx-columns"
+  style:--foot-room="max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"
+  class="flex-auto overflow-y-auto py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   {onscroll}
   role="log"
   bind:this={scroller}
@@ -3406,12 +3422,16 @@
        as its retry comes in is not empty for the frame between the two, and
        the empty state shown there pushed the fold 53px down. -->
   {#if (session.loading || session.cursor !== null) && renderedRows.length === 0}
-    <p data-slot="transcript-empty" class="empty">Loading transcript…</p>
+    <p
+      data-slot="transcript-empty"
+      class="isolate text-size-meta font-normal text-ink-muted py-space-5"
+      >Loading transcript…</p
+    >
   {:else if renderedRows.length === 0 && !bare}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
-    <div in:crossIn>
+    <div class="isolate" in:crossIn>
       <EmptyState
         icon={IconChat}
         line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
@@ -3424,9 +3444,14 @@
        transcript's loading row, or — that page could not be read — why, and
        the way to ask for it again. The reader sees it only at the very top
        of the rows held; a page is asked for a viewport before that. -->
-  <div class="older" {@attach keepPlace}>
+  <!-- The failed line's button stands off the first row by the line's own
+       block padding. -->
+  <div class="isolate has-data-retry:pb-space-5" {@attach keepPlace}>
     {#if renderedRows.length > 0 && session.olderFault}
-      <p data-slot="transcript-empty" class="empty">
+      <p
+        data-slot="transcript-empty"
+        class="text-size-meta font-normal text-ink-muted py-space-5"
+      >
         {#if session.olderFault.reason !== "offline"}
           The turns before these couldn't be read:
         {:else if reconnectingNow(session.olderFault)}
@@ -3437,6 +3462,7 @@
         {faultMessage(session.olderFault)}
       </p>
       <Button
+        data-retry
         onclick={() => readOlderPage(session.instanceId)}
         size="sm"
         variant="outline"
@@ -3444,7 +3470,11 @@
         Try again
       </Button>
     {:else if renderedRows.length > 0 && session.cursor !== null}
-      <p data-slot="transcript-empty" class="empty">Loading transcript…</p>
+      <p
+        data-slot="transcript-empty"
+        class="text-size-meta font-normal text-ink-muted py-space-5"
+        >Loading transcript…</p
+      >
     {/if}
   </div>
 
@@ -3452,10 +3482,10 @@
   <div
     data-transcript-shown={shown || undefined}
     data-slot="listing"
-    class="listing"
+    data-shown={shown || undefined}
+    class="isolate pt-(--spare-top) not-data-shown:invisible"
     bind:this={listing}
-    style:padding-top={spare ? `${spare}px` : undefined}
-    class:shown
+    style:--spare-top={spare ? `${spare}px` : undefined}
     {@attach wholeHeight}
   >
     <Virtualizer
@@ -3536,14 +3566,20 @@
                 "pending"
               )}
               {@const LiveIcon = d.icon}
+              <!-- The in-flight tool is a rail row on the same columns as the
+                   calls it becomes (app.css `.rail-row`, `.rail-line`): one
+                   line, 26px tall. No colour on the glyph: the tool family's
+                   `text-tool-*` tint governs it, the generic case inheriting
+                   the row's strong ink. -->
+              <!-- literal: 26px -->
               <div
                 data-transcript-rail-row
                 data-slot="livetool"
-                class="livetool rail-row rail-line"
+                style:--livetool-h="26px"
+                class="min-h-(--livetool-h) text-size-label font-medium text-ink-strong rail-row rail-line"
               >
-                <span
-                  data-slot="rail-cell"
-                  class="ic rail-cell breathe {d.color}"><LiveIcon /></span
+                <span data-slot="rail-cell" class="rail-cell {d.color}"
+                  ><LiveIcon /></span
                 >
                 <!-- The same anatomy the settled ToolGroup row has: the
                      descriptor's verb, then the mono argument, the verb
@@ -3551,9 +3587,15 @@
                      `glance.name` here and `d.label` once it settled changed
                      the call's vocabulary the instant it completed. -->
                 {#if d.label}
-                  <span class="tk">{d.label}</span>
+                  <span
+                    class="font-medium text-ink-strong flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{d.label}</span
+                  >
                 {/if}
-                <span class="arg">{row.glance.glance}</span>
+                <span
+                  class="font-mono text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0"
+                  >{row.glance.glance}</span
+                >
               </div>
             {/if}
           {/snippet}
@@ -3570,7 +3612,7 @@
        last row, clear above it. -->
   <div
     aria-hidden="true"
-    class="parked-room"
+    class="isolate h-(--parked-room) pointer-events-none"
     style:--parked-room="{parkedHeight}px"
     bind:this={parkedRoom}
   ></div>
@@ -3579,19 +3621,40 @@
        tail keeps the last row clear above it. -->
   <div
     aria-hidden="true"
-    class="shelf-room"
+    class="isolate h-(--shelf-room) pointer-events-none"
     style:--shelf-room="{shelfHeight}px"
     bind:this={shelfRoom}
   ></div>
-  <div data-slot="foot" aria-hidden="true" class="foot" bind:this={foot}></div>
+  <!-- The foot clears the composer's standing box: the pill at one line, the
+       delegate tray's row and the suggestion row on it. `--composer-clearance`
+       is that box plus its offsets, set by the pane from the composer's own
+       tokens; the old fixed reserve is the floor. A box in the flow rather
+       than the scroller's padding: virtua takes the scroller's content box
+       for its view. -->
+  <div
+    data-slot="foot"
+    aria-hidden="true"
+    class="isolate h-(--foot-room) pointer-events-none"
+    bind:this={foot}
+  ></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
-       until it has appended, and — scrolled away from the tail — the way back. -->
+       until it has appended, and — scrolled away from the tail — the way back.
+       Where it rests is the pane's to say (`--latest-inset`): a thread keeps
+       the room Caw's rise takes above its composer; elsewhere it stands at
+       the top of the composer's clearance, and over what rises past it
+       (`--parked-room`): never under an ask. A sticky box keeps off a
+       scroller's padding, so it is measured from the scroller's own foot,
+       under the foot room. Over the pane's foot fade (FootFade), which only
+       the rows pass under. A column hung up from the foot: what overflows
+       its zero height goes up, the pills at the bottom and the
+       not-caught-up line over them. -->
   <div
     data-slot="dock"
-    class="dock"
+    class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight + shelfHeight}px"
+    style:--dock-bottom="calc(var(--foot-room) + var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))))"
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}
@@ -3605,8 +3668,9 @@
          landed instead, until they move on. Heard once through the polite
          region above (`arrived`), so this line is no live region itself. -->
     {#if unfound}
+      <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
       <p
-        class="unfound"
+        class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
         data-open-at={unfound}
         in:rise={"--dur-panel"}
         out:rise={"--dur-exit"}
@@ -3615,7 +3679,7 @@
       </p>
     {/if}
     {#if catching || showLatest}
-      <div class="pills">
+      <div class="pills flex justify-center gap-space-2">
         {#if catching}
           <CatchUp />
         {/if}
@@ -3628,10 +3692,9 @@
 </div>
 
 <style>
-  .listing:not(.shown) {
-    visibility: hidden;
-  }
-  /* A row the list has drawn stays drawn while virtua re-reads its size at
+  /* residual: foreign-dom: virtua's items and container, which this file
+     does not render.
+     A row the list has drawn stays drawn while virtua re-reads its size at
      a new index (Row's `drawn`): virtua hides such an item for the moment
      it takes to measure it, and the visibility it inherits restyled the
      whole row twice. So the drawn row's ITEM takes no hiding of virtua's
@@ -3647,7 +3710,7 @@
      anywhere (each word of a streamed reply, each row virtua mounted)
      restyled its parent, and a tab switch restyled the transcripts whole
      ("Affected by :has()", 1,406 of them across five switches). */
-  .listing :global([data-item]:has(> [data-row][data-drawn])) {
+  [data-slot="listing"] :global([data-item]:has(> [data-row][data-drawn])) {
     visibility: inherit !important;
   }
   /* virtua writes `pointer-events: none` on its container while it scrolls
@@ -3659,176 +3722,38 @@
      alone. Never `auto`: a re-declared `auto` let a press through the lock a
      modal layer (an open menu, a dialog) sets on the body, so a click on a
      row acted on it instead of only shutting the layer. */
-  .listing > :global(:first-child) {
+  [data-slot="listing"] > :global(:first-child) {
     pointer-events: inherit !important;
   }
-  .tr {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    /* The view is kept in place by this component alone (`keepPlace`, and
-       virtua inside its list). A browser that anchors scrolling moved it a
-       second time for the strip before the list, by the strip's height; one
-       that does not (WebKit) never did. */
+  /* The catch-up and the way back to the tail: buttons the dock's children
+     (Behind, CatchUp, Latest) draw take the pointer the dock does not. */
+  [data-slot="dock"] :global(button) {
+    pointer-events: auto;
+  }
+  /* The live tool's glyph is the descriptor's own component, which takes no
+     class: it stands at the glyph column's width. */
+  [data-slot="livetool"] [data-slot="rail-cell"] :global(svg) {
+    inline-size: var(--w-glyph);
+    block-size: var(--w-glyph);
+  }
+  /* residual: unmapped: no utility for these. The view is kept in place by
+     this component alone (`keepPlace`, and virtua inside its list): a
+     browser that anchors scrolling moved it a second time for the strip
+     before the list. Its scroll drives the pane's head blur (HeadFade),
+     which the pane brings in scope with `timeline-scope`. */
+  [data-slot="tr"] {
     overflow-anchor: none;
-    /* asymmetric content padding is the DESIGN.md ledger signature:
-       inline start --space-7 (25), inline end --space-6 (21). */
-    padding-block-start: 0;
-    padding-inline: var(--space-7) var(--space-6);
-    padding-block-end: 0;
-    /* The foot's height (`.foot`), which what floats over it stands on. */
-    --foot-room: max(calc(var(--space-8) * 3), var(--composer-clearance, 0px));
-    min-block-size: 0;
-    position: relative;
-    /* Its scroll drives the pane's head blur (HeadFade), which the pane
-       brings in scope with `timeline-scope`. */
     scroll-timeline: --transcript-head block;
-
-    @media (width <= 900px) {
-      padding-inline: var(--space-5);
-    }
   }
-  /* What scrolls here is its own stacking context, so nothing in it (a
-     row's raised mark, a card's z-index) rises over the pane's fades
-     (FootFade, HeadFade). Only the dock stands over them. */
-  .tr > :not(.dock) {
-    isolation: isolate;
-  }
-  .empty {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    padding-block: var(--space-5);
-  }
-
-  /* The failed line's button stands off the first row by the line's own
-     block padding. */
-  .older:has(> :global(button)) {
-    padding-block-end: var(--space-5);
-  }
-
-  /* The live region is read, never seen: off-screen rather than
-     `display: none`, which assistive tech skips entirely. */
+  /* The live region is read, never seen: clipped to nothing. */
   .spoken {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
     clip-path: inset(50%);
-    white-space: nowrap;
   }
-
-  /* The catch-up and the way back to the tail. A zero-height strip stuck to
-     the foot of the scrollport, above the composer column; what shows hangs
-     up out of it, so its coming and going never changes the scroll height. */
-  /* Where it rests is the pane's to say (`--latest-inset`): a thread keeps
-     the room Caw's rise takes above its composer, empty but for him at its
-     leading corner, and the pill stands there, over nothing a reader is
-     reading. Elsewhere it stands at the top of the composer's clearance,
-     and over what rises past it (`--parked-room`): never under an ask.
-     A sticky child's inset is measured inside the scroller's padding box,
-     so an inset is net of the foot's padding (the clearance). */
-  .parked-room {
-    block-size: var(--parked-room, 0px);
-    pointer-events: none;
-  }
-  .shelf-room {
-    block-size: var(--shelf-room, 0px);
-    pointer-events: none;
-  }
-  /* The foot clears the composer's standing box: the pill at one line, the
-     delegate tray's row and the suggestion row on it. Parked prompt cards
-     and a grown draft stand over the transcript's foot and move nothing.
-     `--composer-clearance` is that box plus its offsets, set by the pane in
-     CSS from the composer's own tokens (app.css `--c-composer-*`), so it is
-     the same whether the pane is on screen or not; the old fixed reserve is
-     the floor. A box in the flow rather than the scroller's padding: virtua
-     takes the scroller's content box for its view, and rows the reader sees
-     around the composer are in that band. */
-  .foot {
-    block-size: var(--foot-room);
-    pointer-events: none;
-  }
-  .dock {
-    position: sticky;
-    /* Over the pane's foot fade (FootFade), which only the rows pass under. */
-    z-index: 2;
-    /* Measured from the scroller's own foot, under the foot room: a sticky
-       box keeps off a scroller's padding, and the room is a box in the flow. */
-    inset-block-end: calc(
-      var(--foot-room) +
-        var(
-          --latest-inset,
-          calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))
-        )
-    );
-    block-size: 0;
-    /* A column hung up from the foot: what overflows its zero height goes
-       up, the pills at the bottom and the not-caught-up line over them. */
-    display: flex;
-    flex-direction: column;
+  /* `end`, which the theme's justify-end / items-end write as flex-end. */
+  [data-slot="dock"] {
     justify-content: end;
-    align-items: center;
-    gap: var(--space-2);
-    pointer-events: none;
-
-    & :global(button) {
-      pointer-events: auto;
-    }
-  }
-  /* The dock's raised line, as the not-caught-up line floats (Behind). */
-  .unfound {
-    max-inline-size: 100%;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    text-align: center;
-    text-wrap: balance;
   }
   .pills {
-    display: flex;
-    justify-content: center;
     align-items: end;
-    gap: var(--space-2);
-  }
-
-  /* The in-flight tool is a rail row on the same columns as the calls it
-     becomes (app.css `.rail-row`, `.rail-line`): one line, 26px tall. */
-  .livetool {
-    min-block-size: 26px;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-
-    /* No `color` here: the tool family's `text-tool-*` tint governs the
-       glyph; the generic case inherits --ink-strong from .livetool. */
-    & .ic :global(svg) {
-      inline-size: var(--w-glyph);
-      block-size: var(--w-glyph);
-    }
-    & .tk {
-      font-weight: var(--weight-strong);
-      color: var(--ink-strong);
-      flex: 0 1 auto;
-      min-inline-size: 0;
-      overflow: clip;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    & .arg {
-      font-family: var(--font-mono);
-      color: var(--ink-muted);
-      overflow: clip;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-inline-size: 0;
-    }
   }
 </style>
