@@ -872,7 +872,7 @@
       {#if kids.length > 0}
         <ul
           class="kit-nest m-0 list-none p-0"
-          {@attach nestFrom('[data-slot="tree-mark"]')}
+          {@attach nestFrom("[data-tree-mark]")}
         >
           {@render branch(row.s.id)}
         </ul>

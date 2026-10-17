@@ -178,14 +178,17 @@
   /* residual: foreign-dom — TaskCard's root and head take no class. A dropped
      card stands where the hand put it, quieter, saying it moves, until the hub
      answers; a card that can be picked keeps its head's end clear for the tick;
-     a picked card takes the selected wash. */
+     a picked card takes the selected wash. The card and its head are named by
+     attributes of their own: under a state, Chrome keys an attribute selector
+     to the attribute's name alone, and `[data-slot="head"]` restyled every
+     `data-slot` in the column. */
   li[data-moving] > :global(:first-child) {
     opacity: 0.6;
   }
-  li[data-pickable] > :global([data-slot="task-card"] [data-slot="head"]) {
+  li[data-pickable] > :global([data-task-card] [data-task-head]) {
     padding-inline-end: calc(var(--space-4) + var(--space-2));
   }
-  li[data-picked] > :global([data-slot="task-card"]) {
+  li[data-picked] > :global([data-task-card]) {
     background: var(--selected-bg);
   }
   li > :global([data-slot="row-fault"]) {

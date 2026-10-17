@@ -164,7 +164,7 @@
          border-well: the recess and hairline by day, deeper with a clear
          edge at night). -->
     <div
-      data-slot="side-well"
+      data-side-well
       class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
       bind:this={well}
     >

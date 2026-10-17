@@ -197,10 +197,73 @@ main's tab-return fix is carried byte for byte (Transcript.svelte's script and w
 
 The mechanism: M's rule is `.ff-tab:has(.hit:active…) .fold .sheet`, the converted one `[data-slot="ff-tab"]:has([data-slot="hit"]:active…) [data-slot="fold"] [data-slot="sheet"]`. Blink's invalidation sets keep an attribute's name, not its value, so a state change on the anchor invalidates every descendant with any `data-slot` (in the kit, nearly every element), where M's class features invalidate only `.fold`/`.sheet`. It follows from the cutover's own invariant (a hook is `data-slot`) wherever a hook sits in descendant position under a state that changes. Fixing it is choosing a hook form for those places (an attribute of its own name, as `data-session-tabs` and `data-rail-item` already are), which is phase 2's step 9 to decide and measure; it goes to the orchestrator with these numbers.
 
-### Gates on the merged tree
+### Gates on the merged tree (step 2)
 
 Before the carries (the merge as it stood): `bun run lint` stopped at states-lint (`3 switch(es) leave a case unhandled`: client.svelte.ts `taken_send`, upstream-posts.ts and upstream-post.ts `mcp`), then svelte-check `621 files, 1 errors, 0 warnings` (the switch's stale `user_message`). After:
 - `bun run lint`: exit 0. `svelte-unused-css: 610 file(s), no style rule pruned`; `spacing-ratchet: 414 numeric spacing utilities (baseline 518)`; `tokens: the token source conforms and every output is byte for byte the committed file (242 files)`; `variants: 466 named variants, byte for byte the committed file`; `Checked 2110 files in 3s. No fixes applied.`; eslint clean; `134 files with a <style> of 610; declarations by kind: keyframes 134, foreign-dom 929, pseudo 229, svg-paint 44, unmapped 0; 0 violations`; `style greps: no transition-all, no filter in a transition list, no has-[.class]`; `token contrast: all 90 pairs DESIGN.md names hold`; `switch exhaustiveness: every switch over a union or enum is whole (1420 files)`.
 - `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings` (main's captions fix in); `packages/hub openapi:check · … · ok`; `typecheck: 24 checks passed`.
 - vite build: `✔ done`.
 - `git grep -l '<style' -- 'apps/dashboard/src/**/*.svelte' | wc -l`: 134.
+
+## Step 9: no rule restyles more than M's for the same state change
+
+The orchestrator's convention: a hook stays an attribute, but one in descendant position under a changing state gets an attribute of its own name. Blink keeps an attribute selector in an invalidation set by its name alone, and a subject with no feature (a universal) is the whole subtree, so a state coming or going restyled every `data-slot` (in the kit, nearly every element) or every element under it, where M's class named one.
+
+### What restyled more, read off the builds
+
+`.cutover/invalidation-sweep.ts` reads a build's stylesheets as Blink's rule_invalidation_data_visitor derives its sets (one feature per compound, id over class over attribute over tag, `:is()`/`:where()` only where a compound has none) and lists every changing state left of a subject whose set gains `data-slot` or the whole subtree:
+
+| build | rules restyling every `data-slot` under a state | rules restyling a whole subtree |
+|---|---|---|
+| M (a7e27322c) | 0 | 87 (29 states) |
+| this tree before step 9 (e79fc7fb9) | 43 (30 states) | 543 (125 states) |
+| after the hooks | 7 (5 states) | 546 (126 states) |
+| after the hooks and the group selectors | 7 (5 states) | 45 (20 states) |
+| final (DelegateTail's key, the side well) | 7 (5 states) | 44 (19 states) |
+
+The 7 left read states written once as literals and never toggled (each attribute's writers read): `[data-rail-sheet]` (Shell.svelte:1001), `[data-preview-sheet]` (SideSheet.svelte:345), `[data-file-in-place]` (ThreadPane.svelte:1059), `[data-account-chip]` (AccountSwitch, AccountChip), `[data-work-tabs]` ×3 (WorkTabs.svelte:785). The final whole-subtree states M has none on are states M wrote as a class on the same elements: `[data-ready]` (M's `class:ready` beside the same `data-ready` on PreviewPane's frame and cover and EffortPips' track: `.cover.ready *`, `.track:not(.ready) *`), `[data-delegate-tail-kind]` (M's `.stream .text *`), `[data-session-details-popover]` (a literal, PaneTabs.svelte:1854; M's `.kit-pop.session-details-popover > *`). A further sweep with classes counted as states (the converted tree still toggles some), diffed against M's build, left only rules keyed on literal classes (`.ff-tabs-list`, `.folder-file`, `.wf`, `.ns-chip-btn`, `.kit-pop`, a utility's own class) or a per-mount prop (TabsList's `scrollable`).
+
+### Hooks of their own name
+
+Each hook below sat in descendant position under a changing state. The markup and every selector and script that read it now use the new attribute; a kit part keeps its `data-slot` beside it (ff-tab, the step icon), and so do the hit and the editor, whose `data-hit`/`data-editor` already stood beside it. Rules, as they stand:
+- TabItem.svelte:451 `[data-hit]::before` (under the folder tab's choice), :479/:489/:497 `[data-slot="fold"] [data-ff-sheet]` (rest, ghosted, pressed); the `<use>` is `data-ff-sheet`, the tab root carries `data-ff-tab`;
+- PaneTabs.svelte:2231 `[data-slot="tab"][data-needs] [data-ff-tab]`;
+- Composer.svelte:3736/:3741/:3746 `[data-atts]` (drawing, asking), :3769–:3803 `[data-editor]` and `[data-editor] [data-mention-chip]` (hint, flying, asking, recalling, hint-back), :3829 `[data-slot="ctrls"][inert] [data-att-btn]`, :3481 the field's thirteen `[&>[data-editor]…]` utilities; AttachmentChips' root `data-atts`, AttachButton's button `data-att-btn`;
+- MentionField.svelte:793/:823/:827/:831 `[data-mention-chip]` (the chip's script writes it);
+- DelegateTray.svelte:1804/:1805 `[data-fly] [data-chip-words]`, `[data-fly] [data-chip-slot]`, and its ResizeObserver's query (:462);
+- AccountSetup.svelte:972/:980 `[data-cur] [data-step-dot]::after`;
+- PaneDeck.svelte:156/:167/:172 `[data-lifted] [data-pane-lift]::before`;
+- MoveWait.svelte:663–:675 `[data-slot="row"][data-phase=…] [data-thinking-step-icon]` (five phases);
+- MessageRow.svelte:959/:964 `[data-slot="turn"][data-ghost|data-you] > [data-turn-who]` (Who's line);
+- TaskColumn.svelte:188/:191 `li[data-pickable] > [data-task-card] [data-task-head]`, `li[data-picked] > [data-task-card]`; ThreadPane.svelte:1159;
+- WorkTabs.svelte:1102/:1103 `[data-leaving] [data-tree-node]::before/::after` (`data-leaving` toggles on LiveRow and MachinesEmpty; the tree's items in WorkTabs and SessionTree);
+- CawMark.svelte:117/:121 `[data-slot="mark"](.playing) > [data-caw-face]`; NeedsCaw.svelte:693 `data-needs-caw-covered:[&>[data-caw-face]]:invisible`;
+- app.css:1074/:1081/:1088/:1099 `[data-tree-mark]`, `[data-tree-mark-deck]`, `[data-tree-mark-echo-box]` (the branch's scope, draw and hold); the marks' readers in AskItems, OlderRows, Sidebar, StopTray, SessionTree, WorkTabs, motion/branch and build-variants' `mark-pressed`/`mark-beating`;
+- DelegateTail.svelte:436 reads the row's own `data-delegate-tail-kind="stream"` (M's `.stream`): its `*` subject made every `data-kind` change on the dashboard (WhereItGoes' stay/gone, TaskColumn's kind…) restyle a whole subtree;
+- PreviewPane.svelte:1964/:1970/:1975/:1979 `[data-side-well]` (SideSurface.svelte:167's well): `.preview-pane:is(.mode-comment, .mode-draw)` toggles with the mode (`mode-${mode}`, :1622), and the slide's `:not([data-split-sliding] *)` is now `:not(:where([data-split-sliding]) [data-side-well])`, the same elements at the same 0,3,0 (in Chromium: 201 elements restyled → 1 for a split of 200).
+Probe specs moved with them: home-counts (`[data-ff-sheet]`), composer-canvas (`[data-atts]`, `[data-att-btn]`, `[data-side-well]`), comments (`[data-turn-who]`, `[data-side-well]`), project-details (`[data-task-card]`), safari-blurs (`[data-tree-mark]`). No CSS rule in the final build reads a removed value on the renamed elements (the remaining `[data-slot=sheet]`/`[data-slot=dot]` rules are Finder's, SideSheet's, PlanPane's, Who's face dot and TaskCard's own).
+
+### Tailwind's group-* and peer-* as the combinators they stand for
+
+The hooks moved 2a's press from 879 to 889 restyled: the rest was Tailwind's shape. A `group-*` variant compiles to `X:is(:where(.group)[state] *)`, a `peer-*` to `X:is(:where(.peer)[state] ~ *)`; the state is an ancestor's of a universal, so each is a whole subtree (on the press: `Invalidation set invalidates subtree on SPAN.relative (by :has)`, `… on DIV.ff-tabs-list (by :has)`, `… on A.touch-hit (by [aria-selected])`). Tailwind writes it so on purpose and has no setting for another (tailwindlabs/tailwindcss#16214: "It is not currently possible to override these for labelled group/peer variants or for the `group-*` or `peer-*` implementations as a whole"). `apps/dashboard/group-selectors.ts`, run where app.css enters the build (vite.config.ts `groupsByCombinator`, after `proseNotByClass`), rewrites each with postcss-selector-parser, touching nothing else in the sheet: `X:is(A *)` → `A X`, `X:is(P ~ *)` → `P ~ X`, several groups on one compound → `:is(A B, B A, A:is(B)) X` (every way the ancestors can stand, each A's weight and B's), a group over a peer → `A P ~ X`, a group after sibling combinators → before them all. Same elements, same weight (an `:is()` weighs its argument). A group's or peer's `:is()` anywhere else, or a sheet with none, fails the build. In Chromium (`.u` among 200 elements, the state toggled on the group): `X:is(A *)` 202 restyled → `A X` 1; two groups 202 → 1; a peer 200 → 1; a group over a peer 405 → 1. 427 selectors are rewritten in the build. `postcss` and `postcss-selector-parser` are the dashboard's devDependencies now (Lightning CSS was tried first: its `transform` merges rules and reprints the whole sheet even unminified, so dev's CSS would have changed beyond the selectors).
+
+### Proofs
+
+`.cutover/i2-selectors.ts` compares two builds' stylesheets: every rule in order (moved rules aligned, and each checked against every rule it crossed for a shared property), only selectors may differ; each changed selector is written as elements (a witness) in every ordering of its groups with all parts met, then with each part taken back; on a page with only the pairs' rules both sides must match alike and Chromium's own specificity (`CSS.getMatchedStylesForNode`) must agree; on pages with the whole sheets every witness's subject and pseudo-element must compute the same at 1280 and 390 wide. With `--renamed` each side's witness is written from its own selector (the markup was renamed too).
+- The hooks, e79fc7fb9's build → this tree's before the transform (`--renamed`): `rules 6224 in 59 sheets; selectors changed 63; rules that moved 1, past a rule setting a property they set 0; anything else differing 0` (the mover is `[&>[data-slot=block]+[data-slot=block]>h4]:mt-…`: Tailwind orders arbitrary variants by their text, so `[&>[data-caw-face]]` and `[&>[data-editor]]` now come before it; it sets only `margin-top`); `witnesses 241 (63 with every part, 178 with one taken back …); match differs 0; … missed 0; … still matched 0; weighed 63, weight differs or unread 0`; `computed styles read 542 …; differ 0`.
+- The group selectors, before → after the transform: `rules 6224 in 59 sheets; selectors changed 427; rules that moved 0 …; anything else differing 0`; `witnesses 1393 (533 with every part, 860 with one taken back …); match differs 0; … missed 0; … still matched 0; weighed 533, weight differs or unread 0`; `computed styles read 2816 …; differ 0`.
+- DelegateTail's key: `selectors changed 1 …; witnesses 3 …; match differs 0 …; weighed 1, weight differs or unread 0`; `computed styles read 6 …; differ 0`.
+- The side well: `selectors changed 4; … anything else differing 0`; `witnesses 14 (4 with every part, 10 with one taken back …); match differs 0; … missed 0; … still matched 0; weighed 4, weight differs or unread 0`; `computed styles read 28 …; differ 0`.
+- Every hook a probe spec reads, against what the dashboard writes, this tree beside M: 367 read here, 349 at M; the two not written here and not missing at M are a suffix match (`[data-slot$="-content"]`, catalogue.ts:53) and `:is([data-a], [data-slot="a"])`, whose `data-a` Who writes.
+
+### keychain-unlock's joined selectors, and every retargeted one
+
+1a's sweep rewrote `section.unlock ` to `section[data-slot="unlock"]` and ate the space after it four times: `section[data-slot="unlock"]input[type="password"]` (the parent's `SyntaxError`), and three that parse but meant the section itself: `…[role="alert"]` ×2 and `…[id$="-title"]`. All four are descendant again (keychain-unlock.ts:560, :568, :608, :617). Every string literal of `scripts/probe-kit` aligned against M's same file (the TypeScript parser), and each changed selector's combinators counted with postcss-selector-parser: run on HEAD it finds those four (`combinators M {" ":1} now {}`), and on this tree none; the eight it still lists keep their meaning (ios-accounts folds `.a .x, .a .y` into `.a :is(…)`; two-pane-perf's and strip-layout's are CSS text and templates with their spaces). All 43 changed selectors, the six specs the parent named among them, go through `document.querySelectorAll` on a blank page in Chromium: `selectors parsed 43, invalid 0`.
+
+upstream-guard's leg g ("the session is told"): the spec reads the fake model's last request (`seen = request.all`, upstream-guard.ts:193), fed by the hub's `tellSession` (server.ts:2774, no diff against M); the parent ran it at M and it fails the same two ways there, so it is main's, fixed on main.
+
+### Gates (step 9)
+
+- `bun run lint`: exit 0 (`tokens: … byte for byte the committed file (242 files)`; `variants: 467 named variants, byte for byte the committed file`; `Checked 2113 files in 4s. No fixes applied.`; `style greps: no transition-all, no filter in a transition list, no has-[.class]`; `token contrast: all 90 pairs DESIGN.md names hold`).
+- `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings`; root `tsc -p tsconfig.json`: exit 0.
+- vite build: `✔ done`.

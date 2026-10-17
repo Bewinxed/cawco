@@ -951,14 +951,17 @@
   /* residual: foreign-dom: the speaker line (Who) is drawn by turn/Who,
      which takes no class, as a direct child of the turn's section. Sending
      and queued, it stands at reduced presence with the words. Not colour
-     alone: the note text and the missing clock carry the state too. */
+     alone: the note text and the missing clock carry the state too. The
+     line is named by its own attribute (`data-turn-who`): under a state,
+     Chrome keys an attribute selector to the attribute's name alone, and
+     `[data-slot="who"]` restyled every `data-slot` in the turn. */
   /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-  :global([data-slot="turn"][data-ghost] > [data-slot="who"]) {
+  :global([data-slot="turn"][data-ghost] > [data-turn-who]) {
     opacity: var(--ghost-presence);
   }
   @media (prefers-reduced-motion: no-preference) {
     /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-    :global([data-slot="turn"][data-you] > [data-slot="who"]) {
+    :global([data-slot="turn"][data-you] > [data-turn-who]) {
       transition: opacity var(--dur-menu) var(--ease-out);
     }
   }

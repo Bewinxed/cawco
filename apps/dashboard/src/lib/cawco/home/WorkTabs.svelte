@@ -689,7 +689,7 @@
   {@const leave = leaveAnim(line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
-  <li data-slot="tree-node" class="relative" style:--leave={leave}>
+  <li data-tree-node class="relative" style:--leave={leave}>
     <div
       data-slot="tree-line"
       class={["relative", leave && "animate-(--swap-anim)"]}
@@ -701,7 +701,7 @@
       <ul
         data-slot="tree-branch"
         class="kit-nest m-0 flex list-none flex-col gap-(--tree-gap) pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0"
-        {@attach nestFrom('[data-slot="tree-mark"]')}
+        {@attach nestFrom("[data-tree-mark]")}
       >
         {#each kids as kid (kid.key)}
           {@render leavingTree(kid, lines)}
@@ -1095,9 +1095,12 @@
   }
   /* residual: pseudo — a leaving row's nesting line (the list item's
      pseudo-elements, app.css .kit-nest) goes out on the row's own exit
-     (`--leave`, the row's `leaveAnim`). */
-  [data-leaving] :global([data-slot="tree-node"])::before,
-  [data-leaving] :global([data-slot="tree-node"])::after {
+     (`--leave`, the row's `leaveAnim`). The item is named by its own
+     attribute: `data-leaving` changes on live rows, Chrome keys an attribute
+     selector under it to the attribute's name alone, and
+     `[data-slot="tree-node"]` restyled every `data-slot` in a leaving row. */
+  [data-leaving] :global([data-tree-node])::before,
+  [data-leaving] :global([data-tree-node])::after {
     animation: var(--leave, none);
   }
 </style>

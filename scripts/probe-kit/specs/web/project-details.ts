@@ -142,7 +142,7 @@ const segment = (page: Page, words: string) =>
 const markScroller = (page: Page) =>
   page.evaluate(() => {
     const card = document.querySelector(
-      '[data-slot="project-page"] :is([data-slot="task-card"], [data-side-surface-class~="task-card"])'
+      '[data-slot="project-page"] :is([data-task-card], [data-side-surface-class~="task-card"])'
     );
     for (let at = card?.parentElement; at; at = at.parentElement) {
       const flow = getComputedStyle(at).overflowY;
@@ -278,7 +278,7 @@ const leg = async (
     .catch(() => null);
   const card = page
     .locator(
-      '[data-slot="project-page"] :is([data-slot="task-card"], [data-side-surface-class~="task-card"])'
+      '[data-slot="project-page"] :is([data-task-card], [data-side-surface-class~="task-card"])'
     )
     .first();
   const taskId = (await card.getAttribute("data-task")) ?? "\0";

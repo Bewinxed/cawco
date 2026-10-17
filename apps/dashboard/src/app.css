@@ -1062,27 +1062,30 @@
      at rest) keeps the mark's level inside it, and the group, drawn after
      the link, rides over the mark. Scoped to the row that owns the group
      and stopped at the group, so a child's own mark and deck inside it are
-     its own affair. */
+     its own affair. The mark and its pieces are named by attributes of their
+     own: under a state (the scope's, the hold's, the draw's), Chrome keys an
+     attribute selector to the attribute's name alone, and
+     `[data-slot="tree-mark"]` restyled every `data-slot` in the tree. */
   @scope (
     :is(li, [data-nest-host]):has(
       > [data-flip-anchor]:not([data-branch-wait], [data-state="closing"])
     )
   ) to ([data-flip-anchor]) {
-    [data-slot="tree-mark"] [data-slot="tree-mark-deck"] {
+    [data-tree-mark] [data-tree-mark-deck] {
       visibility: hidden;
     }
     /* The tree mark reads its own level from this (its style is the
        component's, which outranks this layer), and that its deck is away:
        its echo then shows where the cards stood. Every parent's mark is
        one (a session's, a project's, the "N older" row's). */
-    [data-slot="tree-mark"] {
+    [data-tree-mark] {
       --mark-level: 3;
       --deck-away: 1;
     }
   }
   /* An icon on its way along its line takes no press: in flight it passes
      over its parent's mark, whose switch is under it. */
-  [data-branch-draw] [data-slot="tree-mark"] {
+  [data-branch-draw] [data-tree-mark] {
     pointer-events: none;
   }
   /* A working row's echo is away while the tree it is in opens (held), and
@@ -1093,7 +1096,7 @@
      sessions, none with the echo away. Only while it opens: taken away as a
      fold began, what is drawn after the echo changed layers in that frame,
      and that frame went out with content missing instead. */
-  [data-branch-hold] [data-slot="tree-mark"] [data-slot="tree-mark-echo-box"] {
+  [data-branch-hold] [data-tree-mark] [data-tree-mark-echo-box] {
     display: none;
   }
   /* A group folding away is out of the pointer's reach from the press that

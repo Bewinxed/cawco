@@ -656,25 +656,23 @@
 
 <style>
   /* residual: foreign-dom */
-  /* The glyph says where each step stands, in its status ink. */
-  [data-slot="row"][data-phase="done"]
-    :global([data-slot="thinking-step-icon"]) {
+  /* The glyph says where each step stands, in its status ink. The glyph is
+     named by its own attribute: as `data-phase` moves, Chrome keys an
+     attribute selector to the attribute's name alone, and
+     `[data-slot="thinking-step-icon"]` restyled every `data-slot` in the row. */
+  [data-slot="row"][data-phase="done"] :global([data-thinking-step-icon]) {
     color: var(--status-done-glyph);
   }
-  [data-slot="row"][data-phase="active"]
-    :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="active"] :global([data-thinking-step-icon]) {
     color: var(--ink-strong);
   }
-  [data-slot="row"][data-phase="failed"]
-    :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="failed"] :global([data-thinking-step-icon]) {
     color: var(--status-fail-glyph);
   }
-  [data-slot="row"][data-phase="asking"]
-    :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="asking"] :global([data-thinking-step-icon]) {
     color: var(--status-attn-glyph);
   }
-  [data-slot="row"][data-phase="stopped"]
-    :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="stopped"] :global([data-thinking-step-icon]) {
     color: var(--ink-muted);
   }
   /* The step's label wraps, never truncates. */

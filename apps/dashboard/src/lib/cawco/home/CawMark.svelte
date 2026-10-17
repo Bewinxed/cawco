@@ -110,12 +110,15 @@
 </span>
 
 <style>
-  /* residual: foreign-dom */
-  [data-slot="mark"] > :global([data-slot="caw-face"]) {
+  /* residual: foreign-dom — the face is named by its own attribute: under
+     `.playing`, Chrome keys an attribute selector to the attribute's name
+     alone, and `[data-slot="caw-face"]` restyled every `data-slot` in the
+     mark. */
+  [data-slot="mark"] > :global([data-caw-face]) {
     display: block;
   }
   /* His face is drawn and ready under the clip, unseen until it lands. */
-  [data-slot="mark"].playing > :global([data-slot="caw-face"]) {
+  [data-slot="mark"].playing > :global([data-caw-face]) {
     visibility: hidden;
   }
 </style>

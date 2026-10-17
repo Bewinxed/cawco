@@ -284,6 +284,7 @@
 <span
   data-tab-item-selected={selected || undefined}
   data-slot="ff-tab"
+  data-ff-tab
   class={cn(
     "relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
     "[&:not(:has([data-slot=hit]:last-child))]:pe-(--end-pad)",
@@ -339,7 +340,7 @@
           {/each}
         </linearGradient>
       </defs>
-      <use data-slot="sheet" href="#{uid}-outline" />
+      <use data-ff-sheet href="#{uid}-outline" />
       {#if !hung}
         <g data-slot="rim">
           <use
@@ -447,7 +448,7 @@
   }
   :global([data-variant="folder"])
     [data-slot="ff-tab"][data-tab-item-selected]
-    [data-slot="hit"]::before {
+    [data-hit]::before {
     inset-inline: calc(-1 * var(--flare));
     clip-path: shape(
       from 0 100%,
@@ -470,8 +471,12 @@
      overlapping tabs). The stroke is twice the rim's width, clipped to the
      shape: the half inside it, at its own width even where a kept shape is
      stretched to a box that has since moved (its fonts still loading),
-     until it is measured again. */
-  [data-slot="fold"] [data-slot="sheet"] {
+     until it is measured again. The sheet and the hit are named by their own
+     attributes (`data-ff-sheet`, `data-hit`): under a state that changes (the
+     choice, the ghost, a press), Chrome invalidates the elements a selector's
+     subject names, and it keys an attribute selector to the attribute's name
+     alone, so `[data-slot="sheet"]` restyled every `data-slot` in the tab. */
+  [data-slot="fold"] [data-ff-sheet] {
     fill: color-mix(
       in oklab,
       var(--sheet) calc(var(--pick) * 100%),
@@ -481,7 +486,7 @@
   @media (hover: hover) {
     [data-slot="ff-tab"]:global([data-ghosted]):not([data-tab-item-selected])
       [data-slot="fold"]
-      [data-slot="sheet"] {
+      [data-ff-sheet] {
       fill: var(--tab-hover, var(--surface-hover));
     }
   }
@@ -489,7 +494,7 @@
       [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
     )
     [data-slot="fold"]
-    [data-slot="sheet"] {
+    [data-ff-sheet] {
     fill: var(--press-fill);
   }
   [data-slot="fold"] [data-slot="rim"] {

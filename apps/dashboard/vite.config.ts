@@ -18,6 +18,7 @@ import {
   type PreviewServer,
   type ViteDevServer,
 } from "vite";
+import { groupsAsCombinators } from "./group-selectors.ts";
 import { publicOrigin } from "./public-origin.js";
 
 /**
@@ -299,6 +300,28 @@ export const proseNotByClass = (): Plugin => ({
   },
 });
 
+/**
+ * Tailwind's `group-*` and `peer-*` rules, each `:is(A *)` written as the
+ * combinator it stands for (group-selectors.ts says why), where app.css
+ * enters the build with Tailwind's rules in it. A sheet with none, or one in
+ * a place no combinator can take, fails the build here.
+ */
+export const groupsByCombinator = (): Plugin => ({
+  name: "cawco-groups-by-combinator",
+  transform(code, id) {
+    if (!APP_CSS.test(id)) {
+      return null;
+    }
+    const { css, rewritten } = groupsAsCombinators(code, id);
+    if (rewritten === 0) {
+      throw new Error(
+        `no group-* or peer-* :is() was found in ${id}: re-read how Tailwind writes them and update group-selectors.ts`
+      );
+    }
+    return { code: css, map: null };
+  },
+});
+
 /** The CSS floor, for the minifier (`build.cssTarget` below says why). */
 export const CSS_TARGET = [
   "chrome131",
@@ -321,6 +344,7 @@ export default defineConfig(({ command }) => {
       runningVersion(),
       tailwindcss(),
       proseNotByClass(),
+      groupsByCombinator(),
       sveltekit({
         preprocess: vitePreprocess(),
         compilerOptions: { experimental: { async: true } },

@@ -49,7 +49,7 @@
        its clip, nothing moves. -->
   <!-- literal: 180px, -8px -->
   <div
-    data-slot="atts"
+    data-atts
     style:--hit-gap-x="var(--space-2)"
     style:--hit-gap-y="var(--space-2)"
     style:--atts-max-h="180px"

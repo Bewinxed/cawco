@@ -557,7 +557,7 @@ const spec: Spec = {
       );
 
       const field = page.locator(
-        'section[data-slot="unlock"]input[type="password"]'
+        'section[data-slot="unlock"] input[type="password"]'
       );
       const submit = page
         .locator('section[data-slot="unlock"]')
@@ -565,7 +565,7 @@ const spec: Spec = {
       await field.fill(randomUUID());
       await submit.click();
       await page
-        .locator('section[data-slot="unlock"][role="alert"]')
+        .locator('section[data-slot="unlock"] [role="alert"]')
         .waitFor({ timeout: 60_000 });
       await settle(page);
       const refused = await stepState(page, MACHINE);
@@ -605,7 +605,7 @@ const spec: Spec = {
         (finals) =>
           Array.from(
             document.querySelectorAll(
-              'section[data-slot="unlock"][id$="-title"]'
+              'section[data-slot="unlock"] [id$="-title"]'
             )
           ).some((title) =>
             finals.includes(
@@ -614,7 +614,7 @@ const spec: Spec = {
           ) ||
           Array.from(
             document.querySelectorAll(
-              'section[data-slot="unlock"][role="alert"]'
+              'section[data-slot="unlock"] [role="alert"]'
             )
           ).some((alert) => alert.closest("[inert]") === null),
         answers,

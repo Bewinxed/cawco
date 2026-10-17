@@ -450,7 +450,7 @@
               />
             {:else}
               <span
-                data-slot="dot"
+                data-step-dot
                 aria-hidden="true"
                 class="grid size-icon-md flex-none place-items-center"
                 data-box
@@ -966,8 +966,10 @@
 {/snippet}
 
 <style>
-  /* residual: pseudo */
-  [data-slot="dot"]::after {
+  /* residual: pseudo — the step's dot, by its own attribute: under
+     `data-cur`, Chrome keys an attribute selector to the attribute's name
+     alone, and `[data-slot="dot"]` restyled every `data-slot` in the step. */
+  [data-step-dot]::after {
     content: "";
     width: var(--core);
     height: var(--core);
@@ -975,7 +977,7 @@
     background: var(--neutral-8);
     transition: background-color var(--dur-fade) var(--ease-out);
   }
-  [data-cur] [data-slot="dot"]::after {
+  [data-cur] [data-step-dot]::after {
     background: var(--selected-icon);
   }
 </style>

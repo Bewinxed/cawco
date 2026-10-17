@@ -77,6 +77,8 @@
     "eslint": "^9.39.5",
     "jsrepo": "^3.8.1",
     "paneforge": "^1.0.2",
+    "postcss": "^8.5.30",
+    "postcss-selector-parser": "^7.1.6",
     "shadcn-svelte": "^1.7.0",
     "style-dictionary": "^5.5.5",
     "svelte": "5.57.1",

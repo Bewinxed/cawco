@@ -162,13 +162,13 @@
   let railEl = $state<HTMLElement>();
 
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: '[data-slot="tree-mark"]' };
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
   /**
    * What stands in a row's lead slot under a project: a tree mark (a
    * session's, the "N older" row's), or the glyph of a row that is neither
    * ("No sessions"). The rail's arm ends there.
    */
-  const LEAD = '[data-slot="tree-mark"], [data-slot="sidebar-row-lead"]';
+  const LEAD = '[data-tree-mark], [data-slot="sidebar-row-lead"]';
   /** A project's rows: each hangs off the project's own mark. */
   const LEAD_TREE: BranchOptions = { glyph: LEAD };
 
@@ -745,7 +745,7 @@
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom('[data-slot="tree-mark"]')}
+        {@attach nestFrom("[data-tree-mark]")}
       >
         {#each node.recent as child (child.row.id)}
           {@render subRow(child, list)}
@@ -1080,7 +1080,7 @@
                     data-slot="sidebar-menu-sub"
                     in:branch={LEAD_TREE}
                     out:branch={LEAD_TREE}
-                    {@attach nestFrom('[data-slot="tree-mark"]', LEAD)}
+                    {@attach nestFrom("[data-tree-mark]", LEAD)}
                   >
                     {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
                       {@render subRow(node, "projects")}

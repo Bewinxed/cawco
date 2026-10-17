@@ -47,7 +47,7 @@
   } = $props();
 
   /** How a parent's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: '[data-slot="tree-mark"]' };
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
 
   const shape = $derived(view.shapeOf(row.id));
   const motion = $derived(motionOf?.(row.id));
@@ -57,7 +57,7 @@
   );
 </script>
 
-<li data-slot="tree-node" class="relative" data-flip={flip ? "box" : undefined}>
+<li data-tree-node class="relative" data-flip={flip ? "box" : undefined}>
   <div
     data-slot="tree-line"
     class={["relative", motion && "animate-(--swap-anim)"]}
@@ -96,7 +96,7 @@
       data-flip-anchor
       in:branch={TREE}
       out:branch={TREE}
-      {@attach nestFrom('[data-slot="tree-mark"]')}
+      {@attach nestFrom("[data-tree-mark]")}
     >
       {#each kids as kid (kid.id)}
         <Self {current} {flip} {line} {motionOf} row={kid} {rows} {view} />

@@ -459,7 +459,7 @@
       // swaps); the chip's own box may not, held as it is by the row.
       const watch = new ResizeObserver(take);
       for (const part of node.querySelectorAll(
-        '[data-slot="mark"], [data-slot="words"], [data-slot="note"], [data-slot="slot"]'
+        '[data-slot="mark"], [data-chip-words], [data-slot="note"], [data-chip-slot]'
       )) {
         watch.observe(part);
       }
@@ -1209,7 +1209,7 @@
   >
     {@render mark(item, flies)}
     <span
-      data-slot="words"
+      data-chip-words
       aria-hidden="true"
       class="mark-line min-w-0 flex items-baseline gap-c-pill-gap"
       data-box
@@ -1248,7 +1248,7 @@
       {/if}
     </span>
     <span
-      data-slot="slot"
+      data-chip-slot
       aria-hidden="true"
       class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted"
       data-box
@@ -1795,11 +1795,14 @@
 
 <style>
   /* residual: keyframes */
-  /* The mark flew in; the chip's surface and words come in after it. */
+  /* The mark flew in; the chip's surface and words come in after it. The
+     words and the glyph's slot are named by their own attributes: under
+     `data-fly`, Chrome keys an attribute selector to the attribute's name
+     alone, and `[data-slot="…"]` restyled every `data-slot` in the chip. */
   @media (prefers-reduced-motion: no-preference) {
     [data-fly]::before,
-    [data-fly] [data-slot="words"],
-    [data-fly] [data-slot="slot"] {
+    [data-fly] [data-chip-words],
+    [data-fly] [data-chip-slot] {
       animation: arrive var(--dur-menu) var(--ease-out) var(--dur-control) both;
     }
   }

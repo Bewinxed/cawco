@@ -429,8 +429,11 @@
 <style>
   /* residual: foreign-dom */
   /* The line being written, one line tall however the message renders:
-     every element MessageBody renders inside it. */
-  [data-kind="stream"] [data-slot="text"] :global(*) {
+     every element MessageBody renders inside it. Read off the row's own
+     `data-delegate-tail-kind`: a rule over every element under a state
+     restyles the whole subtree wherever that attribute changes, and
+     `data-kind` changes on rows all over the dashboard. */
+  [data-delegate-tail-kind="stream"] [data-slot="text"] :global(*) {
     display: inline;
     margin: 0;
     padding: 0;

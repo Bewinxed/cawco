@@ -200,11 +200,11 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /* Inside a tree mark whose own hit is held down (TreeMark): the tile gives
    a little under it. */
-@custom-variant mark-pressed (&:is([data-slot="tree-mark"]:has([data-slot="hit"]:active) *));
+@custom-variant mark-pressed (&:is([data-tree-mark]:has([data-slot="hit"]:active) *));
 
 /* Inside a live tree mark while its dot beats (TreeMark). At the weight of
    the selector it came from, so it outranks the mark's hole mask. */
-@custom-variant mark-beating (&:is([data-slot="tree-mark"][data-dot="live"]:has([data-beating]) *));`;
+@custom-variant mark-beating (&:is([data-tree-mark][data-dot="live"]:has([data-beating]) *));`;
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =

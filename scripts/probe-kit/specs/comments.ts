@@ -404,7 +404,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   await settle(on.page, 300);
   const edge = await on.page.evaluate(() => {
     const well = document.querySelector(
-      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="side-well"]'
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-side-well]'
     );
     const probe = document.createElement("span");
     probe.style.color = "var(--accent)";
@@ -781,7 +781,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         ?.matches("[data-grouped]"),
       marks: people.filter((entry) =>
         entry.querySelector(
-          '[data-slot="who"] :is([data-slot="dot"], [data-account-dot-dot])[data-u]'
+          '[data-turn-who] :is([data-slot="dot"], [data-account-dot-dot])[data-u]'
         )
       ).length,
       seam: upper && lower ? Math.round(lower.top - upper.bottom) : null,
@@ -791,13 +791,13 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
         : null,
       agentMark: (() => {
         const dot = agent?.querySelector(
-          '[data-slot="who"] :is([data-slot="dot"], [data-account-dot-dot]):is([data-a], [data-slot="a"])'
+          '[data-turn-who] :is([data-slot="dot"], [data-account-dot-dot]):is([data-a], [data-slot="a"])'
         );
         return dot ? getComputedStyle(dot).backgroundColor : null;
       })(),
       agentName:
         agent
-          ?.querySelector('[data-slot="who"] [data-slot="role"]')
+          ?.querySelector('[data-turn-who] [data-slot="role"]')
           ?.textContent?.trim() ?? null,
     };
   });

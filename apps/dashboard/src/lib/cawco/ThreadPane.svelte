@@ -1156,7 +1156,7 @@
   }
   /* A task's card and what it needs of you, each a step above the next
      (TaskCard and TaskNeedsFor take no class). */
-  [data-slot="thread-pane-task"] > :global([data-slot="task-card"]) {
+  [data-slot="thread-pane-task"] > :global([data-task-card]) {
     margin-block-end: var(--space-2);
   }
   [data-slot="thread-pane-task"]

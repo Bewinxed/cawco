@@ -89,7 +89,7 @@
   } = $props();
 
   /** How the box opens and folds: off each row's mark, as every tree. */
-  const TREE: BranchOptions = { glyph: '[data-slot="tree-mark"]' };
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
   /** Older trees drawn a frame once the box's first rows stand. */
   const STEP = 24;
   /** One row's height, for the row and the box that shows six of them. */

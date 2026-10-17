@@ -454,7 +454,10 @@
   }): HTMLElement {
     const span = document.createElement("span");
     span.className = "mention-chip";
-    span.setAttribute("data-slot", "mention-chip");
+    // Its own attribute, not `data-slot`: the composer hides it under a
+    // state (a flight, an ask), and Chrome keys an attribute selector there
+    // to the attribute's name alone.
+    span.setAttribute("data-mention-chip", "");
     span.contentEditable = "false";
     span.dataset.mention = chip.serialised;
     span.dataset.tip = chip.tip;
@@ -787,7 +790,7 @@
      script (chipShape), never by the markup; their literals are the
      editor's custom properties */
   /* The chip: a recessed badge holding the kind's glyph and the title. */
-  [data-slot="editor"] :global([data-slot="mention-chip"]) {
+  [data-slot="editor"] :global([data-mention-chip]) {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
@@ -817,15 +820,15 @@
     }
   }
   [data-slot="editor"]
-    :global([data-slot="mention-chip"][data-tone="live"] .mention-glyph) {
+    :global([data-mention-chip][data-tone="live"] .mention-glyph) {
     color: var(--status-live-glyph);
   }
   [data-slot="editor"]
-    :global([data-slot="mention-chip"][data-tone="attn"] .mention-glyph) {
+    :global([data-mention-chip][data-tone="attn"] .mention-glyph) {
     color: var(--status-attn-glyph);
   }
   [data-slot="editor"]
-    :global([data-slot="mention-chip"][data-tone="fail"] .mention-glyph) {
+    :global([data-mention-chip][data-tone="fail"] .mention-glyph) {
     color: var(--status-fail-glyph);
   }
 

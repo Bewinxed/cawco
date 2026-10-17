@@ -49,7 +49,7 @@ const respond = (request: Seen): Reply =>
 /** TabItem's box, its hit and its sheet (fluid-tabs/TabItem.svelte's hooks). */
 const TAB = '[data-slot="ff-tab"]';
 const HIT = '[data-slot="hit"]';
-const SHEET = '[data-slot="fold"] [data-slot="sheet"]';
+const SHEET = '[data-slot="fold"] [data-ff-sheet]';
 
 /** One count's colours as the engine computes them, composited to sRGB. */
 interface Computed {

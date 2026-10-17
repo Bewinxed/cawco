@@ -2224,8 +2224,11 @@
   }
   /* Parked on you: the label carries the strong ink whether or not it is
      chosen, so the ask is legible from across the strip. It comes up at
-     the panel's pace, the way the tab's glyph turns. */
-  [data-slot="tab"][data-needs] :global([data-slot="ff-tab"]) {
+     the panel's pace, the way the tab's glyph turns. The tab is named by its
+     own attribute (`data-ff-tab`): under a state, Chrome keys an attribute
+     selector to the attribute's name alone, and `[data-slot="ff-tab"]`
+     restyled every `data-slot` in the tab when `data-needs` came or went. */
+  [data-slot="tab"][data-needs] :global([data-ff-tab]) {
     color: var(--ink-strong);
 
     @media (prefers-reduced-motion: no-preference) {

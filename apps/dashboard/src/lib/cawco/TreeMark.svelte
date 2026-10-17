@@ -130,7 +130,7 @@
      stands bare in the slot, in the muted ink (a row that is no session or
      project: "N older"). The dot's ink is its status's (--dot). -->
 <span
-  data-slot="tree-mark"
+  data-tree-mark
   class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-mark-glyph data-bare:text-ink-muted"
   data-box
   data-bare={fill ? undefined : ""}
@@ -157,7 +157,7 @@
          compositor, and every tile over them one more. -->
     <span
       aria-hidden="true"
-      data-slot="tree-mark-deck"
+      data-tree-mark-deck
       class="absolute inset-0 pointer-events-none"
       data-deck={Math.min(count, 3)}
     >
@@ -280,7 +280,7 @@
          z-index 4), which takes the presses through it. -->
     <span
       aria-hidden="true"
-      data-slot="tree-mark-echo-box"
+      data-tree-mark-echo-box
       class="absolute z-5 -inset-(--reach) pointer-events-none clip-path-(--echo-cut)"
       style:--reach={"round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px)"}
       style:--r="var(--radius-xs)"

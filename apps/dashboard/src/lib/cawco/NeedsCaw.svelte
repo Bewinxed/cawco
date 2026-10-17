@@ -690,7 +690,7 @@
              under it for the frame the clip lands. -->
         <span
           data-needs-caw-covered={covering || undefined}
-          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid data-needs-caw-covered:[&>[data-slot=caw-face]]:invisible"
+          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid data-needs-caw-covered:[&>[data-caw-face]]:invisible"
           data-caw-phase={phase}
           style:--bleed="{CAW_STILL_BLEED}px"
           style:--dx={0.5 - CAW_HEAD_CENTRE.x}

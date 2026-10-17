@@ -101,7 +101,7 @@
 </script>
 
 <a
-  data-slot="task-card"
+  data-task-card
   class="press-tint focus-inset flex cursor-pointer flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] dur-control ease-out data-dragging:opacity-40 hover:bg-surface-hover"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
@@ -120,7 +120,7 @@
       >{task.title}</span
     >
   {/if}
-  <span data-slot="head" class="flex min-h-c-badge-h items-center gap-space-1">
+  <span data-task-head class="flex min-h-c-badge-h items-center gap-space-1">
     <span
       data-slot="id"
       class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle"

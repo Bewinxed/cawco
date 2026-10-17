@@ -1956,20 +1956,27 @@
      it. Interact leaves it as the page's own. The ring eases in and out,
      except while the split slides with motion: then the well's edges take
      the slide's transition (SideSurface's own utilities), which this
-     rule's would otherwise outrank. */
-  :global(.preview-pane [data-slot="side-well"]) {
+     rule's would otherwise outrank. The well is named by its own attribute,
+     and the slide reads it inside `:not()` (`:where()` keeps the weight of
+     `[data-split-sliding] *`): a mode or a slide coming or going restyles
+     the elements its rule's subject names, and `[data-slot="side-well"]`,
+     or a `*`, named every element of the pane. */
+  :global(.preview-pane [data-side-well]) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
   }
-  :global(.preview-pane [data-slot="side-well"]:not([data-split-sliding] *)) {
+  :global(
+    .preview-pane
+      [data-side-well]:not(:where([data-split-sliding]) [data-side-well])
+  ) {
     transition: outline-color var(--dur-control) var(--ease-in-out);
   }
   @media (prefers-reduced-motion: reduce) {
-    :global(.preview-pane [data-slot="side-well"]) {
+    :global(.preview-pane [data-side-well]) {
       transition: outline-color var(--dur-control) var(--ease-in-out);
     }
   }
-  :global(.preview-pane:is(.mode-comment, .mode-draw) [data-slot="side-well"]) {
+  :global(.preview-pane:is(.mode-comment, .mode-draw) [data-side-well]) {
     outline-color: var(--accent);
     cursor: crosshair;
   }

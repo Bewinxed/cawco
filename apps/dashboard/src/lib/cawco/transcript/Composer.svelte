@@ -3478,7 +3478,7 @@
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="group/field touch-hit relative flex flex-auto min-w-0 [&>[data-slot=editor]]:min-h-(--cin-ctl) [&>[data-slot=editor]]:max-h-(--field-max-h) [&>[data-slot=editor]]:text-(length:--field-size) [&>[data-slot=editor]]:py-(--field-pad) [&>[data-slot=editor]]:px-0 motion-safe:group-data-settling/cin:[&>[data-slot=editor]]:dur-grow-exit motion-safe:group-data-settling/cin:[&>[data-slot=editor]]:ease-drawer [&>[data-slot=editor][data-cue-top]]:mask-(--cue-top-fade) [&>[data-slot=editor][data-cue-bottom]]:mask-(--cue-bottom-fade) [&>[data-slot=editor][data-cue-top][data-cue-bottom]]:mask-(--cue-both-fade) data-folded:[&>[data-slot=editor]]:mask-(--fold-fade) [&>[data-slot=editor]]:translate-raw-(--roll-move) [&>[data-slot=editor]]:clip-path-(--roll-clip)"
+          class="group/field touch-hit relative flex flex-auto min-w-0 [&>[data-editor]]:min-h-(--cin-ctl) [&>[data-editor]]:max-h-(--field-max-h) [&>[data-editor]]:text-(length:--field-size) [&>[data-editor]]:py-(--field-pad) [&>[data-editor]]:px-0 motion-safe:group-data-settling/cin:[&>[data-editor]]:dur-grow-exit motion-safe:group-data-settling/cin:[&>[data-editor]]:ease-drawer [&>[data-editor][data-cue-top]]:mask-(--cue-top-fade) [&>[data-editor][data-cue-bottom]]:mask-(--cue-bottom-fade) [&>[data-editor][data-cue-top][data-cue-bottom]]:mask-(--cue-both-fade) data-folded:[&>[data-editor]]:mask-(--fold-fade) [&>[data-editor]]:translate-raw-(--roll-move) [&>[data-editor]]:clip-path-(--roll-clip)"
           inert={askOpen}
           bind:this={fieldWrap}
           style:--roll-move="0 var(--roll-y)"
@@ -3725,18 +3725,25 @@
   /* residual: foreign-dom — AttachmentChips' root, which takes no class.
      Everything in the composer takes the pointer; while the canvas stands,
      the chips stand in the grown shape over the field, above its surface;
-     while an ask holds the composer they step aside with the rest. */
-  [data-slot="composer"] > :global([data-slot="atts"]) {
+     while an ask holds the composer they step aside with the rest.
+
+     What these rules reach under a state that changes (the dock drawing or
+     asking, a recall, a flight) is named by its own attribute: `data-atts`,
+     MentionField's `data-editor`, its chips' `data-mention-chip`,
+     AttachButton's `data-att-btn`. Chrome keys an attribute selector to the
+     attribute's name alone, so `[data-slot="…"]` there restyled every
+     `data-slot` under the state. */
+  [data-slot="composer"] > :global([data-atts]) {
     pointer-events: auto;
   }
   [data-slot="dock"][data-drawing]
     [data-slot="composer"]
-    > :global([data-slot="atts"]) {
+    > :global([data-atts]) {
     position: relative;
     z-index: 2;
   }
   /* biome-ignore lint/style/noDescendingSpecificity: it sets what the drawing rule above leaves alone (opacity, visibility); the order is the source's */
-  [data-slot="dock"][data-asking] :global([data-slot="atts"]) {
+  [data-slot="dock"][data-asking] :global([data-atts]) {
     opacity: 0;
     visibility: hidden;
     transition:
@@ -3759,7 +3766,7 @@
      at the field's own. It stands out of the text's flow, so the caret
      stands at the line's start under it. */
   [data-slot="composer-field"]
-    > :global([data-slot="editor"][data-mention-field-empty]::before) {
+    > :global([data-editor][data-mention-field-empty]::before) {
     position: absolute;
     color: var(--hint-ink);
     letter-spacing: var(--hint-track);
@@ -3771,16 +3778,16 @@
      moment the wheel comes up until it has folded away: an empty draft's
      row on the line stands for it, and the two would read doubled. It fades
      back in once the rows are gone. */
-  [data-slot="composer-field"] > :global([data-slot="editor"][data-flying]),
-  [data-asking] [data-slot="composer-field"] > :global([data-slot="editor"]),
+  [data-slot="composer-field"] > :global([data-editor][data-flying]),
+  [data-asking] [data-slot="composer-field"] > :global([data-editor]),
   [data-slot="cin"][data-recalling]
     [data-slot="composer-field"]
-    > :global([data-slot="editor"]) {
+    > :global([data-editor]) {
     --hint-ink: transparent;
   }
   [data-slot="cin"][data-hint-back]
     [data-slot="composer-field"]
-    > :global([data-slot="editor"]) {
+    > :global([data-editor]) {
     --hint-fade: color var(--dur-fade) var(--ease-out);
   }
 
@@ -3788,12 +3795,12 @@
      makes: clear while another draft's words fly in, hidden while an ask's
      card stands over the field */
   [data-slot="composer-field"]
-    > :global([data-slot="editor"][data-flying] [data-slot="mention-chip"]) {
+    > :global([data-editor][data-flying] [data-mention-chip]) {
     opacity: 0;
   }
   [data-asking]
     [data-slot="composer-field"]
-    > :global([data-slot="editor"] [data-slot="mention-chip"]) {
+    > :global([data-editor] [data-mention-chip]) {
     visibility: hidden;
   }
 
@@ -3819,8 +3826,7 @@
      Send is a card: its face, its edge at the outline button's 3:1 (the
      control edge, 1.37:1, is lost at a 4px peek) and a little shadow, so
      each one's edge reads behind the one in front. */
-  [data-slot="ctrls"][inert]
-    :global(:is([data-slot="att-btn"], [data-att-btn])) {
+  [data-slot="ctrls"][inert] :global([data-att-btn]) {
     box-shadow: var(--shadow-xs);
     border-color: var(--border-button-outline);
   }

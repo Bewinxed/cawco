@@ -1436,7 +1436,7 @@ const removeCheck = async (
       stage: !!document.querySelector(stage as string),
       chip: !!document.querySelector(chip as string),
       atts: document.querySelectorAll(
-        '[data-slot="composer"] [data-slot="atts"] [data-artifact]'
+        '[data-slot="composer"] [data-atts] [data-artifact]'
       ).length,
     }),
     [STAGE, CHIP]
@@ -2037,7 +2037,7 @@ const dockCheck = async (on: On, clock: Clock) => {
       const node = document.querySelector(sel as string);
       const well = document
         .querySelector(
-          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-slot="side-well"]'
+          ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) [data-side-well]'
         )
         ?.getBoundingClientRect();
       const at = node?.getBoundingClientRect();
@@ -2394,7 +2394,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
     }
     await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
   };
-  await tap(':is([data-att-btn], [data-slot="att-btn"])');
+  await tap("[data-att-btn]");
   await page.getByRole("menuitem", { name: "Draw" }).waitFor();
   await tap('[role="menuitem"]:has-text("Draw")');
   const standing = await until(
@@ -2454,7 +2454,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
       page.evaluate((sel) => {
         const node = document.querySelector(sel);
         const well = document
-          .querySelector('[data-slot="side-well"]')
+          .querySelector("[data-side-well]")
           ?.getBoundingClientRect();
         const at = node?.getBoundingClientRect();
         return well && at && at.width > 0

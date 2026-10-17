@@ -153,11 +153,11 @@
 
 /* Inside a tree mark whose own hit is held down (TreeMark): the tile gives
    a little under it. */
-@custom-variant mark-pressed (&:is([data-slot="tree-mark"]:has([data-slot="hit"]:active) *));
+@custom-variant mark-pressed (&:is([data-tree-mark]:has([data-slot="hit"]:active) *));
 
 /* Inside a live tree mark while its dot beats (TreeMark). At the weight of
    the selector it came from, so it outranks the mark's hole mask. */
-@custom-variant mark-beating (&:is([data-slot="tree-mark"][data-dot="live"]:has([data-beating]) *));
+@custom-variant mark-beating (&:is([data-tree-mark][data-dot="live"]:has([data-beating]) *));
 
 /* One per attribute state a component styles: [data-tone="fail"] is
    tone-fail:, [aria-expanded="false"] is aria-expanded-false:. */
@@ -193,6 +193,7 @@
 @custom-variant body-fill (&[data-body="fill"]);
 @custom-variant cell-claude (&[data-cell="claude"]);
 @custom-variant covered-true (&[data-covered="true"]);
+@custom-variant delegate-tail-kind-stream (&[data-delegate-tail-kind="stream"]);
 @custom-variant delta--1 (&[data-delta="-1"]);
 @custom-variant delta-0 (&[data-delta="0"]);
 @custom-variant delta-1 (&[data-delta="1"]);

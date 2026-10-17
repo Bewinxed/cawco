@@ -74,7 +74,7 @@
      its own line box in the body's first line. -->
 <!-- literal: 9ch -->
 <h2
-  data-slot="who"
+  data-turn-who
   data-grouped={grouped || undefined}
   class={[
     "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-(--who-clock-w) data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",

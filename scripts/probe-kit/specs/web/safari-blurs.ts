@@ -391,7 +391,7 @@ async function sheetCases(kit: Kit, fleet: KitFleet, base: string) {
     page,
     "a tree mark's face and chevron swap as its rows fold and open",
     async () => {
-      const hit = row.locator('[data-slot="tree-mark"] [data-slot="hit"]');
+      const hit = row.locator('[data-tree-mark] [data-slot="hit"]');
       const flips: string[] = [];
       for (const _press of [1, 2]) {
         await hit.tap();

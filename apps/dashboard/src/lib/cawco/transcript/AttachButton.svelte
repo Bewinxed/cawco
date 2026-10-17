@@ -66,7 +66,7 @@
   </DropdownMenu.Root>
 {:else}
   <button
-    data-slot="att-btn"
+    data-att-btn
     aria-label="Attach a file or image"
     class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--tpress)"
     onclick={() => input?.click()}
