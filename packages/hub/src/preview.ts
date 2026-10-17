@@ -17,6 +17,8 @@ import { detach } from "@cawco/core/detach";
 import {
   causeOf,
   downResponse,
+  folderKey,
+  IMMUTABLE,
   injectOverlay,
   OVERLAY_PATH,
   overlayResponse,
@@ -26,6 +28,8 @@ import {
   proxyHeaders,
   RELAY_HEADER,
   upgradePreview,
+  versionAssets,
+  versionedFile,
 } from "@cawco/core/preview-proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
@@ -203,19 +207,22 @@ export function previewFrame(
 async function servePage(
   artifactId: string,
   pathname: string,
-  state: (artifactId: string) => string
+  state: (artifactId: string) => string,
+  /** Where the page stands on its origin: its root, or the Decisions tab's `/__cawco/page/<id>/`. */
+  mount = "/"
 ): Promise<Response> {
   let file: string;
   let root: string;
+  // A file at its folder's key (core `versionAssets`), or the page's own address.
+  const versioned = versionedFile(pathname);
+  const asked = versioned ?? pathname;
   try {
     root = await realpath(join(ARTIFACTS_ROOT, artifactId));
     file = await realpath(
       join(
         root,
         folderPath(
-          decodeURIComponent(pathname === "/" ? "/index.html" : pathname).slice(
-            1
-          )
+          decodeURIComponent(asked === "/" ? "/index.html" : asked).slice(1)
         )
       )
     );
@@ -232,16 +239,26 @@ async function servePage(
     return new Response("Not found", { status: 404 });
   }
   const body = Bun.file(file);
-  const headers = { "cache-control": "no-store", "content-type": body.type };
-  return body.type.startsWith("text/html")
-    ? new Response(
-        injectOverlay(await body.text(), {
-          artifact: artifactId,
-          state: state(artifactId),
-        }),
-        { headers }
-      )
-    : new Response(body, { headers });
+  // The page's document is never kept (it carries the doc's state as it is
+  // now); a file at its folder's key never changes, and is kept for good.
+  const headers = {
+    "cache-control": versioned === null ? "no-store" : IMMUTABLE,
+    "content-type": body.type,
+  };
+  if (!body.type.startsWith("text/html")) {
+    return new Response(body, { headers });
+  }
+  // The overlay hashes the page as it was written, before its files are keyed.
+  const page = injectOverlay(await body.text(), {
+    artifact: artifactId,
+    state: state(artifactId),
+  });
+  return new Response(
+    versioned === null
+      ? versionAssets(page, await folderKey(root), mount, pathname)
+      : page,
+    { headers }
+  );
 }
 
 /**
@@ -326,6 +343,10 @@ const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/;
 
 /** Everything under it is the hub's own on a preview origin; a previewed app never sees it. */
 const RESERVED = "/__cawco/";
+
+/** A path the hub keeps for itself: under {@link RESERVED}, but a page's own file at its folder's key, which goes on to whatever serves the page. */
+const hubsOwn = (pathname: string): boolean =>
+  pathname.startsWith(RESERVED) && versionedFile(pathname) === null;
 
 const HOP = "hub listener";
 
@@ -470,10 +491,10 @@ async function serveSession(
     const [, artifactId, rest] = paged;
     return deps.ownerOf(artifactId) === instanceId &&
       deps.kindOf(artifactId) === "page"
-      ? servePage(artifactId, rest, deps.state)
+      ? servePage(artifactId, rest, deps.state, `/__cawco/page/${artifactId}/`)
       : new Response("This session has no such page.", { status: 404 });
   }
-  if (pathname.startsWith(RESERVED)) {
+  if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
   }
   const target = previewTargets.get(instanceId);

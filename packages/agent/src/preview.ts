@@ -5,6 +5,8 @@ import type { PreviewSource } from "@cawco/core";
 import {
   causeOf,
   downResponse,
+  folderKey,
+  IMMUTABLE,
   injectOverlay,
   type PreviewSocket,
   previewFailed,
@@ -12,6 +14,8 @@ import {
   proxyHeaders,
   RELAY_HEADER,
   upgradePreview,
+  versionAssets,
+  versionedFile,
 } from "@cawco/core/preview-proxy";
 import type { Server, WebSocketHandler } from "bun";
 import {
@@ -377,6 +381,8 @@ async function start(
         return notRelayed();
       }
       let response: Response;
+      /** A folder's file at its folder's key: kept for good. */
+      let versioned: string | null = null;
       if ("port" in source) {
         const route = machineRoute(url.pathname);
         if (route) {
@@ -487,9 +493,12 @@ async function start(
           return downResponse("server");
         }
       } else {
+        // A file at its folder's key (core `versionAssets`), or the page's own address.
+        versioned = versionedFile(url.pathname);
+        const asked = versioned ?? url.pathname;
         const filePath = resolve(
           source.dir,
-          `.${decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname)}`
+          `.${decodeURIComponent(asked === "/" ? "/index.html" : asked)}`
         );
         let actual: string;
         try {
@@ -526,8 +535,10 @@ async function start(
       // Cloudflare rewrites it, and a missing header, to `max-age=14400` and
       // caches the file at its edge, so a module stayed four hours stale in
       // the browser and a fix to the proxy never reached it. `no-store` is the
-      // one value it passes through untouched.
-      headers.set("cache-control", "no-store");
+      // one value it passes through untouched. A folder's file at its
+      // folder's key never changes its bytes, so it is kept for good
+      // (core `IMMUTABLE`, longer than any TTL the CDN would set).
+      headers.set("cache-control", versioned === null ? "no-store" : IMMUTABLE);
       headers.delete("expires");
       headers.delete("etag");
       headers.delete("last-modified");
@@ -555,6 +566,15 @@ async function start(
         response.body
       ) {
         body = injectOverlay(await response.text());
+        if ("dir" in source && versioned === null) {
+          // The folder's page: its own files at the folder's key, kept.
+          body = versionAssets(
+            body,
+            await folderKey(source.dir),
+            "/",
+            url.pathname
+          );
+        }
         headers.delete("content-length");
         headers.delete("content-encoding");
       }

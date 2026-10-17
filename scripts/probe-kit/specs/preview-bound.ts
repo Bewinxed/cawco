@@ -24,13 +24,19 @@
  *    (`Origin-Agent-Cluster: ?1`); where Chromium runs the frame (an
  *    out-of-process iframe target or not) is noted. Playwright's Chromium
  *    keys a secure origin's process by itself, so 1 reads the thumbnail's
- *    own cost on the dashboard's thread only where 5 does: WebKit, which
+ *    own cost on the dashboard's thread only where 7 does: WebKit, which
  *    runs every frame there, as Chromium does over plain http.
  * 3. The light page: the same window, noted beside 1, the tool's own cost.
  * 4. A conversation's tab put off screen: its preview's frame stands for
  *    `PARK_MS`, is gone after it, and loads again (the page says ready)
  *    when its tab is back.
- * 5. Heavy page, WebKit at a phone (the owner's Brave on iOS), which runs
+ * 5. Back from parked, the frame's document fetches none of the page's
+ *    files again (Resource Timing, `transferSize` 0): each stands at its
+ *    folder's key (core `versionAssets`) and comes from the cache.
+ * 6. A file of the folder changed on disk, then the pane's Reload: the
+ *    page's files stand at a new key, and the changed sheet is fetched
+ *    with its new bytes.
+ * 7. Heavy page, WebKit at a phone (the owner's Brave on iOS), which runs
  *    every frame on the dashboard's thread: its load to its thumbnail is
  *    noted (the page's own work is in it); the page settled, the thumbnail
  *    asked again alone holds the dashboard's thread under `TASK_MS` at a
@@ -40,9 +46,9 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person opens them
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { appendFile, cp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Browser, Page } from "playwright-core";
+import type { Browser, Frame, Page } from "playwright-core";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 
@@ -207,6 +213,85 @@ async function ownProcessFrames(
     .map((one) => one.url);
 }
 
+/** How long a loaded page is given for what it loads later (its states' Rive files, its grammars). Our call. */
+const LAZY_MS = 5000;
+
+/** The preview's frame in `page`: the frame on the preview's origin under the dashboard. */
+const previewFrameOf = (page: Page, origin: string): Frame | undefined =>
+  page
+    .frames()
+    .find(
+      (frame) => frame !== page.mainFrame() && frame.url().startsWith(origin)
+    );
+
+/** What the frame's document loaded of its origin's files, by Resource Timing: at a key or not, from the cache (`transferSize` 0) or the network. */
+function fetchedFiles(page: Page, origin: string) {
+  const frame = previewFrameOf(page, origin);
+  if (!frame) {
+    return Promise.resolve({
+      versioned: 0,
+      cached: 0,
+      fetched: ["no preview frame"],
+      fetchedBytes: 0,
+      overlayBytes: 0,
+      keys: [] as string[],
+    });
+  }
+  return frame.evaluate(() => {
+    const own = (
+      performance.getEntriesByType("resource") as PerformanceResourceTiming[]
+    ).filter((entry) => entry.name.startsWith(location.origin));
+    const path = (entry: PerformanceResourceTiming) =>
+      new URL(entry.name).pathname;
+    // The hub's own: the overlay, its ping, the doc's socket and sends.
+    const files = own.filter(
+      (entry) =>
+        !path(entry).startsWith("/__cawco/") ||
+        path(entry).startsWith("/__cawco/v/")
+    );
+    const fetched = files.filter((entry) => entry.transferSize > 0);
+    const overlay = own.find((entry) => path(entry) === "/__cawco/overlay.js");
+    return {
+      versioned: files.filter((entry) => path(entry).startsWith("/__cawco/v/"))
+        .length,
+      cached: files.filter((entry) => entry.transferSize === 0).length,
+      fetched: fetched.map((entry) => path(entry)),
+      fetchedBytes: fetched.reduce((sum, entry) => sum + entry.transferSize, 0),
+      overlayBytes: overlay?.transferSize ?? 0,
+      // `/__cawco/v/<key>/…`: its third segment.
+      keys: [
+        ...new Set(
+          files
+            .filter((entry) => path(entry).startsWith("/__cawco/v/"))
+            .map((entry) => path(entry).split("/")[3] ?? "")
+        ),
+      ],
+    };
+  });
+}
+
+/** Sheet `name` as the frame's document loaded it: its key, whether it came over the network, and its bytes now. */
+function sheetOf(page: Page, origin: string, name: string) {
+  const frame = previewFrameOf(page, origin);
+  if (!(frame && name)) {
+    return Promise.resolve({ key: "", fetched: false, text: "" });
+  }
+  return frame.evaluate(async (file) => {
+    const entry = (
+      performance.getEntriesByType("resource") as PerformanceResourceTiming[]
+    ).find((one) => one.name.includes(`/assets/${file}`));
+    if (!entry) {
+      return { key: "", fetched: false, text: "" };
+    }
+    const path = new URL(entry.name).pathname;
+    return {
+      key: path.startsWith("/__cawco/v/") ? (path.split("/")[3] ?? "") : "",
+      fetched: entry.transferSize > 0,
+      text: await (await fetch(entry.name, { cache: "force-cache" })).text(),
+    };
+  }, name);
+}
+
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
 const run = async (kit: Kit) => {
@@ -220,6 +305,9 @@ const run = async (kit: Kit) => {
     return;
   }
   const numbers: Record<string, unknown> = {};
+  // A copy, so the spec can make a new revision of it (6).
+  const folder = join(kit.out, "heavy");
+  await cp(heavy, folder, { recursive: true });
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -234,7 +322,7 @@ const run = async (kit: Kit) => {
   await fleet.api(`/api/instances/${heavyOne}/artifacts`, {
     kind: "preview",
     name: "heavy",
-    dir: heavy,
+    dir: folder,
   });
   await fleet.api(`/api/instances/${lightOne}/artifacts`, {
     kind: "page",
@@ -323,6 +411,50 @@ const run = async (kit: Kit) => {
     `frames 1 s off screen ${before}, ${(PARK_MS + 3000) / 1000} s off screen ${after}, ready again ${back}`
   );
 
+  // 5. Back from parked, the revision already loaded comes from the cache.
+  await desk.waitForTimeout(LAZY_MS);
+  const returned = await fetchedFiles(desk, previewOrigin);
+  numbers.returned = returned;
+  kit.check(
+    "5: back from parked, none of the page's files is fetched again: each comes from the cache at its folder's key",
+    returned.versioned > 0 && returned.fetched.length === 0,
+    `${returned.versioned} files at a key, ${returned.cached} from the cache; fetched again ${returned.fetched.length} (${returned.fetchedBytes} bytes): ${returned.fetched.slice(0, 6).join(", ") || "none"}; the overlay ${returned.overlayBytes} bytes`
+  );
+
+  // 6. A new revision (one file changed on disk) loads the new files.
+  const sheet = (await readdir(join(folder, "assets"))).find((name) =>
+    name.endsWith(".css")
+  );
+  const marker = `/* preview-bound revision ${Date.now()} */`;
+  if (sheet) {
+    await appendFile(join(folder, "assets", sheet), `\n${marker}\n`);
+  }
+  await desk.evaluate(() => {
+    (window as unknown as { __cost: Cost }).__cost.heard.length = 0;
+  });
+  await desk
+    .locator(
+      `[data-slot="pane"][data-pane="${heavyOne}"] button[aria-label="Reload"]`
+    )
+    .click();
+  await until(
+    "the new revision ready",
+    () => costOf(desk),
+    (read) => read.heard.some(([, type]) => type === "cawco:ready"),
+    120_000
+  );
+  const revised = await sheetOf(desk, previewOrigin, sheet ?? "");
+  numbers.revised = { sheet, ...revised, was: returned.keys };
+  kit.check(
+    "6: a file changed on disk is a new key: after a reload the page's files stand at it, and the sheet is fetched with its new bytes",
+    !!sheet &&
+      !!revised.key &&
+      !returned.keys.includes(revised.key) &&
+      revised.fetched &&
+      revised.text.includes(marker),
+    `sheet ${sheet}: key ${revised.key} (was ${returned.keys.join(", ")}), fetched ${revised.fetched}, new bytes ${revised.text.includes(marker)}`
+  );
+
   // The light page alone, the tool's own cost.
   const lightDesk = await kit.page("desk", { init: [watchDashboard] });
   await lightDesk.addInitScript((id) => {
@@ -356,12 +488,12 @@ const run = async (kit: Kit) => {
   // WebKit runs every frame on the dashboard's thread: the page's own work
   // after its load (its bundle, its Rive) shares the window above.
   kit.note(
-    `5: heavy page, WebKit at a phone (3x), its load to its thumbnail: ${said(heavyPhone)}`
+    `7: heavy page, WebKit at a phone (3x), its load to its thumbnail: ${said(heavyPhone)}`
   );
   const alonePhone = await captureAlone(phone, "gaps");
   numbers.alonePhone = alonePhone;
   kit.check(
-    `5: heavy page, WebKit at a phone (3x), the page settled: the thumbnail alone holds the dashboard's thread under ${TASK_MS} ms at a time`,
+    `7: heavy page, WebKit at a phone (3x), the page settled: the thumbnail alone holds the dashboard's thread under ${TASK_MS} ms at a time`,
     alonePhone.longest < TASK_MS && alonePhone.bytes <= THUMB_BYTES,
     said(alonePhone)
   );
