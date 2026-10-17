@@ -90,8 +90,7 @@
         data-num
         data-slot="count"
         class="num type-label text-end text-ink-muted max-phone:row-(--area) max-phone:col-(--area)"
-        style:--area="count"
-        ><MorphText text={String(count)} /></span
+        style:--area="count"><MorphText text={String(count)} /></span
       >
     </div>
   </li>

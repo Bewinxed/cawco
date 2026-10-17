@@ -802,11 +802,7 @@
               title={next.title ?? undefined}>{next.text}</span
             >
           </Table.Cell>
-          <Table.Cell
-            class="h-c-btn-h-lg text-end"
-            {rule}
-            variant="list-opens"
-          >
+          <Table.Cell class="h-c-btn-h-lg text-end" {rule} variant="list-opens">
             <span class="relative z-1 inline-flex"
               ><RowMenu actions={menuOf(routine)} label={routine.name} /></span
             >
@@ -1007,7 +1003,11 @@
         <Table.Body>
           {#each routes as route, index (route.id)}
             {@const rule = index > 0 ? "top" : undefined}
-            <Table.Row data-view-routines-row class="relative" variant="unruled">
+            <Table.Row
+              data-view-routines-row
+              class="relative"
+              variant="unruled"
+            >
               <Table.Cell
                 class="h-c-btn-h-lg w-(--col-state)"
                 {rule}
@@ -1054,7 +1054,11 @@
           {/each}
           {#each polls as poll, index (poll.id)}
             {@const rule = routes.length > 0 || index > 0 ? "top" : undefined}
-            <Table.Row data-view-routines-row class="relative" variant="unruled">
+            <Table.Row
+              data-view-routines-row
+              class="relative"
+              variant="unruled"
+            >
               <Table.Cell
                 class="h-c-btn-h-lg w-(--col-state)"
                 {rule}
