@@ -113,15 +113,16 @@
 {#snippet addForm(under: string, depth: number)}
   <form
     data-slot="add"
-    class="add"
+    class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-(--indent)"
     onsubmit={add}
     style:--depth={depth}
+    style:--indent="calc(var(--depth, 0) * var(--space-6))"
     {@attach under ? focusOnMount : undefined}
   >
     <Input
       aria-label={under ? `Add a to-do under ${under}` : "Add a to-do"}
       autocomplete="off"
-      class="h-[var(--c-btn-h-sm)] text-label"
+      class="flex-auto h-c-btn-h-sm text-label"
       onfocus={() => {
         if (!under) {
           addingUnder = "";
@@ -153,8 +154,8 @@
   </form>
 {/snippet}
 
-<section class="part">
-  <h3 class="kit-section-head">
+<section class="flex flex-col gap-space-2">
+  <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">
     To-dos
     {#if todos.length > 0}
       <span data-num data-slot="count" class="count num"
@@ -163,14 +164,19 @@
     {/if}
   </h3>
   {#if problem}
-    <p class="problem" role="alert">{problem}</p>
+    <p class="type-meta text-error-11" role="alert">{problem}</p>
   {/if}
   {#if todos.length > 0}
-    <ul class="todos">
+    <ul class="flex flex-col m-0 p-0 list-none">
       {#each todos as todo (todo.path)}
         {@const ref = refOf(todo)}
         {@const checked = ticking[ref] ?? todo.done}
-        <li data-slot="todo" class="todo" style:--depth={todo.depth}>
+        <li
+          data-slot="todo"
+          class="group flex items-center gap-space-2 min-h-c-btn-h-sm ps-(--indent)"
+          style:--depth={todo.depth}
+          style:--indent="calc(var(--depth, 0) * var(--space-6))"
+        >
           <Checkbox
             aria-label={todo.text}
             {checked}
@@ -178,7 +184,7 @@
           />
           {#if editing === ref}
             <form
-              class="edit"
+              class="flex-auto"
               onsubmit={(event) => {
                 event.preventDefault();
                 saveEdit(todo);
@@ -188,7 +194,7 @@
               <Input
                 aria-label="To-do"
                 autocomplete="off"
-                class="h-[var(--c-btn-h-sm)] text-label"
+                class="h-c-btn-h-sm text-label"
                 disabled={busy}
                 onblur={() => saveEdit(todo)}
                 onkeydown={(event) => {
@@ -203,7 +209,7 @@
           {:else}
             <button
               data-slot="text"
-              class="text press-tint focus-inset"
+              class="flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-ink-strong text-start hover:bg-surface-hover data-done:text-ink-subtle data-done:line-through data-done:decoration-border-control press-tint focus-inset"
               data-done={checked ? "" : undefined}
               onclick={() => {
                 editing = ref;
@@ -214,19 +220,22 @@
             >
               {#if todo.proposed}
                 <span
-                  class="proposed"
+                  class="flex-none type-meta text-ink-muted"
                   title="Left open in an attempt's plan: offered, not agreed. Rewording it agrees to it."
                   >Proposed</span
                 >
               {/if}
               <span>{todo.text}</span>
               {#if todo.promoted}
-                <span class="promoted">→ {todo.promoted}</span>
+                <span
+                  class="flex-none text-meta font-mono liga-none text-ink-muted"
+                  >→ {todo.promoted}</span
+                >
               {/if}
             </button>
             <Button
               aria-label="Add a to-do under “{todo.text}”"
-              class="under"
+              class="flex-none text-ink-muted can-hover:opacity-0 can-hover:transition-[opacity] can-hover:dur-control can-hover:ease-out can-hover:group-hover:opacity-100 can-hover:focus-visible:opacity-100"
               onclick={() => {
                 addingUnder = ref;
                 addText = "";
@@ -239,107 +248,15 @@
           {/if}
         </li>
         {#if addingUnder === ref}
-          <li class="todo-add">{@render addForm(ref, todo.depth + 1)}</li>
+          <li>{@render addForm(ref, todo.depth + 1)}</li>
         {/if}
       {/each}
     </ul>
   {:else}
-    <p data-slot="todo-list-empty" class="empty">
+    <p data-slot="todo-list-empty" class="type-body text-ink-subtle">
       Break the task into steps here; a session working on it ticks them as it
       goes.
     </p>
   {/if}
   {@render addForm("", 0)}
 </section>
-
-<style>
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .part :global(.kit-section-head) {
-    min-block-size: var(--c-btn-h-xs);
-    margin: 0;
-    padding-inline: 0;
-  }
-  .todos {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .todo,
-  .add {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-    padding-inline-start: calc(var(--depth, 0) * var(--space-6));
-  }
-  .text {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: baseline;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    padding: var(--space-1) var(--space-1);
-    border-radius: var(--radius-xs);
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-align: start;
-  }
-  .text[data-done] {
-    color: var(--ink-subtle);
-    text-decoration: line-through;
-    text-decoration-color: var(--border-control);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .text:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .proposed {
-    flex: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .promoted {
-    flex: none;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  /* The add-under control stays out of the way until its row is pointed at
-     or focused; on touch it is always there. */
-  .todo :global(.under) {
-    flex: none;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .todo :global(.under) {
-      opacity: 0;
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-    .todo:hover :global(.under),
-    .todo :global(.under:focus-visible) {
-      opacity: 1;
-    }
-  }
-  .edit {
-    flex: 1 1 auto;
-  }
-  .add :global(input) {
-    flex: 1 1 auto;
-  }
-  .empty {
-    font: var(--type-body);
-    color: var(--ink-subtle);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-</style>
