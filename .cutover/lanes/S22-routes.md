@@ -1,6 +1,6 @@
 # Lane S22-routes
 
-13 of 13 files done. Residual kind totals: 1 (keyframes) 4 · 2 (foreign-dom) 3 · 3 (pseudo) 0 · 4 (svg-paint) 5 · 5 (unmapped) see table.
+13 of 13 files done. Residual declarations by kind: 1 keyframes 4 · 2 foreign-dom 5 · 3 pseudo 0 · 4 svg-paint 5 · 5 unmapped 13.
 
 | file | rules moved | residual 1/2/3/4/5 | literals preserved | breakpoint edges |
 |---|---|---|---|---|
