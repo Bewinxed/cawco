@@ -553,6 +553,24 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         // Rows that stay are drawn again from the task as it now is.
         snapshot.reconfigureItems(snapshot.itemIdentifiers.filter { dataSource.indexPath(for: $0) != nil })
         dataSource.apply(snapshot, animatingDifferences: collection.window != nil && !UIAccessibility.isReduceMotionEnabled)
+        // What it needs from you is drawn anew on each render: when that
+        // changed (an action decided, an ask answered), assistive tech reads
+        // the screen again, or it keeps the cards that left and misses those that came.
+        let needs = task.map(needsSignature)
+        if needs != shownNeeds {
+            shownNeeds = needs
+            UIAccessibility.post(notification: .layoutChanged, argument: nil)
+        }
+    }
+
+    /// What the needs part last showed, by each reason's id and state.
+    private var shownNeeds: [String]?
+
+    private func needsSignature(_ task: TaskView) -> [String] {
+        needsAsks(task).map(\.requestId)
+            + needsActions(task).map { "\($0.id):\($0.state.rawValue)" }
+            + task.blockedBy
+            + ["\(deciding ?? ""):\(actionProblem.count)"]
     }
 
     /// The space over a part's row past its first.
