@@ -305,3 +305,49 @@ Every line main added in its 17 dashboard files is in the merged tree, and none 
 Proofs: `bun .cutover/i2-exact.ts`: `i2-exact: 62 cases, 150 element states, 0 differ`. The new case, ToolGroup's card at 282054d12, is the same in all 480 properties at rest and with its button focused (`opacity 1`, `outline-style solid` focused). A case may now name a property it is directed to compute differently, with the value it must have (`directed`); the three ring elements use it: `box-shadow oklch(0.295 0.01 70) 0px 0px 0px 1px → none` (TabsList, DecisionNode), `oklch(0.495 0.014 74) 0px 0px 0px 1px → none` (DocThumb). The merged build's sweep is unchanged: 7 rules restyle every data-slot under a state, 44 a whole subtree.
 
 Gates on the merged tree: `bun run lint` exit 0 (`Checked 2125 files in 3s. No fixes applied.`; `variants: 467 named variants, byte for byte the committed file`; `switch exhaustiveness: every switch over a union or enum is whole (1423 files)`); `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings`; vite build `✔ done`; root `tsc` exit 0. `packages/hub openapi:check` fails, and fails the same on a clean checkout of 282054d12: `The wire would break nightly 3944 (WIRE_PROTOCOL 13), at 2 places: PreviewFrame.stage … SshJoinJob.passwordProblem: the shipped app may read it, and the hub no longer sends it`. It is main's.
+
+## Integration 2c: restyles at or under M, the rings and the dock exact
+
+This supersedes two notes above. The three `ring` elements keep main's ring: `ring` is back on TabsList's focus ring, DecisionNode's dot and DocThumb's progress ring as the Tailwind utility it is, with the same box-shadow from the same `--tw-ring-*` defaults and currentcolor. i2-exact no longer takes a `directed` change. The dock takes main's `style:width` again (PaneLeaf, motion/delegate-tray), and app.css no longer registers `--dock-w`; `grep -rn -- '--dock-w' apps/dashboard/src` finds nothing (85381ca37).
+
+### The same stream in both trees
+
+tab-return's busy session streams only as the spec lets it (bf9b579e4): once seeded, its live turns run while the busy tab is away, one per 3s of the absence, and land before the return. So both trees are shown the same turns at the same points: 3 turns before 1a and 60 before 1b, in every run. Each return counts the elements the page put in from the reach on.
+
+### ::selection, the press pass's untagged nodes
+
+With the stream held, the press pass's untagged nodes remained. They are `::selection` resolutions. app.css wrote `::selection { background: var(--selection) }`, and Blink resolves an element's ::selection again on each restyle when that rule reads a var() and the element declares a custom property of its own. Element::ShouldRecalcHighlightPseudoStyle, chromium 89fc3a5: "If the highlight depends on variables and the variables on the originating element have changed, we need to re-evaluate". The converted tree gave elements many custom properties of their own: 774 inline `style:--x="Npx"` (main: 0), plus the utilities' `--tw-*`. In Chromium 156, 50 buttons each with its own custom property restyled 100 per pass with the var() rule, and 50 with the value written out. In 1a's press pass this tree resolved about 263 highlights against main's 75. In 2d's hover passes it resolved 7 nodes against 6 (SessionDetails' copy-link button, with its inline `--icon-action`).
+
+The token build now writes the rule from `color.selection` (lib/tokens/selection.css, in base, imported after the theme), and app.css's hand-written rule is gone (9c6abd434). The value is the token's, byte for byte. Main's build and this one compute every witness's ::selection the same: 39 reads, 0 differ. They cover light, dark, an OS-dark light root, a `color-scheme: light dark` subtree and a shadow root.
+
+### Main's inline standard properties, written so again
+
+The conversion turned main's inline standard properties into an inline custom property for a utility to read, because shadcn/no-inline-styles allows only custom properties. A custom property is inherited, so each change restyled the element's whole subtree where main restyled the element alone: the composer's stack, the shell's height, the tab morph, the transcript's spare room, the rail thumbs and the swap animations.
+
+Swept from main (282054d12): 146 of main's dynamic inline standard properties were no longer inline here. Every one that had become a custom property read by its own element is main's `style:prop` again, with its custom property and utility deleted (f9352a915). Four stay, each a data attribute or a class on the same element, which restyles the element alone as at main: PreviewPane's frame width, AttachmentChips' canvas-chip visibility, and the openui Layout's align-items and justify-content.
+
+Five floating surfaces had swapped `style:pointer-events={pressable(open)}` for a class: the lightbox, New Session's card and scrim, NsPopover, NsPopoverGroup and the kit sheet. The class loses to the inline `pointer-events: auto` bits-ui writes, so main's form is back. In NsPopover and NsPopoverGroup the class also came after `{...props}` and replaced `props.class`, dropping `ns-theme ns-pop` from the open surface.
+
+Removed as dead code with them: ProviderLogo's `fade: set` look, app.css's `anim-delay-*` with its tailwind-merge group, and TaskEdgeLine's dash classes. TaskEdgeLine now draws one BaseEdge per kind with its literal paint, which the rule reads whole; @shadcn/lint 0.2.1, the latest, has no option for a picked string.
+
+eslint.config.mjs allows, file by file, only the properties that file writes inline at main. The rule's own words for `allow`: "Exempts CSS properties from inline-style checks". `-webkit-backdrop-filter` is written as `WebkitBackdropFilter`, the spelling the rule takes an entry in. A grep of every reverted name finds only other elements' constants (ToolGroup's `--card-min="80px"`, Shot's `--cap="240px"`, Segmented's `--thumb-w` formula, and so on).
+
+What stays a custom property is either a constant, which costs nothing while mounted, or read below its element, where inheriting is the point. Examples: Composer's `--cue-*-fade` and `--roll-clip` (read by `[&>[data-editor]]`), `--browse-shadow`, `--bar-reach` and PaneTabs' `--shade-mask`.
+
+### Proofs
+
+- i2-exact: `64 cases, 152 element states, 0 differ`. Two cases now write main's inline form: UsageMeter's +N slot and MentionField's tip.
+- tab-return, three interleaved pairs (main then here), `work.restyled` from the input to the shown frame:
+
+| leg | M p1 | M p2 | M p3 | M median | here p1 | here p2 | here p3 | here median |
+|---|---|---|---|---|---|---|---|---|
+| 1a | 1057 | 970 | 1057 | 1057 | 826 | 826 | 847 | 826 |
+| 1b | 1397 | 1332 | 1397 | 1397 | 1190 | 1190 | 1189 | 1190 |
+| 2a | 478 | 478 | 455 | 478 | 342 | 342 | 342 | 342 |
+| 2b | 472 | 449 | 449 | 449 | 315 | 338 | 338 | 338 |
+| 2c | 443 | 443 | 443 | 443 | 313 | 313 | 337 | 313 |
+| 2d | 476 | 476 | 450 | 476 | 320 | 320 | 320 | 320 |
+
+  Inserted from the reach on, here in every run: 1a 475, 1b 1229, 2a 1, 2b 1, 2c 65, 2d 101. Main's runs are the same except 1a, which inserted 535 in p1 and p3 and 475 in p2. The same three turns had streamed; one more chunk of the listing landed inside main's window.
+- inline-restyle (580982756), the same three pairs, elements restyled per change (medians, main → here): the window to 820/900/740/900px 24/24/30/30 → 14/14/17/17; the card to the long title's tab 1860 → 1571, back 1915 → 1734; the project offer arriving 1680 → 1472, put off 152 → 95. Each change wrote its element's inline style the same number of times in both trees (1, or 2 for the card's first move).
+- Gates: `bun run lint` exit 0. `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings`; only `packages/hub openapi:check` fails, main's. vite build `✔ done`.
