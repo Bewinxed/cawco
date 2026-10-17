@@ -874,7 +874,7 @@
   >
     <button
       data-slot="primary"
-      class="ns-btn cursor-pointer max-phone:h-(--footer-btn-h) max-phone:flex-1"
+      class="ns-btn cursor-pointer [@media(max-width:640px)]:h-(--footer-btn-h) [@media(max-width:640px)]:flex-1"
       data-size="xs"
       data-variant="primary"
       onclick={() => {
