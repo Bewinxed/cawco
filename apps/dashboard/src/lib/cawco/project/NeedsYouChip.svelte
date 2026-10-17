@@ -27,44 +27,16 @@
 <button
   data-slot="needs"
   aria-pressed={on}
-  class={["needs mark-line pressable", className]}
+  class={[
+    "mark-line pressable type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-status-attn-bg px-space-3 text-status-attn-ink transition-[background-color,color,border-color] dur-control ease-out aria-pressed:border-status-attn-glyph",
+    className,
+  ]}
   onclick={ontoggle}
   type="button"
   in:crossIn
   out:crossOut
 >
-  <IconNeedsYou aria-hidden="true" />
+  <IconNeedsYou aria-hidden="true" class="size-icon-md text-status-attn-glyph" />
   <span>Needs you</span>
-  <span data-slot="num" class="num">{count}</span>
+  <span data-slot="num" class="text-status-attn-ink">{count}</span>
 </button>
-
-<style>
-  .needs {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-3);
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    background: var(--status-attn-bg);
-    font: var(--type-label);
-    color: var(--status-attn-ink);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      border-color var(--dur-control) var(--ease-out);
-  }
-  .needs :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--status-attn-glyph);
-  }
-  .num {
-    color: var(--status-attn-ink);
-  }
-  .needs[aria-pressed="true"] {
-    border-color: var(--status-attn-glyph);
-  }
-</style>

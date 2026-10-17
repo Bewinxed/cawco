@@ -18,66 +18,25 @@
   } = $props();
 </script>
 
-<ul class="files">
+<ul class="m-0 mt-space-3 flex list-none flex-wrap gap-space-2 p-0">
   {#each files as path (path)}
     <li>
+      <!-- literal: 30px, 2px -->
       <button
         aria-pressed={shown === path}
-        class="file mark-line press-tint"
+        class="mark-line press-tint type-label inline-flex min-h-(--chip-h) max-w-full cursor-pointer items-center gap-space-2 rounded-sm border border-border-control bg-surface-raised px-space-3 text-ink-strong transition-[background-color] dur-control ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-offset) aria-pressed:bg-surface-fill"
+        style:--chip-h="30px"
+        style:--focus-offset="2px"
         data-folder-chip={path}
         onclick={() => onopen(path)}
         type="button"
       >
-        <IconDocument class="icon" />
-        <bdi data-slot="path" class="path">{path}</bdi>
+        <IconDocument class="size-icon-md flex-none text-ink-muted" />
+        <bdi
+          data-slot="path"
+          class="min-w-0 overflow-clip font-mono text-size-code text-ellipsis whitespace-nowrap"
+          >{path}</bdi>
       </button>
     </li>
   {/each}
 </ul>
-
-<style>
-  .files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin: var(--space-3) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-  .file {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    max-inline-size: 100%;
-    min-block-size: 30px;
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font: var(--type-label);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .file[aria-pressed="true"] {
-    background: var(--surface-fill);
-  }
-  .file :global(.icon) {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-    color: var(--ink-muted);
-  }
-  .path {
-    min-inline-size: 0;
-    overflow: clip;
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .file:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-</style>

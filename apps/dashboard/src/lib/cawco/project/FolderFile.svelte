@@ -71,7 +71,10 @@
   {switcher}
   title={path}
 >
-  <div class="file-body" data-folder-file={path}>
+  <div
+    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5"
+    data-folder-file={path}
+  >
     {#if problem}
       <Alert variant="destructive">
         <AlertDescription>{problem}</AlertDescription>
@@ -82,33 +85,20 @@
     {:else if markdown}
       <Markdown source={content} />
     {:else}
-      <pre data-slot="text" class="text">{content}</pre>
+      <pre
+        data-slot="text"
+        class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      >{content}</pre>
     {/if}
   </div>
 </SideSurface>
 
 <style>
+  /* residual: foreign-dom */
   /* css-scope: .folder-file is this card's own class (SideSurface `class`).
      The path in the head is set as its chip sets it, in the mono face. */
   :global(.folder-file > .side-head .title) {
     font-family: var(--font-mono);
     font-size: var(--text-code);
-  }
-  .file-body {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-block-size: 0;
-    overflow-y: auto;
-    padding: var(--space-5);
-  }
-  .text {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    color: var(--ink-strong);
   }
 </style>
