@@ -779,6 +779,34 @@ function conflict(a, b) {
   return sharedLonghand(a, b);
 }
 
+/**
+ * Whether a third class settles the overlap itself, so the pair's order
+ * never decides it: it holds exactly when both do (its states are the two
+ * chains' states together), lands on the same element, writes the same
+ * longhand and does not rank below them. That is a class stacked with the
+ * other's state (a consumer's `…:direction-vertical:after:left-space-1` over
+ * a kit root's `data-[direction=vertical]:after:left-0`). At equal
+ * specificity it holds each chain's states, so it is a contained pair with
+ * each, which this rule already leaves to the sort: Tailwind 4.3.3 sorts
+ * `max-phone:@max-decisions-900px:hidden` after both `max-phone:block` and
+ * `@max-decisions-900px:hidden`.
+ */
+function covered(a, b, property, others) {
+  const both = new Set([...a.states, ...b.states].map((s) => s.key));
+  const rank = a.specificity.split(",").map(Number);
+  return others.some((c) => {
+    const keys = new Set(c.states.map((s) => s.key));
+    return (
+      c.target === a.target &&
+      c.important === a.important &&
+      c.writes.has(property) &&
+      keys.size === both.size &&
+      [...both].every((k) => keys.has(k)) &&
+      !greater(rank, c.specificity.split(",").map(Number))
+    );
+  });
+}
+
 function winnerOf(a, b) {
   const order = new Map(ds.getClassOrder([a, b]));
   const oa = order.get(a);
@@ -1383,21 +1411,72 @@ function recipeDefinition(name, text, file, imports) {
   return target ? exportedRecipe(target, binding.imported, 0) : null;
 }
 
-/** The classes of the `tv`/`cva` recipes a class expression calls. */
-function recipeClasses(expression, text, file, imports) {
-  return [...expression.matchAll(CALLED)].flatMap(([, name]) => {
-    const found = recipeDefinition(name, text, file, imports);
+/**
+ * The arguments of the call whose `(` opens at `open`, read as script, not
+ * as a selector: a parenthesis or quote inside a string, a template or a
+ * comment does not count (a recipe's doc comments hold apostrophes).
+ */
+function callArguments(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "/" && text[i + 1] === "/") {
+      i = text.indexOf("\n", i);
+      if (i === -1) {
+        break;
+      }
+    } else if (ch === "/" && text[i + 1] === "*") {
+      i = text.indexOf("*/", i + 2) + 1;
+      if (i === 0) {
+        break;
+      }
+    } else if (ch === '"' || ch === "'" || ch === "`") {
+      i += 1;
+      while (i < text.length && text[i] !== ch) {
+        i += text[i] === "\\" ? 2 : 1;
+      }
+    } else if (ch === "(") {
+      depth += 1;
+    } else if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(open + 1, i);
+      }
+    }
+  }
+  return text.slice(open + 1);
+}
+
+const GATED = /([A-Za-z_$][\w$]*)\s*&&\s*$/;
+
+/**
+ * The classes of the `tv`/`cva` recipes a class expression calls. A call
+ * behind a prop (`badge && badgeVariants()`) is worn only when the tag
+ * gives that prop.
+ */
+function recipeClasses(expression, text, file, imports, props = new Map()) {
+  return [...expression.matchAll(CALLED)].flatMap((called) => {
+    const found = recipeDefinition(called[1], text, file, imports);
     if (!found) {
       return [];
     }
     const open = found.match.index + found.match[0].length - 1;
-    const call = parseModule(`f(${parenthesised(found.text, open)})`, {
+    const call = parseModule(`f(${callArguments(found.text, open)})`, {
       range: true,
     }).body[0]?.expression;
     const [first, second] = call?.arguments ?? [];
-    return [
-      found.match[1] === "tv" ? recipeOf(first) : recipeOf(second, first),
-    ];
+    const recipe =
+      found.match[1] === "tv" ? recipeOf(first) : recipeOf(second, first);
+    const gate = props.get(
+      expression.slice(0, called.index).match(GATED)?.[1]
+    );
+    if (gate) {
+      recipe.classes = recipe.classes.map((c) => ({
+        ...c,
+        when: { ...c.when, [gate]: GIVEN },
+      }));
+    }
+    return [recipe];
   });
 }
 
@@ -1439,12 +1518,40 @@ function componentImports(ast) {
   return bindings;
 }
 
+/** A component's props by local name, from its `$props()` destructuring. */
+function propLocals(ast) {
+  const locals = new Map();
+  for (const statement of ast.instance?.content.body ?? []) {
+    for (const declarator of statement.declarations ?? []) {
+      if (
+        declarator.init?.callee?.name !== "$props" ||
+        declarator.id.type !== "ObjectPattern"
+      ) {
+        continue;
+      }
+      for (const property of declarator.id.properties) {
+        const value =
+          property.value?.type === "AssignmentPattern"
+            ? property.value.left
+            : property.value;
+        if (property.type === "Property" && value?.type === "Identifier") {
+          locals.set(
+            value.name,
+            property.key.name ?? String(property.key.value)
+          );
+        }
+      }
+    }
+  }
+  return locals;
+}
+
 /** One root element that wears the `class` prop: its classes, and the component it is, if one. */
-function rootOf(node, attribute, text, file, imports) {
+function rootOf(node, attribute, text, file, imports, props) {
   const expression = text
     .slice(attribute.start, attribute.end)
     .replace(CLASS_EQUALS, "");
-  const recipes = recipeClasses(expression, text, file, imports);
+  const recipes = recipeClasses(expression, text, file, imports, props);
   return {
     line: text.slice(0, attribute.start).split("\n").length,
     classes: [
@@ -1472,6 +1579,7 @@ function componentRoots(file) {
     const binding = text.match(PROPS_BINDING)?.[1].match(CLASS_PROP)?.[1];
     const ast = binding ? parseSvelte(text, { modern: true }) : null;
     const imports = ast ? componentImports(ast) : new Map();
+    const props = ast ? propLocals(ast) : new Map();
     const found = [];
     const uses = binding
       ? new RegExp(`\\b${binding.replace("$", "\\$")}\\b`)
@@ -1484,7 +1592,7 @@ function componentRoots(file) {
         ? text.slice(attribute.start, attribute.end).replace(CLASS_EQUALS, "")
         : "";
       if (attribute && uses.test(expression)) {
-        found.push(rootOf(node, attribute, text, file, imports));
+        found.push(rootOf(node, attribute, text, file, imports, props));
       }
     });
     roots.set(file, { roots: found, imports });
@@ -1519,6 +1627,8 @@ function rootLooks(file, chosen, depth = 0) {
 }
 
 const ANY = Symbol("any value");
+/** The value of a prop a recipe call is gated behind: worn when given at all. */
+const GIVEN = Symbol("given");
 
 /** The values a component tag picks, read from Svelte's own AST. */
 function compiledChoice(node) {
@@ -1564,7 +1674,11 @@ function wears(when, { props, spread }, defaults) {
     if (props.has(axis)) {
       picked = props.get(axis);
     }
-    return picked === ANY || picked === value;
+    return (
+      picked === ANY ||
+      picked === value ||
+      (value === GIVEN && picked !== undefined)
+    );
   });
 }
 
@@ -1621,17 +1735,28 @@ const variantOrder = {
       const file = componentFile(tagName(tag.parent), imports, from);
       for (const look of file ? rootLooks(file, chosenVariants(tag)) : []) {
         for (const entry of entries) {
-          reportAcross(entry, look.names, look.where, look.file);
+          reportAcross(entry, entries, look.names, look.where, look.file);
         }
       }
     };
 
-    const reportAcross = (entry, rootClasses, where, file) => {
+    const reportAcross = (entry, entries, rootClasses, where, file) => {
       const info = classInfo(entry.name);
+      const others = [
+        ...entries
+          .filter((e) => e !== entry && !separated(e, entry))
+          .map((e) => e.name),
+        ...rootClasses,
+      ]
+        .map(classInfo)
+        .filter(Boolean);
       for (const other of info ? rootClasses : []) {
         const otherInfo = other === entry.name ? null : classInfo(other);
         const property = otherInfo ? conflict(info, otherInfo) : null;
-        const winner = property ? winnerOf(entry.name, other) : null;
+        const winner =
+          property && !covered(info, otherInfo, property, others)
+            ? winnerOf(entry.name, other)
+            : null;
         // A component's roots (an `<a>` or a `<button>`) are one look.
         const key = [entry.start, entry.name, file, other].join(":");
         if (winner && !done.has(key)) {
@@ -1648,12 +1773,24 @@ const variantOrder = {
       }
     };
 
-    const reportPair = (x, y) => {
+    const reportPair = (x, y, known) => {
       if (x.entry.name === y.entry.name || separated(x.entry, y.entry)) {
         return;
       }
       const property = conflict(x.info, y.info);
-      const winner = property ? winnerOf(x.entry.name, y.entry.name) : null;
+      const others = known
+        .filter(
+          (z) =>
+            z !== x &&
+            z !== y &&
+            !separated(z.entry, x.entry) &&
+            !separated(z.entry, y.entry)
+        )
+        .map((z) => z.info);
+      const winner =
+        property && !covered(x.info, y.info, property, others)
+          ? winnerOf(x.entry.name, y.entry.name)
+          : null;
       // Classes from an imported constant share the name's place.
       const key = [
         x.entry.start,
@@ -1682,7 +1819,7 @@ const variantOrder = {
         .filter((x) => x.info);
       known.forEach((x, i) => {
         for (const y of known.slice(i + 1)) {
-          reportPair(x, y);
+          reportPair(x, y, known);
         }
       });
     };
