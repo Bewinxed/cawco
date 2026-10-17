@@ -73,6 +73,9 @@ type Tag = "A" | "B" | "C" | "D" | "E";
 const SLEEP = ["sleep", "7311"];
 /** The agent's words for a sandbox the host stopped (boundary-host.ts). */
 const RESTARTED = "was changed on the host";
+/** The agent's words for a boundary it closed (boundary.ts `closeBoundary` and the quiet close). */
+const CLOSED =
+  /, so its boundary [\d, ]+ (is|and its \d+ judge\(s\) are) closed/;
 /** How long the first mock LFS server holds an answer it gives. */
 const SLOW_MS = 4000;
 /** A process's entry in `/proc`. */
@@ -481,6 +484,14 @@ const run = async (kit: Kit) => {
             (line) =>
               line.includes(workspace.slice(0, 8)) && line.includes(RESTARTED)
           );
+      /** The agent's lines that close this workspace's boundary (boundary.ts `closeBoundary`, the quiet close). */
+      const closes = async () =>
+        (await fleet.logs("agent"))
+          .split("\n")
+          .filter(
+            (line) =>
+              line.includes(`[workspace] ${workspace}:`) && CLOSED.test(line)
+          );
       const before = {
         inode: (await stat(config)).ino,
         text: await readFile(config, "utf8"),
@@ -510,6 +521,7 @@ const run = async (kit: Kit) => {
         text: { before: before.text, after: await readFile(config, "utf8") },
         inner: { before: before.inner, after: await inners() },
         restarted: (await restarts()).slice(before.restarts),
+        closed: await closes(),
         sleepAlive: sleeping === undefined ? undefined : alive(sleeping),
         sleeping,
       };
@@ -525,13 +537,18 @@ const run = async (kit: Kit) => {
         .then((subjects) => ({ ok: true, subjects }))
         .catch(async () => ({ ok: false, subjects: await mainLog() }));
     };
-    /** The same sandbox before and after, and no restart said. */
+    /**
+     * No restart said, and the sandbox the item started with still runs, or
+     * none runs and the agent says it closed the workspace's boundary: the
+     * hub settles a workspace whose item ended and that nothing holds.
+     */
     const sameSandbox = (one: Awaited<ReturnType<typeof delegate>>) =>
       Boolean(one.inner.before) &&
-      one.inner.after.includes(one.inner.before ?? "") &&
-      one.restarted.length === 0;
+      one.restarted.length === 0 &&
+      (one.inner.after.includes(one.inner.before ?? "") ||
+        (one.inner.after.length === 0 && one.closed.length > 0));
     const sandboxSaid = (one: Awaited<ReturnType<typeof delegate>>) =>
-      `inner ${one.inner.before} -> ${one.inner.after.join(", ") || "none"}\n${one.restarted.join("\n")}`;
+      `inner ${one.inner.before} -> ${one.inner.after.join(", ") || "none"}\n${[...one.restarted, ...one.closed].join("\n")}`;
 
     // A
     const a = await delegate("A");
@@ -609,7 +626,7 @@ const run = async (kit: Kit) => {
       `inode ${d.inode.before} -> ${d.inode.after}\n${d.text.after}`
     );
     check(
-      "D: the workspace's sandbox is the one it was, and the agent says no restart",
+      "D: its sandbox never restarted: the one it started with runs, or ran until the agent closed its boundary",
       sameSandbox(d),
       sandboxSaid(d)
     );
