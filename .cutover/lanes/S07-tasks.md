@@ -3,7 +3,7 @@
 ## Per-file table
 file · rules moved · residual (1/2/3/4/5) · literals preserved · breakpoint edges · STOPs
 
-| file | rules moved | residual 1/2/3/4/5 | literals preserved | breakpoint edges | STOP |
+| file | rules moved (approx.) | residual 1/2/3/4/5 | literals preserved | breakpoint edges | STOP |
 |---|---|---|---|---|---|
 | tasks/TaskNeedsFor.svelte | 1 | 0/0/0/0/0 | none | none | none |
 | tasks/stage/ArtifactStage.svelte | 1 | 0/0/0/0/0 | 42% (block width) | none | none |
