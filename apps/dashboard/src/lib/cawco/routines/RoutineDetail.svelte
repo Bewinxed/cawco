@@ -130,6 +130,7 @@
       data-clamped={whole ? undefined : ""}
       id="instruction-{routine.id}"
       style:--clamp-h="calc(var(--lines) * 1lh)"
+      style:--fade-from="calc(100% - 1lh)"
       style:--lines="4"
     >
       <Markdown source={routine.prompt} />
@@ -291,6 +292,6 @@
     border-spacing: 0;
   }
   [data-slot="instruction"][data-clamped] {
-    mask-image: linear-gradient(to bottom, canvas calc(100% - 1lh), transparent);
+    mask-image: linear-gradient(to bottom, canvas var(--fade-from), transparent);
   }
 </style>
