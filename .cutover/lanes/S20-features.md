@@ -48,3 +48,7 @@ none.
 - svelte-check: 0 errors, 1 warning (Shot.svelte:212, the foundation's own). No `Unused CSS selector` in this lane; every residual subject is an element of its own file, or `:global(…)` under one.
 - important kept: apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte:67 `stroke: var(--focus-ring) !important` stays as the foreign-dom residual (xyflow's path).
 - wf-* and nodrag/nopan left as written (delta P2).
+
+## Contracts
+contract: apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte:48 shadcn/no-unknown-classes | @xyflow/svelte reads .nodrag/.nopan via closest() | ESLint config allows xyflow's documented hook classes
+contract: apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte:175 shadcn/no-unknown-classes | @xyflow/svelte reads .nodrag/.nopan via closest() | ESLint config allows xyflow's documented hook classes
