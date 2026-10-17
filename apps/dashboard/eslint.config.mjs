@@ -29,6 +29,9 @@ const rules = {
   // Two states that can hold together never leave their winner to Tailwind's
   // variant sort (eslint-plugin-house.mjs).
   "house/variant-order": "error",
+  // A group-not-/peer-not- variant with no group/peer in the file never
+  // matches on its own (eslint-plugin-house.mjs).
+  "house/group-not-needs-ancestor": "error",
   // Property lists only; durations and easings stay tokens.
   "shadcn/no-arbitrary-values": ["error", { allow: ["transition-*"] }],
   "shadcn/no-raw-colors": "error",
