@@ -58,38 +58,68 @@
   </li>
 {/snippet}
 
-<div data-slot="group" class="group">
+<div data-slot="group">
   <NoticeRow
     dismissLabel="Dismiss all {plural(moved.length, 'moved login')}"
     label={heading}
     ondismiss={() => ondismiss(moved.map((one) => one.id))}
   >
     {#snippet lead()}
-      <span data-slot="glyph" class="glyph"
-        ><IconAccounts aria-hidden="true" /></span
+      <!-- The group's glyph in the lead column, as a section head's is: 16px
+           (`icon-md`) in muted ink, centred in the 28px column. -->
+      <span data-slot="glyph" class="grid place-items-center text-ink-muted"
+        ><IconAccounts aria-hidden="true" class="size-icon-md" /></span
       >
     {/snippet}
-    <h3 data-slot="head" class="head">{heading}</h3>
-    <p data-slot="explainer" class="explainer">
+    <!-- The heading of the group: label type in strong ink, its explainer in
+         muted meta; the entries under it read a step lower (MovedLogin). -->
+    <h3
+      data-slot="head"
+      class="m-0 pe-(--x-room) type-label text-ink-strong"
+    >
+      {heading}
+    </h3>
+    <p data-slot="explainer" class="m-0 type-meta text-ink-muted">
       Found signed in on your machines and kept as fleet accounts; any session
       can use them now.
     </p>
   </NoticeRow>
-  <div data-slot="entries" class="entries">
+  <!-- No indent: each entry is a row of the panel, its tile in the one lead
+       column, its words in the one text column, its ✕ at the one trailing
+       edge. The heading and its explainer stand apart from the entries by
+       space as well as type: the head's own foot (`space-3`) and the first
+       entry's (`space-1`), 15px, against the 8px between two entries. -->
+  <div data-slot="entries" class="flex flex-col pb-space-2">
     {#if todo.length > 0}
-      <ul data-slot="list" class="list">
+      <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
         {#each todo as one (one.id)}
           {@render entry(one)}
         {/each}
       </ul>
     {/if}
     {#if done.length > 0}
-      <div data-slot="more" class="more" data-flip>
+      <!-- The toggle in the text column, its chevron's ink on the trailing
+           edge: it hangs past the edge by the kit's 1px transparent border,
+           its inline-end padding (the xs size's 6px beside an icon) and the
+           12px chevron's side bearing (its stroke ends at 19.75 of 24), so its
+           box keeps its size. -->
+      <!-- literal: 28px -->
+      <div
+        data-slot="more"
+        class="flex justify-end ps-(--text-column) pe-space-3 coarse:pb-space-1"
+        data-flip
+        style:--hang="calc(-1 * (1px + 6px + 12px * 4.25 / 24))"
+        style:--text-column="calc(var(--space-3) + 28px + var(--space-3))"
+      >
+        <!-- Open, it says so in its words and its flipped chevron, not in the
+             kit ghost's expanded fill, which would stand hung past the
+             trailing edge (UpdateCard's toggle, the same). The hover fill
+             stays. -->
         <Button
           data-toggle
           aria-controls="moved-done"
           aria-expanded={open}
-          class="toggle"
+          class="me-(--hang) aria-expanded:bg-transparent hover:aria-expanded:bg-surface-hover"
           onclick={() => {
             open = !open;
           }}
@@ -104,21 +134,27 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="chev"
+            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-none"
             data-icon="inline-end"
           />
         </Button>
       </div>
+      <!-- The fold (UpdateCard's notes' recipe): the grid row is the track,
+           the inner box clips, fades and cross-blurs; shutting is quicker than
+           opening; the chevron flips with it. -->
       <div
         data-slot="fold"
-        class="fold"
+        class="group grid transition-[grid-template-rows] dur-exit ease-out data-open:dur-panel motion-reduce:transition-none"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
         ontransitionend={settled}
       >
-        <div data-slot="fold-inner" class="fold-inner">
-          <ul data-slot="list" class="list">
+        <div
+          data-slot="fold-inner"
+          class="min-h-0 overflow-hidden opacity-0 transition-[opacity,filter] dur-exit ease-out group-data-open:opacity-100 group-data-open:dur-panel motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:dur-panel"
+        >
+          <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
             {#each done as one (one.id)}
               {@render entry(one)}
             {/each}
@@ -130,117 +166,26 @@
 </div>
 
 <style>
-  /* The group's glyph in the lead column, as a section head's is: 16px
-     (`icon-md`) in muted ink, centred in the 28px column. */
-  .glyph {
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-  }
-  .glyph > :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  /* The heading of the group: label type in strong ink, its explainer in
-     muted meta; the entries under it read a step lower (MovedLogin). */
-  .head {
-    margin: 0;
-    padding-inline-end: var(--x-room);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .explainer {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* No indent: each entry is a row of the panel, its tile in the one lead
-     column, its words in the one text column, its ✕ at the one trailing
-     edge. The heading and its explainer stand apart from the entries by
-     space as well as type: the head's own foot (`space-3`) and the first
-     entry's (`space-1`), 15px, against the 8px between two entries. */
-  .entries {
-    display: flex;
-    flex-direction: column;
-    padding-block-end: var(--space-2);
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* The toggle in the text column, its chevron's ink on the trailing edge:
-     it hangs past the edge by the kit's 1px transparent border, its
-     inline-end padding (the xs size's 6px beside an icon) and the 12px
-     chevron's side bearing (its stroke ends at 19.75 of 24), so its box
-     keeps its size. */
-  .more {
-    display: flex;
-    justify-content: flex-end;
-    padding-inline: calc(var(--space-3) + 28px + var(--space-3)) var(--space-3);
-  }
-  .more > :global(.toggle) {
-    margin-inline-end: calc(-1 * (1px + 6px + 12px * 4.25 / 24));
-  }
-  /* Open, it says so in its words and its flipped chevron, not in the kit
-     ghost's expanded fill, which would stand hung past the trailing edge
-     (UpdateCard's toggle, the same). The hover fill stays. */
-  .more > :global(.toggle[aria-expanded="true"]:not(:hover)) {
-    background-color: transparent;
-  }
-  /* The fold (UpdateCard's notes' recipe): the grid row is the track, the
-     inner box clips, fades and cross-blurs; shutting is quicker than
-     opening; the chevron flips with it. */
-  .fold {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows var(--dur-exit) var(--ease-out);
-  }
-  .fold[data-open] {
-    grid-template-rows: 1fr;
-    transition-duration: var(--dur-panel);
-  }
-  .fold-inner {
-    min-block-size: 0;
-    overflow: hidden;
-    opacity: 0;
-    filter: blur(var(--fold-blur));
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      filter var(--dur-exit) var(--ease-out);
-  }
-  .fold[data-open] > .fold-inner {
-    opacity: 1;
-    filter: blur(0);
-    transition-duration: var(--dur-panel);
-  }
-  .more :global(.chev) {
-    transition: transform var(--dur-panel) var(--ease-out);
-  }
-  .more :global(.chev path) {
+  /* residual: foreign-dom */
+  [data-slot="more"] :global([data-chev] path) {
     vector-effect: non-scaling-stroke;
   }
-  .more :global(.toggle[aria-expanded="true"] .chev) {
-    transform: scaleY(-1);
+  /* residual: unmapped */
+  [data-slot="fold"] {
+    grid-template-rows: 0fr;
+  }
+  [data-slot="fold"][data-open] {
+    grid-template-rows: 1fr;
+  }
+  [data-slot="fold-inner"] {
+    filter: blur(var(--fold-blur));
+  }
+  [data-slot="fold"][data-open] > [data-slot="fold-inner"] {
+    filter: blur(0);
   }
   @media (prefers-reduced-motion: reduce) {
-    .fold,
-    .more :global(.chev) {
-      transition: none;
-    }
-    .fold-inner {
+    [data-slot="fold-inner"] {
       filter: none;
-      transition: opacity var(--dur-fade) var(--ease-out);
-    }
-  }
-  /* A finger's 44px area (`touch-hit`) reaches 10px past the toggle: the
-     row opens its gap on touch so the area stays inside the group and the
-     panel never scrolls for it (The 44 Touch Rule). */
-  @media (pointer: coarse) {
-    .more {
-      padding-block-end: var(--space-1);
     }
   }
 </style>

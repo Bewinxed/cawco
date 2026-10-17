@@ -39,7 +39,15 @@
   }}
   open={peek.open}
 >
-  <Drawer.Content data-peek-sheet class="peek-sheet">
+  <!-- The peek holds its size from the first frame: it opens on "Reading…" and
+       the tail arrives into a sheet already its height, instead of the sheet
+       growing under the reader as the transcript lands. -->
+  <!-- literal: 80dvh -->
+  <Drawer.Content
+    data-peek-sheet
+    class="vaul-drawer-direction-bottom:h-(--sheet-h) vaul-drawer-direction-bottom:pb-(--safe-bottom)"
+    style="--sheet-h: 80dvh"
+  >
     <Drawer.Title class="sr-only">Peek</Drawer.Title>
     <Drawer.Description class="sr-only"
       >The tail of one session. Open dives into it; closing keeps your place.</Drawer.Description
@@ -50,12 +58,3 @@
   </Drawer.Content>
 </Drawer.Root>
 
-<style>
-  /* The peek holds its size from the first frame: it opens on "Reading…" and
-     the tail arrives into a sheet already its height, instead of the sheet
-     growing under the reader as the transcript lands. */
-  :global(.peek-sheet[data-vaul-drawer-direction="bottom"]) {
-    height: 80dvh;
-    padding-bottom: var(--safe-bottom);
-  }
-</style>

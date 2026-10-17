@@ -38,21 +38,55 @@
   } = $props();
 </script>
 
+<!-- `--x-ink`: how far inside its 24px box the ✕'s ink stops, the box's
+     padding round the 12px glyph plus the glyph's own side bearing (Close:
+     its stroke ends at 18.75 of 24). The ✕ hangs past the trailing edge by
+     that much, so its ink ends on the panel's one trailing edge, where a
+     wait's figures and Approve's fill end; its box keeps its size. An entry of
+     a group (`nested`): the same columns, less air between entries. -->
+<!-- literal: 28px, 44px, 12px, 24px, 5.25 -->
 <article
   data-slot="notice"
   aria-label={label}
-  class={["notice", nested && "nested"]}
+  class="group relative grid min-h-(--row-min) grid-cols-(--columns) items-start gap-x-space-3 px-space-3 py-(--pad-block)"
   data-flip="box"
+  data-nested={nested || undefined}
+  style:--columns="var(--lead) minmax(0, 1fr)"
+  style:--lead="28px"
+  style:--pad-block={nested ? "var(--space-1)" : "var(--space-3)"}
+  style:--row-min={nested ? "0px" : "44px"}
+  style:--x-ink="calc((24px - 12px) / 2 + 12px * 5.25 / 24)"
 >
-  <span data-slot="lead" class="lead">{@render lead()}</span>
-  <div data-slot="body" class="body">{@render children()}</div>
+  <span data-slot="lead" class="grid size-(--lead) place-items-center"
+    >{@render lead()}</span
+  >
+  <!-- The first line pads by `--x-room` so its words stop `space-2` short of
+       the ✕'s box. -->
+  <div
+    data-slot="body"
+    class="flex min-w-0 flex-col gap-space-row"
+    style:--x-room="calc(24px - var(--x-ink) + var(--space-2))"
+  >
+    {@render children()}
+  </div>
   {#if ondismiss}
-    <span data-slot="end" class="end">
+    <!-- The first line's trailing cell: the label line's middle, its ink on
+         the row's trailing edge. An entry's first line is in body type: the ✕
+         centres on that. -->
+    <span
+      data-slot="end"
+      class="absolute end-(--end-edge) top-(--end-top) flex type-label group-data-nested:type-body"
+      style:--end-edge="calc(var(--space-3) - var(--x-ink))"
+      style:--end-top="calc(var(--pad-block) + (1lh - 24px) / 2)"
+    >
       <button
         data-slot="x"
         aria-label={dismissLabel}
-        class="x touch-hit pointer-hit"
+        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted motion-safe:active:scale-(--press-scale) hover:bg-surface-hover hover:text-ink-strong"
         onclick={ondismiss}
+        style:--box="24px"
+        style:--hit-edge="0px"
+        style:--hit-shift="calc((24px - 44px) / 2)"
         type="button"
       >
         <IconClose aria-hidden="true" class="size-icon-sm" />
@@ -62,90 +96,21 @@
 </article>
 
 <style>
-  /* `--x-ink`: how far inside its 24px box the ✕'s ink stops, the box's
-     padding round the 12px glyph plus the glyph's own side bearing (Close:
-     its stroke ends at 18.75 of 24). The ✕ hangs past the trailing edge by
-     that much, so its ink ends on the panel's one trailing edge, where a
-     wait's figures and Approve's fill end; its box keeps its size. */
-  .notice {
-    --x-ink: calc((24px - 12px) / 2 + 12px * 5.25 / 24);
-    --pad-block: var(--space-3);
-    position: relative;
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    column-gap: var(--space-3);
-    align-items: start;
-    min-block-size: 44px;
-    padding: var(--pad-block) var(--space-3);
-  }
-  /* An entry of a group: the same columns, less air between entries. */
-  .nested {
-    --pad-block: var(--space-1);
-    min-block-size: 0;
-  }
-  .lead {
-    display: grid;
-    place-items: center;
-    inline-size: 28px;
-    block-size: 28px;
-  }
-  /* The first line pads by `--x-room` so its words stop `space-2` short of
-     the ✕'s box. */
-  .body {
-    --x-room: calc(24px - var(--x-ink) + var(--space-2));
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  /* The first line's trailing cell: the label line's middle, its ink on the
-     row's trailing edge. */
-  .end {
-    position: absolute;
-    inset-block-start: calc(var(--pad-block) + (1lh - 24px) / 2);
-    inset-inline-end: calc(var(--space-3) - var(--x-ink));
-    display: flex;
-    font: var(--type-label);
-  }
-  /* An entry's first line is in body type: the ✕ centres on that. */
-  .nested > .end {
-    font: var(--type-body);
-  }
-  .x {
-    --hit-edge: 0px;
-    display: grid;
-    place-items: center;
-    inline-size: 24px;
-    block-size: 24px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
+  /* residual: unmapped */
+  [data-slot="x"] {
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
       transform var(--dur-toggle) var(--ease-out);
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .x:active {
-      transform: scale(var(--press-scale));
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .x:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
   /* A finger's 44px area (`touch-hit`) stays whole and centred where the box
      stood before it hung: moved back inboard by `--x-ink`, it ends inside the
      list as it did, so the list never grows a sideways scroll for it. */
   @media (pointer: coarse) {
-    .x::after {
-      inset-inline-start: calc((24px - 44px) / 2 - var(--x-ink));
-      inset-inline-end: calc((24px - 44px) / 2 + var(--x-ink));
+    /* residual: pseudo */
+    [data-slot="x"]::after {
+      inset-inline-start: calc(var(--hit-shift) - var(--x-ink));
+      inset-inline-end: calc(var(--hit-shift) + var(--x-ink));
     }
   }
 </style>
