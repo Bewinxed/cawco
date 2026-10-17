@@ -125,7 +125,9 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-(--pop-w) max-w-(--pop-max) gap-3 p-3"
+    class="w-(--pop-w) max-w-(--pop-max)"
+    gap="form"
+    pad="form"
     style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
@@ -157,7 +159,7 @@
         {/snippet}
         <Input
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="skill-source"
           oninput={() => {
             if (!named) {
@@ -185,7 +187,7 @@
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
           autocomplete="off"
-          class="font-mono"
+          face="mono"
           id="skill-name"
           oninput={() => {
             named = true;

@@ -25,11 +25,11 @@
 {#if accounts.length > 0}
   <ContextMenu.Sub>
     <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
-    <ContextMenu.SubTrigger class="gap-2.5">
+    <ContextMenu.SubTrigger gap="item">
       <IconAccounts class="size-icon-md" />
       <span>Account</span>
     </ContextMenu.SubTrigger>
-    <ContextMenu.SubContent class="min-w-52">
+    <ContextMenu.SubContent min="standard">
       <!-- Its value is the account the session runs on, always: a pick asks
            for the move (moveTo, which leaves the current one alone) and the
            check follows the session once it has moved. -->

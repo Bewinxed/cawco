@@ -201,7 +201,7 @@
                   </Button>
                 {/snippet}
               </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="end" class="w-auto min-w-44">
+              <DropdownMenu.Content align="end" class="w-auto" min="regular">
                 <DropdownMenu.Item
                   disabled={down !== null || deleting || saving}
                   onSelect={ondelete}

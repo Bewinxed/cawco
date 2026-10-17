@@ -312,7 +312,7 @@
 <!-- literal: 1rem on a phone or a coarse pointer -->
 <div
   data-slot="editor-wrap"
-  class="relative"
+  class="relative prompt-fs-(--text-body) max-phone:prompt-fs-(--prompt-fs-touch) coarse:prompt-fs-(--prompt-fs-touch)"
   data-keeps-draft
   style:--prompt-fs-touch="1rem"
   style:--prompt-lh="calc(var(--prompt-fs) * 1.55)"
@@ -322,7 +322,7 @@
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="fai-scroll h-(--prompt-height) max-phone:h-(--prompt-height-phone) w-full overflow-auto rounded-t-lg bg-transparent px-(--pad-x) pt-(--pad-t) pb-(--pad-b) font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap text-ink-strong outline-none max-phone:overscroll-contain max-phone:transition-none motion-safe:transition-[height] motion-safe:duration-(--ns-prompt-ms) motion-safe:ease-in-out"
+    class="fai-scroll h-(--prompt-height) max-phone:h-(--prompt-height-phone) w-full overflow-auto rounded-t-lg bg-transparent px-(--pad-x) pt-(--pad-t) pb-(--pad-b) font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-none max-phone:overscroll-contain max-phone:transition-off motion-safe:phone:transition-[height] motion-safe:phone:duration-(--ns-prompt-ms) motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {
@@ -377,18 +377,6 @@
 </div>
 
 <style>
-  /* residual: unmapped */
-  /* The prompt's type, defined once: the text, the placeholder and the chips
-     (which size themselves to the line) all read the same two values. */
-  [data-slot="editor-wrap"] {
-    --prompt-fs: var(--text-body);
-    @media (max-width: 640px), (pointer: coarse) {
-      --prompt-fs: var(--prompt-fs-touch);
-    }
-  }
-  [data-slot="editor"] {
-    word-break: break-word;
-  }
   /* residual: foreign-dom */
   /* A chip is centred on its line by construction, not tuned to a baseline.
      It is the line minus 1px of margin above and below, pinned to the line's

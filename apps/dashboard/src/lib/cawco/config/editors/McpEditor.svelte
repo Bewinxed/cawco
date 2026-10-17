@@ -362,7 +362,7 @@
           <Field id="mcp-package" label="Package">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-package"
               oninput={() => {
                 if (!named) {
@@ -377,7 +377,7 @@
           <Field id="mcp-package-args" label="Arguments (optional)">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-package-args"
               placeholder="/home/you/projects"
               spellcheck="false"
@@ -405,7 +405,7 @@
           <Field id="mcp-command" label="Command">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-command"
               placeholder="uvx"
               spellcheck="false"
@@ -419,7 +419,7 @@
           >
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-args"
               placeholder="mcp-server-git --repository /home/you/repo"
               spellcheck="false"
@@ -447,7 +447,7 @@
           <Field id="mcp-url" label="URL">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="mcp-url"
               placeholder="https://mcp.example.com/sse"
               spellcheck="false"

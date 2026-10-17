@@ -32,9 +32,12 @@
 >
   <!-- literal: 10px 16px 2px -->
   <a
-    class="link grid min-w-0 flex-auto grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill"
+    data-slot="account-list-row-link"
+    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill data-two:grid-areas-(--link-areas-two)"
     data-two={Boolean(problem) || undefined}
     {href}
+    style:--link-areas={'"dot name chev"'}
+    style:--link-areas-two={'"dot name chev" ". problem chev"'}
     style:--link-cols="10px minmax(0, 1fr) 16px"
   >
     <!-- literal: 10px, 50% -->
@@ -76,15 +79,3 @@
     >
   </a>
 </li>
-
-<style>
-  /* residual: unmapped */
-  .link {
-    grid-template-areas: "dot name chev";
-  }
-  .link[data-two] {
-    grid-template-areas:
-      "dot name chev"
-      ". problem chev";
-  }
-</style>

@@ -324,7 +324,7 @@
     <Field id="type-skills" label="Skills">
       <Input
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="type-skills"
         placeholder="svelte-foundations:coding, ui-observer"
         spellcheck="false"
@@ -334,7 +334,7 @@
     <Field id="type-deny" label="Tools denied">
       <Input
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="type-deny"
         placeholder="Write, Edit, NotebookEdit"
         spellcheck="false"

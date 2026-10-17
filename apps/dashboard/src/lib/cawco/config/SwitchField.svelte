@@ -27,7 +27,7 @@
   style:--row-gap="10px"
 >
   <Switch
-    class="mt-px"
+    align="first-line"
     {disabled}
     {id}
     onCheckedChange={onchange}

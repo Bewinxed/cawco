@@ -209,7 +209,9 @@ You are a <role>, working in one repository at a time.
     {/if}
     <Textarea
       aria-label="{target ?? 'New'} definition"
-      class="min-h-80 resize-y font-mono"
+      class="resize-y"
+      face="mono"
+      height="tall"
       spellcheck="false"
       bind:value={draft}
     />

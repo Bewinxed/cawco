@@ -197,7 +197,7 @@
           <Folder class="text-hue-amber-500" />
         {:else}
           <ProviderLogo
-            class="opacity-(--o)"
+            fade="set"
             provider="github"
             size={null}
             style={`--o:${on ? 1 : 0.6}`}
@@ -272,7 +272,7 @@
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
-          style:--browse-shadow="inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"
+          style:--browse-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
           style:--gap="6px"
           style:--h="30px"
           style:--h-phone="44px"
@@ -488,9 +488,10 @@
             style:--pad-x="12px"
           >
             <ProviderLogo
-              class="size-icon-md flex-none text-hue-amber-500 opacity-80"
+              class="size-icon-md flex-none"
               provider="github"
               size={null}
+              tone="amber-dim"
             />
             <!-- literal: 30px / 44px minimum height, 1.4 line height, 1rem on a phone -->
             <input

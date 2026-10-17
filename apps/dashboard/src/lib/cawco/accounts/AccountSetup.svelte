@@ -439,7 +439,7 @@
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class="group mark-line flex h-(--step-h) items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] dur-fade ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:text-selected-ink"
+            class="group mark-line flex h-(--step-h) items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] dur-fade ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-selected-ink"
             data-cur={place === step || undefined}
             style:--step-h="34px"
           >
@@ -459,8 +459,8 @@
             {/if}
             <span
               data-slot="name"
-              class="@max-setup/setup:group-not-data-cur:absolute @max-setup/setup:group-not-data-cur:size-px @max-setup/setup:group-not-data-cur:overflow-clip @max-setup/setup:group-not-data-cur:whitespace-nowrap"
-              >{words.steps[id]}</span
+              class="@max-setup/setup:group-not-data-cur:absolute @max-setup/setup:group-not-data-cur:size-px @max-setup/setup:group-not-data-cur:overflow-clip @max-setup/setup:group-not-data-cur:whitespace-nowrap @max-setup/setup:group-not-data-cur:clip-path-(--name-clip)"
+              style:--name-clip="inset(50%)">{words.steps[id]}</span
             >
           </li>
         {/each}
@@ -699,6 +699,8 @@
       <ul
         data-slot="machines"
         class="m-0 flex list-none flex-col p-0"
+        style:--mrow-areas={'"name controls st" ". problem problem"'}
+        style:--mrow-areas-stack={'"name st" "controls controls" "problem problem"'}
         style:--mrow-cols="150px minmax(0, 1fr) auto"
         style:--mrow-cols-two="minmax(0, 1fr) auto"
         style:--st-icon="14px"
@@ -712,7 +714,7 @@
           {@const device = devices.get(machine.machineId)}
           {#if device}
             <li
-              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-start"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-start"
               data-device
             >
               <b
@@ -747,7 +749,7 @@
                  and Done. Continue is how a machine is skipped. -->
             {@const asked = paste.phase !== "idle" || paste.url !== null}
             <li
-              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-cols-(--mrow-cols-two)"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-areas-(--mrow-areas-stack) data-paste:grid-cols-(--mrow-cols-two)"
               data-paste
             >
               <b
@@ -818,7 +820,9 @@
                     aria-invalid={paste.problem ? "true" : undefined}
                     aria-label={words.codeFor(name)}
                     autocomplete="off"
-                    class="h-(--code-h) min-w-0 flex-(--code-flex)"
+                    class="h-(--code-h)"
+                    flex="code"
+                    measure="shrink"
                     disabled={paste.url === null}
                     onkeydown={(event) => {
                       if (event.key === "Enter") {
@@ -958,32 +962,6 @@
 {/snippet}
 
 <style>
-  /* residual: unmapped */
-  .mrow {
-    grid-template-areas:
-      "name controls st"
-      ". problem problem";
-  }
-  .mrow[data-paste] {
-    grid-template-areas:
-      "name st"
-      "controls controls"
-      "problem problem";
-  }
-  /* A narrow page: the rail becomes a row of marks with the current step
-     named, and each machine's controls go under its name. */
-  @container setup (width < 640px) {
-    .mrow {
-      grid-template-areas:
-        "name st"
-        "controls controls"
-        "problem problem";
-    }
-    li:not([data-cur]) [data-slot="name"] {
-      clip-path: inset(50%);
-    }
-  }
-
   /* residual: pseudo */
   [data-slot="dot"]::after {
     content: "";

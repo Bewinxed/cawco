@@ -209,7 +209,8 @@
               ? "reserve-line"
               : undefined}
             aria-invalid={reservePct === undefined ? "true" : undefined}
-            class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
+            class="num h-c-btn-h-sm w-(--field-w) flex-none text-center"
+            pad="tight"
             id="reserve"
             inputmode="numeric"
             bind:value={fields.reserve}

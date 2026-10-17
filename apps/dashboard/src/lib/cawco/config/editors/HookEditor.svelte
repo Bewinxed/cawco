@@ -597,7 +597,7 @@
           <Input
             aria-invalid={shown("matcher") ? "true" : undefined}
             autocomplete="off"
-            class="font-mono"
+            face="mono"
             id="hook-matcher"
             onblur={() => {
               touched.matcher = true;
@@ -655,7 +655,8 @@
           >
             <Textarea
               aria-invalid={shown("script") ? "true" : undefined}
-              class="resize-y font-mono"
+              class="resize-y"
+              face="mono"
               id="hook-script"
               onblur={() => {
                 touched.script = true;
@@ -669,7 +670,7 @@
           <Field id="hook-args" label="Arguments (optional)">
             <Input
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-args"
               placeholder="--flag value"
               spellcheck="false"
@@ -720,7 +721,7 @@
             <Input
               aria-invalid={shown("url") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-url"
               onblur={() => {
                 touched.url = true;
@@ -750,7 +751,7 @@
             <Input
               aria-invalid={shown("mcp_server_name") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-server"
               onblur={() => {
                 touched.mcp_server_name = true;
@@ -764,7 +765,7 @@
             <Input
               aria-invalid={shown("tool_name") ? "true" : undefined}
               autocomplete="off"
-              class="font-mono"
+              face="mono"
               id="hook-tool"
               onblur={() => {
                 touched.tool_name = true;
@@ -809,7 +810,7 @@
               <Field id="hook-agent" label="Subagent (optional)">
                 <Input
                   autocomplete="off"
-                  class="font-mono"
+                  face="mono"
                   id="hook-agent"
                   placeholder="Inherits Claude Code's default"
                   spellcheck="false"
@@ -833,7 +834,7 @@
       <Input
         aria-invalid={shown("if") ? "true" : undefined}
         autocomplete="off"
-        class="font-mono"
+        face="mono"
         id="hook-if"
         onblur={() => {
           touched.if = true;
@@ -861,7 +862,7 @@
       >
         <Input
           aria-invalid={shown("timeout") ? "true" : undefined}
-          class="font-mono"
+          face="mono"
           id="hook-timeout"
           min="1"
           oninput={(event) => {
