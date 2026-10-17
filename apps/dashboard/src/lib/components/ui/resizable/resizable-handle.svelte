@@ -12,7 +12,7 @@
       look: {
         split:
           "dur-control bg-border-hairline transition-[background-color] ease-out hover:bg-border-control data-active:bg-ink-muted",
-        grid: "motion-safe:dur-control bg-border-hairline hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:ease-out motion-reduce:transition-none",
+        grid: "motion-safe:dur-control bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:ease-out motion-reduce:transition-none",
       },
     },
   });

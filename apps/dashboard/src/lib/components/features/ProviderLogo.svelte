@@ -2,13 +2,11 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks, each as they drew it: at the opacity the caller
-      sets (`--o`), or in the folder glyph's amber at 80% (a mark drawn in
-      one ink keeps its ink: `provider-ink` is declared over it). */
+  /** Its callers' looks: at the opacity the caller sets (`--o`), or at
+      80%. A caller never tints a mark, so no look carries a colour. */
   export const providerLogoVariants = tv({
     variants: {
-      fade: { set: "opacity-(--o)" },
-      tone: { "amber-dim": "text-hue-amber-500 opacity-80" },
+      fade: { set: "opacity-(--o)", dim: "opacity-80" },
     },
   });
 
@@ -90,7 +88,6 @@
     class: className = "",
     style = "",
     fade,
-    tone,
   }: ProviderLogoLooks & {
     /** The model id as known on the wire; the provider is read off its name. */
     model?: string;
@@ -105,7 +102,7 @@
 
   const key = $derived(provider ?? providerOf(model) ?? "");
   const Logo = $derived(LOGOS[key]);
-  const classes = $derived(cn(providerLogoVariants({ fade, tone }), className));
+  const classes = $derived(cn(providerLogoVariants({ fade }), className));
   const sized = $derived(size === null ? {} : { width: size, height: size });
   const box = $derived(
     size === null ? "" : `width:${size}px;height:${size}px;`
