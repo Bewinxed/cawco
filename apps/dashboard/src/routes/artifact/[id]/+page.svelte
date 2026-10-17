@@ -69,7 +69,14 @@
      a canvas stands on over the pane's slot, and the toasts the artifact
      menu says a refusal in. -->
 <Overlays>
-  <div data-slot="artifact-tab" class="artifact-tab">
+  <!-- The panel's card at the tab's full width and height, on the page's
+       surface, with the gap the card keeps from its column beside a
+       conversation. -->
+  <div
+    data-slot="artifact-tab"
+    class="flex h-(--tab-h) flex-col overflow-hidden bg-surface-page p-space-2"
+    style:--tab-h="100dvh"
+  >
     {#if problem}
       <EmptyState icon={IconAlert} title="This artifact didn't open">
         {#snippet line()}
@@ -83,10 +90,15 @@
     {:else if found && open}
       <PreviewPane instanceId={found.instanceId} ownTab />
     {:else}
-      <div aria-hidden="true" class="opening">
+      <div
+        aria-hidden="true"
+        class="flex-1 rounded-lg bg-surface-recess p-space-5"
+      >
+        <!-- literal: 42% -->
         <span
           data-slot="block"
-          class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+          class="kit-skeleton block h-space-3 w-(--block-w) rounded-xs"
+          style:--block-w="42%"
         ></span>
       </div>
     {/if}
@@ -98,23 +110,3 @@
   expand
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
-
-<style>
-  /* The panel's card at the tab's full width and height, on the page's
-     surface, with the gap the card keeps from its column beside a
-     conversation. */
-  .artifact-tab {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    overflow: hidden;
-    padding: var(--space-2);
-    background: var(--surface-page);
-  }
-  .opening {
-    flex: 1;
-    padding: var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--surface-recess);
-  }
-</style>

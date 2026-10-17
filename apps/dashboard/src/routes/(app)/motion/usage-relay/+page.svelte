@@ -123,12 +123,12 @@
 {#if !framed}
   <nav
     aria-label="Usage popover bench"
-    class="bench"
+    class="pointer-events-auto fixed inset-x-space-2 top-space-2 z-60 flex flex-wrap justify-end gap-x-space-4 gap-y-space-2"
     onpointerdown={(event) => event.stopPropagation()}
   >
     {#each SWITCHES as each (each.key)}
-      <span class="switch">
-        <span class="switch-label">{each.label}</span>
+      <span class="flex items-center gap-space-1">
+        <span class="type-meta text-ink-muted">{each.label}</span>
         {#each each.options as option (option.value)}
           <Button
             aria-current={current(each.key) === option.value
@@ -147,49 +147,27 @@
 {/if}
 
 {#if phoneFrame}
-  <div class="phone">
-    <iframe height="844" src={frameSrc} title="Phone sheet" width="390"
+  <!-- literal: 56px -->
+  <div
+    class="grid place-items-center px-space-4 pt-(--pad-top) pb-space-4"
+    style:--pad-top="56px"
+  >
+    <iframe
+      class="rounded-lg border border-border-control bg-surface-recess"
+      height="844"
+      src={frameSrc}
+      title="Phone sheet"
+      width="390"
     ></iframe>
   </div>
 {:else if ownStrip}
-  <div class="home-strip" data-bench-strip>
+  <!-- literal: 96px, 12px -->
+  <div
+    class="px-(--pad-x) pt-(--pad-top)"
+    data-bench-strip
+    style:--pad-top="96px"
+    style:--pad-x="12px"
+  >
     <UsageMeter variant="home" />
   </div>
 {/if}
-
-<style>
-  .bench {
-    position: fixed;
-    inset-block-start: var(--space-2);
-    inset-inline: var(--space-2);
-    z-index: 60;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-4);
-    justify-content: flex-end;
-    pointer-events: auto;
-  }
-  .switch {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .switch-label {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .phone {
-    display: grid;
-    place-items: center;
-    padding: 56px var(--space-4) var(--space-4);
-
-    & iframe {
-      border: 1px solid var(--border-control);
-      border-radius: var(--radius-lg);
-      background: var(--surface-recess);
-    }
-  }
-  .home-strip {
-    padding: 96px 12px 0;
-  }
-</style>

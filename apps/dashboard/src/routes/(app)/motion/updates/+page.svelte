@@ -294,42 +294,48 @@
 
 <svelte:head><title>Update states · CawCo</title></svelte:head>
 
-<main>
-  <h1>Channel cards</h1>
+<!-- literal: 980px, 380px -->
+<main
+  class="mx-auto grid max-w-(--measure) gap-space-5 p-space-6"
+  style:--measure="980px"
+  style:--notice-cols="repeat(auto-fill, minmax(var(--panel-w), 1fr))"
+  style:--panel-w="380px"
+>
+  <h1 class="type-title">Channel cards</h1>
   <section
     data-slot="updates-page-card"
-    class="card"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
     data-states="cards-stable"
   >
-    <p>The fleet follows Stable; Stable chosen.</p>
+    <p class="type-meta mb-space-2 text-ink-muted">The fleet follows Stable; Stable chosen.</p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="stable" />
   </section>
   <section
     data-slot="updates-page-card"
-    class="card"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
     data-states="cards-nightly"
   >
-    <p>The fleet follows Nightly; Stable chosen.</p>
+    <p class="type-meta mb-space-2 text-ink-muted">The fleet follows Nightly; Stable chosen.</p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="nightly" />
   </section>
 
-  <h1>Update cell, rows 1 to 12</h1>
-  <section data-slot="updates-page-card" class="card" data-states="table">
+  <h1 class="type-title">Update cell, rows 1 to 12</h1>
+  <section data-slot="updates-page-card" class="rounded-lg bg-surface-raised p-space-5 shadow-tile" data-states="table">
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
-  <h1>Notices 1 to 7, as the update row of Caw's panel</h1>
-  <div data-slot="notices" class="notices" data-states="notices">
+  <h1 class="type-title">Notices 1 to 7, as the update row of Caw's panel</h1>
+  <div data-slot="notices" class="grid grid-cols-(--notice-cols) items-start gap-space-5" data-states="notices">
     {#each NOTICES as notice (notice.kind)}
-      <div class="kit-pop panel" data-notice={notice.kind}>
+      <div class="kit-pop w-(--panel-w)" data-notice={notice.kind}>
         <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
       </div>
     {/each}
   </div>
 
-  <h1>Updated, with notes written before sections</h1>
-  <div data-slot="notices" class="notices" data-states="notice-plain">
-    <div class="kit-pop panel" data-notice="plain">
+  <h1 class="type-title">Updated, with notes written before sections</h1>
+  <div data-slot="notices" class="grid grid-cols-(--notice-cols) items-start gap-space-5" data-states="notice-plain">
+    <div class="kit-pop w-(--panel-w)" data-notice="plain">
       <UpdateCard
         alone
         notice={UPDATED_PLAIN}
@@ -339,9 +345,9 @@
     </div>
   </div>
 
-  <h1>Updated, in a tab older than the dashboard: Reload says goodbye</h1>
+  <h1 class="type-title">Updated, in a tab older than the dashboard: Reload says goodbye</h1>
   <!-- As the panel has it: the row in a `reflow`, a row under it. -->
-  <div class="kit-pop panel" data-states="notice-reload" {@attach reflow()}>
+  <div class="kit-pop w-(--panel-w)" data-states="notice-reload" {@attach reflow()}>
     <div data-flip="box">
       <UpdateCard
         alone={false}
@@ -350,53 +356,13 @@
         ondismiss={noop}
       />
     </div>
-    <div class="under" data-flip="box">
+    <div class="type-meta border-t border-border-hairline p-space-3 text-ink-muted" data-flip="box">
       The next row of the panel follows the row's edge
     </div>
   </div>
-  <div data-slot="notices" class="notices" data-states="update-card">
-    <div class="kit-pop panel">
+  <div data-slot="notices" class="grid grid-cols-(--notice-cols) items-start gap-space-5" data-states="update-card">
+    <div class="kit-pop w-(--panel-w)">
       <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>
   </div>
 </main>
-
-<style>
-  main {
-    display: grid;
-    gap: var(--space-5);
-    max-inline-size: 980px;
-    margin-inline: auto;
-    padding: var(--space-6);
-  }
-  h1 {
-    font: var(--type-title);
-  }
-  .card {
-    padding: 18px;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .card p {
-    margin-bottom: var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .notices {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    align-items: start;
-    gap: var(--space-5);
-  }
-  /* The panel's own width (NeedsCaw). */
-  .panel {
-    inline-size: 380px;
-  }
-  .under {
-    padding: var(--space-3);
-    border-block-start: 1px solid var(--border-hairline);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

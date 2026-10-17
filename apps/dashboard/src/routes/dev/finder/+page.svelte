@@ -97,57 +97,95 @@
   });
 </script>
 
-<div class="bench" class:phone>
+<!-- literal: 100dvh -->
+<div
+  class="relative flex h-(--bench-h) flex-col bg-(--background) type-body text-ink-strong"
+  data-phone={phone || undefined}
+  style:--bench-h="100dvh"
+>
   {#if !phone}
-    <header class="bar">
-      <span data-slot="title" class="title">Finder bench</span>
+    <header
+      class="flex h-c-top-bar-h flex-none items-center justify-between border-b border-border-hairline bg-surface-raised ps-space-6 pe-space-1"
+    >
+      <span data-slot="title" class="type-label text-ink-muted"
+        >Finder bench</span
+      >
       <button
-        class="jump"
+        class="inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-0 bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => (open ? hide() : show())}
         type="button"
       >
-        Jump <kbd>⌘K</kbd>
+        Jump <kbd class="type-meta">⌘K</kbd>
       </button>
     </header>
   {/if}
 
-  <main class="page">
-    <ol class="sent" aria-label="Sent">
+  <main class="flex min-h-0 flex-1 flex-col px-space-6 py-space-5">
+    <ol
+      class="m-0 flex-1 list-none overflow-y-auto p-0"
+      aria-label="Sent"
+    >
       {#each log.sent as text, i (i)}
-        <li class="sent-line">{text}</li>
+        <li class="py-space-2 type-code whitespace-pre-wrap">{text}</li>
       {/each}
     </ol>
-    <div data-slot="composer" class="composer" data-composer>
+    <!-- literal: 34px -->
+    <div
+      data-slot="composer"
+      class="relative mx-auto flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile"
+      data-composer
+      style:--composer-w="min(100%, var(--c-composer-w))"
+    >
       <MentionField
         bind:this={mentionField}
         bind:editor
         bind:value={message}
+        class="min-w-0 flex-1"
         onsubmit={send}
         {phone}
       />
-      <div data-slot="controls" class="controls">
-        <button class="attach" type="button">Attach</button>
+      <div data-slot="controls" class="flex gap-space-1">
+        <button
+          class="h-(--btn-h) rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
+          style:--btn-h="34px"
+          type="button">Attach</button
+        >
         <button
           data-slot="send"
-          class="send"
+          class="h-(--btn-h) rounded-xs border-0 bg-action-solid px-space-3 type-label text-on-action"
           data-send
           onclick={() => send(message)}
+          style:--btn-h="34px"
           type="button">Send</button
         >
       </div>
     </div>
     {#if phone}
-      <button class="jump phone" data-jump onclick={() => show()} type="button"
-        >Jump</button
+      <button
+        class="absolute top-space-3 end-space-3 inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-0 bg-transparent px-space-3 type-label text-ink-muted"
+        data-jump
+        onclick={() => show()}
+        type="button">Jump</button
       >
     {/if}
   </main>
 
   {#if open}
     {#if phone}
-      <div data-slot="sheet" class="sheet" data-finder-card>
-        <div class="grabber" aria-hidden="true"></div>
+      <!-- A phone: a sheet from the glass, the field at its foot over the keyboard. -->
+      <div
+        data-slot="sheet"
+        class="fixed inset-0 z-20 flex flex-col bg-surface-raised pt-space-2"
+        data-finder-card
+      >
+        <!-- literal: 36px, 5px -->
+        <div
+          class="mx-auto mb-space-2 h-(--grabber-h) w-(--grabber-w) flex-none rounded-pill bg-border-control"
+          aria-hidden="true"
+          style:--grabber-h="5px"
+          style:--grabber-w="36px"
+        ></div>
         <Finder
           bind:field
           {finder}
@@ -159,13 +197,16 @@
         />
       </div>
     {:else}
+      <!-- The glass's card, as it hangs: right-aligned under the bar, the page live under it. -->
+      <!-- literal: 100dvh, 24px -->
       <div
         data-slot="finder-page-card"
-        class="card"
+        class="absolute end-0 top-c-top-bar-h z-20 flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-t-0 border-border-control bg-surface-raised shadow-overlay-hung"
         data-finder-card
         role="dialog"
         aria-label="Jump"
         aria-modal="false"
+        style:--card-max-h="calc(100dvh - var(--c-top-bar-h) - 24px)"
       >
         <Finder
           bind:field
@@ -181,147 +222,8 @@
 </div>
 
 <style>
-  .bench {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    block-size: 100dvh;
-    background: var(--background);
-    color: var(--ink-strong);
-    font: var(--type-body);
-  }
-  .bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex: none;
-    block-size: var(--c-top-bar-h);
-    padding-inline: var(--space-6) var(--space-1);
-    border-block-end: 1px solid var(--border-hairline);
-    background: var(--surface-raised);
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .jump {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: var(--c-btn-h);
-    padding-inline: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-md);
-    background: none;
-    font: var(--type-label);
-    color: var(--ink-muted);
-
-    & kbd {
-      font: var(--type-meta);
-    }
-  }
-  .jump.phone {
-    position: absolute;
-    inset-block-start: var(--space-3);
-    inset-inline-end: var(--space-3);
-  }
-  .page {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-block-size: 0;
-    padding: var(--space-5) var(--space-6);
-  }
-  .sent {
-    flex: 1;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    overflow-y: auto;
-  }
-  .sent-line {
-    padding-block: var(--space-2);
-    font: var(--type-code);
-    white-space: pre-wrap;
-  }
-  .composer {
-    position: relative;
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-2);
-    flex: none;
-    inline-size: min(100%, var(--c-composer-w));
-    margin-inline: auto;
-    padding: 7px 7px 7px 11px;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-
-    & > :global(.editor) {
-      flex: 1;
-      min-inline-size: 0;
-    }
-  }
-  .controls {
-    display: flex;
-    gap: var(--space-1);
-  }
-  .attach,
-  .send {
-    block-size: 34px;
-    padding-inline: var(--space-3);
-    border-radius: var(--radius-xs);
-    font: var(--type-label);
-  }
-  .attach {
-    border: 1px solid var(--border-control);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-  }
-  .send {
-    border: 0;
-    background: var(--action-solid);
-    color: var(--on-action);
-  }
-
-  /* The glass's card, as it hangs: right-aligned under the bar, the page live under it. */
-  .card {
-    position: absolute;
-    inset-block-start: var(--c-top-bar-h);
-    inset-inline-end: 0;
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    inline-size: var(--c-find-w);
-    max-block-size: calc(100dvh - var(--c-top-bar-h) - 24px);
-    overflow: hidden;
-    border: 1px solid var(--border-control);
-    border-block-start: 0;
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay-hung);
-  }
-
-  /* A phone: a sheet from the glass, the field at its foot over the keyboard. */
-  .sheet {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    padding-block-start: var(--space-2);
-    background: var(--surface-raised);
-  }
-  .grabber {
-    flex: none;
-    inline-size: 36px;
-    block-size: 5px;
-    margin: 0 auto var(--space-2);
-    border-radius: var(--radius-pill);
-    background: var(--border-control);
-  }
-  .sheet > :global(.finder) {
+  /* residual: foreign-dom */
+  [data-slot="sheet"] > :global(.finder) {
     flex: 1;
   }
 </style>

@@ -158,24 +158,31 @@
   <title>New project &middot; CawCo</title>
 </svelte:head>
 
-<main class="new-project">
+<!-- literal: 72rem, 570px, 40rem, 80px -->
+<main
+  class="mx-auto flex w-full max-w-(--measure) flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
+  style:--measure="72rem"
+  style:--pad-top="calc(var(--space-8) * 2)"
+>
   <!-- His slot goes with him when he peeks over a card, and comes back
        with him: the hero's height tweens (morph) rather than leaving a band. -->
-  <div data-slot="ask" class="ask" {@attach morph()}>
+  <div data-slot="ask" class="flex w-full flex-col items-center gap-space-4" {@attach morph()}>
     {#if caw === "page"}
       <div
         data-slot="caw-80"
-        class="caw-80"
+        class="grid min-h-(--caw-min) place-items-center"
         data-share={made ? `caw:${made}` : undefined}
+        style:--caw-min="80px"
       >
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <h1 data-slot="title" class="title">What are we working on?</h1>
+    <h1 data-slot="title" class="type-title text-center text-ink-strong">What are we working on?</h1>
     <div
       data-slot="new-page-field"
-      class="field"
-      style:block-size="calc({footHeight}px + var(--space-4))"
+      class="relative h-(--field-h) w-full max-w-(--field-max)"
+      style:--field-h="calc({footHeight}px + var(--space-4))"
+      style:--field-max="570px"
     >
       <Composer
         agentName="Caw"
@@ -195,7 +202,7 @@
         sending={starting}
       />
     </div>
-    <div data-slot="chips" class="chips kit-chips">
+    <div data-slot="chips" class="kit-chips max-w-(--chips-max) justify-center" style:--chips-max="40rem">
       {#each STARTERS as text (text)}
         <button
           class="kit-chip touch-hit"
@@ -208,7 +215,7 @@
     </div>
   </div>
 
-  <div data-slot="cards" class="cards">
+  <div data-slot="cards" class="w-full">
     <TemplateCards
       action={noMachine
         ? {
@@ -231,54 +238,3 @@
     />
   </div>
 </main>
-
-<style>
-  .new-project {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-8);
-    inline-size: 100%;
-    max-inline-size: 72rem;
-    margin-inline: auto;
-    padding: calc(var(--space-8) * 2) var(--space-6) var(--space-8);
-  }
-  .ask {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
-    inline-size: 100%;
-  }
-  .caw-80 {
-    display: grid;
-    place-items: center;
-    min-block-size: 80px;
-  }
-  .title {
-    font: var(--type-title);
-    color: var(--ink-strong);
-    text-align: center;
-  }
-  /* The session Composer stands on this box's foot (Composer .dock). */
-  .field {
-    position: relative;
-    inline-size: 100%;
-    max-inline-size: 570px;
-  }
-  /* The starters are the kit option chip (.kit-chips / .kit-chip in
-     app.css), centred under the field. */
-  .chips {
-    justify-content: center;
-    max-inline-size: 40rem;
-  }
-  .cards {
-    inline-size: 100%;
-  }
-  @media (max-width: 639px) {
-    .new-project {
-      gap: var(--space-6);
-      padding: var(--space-7) var(--space-4) var(--space-6);
-    }
-  }
-</style>

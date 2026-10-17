@@ -25,14 +25,12 @@
 
 <svelte:head><title>Usage limits | CawCo</title></svelte:head>
 
-<main class="bench" data-usage-bench>
+<!-- literal: 72rem -->
+<main
+  class="mx-auto max-w-(--measure) px-space-4 py-space-6"
+  data-usage-bench
+  style:--measure="72rem"
+>
   <LimitsBlock />
 </main>
 
-<style>
-  .bench {
-    max-inline-size: 72rem;
-    margin-inline: auto;
-    padding: var(--space-6) var(--space-4);
-  }
-</style>
