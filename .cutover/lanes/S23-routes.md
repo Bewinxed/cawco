@@ -31,7 +31,7 @@ None.
 - config/updates: `.trigger :global(.chev)` rules became utilities passed on `IconChevronRight` (`group` on the button, `group-aria-expanded:rotate-90`).
 - motion/lift: `class:grid` became the existing `data-grid` attribute with `data-grid:grid`.
 - motion/overlays: `.openers :global([data-open])` became `rounded-sm border border-border-control px-space-3 py-space-2` passed as `class` on each trigger (and the context-menu div); twMerge resolves it against SelectTrigger's own px-3/rounded-md. Unused `.context` / `.body` / `.page` classes removed.
-- Other eslint finding: motion/caw-notices:363 `caw-pop` on `<HangCard>` is `shadcn/no-unknown-classes` (a cross-file hook class: CawPanel.svelte:289 styles `.kit-pop.caw-pop`; left as is, not mine to edit).
+- motion/caw-notices: `caw-pop` on `<HangCard>` became `data-slot="caw-pop"` (delta O2); `gap-0` stays.
 
 ## shadcn/no-restyle hits (37)
 - (app)/motion/caw-notices/+page.svelte:363 <HangCard> caw-pop
@@ -77,4 +77,5 @@ None (no data-open/closed/checked/unchecked/disabled/active/horizontal/vertical 
 
 ## Delta O lines
 - cross-file hook: (app)/motion/delegate-tray/+page.svelte:251 .leaf → [data-slot="leaf"] (the element already had it; the class is deleted); selected by apps/dashboard/src/lib/cawco/transcript/Composer.svelte:1547 and apps/dashboard/src/lib/cawco/side/SideSheet.svelte:226
+- cross-file hook: (app)/motion/caw-notices/+page.svelte:364 .caw-pop → [data-slot="caw-pop"]; selected by apps/dashboard/src/lib/cawco/home/CawPanel.svelte:289 and :294 (`:global(.kit-pop.caw-pop)`)
 - needs colour token: none (no colour literal in any of the 13 files)
