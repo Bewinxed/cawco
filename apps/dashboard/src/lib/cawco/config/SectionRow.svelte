@@ -144,7 +144,7 @@
       <!-- literal: 8px -->
       <span
         data-slot="name"
-        class="flex min-w-0 items-center gap-(--name-gap) type-label text-ink-strong data-mono:font-mono"
+        class="flex min-w-0 items-center gap-(--name-gap) type-label text-ink-strong data-mono:font-(family-name:--font-mono)"
         data-mono={mono || undefined}
         style:--name-gap="8px"
       >
