@@ -166,10 +166,7 @@
             </Badge>
           {/snippet}
         </Popover.Trigger>
-        <Popover.Content
-          align="start"
-          class="w-96 rounded-lg p-0 shadow-xl"
-        >
+        <Popover.Content align="start" class="w-96 rounded-lg p-0 shadow-xl">
           <header
             class="flex items-baseline gap-space-1 border-b border-border px-space-3 py-space-2"
           >
@@ -178,7 +175,8 @@
               did not install</span
             >
             {#if toolStatus?.method}
-              <span class="ml-auto shrink-0 font-(family-name:--font-mono) text-label text-ink-muted"
+              <span
+                class="ml-auto shrink-0 font-(family-name:--font-mono) text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
@@ -186,9 +184,7 @@
           <pre
             class="max-h-56 overflow-auto px-space-3 py-space-2 font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
               "The machine did not say why."}</pre>
-          <footer
-            class="border-t border-border px-space-3 py-space-2"
-          >
+          <footer class="border-t border-border px-space-3 py-space-2">
             <Button
               disabled={!online}
               {failed}
@@ -230,10 +226,7 @@
           </Badge>
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content
-        align="start"
-        class="w-80 rounded-lg shadow-xl"
-      >
+      <Popover.Content align="start" class="w-80 rounded-lg shadow-xl">
         <p class="font-(family-name:--font-mono) text-label">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
@@ -244,10 +237,8 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge
-              {...props}
-              class="{CHIP} text-ink-subtle"
-              variant="ghost"><span>Unknown</span></Badge
+            <Badge {...props} class="{CHIP} text-ink-subtle" variant="ghost"
+              ><span>Unknown</span></Badge
             >
           {/snippet}
         </Tooltip.Trigger>

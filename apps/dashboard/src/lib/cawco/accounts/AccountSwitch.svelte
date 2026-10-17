@@ -54,8 +54,7 @@
     style:--dot="8px"
     style:--dot-r="50%"
   ></span>
-  <span data-slot="chip-label" data-account-chip>{name}</span
-  >
+  <span data-slot="chip-label" data-account-chip>{name}</span>
 {/snippet}
 
 {#if shown}

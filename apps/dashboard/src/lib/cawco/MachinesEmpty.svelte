@@ -49,7 +49,7 @@
   data-leaving={!present || undefined}
   style:--measure="34rem"
 >
-    <div
+  <div
     data-slot="caw-80"
     class="grid min-h-(--caw-min) place-items-center"
     style:--caw-min="80px"

@@ -598,7 +598,9 @@
                  limit the refresh mark and when it's back: 12px, Solar
                  duotone, muted. -->
             {#if goTime?.kind === "back"}
-              <span aria-hidden="true" class="inline-grid flex-none text-ink-muted"
+              <span
+                aria-hidden="true"
+                class="inline-grid flex-none text-ink-muted"
                 ><IconRefresh class="size-icon-sm" /></span
               >
             {/if}
@@ -819,10 +821,7 @@
       <!-- The name strong, the domain's stem (where it is needed) quiet
            right after it, going under it only when the two don't fit. A
            name never ends in an ellipsis; one longer than the cell wraps. -->
-      <span
-        class="flex min-w-0 flex-wrap type-meta wrap-anywhere"
-        data-name
-      >
+      <span class="flex min-w-0 flex-wrap type-meta wrap-anywhere" data-name>
         <span class="min-w-0 font-medium text-ink-strong">{name.local}</span>
         {#if name.domain}
           <span class="text-ink-muted">{name.domain}</span>
@@ -874,9 +873,9 @@
     {@attach morph()}
   >
     {#if !(shown || gap) && notes.length === 0}
-      <p class="px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
-        >{empty}</p
-      >
+      <p class="px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted">
+        {empty}
+      </p>
     {/if}
     {#if claude}
       <header
@@ -1129,7 +1128,9 @@
   class="group/strip relative w-full min-w-0 rounded-sm bg-(--ring-ground) variant-home:rounded-md"
   data-variant={variant}
   style:--ring-ground="var(--strip-ground, var(--sidebar))"
-  style:--strip-ground={variant === "home" ? "var(--surface-raised)" : undefined}
+  style:--strip-ground={variant === "home"
+    ? "var(--surface-raised)"
+    : undefined}
   style:--strip-hit-h={variant === "home" ? "56px" : "44px"}
 >
   {#if touch.current}

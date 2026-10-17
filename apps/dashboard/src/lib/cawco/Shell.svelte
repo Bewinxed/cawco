@@ -1062,8 +1062,8 @@
           style:--burger="44px"
           style:--burger-press="scale(var(--press-scale))"
           style:--glyph="var(--c-bar-toggle-glyph)"
-          style:--burger-start="calc(var(--c-bar-phone-edge) + var(--glyph) / 2 - 22px)"
-          style:--burger-top="calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - 22px)"
+          style:--burger-start={"calc(var(--c-bar-phone-edge) + var(--glyph) / 2 - 22px)"}
+          style:--burger-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - 22px)"}
           type="button"
           bind:this={burger}
         >
@@ -1286,10 +1286,7 @@
          whole page down and back each time (0.52 CLS on the board for one
          restart). The sentence takes the room, so the countdown ticking in
          it never moves the button at the end. -->
-      <div
-        class="absolute inset-x-0 top-c-top-bar-h z-10"
-        {@attach reflow()}
-      >
+      <div class="absolute inset-x-0 top-c-top-bar-h z-10" {@attach reflow()}>
         {#if browser && cawco.reloadHold}
           <!-- A page on an older wire than the hub's reads nothing more from
              it. It reloads by itself, and while that waits the band says what

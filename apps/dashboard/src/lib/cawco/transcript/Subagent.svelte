@@ -177,13 +177,19 @@
       <p
         data-slot="now"
         class="rail-hang mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink leading-body max-w-(--measure)"
-        style:--measure="68ch">{headline(branch.error)}</p>
+        style:--measure="68ch"
+      >
+        {headline(branch.error)}
+      </p>
     {:else if view.report}
       <!-- literal: 68ch -->
       <p
         data-slot="now"
         class="rail-hang mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
-        style:--measure="68ch">{headline(view.report)}</p>
+        style:--measure="68ch"
+      >
+        {headline(view.report)}
+      </p>
     {/if}
 
     <Collapsible.Content reveal>
@@ -210,7 +216,9 @@
             {:else if row.kind === "thinking"}
               <Thinking live={row.live} text={row.text} />
             {:else if row.kind === "stream"}
-              <div class="mt-space-4"><MessageBody source={row.text} streaming /></div>
+              <div class="mt-space-4">
+                <MessageBody source={row.text} streaming />
+              </div>
             {:else if row.kind === "single"}
               <MessageRow
                 agentName={branch.subagentType}
@@ -224,14 +232,18 @@
           {#if failed && branch.error}
             <p
               class="mt-space-4 p-space-3 rounded-xs text-size-body font-normal text-status-fail-ink bg-surface-raised shadow-tile whitespace-pre-wrap"
-            >{branch.error}</p>
+            >
+              {branch.error}
+            </p>
           {:else if view.report}
             <section
               class="mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-tile"
             >
               <h4
                 class="text-size-label font-medium tracking-caps uppercase text-ink-muted mb-space-2"
-              >Report</h4>
+              >
+                Report
+              </h4>
               <MessageBody source={view.report} />
             </section>
           {/if}

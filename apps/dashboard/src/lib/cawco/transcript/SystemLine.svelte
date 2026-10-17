@@ -370,8 +370,9 @@
       <p
         data-slot="reason"
         class="mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink rail-hang"
-        >{openFailed}</p
       >
+        {openFailed}
+      </p>
     {/if}
   </div>
 {:else if moved}
@@ -398,8 +399,9 @@
     {#if message?.content}
       <p
         class="mt-space-1 mb-0 text-size-meta font-normal leading-body text-ink-muted rail-hang"
-        >{message.content}</p
       >
+        {message.content}
+      </p>
     {/if}
   </div>
 {:else if unread}
@@ -449,7 +451,7 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    style:--rail-head="linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"
+    style:--rail-head={"linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"}
     class="text-size-label font-medium text-status-fail-ink rail-row"
   >
     <span
@@ -462,8 +464,9 @@
     </span>
     <p
       class="mt-space-1 mb-0 text-size-label font-medium leading-body whitespace-pre-wrap rail-hang"
-      >{message?.content}</p
     >
+      {message?.content}
+    </p>
   </div>
 {:else if foldCommand || foldBody}
   <!-- An event that woke a project's Caw is code: its line stands in a 1px
@@ -506,9 +509,9 @@
             style:--well-x="calc(var(--x-hang) - var(--space-3))"
             class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{foldCommand}</pre>
         {:else if foldBody}
-          <div class="mt-space-3 rail-hang"
-            ><MessageBody source={foldBody} /></div
-          >
+          <div class="mt-space-3 rail-hang">
+            <MessageBody source={foldBody} />
+          </div>
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>

@@ -784,10 +784,7 @@
   >
     {#if filed.length > 0}
       <!-- What the cards are, in the kit's meta line over them. -->
-      <p
-        class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted"
-        data-tasks-head
-      >
+      <p class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted" data-tasks-head>
         <MorphText text={filedWords(filed)} />
       </p>
       <!-- Each task is two tracks, its card's and what it needs of you, and
@@ -1171,13 +1168,16 @@
   [data-slot="thread-pane-task"] > :global([data-slot="task-card"]) {
     margin-block-end: var(--space-2);
   }
-  [data-slot="thread-pane-task"] > :global([data-slot="task-needs-for-needs-for"]) {
+  [data-slot="thread-pane-task"]
+    > :global([data-slot="task-needs-for-needs-for"]) {
     margin-block-end: var(--space-2);
   }
   /* A task that needs you takes the row: its card, then what it needs and
      the way to act, collapsed to the deliverable's first lines (TaskNeeds'
      stack, inside TaskNeedsFor). */
-  [data-slot="thread-pane-task"]:has(:global([data-slot="task-needs-needs-stack"])) {
+  [data-slot="thread-pane-task"]:has(
+    :global([data-slot="task-needs-needs-stack"])
+  ) {
     grid-column: 1 / -1;
     max-inline-size: var(--needs-w);
   }

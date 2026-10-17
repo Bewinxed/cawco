@@ -2433,9 +2433,12 @@
 
 /* The two shared sheets, utilities under the names their consumers write:
    the new-session dialog's and the workflow pages' (each says how it keeps
-   its cascade). */
+   its cascade). Tailwind inlines an import where it stands, so these come
+   after the rules above, as .cutover/shared-sheets.md orders them. */
+/* biome-ignore-start lint/correctness/noInvalidPositionAtImportRule: Tailwind's compiler inlines each import in place; the place is the cascade order */
 @import "./lib/cawco/spawn/ns-theme.css";
 @import "./lib/components/features/workflows/workflows.css";
+/* biome-ignore-end lint/correctness/noInvalidPositionAtImportRule: the imports above */
 
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
    in this sheet and in the components sits under

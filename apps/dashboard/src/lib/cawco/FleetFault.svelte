@@ -323,15 +323,13 @@
     {/if}
   </div>
 
-  <div
-    data-slot="body"
-    inert={!whole}
-    {@attach disclose(() => whole)}
-  >
+  <div data-slot="body" inert={!whole} {@attach disclose(() => whole)}>
     <!-- The body folds as one piece under the title line; its own gap to the
          line sits inside it, so a shut body leaves nothing behind. -->
     <div data-slot="inner" class="flex flex-col gap-space-2 pt-space-2">
-      <p class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1">
+      <p
+        class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
+      >
         <span
           class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
           >{SCOPE_NOUN[group.scope]}
@@ -357,7 +355,9 @@
         data-slot="why"
         class="max-w-(--measure) text-size-body font-normal text-(color:--tone-ink)"
         style:--measure="68ch"
-      >{copy.why}</p>
+      >
+        {copy.why}
+      </p>
 
       {#if copy.toolchain && toolchain}
         <!-- The attribution that was missing: which binary said it, and whether a
@@ -375,8 +375,7 @@
                 class="font-mono text-size-meta font-medium wrap-anywhere text-ink-strong"
                 >{toolchain.used.path}</code
               >
-              <span
-                class="num text-size-meta font-normal text-ink-muted"
+              <span class="num text-size-meta font-normal text-ink-muted"
                 >{toolchain.used.version ?? "version unknown"}</span
               >
               <span
@@ -451,12 +450,11 @@
       <p
         class="max-w-(--measure) text-size-body font-normal text-(color:--tone-ink)"
         style:--measure="68ch"
-      >{copy.fix}</p>
-
-      <div
-        data-slot="acts"
-        class="flex flex-wrap items-center gap-space-2"
       >
+        {copy.fix}
+      </p>
+
+      <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
         {#if copy.action === "resync"}
           <Button
             disabled={!online}
@@ -469,7 +467,8 @@
             size="xs"
             variant="outline"
           />
-          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+          <span
+            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
             >{online
               ? actionHint
               : "It syncs on its own the moment it comes back."}</span
@@ -487,7 +486,10 @@
             size="xs"
             variant="outline"
           />
-          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80">{actionHint}</span>
+          <span
+            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            >{actionHint}</span
+          >
         {:else if copy.action === "settle" && group.scope === "skills"}
           {#each shown as fault (fault.key)}
             {#if group.faults.length > 1}
@@ -517,7 +519,8 @@
               variant="outline"
             />
           {/each}
-          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+          <span
+            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >
@@ -525,7 +528,8 @@
           <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
             >Compare the two copies</Button
           >
-          <span class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+          <span
+            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >

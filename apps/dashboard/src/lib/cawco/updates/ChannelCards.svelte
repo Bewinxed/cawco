@@ -113,9 +113,8 @@
         class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-7 pb-space-4 type-meta text-start text-ink-strong transition-control cursor-pointer hover:bg-surface-hover active:bg-surface-fill hover:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
         value={card.channel}
       >
-        <span
-          data-slot="name"
-          class="relative z-2 type-label text-ink-strong">{card.name}</span
+        <span data-slot="name" class="relative z-2 type-label text-ink-strong"
+          >{card.name}</span
         >
         <span class="relative z-2 mt-space-1 text-ink-muted"
           >{card.description}</span

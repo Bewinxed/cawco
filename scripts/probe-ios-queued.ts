@@ -911,9 +911,7 @@ try {
             ...document.querySelectorAll(
               '[data-slot="layer"][data-behind], [data-sonner-toast]'
             ),
-          ].map(
-            (node) => node.textContent?.trim().replace(/\s+/g, " ") ?? ""
-          )
+          ].map((node) => node.textContent?.trim().replace(/\s+/g, " ") ?? "")
         )
         .catch(() => [])) ?? [];
     for (const text of said) {

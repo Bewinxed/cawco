@@ -174,11 +174,7 @@
 >
   {#if policy}
     <!-- literal: 8px -->
-    <div
-      data-slot="group"
-      class="flex flex-col gap-(--gap)"
-      style:--gap="8px"
-    >
+    <div data-slot="group" class="flex flex-col gap-(--gap)" style:--gap="8px">
       <SectionHeader
         hue="var(--hue-blue-500)"
         icon={IconDownload}

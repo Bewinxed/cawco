@@ -62,10 +62,8 @@
           </Badge>
         {/if}
         {#if cell.meta}
-          <span
-            data-num
-            data-slot="meta"
-            class="num type-meta text-ink-muted">{cell.meta}</span
+          <span data-num data-slot="meta" class="num type-meta text-ink-muted"
+            >{cell.meta}</span
           >
         {/if}
         {#each cell.buttons as button (button)}

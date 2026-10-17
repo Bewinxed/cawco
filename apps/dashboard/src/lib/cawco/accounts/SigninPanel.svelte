@@ -92,7 +92,10 @@
     <p
       data-slot="error"
       class="type-meta flex items-start gap-space-2 text-status-fail-ink"
-      id="{codeId}-problem" role="alert" in:appear>
+      id="{codeId}-problem"
+      role="alert"
+      in:appear
+    >
       {flow.problem}
     </p>
   {:else if flow.phase === "signed-in"}
@@ -104,7 +107,9 @@
       <Check />
       <span
         >{words.signedInAs}
-        <b class="font-medium text-ink-strong">{flow.email ?? expected ?? words.theAccount}</b></span
+        <b class="font-medium text-ink-strong"
+          >{flow.email ?? expected ?? words.theAccount}</b
+        ></span
       >
     </p>
   {:else if flow.phase === "mismatch"}

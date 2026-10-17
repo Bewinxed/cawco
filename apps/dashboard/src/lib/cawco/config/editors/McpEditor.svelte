@@ -285,12 +285,21 @@
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
       <!-- literal: 72ch -->
-      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" in:appear>
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+        in:appear
+      >
         A new name makes a new server; {server.name} stays as it is.
       </p>
     {:else}
       <!-- literal: 72ch -->
-      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >
         What sessions call its tools —
         <span class="font-mono">mcp__{serverName || "name"}__…</span>. New
         sessions pick it up; a running session keeps the servers it started
@@ -298,12 +307,16 @@
       </p>
     {/if}
     {#if failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
     {#if server}
       <McpSignIn {server} />
       {#if server.auth?.state === "failed"}
-        <p class="type-meta text-status-fail-ink" role="alert">{server.auth.detail}</p>
+        <p class="type-meta text-status-fail-ink" role="alert">
+          {server.auth.detail}
+        </p>
       {/if}
     {/if}
   {/snippet}
@@ -331,9 +344,21 @@
     >
       {#if mode === "bunx"}
         <!-- literal: 8px -->
-        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-(--fold-gap)"
+          style:--fold-gap="8px"
+          in:crossIn
+          out:crossOut
+        >
           <!-- literal: 72ch -->
-          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{HOW.bunx}</p>
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--measure) text-ink-muted"
+            style:--measure="72ch"
+          >
+            {HOW.bunx}
+          </p>
           <Field id="mcp-package" label="Package">
             <Input
               autocomplete="off"
@@ -362,9 +387,21 @@
         </div>
       {:else if mode === "command"}
         <!-- literal: 8px -->
-        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-(--fold-gap)"
+          style:--fold-gap="8px"
+          in:crossIn
+          out:crossOut
+        >
           <!-- literal: 72ch -->
-          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{HOW.command}</p>
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--measure) text-ink-muted"
+            style:--measure="72ch"
+          >
+            {HOW.command}
+          </p>
           <Field id="mcp-command" label="Command">
             <Input
               autocomplete="off"
@@ -392,9 +429,21 @@
         </div>
       {:else}
         <!-- literal: 8px -->
-        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-(--fold-gap)"
+          style:--fold-gap="8px"
+          in:crossIn
+          out:crossOut
+        >
           <!-- literal: 72ch -->
-          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{HOW.remote}</p>
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--measure) text-ink-muted"
+            style:--measure="72ch"
+          >
+            {HOW.remote}
+          </p>
           <Field id="mcp-url" label="URL">
             <Input
               autocomplete="off"
@@ -431,7 +480,11 @@
         label={mode === "remote" ? "Headers" : "Environment"}
       >
         <!-- literal: 72ch -->
-        <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+        <p
+          data-slot="note"
+          class="type-meta max-w-(--measure) text-ink-muted"
+          style:--measure="72ch"
+        >
           <span class="font-mono">&#36;&#123;VAR&#125;</span>
           is expanded on each machine, from that machine's own environment — secrets
           never pass through the hub.
@@ -467,7 +520,11 @@
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       Every machine in the fleet unless you narrow it to one project. A
       project's server reaches each of its checkouts and delegate workspaces.
     </p>

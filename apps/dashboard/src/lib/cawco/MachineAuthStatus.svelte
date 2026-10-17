@@ -48,11 +48,7 @@
      was. -->
 <div class="relative flex flex-1 flex-col">
   {#key outcome.kind}
-    <div
-      class="flex flex-1 flex-col gap-space-4"
-      in:crossIn
-      out:crossOut
-    >
+    <div class="flex flex-1 flex-col gap-space-4" in:crossIn out:crossOut>
       {#if outcome.kind === "working"}
         <!-- mark-line: a column; the mark stands above the title -->
         <div
@@ -73,11 +69,12 @@
             data-slot="title"
             class="m-0 type-label text-balance text-ink-strong"
             id={titleId}
-          >{working.title}</p>
-          <p
-            data-slot="body"
-            class="m-0 type-meta text-pretty text-ink-muted"
-          >{working.step}</p>
+          >
+            {working.title}
+          </p>
+          <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted">
+            {working.step}
+          </p>
         </div>
         <!-- Closing does not stop the machine; it only stops watching. -->
         <div class="mt-auto flex justify-end">
@@ -107,11 +104,12 @@
             data-slot="title"
             class="m-0 type-label text-balance text-ink-strong"
             id={titleId}
-          >{answer.title}</p>
-          <p
-            data-slot="body"
-            class="m-0 type-meta text-pretty text-ink-muted"
-          >{answer.body}</p>
+          >
+            {answer.title}
+          </p>
+          <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted">
+            {answer.body}
+          </p>
         </div>
         <div class="mt-auto flex justify-end">
           <Button
@@ -127,7 +125,6 @@
     </div>
   {/key}
 </div>
-
 
 <style>
   /* residual: keyframes */

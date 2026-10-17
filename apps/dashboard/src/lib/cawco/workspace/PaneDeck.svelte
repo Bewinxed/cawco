@@ -101,7 +101,10 @@
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
       >
-        <div data-slot="clip" class="flex min-h-0 min-w-0 flex-auto overflow-hidden">
+        <div
+          data-slot="clip"
+          class="flex min-h-0 min-w-0 flex-auto overflow-hidden"
+        >
           <PaneLeaf {leaf} swipeable={focused} />
         </div>
       </div>
@@ -121,7 +124,11 @@
       style:--dots-shift="-50%"
     >
       <!-- literal: 6px -->
-      <div class="flex flex-col gap-(--dots-gap)" style:--dots-gap="6px" transition:fadeDots>
+      <div
+        class="flex flex-col gap-(--dots-gap)"
+        style:--dots-gap="6px"
+        transition:fadeDots
+      >
         {#each workspace.leaves as leaf (leaf.id)}
           <span class="flex" transition:fadeDots>
             <!-- literal: 6px, 18px -->

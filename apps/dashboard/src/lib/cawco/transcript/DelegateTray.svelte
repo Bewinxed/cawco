@@ -1131,7 +1131,11 @@
      either way. -->
 {#snippet glyph(tone: Tone)}
   {#if tone === "starting"}
-    <Spinner aria-hidden="true" class="size-icon-md block" role="presentation" />
+    <Spinner
+      aria-hidden="true"
+      class="size-icon-md block"
+      role="presentation"
+    />
   {:else if tone === "running"}
     <!-- literal: 5px -->
     <!-- literal: 50% -->

@@ -73,10 +73,7 @@
     {/snippet}
     <!-- The heading of the group: label type in strong ink, its explainer in
          muted meta; the entries under it read a step lower (MovedLogin). -->
-    <h3
-      data-slot="head"
-      class="m-0 pe-(--x-room) type-label text-ink-strong"
-    >
+    <h3 data-slot="head" class="m-0 pe-(--x-room) type-label text-ink-strong">
       {heading}
     </h3>
     <p data-slot="explainer" class="m-0 type-meta text-ink-muted">

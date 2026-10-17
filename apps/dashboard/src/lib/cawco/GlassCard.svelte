@@ -529,7 +529,6 @@
   </HangCard>
 </Popover.Root>
 
-
 <style>
   /* residual: unmapped — border-radius: inherit */
   [data-slot="glass-face"] {

@@ -307,13 +307,19 @@
       bind:checked={draft.enabled}
     />
     {#if failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       CawCo reads what a session writes, not what you write to it.
     </p>
     <div data-slot="fold" class="flex flex-col">
@@ -426,7 +432,11 @@
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
@@ -469,7 +479,11 @@
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
       every dated build of it.
@@ -533,7 +547,11 @@
       >
         {#snippet hint()}
           <!-- The two readings cross-fade in one box, its height following. -->
-          <span data-slot="swap" class="relative flex flex-col" {@attach morph()}>
+          <span
+            data-slot="swap"
+            class="relative flex flex-col"
+            {@attach morph()}
+          >
             {#if draft.repeat}
               <span in:crossIn out:crossOut>
                 The session gets your reply each time it is tripped. It stops

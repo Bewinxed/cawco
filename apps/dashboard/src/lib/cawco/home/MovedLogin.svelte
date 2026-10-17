@@ -43,9 +43,8 @@
   <!-- An entry under the group's head: body type in row ink, a step under the
        head's label, so the head reads as the heading and the entries as its
        list. The name gives way first (The Truncate Inside Rule). -->
-  <span
-    data-slot="name"
-    class="pe-(--x-room) type-body text-ink-row truncate">{one.name}</span
+  <span data-slot="name" class="pe-(--x-room) type-body text-ink-row truncate"
+    >{one.name}</span
   >
   <!-- Where it was found, and the to-do at the line's trailing edge; the
        to-do wraps under it when both don't fit. -->
@@ -53,9 +52,8 @@
     data-slot="sub"
     class="flex min-w-0 flex-wrap items-baseline justify-between gap-x-space-2"
   >
-    <span
-      data-slot="from"
-      class="type-meta text-ink-muted wrap-anywhere">{one.from}</span
+    <span data-slot="from" class="type-meta text-ink-muted wrap-anywhere"
+      >{one.from}</span
     >
     {#if one.missing > 0}
       <!-- Its chevron's ink ends on the panel's trailing edge: the link hangs

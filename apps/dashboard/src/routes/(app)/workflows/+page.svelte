@@ -158,7 +158,10 @@
           <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
-      <tbody aria-hidden="true" class="workflow-cards:block workflow-cards:w-full">
+      <tbody
+        aria-hidden="true"
+        class="workflow-cards:block workflow-cards:w-full"
+      >
         {#each [0, 1, 2] as index (index)}
           <tr
             class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"

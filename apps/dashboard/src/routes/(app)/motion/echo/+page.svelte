@@ -35,10 +35,10 @@
   <ul class="m-0 grid list-none gap-space-5 p-0" {@attach echoBeat()}>
     {#each marks as status, row (row)}
       <li
-      class="flex items-center gap-space-5"
-      data-renders={renders}
-      data-row={row}
-    >
+        class="flex items-center gap-space-5"
+        data-renders={renders}
+        data-row={row}
+      >
         <TreeMark fill="var(--mark-{row + 1})" {status}>
           {#snippet face()}
             <span></span>

@@ -30,4 +30,3 @@
   <SectionHeader {hue} {icon} {label} {right} wrap />
   {@render children()}
 </section>
-

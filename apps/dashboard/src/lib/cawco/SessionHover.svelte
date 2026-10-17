@@ -398,9 +398,7 @@
           {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
           {@const line = newestLine(newest)}
           {#if newest && line}
-            <p
-              class="flex min-w-0 gap-space-2 text-size-meta text-ink-strong"
-            >
+            <p class="flex min-w-0 gap-space-2 text-size-meta text-ink-strong">
               <span data-slot="who" class="flex-none font-medium"
                 >{SPEAKER[newest.author]}</span
               >

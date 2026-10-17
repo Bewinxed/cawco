@@ -73,6 +73,21 @@
     machines: "w-(--frame-w) gap-0",
     jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-desk:h-(--frame-h) max-desk:w-(--frame-w-narrow)",
   };
+  /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
+  const FRAME_SIZES: Record<Frame, { w: string; narrow?: string; h?: string }> =
+    {
+      caw: {
+        w: "min(var(--c-panel-w), calc(100vw - 24px))",
+        narrow:
+          "min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))",
+      },
+      machines: { w: "min(20rem, calc(100vw - 16px))" },
+      jump: {
+        w: "min(var(--c-find-w), calc(100vw - 24px))",
+        narrow: "calc(100vw - 12px - env(safe-area-inset-right, 0px))",
+        h: "calc(100dvh - var(--c-top-bar-h) - 24px)",
+      },
+    };
 
   type Props = Omit<
     PopoverPrimitive.ContentProps & ContextMenuPrimitive.ContentProps,
@@ -405,24 +420,12 @@
   {#snippet child({ props, wrapperProps, open })}
     {#if forceMount || drawn(props)}
       <div {...wrapperProps} style:pointer-events={pressable(open)}>
-        <!-- literal: 24px, 12px (the screen's margins), 20rem (the machines) -->
+        <!-- literal: 24px, 12px (the screen's margins), 20rem (the machines): FRAME_SIZES -->
         <div
           {...own(props)}
-          style:--frame-w={frame === "caw"
-            ? "min(var(--c-panel-w), calc(100vw - 24px))"
-            : frame === "machines"
-              ? "min(20rem, calc(100vw - 16px))"
-              : frame === "jump"
-                ? "min(var(--c-find-w), calc(100vw - 24px))"
-                : undefined}
-          style:--frame-w-narrow={frame === "caw"
-            ? "min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))"
-            : frame === "jump"
-              ? "calc(100vw - 12px - env(safe-area-inset-right, 0px))"
-              : undefined}
-          style:--frame-h={frame === "jump"
-            ? "calc(100dvh - var(--c-top-bar-h) - 24px)"
-            : undefined}
+          style:--frame-w={frame ? FRAME_SIZES[frame].w : undefined}
+          style:--frame-w-narrow={frame ? FRAME_SIZES[frame].narrow : undefined}
+          style:--frame-h={frame ? FRAME_SIZES[frame].h : undefined}
           style:pointer-events={pressable(open)}
           {@attach hung}
           {@attach kept}

@@ -80,8 +80,12 @@
     >
       <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
       <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
-        <span data-slot="name" class="truncate text-ink-strong type-label">{pinName(pin)}</span>
-        <span class="truncate text-ink-muted text-size-meta">{lastLine(pin)}</span>
+        <span data-slot="name" class="truncate text-ink-strong type-label"
+          >{pinName(pin)}</span
+        >
+        <span class="truncate text-ink-muted text-size-meta"
+          >{lastLine(pin)}</span
+        >
       </span>
       {#if live.has(pin.id)}
         <span
@@ -140,14 +144,18 @@
         {/each}
       </ul>
     {:else if filter === "open"}
-      <p data-slot="pin-list-empty"
-        class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta">
+      <p
+        data-slot="pin-list-empty"
+        class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+      >
         <span class="text-ink-strong type-label">No open comments</span>
         Choose Comment, then click the page to pin one.
       </p>
     {:else}
-      <p data-slot="pin-list-empty"
-        class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta">
+      <p
+        data-slot="pin-list-empty"
+        class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+      >
         <span class="text-ink-strong type-label">No resolved comments</span>
         A pin you resolve leaves the page and waits here.
       </p>
@@ -156,8 +164,9 @@
       <section data-slot="moved" aria-label="Moved">
         <p
           class="mark-line flex items-center gap-space-1 m-0 px-space-2 py-space-1 text-ink-muted type-label"
-          ><IconMapPoint class="size-icon-md" /><span>Moved</span></p
         >
+          <IconMapPoint class="size-icon-md" /><span>Moved</span>
+        </p>
         <ul class="m-0 p-0 list-none">
           {#each moved as pin (pin.id)}
             <li
@@ -167,8 +176,14 @@
             >
               <PinDisc moved number={pin.number} />
               <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
-                <span data-slot="name" class="truncate text-ink-strong type-label">{pinName(pin)}</span>
-                <span class="truncate text-ink-muted text-size-meta">Its element is gone from the page</span>
+                <span
+                  data-slot="name"
+                  class="truncate text-ink-strong type-label"
+                  >{pinName(pin)}</span
+                >
+                <span class="truncate text-ink-muted text-size-meta"
+                  >Its element is gone from the page</span
+                >
               </span>
               <Button
                 aria-pressed={placing === pin.id}

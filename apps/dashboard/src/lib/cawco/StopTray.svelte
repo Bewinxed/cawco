@@ -781,7 +781,7 @@
         data-slot="rin"
         class="min-w-0"
         style:--fault-end="var(--row-compact-pad-end)"
-        style:--fault-indent="calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px))"
+        style:--fault-indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px))"}
       >
         <div
           data-slot="row"
@@ -799,7 +799,9 @@
               <Sprite aria-hidden="true" class="size-icon-sm" />
             {/snippet}
           </TreeMark>
-          <span data-slot="title" class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
+          <span
+            data-slot="title"
+            class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
             ><span class="sr-only">{status.word}: </span>
             {#if shownAs.href}
               <a
@@ -815,13 +817,19 @@
             class="mark-line inline-flex min-w-(--stat-min) flex-none items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:min-w-(--stat-min-narrow) @max-stop-tray/stop-tray:group-data-away:order-1 @max-stop-tray/stop-tray:group-data-away:basis-full @max-stop-tray/stop-tray:group-data-away:min-w-0 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
-            style:--stat-away-indent="calc(var(--mark-size, 18px) + var(--row-compact-gap))"
+            style:--stat-away-indent={"calc(var(--mark-size, 18px) + var(--row-compact-gap))"}
             style:--stat-min="calc(16px + var(--space-1) + 13ch)"
             style:--stat-min-narrow="13ch"
           >
             <span
               data-slot="glyph"
-              class="inline-grid flex-none @max-stop-tray/stop-tray:hidden {status.tone === 'working' ? 'text-status-live-glyph' : status.tone === 'attention' ? 'text-status-attn-glyph' : status.tone === 'failed' ? 'text-status-fail-glyph' : status.tone === 'quiet' ? 'text-status-idle-glyph' : ''}"
+              class={[
+                "inline-grid flex-none @max-stop-tray/stop-tray:hidden",
+                status.tone === "working" && "text-status-live-glyph",
+                status.tone === "attention" && "text-status-attn-glyph",
+                status.tone === "failed" && "text-status-fail-glyph",
+                status.tone === "quiet" && "text-status-idle-glyph",
+              ]}
               data-box
             >
               {#key status.word}
@@ -906,9 +914,15 @@
         <div
           aria-hidden="true"
           class="aspect-square flex-none self-stretch empty:hidden"
-        >{@render head?.()}</div>
+        >
+          {@render head?.()}
+        </div>
         <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
-          <p data-slot="title" class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong" id="{uid}-title">
+          <p
+            data-slot="title"
+            class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
+            id="{uid}-title"
+          >
             {words.title}
           </p>
           <!-- As wide as the head, whatever its words: sized to them, it
@@ -936,10 +950,7 @@
           {@render branch(null)}
         </ul>
       {/if}
-      <div
-        data-slot="actions"
-        class="flex flex-wrap justify-end gap-space-2"
-      >
+      <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
         <Button
           data-stop-cancel
           label={cancelLabel}

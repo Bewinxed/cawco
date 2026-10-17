@@ -429,7 +429,7 @@
     data-peek={showPeek || undefined}
     data-stale={stale || undefined}
     style:--action-size="28px"
-    style:--action-end="calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1))"
+    style:--action-end={"calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1))"}
     style:--swipe-x="calc(var(--swipe, 0px) * -1)"
     style:--row-touch-h="44px"
     style:--mark-hit-room="13px"
@@ -441,7 +441,8 @@
         aria-hidden="true"
         class="mark-line absolute top-0 right-0 bottom-0 left-auto flex items-center justify-center gap-space-1 w-(--reveal-w) overflow-hidden rounded-r-sm bg-selected-bg text-selected-ink type-meta whitespace-nowrap pointer-events-none"
         style:--reveal-w="var(--swipe, 0px)"
-        ><IconArchive class="flex-none size-icon-md" /><span>Archive</span></span
+        ><IconArchive class="flex-none size-icon-md" /><span>Archive</span
+        ></span
       >
     {/if}
     {#if draft !== null}
@@ -465,7 +466,7 @@
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
         class={cn(
-          "flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-(--row-touch-h) py-space-1 pl-space-3 pr-space-3 text-inherit no-underline group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) press-tint focus-inset",
+          "press-tint focus-inset flex coarse:min-h-(--row-touch-h) min-h-space-8 min-w-0 flex-auto items-center gap-space-2 py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
           trigger.class as string | undefined
         )}
         data-hover-session={instance?.id}
@@ -501,7 +502,7 @@
             aria-label="Archive {title}"
             class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:group-not-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) can-hover:group-data-peek/session-row:right-(--archive-end) no-hover:hidden"
             onclick={onarchive}
-            style:--archive-end="calc(var(--action-end) + var(--action-size) + var(--space-1))"
+            style:--archive-end={"calc(var(--action-end) + var(--action-size) + var(--space-1))"}
             type="button"
           >
             <IconArchive aria-hidden="true" class="size-icon-md" />

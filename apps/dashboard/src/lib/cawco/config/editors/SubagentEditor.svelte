@@ -178,7 +178,9 @@ You are a <role>, working in one repository at a time.
       on every machine, and Claude Code picks it up within seconds.
     </p>
     {#if refused}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{refused}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {refused}
+      </p>
     {/if}
   {/snippet}
 
@@ -192,14 +194,18 @@ You are a <role>, working in one repository at a time.
       >
     {/snippet}
     {#if problem}
-      <p class="type-meta text-status-attn-ink">Not storable yet — {problem}.</p>
+      <p class="type-meta text-status-attn-ink">
+        Not storable yet — {problem}.
+      </p>
     {:else if front.description}
       <!-- literal: 72ch -->
       <p
         data-slot="note"
         class="type-meta max-w-(--measure) text-ink-muted"
         style:--measure="72ch"
-      >{front.description}</p>
+      >
+        {front.description}
+      </p>
     {/if}
     <Textarea
       aria-label="{target ?? 'New'} definition"

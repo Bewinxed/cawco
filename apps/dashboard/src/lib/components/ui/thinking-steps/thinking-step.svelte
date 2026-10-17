@@ -109,10 +109,7 @@
               {@const Glyph = glyph}
               <Glyph class="size-icon-md" />
             {:else}
-              <span
-                data-slot="dot"
-                class="size-space-1 bg-current"
-              ></span>
+              <span data-slot="dot" class="size-space-1 bg-current"></span>
             {/if}</span
           >
         {/key}</span

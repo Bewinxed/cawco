@@ -515,7 +515,9 @@
     <h1
       data-slot="title"
       class="text-size-title leading-ui font-medium font-(family-name:--font-mono) tracking-title wrap-anywhere text-ink-strong"
-    >{label}</h1>
+    >
+      {label}
+    </h1>
     {#if !main}
       <!-- literal: 12px -->
       <p
@@ -629,10 +631,20 @@
       <p class="type-meta text-status-attn-ink" role="alert">{historyError}</p>
     {:else if versions === null}
       <!-- literal: 72ch -->
-      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">Loading…</p>
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >
+        Loading…
+      </p>
     {:else if versions.length === 0}
       <!-- literal: 72ch -->
-      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >
         Nothing replaced yet. Every version a save, an adopt or an overwrite
         replaces is kept here.
       </p>
@@ -646,7 +658,10 @@
         style:--stack-gap="8px"
         {@attach reflow()}
       >
-        <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
+        <ul
+          data-slot="list"
+          class="m-0 flex list-none flex-col gap-space-row p-0"
+        >
           {#each visibleVersions as row (row.id)}
             <!-- literal: 8px, 10px -->
             <li
@@ -670,16 +685,23 @@
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
                 <!-- literal: 72ch -->
-                <span data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch"
-                  >from {sourceLabel(row.source)}</span
+                <span
+                  data-slot="note"
+                  class="type-meta max-w-(--measure) text-ink-muted"
+                  style:--measure="72ch">from {sourceLabel(row.source)}</span
                 >
                 <!-- literal: 72ch -->
-                <span data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" title={row.hash}
-                  >{row.hash.slice(0, 8)}</span
+                <span
+                  data-slot="note"
+                  class="type-meta max-w-(--measure) text-ink-muted"
+                  style:--measure="72ch"
+                  title={row.hash}>{row.hash.slice(0, 8)}</span
                 >
                 <!-- literal: 72ch -->
-                <span data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch"
-                  >{formatBytes(row.bytes)}</span
+                <span
+                  data-slot="note"
+                  class="type-meta max-w-(--measure) text-ink-muted"
+                  style:--measure="72ch">{formatBytes(row.bytes)}</span
                 >
                 <Button
                   class="ml-auto"
@@ -694,8 +716,17 @@
                 <!-- The compare folds open (240 / 160); inside, reading
                    cross-fades to the diff as the box follows its height. -->
                 <!-- literal: 8px -->
-                <div class="flex flex-col gap-(--stack-gap)" style:--stack-gap="8px" in:unfold out:unfold>
-                  <div data-slot="swap" class="relative flex flex-col" {@attach morph()}>
+                <div
+                  class="flex flex-col gap-(--stack-gap)"
+                  style:--stack-gap="8px"
+                  in:unfold
+                  out:unfold
+                >
+                  <div
+                    data-slot="swap"
+                    class="relative flex flex-col"
+                    {@attach morph()}
+                  >
                     {#if reading[row.id]}
                       <!-- literal: 72ch, 8px -->
                       <p
@@ -713,7 +744,12 @@
                       </p>
                     {:else if contents[row.id] !== undefined}
                       <!-- literal: 8px -->
-                      <div class="flex flex-col gap-(--stack-gap)" style:--stack-gap="8px" in:crossIn out:crossOut>
+                      <div
+                        class="flex flex-col gap-(--stack-gap)"
+                        style:--stack-gap="8px"
+                        in:crossIn
+                        out:crossOut
+                      >
                         {#key `${row.id}:${saved?.hash ?? ""}`}
                           <DiffView
                             filePath={path}
@@ -773,14 +809,22 @@
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
         <!-- literal: 72ch -->
-        <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+        <p
+          data-slot="note"
+          class="type-meta max-w-(--measure) text-ink-muted"
+          style:--measure="72ch"
+        >
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
           <!-- literal: 72ch -->
-          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--measure) text-ink-muted"
+            style:--measure="72ch"
+          >
             In sync on {applied.length} machine{applied.length === 1
               ? ""
               : "s"}.
@@ -790,7 +834,10 @@
             {/if}
           </p>
         {/if}
-        <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
+        <ul
+          data-slot="list"
+          class="m-0 flex list-none flex-col gap-space-row p-0"
+        >
           {#each machines as machine, index (machine.machineId)}
             {@const item = memoryStateOf(machine, path)}
             {@const online = machine.status === "online"}
@@ -873,15 +920,23 @@
                   style:--said-px="8px"
                   style:--said-py="6px"
                   in:unfold
-                  out:unfold
-                >{item.detail}</pre>
+                  out:unfold>{item.detail}</pre>
               {/if}
               {#if comparingThis}
                 <!-- The machine's copy folds open under its row; reading
                    cross-fades to what was read as the box follows. -->
                 <!-- literal: 8px -->
-                <div class="flex flex-col gap-(--stack-gap)" style:--stack-gap="8px" in:unfold out:unfold>
-                  <div data-slot="swap" class="relative flex flex-col" {@attach morph()}>
+                <div
+                  class="flex flex-col gap-(--stack-gap)"
+                  style:--stack-gap="8px"
+                  in:unfold
+                  out:unfold
+                >
+                  <div
+                    data-slot="swap"
+                    class="relative flex flex-col"
+                    {@attach morph()}
+                  >
                     {#if peeking[machine.machineId]}
                       <!-- literal: 72ch, 8px -->
                       <p
@@ -898,12 +953,23 @@
                         >
                       </p>
                     {:else if unread[machine.machineId]}
-                      <p class="type-meta text-status-attn-ink" role="alert" in:crossIn out:crossOut>
+                      <p
+                        class="type-meta text-status-attn-ink"
+                        role="alert"
+                        in:crossIn
+                        out:crossOut
+                      >
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
                       <!-- literal: 72ch -->
-                      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" in:crossIn out:crossOut>
+                      <p
+                        data-slot="note"
+                        class="type-meta max-w-(--measure) text-ink-muted"
+                        style:--measure="72ch"
+                        in:crossIn
+                        out:crossOut
+                      >
                         This machine has no copy of this file.
                       </p>
                     {:else if copies[machine.machineId] !== undefined}

@@ -165,16 +165,12 @@
   data-safe-bottom
   style:--fade-len="40px"
   style:--list-max="min(560px, calc(100dvh - 120px))"
-  style:--list-max-phone="calc(100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px)"
+  style:--list-max-phone={"calc(100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px)"}
   {@attach reflow()}
   {@attach measured}
 >
   {#if needs.length > 0}
-    <section
-      data-slot="section"
-      aria-labelledby="caw-needs"
-      data-flip="box"
-    >
+    <section data-slot="section" aria-labelledby="caw-needs" data-flip="box">
       <div
         data-slot="head"
         class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
@@ -209,11 +205,7 @@
   {/if}
 
   {#if noticeCount > 0}
-    <section
-      data-slot="section"
-      aria-labelledby="caw-notices"
-      data-flip="box"
-    >
+    <section data-slot="section" aria-labelledby="caw-notices" data-flip="box">
       <div
         data-slot="head"
         class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
@@ -289,9 +281,9 @@
               variant="secondary"
             />
             {#if resetProblem}
-              <p class="col-span-full m-0 type-meta text-ink-muted"
-                >{resetProblem}</p
-              >
+              <p class="col-span-full m-0 type-meta text-ink-muted">
+                {resetProblem}
+              </p>
             {/if}
           </li>
         {/if}

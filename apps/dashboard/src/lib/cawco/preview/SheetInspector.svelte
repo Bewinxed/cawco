@@ -201,7 +201,9 @@
     data-slot="head"
     class="flex items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
   >
-    <h2 data-slot="title" class="flex-1 m-0 text-ink-strong type-label">Inspect</h2>
+    <h2 data-slot="title" class="flex-1 m-0 text-ink-strong type-label">
+      Inspect
+    </h2>
     <Button
       aria-label="Close the inspector"
       class="touch-hit"
@@ -218,14 +220,23 @@
   >
     {#if !sheet}
       <!-- The rows' own size while the page reads the sheet's props. -->
-      <div aria-label="Reading the sheet's props" class="grid gap-space-2" role="status">
+      <div
+        aria-label="Reading the sheet's props"
+        class="grid gap-space-2"
+        role="status"
+      >
         {#each [0, 1, 2] as row (row)}
-          <span class="kit-skeleton block w-(--skeleton-w) h-(--text-label) rounded-xs"></span>
-          <span class="kit-skeleton block h-c-input-h mb-space-2 rounded-md"></span>
+          <span
+            class="kit-skeleton block w-(--skeleton-w) h-(--text-label) rounded-xs"
+          ></span>
+          <span class="kit-skeleton block h-c-input-h mb-space-2 rounded-md"
+          ></span>
         {/each}
       </div>
     {:else if sheet.stories.length === 0}
-      <p class="m-0 text-ink-muted type-meta">{fileName} has no stories yet. Add one below.</p>
+      <p class="m-0 text-ink-muted type-meta">
+        {fileName} has no stories yet. Add one below.
+      </p>
     {:else}
       <div class="flex items-center gap-space-2">
         <label class="sr-only" for={`${id}-story`}>Story</label>
@@ -286,9 +297,8 @@
 
       {#if component}
         <p class="m-0 text-ink-muted type-meta">
-          {component.name} · <code class="type-code wrap-anywhere"
-            >{component.file}</code
-          >
+          {component.name} ·
+          <code class="type-code wrap-anywhere">{component.file}</code>
         </p>
         {#if component.note}
           <p class="m-0 text-ink-muted type-meta">{component.note}</p>
@@ -300,7 +310,9 @@
             {@const value = inspector.value(prop)}
             <li class="grid gap-space-1" data-prop={prop.name}>
               <div class="flex items-center gap-space-2 min-h-space-6">
-                <label class="text-ink-strong type-label" for={fieldId(prop)}>{prop.name}</label>
+                <label class="text-ink-strong type-label" for={fieldId(prop)}
+                  >{prop.name}</label
+                >
                 {#if prop.required}
                   <span class="m-0 text-ink-muted type-meta">required</span>
                 {/if}
@@ -406,7 +418,8 @@
               {:else if control === "slot"}
                 <p
                   class="mark-line flex items-center gap-space-2 m-0 text-ink-muted type-meta"
-                  id={fieldId(prop)}>
+                  id={fieldId(prop)}
+                >
                   <IconComment class="shrink-0 size-icon-md" />
                   <span
                     >Content is a pin: Comment on the page to change it.</span
@@ -416,12 +429,12 @@
                 <p
                   data-slot="code"
                   class="grid gap-space-1 m-0"
-                  id={fieldId(prop)}>
+                  id={fieldId(prop)}
+                >
                   <code class="text-ink-strong type-code wrap-anywhere"
                     >{inspector.code(prop) ?? prop.type.raw}</code
                   >
-                  <span
-                    class="m-0 text-ink-muted type-meta"
+                  <span class="m-0 text-ink-muted type-meta"
                     >{inspector.code(prop) === null
                       ? "Set it in the file."
                       : "Code in the file: a pin changes it."}</span
@@ -439,15 +452,17 @@
             </li>
           {:else}
             {#if component.types !== "unknown"}
-              <li class="m-0 text-ink-muted type-meta">{component.name} takes no props.</li>
+              <li class="m-0 text-ink-muted type-meta">
+                {component.name} takes no props.
+              </li>
             {/if}
           {/each}
         </ul>
       {:else}
         <p class="m-0 text-ink-muted type-meta">
           The sheet's meta names no component the stage could find, so it has no
-          controls. Give its default export a <code class="type-code wrap-anywhere"
-            >component</code
+          controls. Give its default export a <code
+            class="type-code wrap-anywhere">component</code
           >.
         </p>
       {/if}
@@ -458,7 +473,9 @@
     class="grid gap-space-2 px-space-3 pt-space-2 pb-(--foot-pb) border-t border-t-border-hairline"
   >
     {#if inspector.problem}
-      <p class="m-0 text-data-bad type-meta" role="alert">{inspector.problem}</p>
+      <p class="m-0 text-data-bad type-meta" role="alert">
+        {inspector.problem}
+      </p>
     {/if}
     {#if naming}
       <form class="grid gap-space-2 m-0" onsubmit={named}>

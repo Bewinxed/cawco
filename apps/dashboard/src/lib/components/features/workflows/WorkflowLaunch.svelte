@@ -145,11 +145,7 @@
     interactOutsideBehavior={busy ? "ignore" : "close"}
     style="--dialog-max: 90dvh; --dialog-w: 36rem"
     bind:ref={content}
-    ><div
-      class="wf wf-stack"
-      data-slot="launch"
-      style:--hit-min="44px"
-    >
+    ><div class="wf wf-stack" data-slot="launch" style:--hit-min="44px">
       <Dialog.Header
         ><Dialog.Title>Run {workflow.name}</Dialog.Title><Dialog.Description
           >Choose the inputs and workspace for this workflow run.</Dialog.Description

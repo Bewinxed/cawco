@@ -3661,9 +3661,13 @@
                     role="presentation"
                   />
                 {:else if stops}
-                  <IconStop class="group-enabled/stop:transform-(--send-nudge)" />
+                  <IconStop
+                    class="group-enabled/stop:transform-(--send-nudge)"
+                  />
                 {:else}
-                  <IconSend class="group-enabled/stop:transform-(--send-nudge)" />
+                  <IconSend
+                    class="group-enabled/stop:transform-(--send-nudge)"
+                  />
                 {/if}
               </span>
             {/key}
@@ -3682,13 +3686,13 @@
      ask holds the composer comes back at once and fades in) */
   /* css-scope: not global: Svelte scopes each selector inside :is() to this composer (built, it reads [data-slot=ctrls].svelte-…) */
   :is(
-      [data-slot="prompts"],
-      [data-slot="tray-slot"],
-      [data-slot="progress-slot"],
-      [data-slot="lift"],
-      [data-slot="perch"],
-      [data-slot="ctrls"]
-    ) {
+    [data-slot="prompts"],
+    [data-slot="tray-slot"],
+    [data-slot="progress-slot"],
+    [data-slot="lift"],
+    [data-slot="perch"],
+    [data-slot="ctrls"]
+  ) {
     transition: var(--step-aside);
   }
   /* residual: unmapped — needs transition token: opacity var(--dur-fade)
@@ -3746,6 +3750,7 @@
     position: relative;
     z-index: 2;
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: it sets what the drawing rule above leaves alone (opacity, visibility); the order is the source's */
   [data-slot="dock"][data-asking] :global([data-slot="atts"]) {
     opacity: 0;
     visibility: hidden;
@@ -3889,6 +3894,7 @@
       transparent
     );
   }
+  /* biome-ignore lint/style/noDescendingSpecificity: the recalling rule above sets only the hint's ink; this, the fold's mask; the order is the source's */
   [data-slot="composer-field"][data-folded] > :global([data-slot="editor"]),
   [data-slot="composer-field"][data-folded] [data-slot="flight"] {
     mask-image: linear-gradient(
@@ -3902,6 +3908,7 @@
      own text, and sideways only as far as the pill's inset on the left and
      the gap to the controls on the right, so nothing paints outside the
      pill or over its buttons. */
+  /* biome-ignore lint/style/noDescendingSpecificity: the folded rule above sets only the mask; this, the alignment and clip; the order is the source's */
   [data-slot="flight"] {
     align-content: unsafe end;
     align-items: unsafe end;

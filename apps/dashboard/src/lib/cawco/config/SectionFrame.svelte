@@ -120,7 +120,9 @@
           <p
             class="flex flex-wrap items-center gap-(--line-gap)"
             style:--line-gap="8px"
-          >{purpose}</p>
+          >
+            {purpose}
+          </p>
         {/if}
       </div>
       {#if actions}
@@ -129,7 +131,9 @@
           data-slot="actions"
           class="flex flex-wrap items-center gap-(--line-gap)"
           style:--line-gap="8px"
-        >{@render actions(down)}</div>
+        >
+          {@render actions(down)}
+        </div>
       {/if}
     </header>
     {#if !ready && problem}
@@ -152,7 +156,9 @@
               <div
                 class="flex flex-wrap items-center gap-(--line-gap)"
                 style:--line-gap="8px"
-              >{@render toolbar()}</div>
+              >
+                {@render toolbar()}
+              </div>
             {/if}
             {#if problem}
               {@render fault(problem)}

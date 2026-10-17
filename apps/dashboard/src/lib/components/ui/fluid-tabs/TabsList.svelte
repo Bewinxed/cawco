@@ -1185,12 +1185,12 @@
     .ff-tabs-list
     > :global(
       :not(
-          [data-slot="segment"],
-          [data-slot="ring"],
-          .kit-ghost,
-          .kit-pill,
-          .kit-pill-trail
-        )
+        [data-slot="segment"],
+        [data-slot="ring"],
+        .kit-ghost,
+        .kit-pill,
+        .kit-pill-trail
+      )
     ) {
     position: relative;
     z-index: var(--z, var(--z-rest, 1));
@@ -1216,7 +1216,9 @@
      var(--dur-ghost) var(--ease-out). */
   @media (hover: hover) {
     .ff-tabs-list:has(
-        :global([data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected]))
+        :global(
+          [data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected])
+        )
       )
       > [data-slot="segment"] {
       opacity: 0.85;

@@ -109,10 +109,19 @@
 {#snippet outcome(machineId: string)}
   {@const result = results.get(machineId)}
   {#if result?.ok}
-    <span data-slot="ok" class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"><Check /><span>{words.sent}</span></span>
+    <span
+      data-slot="ok"
+      class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"
+      ><Check /><span>{words.sent}</span></span
+    >
   {:else if result}
-    <span data-slot="bad" class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
-      ><IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" /><span>{result.why}</span></span
+    <span
+      data-slot="bad"
+      class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
+      ><IconWarningTriangle
+        aria-hidden="true"
+        class="size-icon-sm flex-none"
+      /><span>{result.why}</span></span
     >
   {/if}
 {/snippet}
@@ -154,7 +163,11 @@
   </InputGroup.Root>
 
   {#if !one}
-    <ul data-slot="machines" aria-label={words.machines} class="m-0 flex list-none flex-col p-0">
+    <ul
+      data-slot="machines"
+      aria-label={words.machines}
+      class="m-0 flex list-none flex-col p-0"
+    >
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
         <li
@@ -181,13 +194,18 @@
             />
             <label
               class="type-label truncate text-ink-strong group-data-off:text-ink-muted"
-              for="{id}-{machine.machineId}"
-              >{machineName(machine)}</label
+              for="{id}-{machine.machineId}">{machineName(machine)}</label
             >
           </span>
-          <span data-slot="result" class="type-meta inline-flex items-center gap-space-1 text-ink-muted">
+          <span
+            data-slot="result"
+            class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
+          >
             {#if !online}
-              <span class="type-meta inline-flex items-center gap-space-1 text-ink-muted">{words.offline}</span>
+              <span
+                class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
+                >{words.offline}</span
+              >
             {:else}
               {@render outcome(machine.machineId)}
             {/if}
@@ -208,12 +226,20 @@
       variant={primary ? "default" : "outline"}
     />
     {#if one && machines[0]}
-      <span data-slot="result" class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
+      <span
+        data-slot="result"
+        class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
         >{@render outcome(machines[0].machineId)}</span
       >
     {/if}
   </div>
   {#if problem}
-    <p data-slot="bad" class="type-meta inline-flex items-center gap-space-1 text-status-fail-ink" role="alert">{problem}</p>
+    <p
+      data-slot="bad"
+      class="type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
+      role="alert"
+    >
+      {problem}
+    </p>
   {/if}
 </form>

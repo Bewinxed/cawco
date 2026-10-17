@@ -189,11 +189,10 @@
 {/if}
 {#if cawco.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
-  <p class="m-0 px-space-2 pt-space-1 pb-space-2 type-meta text-ink-muted">Connect a machine to run sessions</p>
-  <ul
-    data-slot="list"
-    class="m-0 flex list-none flex-col gap-space-row p-0"
-  >
+  <p class="m-0 px-space-2 pt-space-1 pb-space-2 type-meta text-ink-muted">
+    Connect a machine to run sessions
+  </p>
+  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
     {#each JOIN_WAYS as way (way.way)}
       {@const Icon = way.icon}
       <li>
@@ -212,22 +211,22 @@
           <span
             data-slot="glyph"
             class="inline-grid w-icon-md flex-none place-items-center text-(color:--glyph-ink)"
-            style:--glyph-ink={way.hue}
-            ><Icon class="size-icon-md" /></span
+            style:--glyph-ink={way.hue}><Icon class="size-icon-md" /></span
           >
           <span data-slot="words" class="flex min-w-0 flex-col">
-            <span data-slot="name" class="type-label text-ink-strong">{way.name}</span>
-            <span data-slot="meta" class="type-meta text-ink-muted">{way.meta}</span>
+            <span data-slot="name" class="type-label text-ink-strong"
+              >{way.name}</span
+            >
+            <span data-slot="meta" class="type-meta text-ink-muted"
+              >{way.meta}</span
+            >
           </span>
         </button>
       </li>
     {/each}
   </ul>
 {:else}
-  <ul
-    data-slot="list"
-    class="m-0 flex list-none flex-col gap-space-row p-0"
-  >
+  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
     {#each cawco.machines as machine, index (machine.machineId)}
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
@@ -263,10 +262,7 @@
             />
           </div>
         </MachineMenu>
-        <RowFault
-          again={updateFailed?.again}
-          reason={updateFailed?.reason}
-        />
+        <RowFault again={updateFailed?.again} reason={updateFailed?.reason} />
       </li>
     {/each}
   </ul>

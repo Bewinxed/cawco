@@ -234,7 +234,10 @@
     >
       <span>{video ? "Video" : "Image"} not available</span>
       {#if path}
-        <span data-slot="path" class="font-(family-name:--font-mono) wrap-anywhere">{path}</span>
+        <span
+          data-slot="path"
+          class="font-(family-name:--font-mono) wrap-anywhere">{path}</span
+        >
       {/if}
     </div>
   {:else}
@@ -249,7 +252,7 @@
         data-sized={intrinsic !== null || undefined}
         class="group/frame relative flex items-center w-full h-full rounded-sm data-sized:w-(--frame-w) data-sized:h-auto data-sized:aspect-(--frame-ratio)"
         style:--frame-ratio="var(--w) / var(--h)"
-        style:--frame-w="min(100%, calc(var(--w) * 1px), calc(var(--cap) * var(--w) / var(--h)))"
+        style:--frame-w={"min(100%, calc(var(--w) * 1px), calc(var(--cap) * var(--w) / var(--h)))"}
         style:--h={intrinsic?.height}
         style:--w={intrinsic?.width}
       >
@@ -287,12 +290,17 @@
     </button>
   {/if}
   {#if caption || path}
-    <figcaption class="flex flex-col gap-space-1 mt-space-2 text-size-meta font-normal text-ink-muted">
+    <figcaption
+      class="flex flex-col gap-space-1 mt-space-2 text-size-meta font-normal text-ink-muted"
+    >
       {#if caption}
         <span>{caption}</span>
       {/if}
       {#if path}
-        <span data-slot="path" class="font-(family-name:--font-mono) wrap-anywhere">{path}</span>
+        <span
+          data-slot="path"
+          class="font-(family-name:--font-mono) wrap-anywhere">{path}</span
+        >
       {/if}
     </figcaption>
   {/if}

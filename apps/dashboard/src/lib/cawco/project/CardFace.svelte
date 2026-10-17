@@ -46,7 +46,10 @@
 {#if art}
   <span class="relative z-2 mb-space-2 self-center">{@render art()}</span>
 {/if}
-<span data-slot="name" class="type-label relative z-2 font-medium text-ink-strong">{name}</span>
+<span
+  data-slot="name"
+  class="type-label relative z-2 font-medium text-ink-strong">{name}</span
+>
 <span data-slot="meta" class="relative z-2 text-ink-muted">{meta}</span>
 
 <style>

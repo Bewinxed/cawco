@@ -76,15 +76,13 @@
 <svelte:head><title>Overlays bench · CawCo</title></svelte:head>
 
 <main class="type-body grid gap-space-5 p-space-5 text-ink-strong">
-  <div
-    data-slot="openers"
-    class="relative z-1 flex flex-wrap gap-space-2"
-  >
+  <div data-slot="openers" class="relative z-1 flex flex-wrap gap-space-2">
     {#if shows("sheet")}
       <Sheet.Root bind:open={open.sheet}>
         <Sheet.Trigger
           class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="sheet">Sheet</Sheet.Trigger>
+          data-open="sheet">Sheet</Sheet.Trigger
+        >
         <Sheet.Content side="left">
           <Sheet.Header>
             <Sheet.Title>Sheet</Sheet.Title>
@@ -102,7 +100,8 @@
       <Dialog.Root bind:open={open.dialog}>
         <Dialog.Trigger
           class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="dialog">Dialog</Dialog.Trigger>
+          data-open="dialog">Dialog</Dialog.Trigger
+        >
         <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>Dialog</Dialog.Title>
@@ -118,8 +117,7 @@
       <AlertDialog.Root bind:open={open["alert-dialog"]}>
         <AlertDialog.Trigger
           class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="alert-dialog"
-          >Alert dialog</AlertDialog.Trigger
+          data-open="alert-dialog">Alert dialog</AlertDialog.Trigger
         >
         <AlertDialog.Content>
           <AlertDialog.Header>
@@ -140,7 +138,8 @@
       <Drawer.Root bind:open={open.drawer}>
         <Drawer.Trigger
           class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="drawer">Drawer</Drawer.Trigger>
+          data-open="drawer">Drawer</Drawer.Trigger
+        >
         <Drawer.Content>
           <Drawer.Header>
             <Drawer.Title>Drawer</Drawer.Title>
@@ -158,8 +157,7 @@
       <DropdownMenu.Root bind:open={open["dropdown-menu"]}>
         <DropdownMenu.Trigger
           class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="dropdown-menu"
-          >Dropdown menu</DropdownMenu.Trigger
+          data-open="dropdown-menu">Dropdown menu</DropdownMenu.Trigger
         >
         <DropdownMenu.Content>
           <DropdownMenu.Item
@@ -175,7 +173,8 @@
       <Popover.Root bind:open={open.popover}>
         <Popover.Trigger
           class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="popover">Popover</Popover.Trigger>
+          data-open="popover">Popover</Popover.Trigger
+        >
         <Popover.Content>
           <Button data-inside="popover" onclick={() => inside("popover")}
             >Press</Button
@@ -194,8 +193,9 @@
         value={chosen}
         bind:open={open.select}
       >
-        <Select.Trigger class="rounded-sm border border-border-control px-space-3 py-space-2" data-open="select"
-          >{chosen || "Select"}</Select.Trigger
+        <Select.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="select">{chosen || "Select"}</Select.Trigger
         >
         <Select.Content>
           <Select.Item data-inside="select" label="Press" value="press" />
@@ -207,7 +207,12 @@
     {#if shows("context-menu")}
       <ContextMenu.Root bind:open={open["context-menu"]}>
         <ContextMenu.Trigger>
-          <div class="rounded-sm border border-border-control px-space-3 py-space-2" data-open="context-menu">Context menu</div>
+          <div
+            class="rounded-sm border border-border-control px-space-3 py-space-2"
+            data-open="context-menu"
+          >
+            Context menu
+          </div>
         </ContextMenu.Trigger>
         <ContextMenu.Content>
           <ContextMenu.Item

@@ -248,7 +248,9 @@
   function chooseWork(id: string) {
     const at = WORK_IDS.indexOf(id as (typeof WORK_IDS)[number]);
     workEl
-      ?.querySelectorAll<HTMLElement>('[data-slot="ff-tab"] > [data-slot="hit"]')
+      ?.querySelectorAll<HTMLElement>(
+        '[data-slot="ff-tab"] > [data-slot="hit"]'
+      )
       [at]?.click();
   }
 
@@ -341,8 +343,8 @@
       <!-- literal: 4ch -->
       <output
         class="num min-w-(--output-w) text-ink-strong"
-        style:--output-w="4ch"
-      >{taper ?? "–"}px</output>
+        style:--output-w="4ch">{taper ?? "–"}px</output
+      >
     </label>
     <label class="flex items-center gap-space-2">
       <span>Subtle</span>
@@ -361,8 +363,8 @@
       <!-- literal: 4ch -->
       <output
         class="num min-w-(--output-w) text-ink-strong"
-        style:--output-w="4ch"
-      >{subtle ?? "–"}%</output>
+        style:--output-w="4ch">{subtle ?? "–"}%</output
+      >
     </label>
     <label class="flex items-center gap-space-2">
       <span>Thickness</span>
@@ -381,8 +383,8 @@
       <!-- literal: 4ch -->
       <output
         class="num min-w-(--output-w) text-ink-strong"
-        style:--output-w="4ch"
-      >{width ?? "–"}px</output>
+        style:--output-w="4ch">{width ?? "–"}px</output
+      >
     </label>
   </div>
   <!-- The home's Working and Finished as the shell hosts them: in the

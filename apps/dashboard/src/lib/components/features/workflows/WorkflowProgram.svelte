@@ -85,7 +85,9 @@
           data-flip
         >
           {#if problem.line}
-            <span class="me-space-2 text-ink-muted num">Line {problem.line}</span>
+            <span class="me-space-2 text-ink-muted num"
+              >Line {problem.line}</span
+            >
           {/if}
           {problem.line ? withoutLine(problem.message) : problem.message}
         </p>

@@ -44,6 +44,25 @@
     related: "edge-related",
     found_in: "edge-found-in",
   };
+  /** An edge's ink and width, for `--xy-edge-stroke` and `--xy-edge-stroke-width`. */
+  interface Stroke {
+    ink: string;
+    width: string;
+  }
+  /** A landed `after` edge's stroke, muted to the control edge. */
+  const LANDED: Stroke = { ink: "var(--border-control)", width: "1.5px" };
+  /** Every other kind's own stroke; an `after` still waiting takes PLAIN. */
+  const STROKES: Partial<Record<TaskEdgeKind, Stroke>> = {
+    parent: { ink: "var(--nest-ink)", width: "var(--nest-line, 1px)" },
+    related: { ink: "var(--ink-muted)", width: "2px" },
+    found_in: { ink: "var(--ink-subtle)", width: "1px" },
+  };
+  const PLAIN: Stroke = { ink: "var(--ink-muted)", width: "1.5px" };
+  const stroke = $derived(
+    edge.kind === "after" && edge.landed
+      ? LANDED
+      : (STROKES[edge.kind] ?? PLAIN)
+  );
 </script>
 
 <BaseEdge
@@ -51,15 +70,7 @@
   class={DASHES[edge.kind]}
   markerEnd={edge.kind === "after" ? `url(#${edge.marker})` : undefined}
   path={route[0]}
-  style={edge.kind === "after" && edge.landed
-    ? "--xy-edge-stroke: var(--border-control); --xy-edge-stroke-width: 1.5px"
-    : edge.kind === "parent"
-      ? "--xy-edge-stroke: var(--nest-ink); --xy-edge-stroke-width: var(--nest-line, 1px)"
-      : edge.kind === "related"
-        ? "--xy-edge-stroke: var(--ink-muted); --xy-edge-stroke-width: 2px"
-        : edge.kind === "found_in"
-          ? "--xy-edge-stroke: var(--ink-subtle); --xy-edge-stroke-width: 1px"
-          : "--xy-edge-stroke: var(--ink-muted); --xy-edge-stroke-width: 1.5px"}
+  style="--xy-edge-stroke: {stroke.ink}; --xy-edge-stroke-width: {stroke.width}"
 />
 
 <style>

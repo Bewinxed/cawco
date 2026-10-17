@@ -62,8 +62,9 @@
     </p>
   {:else if fault.reason === "offline"}
     <p class="min-w-0 text-balance">
-      Not caught up: <span data-slot="name" class="whitespace-nowrap">{machine}</span> is offline.
-      The rest comes in once it's back.
+      Not caught up: <span data-slot="name" class="whitespace-nowrap"
+        >{machine}</span
+      > is offline. The rest comes in once it's back.
     </p>
   {:else}
     <p class="min-w-0 text-balance">Not caught up</p>

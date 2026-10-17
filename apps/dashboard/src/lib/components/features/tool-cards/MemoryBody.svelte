@@ -248,7 +248,8 @@
             <span
               data-slot="path"
               class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
-              >{doc.path}</span>
+              >{doc.path}</span
+            >
             {#if doc.updatedAt}
               <span
                 data-slot="meta"
@@ -265,7 +266,8 @@
               data-slot="chev"
               class="flex-none grid place-items-center text-ink-muted transition-[transform] dur-control ease-out motion-reduce:transition-none group-state-open:transform-(--chev-turn)"
               data-box
-              style:--chev-turn="rotate(90deg)"><IconChevronRight class="size-icon-sm block" /></span
+              style:--chev-turn="rotate(90deg)"
+              ><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>
           <!-- Folds like the row that holds it: grows open and folds shut

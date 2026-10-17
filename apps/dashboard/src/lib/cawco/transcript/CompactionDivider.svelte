@@ -293,9 +293,8 @@
           ><IconError class="size-icon-sm" /></span
         ><b>Couldn't compact the conversation</b></span
       >
-      <span
-        data-slot="reason"
-        class="block mt-space-1 text-pretty rail-hang">{reason}</span
+      <span data-slot="reason" class="block mt-space-1 text-pretty rail-hang"
+        >{reason}</span
       >
     </span>
   {/if}
@@ -460,7 +459,8 @@
      no class; the brief reads in the muted ink of a note, not a turn's. */
   [data-slot="body"] :global([data-slot="msg"]),
   [data-slot="body"] :global([data-slot="msg"] .prose),
-  [data-slot="body"] :global([data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6)) {
+  [data-slot="body"]
+    :global([data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6)) {
     color: var(--ink-muted);
   }
   [data-slot="body"] :global([data-slot="msg"] .prose) {

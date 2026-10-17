@@ -98,7 +98,10 @@
   <section
     {...rest}
     aria-labelledby="{id}-title"
-    class={cn("ps-(--ask-indent-in) pe-(--ask-end-in) min-w-0 py-space-1", className)}
+    class={cn(
+      "min-w-0 py-space-1 ps-(--ask-indent-in) pe-(--ask-end-in)",
+      className
+    )}
     data-ask={at}
     style:--ask-end-in="var(--ask-end, 0)"
     style:--ask-indent-in="var(--ask-indent, 0)"
@@ -115,21 +118,22 @@
         data-slot="title"
         class="m-0 type-label text-balance wrap-anywhere text-ink-strong"
         id="{id}-title"
-      >{asked.title}</p>
+      >
+        {asked.title}
+      </p>
       {#each paragraphs as paragraph, index (index)}
         <p
           data-slot="body"
           class="m-0 type-meta text-pretty wrap-anywhere text-ink-muted"
-        >{paragraph}</p>
+        >
+          {paragraph}
+        </p>
       {/each}
       {#if items.length > 0}
         <AskItems {items} label="What this reaches" />
       {/if}
       <RowFault reason={failure} />
-      <div
-        data-slot="actions"
-        class="flex flex-wrap justify-end gap-space-2"
-      >
+      <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
         <Button
           data-ask-cancel
           disabled={running}

@@ -838,7 +838,7 @@
                 <span
                   class="inline-flex items-center h-(--wordmark-h) font-wordmark text-size-body font-(--weight-wordmark) tracking-wordmark leading-kpi min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
                   data-box
-                  style:--wordmark-h="calc(var(--text-body) * var(--leading-body))"
+                  style:--wordmark-h={"calc(var(--text-body) * var(--leading-body))"}
                   >Caw&amp;Co</span
                 >
               </a>
@@ -891,7 +891,9 @@
           type="button"
         >
           <IconSearch class="flex-none size-icon-md" />
-          <span class="overflow-clip text-ellipsis whitespace-nowrap">Search sessions, projects, machines</span>
+          <span class="overflow-clip text-ellipsis whitespace-nowrap"
+            >Search sessions, projects, machines</span
+          >
         </button>
       </div>
     {/if}

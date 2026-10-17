@@ -108,7 +108,11 @@
 </script>
 
 <div class="flex flex-col">
-  <p data-slot="order-list-label" class="type-meta px-space-1 pt-0 pb-space-2 text-ink-muted" id="order-label">
+  <p
+    data-slot="order-list-label"
+    class="type-meta px-space-1 pt-0 pb-space-2 text-ink-muted"
+    id="order-label"
+  >
     {words.order}
   </p>
   <!-- literal: 3px -->
@@ -148,7 +152,7 @@
             aria-hidden="true"
             class="h-space-4 w-(--handle-w) flex-none bg-(image:--handle-dots) bg-size-(--handle-tile)"
             style:--handle-w="10px"
-            style:--handle-dots="radial-gradient(circle, var(--ink-subtle) 1px, transparent 1.5px)"
+            style:--handle-dots={"radial-gradient(circle, var(--ink-subtle) 1px, transparent 1.5px)"}
             style:--handle-tile="5px 5px"
           ></span>
           <!-- literal: 8px; 50% -->

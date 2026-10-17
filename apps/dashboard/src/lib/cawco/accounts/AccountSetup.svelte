@@ -495,7 +495,11 @@
                 })}
               {:else if at === "atLimit" && pair}
                 <section class="flex min-w-0 flex-col">
-                  <h2 class="type-title mb-space-5 text-balance text-ink-strong">{words.steps.atLimit}</h2>
+                  <h2
+                    class="type-title mb-space-5 text-balance text-ink-strong"
+                  >
+                    {words.steps.atLimit}
+                  </h2>
                   <AtLimitBlock
                     accounts={[pair[1], pair[0]]}
                     terms={provider === CLAUDE_PROVIDER}
@@ -505,7 +509,9 @@
               {:else if at === "done" && pair}
                 {@const line = routingLine(pair, { yours, delegates })}
                 <section class="flex min-w-0 flex-col">
-                  <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+                  <h2
+                    class="type-title mb-space-5 text-balance text-ink-strong"
+                  >
                     {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
                   </h2>
                   <p data-slot="lead" class="text-pretty text-ink-muted">
@@ -517,7 +523,11 @@
           {/key}
         </div>
         {#if refused}
-          <p class="type-meta mt-space-3 text-status-fail-ink" role="alert" in:appear>
+          <p
+            class="type-meta mt-space-3 text-status-fail-ink"
+            role="alert"
+            in:appear
+          >
             {refused}
           </p>
         {/if}
@@ -566,7 +576,9 @@
         data-slot="ghead"
         class="type-label px-space-3 pt-space-4 pb-space-1 text-ink-muted first-of-type:pt-0"
         id="pick-{group.id}"
-      >{group.label}</h3>
+      >
+        {group.label}
+      </h3>
       {@render choiceRows(group.rows, group.id)}
     {:else}
       <p class="type-meta px-space-4 py-space-3 text-ink-muted">
@@ -610,8 +622,7 @@
           <span
             data-slot="ptile"
             class="grid size-(--ptile) flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
-            data-box
-            ><ProviderMark provider={row.provider} /></span
+            data-box><ProviderMark provider={row.provider} /></span
           >
           <span
             data-slot="plabel"
@@ -622,8 +633,7 @@
             data-slot="chev"
             aria-hidden="true"
             class="flex text-ink-subtle"
-            data-box
-            ><IconChevronRight class="size-icon-md" /></span
+            data-box><IconChevronRight class="size-icon-md" /></span
           >
         </button>
       {/snippet}
@@ -677,7 +687,8 @@
         />
         <span
           >{accountsWords.signin.signedInAs}
-          <b class="font-medium">{email ?? accountsWords.signin.theAccount}</b></span
+          <b class="font-medium">{email ?? accountsWords.signin.theAccount}</b
+          ></span
         >
       </div>
     {/if}
@@ -721,9 +732,10 @@
                 style:--area="st"
               >
                 {#if !done && state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" class="size-(--st-icon)" /><span
-                    >{words.someoneElse}</span
-                  >
+                  <IconWarningTriangle
+                    aria-hidden="true"
+                    class="size-(--st-icon)"
+                  /><span>{words.someoneElse}</span>
                 {:else if !online}
                   <span>{words.offline}</span>
                 {/if}
@@ -752,12 +764,12 @@
                   <IconSuccess
                     aria-hidden="true"
                     class="size-(--st-icon) text-status-done-glyph"
-                  /><span>{words.signedIn}</span
-                  >
+                  /><span>{words.signedIn}</span>
                 {:else if paste.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" class="size-(--st-icon)" /><span
-                    >{words.someoneElse}</span
-                  >
+                  <IconWarningTriangle
+                    aria-hidden="true"
+                    class="size-(--st-icon)"
+                  /><span>{words.someoneElse}</span>
                 {:else if !online}
                   <span>{words.offline}</span>
                 {:else if !asked}
@@ -866,7 +878,9 @@
 
 {#snippet nameIt()}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-5 text-balance text-ink-strong">{words.steps.nameIt}</h2>
+    <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+      {words.steps.nameIt}
+    </h2>
     <!-- literal: 280px -->
     <div
       class="flex min-w-0 flex-col items-start gap-space-2 mb-space-5"
@@ -889,7 +903,11 @@
       class="flex min-w-0 flex-col items-start gap-space-2 mb-space-5"
       style:--nick-max="280px"
     >
-      <label data-slot="account-setup-label" class="type-label text-ink-strong" for="setup-nickname">
+      <label
+        data-slot="account-setup-label"
+        class="type-label text-ink-strong"
+        for="setup-nickname"
+      >
         {words.nickname}
         <span class="font-normal text-ink-muted">{words.optional}</span>
       </label>
@@ -920,7 +938,9 @@
   onchoice: (choice: StrategyChoice) => void
 )}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-5 text-balance text-ink-strong">{heading}</h2>
+    <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+      {heading}
+    </h2>
     {#if pair}
       <StrategyPicker
         accounts={pair}

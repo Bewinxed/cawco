@@ -61,9 +61,7 @@
   const marked = $derived(hits.map((hit) => `${hit.start}-${hit.end}`).join());
 </script>
 
-<div
-  class="flex flex-col gap-2 rounded-md bg-surface-recess p-3"
->
+<div class="flex flex-col gap-2 rounded-md bg-surface-recess p-3">
   <div class="flex flex-wrap items-baseline justify-between gap-2">
     <span class="text-label text-ink-strong">Try it</span>
     <span

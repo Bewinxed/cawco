@@ -248,7 +248,7 @@
   <div
     aria-hidden="true"
     class="relative h-(--ticks-h) type-meta num text-ink-subtle"
-    style:--ticks-h="calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"
+    style:--ticks-h={"calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"}
   >
     {#each ticks as tick (tick.hour)}
       <!-- mark-line: the tick stands above its hour, not beside it -->

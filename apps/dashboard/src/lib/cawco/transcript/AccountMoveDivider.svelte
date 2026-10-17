@@ -107,7 +107,10 @@
     <span class="h-px bg-border-control"></span>
     <span
       class="inline-flex items-center gap-space-2 min-w-0 whitespace-nowrap mark-line"
-      ><span data-slot="mark" class="inline-flex items-center gap-space-2" data-box
+      ><span
+        data-slot="mark"
+        class="inline-flex items-center gap-space-2"
+        data-box
         ><IconTransfer
           data-account-move-divider-glyph
           aria-hidden="true"

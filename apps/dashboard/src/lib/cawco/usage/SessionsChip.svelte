@@ -202,11 +202,7 @@
     style={reach > 0 ? `--reach: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
-    <div
-      data-slot="sessions-chip-card"
-      class="flex flex-col"
-      bind:this={card}
-    >
+    <div data-slot="sessions-chip-card" class="flex flex-col" bind:this={card}>
       <p
         data-slot="head"
         class="px-space-3 pt-space-2 pb-space-1 font-body text-ink-strong text-meta font-medium"
@@ -229,7 +225,9 @@
               onclick={opened}
             >
               <SessionStatus compact sessionId={session.id} />
-              <span data-slot="title" class="min-w-0 flex-auto truncate type-label"
+              <span
+                data-slot="title"
+                class="min-w-0 flex-auto truncate type-label"
                 >{instanceTitle(session)}</span
               >
               <span

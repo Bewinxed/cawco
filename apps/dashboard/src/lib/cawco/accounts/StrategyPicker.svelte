@@ -94,20 +94,31 @@
       event.key
     ];
     if (event.key === "Enter" || event.key === " ") {
-      if ((event.target as HTMLElement).matches('[data-slot="strategy-picker-card"]')) {
+      if (
+        (event.target as HTMLElement).matches(
+          '[data-slot="strategy-picker-card"]'
+        )
+      ) {
         event.preventDefault();
         choose(offered[at]);
       }
       return;
     }
-    if (by === undefined || !(event.target as HTMLElement).matches('[data-slot="strategy-picker-card"]')) {
+    if (
+      by === undefined ||
+      !(event.target as HTMLElement).matches(
+        '[data-slot="strategy-picker-card"]'
+      )
+    ) {
       return;
     }
     event.preventDefault();
     const next = (at + by + offered.length) % offered.length;
     choose(offered[next]);
     await tick();
-    grid?.querySelectorAll<HTMLElement>('[data-slot="strategy-picker-card"]')[next]?.focus();
+    grid
+      ?.querySelectorAll<HTMLElement>('[data-slot="strategy-picker-card"]')
+      [next]?.focus();
   }
 </script>
 
@@ -129,7 +140,11 @@
         class="group flex min-w-0 cursor-pointer flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] dur-fade ease-out hover:border-border-control aria-checked:border-focus-ring aria-checked:hover:border-focus-ring focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:active:transform-(--card-press)"
         style:--card-press="scale(0.995)"
         onclick={(event) => {
-          if (!(event.target as HTMLElement).closest('select, [data-slot="order"]')) {
+          if (
+            !(event.target as HTMLElement).closest(
+              'select, [data-slot="order"]'
+            )
+          ) {
             choose(strategy);
           }
         }}
@@ -167,7 +182,11 @@
           <!-- Only the chosen Pinned card names its account: an unchosen one
                keeps no room for it. -->
           {#if strategy.id === "pinned" && checked}
-            <span class="ms-auto max-w-full min-w-0 flex-initial" in:appear out:crossOut>
+            <span
+              class="ms-auto max-w-full min-w-0 flex-initial"
+              in:appear
+              out:crossOut
+            >
               <NativeSelect
                 aria-label={words.pinnedAccount}
                 onchange={(event) => {

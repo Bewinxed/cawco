@@ -202,7 +202,7 @@
     style:--panel-origin-above="var(--origin) 100%"
     style:--panel-origin-right="0 calc(var(--y) + var(--origin) - var(--top))"
     style:--panel-x="max(0px, min(var(--x), calc(var(--span) - 100%)))"
-    style:--top="clamp(var(--hover-panel-inset), var(--y), calc(100dvh - 100% - var(--hover-panel-inset)))"
+    style:--top={"clamp(var(--hover-panel-inset), var(--y), calc(100dvh - 100% - var(--hover-panel-inset)))"}
     in:panelIn
     out:panelOut
     {@attach morph({ width: true })}
@@ -231,7 +231,6 @@
     </div>
   </div>
 {/if}
-
 
 <style>
   /* residual: pseudo — the 4px between the panel and its trigger, so the

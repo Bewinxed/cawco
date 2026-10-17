@@ -42,8 +42,9 @@
       >
     {/snippet}
     <h3 data-slot="head" class="type-label m-0 pe-(--x-room) text-ink-strong">
-      Sessions rebalanced <span data-slot="count" class="type-meta num text-ink-muted"
-        >{notices.length}</span
+      Sessions rebalanced <span
+        data-slot="count"
+        class="type-meta num text-ink-muted">{notices.length}</span
       >
     </h3>
     <p data-slot="explainer" class="type-meta m-0 text-ink-muted">
@@ -51,7 +52,10 @@
       ones were placed again.
     </p>
   </NoticeRow>
-  <ul data-slot="entries" class="m-0 flex list-none flex-col px-0 pt-0 pb-space-2">
+  <ul
+    data-slot="entries"
+    class="m-0 flex list-none flex-col px-0 pt-0 pb-space-2"
+  >
     {#each notices as notice (notice.id)}
       {@const words = rebalanceWords(notice)}
       {@const first = notice.came[0]?.account}
@@ -68,7 +72,11 @@
               <AccountTile hue={first.hue} {provider} size={28} />
             {/if}
           {/snippet}
-          <span data-slot="title" class="type-body truncate pe-(--x-room) text-ink-row">{words.title}</span>
+          <span
+            data-slot="title"
+            class="type-body truncate pe-(--x-room) text-ink-row"
+            >{words.title}</span
+          >
           {#each words.lines as line, n (n)}
             <span class="type-meta wrap-anywhere text-ink-muted">{line}</span>
           {/each}

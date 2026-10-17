@@ -106,7 +106,9 @@
             <Table.Cell
               class="border-l border-border px-space-4 py-space-2 max-phone:border-l-none"
             >
-              <span class="mark-line inline-flex items-center gap-space-1 type-label">
+              <span
+                class="mark-line inline-flex items-center gap-space-1 type-label"
+              >
                 {#if isCurrent(machine)}
                   <IconCheck class="size-icon-md shrink-0 text-success-9" />
                 {/if}

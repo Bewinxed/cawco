@@ -1606,7 +1606,9 @@
     <div
       class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
       bind:this={well}
-    >{@render framed()}</div>
+    >
+      {@render framed()}
+    </div>
   </section>
 {:else}
   <SideSurface
@@ -1732,7 +1734,9 @@
       ></span>
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own Vite, started or woken by the daemon. -->
-        <p class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta">{stageWaiting}</p>
+        <p class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta">
+          {stageWaiting}
+        </p>
       {/if}
     </div>
     {#if compileErrors.length > 0}
@@ -1753,11 +1757,12 @@
         <p class="m-0 text-data-bad text-size-body font-medium">
           Doesn't compile: <code class="type-code">{errorPlace(first)}</code>
         </p>
-        <p class="m-0 text-ink-muted type-meta">{first.message.split("\n")[0]}</p>
+        <p class="m-0 text-ink-muted type-meta">
+          {first.message.split("\n")[0]}
+        </p>
         {#if first.frame}
           <pre
-            class="m-0 overflow-x-auto p-space-2 rounded-sm bg-surface-recess text-ink-strong type-code"
-          >{first.frame}</pre>
+            class="m-0 overflow-x-auto p-space-2 rounded-sm bg-surface-recess text-ink-strong type-code">{first.frame}</pre>
         {/if}
         <p class="m-0 text-ink-muted type-meta">
           {compileErrors.length > 1
@@ -1954,7 +1959,8 @@
   }
   /* The mode's segmented control keeps its segments to their glyphs: each
      name stays its accessible name and its title, never drawn. */
-  [data-slot="modes"] :global([data-slot="ff-tab"] [data-slot="tab-item-label"]) {
+  [data-slot="modes"]
+    :global([data-slot="ff-tab"] [data-slot="tab-item-label"]) {
     position: absolute;
     width: 1px;
     height: 1px;

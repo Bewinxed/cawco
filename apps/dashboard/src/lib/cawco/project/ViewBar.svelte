@@ -172,7 +172,11 @@
               {#if view.draft}
                 <Badge variant="secondary"><span>draft</span></Badge>
               {:else if view.count > 0}
-                <span data-slot="count" class="type-meta ms-auto text-ink-muted tabular-nums">{view.count}</span>
+                <span
+                  data-slot="count"
+                  class="type-meta ms-auto text-ink-muted tabular-nums"
+                  >{view.count}</span
+                >
               {/if}
             {/snippet}
           </Select.Item>

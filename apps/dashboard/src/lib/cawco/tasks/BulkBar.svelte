@@ -128,12 +128,15 @@
   class="fixed inset-x-space-3 bottom-(--off-bottom) z-40 flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-overlay py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
   style:--off-bottom="calc(var(--space-5) + var(--safe-bottom, 0px))"
-  style:--off-bottom-phone="calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-2))"
+  style:--off-bottom-phone={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-2))"}
   style:--min-h="calc(var(--c-btn-h-sm) + var(--space-2))"
 >
   {#if run}
     <!-- The change in flight, drawn where it was asked for. -->
-    <span class="mark-line inline-flex items-center gap-space-2 pe-space-2 type-label text-ink-strong" role="status">
+    <span
+      class="mark-line inline-flex items-center gap-space-2 pe-space-2 type-label text-ink-strong"
+      role="status"
+    >
       <TaskRing done={run.done} size="sm" total={run.total} />
       {#if run.failed}
         <span data-slot="failed" class="text-status-fail-ink"
@@ -289,8 +292,7 @@
                     class="flex-none text-meta font-(family-name:--font-mono) liga-none text-ink-muted"
                     >{task.id}</span
                   >
-                  <span
-                    class="min-w-0 truncate type-label text-ink-strong"
+                  <span class="min-w-0 truncate type-label text-ink-strong"
                     >{task.title}</span
                   >
                   {#if task.attempts[0]}

@@ -107,7 +107,8 @@
     <span
       data-slot="name"
       class="flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong transition-[color] dur-control ease-out group-hover/words:text-brand-ink"
-      >{name}</span>
+      >{name}</span
+    >
     <span
       data-slot="num"
       class="num flex-none ms-auto text-ink-muted text-size-meta font-normal"
@@ -154,7 +155,13 @@
   </div>
   {#if failure}
     <!-- literal: 68ch -->
-    <p data-slot="failure" class="rail-hang mt-space-1 mb-0 max-w-(--measure) text-status-fail-ink text-size-meta font-normal leading-body wrap-anywhere" style:--measure="68ch">{failure}</p>
+    <p
+      data-slot="failure"
+      class="rail-hang mt-space-1 mb-0 max-w-(--measure) text-status-fail-ink text-size-meta font-normal leading-body wrap-anywhere"
+      style:--measure="68ch"
+    >
+      {failure}
+    </p>
   {/if}
   <!-- The steps come from the run's detail, read once if it isn't yet
        (RunSteps), whether or not the run's row is still on the board. -->

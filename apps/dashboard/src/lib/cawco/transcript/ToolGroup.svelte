@@ -444,7 +444,9 @@
                       pending={busy}
                       pendingLabel="Opening…"
                     /></span
-                  ><span data-slot="artifact-path" class="truncate text-ink-muted"
+                  ><span
+                    data-slot="artifact-path"
+                    class="truncate text-ink-muted"
                     >{preview?.source
                       ? previewPlace(preview.source)
                       : (called?.kind ?? "")}</span
@@ -548,7 +550,9 @@
                             data-slot="refusal"
                             class="my-0 me-0 ms-(--refusal-start) text-size-label text-data-bad wrap-anywhere"
                             style:--refusal-start="13px"
-                          >{refusal}</p>
+                          >
+                            {refusal}
+                          </p>
                         {/if}
                         {#each changes as change, i (i)}
                           <DiffView
@@ -572,7 +576,7 @@
                            them by its own padding. -->
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
-                        style:--fields-start="calc(var(--x-hang) - var(--space-3))"
+                        style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
                       >
                         <div
                           data-slot="tool-group-field"
@@ -602,7 +606,7 @@
                     {:else}
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
-                        style:--fields-start="calc(var(--x-hang) - var(--space-3))"
+                        style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
                       >
                         {#each fields as f (f.key)}
                           <div

@@ -111,9 +111,8 @@
               class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:w-(--sheen-width) motion-safe:text-ink-strong"
               data-slot="sheen"
               style:--sheen-width="300%"
-              ><span
-                class="motion-safe:inline-block"
-                data-slot="sheen-word">{word}</span
+              ><span class="motion-safe:inline-block" data-slot="sheen-word"
+                >{word}</span
               ></span
             >
           {/if}</span

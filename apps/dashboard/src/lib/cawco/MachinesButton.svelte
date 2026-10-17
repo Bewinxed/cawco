@@ -87,7 +87,6 @@
   {/snippet}
 </Tip>
 
-
 <style>
   /* residual: unmapped — outranks Shell's unlayered `.tools .bar-symbol` ink,
      which a utility on the glyph cannot; clears when Shell's lane moves it. */

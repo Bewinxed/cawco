@@ -178,7 +178,11 @@
               <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
                 <ProviderLogo model={trimmed} />
                 <span class="flex flex-col" data-box>
-                  <span>Use <span class="font-(family-name:--font-mono)">{trimmed}</span></span>
+                  <span
+                    >Use <span class="font-(family-name:--font-mono)"
+                      >{trimmed}</span
+                    ></span
+                  >
                   <span class="text-meta text-ink-muted">
                     Sent to the selected harness exactly as typed
                   </span>

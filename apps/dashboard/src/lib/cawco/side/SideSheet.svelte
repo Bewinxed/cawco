@@ -437,9 +437,7 @@
   /* The card is as tall as what the snap shows (`--sheet-hidden` stands
      below the composer), so its well keeps its foot and radius above it. */
   /* css-scope: SideSurface's card, held in this sheet's own sheet div */
-  :global(
-      [data-preview-sheet] [data-slot="sheet"] > [data-slot="side-card"]
-    ) {
+  :global([data-preview-sheet] [data-slot="sheet"] > [data-slot="side-card"]) {
     flex: 1;
     height: auto;
     max-block-size: calc(100% - var(--sheet-hidden, 0px));

@@ -60,7 +60,11 @@
 </p>
 <!-- Rows that come and go (Show all, a restore's new version) go through
      reflow, what follows sliding. -->
-<div class="flex flex-col gap-(--hist-gap)" style:--hist-gap="8px" {@attach reflow()}>
+<div
+  class="flex flex-col gap-(--hist-gap)"
+  style:--hist-gap="8px"
+  {@attach reflow()}
+>
   {#if failed}
     <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if versions.length === 0}
@@ -68,14 +72,27 @@
       data-slot="note"
       class="max-w-(--measure) type-meta text-ink-muted"
       style:--measure="72ch"
-    >Nothing has been saved over yet.</p>
+    >
+      Nothing has been saved over yet.
+    </p>
   {:else}
-    <ul class="flex flex-col gap-space-row m-0 p-0 list-none" style:--v-py="8px" style:--v-px="10px">
+    <ul
+      class="flex flex-col gap-space-row m-0 p-0 list-none"
+      style:--v-py="8px"
+      style:--v-px="10px"
+    >
       {#each visibleVersions as version (version.id)}
-        <li class="flex flex-wrap items-center justify-between gap-(--hist-gap) py-(--v-py) px-(--v-px) rounded-sm bg-surface-recess" data-flip>
+        <li
+          class="flex flex-wrap items-center justify-between gap-(--hist-gap) py-(--v-py) px-(--v-px) rounded-sm bg-surface-recess"
+          data-flip
+        >
           <span class="flex flex-col gap-space-row">
             <span class="type-label text-ink-strong">{version.name}</span>
-            <span data-slot="note" class="max-w-(--measure) type-meta text-ink-muted" style:--measure="72ch">
+            <span
+              data-slot="note"
+              class="max-w-(--measure) type-meta text-ink-muted"
+              style:--measure="72ch"
+            >
               {new Date(version.createdAt).toLocaleString()}
               · from {sourceLabel(version.source)}
               · <span class="font-mono">{version.hash.slice(0, 7)}</span>
@@ -115,4 +132,3 @@
     {/if}
   {/if}
 </div>
-

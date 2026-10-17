@@ -57,11 +57,7 @@
   );
 </script>
 
-<li
-  data-slot="tree-node"
-  class="relative"
-  data-flip={flip ? "box" : undefined}
->
+<li data-slot="tree-node" class="relative" data-flip={flip ? "box" : undefined}>
   <div
     data-slot="tree-line"
     class={["relative", motion && "animate-(--swap-anim)"]}
@@ -80,7 +76,7 @@
         aria-hidden="true"
         class="absolute inset-y-0 left-(--gutter-start) z-1 w-(--gutter-w) p-0 border-none border-current bg-transparent cursor-pointer"
         onclick={() => openTrees.set(above, false, view.list)}
-        style:--gutter-start="calc(var(--nest-x) - var(--nest-pad) - var(--space-2))"
+        style:--gutter-start={"calc(var(--nest-x) - var(--nest-pad) - var(--space-2))"}
         style:--gutter-w="calc(var(--nest-pad) - var(--nest-x) + var(--space-2))"
         tabindex="-1"
         type="button"

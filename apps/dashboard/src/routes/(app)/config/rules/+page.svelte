@@ -203,8 +203,7 @@
                 data-slot="num"
                 class="num type-label flex-none rounded-xs bg-status-attn-bg px-(--waiting-pad-x) py-(--waiting-pad-y) text-status-attn-ink"
                 style:--waiting-pad-x="6px"
-                style:--waiting-pad-y="1px"
-                >{row.stats.pending} waiting</span
+                style:--waiting-pad-y="1px">{row.stats.pending} waiting</span
               >
             {/if}
           {/snippet}

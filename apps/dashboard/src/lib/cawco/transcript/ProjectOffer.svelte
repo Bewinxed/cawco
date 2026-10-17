@@ -80,7 +80,11 @@
       class="mark-line flex items-center gap-space-2 min-w-0 flex-(--line-flex) text-size-body font-normal leading-body text-ink-strong"
       style:--line-flex="1 1 24ch"
     >
-      <IconFolder data-project-offer-glyph aria-hidden="true" class="size-icon-md flex-none text-ink-muted" />
+      <IconFolder
+        data-project-offer-glyph
+        aria-hidden="true"
+        class="size-icon-md flex-none text-ink-muted"
+      />
       <span>{joinedLine}</span>
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
@@ -113,7 +117,11 @@
       class="mark-line flex items-center gap-space-2 min-w-0 flex-(--line-flex) text-size-body font-normal leading-body text-ink-strong"
       style:--line-flex="1 1 24ch"
     >
-      <IconFolder data-project-offer-glyph aria-hidden="true" class="size-icon-md flex-none text-ink-muted" />
+      <IconFolder
+        data-project-offer-glyph
+        aria-hidden="true"
+        class="size-icon-md flex-none text-ink-muted"
+      />
       <span>{offer.line}</span>
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">

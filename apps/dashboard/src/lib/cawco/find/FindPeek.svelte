@@ -68,12 +68,15 @@
 >
   {#if conversation?.purpose}
     <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
-    <span data-slot="value" class="min-w-0 text-ink-row">{conversation.purpose}</span>
+    <span data-slot="value" class="min-w-0 text-ink-row"
+      >{conversation.purpose}</span
+    >
   {/if}
   {#if conversation?.lastReport}
     <span data-slot="find-peek-label" class="text-ink-subtle">last</span>
     <span data-slot="value" class="min-w-0 text-ink-row"
-      >report “{conversation.lastReport.headline}”<span class="px-(--sep-pad)">·</span
+      >report “{conversation.lastReport.headline}”<span class="px-(--sep-pad)"
+        >·</span
       ><span data-slot="num" class="num"
         >{age(conversation.lastReport.at, now)}</span
       ></span
@@ -98,15 +101,20 @@
           type="button"
         >
           <span class="flex-1 min-w-0 truncate"
-            >{AUTHOR[moment.author]}{#if moment.at !== null}<span class="px-(--sep-pad)"
-                >·</span
+            >{AUTHOR[moment.author]}{#if moment.at !== null}<span
+                class="px-(--sep-pad)">·</span
               ><span data-slot="num" class="num">{age(moment.at, now)}</span
               >{/if}<span class="px-(--sep-pad)">·</span
-            >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark class="bg-transparent text-ink-strong font-medium"
+            >“{#each excerptParts(moment.excerpt) as part, j (j)}{#if part.matched}<mark
+                  class="bg-transparent text-ink-strong font-medium"
                   >{part.text}</mark
                 >{:else}{part.text}{/if}{/each}”</span
           >
-          <span data-slot="enter" class="text-ink-subtle opacity-0 group-data-active/moment:opacity-100 group-data-phone/peek:opacity-100" aria-hidden="true">↵</span>
+          <span
+            data-slot="enter"
+            class="text-ink-subtle opacity-0 group-data-active/moment:opacity-100 group-data-phone/peek:opacity-100"
+            aria-hidden="true">↵</span
+          >
         </button>
       {/each}
     </span>
@@ -118,7 +126,8 @@
   {:else if momentsState.state === "missing"}
     <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
     <span data-slot="value" class="min-w-0 text-ink-muted"
-      >{momentsState.machine} didn't answer<span class="px-(--sep-pad)">·</span><button
+      >{momentsState.machine} didn't answer<span class="px-(--sep-pad)">·</span
+      ><button
         class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer"
         onclick={onretry}
         type="button">Retry</button
@@ -129,8 +138,9 @@
     <span data-slot="find-peek-label" class="text-ink-subtle">delegates</span>
     <span data-slot="value" class="min-w-0 text-ink-row"
       ><span data-slot="num" class="num">{conversation.children.count}</span
-      >{#if conversation.children.needsYou > 0}<span class="px-(--sep-pad)">·</span><span
-          class="text-status-attn-ink font-medium"
+      >{#if conversation.children.needsYou > 0}<span class="px-(--sep-pad)"
+          >·</span
+        ><span class="text-status-attn-ink font-medium"
           ><span data-slot="num" class="num"
             >{conversation.children.needsYou}</span
           > needs you</span
@@ -138,8 +148,10 @@
     >
   {/if}
   {#if !phone}
-    <span data-slot="foot" class="col-span-full text-ink-subtle" aria-hidden="true"
-      >↵ open<span class="px-(--sep-pad)">·</span>← fold</span
+    <span
+      data-slot="foot"
+      class="col-span-full text-ink-subtle"
+      aria-hidden="true">↵ open<span class="px-(--sep-pad)">·</span>← fold</span
     >
   {/if}
 </div>

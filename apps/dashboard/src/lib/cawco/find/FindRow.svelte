@@ -64,7 +64,7 @@
     aria-selected={active}
     data-active={active ? "" : undefined}
     data-find-row
-    data-has-reason={row.reason !== null ? "" : undefined}
+    data-has-reason={row.reason === null ? undefined : ""}
     data-peekable={peekable || undefined}
     data-phone={phone || undefined}
     onclick={onpick}

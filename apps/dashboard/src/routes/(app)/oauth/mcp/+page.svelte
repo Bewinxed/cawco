@@ -70,4 +70,3 @@
     <p class="type-body text-ink-muted" role="status">Finishing sign-in…</p>
   {/if}
 </div>
-

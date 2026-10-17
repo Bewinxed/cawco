@@ -160,7 +160,9 @@
       bind:value={fields.nickname}
     />
     {#if refused}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{refused}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {refused}
+      </p>
     {/if}
   {/snippet}
 

@@ -57,7 +57,6 @@
     critical: "bg-error-9",
   };
 
-
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
   const SWATCH = [
     "var(--chart-2)",
@@ -103,13 +102,11 @@
       : `Context ${shown}% used. Show the breakdown.`}
     class={[
       "mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5 text-label tabular-nums hover:bg-neutral-2 transition-[background-color,color] duration-(--dur-control) ease-out",
-      compacting
-        ? "text-ink-strong"
-        : band === "critical"
-          ? "text-error-9"
-          : band === "warn"
-            ? "text-warning-9"
-            : "text-ink-muted",
+      compacting && "text-ink-strong",
+      !compacting && band === "critical" && "text-error-9",
+      !compacting && band === "warn" && "text-warning-9",
+      !(compacting || band === "critical" || band === "warn") &&
+        "text-ink-muted",
     ]}
     title={meterTitle}
   >
@@ -140,11 +137,7 @@
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content
-    align="end"
-    class="w-72 rounded-lg shadow-lg p-0"
-    side="top"
-  >
+  <Popover.Content align="end" class="w-72 rounded-lg shadow-lg p-0" side="top">
     <div
       class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
     >
@@ -154,11 +147,9 @@
         <span
           class={[
             "ml-auto text-label tabular-nums",
-            band === "critical"
-              ? "text-error-9"
-              : band === "warn"
-                ? "text-warning-9"
-                : "text-ink-muted",
+            band === "critical" && "text-error-9",
+            band === "warn" && "text-warning-9",
+            band !== "critical" && band !== "warn" && "text-ink-muted",
           ]}>{usage.percentage}%</span
         >
       {/if}

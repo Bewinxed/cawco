@@ -35,7 +35,8 @@
         <bdi
           data-slot="path"
           class="min-w-0 overflow-clip font-(family-name:--font-mono) text-size-code text-ellipsis whitespace-nowrap"
-          >{path}</bdi>
+          >{path}</bdi
+        >
       </button>
     </li>
   {/each}

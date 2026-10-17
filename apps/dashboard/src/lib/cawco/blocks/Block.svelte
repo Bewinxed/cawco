@@ -115,8 +115,8 @@
   data-flip
   data-span={span}
   style:--block-col="span {span}"
-  style:--fill-h-coarse="calc(var(--block-fill) - var(--c-btn-h-lg) - var(--space-2))"
-  style:--fill-h-fine="calc(var(--block-fill) - var(--c-btn-h-sm) - var(--space-2))"
+  style:--fill-h-coarse={"calc(var(--block-fill) - var(--c-btn-h-lg) - var(--space-2))"}
+  style:--fill-h-fine={"calc(var(--block-fill) - var(--c-btn-h-sm) - var(--space-2))"}
   {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}
   {@attach resizing && morph({ width: true })}
 >
@@ -226,7 +226,7 @@
       aria-hidden="true"
       class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-c-block-drop-line edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-c-block-drop-line edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-c-block-drop-line edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-c-block-drop-line"
       data-edge={over}
-      style:--drop-off="calc(var(--space-group) / -2 - var(--c-block-drop-line) / 2)"
+      style:--drop-off={"calc(var(--space-group) / -2 - var(--c-block-drop-line) / 2)"}
     ></span>
   {/if}
 </section>

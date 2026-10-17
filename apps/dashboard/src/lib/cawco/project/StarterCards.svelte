@@ -88,7 +88,7 @@
     data-slot="cards"
     aria-label="Starters"
     class="m-0 grid list-none auto-rows-fr grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols)"
-    style:--cards-cols="repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"
+    style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
   >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
@@ -99,7 +99,11 @@
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph data-starter-glyph aria-hidden="true" class="size-icon-md flex-none text-ink-strong" />
+          <Glyph
+            data-starter-glyph
+            aria-hidden="true"
+            class="size-icon-md flex-none text-ink-strong"
+          />
           <span data-slot="starter-text">{starter.text}</span>
         </button>
       </li>

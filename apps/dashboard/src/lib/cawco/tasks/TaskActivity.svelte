@@ -238,7 +238,8 @@
           data-slot="who"
           class="font-body leading-label font-medium text-ink-strong"
           >{each.who}</span
-        > {each.text}</span
+        >
+        {each.text}</span
       >
       <time
         class="type-meta whitespace-nowrap text-ink-subtle"

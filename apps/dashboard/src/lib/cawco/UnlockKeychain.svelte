@@ -194,11 +194,18 @@
             />
           {:else}
             <div class="flex flex-col gap-space-1">
-              <p data-slot="title" class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong" id="{id}-title">
+              <p
+                data-slot="title"
+                class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
+                id="{id}-title"
+              >
                 <IconKey class="size-icon-md text-warning-9" />
                 <span>Unlock {machine.hostname}</span>
               </p>
-              <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted">
+              <p
+                data-slot="body"
+                class="m-0 type-meta text-pretty text-ink-muted"
+              >
                 Its login keychain is locked, so Claude Code there cannot read
                 its credentials. This is the macOS login password for that
                 machine.
@@ -230,7 +237,11 @@
                   {phase.message}
                 </p>
               {:else}
-                <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted" id="{id}-note">
+                <p
+                  data-slot="body"
+                  class="m-0 type-meta text-pretty text-ink-muted"
+                  id="{id}-note"
+                >
                   Sent over your tunnel to that machine, used once, and not
                   stored anywhere.
                 </p>

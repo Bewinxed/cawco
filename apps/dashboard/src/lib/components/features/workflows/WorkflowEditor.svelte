@@ -889,7 +889,9 @@
       <Drawer.Description class="sr-only"
         >Edit the selected node or workflow settings.</Drawer.Description
       >
-      <div class="min-h-0 touch-pan-y overflow-y-auto">{@render inspector()}</div>
+      <div class="min-h-0 touch-pan-y overflow-y-auto">
+        {@render inspector()}
+      </div>
     </Drawer.Content>
   </Drawer.Root>
 {/if}

@@ -45,21 +45,16 @@
   );
 </script>
 
-<div
-  class="flex flex-col gap-2 rounded-md bg-surface-recess p-3"
->
+<div class="flex flex-col gap-2 rounded-md bg-surface-recess p-3">
   <div class="flex flex-wrap items-center gap-2">
     <Badge
       class={[
         "shrink-0",
-        kind === "exact"
-          ? "border-success-9 text-success-9"
-          : kind === "regex"
-            ? "border-warning-9 text-warning-9"
-            : "border-border text-ink-muted",
+        kind === "exact" && "border-success-9 text-success-9",
+        kind === "regex" && "border-warning-9 text-warning-9",
+        kind !== "exact" && kind !== "regex" && "border-border text-ink-muted",
       ]}
-      variant="outline"
-      ><span>{KIND_LABEL[kind]}</span></Badge
+      variant="outline"><span>{KIND_LABEL[kind]}</span></Badge
     >
     <span class="text-meta text-ink-muted">{KIND_HOW[kind]}</span>
   </div>

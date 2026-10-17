@@ -51,7 +51,11 @@
     style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px; --tpress: scale(var(--press-scale))"
   >
     <span class="text-ink-muted">{label}</span>
-    <span data-slot="num" class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"><MorphText text={chosen} /></span>
+    <span
+      data-slot="num"
+      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"
+      ><MorphText text={chosen} /></span
+    >
     <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
@@ -66,11 +70,18 @@
       style:--opt-gap="8px"
       style:--opt-pad="10px"
       style:--group-pt="8px"
-      {@attach highlight({ rows: '[data-slot="item"]', selected: '[aria-selected="true"]' })}
+      {@attach highlight({
+        rows: '[data-slot="item"]',
+        selected: '[aria-selected="true"]',
+      })}
     >
       {#each options as option, index (option.value)}
         {#if option.group && option.group !== options[index - 1]?.group}
-          <span data-slot="group" class="pt-(--group-pt) px-(--opt-pad) pb-space-1 type-meta text-ink-muted">{option.group}</span>
+          <span
+            data-slot="group"
+            class="pt-(--group-pt) px-(--opt-pad) pb-space-1 type-meta text-ink-muted"
+            >{option.group}</span
+          >
         {/if}
         <button
           data-slot="item"
@@ -84,7 +95,10 @@
           role="option"
           type="button"
         >
-          <span data-slot="picker-chip-label" class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap">{option.label}</span
+          <span
+            data-slot="picker-chip-label"
+            class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+            >{option.label}</span
           >
           {#if isChosen(option.value)}
             <IconCheck class="size-icon-md flex-none" />

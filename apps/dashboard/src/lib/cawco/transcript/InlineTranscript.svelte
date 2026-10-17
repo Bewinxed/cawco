@@ -142,11 +142,17 @@
       style:--well-start="var(--well-at, 0)"
     >
       {#if loading}
-        <p data-slot="inline-transcript-empty" class="p-space-2 text-size-meta font-normal text-ink-muted">
+        <p
+          data-slot="inline-transcript-empty"
+          class="p-space-2 text-size-meta font-normal text-ink-muted"
+        >
           Loading its transcript…
         </p>
       {:else if shown.length === 0 && fault}
-        <p data-slot="inline-transcript-empty" class="p-space-2 text-size-meta font-normal text-ink-muted">
+        <p
+          data-slot="inline-transcript-empty"
+          class="p-space-2 text-size-meta font-normal text-ink-muted"
+        >
           {#if fault.reason !== "offline"}
             Its transcript couldn't be read:
           {:else if reconnectingNow(fault)}
@@ -170,7 +176,10 @@
           Try again
         </Button>
       {:else if shown.length === 0}
-        <p data-slot="inline-transcript-empty" class="p-space-2 text-size-meta font-normal text-ink-muted">
+        <p
+          data-slot="inline-transcript-empty"
+          class="p-space-2 text-size-meta font-normal text-ink-muted"
+        >
           {id
             ? "Nothing in its transcript yet."
             : "Still starting — no transcript to show."}
@@ -194,7 +203,9 @@
         {:else if r.kind === "thinking"}
           <Thinking live={r.live} text={r.text} />
         {:else if r.kind === "stream"}
-          <div class="mt-space-4"><MessageBody source={r.text} streaming /></div>
+          <div class="mt-space-4">
+            <MessageBody source={r.text} streaming />
+          </div>
         {:else if r.kind === "single"}
           <MessageRow
             {agentName}

@@ -62,11 +62,12 @@
       {#each table.getHeaderGroups() as group (group.id)}
         <Table.Row class="border-0 bg-surface-band">
           {#each group.headers as header (header.id)}
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="h-c-toolbar-ctl px-space-3 tracking-caps text-ink-muted uppercase"
               scope="col">{header.column.columnDef.header}</Table.Head
             >
+            <!-- biome-ignore-end lint/a11y/noHeaderScope: the head above -->
           {/each}
         </Table.Row>
       {/each}

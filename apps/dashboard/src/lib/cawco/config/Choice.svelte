@@ -36,4 +36,3 @@
     </ToggleGroup.Item>
   {/each}
 </ToggleGroup.Root>
-

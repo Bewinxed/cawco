@@ -452,7 +452,10 @@
   >
     <SectionHeader hue={HUE} icon={IconBolt} label="Skills" />
     {#if skills.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--note-measure) text-ink-muted"
+      >
         No skills fetched yet. Paste what you would otherwise have run and the
         hub downloads the files itself.
       </p>
@@ -562,7 +565,10 @@
   >
     <SectionHeader hue={HUE} icon={IconShop} label="Marketplaces" />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--note-measure) text-ink-muted"
+      >
         No marketplaces linked yet. Link one and its plugins become browsable
         here.
       </p>
@@ -625,13 +631,21 @@
                     {/each}
                   </div>
                 {:else if unread[row.name]}
-                  <p class="type-meta text-status-attn-ink" role="alert">{unread[row.name]}</p>
+                  <p class="type-meta text-status-attn-ink" role="alert">
+                    {unread[row.name]}
+                  </p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+                  <p
+                    data-slot="note"
+                    class="type-meta max-w-(--note-measure) text-ink-muted"
+                  >
                     This marketplace lists no plugins.
                   </p>
                 {:else}
-                  <ul data-slot="listing" class="m-0 flex list-none flex-col gap-space-row p-0">
+                  <ul
+                    data-slot="listing"
+                    class="m-0 flex list-none flex-col gap-space-row p-0"
+                  >
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <!-- literal: 8px 10px -->
@@ -653,24 +667,34 @@
                               >{plugin.name}</span
                             >
                             {#if plugin.version}
-                              <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted"
+                              <span
+                                data-slot="note"
+                                class="type-meta max-w-(--note-measure) text-ink-muted"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
-                              <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted"
+                              <span
+                                data-slot="note"
+                                class="type-meta max-w-(--note-measure) text-ink-muted"
                                 >{plugin.category}</span
                               >
                             {/if}
                           </span>
                           {#if plugin.description}
-                            <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted"
+                            <span
+                              data-slot="note"
+                              class="type-meta max-w-(--note-measure) text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">Added</span>
+                          <span
+                            data-slot="note"
+                            class="type-meta max-w-(--note-measure) text-ink-muted"
+                            >Added</span
+                          >
                         {:else}
                           <Button
                             failed={id in installFailed}
@@ -705,7 +729,10 @@
   >
     <SectionHeader hue={HUE} icon={IconLayers} label="Plugins" />
     {#if plugins.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--note-measure) text-ink-muted"
+      >
         Nothing installed yet. Browse a marketplace above and add a plugin.
       </p>
     {:else}

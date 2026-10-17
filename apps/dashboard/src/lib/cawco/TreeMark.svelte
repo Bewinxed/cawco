@@ -167,7 +167,7 @@
           style:--i={i}
           style:--p="max(0, calc(var(--n) - var(--i) + 1))"
           style:--card-seen="clamp(0, calc(var(--n) - var(--i) + 1), 1)"
-          style:--card-origin="50% calc(var(--size) + var(--deck-step) / var(--deck-shrink))"
+          style:--card-origin={"50% calc(var(--size) + var(--deck-step) / var(--deck-shrink))"}
           style:--card-scale="scale(calc(1 - var(--deck-shrink) * var(--p)))"
         ></span>
       {/each}
@@ -270,7 +270,7 @@
       aria-hidden="true"
       data-slot="tree-mark-echo-box"
       class="absolute z-5 -inset-(--reach) pointer-events-none"
-      style:--reach="round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px)"
+      style:--reach={"round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px)"}
       style:--r="var(--radius-xs)"
       style:--side="calc(var(--size) - 2 * var(--r))"
       style:--foot="calc(var(--reach) + var(--size))"
@@ -310,7 +310,7 @@
       class="focus-inset touch-hit absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs cursor-pointer"
       style:--reach="calc(var(--status-dot-size) / 2)"
       style:--hit-max="var(--mark-hit-max, calc(5px + var(--tree-gap)))"
-      style:--hit-foot="calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"
+      style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}
       onclick={toggle}
       onkeydown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -413,7 +413,10 @@
   [data-slot="tree-mark"][data-open] [data-slot="chev"] :global(svg) {
     --swap-turn: 90deg;
   }
-  [data-slot="tree-mark"][data-open]:not([data-status-count], [data-face-always]) {
+  [data-slot="tree-mark"][data-open]:not(
+      [data-status-count],
+      [data-face-always]
+    ) {
     & [data-slot="tree-mark-rest"] {
       --swap-away: 1;
     }

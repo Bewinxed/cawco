@@ -1446,7 +1446,8 @@
       {#if strippedNewTask}
         <Button
           data-wide
-          class="max-phone:hidden" press="pressable"
+          class="max-phone:hidden"
+          press="pressable"
           onclick={() => {
             if (current !== "table") {
               choose("board");
@@ -1463,7 +1464,8 @@
       {#if canTalk}
         <Button
           data-wide
-          class="max-phone:hidden" press="pressable"
+          class="max-phone:hidden"
+          press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
           variant="ghost"
@@ -1557,7 +1559,9 @@
 {/snippet}
 <!-- A task view's block counts the tasks it shows. -->
 {#snippet taskCount()}
-  <span data-slot="num" class="type-meta num text-ink-subtle">{shownTasks.length}</span>
+  <span data-slot="num" class="type-meta num text-ink-subtle"
+    >{shownTasks.length}</span
+  >
 {/snippet}
 <!-- A kept view placed on a page, drawn as its tab draws it. -->
 {#snippet viewBody(block: string)}
@@ -1612,11 +1616,20 @@
           </div>
         {:else}
           <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
-          <div data-slot="view-head" class="mark-line flex min-h-c-btn-h-sm items-center gap-space-2 px-space-1">
-            <span aria-hidden="true" class="grid flex-none place-items-center text-ink-muted" data-box
-              ><IconArtifactSheet class="size-icon-md" /></span
+          <div
+            data-slot="view-head"
+            class="mark-line flex min-h-c-btn-h-sm items-center gap-space-2 px-space-1"
+          >
+            <span
+              aria-hidden="true"
+              class="grid flex-none place-items-center text-ink-muted"
+              data-box><IconArtifactSheet class="size-icon-md" /></span
             >
-            <h2 class="type-label m-0 min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-ink-strong">{viewLabel(view.name)}</h2>
+            <h2
+              class="type-label m-0 min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+            >
+              {viewLabel(view.name)}
+            </h2>
             <span data-box>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
@@ -1808,8 +1821,10 @@
 {:else}
   {#if phone && openTask && stages}
     <!-- A phone: the task is its own page, with Back to the view. -->
-    <div data-slot="project-page" class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
-      style:--bar-reach="calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"
+    <div
+      data-slot="project-page"
+      class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
+      style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
     >
       <TaskPane
         {allowedFrom}
@@ -1830,8 +1845,11 @@
     <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <div
         data-slot="project-page"
-        class={["flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)", fadeOn === "page" && "kit-edge-fade-block"]}
-        style:--bar-reach="calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"
+        class={[
+          "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)",
+          fadeOn === "page" && "kit-edge-fade-block",
+        ]}
+        style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
       >
         <ProjectHead
           bind:this={head}
@@ -1857,28 +1875,48 @@
         />
 
         {#if lead.view?.problem}
-          <Alert data-id-page-notice class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5" variant="warning">
+          <Alert
+            data-id-page-notice
+            class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+            variant="warning"
+          >
             <AlertDescription>{lead.view.problem}</AlertDescription>
           </Alert>
         {/if}
         {#if stages && stages.problems.length > 0}
-          <Alert data-id-page-notice class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5" variant="warning">
+          <Alert
+            data-id-page-notice
+            class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+            variant="warning"
+          >
             <AlertDescription>{unreadStages}</AlertDescription>
           </Alert>
         {:else if stagesProblem}
-          <Alert data-id-page-notice class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5" variant="warning">
+          <Alert
+            data-id-page-notice
+            class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+            variant="warning"
+          >
             <AlertDescription>
               The project's stages could not be read: {stagesProblem}
             </AlertDescription>
           </Alert>
         {/if}
         {#if list && list.problems.length > 0}
-          <Alert data-id-page-notice class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5" variant="warning">
+          <Alert
+            data-id-page-notice
+            class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+            variant="warning"
+          >
             <AlertDescription>{list.problems.join(" ")}</AlertDescription>
           </Alert>
         {/if}
         {#if viewsProblem}
-          <Alert data-id-page-notice class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5" variant="warning">
+          <Alert
+            data-id-page-notice
+            class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+            variant="warning"
+          >
             <AlertDescription
               >The project's views could not be read:
               {viewsProblem}</AlertDescription
@@ -1968,21 +2006,30 @@
   <div
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-    class={["group flex min-h-0 flex-auto flex-col overflow-y-auto pt-0 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:h-(--pane-h) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:h-(--pane-h) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:h-(--pane-h) max-phone:view-decisions-page:overflow-visible", fadeOn === "pane" && "kit-edge-fade-block"]}
+    class={[
+      "group flex min-h-0 flex-auto flex-col overflow-y-auto pt-0 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:h-(--pane-h) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:h-(--pane-h) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:h-(--pane-h) max-phone:view-decisions-page:overflow-visible",
+      fadeOn === "pane" && "kit-edge-fade-block",
+    ]}
     data-view={reading ? "board" : paneView}
     style:--pane-h="100cqb"
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
              next project's read cross-fades in over it. -->
-      <div aria-hidden="true" class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
+      <div
+        aria-hidden="true"
+        class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
         style:--skeleton-col="minmax(15rem, 22rem)"
-        style:--skeleton-col-phone="calc(100% - var(--space-8))" out:crossOut>
+        style:--skeleton-col-phone="calc(100% - var(--space-8))"
+        out:crossOut
+      >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <!-- literal: 54px (a card's height) -->
-          <div class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--hairline-ring)"
+          <div
+            class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--hairline-ring)"
             style:--hairline-ring="inset 0 0 0 1px var(--border-hairline)"
-            style:--card-h="54px">
+            style:--card-h="54px"
+          >
             <Skeleton class="h-space-4 w-3/5" />
             <Skeleton class="h-(--card-h) w-full rounded-sm" />
             <Skeleton class="h-(--card-h) w-full rounded-sm" />
@@ -1990,7 +2037,11 @@
         {/each}
       </div>
     {:else}
-      <div data-slot="swap" class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto" in:crossIn>
+      <div
+        data-slot="swap"
+        class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+        in:crossIn
+      >
         {#key shown}
           <div
             class="flex min-h-0 animate-(--swap-anim) flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"

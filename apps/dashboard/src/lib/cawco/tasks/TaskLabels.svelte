@@ -65,7 +65,7 @@
     </Badge>
   {/each}
   {#if adding}
-<!-- literal: 8rem -->
+    <!-- literal: 8rem -->
     <input
       data-slot="task-labels-field"
       aria-label="New label"

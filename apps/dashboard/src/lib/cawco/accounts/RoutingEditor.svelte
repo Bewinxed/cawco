@@ -150,7 +150,9 @@
   {#snippet header()}
     <h1 data-slot="title" class="type-title text-ink-strong">{title}</h1>
     {#if refused}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{refused}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {refused}
+      </p>
     {/if}
   {/snippet}
 

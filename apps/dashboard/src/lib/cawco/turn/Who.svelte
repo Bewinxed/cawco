@@ -115,10 +115,15 @@
         {/if}
       </span>
     {/if}
-    <span data-slot="role" class="text-size-label font-medium text-ink-strong">{name}</span>
+    <span data-slot="role" class="text-size-label font-medium text-ink-strong"
+      >{name}</span
+    >
   {/if}
   {#if note}
-    <span data-slot="note" class="ms-auto text-size-meta font-normal text-ink-muted">{note}</span>
+    <span
+      data-slot="note"
+      class="ms-auto text-size-meta font-normal text-ink-muted">{note}</span
+    >
   {/if}
   {#if validAt}
     <time

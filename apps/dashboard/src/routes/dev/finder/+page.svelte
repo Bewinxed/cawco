@@ -122,10 +122,7 @@
   {/if}
 
   <main class="flex min-h-0 flex-1 flex-col px-space-6 py-space-5">
-    <ol
-      class="m-0 flex-1 list-none overflow-y-auto p-0"
-      aria-label="Sent"
-    >
+    <ol class="m-0 flex-1 list-none overflow-y-auto p-0" aria-label="Sent">
       {#each log.sent as text, i (i)}
         <li class="py-space-2 type-code whitespace-pre-wrap">{text}</li>
       {/each}

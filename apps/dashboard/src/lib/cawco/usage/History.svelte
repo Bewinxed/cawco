@@ -238,9 +238,18 @@
   }>();
 </script>
 
-<section data-slot="history-card" aria-labelledby="history-title" class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-tile max-phone:p-space-4">
-  <header data-slot="head" class="flex flex-wrap items-center justify-between gap-space-3">
-    <h2 data-slot="title" class="type-label text-ink-muted" id="history-title">History</h2>
+<section
+  data-slot="history-card"
+  aria-labelledby="history-title"
+  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-tile max-phone:p-space-4"
+>
+  <header
+    data-slot="head"
+    class="flex flex-wrap items-center justify-between gap-space-3"
+  >
+    <h2 data-slot="title" class="type-label text-ink-muted" id="history-title">
+      History
+    </h2>
     <Tabs
       onValueChange={(next) => {
         const to = next as "chart" | "table";
@@ -267,7 +276,11 @@
   </header>
 
   {#if failed && !ready}
-    <div data-slot="failed" class="flex flex-wrap items-center gap-space-3" role="alert">
+    <div
+      data-slot="failed"
+      class="flex flex-wrap items-center gap-space-3"
+      role="alert"
+    >
       <p data-slot="note" class="type-meta text-ink-muted">
         Could not read the history from the hub.
       </p>
@@ -286,7 +299,9 @@
       {#each charts as chart (chart.harness)}
         <figure class="flex min-w-0 flex-col gap-space-2">
           <figcaption class="flex items-baseline justify-between gap-space-2">
-            <span data-slot="name" class="type-label text-ink-strong">{chart.title}</span>
+            <span data-slot="name" class="type-label text-ink-strong"
+              >{chart.title}</span
+            >
             {#if ready && !chart.missing}
               <span data-slot="num" class="type-label text-ink-strong"
                 >{chart.approx}{money(chart.total)}</span
@@ -294,7 +309,9 @@
             {/if}
           </figcaption>
           {#if chart.missing}
-            <p data-slot="note" class="type-meta text-ink-muted">No 5-hour window is running.</p>
+            <p data-slot="note" class="type-meta text-ink-muted">
+              No 5-hour window is running.
+            </p>
           {:else if !ready}
             <Skeleton class="h-24 w-full" />
           {:else}
@@ -339,10 +356,15 @@
 {#snippet plot(chart: Chart, live: boolean)}
   <div class="flex flex-col gap-space-1">
     <!-- literal: 96px -->
-    <div class="flex h-(--bars-h) items-end gap-space-row border-b border-b-border-hairline" style:--bars-h="96px">
+    <div
+      class="flex h-(--bars-h) items-end gap-space-row border-b border-b-border-hairline"
+      style:--bars-h="96px"
+    >
       {#each chart.points as point (point.at)}
         {#if !live}
-          <span data-slot="slot" class="group flex min-w-0 flex-1 items-end h-full"
+          <span
+            data-slot="slot"
+            class="group flex min-w-0 flex-1 items-end h-full"
             ><span
               class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
@@ -365,7 +387,7 @@
                   <span
                     class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
                     style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
-              style:--bar-h="calc(var(--h) * 100%)"
+                    style:--bar-h="calc(var(--h) * 100%)"
                   ></span>
                 </span>
               {/snippet}
@@ -391,8 +413,15 @@
   <table class="type-meta w-full border-collapse">
     <thead>
       <tr>
-        <th class="type-label border-b border-b-border-hairline px-0 py-space-1 text-start text-ink-muted" scope="col">{byHour ? "Hour" : "Day"}</th>
-        <th data-slot="num" class="type-label border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted" scope="col">
+        <th
+          class="type-label border-b border-b-border-hairline px-0 py-space-1 text-start text-ink-muted"
+          scope="col">{byHour ? "Hour" : "Day"}</th
+        >
+        <th
+          data-slot="num"
+          class="type-label border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted"
+          scope="col"
+        >
           {chart.harness === "claude" ? "API price" : "Spend"}
         </th>
       </tr>
@@ -400,8 +429,15 @@
     <tbody>
       {#each chart.points as point (point.at)}
         <tr>
-          <td class="border-b border-b-border-hairline px-0 py-space-1 text-ink-strong">{periodLabel(point.at)}</td>
-          <td data-slot="num" class="border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong">{chart.approx}{money(point.cost)}</td>
+          <td
+            class="border-b border-b-border-hairline px-0 py-space-1 text-ink-strong"
+            >{periodLabel(point.at)}</td
+          >
+          <td
+            data-slot="num"
+            class="border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong"
+            >{chart.approx}{money(point.cost)}</td
+          >
         </tr>
       {/each}
     </tbody>

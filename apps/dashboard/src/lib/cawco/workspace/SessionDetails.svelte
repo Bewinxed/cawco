@@ -593,8 +593,13 @@
          folds it back into its tab, PaneTabs `swipeCardShut`), never the
          body's scroll, which would take the touch away from it. -->
     <div data-slot="head" class="touch-pan-x bg-surface-recess">
-      <div class="flex items-start gap-space-3 px-space-5 pt-space-4 pb-space-1">
-        <div data-slot="title" class="flex min-w-0 flex-1 items-start gap-space-1">
+      <div
+        class="flex items-start gap-space-3 px-space-5 pt-space-4 pb-space-1"
+      >
+        <div
+          data-slot="title"
+          class="flex min-w-0 flex-1 items-start gap-space-1"
+        >
           <!-- Wraps; only a title past three lines is cut. -->
           <h2
             id={`${uid}-title`}
@@ -746,8 +751,7 @@
               data-slot="ns-chip-btn"
               data-model-chip
               data-variant="static"
-              class="ns-chip-btn"
-              >{@render modelChip()}</span
+              class="ns-chip-btn">{@render modelChip()}</span
             >
           {/if}
           <ToolChips
@@ -984,7 +988,9 @@
        the model's name needs. The account chip keeps its own: it is the
        only hint that it opens anything. */
     [data-slot="settings"]
-      :global(.ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"]) {
+      :global(
+        .ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"]
+      ) {
       display: none;
     }
   }

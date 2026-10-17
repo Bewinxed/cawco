@@ -84,7 +84,11 @@
 
 {#snippet face()}
   {#if uploading}
-    <span data-slot="glyph" aria-hidden="true" class="grid place-items-center flex-none text-ink-muted">
+    <span
+      data-slot="glyph"
+      aria-hidden="true"
+      class="grid place-items-center flex-none text-ink-muted"
+    >
       <svg
         data-slot="ring"
         aria-hidden="true"
@@ -114,20 +118,30 @@
       data-slot="glyph"
       aria-hidden="true"
       class="grid place-items-center flex-none text-ink-muted"
-      style:--glyph="24px"><Glyph class="size-(--glyph)" /></span>
+      style:--glyph="24px"><Glyph class="size-(--glyph)" /></span
+    >
   {/if}
   <span data-slot="text" class="flex flex-col min-w-0">
-    <span data-slot="name" class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
-      ><span data-slot="head" class="min-w-0 truncate">{name.slice(0, cut)}</span><span
-        class="flex-none">{name.slice(cut)}</span
-      ></span
+    <span
+      data-slot="name"
+      class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
+      ><span data-slot="head" class="min-w-0 truncate"
+        >{name.slice(0, cut)}</span
+      ><span class="flex-none">{name.slice(cut)}</span></span
     >
     {#if file?.failed}
-      <span data-slot="meta" data-doc-thumb-failed class="text-size-meta font-normal tabular-nums leading-ui text-status-fail-ink whitespace-nowrap"
+      <span
+        data-slot="meta"
+        data-doc-thumb-failed
+        class="text-size-meta font-normal tabular-nums leading-ui text-status-fail-ink whitespace-nowrap"
         >Couldn't upload</span
       >
     {:else}
-      <span data-slot="meta" class="text-size-meta font-normal tabular-nums leading-ui text-ink-muted whitespace-nowrap">{meta}</span>
+      <span
+        data-slot="meta"
+        class="text-size-meta font-normal tabular-nums leading-ui text-ink-muted whitespace-nowrap"
+        >{meta}</span
+      >
     {/if}
   </span>
 {/snippet}
@@ -180,17 +194,21 @@
       aria-busy="true"
       aria-label={`Uploading ${name}`}
       class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
-    style:--doc-h="48px"
-    style:--doc-max="min(100%, 16rem)"
+      style:--doc-h="48px"
+      style:--doc-max="min(100%, 16rem)"
       role="status"
       title={name}
     >
       {@render face()}
     </span>
   {:else}
-    <span data-slot="doc" class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
-    style:--doc-h="48px"
-    style:--doc-max="min(100%, 16rem)" title={name}>{@render face()}</span>
+    <span
+      data-slot="doc"
+      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
+      style:--doc-h="48px"
+      style:--doc-max="min(100%, 16rem)"
+      title={name}>{@render face()}</span
+    >
   {/if}
 {/if}
 

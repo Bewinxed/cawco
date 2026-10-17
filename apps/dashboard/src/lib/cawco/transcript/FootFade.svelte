@@ -23,8 +23,8 @@
   class="absolute inset-x-0 bottom-0 z-1 h-(--foot-fade-h) pointer-events-none bg-(image:--foot-fade-image) data-standing:h-(--foot-fade-standing-h) data-standing:bg-(image:--foot-fade-standing-image)"
   style:--fade-solid={solid ?? null}
   style:--foot-fade-h="96px"
-  style:--foot-fade-image="linear-gradient(to top, var(--surface-recess) 22%, var(--surface-recess-clear))"
+  style:--foot-fade-image={"linear-gradient(to top, var(--surface-recess) 22%, var(--surface-recess-clear))"}
   style:--foot-fade-standing-h="calc(var(--fade-solid) + var(--space-8))"
-  style:--foot-fade-standing-image="linear-gradient(to top, var(--surface-recess) var(--fade-solid), var(--surface-recess-clear))"
+  style:--foot-fade-standing-image={"linear-gradient(to top, var(--surface-recess) var(--fade-solid), var(--surface-recess-clear))"}
   transition:fade
 ></div>

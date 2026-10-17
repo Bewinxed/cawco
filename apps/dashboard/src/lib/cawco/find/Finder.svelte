@@ -518,7 +518,9 @@
       >
     {/each}
     {#each finder.projectChips as word (word)}
-      <span class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)" data-flip="pop"
+      <span
+        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        data-flip="pop"
         ><span>{word}</span><button
           class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${word}`}
@@ -530,7 +532,9 @@
     {/each}
     {#if finder.parsed.time}
       {@const time = finder.parsed.time}
-      <span class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)" data-flip="pop"
+      <span
+        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        data-flip="pop"
         ><span>{time}</span><button
           class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${time}`}
@@ -545,8 +549,7 @@
         data-slot="searching"
         class="mark-line inline-flex items-center gap-space-2 ms-auto pe-space-1 type-meta text-ink-muted"
         aria-hidden="true"
-        ><span>Searching {machines(finder.askable)}…</span><Spinner
-        /></span
+        ><span>Searching {machines(finder.askable)}…</span><Spinner /></span
       >
     {:else if finder.coverage?.asked && !short}
       <span
@@ -631,7 +634,11 @@
           tabindex="-1"
           type="button"
         >
-          <Server class="size-icon-md text-ink-muted" aria-hidden="true" data-box /><span>{label}</span>
+          <Server
+            class="size-icon-md text-ink-muted"
+            aria-hidden="true"
+            data-box
+          /><span>{label}</span>
         </button>
       {/each}
     </div>
@@ -655,7 +662,10 @@
       tabindex="-1"
       type="button"
     >
-      <Glyph class="flex-none size-icon-md text-status-idle-glyph" aria-hidden="true" />
+      <Glyph
+        class="flex-none size-icon-md text-status-idle-glyph"
+        aria-hidden="true"
+      />
       <span class="flex-1 min-w-0 overflow-clip whitespace-nowrap text-ellipsis"
         ><span data-slot="num" class="num">{count}</span>
         {kindNoun(first, count)} match “{finder.asked}”</span
@@ -699,20 +709,27 @@
       />
     </button>
   {:else if item.t === "head"}
-    <div data-slot="head"
-      class="flex-none h-(--head-h) px-space-3 font-body font-medium text-(length:--caps-fs) leading-(--head-h) uppercase tracking-caps text-ink-muted truncate" data-flip role="presentation">
+    <div
+      data-slot="head"
+      class="flex-none h-(--head-h) px-space-3 font-body font-medium text-(length:--caps-fs) leading-(--head-h) uppercase tracking-caps text-ink-muted truncate"
+      data-flip
+      role="presentation"
+    >
       {item.label}
     </div>
   {:else if item.t === "chips"}
     {@render whoChips()}
   {:else if item.t === "coverage"}
-    <div data-slot="coverage"
-      class="flex items-center flex-none h-(--head-h) px-space-3 type-meta text-ink-muted" data-flip>
+    <div
+      data-slot="coverage"
+      class="flex items-center flex-none h-(--head-h) px-space-3 type-meta text-ink-muted"
+      data-flip
+    >
       {#if finder.missing.length > 0}
         <span data-slot="num" class="num"
           >{answered} of {machines(machineCount)}</span
-        ><span class="px-(--sep-pad)">·</span>{missingNames} didn't<span class="px-(--sep-pad)"
-          >·</span
+        ><span class="px-(--sep-pad)">·</span>{missingNames} didn't<span
+          class="px-(--sep-pad)">·</span
         >
       {/if}
       {#if finder.indexing.length > 0}
@@ -721,27 +738,41 @@
           class="px-(--sep-pad)">·</span
         >
       {/if}
-      <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.retry()} type="button"
-        >Retry</button
+      <button
+        class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+        onclick={() => finder.retry()}
+        type="button">Retry</button
       >
     </div>
   {:else if item.t === "rule"}
-    <hr class="flex-none my-space-1 mx-(--rule-mx) border-t border-t-border-hairline border-r-none border-b-none border-l-none" data-flip />
+    <hr
+      class="flex-none my-space-1 mx-(--rule-mx) border-t border-t-border-hairline border-r-none border-b-none border-l-none"
+      data-flip
+    />
   {:else if item.t === "skeleton"}
-    <div class="flex-none px-space-3 py-(--sk-pad)" aria-hidden="true" data-flip>
+    <div
+      class="flex-none px-space-3 py-(--sk-pad)"
+      aria-hidden="true"
+      data-flip
+    >
       <Skeleton
         data-tall={item.tall || undefined}
         class="h-(--sk-row) data-tall:h-(--sk-tall)"
       />
     </div>
   {:else if item.t === "nothing"}
-    <div data-slot="nothing"
-      class="flex flex-none flex-col items-start gap-space-row pt-space-3 px-space-3 pb-space-4 type-body" data-flip>
+    <div
+      data-slot="nothing"
+      class="flex flex-none flex-col items-start gap-space-row pt-space-3 px-space-3 pb-space-4 type-body"
+      data-flip
+    >
       <p data-slot="nothing-line" class="m-0 text-ink-strong">
         No sessions for “{finder.text.trim()}”
       </p>
-      <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={clear} type="button"
-        >Open today's sessions</button
+      <button
+        class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+        onclick={clear}
+        type="button">Open today's sessions</button
       >
     </div>
   {/if}
@@ -777,10 +808,8 @@
     <!-- The back control and the sort are boxes of their own; the title
          stands between them on .mark-text, its x-height on their middle. -->
     <span class="mark-text flex-1 type-label text-ink-strong"
-      >Waiting for you{#if waitingCount > 0}<span class="px-(--sep-pad)">·</span><span
-          data-slot="num"
-          class="num">{waitingCount}</span
-        >{/if}</span
+      >Waiting for you{#if waitingCount > 0}<span class="px-(--sep-pad)">·</span
+        ><span data-slot="num" class="num">{waitingCount}</span>{/if}</span
     >
     <Segmented
       items={[
@@ -805,20 +834,33 @@
     {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
   >
     {#if finder.waiting.state === "ok" && waitingCount === 0}
-      <div data-slot="nothing"
-      class="flex flex-none flex-col items-start gap-space-row pt-space-3 px-space-3 pb-space-4 type-body" data-flip>
+      <div
+        data-slot="nothing"
+        class="flex flex-none flex-col items-start gap-space-row pt-space-3 px-space-3 pb-space-4 type-body"
+        data-flip
+      >
         <p data-slot="nothing-line" class="m-0 text-ink-strong">
           Nothing waits for you
         </p>
-        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.showFind()} type="button"
-          >Open today's sessions</button
+        <button
+          class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+          onclick={() => finder.showFind()}
+          type="button">Open today's sessions</button
         >
       </div>
     {:else if finder.waiting.state === "asking" || finder.waiting.state === "idle"}
-      <div class="flex-none px-space-3 py-(--sk-pad)" aria-hidden="true" data-flip>
+      <div
+        class="flex-none px-space-3 py-(--sk-pad)"
+        aria-hidden="true"
+        data-flip
+      >
         <Skeleton class="h-(--sk-row)" />
       </div>
-      <div class="flex-none px-space-3 py-(--sk-pad)" aria-hidden="true" data-flip>
+      <div
+        class="flex-none px-space-3 py-(--sk-pad)"
+        aria-hidden="true"
+        data-flip
+      >
         <Skeleton class="h-(--sk-row)" />
       </div>
     {:else}
@@ -885,8 +927,10 @@
         {:else}
           {finder.refused}.
         {/if}
-        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.retry()} type="button"
-          >Retry</button
+        <button
+          class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72"
+          onclick={() => finder.retry()}
+          type="button">Retry</button
         >
       </div>
     {:else}
@@ -910,9 +954,9 @@
       aria-hidden="true"
     >
       {#if finder.view === "waiting"}
-        <span><kbd class="font-body text-ink-muted">↵</kbd> open</span><span><kbd class="font-body text-ink-muted">←</kbd> back</span><span
-          ><kbd class="font-body text-ink-muted">esc</kbd></span
-        >
+        <span><kbd class="font-body text-ink-muted">↵</kbd> open</span><span
+          ><kbd class="font-body text-ink-muted">←</kbd> back</span
+        ><span><kbd class="font-body text-ink-muted">esc</kbd></span>
       {:else}
         {#if finder.stops.length > 0}
           <span><kbd class="font-body text-ink-muted">↵</kbd> {enterHint}</span>

@@ -325,10 +325,14 @@
             {/snippet}
             {#snippet trailing()}
               {#if same}
-                <span class="type-meta whitespace-nowrap text-ink-muted">Managed · in sync</span>
+                <span class="type-meta whitespace-nowrap text-ink-muted"
+                  >Managed · in sync</span
+                >
               {:else}
                 {#if stored}
-                  <span class="type-meta whitespace-nowrap text-status-attn-ink">Managed · differs</span>
+                  <span class="type-meta whitespace-nowrap text-status-attn-ink"
+                    >Managed · differs</span
+                  >
                 {/if}
                 <Button
                   failed={key in adoptFailed}

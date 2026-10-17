@@ -184,7 +184,10 @@
         </Select.Content>
       </Select.Root>
       {#if !filtered}
-        <div data-slot="controls" class="flex flex-wrap items-center gap-space-2 max-phone:order-2">
+        <div
+          data-slot="controls"
+          class="flex flex-wrap items-center gap-space-2 max-phone:order-2"
+        >
           <Tabs
             onValueChange={(next) => {
               range = next as Range;

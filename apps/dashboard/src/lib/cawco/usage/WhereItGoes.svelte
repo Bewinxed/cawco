@@ -254,7 +254,8 @@
     old: Group[];
   }
   /** The boxes whose heights a change drives: each group, and the "more" line's. */
-  const BOXES = ':scope > [data-slot="group"], :scope > [data-slot="more-slot"]';
+  const BOXES =
+    ':scope > [data-slot="group"], :scope > [data-slot="more-slot"]';
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -322,7 +323,10 @@
     const list = listEl;
     const before = list ? boxHeights(list, BOXES) : new Map<string, number>();
     // Mid-change, only what is on screen this frame has anything to leave.
-    const seen = plan && list ? onScreen(list, '[data-slot="group"], [data-slot="more-slot"]') : null;
+    const seen =
+      plan && list
+        ? onScreen(list, '[data-slot="group"], [data-slot="more-slot"]')
+        : null;
     const drawnNow = (key: string) => !seen || seen.has(key);
     const old: Group[] = drawn
       .filter((entry) => entry.kind !== "gone")
@@ -490,7 +494,9 @@
     data-slot="head"
     class="flex flex-wrap items-center justify-between gap-space-3"
   >
-    <h2 data-slot="title" class="type-label text-ink-muted" id="where-title">Where it goes</h2>
+    <h2 data-slot="title" class="type-label text-ink-muted" id="where-title">
+      Where it goes
+    </h2>
     <div class="flex flex-wrap gap-space-2">
       <Tabs
         onValueChange={(next) => {
@@ -553,12 +559,16 @@
       {/each}
     </div>
   {:else if empty && !plan}
-    <p data-slot="note" class="type-meta text-ink-muted">Nothing recorded in this range.</p>
+    <p data-slot="note" class="type-meta text-ink-muted">
+      Nothing recorded in this range.
+    </p>
   {:else}
     <div
       data-slot="list"
       class="flex flex-col overflow-x-clip"
-      bind:this={listEl} {@attach reflow()}>
+      bind:this={listEl}
+      {@attach reflow()}
+    >
       {#each drawn as entry (entry.group.machineId)}
         {@const id = entry.group.machineId}
         <div
@@ -575,7 +585,9 @@
               class="mark-line type-label m-0 flex animate-(--swap-anim) items-center gap-space-2 py-space-1 text-ink-muted opacity-(--head-opacity)"
               data-key="head:{id}"
               style:--swap-anim={headAnim(entry.kind, id)}
-              style:--head-opacity={headHidden(entry.kind, id) ? "0" : undefined}
+              style:--head-opacity={headHidden(entry.kind, id)
+                ? "0"
+                : undefined}
             >
               <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
               <span>{entry.group.name}</span>
@@ -623,8 +635,7 @@
           <span
             aria-hidden="true"
             class="type-label animate-(--swap-anim) text-ink-muted"
-            style:--swap-anim={leaveAnim("more")}
-            >{plan.more}</span
+            style:--swap-anim={leaveAnim("more")}>{plan.more}</span
           >
         {/if}
       </div>
@@ -647,27 +658,43 @@
     style:--row-min="28px"
   >
     {#if item.href && live}
-      <a data-slot="name" class="type-body truncate text-ink-strong no-underline hover:underline" href={item.href} title={item.label}
-        >{item.label}</a
+      <a
+        data-slot="name"
+        class="type-body truncate text-ink-strong no-underline hover:underline"
+        href={item.href}
+        title={item.label}>{item.label}</a
       >
     {:else if item.os}
-      <span data-slot="name" class="mark-line type-body flex items-center gap-space-2 truncate text-ink-strong">
+      <span
+        data-slot="name"
+        class="mark-line type-body flex items-center gap-space-2 truncate text-ink-strong"
+      >
         <OsMark class="size-icon-md shrink-0" os={item.os} />
         <span>{item.label}</span>
       </span>
     {:else}
-      <span data-slot="name" class="type-body truncate text-ink-strong" title={item.label}>{item.label}</span>
+      <span
+        data-slot="name"
+        class="type-body truncate text-ink-strong"
+        title={item.label}>{item.label}</span
+      >
     {/if}
     {#if live}
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <span {...props} class="flex min-w-0 items-center gap-space-2">
-              <span data-slot="fill" class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer" style:--share={item.share}
+              <span
+                data-slot="fill"
+                class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+                style:--share={item.share}
                 style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
                 style:--fill-h="8px"
               ></span>
-              <span data-where-it-goes-value data-slot="num" class="type-meta num flex-none text-ink-strong"
+              <span
+                data-where-it-goes-value
+                data-slot="num"
+                class="type-meta num flex-none text-ink-strong"
                 >{item.value}</span
               >
             </span>
@@ -677,11 +704,17 @@
       </Tooltip.Root>
     {:else}
       <span class="flex min-w-0 items-center gap-space-2">
-        <span data-slot="fill" class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer" style:--share={item.share}
-                style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
-                style:--fill-h="8px"></span>
-        <span data-where-it-goes-value data-slot="num" class="type-meta num flex-none text-ink-strong"
-          >{item.value}</span
+        <span
+          data-slot="fill"
+          class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+          style:--share={item.share}
+          style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
+          style:--fill-h="8px"
+        ></span>
+        <span
+          data-where-it-goes-value
+          data-slot="num"
+          class="type-meta num flex-none text-ink-strong">{item.value}</span
         >
       </span>
     {/if}

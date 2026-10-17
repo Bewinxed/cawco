@@ -334,10 +334,10 @@
      transcript's own field; a gradient in sRGB, which the theme's gradient
      utilities (oklab) would repaint. */
   [data-slot="suggest"]:has(
-      [data-slot="suggest-chip"],
-      [data-slot="suggest-shimmer"],
-      [data-slot="suggest-fail"]
-    ) {
+    [data-slot="suggest-chip"],
+    [data-slot="suggest-shimmer"],
+    [data-slot="suggest-fail"]
+  ) {
     background: linear-gradient(
       to top,
       var(--surface-recess) 55%,

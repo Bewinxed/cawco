@@ -30,7 +30,8 @@
     aria-hidden="true"
     class="grid flex-none motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/header:transform-(--chev-turn) group-disabled/header:invisible"
     data-box
-    style:--chev-turn="rotate(90deg)"><IconChevronRight class="size-icon-sm" /></span
+    style:--chev-turn="rotate(90deg)"
+    ><IconChevronRight class="size-icon-sm" /></span
   >
   {@render after?.()}
 </Collapsible.Trigger>

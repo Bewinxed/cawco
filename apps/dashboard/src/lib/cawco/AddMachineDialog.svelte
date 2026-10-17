@@ -315,7 +315,9 @@
         {#each hubAuth.waiting as machine (machine.machineId)}
           <li class="flex items-center gap-space-3">
             <span data-slot="who" class="flex min-w-0 flex-auto flex-col">
-              <span data-slot="name" class="type-body text-ink-strong wrap-anywhere"
+              <span
+                data-slot="name"
+                class="type-body text-ink-strong wrap-anywhere"
                 >{machine.hostname ?? machine.machineId} waits to be admitted</span
               >
               {#if machine.address}
@@ -371,7 +373,10 @@
                     class="size-icon-md flex-none text-status-done-ink"
                   />
                 {/if}
-                <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">{step}</span>
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >{step}</span
+                >
               </li>
             {:else}
               <!-- literal: 10px -->
@@ -380,7 +385,8 @@
                 data-current
                 style:--step-gap="10px"
               >
-                <Spinner class="size-icon-md" /><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                <Spinner class="size-icon-md" /><span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                   >Connecting over SSH</span
                 >
               </li>
@@ -406,16 +412,11 @@
               style:--pre-top="8px"
               style:--pre-x="12px"
               style:--pre-y="10px"
-              {@attach followTail()}
-            >{job.lines.join("\n")}</pre>
+              {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
         </div>
       {:else}
-        <form
-          class="flex flex-col gap-space-4"
-          id="ssh-join"
-          onsubmit={start}
-        >
+        <form class="flex flex-col gap-space-4" id="ssh-join" onsubmit={start}>
           <!-- literal: minmax(0, 1fr) 6rem -->
           <div
             data-slot="grid"
@@ -468,8 +469,7 @@
                   class="m-0 max-h-(--pre-max) overflow-auto border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
                   style:--pre-max="12rem"
                   style:--pre-x="12px"
-                  style:--pre-y="10px"
-                >{failure.tail.join("\n")}</pre>
+                  style:--pre-y="10px">{failure.tail.join("\n")}</pre>
               {/if}
             </div>
           {:else if sshJoin.refused}
@@ -617,8 +617,6 @@
     </Dialog.Content>
   </Dialog.Root>
 {/if}
-
-
 
 <style>
   /* residual: pseudo */

@@ -177,7 +177,9 @@
             {/snippet}
             {#snippet aside()}
               {#if fit === card.template && peek}
-                <span class="type-label text-brand-ink" transition:appear>Fits your prompt</span>
+                <span class="type-label text-brand-ink" transition:appear
+                  >Fits your prompt</span
+                >
               {/if}
             {/snippet}
           </CardFace>

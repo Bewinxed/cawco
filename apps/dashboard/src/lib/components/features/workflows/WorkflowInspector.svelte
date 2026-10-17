@@ -229,7 +229,9 @@
                 </select></label
               >
               <fieldset>
-                <legend class="mb-space-2 text-size-label font-medium">Harness</legend>
+                <legend class="mb-space-2 text-size-label font-medium"
+                  >Harness</legend
+                >
                 <div class="wf-row">
                   {#each ["claude", "opencode", "pi"] as harness (harness)}
                     <button
@@ -1215,11 +1217,7 @@
     {/key}
   </div>
   <!-- literal: 44px -->
-  <section
-    aria-label="Problems"
-    class="wf-stack"
-    style:--problem-min="44px"
-  >
+  <section aria-label="Problems" class="wf-stack" style:--problem-min="44px">
     <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
     {#if !problems.length}
       <p class="wf-muted">No problems found.</p>

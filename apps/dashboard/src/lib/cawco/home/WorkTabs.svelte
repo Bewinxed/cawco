@@ -811,8 +811,7 @@
                       style:--count-end="max(0px, 2px - var(--tight) * 0.06)"
                       style:--count-pad="calc(3px - var(--tight) * 0.03)"
                       style:--count-side="18px"
-                      ><span class="col-start-1 row-start-1">{count}</span
-                      ><span
+                      ><span class="col-start-1 row-start-1">{count}</span><span
                         aria-hidden="true"
                         class="col-start-1 row-start-1 text-(--ink) opacity-(--pick)"
                         >{count}</span
@@ -1060,12 +1059,16 @@
     --tab-fill: var(--surface-recess);
   }
   /* A label to its count (the kit's --gap + 4px), closer on a narrow rail. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]) {
+  :global(
+    [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]
+  ) {
     --gap: max(0px, 2px - var(--tight) * 0.06);
   }
   /* A tab is as wide as its label and its count together: the count never
      stands outside the tab, whatever the row's width. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]) {
+  :global(
+    [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]
+  ) {
     min-inline-size: max-content;
   }
   /* A tab after the first tucks its start under its neighbour by the

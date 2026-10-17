@@ -92,17 +92,14 @@
             class="grid size-(--mark) flex-none place-items-center rounded-(--mark-r) bg-surface-fill text-meta font-medium text-ink-strong"
             data-box
             style:--mark="24px"
-            style:--mark-r="50%"
-            >{handle.slice(0, 1).toUpperCase()}</span
+            style:--mark-r="50%">{handle.slice(0, 1).toUpperCase()}</span
           >
           <span
             class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
             >{post.account}</span
           >
           {#if parts.length > 1}
-            <span
-              data-slot="num"
-              class="num ms-auto type-meta text-ink-muted"
+            <span data-slot="num" class="num ms-auto type-meta text-ink-muted"
               >{index + 1}/{parts.length}</span
             >
           {/if}
@@ -110,8 +107,9 @@
         <p
           data-slot="text"
           class="m-0 type-body wrap-anywhere whitespace-pre-wrap text-ink-strong group-data-compact:line-clamp-3"
-          >{text}</p
         >
+          {text}
+        </p>
         {#if !compact}
           <span
             data-num
@@ -139,9 +137,7 @@
         <div class="flex flex-col gap-space-row">
           <dt class="type-meta text-ink-muted">Media</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
-          <dd
-            class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong"
-          >
+          <dd class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong">
             {#each media as file (file)}
               {@const kind = deliverableKind(file)}
               {#if kind === "image"}

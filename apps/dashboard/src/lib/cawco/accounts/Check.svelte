@@ -1,7 +1,12 @@
 <!-- A sign-in landed: the tick draws itself along its stroke over
      --dur-toggle as it arrives (Ticks and dots); with reduced motion it only
      fades in. -->
-<svg aria-hidden="true" class="check flex-none size-icon-md text-status-done-glyph" fill="none" viewBox="0 0 24 24">
+<svg
+  aria-hidden="true"
+  class="check flex-none size-icon-md text-status-done-glyph"
+  fill="none"
+  viewBox="0 0 24 24"
+>
   <path
     d="M5 12.5l4.5 4.5L19 7.5"
     pathLength="1"

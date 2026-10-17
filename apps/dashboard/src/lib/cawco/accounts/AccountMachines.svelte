@@ -135,7 +135,10 @@
               data-state={shown}
             >
               {#if shown === "mismatch"}
-                <IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" />
+                <IconWarningTriangle
+                  aria-hidden="true"
+                  class="size-icon-sm flex-none"
+                />
               {/if}
               <span>{WORDS[shown]}</span>
             </span>
@@ -158,7 +161,9 @@
                   {verb}
                 {/snippet}
                 <div class="flex flex-col gap-space-3 p-space-2">
-                  <p data-slot="title" class="type-label text-ink-strong">{name}</p>
+                  <p data-slot="title" class="type-label text-ink-strong">
+                    {name}
+                  </p>
                   {#if flow?.kind === "paste"}
                     <SigninPanel
                       expected={account.email}
@@ -209,7 +214,9 @@
         {/if}
       </li>
     {:else}
-      <li class="col-span-full px-space-4 py-space-3 type-meta text-ink-muted">{words.machines.none}</li>
+      <li class="col-span-full px-space-4 py-space-3 type-meta text-ink-muted">
+        {words.machines.none}
+      </li>
     {/each}
   </ul>
 </NsPopoverGroup>

@@ -239,7 +239,10 @@
         icon={IconWarningTriangle}
         label="Model documents are not being loaded everywhere"
       />
-      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--note-measure) text-ink-muted"
+      >
         The documents are put in front of a session by a SessionStart hook CawCo
         registers. Where it did not register, the files are on the machine and
         nothing reads them.

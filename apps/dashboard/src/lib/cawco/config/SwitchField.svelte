@@ -21,16 +21,36 @@
 </script>
 
 <!-- literal: 10px -->
-<div data-slot="row" class="flex items-start gap-(--row-gap)" style:--row-gap="10px">
-  <Switch class="mt-px" {disabled} {id} onCheckedChange={onchange} bind:checked />
+<div
+  data-slot="row"
+  class="flex items-start gap-(--row-gap)"
+  style:--row-gap="10px"
+>
+  <Switch
+    class="mt-px"
+    {disabled}
+    {id}
+    onCheckedChange={onchange}
+    bind:checked
+  />
   <span class="flex min-w-0 flex-col gap-space-row">
-    <label data-slot="switch-field-label" class="type-label cursor-pointer text-ink-strong" for={id}>{label}</label>
+    <label
+      data-slot="switch-field-label"
+      class="type-label cursor-pointer text-ink-strong"
+      for={id}>{label}</label
+    >
     {#if typeof hint === "string"}
       <!-- literal: 72ch -->
-      <span class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{hint}</span>
+      <span
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch">{hint}</span
+      >
     {:else if hint}
       <!-- literal: 72ch -->
-      <span class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">{@render hint()}</span>
+      <span
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch">{@render hint()}</span
+      >
     {/if}
   </span>
 </div>

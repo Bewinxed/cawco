@@ -210,7 +210,8 @@
       transform: scale(var(--press-scale));
     }
   }
-  [data-slot="side-head"] :global(button[aria-pressed="true"]:not([role="tab"])) {
+  [data-slot="side-head"]
+    :global(button[aria-pressed="true"]:not([role="tab"])) {
     background: var(--surface-fill);
     color: var(--ink-strong);
   }

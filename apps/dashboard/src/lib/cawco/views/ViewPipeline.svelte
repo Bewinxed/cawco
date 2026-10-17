@@ -65,9 +65,8 @@
         >
       </span>
       <!-- A stage's kind is a word of stages.md, set as code. -->
-      <span
-        data-slot="kind"
-        class="type-code text-ink-subtle max-phone:hidden">{KIND_LABEL[stage.kind]}</span
+      <span data-slot="kind" class="type-code text-ink-subtle max-phone:hidden"
+        >{KIND_LABEL[stage.kind]}</span
       >
       <!-- literal: 8px -->
       <span

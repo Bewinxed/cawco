@@ -749,8 +749,10 @@
               <p
                 data-slot="reason"
                 class="text-size-meta font-normal text-status-fail-ink"
-                role="alert">{editError}</p
+                role="alert"
               >
+                {editError}
+              </p>
             {/if}
           </div>
         </div>

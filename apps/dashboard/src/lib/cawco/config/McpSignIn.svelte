@@ -62,7 +62,9 @@
 
 {#if server.auth?.mode === "oauth"}
   {#if signedIn}
-    <span class="type-meta text-ink-muted" role="status">Signed in for the fleet</span>
+    <span class="type-meta text-ink-muted" role="status"
+      >Signed in for the fleet</span
+    >
   {:else}
     <Button
       disabled={!server.enabled}
@@ -76,10 +78,5 @@
       variant="outline"
     />
   {/if}
-  <RowFault
-    data-sign-in-fault
-    again={signIn}
-    reason={problem}
-  />
+  <RowFault data-sign-in-fault again={signIn} reason={problem} />
 {/if}
-

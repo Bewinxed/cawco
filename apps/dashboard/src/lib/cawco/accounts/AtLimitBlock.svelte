@@ -51,7 +51,9 @@
   <h3
     data-slot="head"
     class="type-label mb-space-3 text-balance text-ink-strong"
-  >{words.head}</h3>
+  >
+    {words.head}
+  </h3>
   <div
     class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
   >
@@ -61,7 +63,9 @@
   {#if atLimit.move}
     <!-- literal: 64px -->
     <div class="flex flex-col" in:unfold out:unfold style:--field-w="64px">
-      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
+      <p
+        class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row"
+      >
         <label for="{id}-wait">{words.wait}</label>
         <Input
           data-num
@@ -78,7 +82,9 @@
         />
         <span>{words.minutes}</span>
       </p>
-      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
+      <p
+        class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row"
+      >
         <label for="{id}-over">{words.over}</label>
         <Input
           data-num

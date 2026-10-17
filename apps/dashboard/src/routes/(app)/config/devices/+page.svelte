@@ -169,8 +169,11 @@
             hub until its update arrives.
           </li>
           <li>
-            Each run of <code class="type-code text-ink-strong">cawco connections</code>, <code class="type-code text-ink-strong">relay</code> or
-            <code class="type-code text-ink-strong">jev</code> asks you to approve it once.
+            Each run of <code class="type-code text-ink-strong"
+              >cawco connections</code
+            >, <code class="type-code text-ink-strong">relay</code> or
+            <code class="type-code text-ink-strong">jev</code> asks you to approve
+            it once.
           </li>
           <li>Sessions keep their tools. Telegram keeps working as it does.</li>
         </ul>
@@ -245,15 +248,24 @@
             style:--row-pad-y="10px"
           >
             <div data-slot="who" class="flex min-w-0 flex-col">
-              <span data-slot="name" class="type-body text-ink-strong">{request.name}</span>
-              <span data-num data-slot="meta" class="num type-meta wrap-anywhere text-ink-muted">
+              <span data-slot="name" class="type-body text-ink-strong"
+                >{request.name}</span
+              >
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
+              >
                 Code <span data-slot="code" class="type-code text-ink-strong"
                   >{request.userCode}</span
                 >{request.address ? ` · ${request.address}` : ""} · asked {formatDistanceToNow(
                   new Date(request.at)
                 )}
               </span>
-              <span data-slot="meta" class="type-meta wrap-anywhere text-ink-muted">
+              <span
+                data-slot="meta"
+                class="type-meta wrap-anywhere text-ink-muted"
+              >
                 Approve only if this is the code on the device in front of you.
               </span>
             </div>
@@ -294,7 +306,11 @@
               <span data-slot="name" class="type-body text-ink-strong"
                 >{machine.hostname ?? machine.machineId}</span
               >
-              <span data-num data-slot="meta" class="num type-meta wrap-anywhere text-ink-muted">
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
+              >
                 Machine{machine.platform
                   ? ` · ${machine.platform}`
                   : ""}{machine.address ? ` · ${machine.address}` : ""} · waiting
@@ -357,7 +373,11 @@
                   ? " · this browser"
                   : ""}</span
               >
-              <span data-num data-slot="meta" class="num type-meta wrap-anywhere text-ink-muted">
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
+              >
                 {KINDS[device.kind]} · paired {formatDistanceToNow(
                   new Date(device.createdAt)
                 )}{device.lastUsedAt
@@ -378,7 +398,10 @@
         {/each}
       </ul>
       {#if devices.length === 1}
-        <p data-slot="note" class="type-meta max-w-(--note-measure) wrap-anywhere text-ink-muted">
+        <p
+          data-slot="note"
+          class="type-meta max-w-(--note-measure) wrap-anywhere text-ink-muted"
+        >
           The only paired device stays until you pair another or turn pairing
           off, so the fleet always has someone who can approve.
         </p>
@@ -391,7 +414,9 @@
       class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
       role="alert"
       transition:unfold
-    >{problem}</p>
+    >
+      {problem}
+    </p>
   {/if}
 </SectionFrame>
 

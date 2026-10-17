@@ -147,7 +147,7 @@
          spinner at its start. -->
     <p
       class={cn(
-        "mark-line m-0 flex items-center gap-space-1 py-space-1 ps-(--ask-indent-in) pe-(--ask-end-in) type-meta text-ink-muted",
+        "mark-line type-meta m-0 flex items-center gap-space-1 py-space-1 ps-(--ask-indent-in) pe-(--ask-end-in) text-ink-muted",
         className
       )}
       role="status"

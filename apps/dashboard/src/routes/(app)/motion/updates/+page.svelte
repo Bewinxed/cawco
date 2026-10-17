@@ -307,7 +307,9 @@
     class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
     data-states="cards-stable"
   >
-    <p class="type-meta mb-space-2 text-ink-muted">The fleet follows Stable; Stable chosen.</p>
+    <p class="type-meta mb-space-2 text-ink-muted">
+      The fleet follows Stable; Stable chosen.
+    </p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="stable" />
   </section>
   <section
@@ -315,17 +317,27 @@
     class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
     data-states="cards-nightly"
   >
-    <p class="type-meta mb-space-2 text-ink-muted">The fleet follows Nightly; Stable chosen.</p>
+    <p class="type-meta mb-space-2 text-ink-muted">
+      The fleet follows Nightly; Stable chosen.
+    </p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="nightly" />
   </section>
 
   <h1 class="type-title">Update cell, rows 1 to 12</h1>
-  <section data-slot="updates-page-card" class="rounded-lg bg-surface-raised p-space-5 shadow-tile" data-states="table">
+  <section
+    data-slot="updates-page-card"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
+    data-states="table"
+  >
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
   <h1 class="type-title">Notices 1 to 7, as the update row of Caw's panel</h1>
-  <div data-slot="notices" class="grid grid-cols-(--notice-cols) items-start gap-space-5" data-states="notices">
+  <div
+    data-slot="notices"
+    class="grid grid-cols-(--notice-cols) items-start gap-space-5"
+    data-states="notices"
+  >
     {#each NOTICES as notice (notice.kind)}
       <div class="kit-pop w-(--panel-w)" data-notice={notice.kind}>
         <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
@@ -334,7 +346,11 @@
   </div>
 
   <h1 class="type-title">Updated, with notes written before sections</h1>
-  <div data-slot="notices" class="grid grid-cols-(--notice-cols) items-start gap-space-5" data-states="notice-plain">
+  <div
+    data-slot="notices"
+    class="grid grid-cols-(--notice-cols) items-start gap-space-5"
+    data-states="notice-plain"
+  >
     <div class="kit-pop w-(--panel-w)" data-notice="plain">
       <UpdateCard
         alone
@@ -345,9 +361,15 @@
     </div>
   </div>
 
-  <h1 class="type-title">Updated, in a tab older than the dashboard: Reload says goodbye</h1>
+  <h1 class="type-title">
+    Updated, in a tab older than the dashboard: Reload says goodbye
+  </h1>
   <!-- As the panel has it: the row in a `reflow`, a row under it. -->
-  <div class="kit-pop w-(--panel-w)" data-states="notice-reload" {@attach reflow()}>
+  <div
+    class="kit-pop w-(--panel-w)"
+    data-states="notice-reload"
+    {@attach reflow()}
+  >
     <div data-flip="box">
       <UpdateCard
         alone={false}
@@ -356,11 +378,18 @@
         ondismiss={noop}
       />
     </div>
-    <div class="type-meta border-t border-t-border-hairline p-space-3 text-ink-muted" data-flip="box">
+    <div
+      class="type-meta border-t border-t-border-hairline p-space-3 text-ink-muted"
+      data-flip="box"
+    >
       The next row of the panel follows the row's edge
     </div>
   </div>
-  <div data-slot="notices" class="grid grid-cols-(--notice-cols) items-start gap-space-5" data-states="update-card">
+  <div
+    data-slot="notices"
+    class="grid grid-cols-(--notice-cols) items-start gap-space-5"
+    data-states="update-card"
+  >
     <div class="kit-pop w-(--panel-w)">
       <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>

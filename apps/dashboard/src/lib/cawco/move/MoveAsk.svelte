@@ -19,7 +19,9 @@
     <p
       class="m-0 type-body text-ink-strong text-pretty data-follows:text-ink-muted"
       data-follows={i > 0 || undefined}
-    >{line}</p>
+    >
+      {line}
+    </p>
   {/each}
   <Collapsible.Root bind:open>
     <!-- literal: 26px -->
@@ -38,7 +40,9 @@
     </Collapsible.Trigger>
     <Collapsible.Content reveal>
       <pre
-        class="mx-0 mb-0 mt-space-1 p-space-3 rounded-sm bg-surface-recess type-code text-ink-strong whitespace-pre-wrap wrap-anywhere">{ask.details.join("\n")}</pre>
+        class="mx-0 mb-0 mt-space-1 p-space-3 rounded-sm bg-surface-recess type-code text-ink-strong whitespace-pre-wrap wrap-anywhere">{ask.details.join(
+          "\n"
+        )}</pre>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>

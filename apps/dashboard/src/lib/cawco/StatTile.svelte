@@ -42,16 +42,21 @@
     <span
       data-slot="num"
       class="num min-h-(--line-min) type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink max-desk:type-title"
-      style:--line-min="1lh"
-      ><MorphText text={String(value)} /></span
+      style:--line-min="1lh"><MorphText text={String(value)} /></span
     >
     {#if unit}
       {#key unit}
-        <span data-slot="num" class="num type-meta text-ink-muted" data-flip="pop">{unit}</span>
+        <span
+          data-slot="num"
+          class="num type-meta text-ink-muted"
+          data-flip="pop">{unit}</span
+        >
       {/key}
     {/if}
   </span>
   {#if action}
-    <span class="flex flex-wrap items-center gap-space-2">{@render action()}</span>
+    <span class="flex flex-wrap items-center gap-space-2"
+      >{@render action()}</span
+    >
   {/if}
 </div>

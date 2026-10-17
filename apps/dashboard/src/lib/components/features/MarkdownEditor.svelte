@@ -193,10 +193,12 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
-  [data-slot="crepe-host"] :global(.milkdown :is(strong, b, h1, h2, h3, h4, h5, h6, th)) {
+  [data-slot="crepe-host"]
+    :global(.milkdown :is(strong, b, h1, h2, h3, h4, h5, h6, th)) {
     font-weight: var(--weight-strong) !important;
   }
-  [data-slot="crepe-host"] :global(.milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)) {
+  [data-slot="crepe-host"]
+    :global(.milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)) {
     margin-top: var(--space-5);
     padding: var(--space-1) 0;
   }
@@ -251,7 +253,8 @@
   [data-slot="crepe-host"] :global(.milkdown :is(.cm-editor, .cm-gutters)) {
     background: var(--surface-recess);
   }
-  [data-slot="crepe-host"] :global(.milkdown :is(button, input, [role="button"])) {
+  [data-slot="crepe-host"]
+    :global(.milkdown :is(button, input, [role="button"])) {
     border-radius: var(--radius-sm);
     font-size: var(--text-label) !important;
     line-height: var(--leading-ui) !important;
@@ -265,10 +268,12 @@
     outline: var(--focus-ring-width) solid var(--focus-ring) !important;
     outline-offset: var(--focus-ring-offset);
   }
-  [data-slot="crepe-host"] :global(.milkdown :is(input, [contenteditable]):focus-visible) {
+  [data-slot="crepe-host"]
+    :global(.milkdown :is(input, [contenteditable]):focus-visible) {
     outline-offset: var(--focus-ring-inset);
   }
-  [data-slot="crepe-host"] :global(.milkdown :is(button, [role="button"]):active) {
+  [data-slot="crepe-host"]
+    :global(.milkdown :is(button, [role="button"]):active) {
     background: var(--surface-fill);
     box-shadow: var(--shadow-inset-sel);
   }
@@ -276,7 +281,8 @@
      surface-fill's own step, with its glyph in the strong ink. Styled here
      and not through --crepe-color-selected, which is also the document's
      text selection. */
-  [data-slot="crepe-host"] :global(.milkdown .milkdown-block-handle .operation-item.active) {
+  [data-slot="crepe-host"]
+    :global(.milkdown .milkdown-block-handle .operation-item.active) {
     background: light-dark(var(--surface-fill-strong), var(--surface-fill));
 
     & :global(svg) {

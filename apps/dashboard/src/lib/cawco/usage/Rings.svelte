@@ -168,9 +168,7 @@
     pathLength="100"
     r={geometry.rr.toFixed(3)}
     stroke-width={geometry.w.toFixed(3)}
-    style:--arc-offset={off(
-      reserve === null ? 0 : Math.min(rim, reserve)
-    )}
+    style:--arc-offset={off(reserve === null ? 0 : Math.min(rim, reserve))}
   />
   <circle
     class="notch fill-none origin-(--ring-origin) transform-(--ring-turn) transition-[opacity] dur-toggle ease-out data-off:opacity-0 motion-reduce:transition-none"

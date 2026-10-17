@@ -97,7 +97,8 @@
      InputGroup.Button, a Collapsible trigger) inherit the surface's font and
      ink as every button here does, over the kit's own type and ink; a
      component's hover (`hover:`, (0,2,0)) still wins. */
-  .ns-theme button:where([data-slot="button"], [data-slot="collapsible-trigger"]) {
+  .ns-theme
+    button:where([data-slot="button"], [data-slot="collapsible-trigger"]) {
     font: inherit;
     color: inherit;
     transition: var(--transition-control);
@@ -108,7 +109,11 @@
     }
   }
   /* foreign-dom — K2: the kit Input's placeholder in the subtle ink. */
-  .ns-theme input:where([data-slot="input"], [data-slot="input-group-control"])::placeholder {
+  .ns-theme
+    input:where(
+      [data-slot="input"],
+      [data-slot="input-group-control"]
+    )::placeholder {
     color: var(--ink-subtle);
   }
   /* foreign-dom — K3: on a phone every button in a popover is 44px tall. */

@@ -336,7 +336,9 @@
     </p>
     <div
       class="h-(--morph-size) overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
-      style:--morph-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
+      style:--morph-size={openrouterHeight
+        ? `${openrouterHeight}px`
+        : undefined}
     >
       <div data-slot="stack" class="grid" bind:clientHeight={openrouterHeight}>
         {#key phase}
@@ -389,7 +391,11 @@
                 )}</span
               >
             {:else}
-              <span data-slot="dot" aria-hidden="true" class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100" data-box
+              <span
+                data-slot="dot"
+                aria-hidden="true"
+                class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                data-box
               ></span>
               <span>Not connected</span>
             {/if}
@@ -398,7 +404,13 @@
       </div>
     </div>
     {#if openrouterError}
-      <p class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink" role="alert" transition:unfold>{openrouterError}</p>
+      <p
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {openrouterError}
+      </p>
     {/if}
   </div>
 
@@ -449,7 +461,12 @@
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
-      <span data-slot="dot" aria-hidden="true" class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100" data-box></span>
+      <span
+        data-slot="dot"
+        aria-hidden="true"
+        class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+        data-box
+      ></span>
       <span>{routeLine}</span>
     </p>
     <Field id="typesafe-key" label="TypeSafe key">
@@ -506,7 +523,11 @@
               </svg>
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
-              <span data-slot="dot" aria-hidden="true" class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100" data-box
+              <span
+                data-slot="dot"
+                aria-hidden="true"
+                class="size-space-2 flex-none bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                data-box
               ></span>
               <span>Not set</span>
             {/if}
@@ -525,7 +546,13 @@
       onchange={setSuggest}
     />
     {#if jevError}
-      <p class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink" role="alert" transition:unfold>{jevError}</p>
+      <p
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {jevError}
+      </p>
     {/if}
   </form>
 
@@ -554,7 +581,10 @@
       onchange={setWatch}
     />
     {#if watch}
-      <ul data-slot="num" class="num type-meta m-0 flex list-none flex-col gap-space-1 p-0 text-ink-muted">
+      <ul
+        data-slot="num"
+        class="num type-meta m-0 flex list-none flex-col gap-space-1 p-0 text-ink-muted"
+      >
         <li>
           Same error {watch.limits.sameError} times in
           {watch.limits.errorTurns}
@@ -571,7 +601,13 @@
       </ul>
     {/if}
     {#if watchError}
-      <p class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink" role="alert" transition:unfold>{watchError}</p>
+      <p
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {watchError}
+      </p>
     {/if}
   </div>
 </SectionFrame>

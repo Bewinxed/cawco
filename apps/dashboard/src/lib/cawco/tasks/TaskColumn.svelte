@@ -89,13 +89,8 @@
   data-picking={picking ? "" : undefined}
   {@attach drop}
 >
-  <header
-    data-slot="head"
-    class="flex flex-col gap-0 px-space-2 py-space-1"
-  >
-    <span
-      class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2"
-    >
+  <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
+    <span class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">
       {#if kind === "you"}
         <IconNeedsYou
           aria-hidden="true"
@@ -105,8 +100,9 @@
       <h3
         data-slot="name"
         class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong group-kind-you/col:text-brand-ink"
-        >{label}</h3
       >
+        {label}
+      </h3>
       <span
         data-num
         data-slot="count"
@@ -168,10 +164,7 @@
             ></span
           >
         {/if}
-        <RowFault
-          again={fault?.again}
-          reason={fault?.reason}
-        />
+        <RowFault again={fault?.again} reason={fault?.reason} />
       </li>
     {/each}
   </ol>

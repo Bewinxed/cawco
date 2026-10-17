@@ -157,7 +157,8 @@
           >
             <span
               data-slot="id"
-              class="num font-(family-name:--font-mono) text-size-meta text-ink-muted">{id}</span
+              class="num font-(family-name:--font-mono) text-size-meta text-ink-muted"
+              >{id}</span
             >
             {#if task}
               <span

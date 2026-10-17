@@ -122,7 +122,10 @@
   {#if question}
     <AskHere asker={question.asker} at="editor" class="max-w-(--inner-max)" />
   {/if}
-  <div data-slot="inner" class="flex items-center gap-(--inner-gap) max-w-(--inner-max) max-phone:flex-wrap max-phone:justify-end">
+  <div
+    data-slot="inner"
+    class="flex items-center gap-(--inner-gap) max-w-(--inner-max) max-phone:flex-wrap max-phone:justify-end"
+  >
     {#if ondelete && deleteLabel}
       <Button
         data-delete
@@ -141,7 +144,11 @@
     {/if}
     <span class="flex-auto max-phone:hidden"></span>
     {#if result}
-      <span data-slot="result" class="inline-flex items-center gap-space-2 min-w-0 type-meta text-ink-muted">{@render result()}</span>
+      <span
+        data-slot="result"
+        class="inline-flex items-center gap-space-2 min-w-0 type-meta text-ink-muted"
+        >{@render result()}</span
+      >
     {/if}
     <Button
       disabled={saving}
@@ -163,4 +170,3 @@
     />
   </div>
 </footer>
-

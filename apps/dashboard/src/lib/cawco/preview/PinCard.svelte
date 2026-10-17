@@ -321,12 +321,18 @@
     <span
       data-slot="anchor"
       class="flex flex-1 min-w-0 flex-col"
-      title={selector ?? undefined}>
-      <span data-slot="name" class="truncate text-ink-strong type-label">{pinName(pin)}</span>
+      title={selector ?? undefined}
+    >
+      <span data-slot="name" class="truncate text-ink-strong type-label"
+        >{pinName(pin)}</span
+      >
       {#if source}
         <!-- Cut from its start, so the file's name and line stay. -->
-        <span data-slot="source"
-          class="truncate text-left text-ink-muted font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal)"><bdi>{source}</bdi></span>
+        <span
+          data-slot="source"
+          class="truncate text-left text-ink-muted font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal)"
+          ><bdi>{source}</bdi></span
+        >
       {/if}
     </span>
     {#if live}
@@ -435,8 +441,11 @@
       </ol>
     </div>
   {/if}
-  <div data-slot="foot"
-    class="flex shrink-0 flex-col gap-space-2" bind:this={foot}>
+  <div
+    data-slot="foot"
+    class="flex shrink-0 flex-col gap-space-2"
+    bind:this={foot}
+  >
     <Textarea
       data-field
       aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
@@ -457,7 +466,11 @@
     {#if problem}
       <p
         class="m-0 text-data-bad text-size-meta"
-        id={`pin-error-${pin.id}`} role="alert">{problem}</p>
+        id={`pin-error-${pin.id}`}
+        role="alert"
+      >
+        {problem}
+      </p>
     {/if}
     <footer data-slot="actions" class="flex justify-end gap-space-2">
       <Button

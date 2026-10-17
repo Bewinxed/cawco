@@ -347,6 +347,7 @@
 @custom-variant slot-heading (&[data-slot="heading"]);
 @custom-variant slot-hint (&[data-slot="hint"]);
 @custom-variant slot-hit (&[data-slot="hit"]);
+@custom-variant slot-hitl (&[data-slot="hitl"]);
 @custom-variant slot-icon-action (&[data-slot="icon-action"]);
 @custom-variant slot-inner (&[data-slot="inner"]);
 @custom-variant slot-input (&[data-slot="input"]);
@@ -426,6 +427,7 @@
 @custom-variant slot-row-ask (&[data-slot="row-ask"]);
 @custom-variant slot-row-fault (&[data-slot="row-fault"]);
 @custom-variant slot-run-entry (&[data-slot="run-entry"]);
+@custom-variant slot-run-filter (&[data-slot="run-filter"]);
 @custom-variant slot-runs-ledger (&[data-slot="runs-ledger"]);
 @custom-variant slot-said (&[data-slot="said"]);
 @custom-variant slot-search (&[data-slot="search"]);

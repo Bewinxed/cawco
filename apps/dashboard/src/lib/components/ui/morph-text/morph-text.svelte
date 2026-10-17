@@ -180,8 +180,8 @@
       aria-hidden="true"
       data-slot="letters"
       style:--roll-bleed="-100vw"
-      {@attach letters}></span
-    ><span
+      {@attach letters}
+    ></span><span
       class="absolute -m-px size-px overflow-hidden whitespace-pre select-none"
       data-slot="said">{text}</span
     >{:else}{text}{/if}</span

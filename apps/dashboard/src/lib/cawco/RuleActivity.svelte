@@ -96,10 +96,7 @@
         still pending — it clears when their next turn ends without matching.
       </p>
     {/if}
-    <ul
-      data-slot="list"
-      class="m-0 flex list-none flex-col gap-space-row p-0"
-    >
+    <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
       {#each visible as row (row.instanceId)}
         <!-- literal: 8px, 10px -->
         <li
@@ -124,7 +121,8 @@
               <span
                 data-slot="path"
                 class="font-(family-name:--font-mono) text-size-meta wrap-anywhere text-ink-strong"
-              >{row.where}</span>
+                >{row.where}</span
+              >
               {#if row.harness}
                 <!-- literal: 72ch -->
                 <span
@@ -143,7 +141,9 @@
           </div>
 
           {#if row.status === "pending"}
-            <p class="type-meta text-status-attn-ink">Fired {times(row.fireCount)} in a row.</p>
+            <p class="type-meta text-status-attn-ink">
+              Fired {times(row.fireCount)} in a row.
+            </p>
           {/if}
         </li>
       {/each}

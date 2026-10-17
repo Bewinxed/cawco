@@ -1,6 +1,23 @@
-## Main changes to carry
+## Base of record
 
-- **272e8db16** (series d7dbe4bc8, b5287a4ba, 3d4aeeba0, 272e8db16), the preview-hang fix, landed on main after this branch's base. d7dbe4bc8 adds `onScreen={visible}` to the desk `<PreviewPane>` in `src/lib/cawco/side/SideSplit.svelte` (at its line 235 on main). Nothing to do in 1a. When the integration branch is rebased onto main (phase 2), keep main's `onScreen={visible}` on that PreviewPane beside this branch's changes to SideSplit (the `mainClass` prop and `data-split-main-class` are gone here). The series is part of the base of record the style-snapshot compare runs against.
+**T = `1bd7096724443490eb49857d957c215ae5ff0dc7`**: the one merge of `origin/main` (at `ac7b79de8`) into the integration branch. The lanes branched from `6001f5afa`; main moved 69 commits past it, 22 of them touching dashboard `.svelte` files. T is the base of record: the style-snapshot compare's "before" is main at `ac7b79de8`, with the DESIGN-law fixes below applied in `<style>` form.
+
+## Main's changes, carried in T
+
+Main's logic, markup and text are kept exactly; its styles take the lane rules (lane-a.md, deltas A–R, and 1a's additions).
+
+| file | how it merged | what main's change became |
+|---|---|---|
+| `src/lib/cawco/transcript/AccountMoveDivider.svelte` | conflict | a6d82ddc4 dropped the summarising state (Caw at work, the line's settle animation, the disabled button, the spoken status): those utilities, the `data-live`/`data-settled` hooks and the `arm-draw` keyframes residual are gone. |
+| `src/lib/cawco/accounts/AtLimitBlock.svelte` | conflict | the one "move whole over" field and its `compacts` note, in the converted row's classes (`.aside` is `type-meta text-ink-muted`, as before). |
+| `src/lib/cawco/accounts/StrategyFigure.svelte` | conflict | the document marker's two rules (`.doc`, `.doc::after`) are gone, and the element's `--fig-doc-*` with them. |
+| `src/lib/cawco/Shell.svelte` | conflict | ac7b79de8's rule (Jump and the machines off a narrow bar's group) sits in the residual's `(max-width: 899px)` block after the items' own `display`, as `[data-slot="tools"] :global(:is([data-jump], [data-machines]))`; the Jump button gains `data-jump` (MachinesButton has `data-machines`). |
+| `src/lib/cawco/SessionRow.svelte` | conflict | the pending note takes the notes' hook and utilities; its Stop is `cursor-pointer border-none border-current bg-transparent p-0 text-ink-strong underline underline-offset-2`, and its `font: inherit` is one kind-5 declaration, for 1b. |
+| `src/lib/cawco/transcript/DelegateTail.svelte` | auto | the failed turn's ink is `text-data-bad` (main wrote `text-[var(--data-bad)]`; the same rule). |
+| `src/lib/cawco/side/SideSplit.svelte` | auto | d7dbe4bc8's `onScreen={visible}` is on the desk PreviewPane. |
+| `MachinesList`, `SessionPane`, `ThreadPane`, `config/editors/MemoryEditor`, `config/editors/RuleEditor`, `find/FinderCard`, `home/NeedsCard`, `preview/PreviewPane`, `spawn/NewSessionDialog`, `transcript/Prompt`, `workspace/SessionDetails`, `ui/hang-card/hang-card`, the models, rules and seed-tabs pages, `spawn/PRESERVE.md` | auto | script or text only; the hooks main's new code selects (`li[data-machine] [data-slot="row"]`, `[data-slot='hitl']`, `[data-leaf]`, `[data-caw-panel]`) are on the converted markup. |
+
+Main's changes added two residual declarations: SessionRow's `font: inherit` (kind 5) and Shell's `display: none` (foreign-dom).
 
 ## DESIGN-law fixes the cutover exposed (the orchestrator's ruling)
 

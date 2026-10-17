@@ -110,9 +110,7 @@
   }
 </script>
 
-<div
-  class="rounded-md overflow-hidden border border-border bg-neutral-2"
->
+<div class="rounded-md overflow-hidden border border-border bg-neutral-2">
   <div
     class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-ink-muted"
   >

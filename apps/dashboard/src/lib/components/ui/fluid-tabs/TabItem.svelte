@@ -284,9 +284,9 @@
     "relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
     "[&:not(:has([data-slot=hit]:last-child))]:pe-(--end-pad)",
     "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",
-    "data-tab-item-selected:text-ink-strong can-hover:data-ghosted:text-ink-strong",
-    "in-variant-folder:data-tab-item-selected:text-ink-muted can-hover:in-variant-folder:data-tab-item-selected:text-ink-muted",
-    "motion-safe:transition-[color] motion-safe:dur-ghost motion-safe:ease-out",
+    "can-hover:data-ghosted:text-ink-strong data-tab-item-selected:text-ink-strong",
+    "can-hover:in-variant-folder:data-tab-item-selected:text-ink-muted in-variant-folder:data-tab-item-selected:text-ink-muted",
+    "motion-safe:dur-ghost motion-safe:transition-[color] motion-safe:ease-out",
     className
   )}
   data-flush={flush}
@@ -445,8 +445,8 @@
      folder tab's press tints its own shape, its feet too; the box itself
      stays clear behind it. */
   [data-slot="ff-tab"]:has(
-      [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
-    ) {
+    [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
+  ) {
     --press: light-dark(var(--surface-fill-strong), var(--surface-fill));
     background-color: var(--press);
   }

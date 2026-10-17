@@ -52,10 +52,16 @@
     {:else}
       <span data-box></span>
     {/if}
-    <span data-slot="rings-key-label" class="font-medium text-ink-row">{row.label}</span>
-    <span data-slot="value" class="mark-text font-medium whitespace-nowrap text-ink-strong" data-key-value
-      >{@render said(row.value)}</span
+    <span data-slot="rings-key-label" class="font-medium text-ink-row"
+      >{row.label}</span
     >
-    <span class="mark-text min-w-0 justify-self-end text-end text-ink-muted">{@render said(row.reset)}</span>
+    <span
+      data-slot="value"
+      class="mark-text font-medium whitespace-nowrap text-ink-strong"
+      data-key-value>{@render said(row.value)}</span
+    >
+    <span class="mark-text min-w-0 justify-self-end text-end text-ink-muted"
+      >{@render said(row.reset)}</span
+    >
   {/each}
 </div>

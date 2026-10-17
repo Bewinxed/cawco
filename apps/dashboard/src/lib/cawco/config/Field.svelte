@@ -37,20 +37,37 @@
   style:--field-gap="6px"
   style:--measure="72ch"
 >
-  <label data-field-label class="type-meta text-ink-muted" for={id}>{label}</label>
+  <label data-field-label class="type-meta text-ink-muted" for={id}
+    >{label}</label
+  >
   {@render children()}
   {#if problem || warn || hint}
     <div class="relative flex flex-col" in:unfold out:unfold {@attach morph()}>
       {#if problem}
-        <span class="max-w-(--measure) type-meta text-status-fail-ink" in:crossIn out:crossOut>{problem}</span>
+        <span
+          class="max-w-(--measure) type-meta text-status-fail-ink"
+          in:crossIn
+          out:crossOut>{problem}</span
+        >
       {:else if warn}
-        <span class="max-w-(--measure) type-meta text-status-attn-ink" in:crossIn out:crossOut>{@render warn()}</span>
+        <span
+          class="max-w-(--measure) type-meta text-status-attn-ink"
+          in:crossIn
+          out:crossOut>{@render warn()}</span
+        >
       {:else if typeof hint === "string"}
-        <span class="max-w-(--measure) type-meta text-ink-muted" in:crossIn out:crossOut>{hint}</span>
+        <span
+          class="max-w-(--measure) type-meta text-ink-muted"
+          in:crossIn
+          out:crossOut>{hint}</span
+        >
       {:else if hint}
-        <span class="max-w-(--measure) type-meta text-ink-muted" in:crossIn out:crossOut>{@render hint()}</span>
+        <span
+          class="max-w-(--measure) type-meta text-ink-muted"
+          in:crossIn
+          out:crossOut>{@render hint()}</span
+        >
       {/if}
     </div>
   {/if}
 </div>
-

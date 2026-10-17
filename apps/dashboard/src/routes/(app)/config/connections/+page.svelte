@@ -466,7 +466,13 @@
       </Field>
     {/if}
     {#if addProblem}
-      <p class="type-meta wrap-anywhere text-status-fail-ink" role="alert" transition:unfold>{addProblem}</p>
+      <p
+        class="type-meta wrap-anywhere text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {addProblem}
+      </p>
     {/if}
     <div class="flex justify-end gap-space-2">
       <Button
@@ -720,7 +726,9 @@
   <Popover.Content align="end" class="w-64" customAnchor={chooseAnchor}>
     {#if choosing}
       {@const row = choosing}
-      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">Projects that may use {labelOf(row)}</p>
+      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">
+        Projects that may use {labelOf(row)}
+      </p>
       <ul class="m-0 flex list-none flex-col p-0">
         {#each cawco.projects as project (project.id)}
           <li>

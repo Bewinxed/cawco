@@ -554,7 +554,9 @@ const spec: Spec = {
         JSON.stringify(opened)
       );
 
-      const field = page.locator('section[data-slot="unlock"]input[type="password"]');
+      const field = page.locator(
+        'section[data-slot="unlock"]input[type="password"]'
+      );
       const submit = page
         .locator('section[data-slot="unlock"]')
         .getByRole("button", { name: UNLOCK_BUTTON });
@@ -600,14 +602,18 @@ const spec: Spec = {
       await page.waitForFunction(
         (finals) =>
           Array.from(
-            document.querySelectorAll('section[data-slot="unlock"][id$="-title"]')
+            document.querySelectorAll(
+              'section[data-slot="unlock"][id$="-title"]'
+            )
           ).some((title) =>
             finals.includes(
               title.textContent?.replace(/\s+/g, " ").trim() ?? ""
             )
           ) ||
           Array.from(
-            document.querySelectorAll('section[data-slot="unlock"][role="alert"]')
+            document.querySelectorAll(
+              'section[data-slot="unlock"][role="alert"]'
+            )
           ).some((alert) => alert.closest("[inert]") === null),
         answers,
         { timeout: 60_000 }

@@ -253,7 +253,12 @@
       style:--section-h="3rem"
     >
       {#key views[i]}
-        <div class="flex items-center gap-space-2 bg-surface-raised p-space-2" data-view={views[i]} in:crossIn out:leaving={i}>
+        <div
+          class="flex items-center gap-space-2 bg-surface-raised p-space-2"
+          data-view={views[i]}
+          in:crossIn
+          out:leaving={i}
+        >
           <span>{one.name} · {views[i]}</span>
           <button type="button">Press</button>
         </div>

@@ -62,11 +62,19 @@
   class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-(--rail-w) variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
   data-variant={variant}
   style:--rail-w="232px"
-  {@attach highlight({ rows: '[data-slot="row"]', selected: '[aria-current="page"]' })}
+  {@attach highlight({
+    rows: '[data-slot="row"]',
+    selected: '[aria-current="page"]',
+  })}
 >
   {#each GROUPS as { group, sections } (group)}
     <div data-slot="group" class="flex flex-col">
-      <h2 data-slot="config-rail-label" class="pt-space-4 px-space-3 pb-space-2 type-body text-ink-muted">{group}</h2>
+      <h2
+        data-slot="config-rail-label"
+        class="pt-space-4 px-space-3 pb-space-2 type-body text-ink-muted"
+      >
+        {group}
+      </h2>
       <ul data-slot="list" class="flex flex-col m-0 p-0 list-none">
         {#each sections as section (section.slug)}
           {@const count = countOf(store, section.slug)}
@@ -87,12 +95,20 @@
               style:--fault-h="18px"
               style:--count-min="3ch"
             >
-              <span data-slot="tile" class="inline-flex items-center justify-center flex-none size-(--tile) rounded-xs bg-surface-tile shadow-tile text-(--tile-ink)" style:--tile-ink={section.hue}
-                ><section.icon /></span
+              <span
+                data-slot="tile"
+                class="inline-flex items-center justify-center flex-none size-(--tile) rounded-xs bg-surface-tile shadow-tile text-(--tile-ink)"
+                style:--tile-ink={section.hue}><section.icon /></span
               >
-              <span data-slot="name" class="flex-auto min-w-0 type-label truncate">{section.label}</span>
+              <span
+                data-slot="name"
+                class="flex-auto min-w-0 type-label truncate"
+                >{section.label}</span
+              >
               {#if unsavedIn(store, section.slug)}
-                <span class="flex-none size-(--dot) rounded-(--dot-r) bg-ink-strong motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out motion-safe:starting:opacity-0" title={words.unsaved}
+                <span
+                  class="flex-none size-(--dot) rounded-(--dot-r) bg-ink-strong motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out motion-safe:starting:opacity-0"
+                  title={words.unsaved}
                   ><span class="sr-only">{words.unsaved}</span></span
                 >
               {/if}
@@ -116,9 +132,17 @@
                 <!-- The figure is its own element, not the dash's text
                      rewritten: it arrives in place rather than moving in. -->
                 {#if count === null}
-                  <span data-slot="count" class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">—</span>
+                  <span
+                    data-slot="count"
+                    class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
+                    >—</span
+                  >
                 {:else}
-                  <span data-slot="count" class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">{count}</span>
+                  <span
+                    data-slot="count"
+                    class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
+                    >{count}</span
+                  >
                 {/if}
               {/if}
             </a>

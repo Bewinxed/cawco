@@ -442,11 +442,7 @@
   </div>
 
   {#if columnShown}
-    <div
-      data-slot="column"
-      class="grid gap-space-3 w-(--col-w)"
-      in:crossIn
-    >
+    <div data-slot="column" class="grid gap-space-3 w-(--col-w)" in:crossIn>
       <ThinkingSteps>
         {#each rows as row, index (row.step)}
           <div
@@ -656,19 +652,24 @@
 <style>
   /* residual: foreign-dom */
   /* The glyph says where each step stands, in its status ink. */
-  [data-slot="row"][data-phase="done"] :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="done"]
+    :global([data-slot="thinking-step-icon"]) {
     color: var(--status-done-glyph);
   }
-  [data-slot="row"][data-phase="active"] :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="active"]
+    :global([data-slot="thinking-step-icon"]) {
     color: var(--ink-strong);
   }
-  [data-slot="row"][data-phase="failed"] :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="failed"]
+    :global([data-slot="thinking-step-icon"]) {
     color: var(--status-fail-glyph);
   }
-  [data-slot="row"][data-phase="asking"] :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="asking"]
+    :global([data-slot="thinking-step-icon"]) {
     color: var(--status-attn-glyph);
   }
-  [data-slot="row"][data-phase="stopped"] :global([data-slot="thinking-step-icon"]) {
+  [data-slot="row"][data-phase="stopped"]
+    :global([data-slot="thinking-step-icon"]) {
     color: var(--ink-muted);
   }
   /* The step's label wraps, never truncates. */

@@ -166,7 +166,11 @@
 >
   <!-- His slot goes with him when he peeks over a card, and comes back
        with him: the hero's height tweens (morph) rather than leaving a band. -->
-  <div data-slot="ask" class="flex w-full flex-col items-center gap-space-4" {@attach morph()}>
+  <div
+    data-slot="ask"
+    class="flex w-full flex-col items-center gap-space-4"
+    {@attach morph()}
+  >
     {#if caw === "page"}
       <div
         data-slot="caw-80"
@@ -177,7 +181,9 @@
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <h1 data-slot="title" class="type-title text-center text-ink-strong">What are we working on?</h1>
+    <h1 data-slot="title" class="type-title text-center text-ink-strong">
+      What are we working on?
+    </h1>
     <div
       data-slot="new-page-field"
       class="relative h-(--field-h) w-full max-w-(--field-max)"
@@ -202,7 +208,11 @@
         sending={starting}
       />
     </div>
-    <div data-slot="chips" class="kit-chips max-w-(--chips-max) justify-center" style:--chips-max="40rem">
+    <div
+      data-slot="chips"
+      class="kit-chips max-w-(--chips-max) justify-center"
+      style:--chips-max="40rem"
+    >
       {#each STARTERS as text (text)}
         <button
           class="kit-chip touch-hit"

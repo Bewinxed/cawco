@@ -126,7 +126,13 @@
         />
       </Field>
       {#if failed}
-        <p class="type-meta text-status-fail-ink" role="alert" transition:unfold>{failed}</p>
+        <p
+          class="type-meta text-status-fail-ink"
+          role="alert"
+          transition:unfold
+        >
+          {failed}
+        </p>
       {/if}
       <Button
         class="self-end"
@@ -141,4 +147,3 @@
     </form>
   </Popover.Content>
 </Popover.Root>
-

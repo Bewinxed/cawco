@@ -88,28 +88,26 @@
   >
     <Table.Header>
       <Table.Row class="border-0 bg-surface-band">
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           class="h-c-toolbar-ctl w-(--lead-w) px-space-3 pe-0 type-label tracking-caps text-ink-muted uppercase"
           scope="col"><span class="sr-only">Service</span></Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
           scope="col">Action</Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           data-slot="actions-table-col-status"
           class="h-c-toolbar-ctl w-c-routine-time-w px-space-3 type-label tracking-caps text-ink-muted uppercase"
           scope="col">Status</Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           data-slot="actions-table-col-when"
           class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase"
           scope="col">When</Table.Head
         >
+        <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
       </Table.Row>
     </Table.Header>
     <Table.Body>
@@ -123,9 +121,7 @@
         >
           <Table.Cell
             class="h-c-btn-h-lg px-space-3 py-space-2 pe-0 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
-            ><span
-              data-slot="mark"
-              class="grid w-c-row-lead place-items-center"
+            ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
               ><ProviderLogo
                 class="size-icon-md"
                 provider={action.service.toLowerCase()}

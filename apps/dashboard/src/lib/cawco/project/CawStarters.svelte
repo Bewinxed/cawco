@@ -38,7 +38,11 @@
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph data-starter-glyph aria-hidden="true" class="size-icon-md flex-none text-ink-strong" />
+          <Glyph
+            data-starter-glyph
+            aria-hidden="true"
+            class="size-icon-md flex-none text-ink-strong"
+          />
           <span>{starter.text}</span>
         </button>
       </li>

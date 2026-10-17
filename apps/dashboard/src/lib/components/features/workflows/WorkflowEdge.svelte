@@ -48,8 +48,7 @@
     class="group mark-line nodrag nopan flex items-center gap-space-1 text-size-label font-medium"
   >
     {#if data?.label}
-      <span
-        class="rounded-sm bg-surface-recess p-space-1 text-ink-strong"
+      <span class="rounded-sm bg-surface-recess p-space-1 text-ink-strong"
         >{String(data.label)}</span
       >
     {/if}

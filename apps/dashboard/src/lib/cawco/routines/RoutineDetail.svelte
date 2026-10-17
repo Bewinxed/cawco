@@ -180,27 +180,25 @@
         >
           <Table.Header>
             <Table.Row class="border-0 bg-surface-band">
-              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
                 data-slot="routine-detail-col-when"
                 class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
                 scope="col">When</Table.Head
               >
-              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
                 class="h-c-toolbar-ctl w-(--outcome-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
                 scope="col">Outcome</Table.Head
               >
-              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
                 class="h-c-toolbar-ctl w-(--took-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:hidden"
                 scope="col">Took</Table.Head
               >
-              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
                 class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
                 scope="col">Result</Table.Head
               >
+              <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -294,6 +292,10 @@
     border-spacing: 0;
   }
   [data-slot="instruction"][data-clamped] {
-    mask-image: linear-gradient(to bottom, var(--mask-opaque) var(--fade-from), transparent);
+    mask-image: linear-gradient(
+      to bottom,
+      var(--mask-opaque) var(--fade-from),
+      transparent
+    );
   }
 </style>

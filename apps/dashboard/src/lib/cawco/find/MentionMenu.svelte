@@ -108,14 +108,24 @@
     {@attach highlight({ rows: "[data-find-row]", hovered: "data-active" })}
   >
     {#if mention.answer.state === "unreached"}
-      <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>
+      <p
+        class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        data-flip
+      >
         Can't reach the hub. Nothing can be named until it's back.
-        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer" onclick={() => mention.retry()} type="button"
-          >Retry</button
+        <button
+          class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer"
+          onclick={() => mention.retry()}
+          type="button">Retry</button
         >
       </p>
     {:else if mention.answer.state === "refused"}
-      <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>{mention.answer.detail}</p>
+      <p
+        class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        data-flip
+      >
+        {mention.answer.detail}
+      </p>
     {:else if mention.candidates.length > 0}
       {#each mention.candidates as result (keyOf(result))}
         {@const key = keyOf(result)}
@@ -132,7 +142,12 @@
         />
       {/each}
     {:else if mention.current && mention.answer.state === "ok"}
-      <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>No sessions for “{mention.words}”</p>
+      <p
+        class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        data-flip
+      >
+        No sessions for “{mention.words}”
+      </p>
     {:else if late}
       <Skeleton class="h-(--sk-h) mx-space-3 my-(--sk-my)" />
     {/if}

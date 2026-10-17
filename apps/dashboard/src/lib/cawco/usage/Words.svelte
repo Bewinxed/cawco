@@ -38,9 +38,7 @@
           style:--c={part.color}
           style:--dot="6px"
           style:--dot-r="50%"
-        ></span><b class="font-medium text-ink-strong"
-          >{part.account}</b
-        >
+        ></span><b class="font-medium text-ink-strong">{part.account}</b>
       {/if}
     {/each}</span
   >

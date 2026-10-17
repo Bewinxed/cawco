@@ -515,7 +515,9 @@
               >
               {#if glanceOf(message)}
                 <span class="shrink-0">·</span>
-                <span class="truncate font-(family-name:--font-mono)">{glanceOf(message)}</span>
+                <span class="truncate font-(family-name:--font-mono)"
+                  >{glanceOf(message)}</span
+                >
               {/if}
             </p>
           {:else if message.type === "user"}

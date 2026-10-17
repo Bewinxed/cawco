@@ -12,9 +12,8 @@
 <span
   data-slot="harness-logo"
   class="inline-flex size-icon-md flex-none text-inherit"
-  data-harness-logo={harness}
-><Mark /></span>
-
+  data-harness-logo={harness}><Mark /></span
+>
 
 <style>
   /* residual: foreign-dom — the logos' own svg roots take no class */

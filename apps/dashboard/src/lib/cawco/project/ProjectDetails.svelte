@@ -261,20 +261,39 @@
     style:--row-cols="6.5rem minmax(0, 1fr)"
   >
     <!-- Place: where it lives, its places, and adding one. -->
-    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="place" bind:this={placesRow}>
-      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Place</p>
-      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="place"
+      bind:this={placesRow}
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Place
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <!-- mark-line: the machine's mark heads its whole folder, which wraps (the head's line cuts it short): it stands in a mark cell, one line tall, on the first line -->
-        <p class="type-label flex min-w-0 items-start gap-space-2 wrap-anywhere text-ink-strong">
+        <p
+          class="type-label flex min-w-0 items-start gap-space-2 wrap-anywhere text-ink-strong"
+        >
           {#if machine}
-            <span class="mark-cell"><OsMark class="size-icon-sm flex-none" os={machine.os} /></span>
+            <span class="mark-cell"
+              ><OsMark class="size-icon-sm flex-none" os={machine.os} /></span
+            >
           {/if}
           <span class="min-w-0" data-place-words>{place}</span>
         </p>
         <p data-slot="note" class="type-meta text-ink-muted">
           Its folder stays where it is; CawCo can't move it.
         </p>
-        <div class="flex flex-wrap items-center justify-between gap-space-2 pt-space-1">
+        <div
+          class="flex flex-wrap items-center justify-between gap-space-2 pt-space-1"
+        >
           <button
             aria-expanded={listOpen}
             class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
@@ -310,7 +329,10 @@
             transition:unfold
           >
             {#each project.places as each (each.id)}
-              <li data-place={each.id} class="flex min-w-0 flex-col gap-space-row">
+              <li
+                data-place={each.id}
+                class="flex min-w-0 flex-col gap-space-row"
+              >
                 <div class="flex min-w-0 items-center gap-space-2">
                   <div class="flex min-w-0 flex-auto flex-col gap-space-row">
                     <span data-slot="host" class="type-label text-ink-strong"
@@ -321,8 +343,7 @@
                     <span
                       data-slot="path"
                       class="type-meta truncate text-start text-ink-muted"
-                      title={each.path}
-                      ><bdi>{each.path}</bdi></span
+                      title={each.path}><bdi>{each.path}</bdi></span
                     >
                   </div>
                   {#if each.kind === "checkout" && !each.isPrimary}
@@ -351,7 +372,9 @@
                 {/if}
                 {#if each.held}
                   {@const held = each.held}
-                  <span class="type-meta text-ink-strong">Held: {held.holds} · {held.size}</span>
+                  <span class="type-meta text-ink-strong"
+                    >Held: {held.holds} · {held.size}</span
+                  >
                   <span class="flex gap-space-2 pt-space-1">
                     {#if held.instanceId}
                       <Button
@@ -440,12 +463,30 @@
     </div>
 
     <!-- Repository: a fact, with where it comes from. -->
-    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="repository">
-      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Repository</p>
-      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="repository"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Repository
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         {#if project.remote}
-          <p class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"><bdi>{project.remote}</bdi></p>
-          <p data-slot="note" class="type-meta text-ink-muted">From the folder's remote.</p>
+          <p
+            class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+          >
+            <bdi>{project.remote}</bdi>
+          </p>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            From the folder's remote.
+          </p>
         {:else}
           <p data-slot="note" class="type-meta text-ink-muted">
             No remote on the folder yet. Add one in the folder and it shows
@@ -456,11 +497,22 @@
     </div>
 
     <!-- Work lands: the segment asked breathes until the hub answers. -->
-    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="lands">
-      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted" id="{uid}-lands">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="lands"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+        id="{uid}-lands"
+      >
         Work lands
       </p>
-      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <ToggleGroup.Root
           aria-labelledby="{uid}-lands"
           class="max-w-full flex-wrap self-start"
@@ -480,7 +532,9 @@
             >
           {/each}
         </ToggleGroup.Root>
-        <p data-slot="note" class="type-meta text-ink-muted" data-lands-says>{LANDS[lands].says}</p>
+        <p data-slot="note" class="type-meta text-ink-muted" data-lands-says>
+          {LANDS[lands].says}
+        </p>
         <RowFault
           again={() => (landsTried ? setLands(landsTried) : undefined)}
           data-lands-fault
@@ -490,9 +544,21 @@
     </div>
 
     <!-- Caw: his own switch, its ways off with it. -->
-    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="caw">
-      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Caw</p>
-      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="caw"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Caw
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <CawLeadSwitch
           label="Leads this project"
           {lead}
@@ -503,11 +569,25 @@
     </div>
 
     <!-- Review before done. -->
-    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="review">
-      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Review</p>
-      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="review"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        Review
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-        <label class="type-label flex cursor-pointer items-center gap-space-2 text-ink-strong">
+        <label
+          class="type-label flex cursor-pointer items-center gap-space-2 text-ink-strong"
+        >
           <Switch
             data-review-switch
             disabled={reviewAsked !== null}

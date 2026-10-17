@@ -65,10 +65,17 @@
       <EditorSkeleton {problem} {saveLabel} {section} />
     </div>
   {:else if !found}
-    <div class="flex flex-auto flex-col min-w-0 min-h-0" in:crossIn><Missing {section} {what} /></div>
+    <div class="flex flex-auto flex-col min-w-0 min-h-0" in:crossIn>
+      <Missing {section} {what} />
+    </div>
   {:else}
     <!-- Every editor here keeps its unsaved fields (`keepDraft`). -->
-    <div class="flex flex-auto flex-col min-w-0 min-h-0" data-keeps-draft in:crossIn>{@render children()}</div>
+    <div
+      class="flex flex-auto flex-col min-w-0 min-h-0"
+      data-keeps-draft
+      in:crossIn
+    >
+      {@render children()}
+    </div>
   {/if}
 </div>
-

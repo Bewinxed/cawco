@@ -232,7 +232,10 @@
       restoreScrollDelay={0}
     >
       {#snippet child({ props, open })}
-        <div {...props} data-pressable={pressable(open) === "auto" || undefined}>
+        <div
+          {...props}
+          data-pressable={pressable(open) === "auto" || undefined}
+        >
           {@render docView()}
         </div>
       {/snippet}

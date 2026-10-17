@@ -233,9 +233,7 @@
        the title at the text column, the state in words after it. Each
        state cell is one grid cell, so the outgoing mark or word and the
        incoming one cross-fade in place. -->
-  <h2
-    class="rail-line text-size-label font-medium text-ink-strong mb-space-2"
-  >
+  <h2 class="rail-line text-size-label font-medium text-ink-strong mb-space-2">
     <span data-slot="rail-cell" class="rail-cell inline-grid">
       {#if answered}
         <span
@@ -303,7 +301,10 @@
     <p
       data-slot="lede"
       class="rail-hang text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-(--measure)"
-      style:--measure="72ch">{q.question}</p>
+      style:--measure="72ch"
+    >
+      {q.question}
+    </p>
     <!-- The settled record is the live card's anatomy, inert: the same kit
          option chips (.kit-chips / .kit-chip / .kit-keycap in app.css), so a
          pick looks picked, not flagged, and the card settles without a jump. -->

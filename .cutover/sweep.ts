@@ -33,7 +33,7 @@ const { parse } = (await import(
 )) as { parse: (s: string, o: { modern: true }) => Ast };
 
 interface Ast {
-  css: { content: { styles: string; start: number } } | null;
+  css: { content: { start: number; styles: string } } | null;
   fragment: Node;
   instance?: Node;
   module?: Node;
@@ -60,15 +60,33 @@ function walkFiles(dir: string, test: (name: string) => boolean): string[] {
 const CLASS_TOKEN = /^-?[a-zA-Z_][\w-]*$/;
 /** A class in a selector, `h3.ghead`'s included; a number's point (`1.5`) never starts one. */
 const CLASS_IN_SELECTOR = /(?<![\\-])\.(-?[a-zA-Z_][\w-]*)/g;
+const ATTRIBUTE_BRACKETS = /\[[^\]]*\]/g;
+const QUOTED = /"[^"]*"|'[^']*'/g;
+const URL_CALL = /url\([^)]*\)/g;
+const WHITESPACE = /\s+/;
+const BANG_EDGES = /^[!]|[!]$/g;
+const NOT_NEWLINE = /[^\n]/g;
+/** A string literal of any quote, on one line or (template) across them. */
+const STRING_LITERAL = /(["'`])((?:(?!\1).)*)\1/g;
+/** A string literal of any quote, kept to one line. */
+const LINE_STRING = /(["'`])((?:(?!\1)[^\n])*)\1/g;
+/** CSS a script injects as one rule (`".x > * { display: none }"`). */
+const INJECTED_RULE = /^[^{}]+\{[^{}]*\}\s*$/;
+const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
+const PRELUDE = /([^{};]+)\{/g;
+const GLOBAL_OPEN = /:global\(/g;
+const SCRIPT_OR_STYLE = /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g;
+
 const lineAt = (text: string, offset: number) =>
   text.slice(0, offset).split("\n").length;
+const blank = (s: string) => s.replace(NOT_NEWLINE, " ");
 
 /** Every class name in a selector text, outside attribute brackets and strings. */
 function classesOf(selector: string): string[] {
   const bare = selector
-    .replace(/\[[^\]]*\]/g, "[]")
-    .replace(/"[^"]*"|'[^']*'/g, '""')
-    .replace(/url\([^)]*\)/g, "");
+    .replace(ATTRIBUTE_BRACKETS, "[]")
+    .replace(QUOTED, '""')
+    .replace(URL_CALL, "");
   return [...bare.matchAll(CLASS_IN_SELECTOR)].map((m) => m[1] ?? "");
 }
 
@@ -81,14 +99,35 @@ const select = (name: string, site: string) => {
   }
   selected.get(name)?.add(site);
 };
+const selectAll = (names: string[], site: string) => {
+  for (const name of names) {
+    select(name, site);
+  }
+};
 const give = (text: string, into: Set<string> = provided) => {
-  for (const token of text.split(/\s+/)) {
-    const clean = token.replace(/^[!]|[!]$/g, "");
+  for (const token of text.split(WHITESPACE)) {
+    const clean = token.replace(BANG_EDGES, "");
     if (CLASS_TOKEN.test(clean)) {
       into.add(clean);
     }
   }
 };
+
+/** Each child node of an AST node, its parent and metadata links left out. */
+function children(node: Node): unknown[] {
+  const out: unknown[] = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "parent" || key === "metadata") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      out.push(...value);
+    } else if (value && typeof value === "object") {
+      out.push(value);
+    }
+  }
+  return out;
+}
 
 /** Every string literal and template chunk under an estree node. */
 function strings(node: unknown, out: string[] = []): string[] {
@@ -99,61 +138,50 @@ function strings(node: unknown, out: string[] = []): string[] {
   if (n.type === "Literal" && typeof n.value === "string") {
     out.push(n.value);
   } else if (n.type === "TemplateElement") {
-    out.push(String((n.value as { cooked?: string })?.cooked ?? ""));
+    out.push(
+      String((n.value as { cooked?: string } | undefined)?.cooked ?? "")
+    );
   }
-  for (const [key, value] of Object.entries(n)) {
-    if (key === "parent" || key === "metadata") {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      for (const v of value) {
-        strings(v, out);
-      }
-    } else if (value && typeof value === "object") {
-      strings(value, out);
-    }
+  for (const child of children(n)) {
+    strings(child, out);
   }
   return out;
 }
 
 const CLASS_PROP = /(^|[a-z])class(name)?(es)?$/i;
+/** A class attribute's or …Class prop's every token: its text, and every string in its expression. */
+function giveAttribute(attribute: Node): void {
+  const { value } = attribute;
+  for (const part of Array.isArray(value) ? value : [value]) {
+    const p = part as Node | true | undefined;
+    if (p === true || !p) {
+      continue;
+    }
+    if (p.type === "Text") {
+      give(String(p.data ?? ""));
+      continue;
+    }
+    for (const s of strings(p.expression ?? p)) {
+      give(s);
+    }
+  }
+}
+
 /** Markup: class attributes, class: directives, …Class props. */
 function markup(node: unknown): void {
   if (!node || typeof node !== "object") {
     return;
   }
   const n = node as Node;
-  if (n.type === "Attribute" && typeof n.name === "string" && CLASS_PROP.test(n.name)) {
-    const value = n.value;
-    const parts = Array.isArray(value) ? value : [value];
-    for (const part of parts) {
-      const p = part as Node | true;
-      if (p === true || !p) {
-        continue;
-      }
-      if (p.type === "Text") {
-        give(String(p.data ?? ""));
-      } else {
-        for (const s of strings(p.expression ?? p)) {
-          give(s);
-        }
-      }
-    }
+  const named = typeof n.name === "string";
+  if (n.type === "Attribute" && named && CLASS_PROP.test(String(n.name))) {
+    giveAttribute(n);
   }
-  if (n.type === "ClassDirective" && typeof n.name === "string") {
-    provided.add(n.name);
+  if (n.type === "ClassDirective" && named) {
+    provided.add(String(n.name));
   }
-  for (const [key, value] of Object.entries(n)) {
-    if (key === "parent" || key === "metadata") {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      for (const v of value) {
-        markup(v);
-      }
-    } else if (value && typeof value === "object") {
-      markup(value);
-    }
+  for (const child of children(n)) {
+    markup(child);
   }
 }
 
@@ -172,68 +200,95 @@ const NOT_SELECTOR =
   /\/|\.(svelte|ts|js|mjs|json|css|png|jpe?g|webp|svg|md|html|txt|woff2?|sh|log|lock|yml|yaml)\b|^[a-z]+\.[a-z]+$|\s[a-z]+\s[a-z]+\s/i;
 const CLASSNAME_SET = /\.className\s*[+]?=\s*(["'`])((?:(?!\1).)*)\1/g;
 
+/** Where a string that opens at `i` (on its quote) ends, past its closing quote. */
+function stringEnd(text: string, i: number): number {
+  const quote = text[i];
+  let at = i + 1;
+  while (at < text.length) {
+    const ch = text[at];
+    if (ch === "\\") {
+      at += 2;
+      continue;
+    }
+    at += 1;
+    if (ch === quote || (ch === "\n" && quote !== "`")) {
+      break;
+    }
+  }
+  return at;
+}
+
+/** Where a comment that opens at `i` ends: a line comment at its line's end, a block or HTML one past its close. */
+function commentEnd(text: string, i: number): number | null {
+  if (text.startsWith("//", i) && text[i - 1] !== ":") {
+    const end = text.indexOf("\n", i);
+    return end < 0 ? text.length : end;
+  }
+  let close: string;
+  if (text.startsWith("/*", i)) {
+    close = "*/";
+  } else if (text.startsWith("<!--", i)) {
+    close = "-->";
+  } else {
+    return null;
+  }
+  const end = text.indexOf(close, i + 2);
+  return end < 0 ? text.length : end + close.length;
+}
+
 /** A script with its comments (line, block and HTML) blanked, strings kept, line breaks kept. */
 function uncommented(text: string): string {
   let out = "";
   let i = 0;
-  let quote: string | null = null;
-  const blank = (s: string) => s.replace(/[^\n]/g, " ");
   while (i < text.length) {
     const ch = text[i] ?? "";
-    if (quote) {
-      out += ch;
-      if (ch === "\\") {
-        out += text[i + 1] ?? "";
-        i += 2;
-        continue;
-      }
-      if (ch === quote || (ch === "\n" && quote !== "`")) {
-        quote = null;
-      }
-      i += 1;
-      continue;
-    }
-    const two = text.slice(i, i + 2);
-    if (two === "//" && text[i - 1] !== ":") {
-      const end = text.indexOf("\n", i);
-      const stop = end < 0 ? text.length : end;
-      out += blank(text.slice(i, stop));
-      i = stop;
-      continue;
-    }
-    if (two === "/*" || text.startsWith("<!--", i)) {
-      const close = two === "/*" ? "*/" : "-->";
-      const end = text.indexOf(close, i + 2);
-      const stop = end < 0 ? text.length : end + close.length;
-      out += blank(text.slice(i, stop));
-      i = stop;
-      continue;
-    }
     if (ch === '"' || ch === "'" || ch === "`") {
-      quote = ch;
+      const end = stringEnd(text, i);
+      out += text.slice(i, end);
+      i = end;
+      continue;
     }
-    out += ch;
-    i += 1;
+    const end = commentEnd(text, i);
+    if (end === null) {
+      out += ch;
+      i += 1;
+    } else {
+      out += blank(text.slice(i, end));
+      i = end;
+    }
   }
   return out;
 }
 
-/** A script's own selector strings and class writes. */
-function script(source: string, file: string, offset: number): void {
-  const text = uncommented(source);
-  for (const m of text.matchAll(QUERY)) {
-    for (const name of classesOf(m[3] ?? "")) {
-      select(name, `${file}:${lineAt(text, m.index ?? 0) + offset}`);
+/** The index of the `)` that closes a call whose arguments start at `from`. */
+function closingParen(text: string, from: number): number {
+  let depth = 0;
+  for (let at = from; at < text.length; at += 1) {
+    if (text[at] === "(") {
+      depth += 1;
+    } else if (text[at] === ")") {
+      if (depth === 0) {
+        return at;
+      }
+      depth -= 1;
     }
   }
+  return text.length;
+}
+
+/** The selectors a script hands to the DOM or a probe, and the classes it reads or writes by name. */
+function queries(text: string, file: string, offset: number): void {
+  const site = (index: number | undefined) =>
+    `${file}:${lineAt(text, index ?? 0) + offset}`;
+  for (const m of text.matchAll(QUERY)) {
+    selectAll(classesOf(m[3] ?? ""), site(m.index));
+  }
   for (const m of text.matchAll(SELECTOR_CONST)) {
-    for (const name of classesOf(m[2] ?? "")) {
-      select(name, `${file}:${lineAt(text, m.index ?? 0) + offset}`);
-    }
+    selectAll(classesOf(m[2] ?? ""), site(m.index));
   }
   for (const m of text.matchAll(CLASSLIST_READ)) {
     if (m[1] === "contains") {
-      select(m[3] ?? "", `${file}:${lineAt(text, m.index ?? 0) + offset}`);
+      select(m[3] ?? "", site(m.index));
     } else {
       give(m[3] ?? "");
     }
@@ -241,81 +296,68 @@ function script(source: string, file: string, offset: number): void {
   for (const m of text.matchAll(CLASSNAME_SET)) {
     give(m[2] ?? "");
   }
+}
+
+/** The string arguments of a class-building call (`cn(…)`, `tv(…)`): classes put on. */
+function provideCalls(text: string): void {
   for (const m of text.matchAll(PROVIDE_CALL)) {
-    // The call's own arguments, to its closing parenthesis.
-    let depth = 0;
-    let end = (m.index ?? 0) + m[0].length;
-    for (; end < text.length; end += 1) {
-      const ch = text[end];
-      if (ch === "(") {
-        depth += 1;
-      } else if (ch === ")") {
-        if (depth === 0) {
-          break;
-        }
-        depth -= 1;
-      }
-    }
-    const args = text.slice((m.index ?? 0) + m[0].length, end);
-    for (const s of args.matchAll(/(["'`])((?:(?!\1).)*)\1/g)) {
+    const from = (m.index ?? 0) + m[0].length;
+    const args = text.slice(from, closingParen(text, from));
+    for (const s of args.matchAll(STRING_LITERAL)) {
       give(s[2] ?? "");
     }
   }
-  for (const s of text.matchAll(/(["'`])((?:(?!\1)[^\n])*)\1/g)) {
+}
+
+/** Every other string: a maybe-class, a selector handed to a helper, or a rule the script injects. */
+function literals(text: string, file: string, offset: number): void {
+  for (const s of text.matchAll(LINE_STRING)) {
     const literal = s[2] ?? "";
     give(literal, maybe);
     const at = `${file}:${lineAt(text, s.index ?? 0) + offset}`;
     // A selector handed to any helper (`nestFrom(".x")`, `linkOrRefusal(…, ".x")`).
     if (SELECTORISH.test(literal) && !NOT_SELECTOR.test(literal)) {
-      for (const name of classesOf(literal)) {
-        select(name, at);
-      }
+      selectAll(classesOf(literal), at);
     }
-    // CSS a script injects (`".x > * { display: none }"`).
-    if (/^[^{}]+\{[^{}]*\}\s*$/.test(literal)) {
-      for (const name of classesOf(literal.slice(0, literal.indexOf("{")))) {
-        select(name, at);
-      }
+    if (INJECTED_RULE.test(literal)) {
+      selectAll(classesOf(literal.slice(0, literal.indexOf("{"))), at);
     }
   }
 }
 
+/** A script's own selector strings and class writes. */
+function script(source: string, file: string, offset: number): void {
+  const text = uncommented(source);
+  queries(text, file, offset);
+  provideCalls(text);
+  literals(text, file, offset);
+}
+
+/** What each `:global(…)` in a selector prelude holds. */
+function globalArguments(prelude: string): string[] {
+  return [...prelude.matchAll(GLOBAL_OPEN)].map((g) => {
+    const from = (g.index ?? 0) + g[0].length;
+    return prelude.slice(from, closingParen(prelude, from));
+  });
+}
+
 /** A stylesheet's class selectors (all of them, or only inside :global()). */
-function sheet(css: string, file: string, offset: number, globalOnly: boolean): void {
-  const noComments = css.replace(/\/\*[\s\S]*?\*\//g, (c) =>
-    c.replace(/[^\n]/g, " ")
-  );
-  const preludes = /([^{};]+)\{/g;
-  for (const m of noComments.matchAll(preludes)) {
+function sheet(
+  css: string,
+  file: string,
+  offset: number,
+  globalOnly: boolean
+): void {
+  const noComments = css.replace(BLOCK_COMMENT, blank);
+  for (const m of noComments.matchAll(PRELUDE)) {
     const prelude = m[1] ?? "";
     if (prelude.trim().startsWith("@")) {
       continue;
     }
     const at = `${file}:${lineAt(noComments, m.index ?? 0) + offset}`;
-    if (globalOnly) {
-      for (const g of prelude.matchAll(/:global\(/g)) {
-        let depth = 0;
-        let end = (g.index ?? 0) + g[0].length;
-        for (; end < prelude.length; end += 1) {
-          if (prelude[end] === "(") {
-            depth += 1;
-          } else if (prelude[end] === ")") {
-            if (depth === 0) {
-              break;
-            }
-            depth -= 1;
-          }
-        }
-        for (const name of classesOf(
-          prelude.slice((g.index ?? 0) + g[0].length, end)
-        )) {
-          select(name, at);
-        }
-      }
-    } else {
-      for (const name of classesOf(prelude)) {
-        select(name, at);
-      }
+    const parts = globalOnly ? globalArguments(prelude) : [prelude];
+    for (const part of parts) {
+      selectAll(classesOf(part), at);
     }
   }
 }
@@ -340,19 +382,16 @@ for (const path of svelteFiles) {
     }
   }
   // Script inside markup expressions ({@attach}, handlers) reads selectors too.
-  script(
-    text.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, (b) =>
-      b.replace(/[^\n]/g, " ")
-    ),
-    file,
-    0
-  );
+  script(text.replace(SCRIPT_OR_STYLE, blank), file, 0);
   if (ast.css) {
-    const start = ast.css.content.start;
-    sheet(ast.css.content.styles, file, lineAt(text, start) - 1, true);
+    const { start, styles } = ast.css.content;
+    sheet(styles, file, lineAt(text, start) - 1, true);
   }
 }
-for (const path of walkFiles(SRC, (n) => n.endsWith(".ts") || n.endsWith(".js"))) {
+for (const path of walkFiles(
+  SRC,
+  (n) => n.endsWith(".ts") || n.endsWith(".js")
+)) {
   script(readFileSync(path, "utf8"), relative(ROOT, path), 0);
 }
 for (const path of [

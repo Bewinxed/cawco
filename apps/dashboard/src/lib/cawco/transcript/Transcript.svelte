@@ -3411,7 +3411,7 @@
   data-tx-columns
   data-slot="tr"
   aria-label="Session transcript"
-  style:--foot-room="max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"
+  style:--foot-room={"max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"}
   class="flex-auto overflow-y-auto py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   {onscroll}
   role="log"
@@ -3425,8 +3425,9 @@
     <p
       data-slot="transcript-empty"
       class="isolate text-size-meta font-normal text-ink-muted py-space-5"
-      >Loading transcript…</p
     >
+      Loading transcript…
+    </p>
   {:else if renderedRows.length === 0 && !bare}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
@@ -3473,8 +3474,9 @@
       <p
         data-slot="transcript-empty"
         class="text-size-meta font-normal text-ink-muted py-space-5"
-        >Loading transcript…</p
       >
+        Loading transcript…
+      </p>
     {/if}
   </div>
 
@@ -3654,7 +3656,7 @@
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight + shelfHeight}px"
-    style:--dock-bottom="calc(var(--foot-room) + var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))))"
+    style:--dock-bottom={"calc(var(--foot-room) + var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}

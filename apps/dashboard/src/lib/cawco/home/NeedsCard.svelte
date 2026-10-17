@@ -373,7 +373,7 @@
   data-peek={peeks || undefined}
   data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
   data-stale={held || undefined}
-  style:--peek-ink="calc((24px - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
+  style:--peek-ink={"calc((24px - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
   style:--peek-room="calc(24px - var(--peek-ink) + var(--space-2))"
   style:--row-cols="auto minmax(0, 1fr) auto"
   style:--row-min="44px"
@@ -550,10 +550,8 @@
       <span class="flex-none"
         >{item.isQuestion ? "Question" : "Permission"}</span
       >
-      <span
-        data-slot="dot"
-        aria-hidden="true"
-        class="flex-none text-ink-muted">·</span
+      <span data-slot="dot" aria-hidden="true" class="flex-none text-ink-muted"
+        >·</span
       >
       <span
         data-slot="machine"
@@ -595,8 +593,9 @@
       <dd
         data-slot="tool"
         class="m-0 font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
-        >{call.tool}</dd
       >
+        {call.tool}
+      </dd>
     </dl>
     <!-- A scroller with no focusable child is itself in the tab order
          (keyboard-focusable scrollers), so a keyboard scrolls it too. The
@@ -673,10 +672,8 @@
         >
       {/if}
       <span class="flex-none">Task</span>
-      <span
-        data-slot="dot"
-        aria-hidden="true"
-        class="flex-none text-ink-muted">·</span
+      <span data-slot="dot" aria-hidden="true" class="flex-none text-ink-muted"
+        >·</span
       >
       <span class="flex-none num">{item.taskId}</span>
     </span>
@@ -789,10 +786,7 @@
       class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
     >
       {#if refusal}
-        <ErrorText
-          message={refusal}
-          title="The hub refused that answer"
-        />
+        <ErrorText message={refusal} title="The hub refused that answer" />
       {/if}
       <Button
         data-deny
@@ -827,10 +821,7 @@
       class="relative col-start-2 col-end-4 row-6 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
     >
       {#if refusal}
-        <ErrorText
-          message={refusal}
-          title="The hub refused that decision"
-        />
+        <ErrorText message={refusal} title="The hub refused that decision" />
       {/if}
       {#if approvable}
         <Button

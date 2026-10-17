@@ -429,11 +429,14 @@
             ><MorphText text={words.text} /></a
           >
           {#if words.more > 0}
-            <span data-num data-slot="more" class="num text-ink-muted">+{words.more}</span
+            <span data-num data-slot="more" class="num text-ink-muted"
+              >+{words.more}</span
             >
           {/if}
         {:else if words}
-          <span class="min-w-0 overflow-hidden text-ellipsis"><MorphText text={words.text} /></span>
+          <span class="min-w-0 overflow-hidden text-ellipsis"
+            ><MorphText text={words.text} /></span
+          >
         {:else}
           <!-- The place is a press, as the name is: the project's details
                unfold under the head. -->
@@ -456,7 +459,9 @@
             {#if machine}
               <OsMark class="size-icon-sm flex-none" os={machine.os} />
             {/if}
-            <span class="min-w-0 overflow-hidden text-ellipsis"><MorphText text={place} /></span>
+            <span class="min-w-0 overflow-hidden text-ellipsis"
+              ><MorphText text={place} /></span
+            >
           </button>
           {#if checkouts > 1}
             <button
@@ -480,7 +485,8 @@
       <!-- No checkout yet: a session needs a machine and folder, which the
            New Session dialog asks for. -->
       <Button
-        class="max-phone:hidden" press="pressable"
+        class="max-phone:hidden"
+        press="pressable"
         onclick={() => newSession({ projectId: project.id })}
         >New session</Button
       >
@@ -492,7 +498,9 @@
           }}
         >
           {#snippet child({ props })}
-            <Button {...props} class="max-phone:hidden" press="pressable">New session</Button>
+            <Button {...props} class="max-phone:hidden" press="pressable"
+              >New session</Button
+            >
           {/snippet}
         </Popover.Trigger>
         <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). Over
@@ -552,7 +560,8 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="max-phone:hidden" press="pressable"
+        class="max-phone:hidden"
+        press="pressable"
         data-share="session:new"
         data-share-ttl="8000"
         disabled={starting !== null && starting !== "spin"}

@@ -211,7 +211,7 @@
       ]}
       style:--grabber-h="6px"
       style:--grabber-w="100px"
-      style:--grip-r="max(0px, calc(var(--corner-r) - var(--c-corner-grip-inset)))"
+      style:--grip-r={"max(0px, calc(var(--corner-r) - var(--c-corner-grip-inset)))"}
     ></span>
   </div>
 {/snippet}

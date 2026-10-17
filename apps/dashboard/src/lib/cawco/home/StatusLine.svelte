@@ -49,7 +49,10 @@
         out:crossOut
       >
         {#if home.status === "unreachable"}
-          <span data-slot="down" class="mark-line inline-flex items-center gap-space-1 text-status-fail-ink">
+          <span
+            data-slot="down"
+            class="mark-line inline-flex items-center gap-space-1 text-status-fail-ink"
+          >
             <IconWarningTriangle aria-hidden="true" />
             <span
               >Hub unreachable,

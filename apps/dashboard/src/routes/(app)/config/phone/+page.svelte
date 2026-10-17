@@ -175,7 +175,10 @@
       </p>
     {/each}
     {#if devices.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--note-measure) text-ink-muted"
+      >
         Your devices will appear here. Open the CawCo app on your phone and
         allow notifications to register it.
       </p>
@@ -237,7 +240,9 @@
         class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
         role="alert"
         transition:unfold
-      >{deviceError}</p>
+      >
+        {deviceError}
+      </p>
     {/if}
   </div>
 </SectionFrame>

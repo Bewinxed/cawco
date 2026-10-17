@@ -85,7 +85,9 @@
           class="flex min-h-0 min-w-0 flex-col bg-surface-recess"
           in:pageIn
           out:pageOut
-        >{@render children()}</div>
+        >
+          {@render children()}
+        </div>
       {/key}
     </div>
   </div>

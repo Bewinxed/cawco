@@ -144,11 +144,17 @@
             {:else}
               <IconChevronRight class="size-icon-md flex-none text-ink-muted" />
             {/if}
-            <OsMark class="size-icon-md flex-none text-ink-muted" os={machine.os} />
+            <OsMark
+              class="size-icon-md flex-none text-ink-muted"
+              os={machine.os}
+            />
             <span data-slot="host" class="type-label text-ink-strong"
               >{machineLabel(machine.hostname)}</span
             >
-            <span data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">
+            <span
+              data-slot="note"
+              class="max-w-(--inv-measure) type-meta text-ink-muted"
+            >
               {#if open[machine.machineId]}
                 Hide
               {:else if machine.status === "online"}
@@ -174,7 +180,10 @@
                 <AlertDescription>{unread[machine.machineId]}</AlertDescription>
               </Alert>
             {:else if rows.length === 0}
-              <p data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">
+              <p
+                data-slot="note"
+                class="max-w-(--inv-measure) type-meta text-ink-muted"
+              >
                 {kind === "mcp"
                   ? "This machine has no MCP servers at all."
                   : "This machine has no skills at all."}
@@ -193,11 +202,14 @@
                       data-slot="text"
                       class="flex min-w-0 grow basis-(--inv-text-basis) flex-col gap-space-row"
                     >
-                      <span class="flex flex-wrap items-center gap-(--inv-tight)">
+                      <span
+                        class="flex flex-wrap items-center gap-(--inv-tight)"
+                      >
                         <span
                           data-slot="name"
                           class="font-(family-name:--font-mono) text-size-meta text-ink-strong"
-                          >{row.name}</span>
+                          >{row.name}</span
+                        >
                         <Badge variant="outline"><span>{row.scope}</span></Badge
                         >
                         {#if row.managed}
@@ -210,7 +222,9 @@
                         {/if}
                       </span>
                       {#if "description" in row && row.description}
-                        <span data-slot="note" class="line-clamp-2 max-w-(--inv-measure) type-meta text-ink-muted"
+                        <span
+                          data-slot="note"
+                          class="line-clamp-2 max-w-(--inv-measure) type-meta text-ink-muted"
                           >{row.description}</span
                         >
                       {/if}
@@ -229,7 +243,11 @@
                         variant="outline"
                       />
                     {:else if taken.includes(row.name) && !row.managed}
-                      <span data-slot="note" class="max-w-(--inv-measure) type-meta text-ink-muted">In the fleet</span>
+                      <span
+                        data-slot="note"
+                        class="max-w-(--inv-measure) type-meta text-ink-muted"
+                        >In the fleet</span
+                      >
                     {/if}
                     <RowFault class="basis-full" reason={adoptFailed[key]} />
                   </li>

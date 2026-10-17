@@ -203,9 +203,9 @@
               </li>
             {/if}
           {:else}
-            <li class="m-0 px-space-3 py-space-2 type-meta text-ink-muted"
-              >No session matches “{search}”.</li
-            >
+            <li class="m-0 px-space-3 py-space-2 type-meta text-ink-muted">
+              No session matches “{search}”.
+            </li>
           {/each}
         </ul>
         {#if recentMatches.length > recentListed}
@@ -226,4 +226,3 @@
     {/if}
   </section>
 {/if}
-

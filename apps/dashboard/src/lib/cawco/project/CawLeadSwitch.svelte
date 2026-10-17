@@ -118,8 +118,10 @@
 </label>
 {#if turnLine}
   <div
-  class="flex min-h-c-btn-h-sm flex-wrap items-center gap-space-2"
-  data-caw-turn-line transition:unfold>
+    class="flex min-h-c-btn-h-sm flex-wrap items-center gap-space-2"
+    data-caw-turn-line
+    transition:unfold
+  >
     <span class="type-meta min-w-0 shrink grow basis-full text-ink-muted"
       >{turnLine.title ?? "Answering an event"}. Off, it can finish or stop now.</span
     >
@@ -153,5 +155,7 @@
   />
 {/if}
 {#if lead.refused}
-  <p data-slot="refused" class="type-meta text-error-11" role="alert">{lead.refused}</p>
+  <p data-slot="refused" class="type-meta text-error-11" role="alert">
+    {lead.refused}
+  </p>
 {/if}

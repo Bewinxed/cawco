@@ -131,9 +131,7 @@
         <IconPalette class="size-icon-md" />
         <span>Customize</span>
       </ContextMenu.SubTrigger>
-      <ContextMenu.SubContent
-        class="w-64 rounded-lg p-3 shadow-xl"
-      >
+      <ContextMenu.SubContent class="w-64 rounded-lg p-3 shadow-xl">
         <div class="flex items-center justify-between pb-2 pl-space-1">
           <span class="text-label font-medium text-ink-muted">Colour</span>
           {#if pickedHue !== undefined}
@@ -172,7 +170,8 @@
                    colour it would apply, at the ink lightness it lands on. -->
               <span
                 class="identity-ink size-icon-lg rounded-full bg-current"
-                style:--identity-h={hue}              ></span>
+                style:--identity-h={hue}
+              ></span>
             </button>
           {/each}
         </div>

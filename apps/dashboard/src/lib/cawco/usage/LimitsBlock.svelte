@@ -130,8 +130,7 @@
           >
             <span data-slot="what" class="min-w-0 truncate"
               >{#if project}
-                <span data-slot="project" class="text-ink-muted"
-                  >{project}</span
+                <span data-slot="project" class="text-ink-muted">{project}</span
                 >
               {/if}
               {titleOf(row)}</span
@@ -179,7 +178,10 @@
     </div>
     <div data-slot="mark" class="flex items-center gap-space-4">
       <Rings {index} reveal {ring} size={56} />
-      <span class="flex min-w-0 flex-col gap-(--figure-gap)" style:--figure-gap="3px">
+      <span
+        class="flex min-w-0 flex-col gap-(--figure-gap)"
+        style:--figure-gap="3px"
+      >
         <span
           data-slot="value"
           class="type-title num text-ink-strong data-muted:text-ink-muted"
@@ -193,7 +195,8 @@
               class="me-(--glyph-gap) inline-grid align-(--glyph-lift) text-ink-muted"
               style:--glyph-gap="0.25em"
               style:--glyph-lift="-0.1em"
-              style:--glyph-size="0.8em"><IconRefresh class="size-(--glyph-size)" /></span
+              style:--glyph-size="0.8em"
+              ><IconRefresh class="size-(--glyph-size)" /></span
             >
           {/if}
           <Figure text={figure.figure} /></span
@@ -213,7 +216,9 @@
   class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-tile max-phone:p-space-4"
   style:--ring-ground="var(--surface-recess)"
 >
-  <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">Limits</h2>
+  <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
+    Limits
+  </h2>
 
   {#if !read}
     <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
@@ -239,7 +244,10 @@
         style:--lead-gap="6px"
       >
         <!-- literal: 10px -->
-        <p class="flex flex-wrap items-baseline gap-(--big-gap)" style:--big-gap="10px">
+        <p
+          class="flex flex-wrap items-baseline gap-(--big-gap)"
+          style:--big-gap="10px"
+        >
           <!-- literal: -0.02em, 0.25em, -0.1em, 0.8em -->
           <span
             data-slot="num"
@@ -253,7 +261,8 @@
                 class="me-(--glyph-gap) inline-grid align-(--glyph-lift) text-ink-muted"
                 style:--glyph-gap="0.25em"
                 style:--glyph-lift="-0.1em"
-                style:--glyph-size="0.8em"><IconRefresh class="size-(--glyph-size)" /></span
+                style:--glyph-size="0.8em"
+                ><IconRefresh class="size-(--glyph-size)" /></span
               >
             {/if}
             <Figure text={lead.figure} /></span

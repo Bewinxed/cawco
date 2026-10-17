@@ -79,6 +79,14 @@
   });
   const labelled = $derived(tasks.some((task) => task.labels.length > 0));
   const planned = $derived(tasks.some((task) => task.todos.total > 0));
+  /** The cells that draw themselves their own way; every other takes the plain cell. */
+  const SPECIAL_CELLS = new Set([
+    "pick",
+    "title",
+    "labels",
+    "created",
+    "updated",
+  ]);
   /** A column the ledger holds in its own order. */
   const fixed = { enableSorting: false } as const;
   /** A time column: sorted by its ms epoch, newest first on the first pick. */
@@ -223,11 +231,15 @@
             <!-- literal: calc(1rem + 2 * var(--space-3)), 6.5rem, 12rem, 14rem, 6rem, 7rem -->
             <Table.Head
               aria-sort={sort}
-              class={column.id === "created"
-                ? "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted text-end @max-decisions-900px:hidden"
-                : column.id === "updated"
-                  ? "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted text-end"
-                  : "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted"}
+              class={[
+                column.id === "created" &&
+                  "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted text-end @max-decisions-900px:hidden",
+                column.id === "updated" &&
+                  "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted text-end",
+                column.id !== "created" &&
+                  column.id !== "updated" &&
+                  "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted",
+              ]}
               data-task-table-col={column.id}
               scope="col"
               style="--col-w: {{
@@ -296,17 +308,20 @@
         >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
-              class={cell.column.id === "pick"
-                ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-(--pick-row) max-phone:col-start-1"
-                : cell.column.id === "title"
-                  ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1"
-                  : cell.column.id === "labels"
-                    ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:hidden"
-                    : cell.column.id === "created"
-                      ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent @max-decisions-900px:hidden"
-                      : cell.column.id === "updated"
-                        ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5"
-                        : "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current"}
+              class={[
+                cell.column.id === "pick" &&
+                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-(--pick-row) max-phone:col-start-1",
+                cell.column.id === "title" &&
+                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
+                cell.column.id === "labels" &&
+                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:hidden",
+                cell.column.id === "created" &&
+                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent @max-decisions-900px:hidden",
+                cell.column.id === "updated" &&
+                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
+                !SPECIAL_CELLS.has(cell.column.id) &&
+                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current",
+              ]}
               data-task-table-col={cell.column.id}
             >
               {#if cell.column.id === "pick"}

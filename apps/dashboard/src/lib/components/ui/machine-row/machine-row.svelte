@@ -34,10 +34,13 @@
   class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised text-(--tile-hue) shadow-tile data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none"
   data-ink={ink || undefined}
   style:--tile="26px"
-  style:--tile-hue={ink ? undefined : hue}><Icon class="size-icon-md flex-none" /></span
+  style:--tile-hue={ink ? undefined : hue}
+  ><Icon class="size-icon-md flex-none" /></span
 >
 <span data-slot="text" class="min-w-0 flex-1">
-  <span data-slot="name" class="type-label block truncate text-ink-strong">{name}</span>
+  <span data-slot="name" class="type-label block truncate text-ink-strong"
+    >{name}</span
+  >
   <!-- literal: 6px -->
   <span
     data-slot="meta"
@@ -51,8 +54,7 @@
       data-is-away={presence === "away" || undefined}
       data-is-online={presence === "online" || undefined}
       style:--dot="6px"
-    ></span
-    ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+    ></span><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{meta}</span
     ></span
   >

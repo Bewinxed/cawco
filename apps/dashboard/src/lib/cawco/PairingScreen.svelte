@@ -62,7 +62,12 @@
         out:crossOut
       >
         {#if stage.kind === "waiting"}
-          <h1 data-slot="title" class="m-0 type-title text-center text-balance text-ink-strong">Pair this browser</h1>
+          <h1
+            data-slot="title"
+            class="m-0 type-title text-center text-balance text-ink-strong"
+          >
+            Pair this browser
+          </h1>
           <!-- literal: 26rem -->
           <p
             class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
@@ -71,16 +76,29 @@
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices, or in Telegram.
           </p>
-          <p data-num data-slot="code" class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 font-(family-name:--font-mono) text-size-kpi leading-none font-medium text-ink-stat select-all">
+          <p
+            data-num
+            data-slot="code"
+            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 font-(family-name:--font-mono) text-size-kpi leading-none font-medium text-ink-stat select-all"
+          >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
-          <p data-num data-slot="meta" class="num m-0 type-meta text-center text-ink-muted">
+          <p
+            data-num
+            data-slot="meta"
+            class="num m-0 type-meta text-center text-ink-muted"
+          >
             Waiting for approval… The code expires {left < 60_000
               ? "in under a minute"
               : `in ${Math.ceil(left / 60_000)} min`}.
           </p>
         {:else if stage.kind === "denied"}
-          <h1 data-slot="title" class="m-0 type-title text-center text-balance text-ink-strong">Pairing was denied</h1>
+          <h1
+            data-slot="title"
+            class="m-0 type-title text-center text-balance text-ink-strong"
+          >
+            Pairing was denied
+          </h1>
           <!-- literal: 26rem -->
           <p
             class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
@@ -91,7 +109,12 @@
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "expired"}
-          <h1 data-slot="title" class="m-0 type-title text-center text-balance text-ink-strong">The code expired</h1>
+          <h1
+            data-slot="title"
+            class="m-0 type-title text-center text-balance text-ink-strong"
+          >
+            The code expired
+          </h1>
           <!-- literal: 26rem -->
           <p
             class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
@@ -101,20 +124,32 @@
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "failed"}
-          <h1 data-slot="title" class="m-0 type-title text-center text-balance text-ink-strong">Pairing didn't start</h1>
+          <h1
+            data-slot="title"
+            class="m-0 type-title text-center text-balance text-ink-strong"
+          >
+            Pairing didn't start
+          </h1>
           <ErrorText
             message={stage.message}
             title="The hub refused to start pairing"
           />
           <Button onclick={startPairing}>Start pairing</Button>
         {:else}
-          <h1 data-slot="title" class="m-0 type-title text-center text-balance text-ink-strong">Pair this browser</h1>
+          <h1
+            data-slot="title"
+            class="m-0 type-title text-center text-balance text-ink-strong"
+          >
+            Pair this browser
+          </h1>
           <!-- literal: 26rem -->
           <p
             aria-live="polite"
             class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
             style:--line-measure="26rem"
-          >Asking the hub for a code…</p>
+          >
+            Asking the hub for a code…
+          </p>
         {/if}
       </div>
     {/key}

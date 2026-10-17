@@ -231,7 +231,10 @@
               <span class="sr-only">Open {titleOf(step)}</span>
             </a>
           {/if}
-          <span data-slot="time" data-num class="num flex-none text-size-meta text-ink-muted"
+          <span
+            data-slot="time"
+            data-num
+            class="num flex-none text-size-meta text-ink-muted"
             >{duration(step.startedAt, step.endedAt, clock.now)}</span
           >
           {#if foldable}

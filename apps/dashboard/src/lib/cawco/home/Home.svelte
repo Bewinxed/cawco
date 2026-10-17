@@ -183,11 +183,7 @@
     {#if machinesThere}
       <!-- Anchored as New project's ask is (its page pads --space-7 on a
            phone): the groups' own top padding and this margin make that. -->
-      <div
-        data-slot="machines"
-        class="mx-0 mt-space-5 mb-space-6"
-        data-flip
-      >
+      <div data-slot="machines" class="mx-0 mt-space-5 mb-space-6" data-flip>
         <MachinesEmpty
           fleet={machinesThere}
           ongone={() => {

@@ -59,7 +59,7 @@
     class={cn(
       "kit-pop z-50 flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
       bare &&
-        "border-none border-current bg-transparent bg-none p-0 shadow-none",
+        "border-current border-none bg-none bg-transparent p-0 shadow-none",
       className
     )}
     collisionPadding={inset}

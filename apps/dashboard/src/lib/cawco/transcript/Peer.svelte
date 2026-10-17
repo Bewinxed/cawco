@@ -208,8 +208,9 @@
       <p
         data-slot="reason"
         class="mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink rail-hang"
-        >{meta.sendFailed}</p
       >
+        {meta.sendFailed}
+      </p>
     {/if}
     <Collapsible.Content reveal>
       <div data-slot="body" class="mt-space-2 rail-hang">

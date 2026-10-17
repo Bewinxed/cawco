@@ -15,21 +15,34 @@ import { join, resolve } from "node:path";
 const ROOT = resolve(import.meta.dir, "..");
 const LEDGER = join(ROOT, ".cutover", "ledger.md");
 const OUT = join(ROOT, ".cutover", "clearance.md");
-const TOKENS = join(ROOT, "apps", "dashboard", "src", "lib", "tokens", "tokens.css");
+const TOKENS = join(
+  ROOT,
+  "apps",
+  "dashboard",
+  "src",
+  "lib",
+  "tokens",
+  "tokens.css"
+);
 
-interface Set {
+/** One 1b lane's files. */
+interface LaneSet {
   id: string;
   name: string;
-  takes: (file: string) => boolean;
   /** A kit set: the kit parts whose consumer hits it makes variants for. */
   owns?: (part: string) => boolean;
+  takes: (file: string) => boolean;
 }
 
-const under = (...dirs: string[]) => (file: string) =>
-  dirs.some((dir) => file.startsWith(`src/${dir}/`));
+const under =
+  (...dirs: string[]) =>
+  (file: string) =>
+    dirs.some((dir) => file.startsWith(`src/${dir}/`));
 const TOP = "src/lib/cawco/";
-const top = (...names: string[]) => (file: string) =>
-  names.some((name) => file === `${TOP}${name}.svelte`);
+const top =
+  (...names: string[]) =>
+  (file: string) =>
+    names.some((name) => file === `${TOP}${name}.svelte`);
 const SHELL_FAMILY = [
   "GlassCard",
   "NeedsCaw",
@@ -47,7 +60,7 @@ const SHELL_FAMILY = [
   "TreeMark",
 ];
 
-const SETS: Set[] = [
+const SETS: LaneSet[] = [
   {
     id: "K1",
     name: "kit: the table parts",
@@ -63,7 +76,11 @@ const SETS: Set[] = [
   { id: "1", name: "transcript", takes: under("lib/cawco/transcript") },
   { id: "2", name: "usage", takes: under("lib/cawco/usage") },
   { id: "3", name: "tasks", takes: under("lib/cawco/tasks") },
-  { id: "4", name: "routines and views", takes: under("lib/cawco/routines", "lib/cawco/views") },
+  {
+    id: "4",
+    name: "routines and views",
+    takes: under("lib/cawco/routines", "lib/cawco/views"),
+  },
   {
     id: "5",
     name: "home, workspace, side, project, preview, plan",
@@ -76,17 +93,28 @@ const SETS: Set[] = [
       "lib/cawco/plan"
     ),
   },
-  { id: "6", name: "cawco top level: the shell, sidebar and session rows", takes: top(...SHELL_FAMILY) },
+  {
+    id: "6",
+    name: "cawco top level: the shell, sidebar and session rows",
+    takes: top(...SHELL_FAMILY),
+  },
   {
     id: "7",
     name: "cawco top level: everything else",
     takes: (file) =>
-      file.startsWith(TOP) && !file.slice(TOP.length).includes("/") && !top(...SHELL_FAMILY)(file),
+      file.startsWith(TOP) &&
+      !file.slice(TOP.length).includes("/") &&
+      !top(...SHELL_FAMILY)(file),
   },
   {
     id: "8",
     name: "config, updates, accounts, spawn",
-    takes: under("lib/cawco/config", "lib/cawco/updates", "lib/cawco/accounts", "lib/cawco/spawn"),
+    takes: under(
+      "lib/cawco/config",
+      "lib/cawco/updates",
+      "lib/cawco/accounts",
+      "lib/cawco/spawn"
+    ),
   },
   {
     id: "9",
@@ -126,16 +154,22 @@ const restyle = new Map<string, Restyle[]>();
     }
     const head = /^### (\S+) \(\d+\)$/.exec(line);
     if (head) {
-      file = head[1];
+      [, file] = head;
       continue;
     }
     if (section.startsWith("## Kind-5")) {
       const m = /^- :(\d+) `(.*)`$/.exec(line);
       if (m) {
-        kind5.set(file, [...(kind5.get(file) ?? []), { line: Number(m[1]), text: m[2] }]);
+        kind5.set(file, [
+          ...(kind5.get(file) ?? []),
+          { line: Number(m[1]), text: m[2] },
+        ]);
       }
     } else if (section.startsWith("## ESLint")) {
-      const m = /^- :(\d+) shadcn\/no-restyle · "([^"]+)" is not allowed on <([^>]+)>/.exec(line);
+      const m =
+        /^- :(\d+) shadcn\/no-restyle · "([^"]+)" is not allowed on <([^>]+)>/.exec(
+          line
+        );
       if (m) {
         restyle.set(file, [
           ...(restyle.get(file) ?? []),
@@ -147,7 +181,7 @@ const restyle = new Map<string, Restyle[]>();
 }
 
 const files = [...new Set([...kind5.keys(), ...restyle.keys()])].sort();
-const setOf = new Map<string, Set>();
+const setOf = new Map<string, LaneSet>();
 for (const file of files) {
   const set = SETS.find((s) => s.takes(file));
   if (!set) {
@@ -171,9 +205,29 @@ const norm = (v: string) =>
     .replace(/\s+/g, " ")
     .replace(/\s*,\s*/g, ", ")
     .trim();
-const tokenOf = new Map([...tokens].map(([name, value]) => [norm(value), name.slice(2)]));
+const tokenOf = new Map(
+  [...tokens].map(([name, value]) => [norm(value), name.slice(2)])
+);
 
-const count = (file: string) => [kind5.get(file)?.length ?? 0, restyle.get(file)?.length ?? 0];
+/** What a kind-5 transition becomes: its token, `transition-off`, or the list form the rules give. */
+function utilityFor(t: { text: string; token?: string }): string {
+  if (t.token) {
+    return `\`${t.token}\``;
+  }
+  const value = t.text.slice("transition: ".length).trim();
+  if (value === "none") {
+    return "`transition-off`";
+  }
+  if (value === "var(--step-aside)") {
+    return "`transition-fade-show` (the value Composer sets `--step-aside` to)";
+  }
+  return "no token: `transition-[…]` with `duration-(--…)`/`ease-(--…)` lists set on the element, or one duration and easing as the lane rule writes it (“Transitions” above)";
+}
+
+const count = (file: string) => [
+  kind5.get(file)?.length ?? 0,
+  restyle.get(file)?.length ?? 0,
+];
 const sum = (list: string[]) =>
   list.reduce(
     (acc, file) => {
@@ -186,12 +240,16 @@ const sum = (list: string[]) =>
 const byPart = new Map<string, { file: string; line: number; cls: string }[]>();
 for (const [file, hits] of restyle) {
   for (const h of hits) {
-    byPart.set(h.part, [...(byPart.get(h.part) ?? []), { file, line: h.line, cls: h.cls }]);
+    byPart.set(h.part, [
+      ...(byPart.get(h.part) ?? []),
+      { file, line: h.line, cls: h.cls },
+    ]);
   }
 }
-const partsOf = (set: Set) =>
+const partsOf = (set: LaneSet) =>
   set.owns ? [...byPart].filter(([part]) => set.owns?.(part)) : [];
-const partHits = (set: Set) => partsOf(set).reduce((n, [, hits]) => n + hits.length, 0);
+const partHits = (set: LaneSet) =>
+  partsOf(set).reduce((n, [, hits]) => n + hits.length, 0);
 
 const md: string[] = [];
 const total = sum(files);
@@ -201,7 +259,9 @@ md.push(
   `Generated by \`bun .cutover/clearance.ts\` from \`.cutover/ledger.md\`. What 1a leaves: ${total[0]} kind-5 declarations (\`bun scripts/style-residual-check.ts --list\`) and ${total[1]} \`shadcn/no-restyle\` messages (\`cd apps/dashboard && bunx eslint src\`), in ${files.length} files. Every other ESLint rule is at 0. Sites are relative to \`apps/dashboard/\`.`
 );
 md.push("");
-md.push(readFileSync(join(ROOT, ".cutover", "clearance-rules.md"), "utf8").trimEnd());
+md.push(
+  readFileSync(join(ROOT, ".cutover", "clearance-rules.md"), "utf8").trimEnd()
+);
 md.push("");
 md.push("## The sets");
 md.push("");
@@ -221,7 +281,9 @@ for (const set of SETS) {
   const mine = files.filter((f) => setOf.get(f) === set);
   const [k, r] = sum(mine);
   md.push("");
-  md.push(`### Set ${set.id}: ${set.name} (${mine.length} files, ${k} kind-5, ${r} no-restyle)`);
+  md.push(
+    `### Set ${set.id}: ${set.name} (${mine.length} files, ${k} kind-5, ${r} no-restyle)`
+  );
   if (set.owns) {
     md.push("");
     md.push(
@@ -243,16 +305,18 @@ for (const set of SETS) {
   const transitions = mine.flatMap((file) =>
     (kind5.get(file) ?? [])
       .filter((h) => h.text.startsWith("transition: "))
-      .map((h) => ({ file, ...h, token: tokenOf.get(norm(h.text.slice("transition: ".length))) }))
+      .map((h) => ({
+        file,
+        ...h,
+        token: tokenOf.get(norm(h.text.slice("transition: ".length))),
+      }))
   );
   if (transitions.length > 0) {
     md.push("");
     md.push("Its kind-5 transitions:");
     md.push("");
     for (const t of transitions) {
-      md.push(
-        `- \`${t.file}:${t.line}\` → ${t.token ? `\`${t.token}\`` : "no token: see “Transitions” above"} (\`${t.text}\`)`
-      );
+      md.push(`- \`${t.file}:${t.line}\` → ${utilityFor(t)} (\`${t.text}\`)`);
     }
   }
 }
@@ -262,7 +326,9 @@ md.push("");
 md.push(
   "Each kit part, its hits, and each consumer site with the classes it passes that the part's recipe should own. Sites are the line ESLint reports."
 );
-for (const [part, hits] of [...byPart].sort((a, b) => b[1].length - a[1].length)) {
+for (const [part, hits] of [...byPart].sort(
+  (a, b) => b[1].length - a[1].length
+)) {
   md.push("");
   md.push(`### <${part}> (${hits.length})`);
   md.push("");
@@ -272,7 +338,9 @@ for (const [part, hits] of [...byPart].sort((a, b) => b[1].length - a[1].length)
     bySite.set(site, [...(bySite.get(site) ?? []), h.cls]);
   }
   for (const [site, classes] of bySite) {
-    md.push(`- \`${site}\` (set ${setOf.get(site.replace(/:\d+$/, ""))?.id}): ${classes.map((c) => `\`${c}\``).join(" ")}`);
+    md.push(
+      `- \`${site}\` (set ${setOf.get(site.replace(/:\d+$/, ""))?.id}): ${classes.map((c) => `\`${c}\``).join(" ")}`
+    );
   }
 }
 writeFileSync(OUT, `${md.join("\n")}\n`);
@@ -283,5 +351,7 @@ for (const set of SETS) {
     `${set.id.padEnd(3)} ${String(mine.length).padStart(3)} files  ${String(k).padStart(4)} kind-5  ${String(r).padStart(5)} no-restyle${set.owns ? `  (${partHits(set)} kit hits)` : ""}  ${set.name}`
   );
 }
-console.log(`all ${files.length} files  ${total[0]} kind-5  ${total[1]} no-restyle`);
+console.log(
+  `all ${files.length} files  ${total[0]} kind-5  ${total[1]} no-restyle`
+);
 console.log(`wrote ${OUT}`);

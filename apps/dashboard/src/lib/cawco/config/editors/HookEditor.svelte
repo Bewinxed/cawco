@@ -532,13 +532,19 @@
       bind:checked={draft.enabled}
     />
     {#if failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -561,12 +567,24 @@
       <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
     {:else if eventInfo}
       <!-- literal: 72ch -->
-      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">Runs {eventInfo.blurb}.</p>
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >
+        Runs {eventInfo.blurb}.
+      </p>
     {/if}
     {#if hookTakesMatcher(draft.event)}
       <!-- The matcher comes and goes with the event: it folds (240 / 160). -->
       <!-- literal: 8px -->
-      <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:unfold out:unfold>
+      <div
+        data-slot="fold"
+        class="flex flex-col gap-(--fold-gap)"
+        style:--fold-gap="8px"
+        in:unfold
+        out:unfold
+      >
         <Field
           id="hook-matcher"
           label="Matcher — {eventInfo?.filters}"
@@ -600,7 +618,11 @@
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -612,10 +634,19 @@
     />
     <!-- One handler's fields cross-fade into the next's (--dur-control) in
          one box, whose height follows over --dur-pop on --ease-drawer. -->
-    <div class="relative flex flex-col" {@attach morph({ ms: dur("--dur-pop") })}>
+    <div
+      class="relative flex flex-col"
+      {@attach morph({ ms: dur("--dur-pop") })}
+    >
       {#if draft.handler.type === "command"}
         <!-- literal: 8px -->
-        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-(--fold-gap)"
+          style:--fold-gap="8px"
+          in:crossIn
+          out:crossOut
+        >
           <Field
             hint="Written to every machine, at a path CawCo picks — the hook always points at that copy, never at one you keep locally."
             id="hook-script"
@@ -673,7 +704,13 @@
         </div>
       {:else if draft.handler.type === "http"}
         <!-- literal: 8px -->
-        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-(--fold-gap)"
+          style:--fold-gap="8px"
+          in:crossIn
+          out:crossOut
+        >
           <Field
             hint="Every machine posts the event's own JSON here — https, or localhost for something running on the same box."
             id="hook-url"
@@ -696,7 +733,14 @@
         </div>
       {:else if draft.handler.type === "mcp_tool"}
         <!-- literal: 8px, 12px -->
-        <div data-slot="pair" class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)" style:--pair-gap-x="12px" style:--pair-gap-y="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="pair"
+          class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)"
+          style:--pair-gap-x="12px"
+          style:--pair-gap-y="8px"
+          in:crossIn
+          out:crossOut
+        >
           <Field
             id="hook-server"
             label="MCP server"
@@ -732,7 +776,13 @@
         </div>
       {:else}
         <!-- literal: 8px -->
-        <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:crossIn out:crossOut>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-(--fold-gap)"
+          style:--fold-gap="8px"
+          in:crossIn
+          out:crossOut
+        >
           <Field id="hook-prompt" label="Prompt" problem={shown("prompt")}>
             <Textarea
               aria-invalid={shown("prompt") ? "true" : undefined}
@@ -748,7 +798,13 @@
           </Field>
           {#if draft.handler.type === "agent"}
             <!-- literal: 8px -->
-            <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:unfold out:unfold>
+            <div
+              data-slot="fold"
+              class="flex flex-col gap-(--fold-gap)"
+              style:--fold-gap="8px"
+              in:unfold
+              out:unfold
+            >
               <Field id="hook-agent" label="Subagent (optional)">
                 <Input
                   autocomplete="off"
@@ -790,7 +846,12 @@
       />
     </Field>
     <!-- literal: 8px, 12px -->
-    <div data-slot="pair" class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)" style:--pair-gap-x="12px" style:--pair-gap-y="8px">
+    <div
+      data-slot="pair"
+      class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y)"
+      style:--pair-gap-x="12px"
+      style:--pair-gap-y="8px"
+    >
       <Field
         id="hook-timeout"
         label="Timeout, seconds (optional)"
@@ -829,7 +890,11 @@
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <div>
@@ -855,14 +920,22 @@
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
         <!-- literal: 72ch -->
-        <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+        <p
+          data-slot="note"
+          class="type-meta max-w-(--measure) text-ink-muted"
+          style:--measure="72ch"
+        >
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
           <!-- literal: 72ch -->
-          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--measure) text-ink-muted"
+            style:--measure="72ch"
+          >
             In sync on
             {applied.length}
             machine{applied.length === 1 ? "" : "s"}.
@@ -872,7 +945,10 @@
             {/if}
           </p>
         {/if}
-        <ul data-slot="machines" class="m-0 flex list-none flex-col gap-space-row p-0">
+        <ul
+          data-slot="machines"
+          class="m-0 flex list-none flex-col gap-space-row p-0"
+        >
           {#each machines as machine, index (machine.machineId)}
             {@const item = stateOn(machine)}
             {@const online = machine.status === "online"}
@@ -953,14 +1029,19 @@
                   style:--said-px="8px"
                   style:--said-py="6px"
                   in:unfold
-                  out:unfold
-                >{item.detail}</pre>
+                  out:unfold>{item.detail}</pre>
               {/if}
               {#if comparingThis}
                 <!-- The machine's script folds open under its row; reading
                      cross-fades to what was read as the box follows. -->
                 <!-- literal: 8px -->
-                <div data-slot="fold" class="flex flex-col gap-(--fold-gap)" style:--fold-gap="8px" in:unfold out:unfold>
+                <div
+                  data-slot="fold"
+                  class="flex flex-col gap-(--fold-gap)"
+                  style:--fold-gap="8px"
+                  in:unfold
+                  out:unfold
+                >
                   <div class="relative flex flex-col" {@attach morph()}>
                     {#if peeking[machine.machineId]}
                       <!-- literal: 72ch, 8px -->
@@ -978,12 +1059,23 @@
                         >
                       </p>
                     {:else if unread[machine.machineId]}
-                      <p class="type-meta text-status-attn-ink" role="alert" in:crossIn out:crossOut>
+                      <p
+                        class="type-meta text-status-attn-ink"
+                        role="alert"
+                        in:crossIn
+                        out:crossOut
+                      >
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
                       <!-- literal: 72ch -->
-                      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" in:crossIn out:crossOut>
+                      <p
+                        data-slot="note"
+                        class="type-meta max-w-(--measure) text-ink-muted"
+                        style:--measure="72ch"
+                        in:crossIn
+                        out:crossOut
+                      >
                         This machine has no copy of this script.
                       </p>
                     {:else if copies[machine.machineId] !== undefined}

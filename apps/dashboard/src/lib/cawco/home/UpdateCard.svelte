@@ -332,7 +332,9 @@
               class="flex flex-col gap-space-1 pt-(--fold-air)"
               style:--fold-air="calc(2px + var(--space-1))"
             >
-              <div class="type-body text-ink-row"><ReleaseNotes source={notes.full} /></div>
+              <div class="type-body text-ink-row">
+                <ReleaseNotes source={notes.full} />
+              </div>
               {#if said}
                 {@render lines(notice)}
               {/if}

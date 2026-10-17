@@ -143,7 +143,7 @@
   <div
     class="flex flex-auto flex-col min-h-0 overflow-y-auto pt-space-2 px-space-5 pb-space-5 max-phone:pb-(--scroll-pb)"
     data-safe-bottom
-    style:--scroll-pb="calc(var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom))"
+    style:--scroll-pb={"calc(var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom))"}
     bind:this={scroller}
   >
     <!-- literal: 980px, 8px, 26px -->
@@ -180,7 +180,12 @@
             <section.icon />
           </span>
         {/if}
-        <div data-slot="lead" class="flex flex-auto flex-col gap-(--head-gap) min-w-0">{@render header()}</div>
+        <div
+          data-slot="lead"
+          class="flex flex-auto flex-col gap-(--head-gap) min-w-0"
+        >
+          {@render header()}
+        </div>
         {#if ondelete && deleteLabel}
           <span class="hidden max-phone:inline-flex">
             <DropdownMenu.Root>

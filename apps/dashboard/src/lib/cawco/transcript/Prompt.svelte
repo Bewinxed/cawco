@@ -984,13 +984,17 @@
         data-slot="lede"
         class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-(--measure) wrap-anywhere text-pretty"
         style:--measure="72ch"
-      >{presentation.summary}</p>
+      >
+        {presentation.summary}
+      </p>
       <!-- How much it changes and where, under it. -->
       {#if presentation.detail}
         <p
           data-slot="detail"
           class="text-size-label font-normal text-ink-muted mb-space-2"
-        >{presentation.detail}</p>
+        >
+          {presentation.detail}
+        </p>
       {/if}
       <!-- The command under the reason, in the transcript's command rule:
            one line, cut with an ellipsis, until its chevron opens it whole. -->
@@ -1055,14 +1059,16 @@
               data-slot="prompt-field"
               class="flex flex-col gap-space-1 min-w-0"
             >
-              <dt class="text-size-label font-medium text-ink-muted"
-                >{field.key}</dt
-              >
+              <dt class="text-size-label font-medium text-ink-muted">
+                {field.key}
+              </dt>
               <!-- literal: 200px -->
               <dd
                 class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap"
                 style:--value-max="200px"
-              >{field.value}</dd>
+              >
+                {field.value}
+              </dd>
             </div>
           {/each}
         </dl>
@@ -1127,9 +1133,7 @@
              --space-5). The permission scope actually being granted is
              consequential text — it reads at --text-label, never the
              10.25px micro-label step. -->
-        <div
-          class="mt-space-8 pt-space-5 border-t border-t-border-hairline"
-        >
+        <div class="mt-space-8 pt-space-5 border-t border-t-border-hairline">
           <!-- literal: 66ch -->
           <p
             class="text-size-body font-normal text-ink-muted mb-space-2 max-w-(--measure)"
@@ -1138,7 +1142,8 @@
             This would allow <span
               class="font-(family-name:--font-mono) text-size-label"
               >{rule.full}</span
-            > for
+            >
+            for
             {rule.scope}
             — a wider grant than the request above.
           </p>

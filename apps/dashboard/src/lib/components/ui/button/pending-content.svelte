@@ -221,14 +221,19 @@
     /></span
   >
   {#if arrivals}
-    <span aria-hidden="true" class="relative size-full pointer-events-none">{@render arrivals()}</span>
+    <span aria-hidden="true" class="relative size-full pointer-events-none"
+      >{@render arrivals()}</span
+    >
   {/if}
 </span>
 {#if label === undefined}
   <!-- Icon only: nothing to morph. -->
 {:else}
-  <span class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-start"
-    ><span class="transition-[opacity] dur-morph ease-out covered-true:opacity-0" data-covered={covered}
+  <span
+    class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-start"
+    ><span
+      class="transition-[opacity] dur-morph ease-out covered-true:opacity-0"
+      data-covered={covered}
       >{#if swapsLabel}
         <span class="inline-grid justify-items-start" data-slot="words"
           ><span

@@ -13,10 +13,7 @@
 </script>
 
 <PaneGroup
-  class={cn(
-    "flex h-full w-full data-[direction=vertical]:flex-col",
-    className
-  )}
+  class={cn("flex h-full w-full data-[direction=vertical]:flex-col", className)}
   data-slot="resizable-pane-group"
   bind:this={paneGroup}
   bind:ref

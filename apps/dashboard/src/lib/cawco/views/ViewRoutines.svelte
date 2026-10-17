@@ -624,8 +624,7 @@
       class="inline-flex text-status-attn-glyph"
       title={said.said}
       ><IconNeedsYou aria-hidden="true" class="size-icon-sm" /><span
-        class="sr-only"
-        >, {said.said}</span
+        class="sr-only">, {said.said}</span
       ></span
     >
   {/if}
@@ -695,7 +694,8 @@
 {/snippet}
 
 {#snippet routineRows(routine: Routine)}
-  {@const rule = sorted[0]?.id === routine.id ? "" : "border-t border-t-border-hairline"}
+  {@const rule =
+    sorted[0]?.id === routine.id ? "" : "border-t border-t-border-hairline"}
   {@const lead = LEAD[leadOf(routine)]}
   {@const line = scheduleLine(routine)}
   {@const last = lastOf(routine)}
@@ -852,10 +852,7 @@
 
 {#snippet routinesBody()}
   {#if empty}
-    <div
-      data-slot="starters"
-      class="w-full max-w-(--c-starters-w) p-space-3"
-    >
+    <div data-slot="starters" class="w-full max-w-(--c-starters-w) p-space-3">
       {#if canTalk}
         <EmptyState
           icon={IconClock}
@@ -927,23 +924,21 @@
             <Table.Head class="w-(--col-state)" scope="col"
               ><span class="sr-only">State</span></Table.Head
             >
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head scope="col">Routine</Table.Head>
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
               class="w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
               scope="col">Last run</Table.Head
             >
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
               scope="col">Next run</Table.Head
             >
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head class="w-(--col-menu)" scope="col"
               ><span class="sr-only">Actions</span></Table.Head
             >
+            <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
           </Table.Row>
         </Table.Header>
         {#each sorted as routine (routine.id)}
@@ -1168,9 +1163,9 @@
   [data-slot="ledger"]
     :global(
       th:is(
-          [data-slot="actions-table-col-when"],
-          [data-slot="routine-detail-col-when"]
-        )
+        [data-slot="actions-table-col-when"],
+        [data-slot="routine-detail-col-when"]
+      )
     ) {
     inline-size: var(--col-when);
   }

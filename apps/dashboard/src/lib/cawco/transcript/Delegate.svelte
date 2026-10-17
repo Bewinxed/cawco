@@ -557,7 +557,10 @@
       <!-- literal: 68ch -->
       <p
         class="rail-hang mt-space-1 mb-0 text-size-body font-normal text-ink-muted leading-body max-w-(--measure) wrap-anywhere"
-        style:--measure="68ch">{headline(brief)}</p>
+        style:--measure="68ch"
+      >
+        {headline(brief)}
+      </p>
     {/if}
 
     <!-- The lines under the head: their words at the text column, a live

@@ -28,10 +28,7 @@ const VARIANTS = [
     "the sheets out",
     `${STRIP} ${TAB} > svg[data-slot="fold"] { display: none !important; }`,
   ],
-  [
-    "the links out",
-    `${STRIP} ${TAB} > ${HIT} { display: none !important; }`,
-  ],
+  ["the links out", `${STRIP} ${TAB} > ${HIT} { display: none !important; }`],
   [
     "the trails out",
     `${STRIP} ${TAB} > :not(${HIT}, svg) { display: none !important; }`,

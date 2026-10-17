@@ -377,21 +377,31 @@
                       variant="outline"
                     />
                     {#if option.description}
-                      <p class="m-0 text-size-meta leading-meta wrap-anywhere text-ink-muted">{option.description}</p>
+                      <p
+                        class="m-0 text-size-meta leading-meta wrap-anywhere text-ink-muted"
+                      >
+                        {option.description}
+                      </p>
                     {/if}
                     <RowFault reason={faultOf(key)} />
                   </li>
                 {/each}
               </ul>
             {/if}
-            <div data-slot="workflow-run-view-field" class="flex flex-col gap-space-2">
+            <div
+              data-slot="workflow-run-view-field"
+              class="flex flex-col gap-space-2"
+            >
               <Label for="run-note-{runId}">Note (optional)</Label>
               <Input id="run-note-{runId}" bind:value={note} />
             </div>
             {#if ask.answerSchema}
               <!-- A typed answer: its JSON is checked by the hub against the
                    schema the program declared, shown here as the placeholder. -->
-              <div data-slot="workflow-run-view-field" class="flex flex-col gap-space-2">
+              <div
+                data-slot="workflow-run-view-field"
+                class="flex flex-col gap-space-2"
+              >
                 <Label for="run-value-{runId}">Answer value (JSON)</Label>
                 <Textarea
                   id="run-value-{runId}"
@@ -425,7 +435,10 @@
               {/if}
             {/if}
             {#if ask.allowOther}
-              <div data-slot="workflow-run-view-field" class="flex flex-col gap-space-2">
+              <div
+                data-slot="workflow-run-view-field"
+                class="flex flex-col gap-space-2"
+              >
                 <Label for="run-other-{runId}">Other answer</Label>
                 <div data-slot="other" class="flex items-center gap-space-2">
                   <Input id="run-other-{runId}" bind:value={other} />

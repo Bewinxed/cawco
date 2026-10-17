@@ -212,7 +212,11 @@
       bind:value={draft.name}
     />
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       {name
         ? "The name is the key a running call already asks for by; renaming means creating a new type."
         : "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."}
@@ -229,7 +233,9 @@
       </Alert.Description>
     </Alert.Root>
     {#if failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{failed}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+        {failed}
+      </p>
     {/if}
   {/snippet}
 
@@ -256,7 +262,11 @@
 
   <EditorSection hue={HUE} icon={IconCpu} label="What it runs on">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       The harness and model the delegate spawns on, and how hard it should
       think.
     </p>
@@ -303,7 +313,11 @@
 
   <EditorSection hue={HUE} icon={IconKey} label="What it can reach">
     <!-- literal: 72ch -->
-    <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       Comma-separated. Both are optional narrowings — empty means the delegate
       has the harness's ordinary defaults.
     </p>

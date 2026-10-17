@@ -51,10 +51,7 @@
       data-slot="name"
       class="type-label flex min-w-0 text-ink-row"
       style:--area="name"
-      ><span
-        data-slot="words"
-        class="truncate"
-        data-share="title:{href}"
+      ><span data-slot="words" class="truncate" data-share="title:{href}"
         >{name}</span
       ></span
     >
@@ -64,7 +61,10 @@
         data-flip
         style:--area="problem"
       >
-        <IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" />
+        <IconWarningTriangle
+          aria-hidden="true"
+          class="size-icon-sm flex-none"
+        />
         <span><MorphText text={problem} /></span>
       </span>
     {/if}
@@ -72,8 +72,7 @@
       data-slot="chev"
       aria-hidden="true"
       class="flex text-ink-subtle"
-      style:--area="chev"
-      ><IconChevronRight class="size-icon-md" /></span
+      style:--area="chev"><IconChevronRight class="size-icon-md" /></span
     >
   </a>
 </li>

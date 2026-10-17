@@ -9,11 +9,7 @@
   }: { value: AccountHue; label?: string } = $props();
 </script>
 
-<div
-  aria-label={label}
-  class="flex flex-wrap gap-space-3"
-  role="radiogroup"
->
+<div aria-label={label} class="flex flex-wrap gap-space-3" role="radiogroup">
   <!-- literal: 26px, 4px, 5px -->
   {#each accountsWords.swatches as swatch (swatch.hue)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a colour swatch ringed when chosen; a native radio cannot draw it -->

@@ -595,10 +595,20 @@
   >
     <g class="max-desk:hidden">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
-        <path class="fill-none stroke-status-attn-glyph" d={arcPath(k)} pathLength="1" transition:drawn />
+        <path
+          class="fill-none stroke-status-attn-glyph"
+          d={arcPath(k)}
+          pathLength="1"
+          transition:drawn
+        />
       {/each}
       {#each lapSlots.filter((k) => roundLow(k) === low) as k (k)}
-        <path class="fill-none stroke-status-fail-glyph" d={arcPath(k)} pathLength="1" transition:drawn />
+        <path
+          class="fill-none stroke-status-fail-glyph"
+          d={arcPath(k)}
+          pathLength="1"
+          transition:drawn
+        />
       {/each}
       {#if ringClosed}
         <path
@@ -612,7 +622,12 @@
     </g>
     <g data-slot="standing" class="hidden max-desk:inline">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
-        <path class="fill-none stroke-status-attn-glyph" d={outlinePath(k)} pathLength="1" transition:drawn />
+        <path
+          class="fill-none stroke-status-attn-glyph"
+          d={outlinePath(k)}
+          pathLength="1"
+          transition:drawn
+        />
       {/each}
       {#each lapSlots.filter((k) => standLow(k) === low) as k (k)}
         <path

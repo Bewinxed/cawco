@@ -60,7 +60,10 @@
   }
 </script>
 
-<div class="rail-hang flex flex-wrap items-center gap-space-2 mt-space-2" data-design-offer={offer.projectId}>
+<div
+  class="rail-hang flex flex-wrap items-center gap-space-2 mt-space-2"
+  data-design-offer={offer.projectId}
+>
   {#if now?.answer === "open"}
     <Button
       label="Build"
@@ -87,6 +90,8 @@
     <span class="text-size-meta font-normal text-ink-muted">Not now</span>
   {/if}
   {#if problem}
-    <p class="basis-full m-0 text-size-meta font-normal text-status-fail-ink">{problem}</p>
+    <p class="basis-full m-0 text-size-meta font-normal text-status-fail-ink">
+      {problem}
+    </p>
   {/if}
 </div>

@@ -1259,7 +1259,9 @@
   {:else if fault}
     <!-- No session in the store yet, and the server's read was refused: the
          same named state the pane's own read would show. -->
-    <div class="flex min-h-0 flex-auto flex-col">{@render faultState(fault)}</div>
+    <div class="flex min-h-0 flex-auto flex-col">
+      {@render faultState(fault)}
+    </div>
   {:else if unaddressable}
     <div class="flex min-h-0 flex-auto flex-col">{@render missingState()}</div>
   {:else}
