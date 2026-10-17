@@ -339,32 +339,24 @@ async function run(kit: Kit): Promise<void> {
       };
       const heardSince = (start: number, test: (line: string) => boolean) =>
         heard.slice(start).find(test);
-      /** A node of the accessibility tree whose label passes `test`, tapped at its middle. */
-      const tap = async (test: (label: string) => boolean): Promise<boolean> => {
-        const roots = JSON.parse(
-          await sh(`${AXE} describe-ui --udid ${udid}`)
-        ) as Record<string, unknown>[];
-        let frame: { x: number; y: number; width: number; height: number } | undefined;
-        const walk = (node: Record<string, unknown>) => {
-          const label = node.AXLabel ?? node.label;
-          const at = node.frame as typeof frame;
-          if (!frame && typeof label === "string" && test(label) && (at?.width ?? 0) > 0) {
-            frame = at;
-          }
-          for (const kid of (node.children as Record<string, unknown>[] | undefined) ?? []) {
-            walk(kid);
-          }
-        };
-        for (const root of roots) {
-          walk(root);
-        }
-        if (!frame) {
+      /**
+       * The element whose accessibility identifier is `id`, tapped at its
+       * activation point once it stands (axe waits up to 15 s). One that
+       * never stands leaves the screen's tree beside the captures.
+       */
+      const tap = async (id: string): Promise<boolean> => {
+        try {
+          await sh(
+            `${AXE} tap --id ${id} --wait-timeout 15 --post-delay 0.5 --udid ${udid}`
+          );
+          return true;
+        } catch {
+          await writeFile(
+            join(keep, `${tag}-untapped-${id}.json`),
+            await sh(`${AXE} describe-ui --udid ${udid}`).catch(String)
+          );
           return false;
         }
-        await sh(
-          `${AXE} tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
-        );
-        return true;
       };
 
       for (const theme of THEMES) {
@@ -388,11 +380,12 @@ async function run(kit: Kit): Promise<void> {
             Boolean,
             60_000
           ).catch(() => undefined);
+          // A sentence carrying the hub's error text ends where that text's own newline does in the log.
           const toast = heardSince(
             from,
             (line) =>
               line.startsWith("toast shown:") &&
-              line.includes(`id catalog-unread-${machine}`)
+              line.includes(machine === FAILING ? "couldn't list" : "didn't answer")
           );
           const shot = said ? await appShot(`${at}-toast-${machine}`) : "";
           const words =
@@ -472,27 +465,28 @@ async function run(kit: Kit): Promise<void> {
       // The taps, once per device, in the dark: Deny, Approve, Remove, Decided on.
       const at = `${tag}-dark`;
       let from = heard.length;
-      const denied = await tap((label) => label === `Deny post on ${CONNECTION}`);
+      // This device's first action is denied, its second approved.
+      const left = second;
+      const denied = await tap(`task-action-deny-${first}`);
       const deniedOne = await until(
-        `${at}: 2: one action denied`,
-        () => [first, second].find((id) => stateOf(id) === "denied"),
+        `${at}: 2: the first action denied`,
+        () => (stateOf(first) === "denied" ? first : undefined),
         Boolean,
         30_000
       ).catch(() => undefined);
-      const left = deniedOne === first ? second : first;
       const gone = await until(
         `${at}: 2: its card gone`,
-        () => heardSince(from, (line) => line === `gone task-action-${deniedOne}`),
+        () => heardSince(from, (line) => line === `gone task-action-${first}`),
         Boolean,
         30_000
       ).catch(() => undefined);
       kit.check(
         `${at}: 2: Deny denies the action through the hub, and its card leaves`,
         denied && Boolean(deniedOne) && Boolean(gone),
-        `tapped ${denied}; denied ${deniedOne ?? "none"}; ${gone ?? "card stands"}`
+        `tapped ${denied}; state ${stateOf(first)}; ${gone ?? "card stands"}`
       );
       from = heard.length;
-      const approved = await tap((label) => label === `Approve post on ${CONNECTION}`);
+      const approved = await tap(`task-action-approve-${left}`);
       const failed = await until(
         `${at}: 2: the approved action failed at the service`,
         () => (stateOf(left) === "failed" ? true : undefined),
@@ -524,7 +518,7 @@ async function run(kit: Kit): Promise<void> {
       kit.note(`${at}: web failed card ${await webShot(failedPage, `${at}-web-action-failed`)}`);
       await failedPage.close();
       from = heard.length;
-      const removed = await tap((label) => label === "Remove");
+      const removed = await tap(`task-action-remove-${left}`);
       const checked = await until(
         `${at}: 2: Remove puts it away`,
         () => heardSince(from, (line) => line === `gone task-action-${left}`),
@@ -542,7 +536,7 @@ async function run(kit: Kit): Promise<void> {
         `tapped ${removed}; ${checked ?? "card stands"}`
       );
       from = heard.length;
-      const pressed = await tap((label) => label.startsWith("Decided on "));
+      const pressed = await tap("task-decided");
       const opened = await until(
         `${at}: 3: the decision's artifact opened`,
         () =>
