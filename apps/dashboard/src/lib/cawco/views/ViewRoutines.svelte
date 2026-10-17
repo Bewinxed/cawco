@@ -921,13 +921,12 @@
       >
         <Table.Header>
           <Table.Row variant="band">
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="h-c-toolbar-ctl w-(--col-state)"
               scope="col"
               variant="caps"><span class="sr-only">State</span></Table.Head
             >
-            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
               >Routine</Table.Head
             >
@@ -981,23 +980,22 @@
       >
         <Table.Header>
           <Table.Row variant="band">
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="h-c-toolbar-ctl w-(--col-state)"
               scope="col"
               variant="caps"><span class="sr-only">Service</span></Table.Head
             >
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
               >Source</Table.Head
             >
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
               class="h-c-toolbar-ctl w-c-routine-time-w"
               scope="col"
               variant="caps">Last read</Table.Head
             >
+            <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
           </Table.Row>
         </Table.Header>
         <Table.Body>
