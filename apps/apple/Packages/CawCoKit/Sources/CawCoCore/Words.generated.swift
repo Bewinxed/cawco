@@ -705,4 +705,18 @@ public enum Words {
             "\(harness) on \(machine) couldn't list its stored sessions (\(error)), so they are the ones it listed last."
         }
     }
+
+    public enum Preview {
+        // packages/core/src/words/preview.ts `previewWords`
+        /// The page's content process ended a second time for the same page (the first reloads it by itself): the system ended it, most often over its memory. The app hears it from WebKit; a browser never tells the parent page.
+        public static let stoppedTitle = "This page stopped"
+
+        public static let stoppedLine = "It closed while it ran, most likely because it needed more memory than this device gives a page. Try again loads it again."
+
+        /// The state's way back: the page loaded afresh.
+        public static let tryAgain = "Try again"
+
+        /// Try again while the page loads.
+        public static let reloading = "Reloading…"
+    }
 }

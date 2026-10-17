@@ -131,6 +131,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var answers: [String: CheckedContinuation<String?, Never>] = [:]
     /// How long the page has to answer a reply or a resolve. Our call: the overlay writes its doc at once.
     private static let answerWithin = Duration.seconds(10)
+    /// The longest message the page may post, in UTF-16 units: the overlay's
+    /// are a few hundred, and a longer one would be parsed on the main thread
+    /// for nothing. Our call.
+    private static let messageMost = 64 * 1024
     /// Whether the session's turn runs now (its activity pulse), and the pins the agent works on.
     private var sessionWorking = false
     private var live: Set<String> = []
@@ -219,28 +223,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             pinsBadge.trailingAnchor.constraint(equalTo: pinsButton.trailingAnchor, constant: -(Space.space3 + 1)),
         ])
 
-        // The page, in a web view of its own: its own cookie store, never
-        // shared with another session's preview.
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        configuration.userContentController.add(WeakHandler(self), name: "cawco")
-        #if DEBUG
-        if PreviewProbe.on, let report = PreviewProbe.report {
-            configuration.userContentController.addUserScript(WKUserScript(source: report, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-        #endif
-        configuration.allowsInlineMediaPlayback = true
-        web = WKWebView(frame: .zero, configuration: configuration)
-        web.navigationDelegate = self
-        web.isOpaque = false
-        web.backgroundColor = Palette.surfaceRecess
-        web.translatesAutoresizingMaskIntoConstraints = false
-        web.isInspectable = true
-        // The pencil's double-tap goes to the page, as the person set it (slice 5b).
-        let pencil = UIPencilInteraction()
-        pencil.delegate = self
-        web.addInteraction(pencil)
+        web = makeWeb()
 
         // `.well`: a hairline at `--radius-sm` on the recess; Comment and Draw
         // turn its edge the accent. The page keeps the well's whole height in
@@ -261,7 +244,26 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         wellEdge.translatesAutoresizingMaskIntoConstraints = false
         wellEdge.isUserInteractionEnabled = false
         wellEdge.isHidden = true
-        for part in [web!, cover, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
+        let stoppedState = KitEmptyState(icon: .alert, title: Words.Preview.stoppedTitle, line: Words.Preview.stoppedLine, action: tryAgain)
+        stoppedState.translatesAutoresizingMaskIntoConstraints = false
+        stopped.addSubview(stoppedState)
+        stopped.translatesAutoresizingMaskIntoConstraints = false
+        stopped.backgroundColor = Palette.surfaceWell
+        stopped.isHidden = true
+        for part in [web!, cover, stopped, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
+        placeWeb()
+        NSLayoutConstraint.activate([
+            stopped.topAnchor.constraint(equalTo: well.topAnchor),
+            stopped.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            stopped.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            stopped.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+            // `.down`: `padding-inline: space-6` on the well, scrolled when it runs past it.
+            stoppedState.topAnchor.constraint(equalTo: stopped.contentLayoutGuide.topAnchor),
+            stoppedState.bottomAnchor.constraint(equalTo: stopped.contentLayoutGuide.bottomAnchor),
+            stoppedState.leadingAnchor.constraint(equalTo: stopped.contentLayoutGuide.leadingAnchor, constant: Space.space6),
+            stoppedState.trailingAnchor.constraint(equalTo: stopped.contentLayoutGuide.trailingAnchor, constant: -Space.space6),
+            stoppedState.widthAnchor.constraint(equalTo: stopped.frameLayoutGuide.widthAnchor, constant: -Space.space6 * 2),
+        ])
 
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
@@ -311,10 +313,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             wellLeading,
             wellTrailing,
             wellBottom,
-            web.topAnchor.constraint(equalTo: well.topAnchor),
-            web.leadingAnchor.constraint(equalTo: well.leadingAnchor),
-            web.trailingAnchor.constraint(equalTo: well.trailingAnchor),
-            web.bottomAnchor.constraint(equalTo: well.bottomAnchor),
             cover.topAnchor.constraint(equalTo: well.topAnchor),
             cover.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             cover.trailingAnchor.constraint(equalTo: well.trailingAnchor),
@@ -361,12 +359,182 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #endif
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        appeared = true
+        wake()
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        appeared = false
+        wake()
         #if DEBUG
         heartbeat?.invalidate()
         heartbeat = nil
         #endif
+    }
+
+    // MARK: The page's process
+
+    /// The page runs only where it can be seen: the preview on screen
+    /// (appeared) and its conversation the tab in front of its group. A tab
+    /// behind, or parked a swipe aside, and a preview a screen covers, let
+    /// their page go: its web view is released and WebKit ends its content
+    /// process, so only pages on screen hold memory and draw. It loads again
+    /// when it comes forward.
+    private var appeared = false
+    private var inFront = true
+    private var pageShown: Bool { appeared && inFront }
+    /// No page is loaded: never yet, or let go while it could not be seen.
+    private var asleep = true
+
+    /// Whether its conversation is the tab in front of its group (PaneGroupController).
+    func standsInFront(_ front: Bool) {
+        guard inFront != front else { return }
+        inFront = front
+        wake()
+    }
+
+    /// The page loaded where it can be seen, and let go where it cannot.
+    private func wake() {
+        guard isViewLoaded else { return }
+        if pageShown {
+            if asleep { show() }
+        } else if !asleep {
+            letGo()
+        }
+    }
+
+    /// The page goes: a fresh web view with nothing loaded takes the old
+    /// one's place, and the next show loads the page again.
+    private func letGo() {
+        #if DEBUG
+        PreviewProbe.say("preview let go appeared=\(appeared) front=\(inFront)")
+        #endif
+        asleep = true
+        revision = nil
+        entering?.cancel()
+        silence?.cancel()
+        connected = false
+        replaceWeb()
+        cover.alpha = 1
+        coverLine.isHidden = false
+    }
+
+    /// A web view for the page: its own cookie store, never shared with
+    /// another session's preview, nor with this one's page before it.
+    private func makeWeb() -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.add(WeakHandler(self), name: "cawco")
+        #if DEBUG
+        if PreviewProbe.on, let report = PreviewProbe.report {
+            configuration.userContentController.addUserScript(WKUserScript(source: report, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        #endif
+        configuration.allowsInlineMediaPlayback = true
+        let web = WKWebView(frame: .zero, configuration: configuration)
+        web.navigationDelegate = self
+        web.isOpaque = false
+        web.backgroundColor = Palette.surfaceRecess
+        web.translatesAutoresizingMaskIntoConstraints = false
+        web.isInspectable = true
+        #if DEBUG
+        PreviewMeter.watch(web)
+        #endif
+        // The pencil's double-tap goes to the page, as the person set it (slice 5b).
+        let pencil = UIPencilInteraction()
+        pencil.delegate = self
+        web.addInteraction(pencil)
+        return web
+    }
+
+    /// The web view fills the well.
+    private func placeWeb() {
+        NSLayoutConstraint.activate([
+            web.topAnchor.constraint(equalTo: well.topAnchor),
+            web.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            web.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            web.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+        ])
+    }
+
+    /// The web view and its page released, an empty one in its place.
+    private func replaceWeb() {
+        let old: WKWebView = web
+        old.navigationDelegate = nil
+        old.stopLoading()
+        old.configuration.userContentController.removeAllScriptMessageHandlers()
+        web = makeWeb()
+        well.insertSubview(web, aboveSubview: old)
+        old.removeFromSuperview()
+        placeWeb()
+    }
+
+    /// The revision whose page has already been loaded again after its
+    /// content process ended: a second end stands as the stopped state.
+    private var endedOnce: String?
+    /// The stopped state over the well (PreviewPane.svelte `.down`, the kit's empty state).
+    private let stopped = UIScrollView()
+    private lazy var tryAgain: UIButton = KitButton.make(Words.Preview.tryAgain, glyph: .refresh, variant: .outline, height: .sm) { [weak self] in
+        self?.again()
+    }
+
+    /// WebKit ended the page's content process (the system over its
+    /// memory, or a crash): the web view draws nothing and its page is gone.
+    /// The first end of a revision loads it again by itself; the second
+    /// stands as the stopped state, with Try again.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard webView === web, let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        let first = endedOnce != frame.revision
+        #if DEBUG
+        PreviewProbe.say("preview content ended revision=\(frame.revision) first=\(first)")
+        #endif
+        connected = false
+        silence?.cancel()
+        endedOnce = frame.revision
+        if first {
+            revision = nil
+            show()
+        } else {
+            showStopped(true)
+        }
+    }
+
+    /// Try again: the page loads afresh, the state standing until a load serves it.
+    private func again() {
+        paintTryAgain(pending: true)
+        revision = nil
+        show()
+    }
+
+    private func showStopped(_ shown: Bool) {
+        if shown {
+            cover.alpha = 0
+            coverLine.isHidden = true
+            clearFailure()
+            UIAccessibility.post(notification: .screenChanged, argument: stopped)
+        }
+        stopped.isHidden = !shown
+        paintTryAgain(pending: false)
+        #if DEBUG
+        PreviewProbe.say("preview stopped shown=\(shown) tryAgain=\(PreviewProbe.centre(tryAgain))")
+        if shown { PreviewMeter.stopped(stopped, tryAgain: tryAgain) }
+        #endif
+    }
+
+    private func paintTryAgain(pending: Bool) {
+        tryAgain.configuration?.showsActivityIndicator = pending
+        KitButton.setTitle(pending ? Words.Preview.reloading : Words.Preview.tryAgain, of: tryAgain, variant: .outline, height: .sm)
+        tryAgain.isEnabled = !pending
+    }
+
+    /// A load failed because the content process ended under it: the end's own handler says so.
+    private static func endedUnder(_ error: any Error) -> Bool {
+        let error = error as NSError
+        return error.domain == WKErrorDomain && error.code == WKError.Code.webContentProcessTerminated.rawValue
     }
 
     @objc private func cameForward() { sayShown() }
@@ -492,9 +660,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func show() {
         guard isViewLoaded, let frame = hub.previews.byInstance[instanceId], frame.state == .open,
               let route = hub.previewRoute(frame) else { return }
+        // Out of sight, the page waits to be seen.
+        guard pageShown else { return }
         let origin = route.origin
         guard frame.revision != revision else { return }
         revision = frame.revision
+        asleep = false
+        // Another page: the stopped state was the last one's.
+        if frame.revision != endedOnce, !stopped.isHidden { showStopped(false) }
         // A moved pin waiting to be placed again belongs to the page that showed it.
         if placing != nil { setMode(placingFrom ?? mode) }
         placingFrom = nil
@@ -599,6 +772,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             coverLine.isHidden = true
         }
         fade.startAnimation()
+        // A load served the page again: the stopped state goes.
+        if !stopped.isHidden { showStopped(false) }
         guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
         loaded(frame.revision)
     }
@@ -629,13 +804,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
-        guard !enteredAgain(error) else { return }
+        guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
         loaded(revision)
     }
 
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) {
-        guard !enteredAgain(error) else { return }
+        guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
         loaded(revision)
     }
@@ -651,7 +826,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// reads them the same way). The page is code an agent wrote: every
     /// field is checked and bounded.
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let text = message.body as? String, let data = text.data(using: .utf8),
+        // Read on the main thread: a message past `messageMost` is not the overlay's, and goes unread.
+        guard let said = message.body as? NSString, said.length <= Self.messageMost else { return }
+        guard let data = (said as String).data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         switch body["type"] as? String {
         case "cawco:loaded":
@@ -721,6 +898,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         reentered = false
         #if DEBUG
         PreviewProbe.say("preview ready")
+        PreviewMeter.ready(web)
         if byHost { PreviewProbe.lapse(web) }
         #endif
         paintSend()
@@ -1636,7 +1814,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     (() => {
       const listeners = new Set();
       const host = {
+        // Only the overlay's own words reach the app: whatever else the
+        // page posts to its parent stays in the page, never crossing to
+        // the app's main thread.
         postMessage(data) {
+          if (!data || typeof data.type !== "string" || !data.type.startsWith("cawco:")) return;
           window.webkit.messageHandlers.cawco.postMessage(JSON.stringify(data));
         },
       };

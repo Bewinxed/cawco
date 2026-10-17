@@ -630,8 +630,18 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     private func makePreview() -> PreviewController {
         let controller = PreviewController(hub: hub, instanceId: sessionId)
+        controller.standsInFront(inFront)
         preview = controller
         return controller
+    }
+
+    /// This conversation is the tab in front of its group: behind, or parked
+    /// a swipe aside, its preview lets its page go until it comes forward.
+    private var inFront = true
+
+    func standsInFront(_ front: Bool) {
+        inFront = front
+        preview?.standsInFront(front)
     }
 
     /// The web's wide layout: the preview beside the transcript, its share of

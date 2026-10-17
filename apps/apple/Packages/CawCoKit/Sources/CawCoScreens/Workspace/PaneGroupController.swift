@@ -303,6 +303,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         slots[id] = slot
         stack.addSubview(slot)
         let controller = panes.controller(for: id)
+        // Told before it appears, so a neighbour never loads its preview's page only to let it go.
+        (controller as? SessionViewController)?.standsInFront(id == leaf?.active)
         addChild(controller)
         controller.view.translatesAutoresizingMaskIntoConstraints = true
         controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -417,6 +419,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             // A neighbour parked a width aside is drawn for the swipe, not read out.
             slot.accessibilityElementsHidden = id != active
             slot.transform = .identity
+            // Only the tab in front runs its preview's page.
+            panes.session(id)?.standsInFront(id == active)
         }
         stack.configure(count: shownTabs.count, selected: activeIndex ?? 0)
     }
