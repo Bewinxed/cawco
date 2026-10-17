@@ -284,7 +284,10 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <div class="matrix overflow-x-auto rounded-md bg-surface-raised">
+  <!-- The matrix scrolls sideways inside the section; the page never does. -->
+  <div
+    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
+  >
     <Table.Root class="border-collapse text-left">
       <Table.Header>
         <Table.Row class="align-top">
@@ -388,11 +391,3 @@
     </Table.Root>
   </div>
 {/if}
-
-<style>
-  /* residual: unmapped */
-  /* The matrix scrolls sideways inside the section; the page never does. */
-  .matrix {
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-</style>

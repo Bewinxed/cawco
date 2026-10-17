@@ -187,7 +187,7 @@
   const rowOf = (id: string) => ({
     getBoundingClientRect: () => {
       const cell = document.querySelector<HTMLElement>(
-        `.cell-d[data-account="${CSS.escape(id)}"]`
+        `[data-slot="cell-d"][data-account="${CSS.escape(id)}"]`
       );
       const grid = cell?.closest<HTMLElement>('[data-slot="wall"]');
       if (!(cell && grid)) {
@@ -782,13 +782,15 @@
        edge (3:1 on the raised surface); an account at its limit the limit
        wash, which the dial's reserve notch takes as its ground; the cell a
        relay band stands for, while that band is hovered or open, the hover
-       wash. (`cell-d` is the class rowOf reads and the states' hook.) -->
+       wash; each of those washes is also the ground the notch takes
+       (`--ring-ground`). (`cell-d` is the hook rowOf reads.) -->
   <!-- literal: span 5; auto auto -->
   <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <div
+    data-slot="cell-d"
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="cell-d relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out motion-reduce:transition-none"
+    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-none"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -799,6 +801,11 @@
     role="group"
     style:--cell-rows="auto auto"
     style:--cell-span="span 5"
+    style:--ring-ground={ring.id === lit
+      ? "var(--surface-hover)"
+      : ring.state === "limit"
+        ? "var(--meter-wash-over)"
+        : undefined}
   >
     {@render dial(ring, c, shown, side)}
     <!-- The first line, from the time's x to the share's end, so the name
@@ -1025,9 +1032,9 @@
               <div data-slot="block" class="contents" data-org-group="opencode">
                 <!-- The providers' hairline, inside the wall's grid: across
                      the whole popover, edge to edge, as a section's edge
-                     is. -->
+                     is: `border: 0`, then its top edge. -->
                 <hr
-                  class="col-span-full mx-(--seam-pull) my-space-1"
+                  class="col-span-full mx-(--seam-pull) my-space-1 border-t border-t-border-hairline border-r-none border-b-none border-l-none"
                   style:--seam-pull="calc(-1 * var(--group-pad-x))"
                 />
                 {@render cell(openCode, null, sideFor())}
@@ -1062,9 +1069,9 @@
         <!-- Claude's gap: the whole why the strip's line stands for, and
              the sign-in that fixes it when one does. -->
         <div
-          class="pop-gap flex flex-col items-start gap-space-2 px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+          class="flex flex-col items-start gap-space-2 px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
         >
-          <p class="pop-note mark-line flex items-center gap-(--note-gap)">
+          <p class="mark-line flex items-center gap-(--note-gap)">
             <span
               data-slot="mark"
               aria-hidden="true"
@@ -1086,9 +1093,11 @@
       {/if}
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
-        <!-- A provider with nothing to draw: why, and what to do about it. -->
+        <!-- A provider with nothing to draw: why, and what to do about it.
+             A hairline parts it from the group, the gap or the note before
+             it. -->
         <p
-          class="pop-note mark-line flex items-center gap-(--note-gap) px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+          class="mark-line flex items-center gap-(--note-gap) px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted not-first:border-t not-first:border-t-border-hairline"
         >
           <span
             data-slot="mark"
@@ -1182,11 +1191,9 @@
   /* css-scope .strip-hit: the strip's own control; the usage-relay motion bench draws the strip with it */
   /* residual: unmapped — the strip's control under the pointer or open
      paints its own ground, and the dials' reserve notch takes it
-     (--ring-ground: a custom property no utility sets); the strip's caption
-     clamps by the standard property too; a cell's states (the carrier's
-     inset ring, the limit wash and the lit wash, each a ground the notch
-     takes); and the hairline between the popover's sections (a sibling
-     rule). */
+     (--ring-ground: a custom property no utility sets yet); the strip's
+     caption clamps by the standard property too (needs shared: K2's
+     ring-ground-* and line-clamp-std-*). */
   @media (hover: hover) and (pointer: fine) {
     :global(.strip-hit:hover) {
       --ring-ground: var(--surface-hover);
@@ -1199,28 +1206,5 @@
   [data-strip-caption],
   [data-strip-go-week] {
     line-clamp: 1;
-  }
-  .cell-d[data-carrying] {
-    box-shadow: inset 0 0 0 1px var(--border-button-outline);
-  }
-  .cell-d[data-limit] {
-    background: var(--meter-wash-over);
-    --ring-ground: var(--meter-wash-over);
-  }
-  .cell-d[data-lit] {
-    background: var(--surface-hover);
-    --ring-ground: var(--surface-hover);
-  }
-  /* The providers' hairline: `border: 0` then its top edge, which
-     `border-none` would leave unstyled (delta R2). */
-  [data-slot="wall"] hr {
-    border: 0;
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  [data-slot="group"] + [data-slot="group"],
-  [data-slot="group"] + .pop-note,
-  .pop-gap + .pop-note,
-  .pop-note + .pop-note {
-    border-block-start: 1px solid var(--border-hairline);
   }
 </style>
