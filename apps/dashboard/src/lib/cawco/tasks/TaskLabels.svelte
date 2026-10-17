@@ -46,25 +46,31 @@
   }
 </script>
 
-<div class="labels">
+<div class="flex flex-wrap items-center gap-space-1">
   {#each labels as label (label)}
-    <Badge data-task-labels-label class="label" data-label variant="secondary">
+    <Badge
+      data-task-labels-label
+      class="group/label gap-space-row"
+      data-label
+      variant="secondary"
+    >
       <span>{label}</span>
       <button
         aria-label="Remove the label {label}"
-        class="remove"
+        class="-me-space-row inline-grid w-0 cursor-pointer place-items-center overflow-hidden border-0 bg-transparent p-0 text-inherit opacity-0 transition-[inline-size,opacity] dur-control ease-out group-hover/label:w-icon-sm group-hover/label:opacity-100 focus-visible:w-icon-sm focus-visible:opacity-100 coarse:w-icon-sm coarse:opacity-100"
         data-box
         onclick={() => save(labels.filter((each) => each !== label))}
-        type="button"><IconClose /></button
+        type="button"><IconClose class="size-icon-sm" /></button
       >
     </Badge>
   {/each}
   {#if adding}
+<!-- literal: 8rem -->
     <input
       data-slot="task-labels-field"
       aria-label="New label"
       autocomplete="off"
-      class="field"
+      class="h-c-badge-h w-(--w) rounded-xs border border-border-control bg-surface-raised px-space-1 type-label text-ink-strong"
       list={listId}
       onblur={add}
       onkeydown={(event) => {
@@ -78,6 +84,7 @@
         }
       }}
       placeholder="label"
+      style:--w="8rem"
       bind:value={draft}
       {@attach (node) => node.focus()}
     />
@@ -89,78 +96,12 @@
   {:else}
     <button
       data-slot="add"
-      class="add kit-chip touch-hit mark-line"
+      class="kit-chip touch-hit mark-line inline-flex h-c-badge-h items-center gap-space-row px-space-1 type-label text-ink-muted"
       onclick={() => {
         adding = true;
       }}
-      type="button"><IconPlus /><span>label</span></button
+      type="button"><IconPlus class="size-icon-sm" /><span>label</span></button
     >
   {/if}
 </div>
 <RowFault reason={problem} />
-
-<style>
-  .labels {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .labels :global(.label) {
-    gap: 2px;
-  }
-  .remove {
-    display: inline-grid;
-    place-items: center;
-    inline-size: 0;
-    margin-inline-end: -2px;
-    padding: 0;
-    overflow: hidden;
-    border: 0;
-    background: none;
-    color: inherit;
-    opacity: 0;
-    cursor: pointer;
-    transition:
-      inline-size var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-out);
-  }
-  .remove :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  :global(.label:hover) .remove,
-  .remove:focus-visible {
-    inline-size: var(--icon-sm);
-    opacity: 1;
-  }
-  @media (pointer: coarse) {
-    .remove {
-      inline-size: var(--icon-sm);
-      opacity: 1;
-    }
-  }
-  .add {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    block-size: var(--c-badge-h);
-    padding-inline: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .add :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  .field {
-    inline-size: 8rem;
-    block-size: var(--c-badge-h);
-    padding-inline: var(--space-1);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-</style>
