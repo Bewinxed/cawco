@@ -186,6 +186,10 @@ export async function passPage(
   await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   await page.clock.install({ time: at - CLOCK_LEAD_MS });
   await page.clock.pauseAt(at);
+  // Date stands at the tape's moment whatever stretches the timers are run
+  // on: what a read says of the time ("2m ago") is the same on every run.
+  await page.clock.setFixedTime(at);
+  clockOf.set(page, { at, now: at });
   const pending = new Set<Request>();
   inFlight.set(page, pending);
   page.on("request", (request) => pending.add(request));
@@ -212,22 +216,53 @@ const CLOCK_LEAD_MS = 1000;
 const ACT_MS = 60_000;
 
 /**
+ * Where each page's fake clock stands (`now`), the walk's own count: Date
+ * is fixed at the tape's moment (`at`), so the page cannot say.
+ */
+const clockOf = new WeakMap<Page, { at: number; now: number }>();
+
+/** The page's timers run on `ms`, its clock's count kept. */
+async function runOn(page: Page, ms: number): Promise<void> {
+  await page.clock.runFor(ms);
+  const clock = clockOf.get(page);
+  if (clock) {
+    clock.now += ms;
+  }
+}
+
+/**
  * An act, with the page's time flowing as a person's clicks meet a page
  * whose motions play (a popover's control is clickable once its opening
  * has moved it into place); then the clock stands again at ACT_MS past
- * where the act began, the same mark on every run.
+ * where the act began, the same mark on every run, Date at the tape's
+ * moment still.
  */
 async function acting(
   page: Page,
   act: (page: Page) => Promise<unknown>
 ): Promise<void> {
-  const from = await page.evaluate(() => Date.now());
+  const clock = clockOf.get(page);
+  const began = performance.now();
   await page.clock.resume();
   try {
     await act(page);
   } finally {
-    const now = await page.evaluate(() => Date.now()).catch(() => from);
-    await page.clock.pauseAt(Math.max(from + ACT_MS, now + 1));
+    if (clock) {
+      // The act ran in real time, its page time flowing with it: the mark
+      // stands ACT_MS on, past any act under it. One that ran longer stands
+      // past itself instead, and says so: that state is no longer still.
+      const took = performance.now() - began;
+      let mark = clock.now + ACT_MS;
+      if (took >= ACT_MS - 1000) {
+        mark = clock.now + took + ACT_MS;
+        console.log(
+          `  act: ran ${Math.round(took)} ms of real time, past its ${ACT_MS} ms of page time`
+        );
+      }
+      await page.clock.pauseAt(mark);
+      await page.clock.setFixedTime(clock.at);
+      clock.now = mark;
+    }
   }
 }
 /** Each stretch `settle` runs the clock on, and how many. */
@@ -270,7 +305,7 @@ async function settle(page: Page): Promise<void> {
   for (let step = 0; step < SETTLE_STEPS; step += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each stretch runs on what the last one left
     await quiet(page);
-    await page.clock.runFor(SETTLE_STEP_MS);
+    await runOn(page, SETTLE_STEP_MS);
   }
   await quiet(page);
 }
@@ -338,7 +373,7 @@ async function stillInPageTime(page: Page): Promise<void> {
   for (let i = 0; i < STILL_STRETCHES && still < 3; i += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: polled until the page holds still
     await quiet(page);
-    await page.clock.runFor(STILL_STEP_MS);
+    await runOn(page, STILL_STEP_MS);
     await holdStill(page);
     const now = await page.evaluate(scrollsAndBoxes);
     still = now === last ? still + 1 : 0;
@@ -358,7 +393,16 @@ const STILL_STRETCHES = 60;
  */
 async function arrive(page: Page): Promise<void> {
   await stand(page);
-  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  // A real resize, one pixel and back: a ResizeObserver hears it (a
+  // highlight's rows measured mid-slide, highlight.svelte.ts's `sizes`),
+  // where a dispatched `resize` event reaches only window listeners.
+  const size = page.viewportSize();
+  if (size) {
+    await page.setViewportSize({ width: size.width + 1, height: size.height });
+    await quiet(page);
+    await runOn(page, SETTLE_STEP_MS);
+    await page.setViewportSize(size);
+  }
   await stand(page);
 }
 
