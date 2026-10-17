@@ -161,7 +161,12 @@
   };
 </script>
 
-<section class="loc" class:embedded>
+<!-- literal: 8px gap -->
+<section
+  class="grid gap-(--gap) data-embedded:p-space-1"
+  data-embedded={embedded || undefined}
+  style:--gap="8px"
+>
   {#if embedded}
     {@render source()}
   {:else}
@@ -178,6 +183,7 @@
   {/if}
   {#snippet source()}
     <Segmented
+      class={embedded ? "justify-self-start" : ""}
       items={[
         { value: "dir", label: "Existing files" },
         { value: "repo", label: "Clone from GitHub" },
@@ -188,12 +194,13 @@
     >
       {#snippet icon(value, on)}
         {#if value === "dir"}
-          <Folder style="color:var(--hue-amber-500)" />
+          <Folder class="text-hue-amber-500" />
         {:else}
           <ProviderLogo
+            class="opacity-(--o)"
             provider="github"
             size={null}
-            style={`opacity:${on ? 1 : 0.6}`}
+            style={`--o:${on ? 1 : 0.6}`}
           />
         {/if}
       {/snippet}
@@ -202,140 +209,245 @@
 
   <div
     data-slot="location-section-field"
-    class="field field-shell"
-    class:locked
+    class="field-shell overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
+    data-locked={locked || undefined}
   >
-    <div data-slot="row" class="row">
-      <FolderOpen data-location-section-lead class="lead" />
+    <!-- literal: 8px gap, 42px / 56px height, 0 6px 0 12px padding -->
+    <div
+      data-slot="row"
+      class="flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) pr-(--pr) pl-(--pl)"
+      style:--gap="8px"
+      style:--h="42px"
+      style:--h-phone="56px"
+      style:--pl="12px"
+      style:--pr="6px"
+    >
+      <FolderOpen
+        data-location-section-lead
+        class="size-icon-md flex-none text-hue-amber-500"
+      />
+      <!-- literal: 30px / 44px minimum height, 1.4 line height, 1rem on a phone -->
       <input
         aria-invalid={reading && !informational ? true : undefined}
         aria-label="Directory"
         autocapitalize="off"
+        class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
         onkeydown={commitOnEnter}
         placeholder="~/code/project"
         readonly={locked}
         spellcheck="false"
+        style:--fs-phone="1rem"
+        style:--lh="1.4"
+        style:--min-h="30px"
+        style:--min-h-phone="44px"
         value={dir}
       />
       {#if locked}
-        <span class="badge ns-in mark-line"><span>From project</span></span>
+        <!-- literal: 4px gap, 24px height, 8px inline padding -->
+        <span
+          class="ns-in mark-line inline-flex h-(--h) items-center gap-space-1 rounded-sm bg-status-live-bg px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
+          style:--h="24px"
+          style:--pad-x="8px"><span>From project</span></span
+        >
+        <!-- literal: 30px / 44px height, 10px inline padding -->
         <button
-          class="override ns-in"
+          class="ns-in h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer rounded-sm border-0 bg-transparent px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted hover:bg-surface-hover hover:text-ink-strong"
           onclick={onoverride}
           style="--delay:40ms"
+          style:--h="30px"
+          style:--h-phone="44px"
+          style:--pad-x="10px"
           type="button"
         >
           Override
         </button>
       {:else}
+        <!-- literal: 6px gap, 30px / 44px height, 10px inline padding -->
         <button
+          data-slot="browse"
           aria-expanded={browsing}
-          class="browse ns-in"
+          class="ns-in inline-flex h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer items-center justify-start gap-(--gap) rounded-sm border border-border-control bg-surface-recess px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong opacity-(--o) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
-          style={`opacity:${machineId ? 1 : 0.5}`}
+          style:--gap="6px"
+          style:--h="30px"
+          style:--h-phone="44px"
+          style:--o={machineId ? 1 : 0.5}
+          style:--pad-x="10px"
           type="button"
         >
           {#if browsing}
-            <Up /><span>Close</span>
+            <Up class="size-icon-md flex-none text-ink-muted" /><span
+              >Close</span
+            >
           {:else}
-            <Search />
+            <Search class="size-icon-md flex-none text-ink-muted" />
             <span>Browse</span>
           {/if}
         </button>
       {/if}
     </div>
     <div class="panel" inert={!browsing} {@attach folds(() => browsing, PANEL)}>
-      <div class="clip">
-        <div class="browser">
-          <div class="crumbs">
-            <span data-slot="machine" class="machine mark-line"
-              ><span data-slot="dot" class="dot" data-box></span><span
-                >{machineName}</span
-              ></span
+      <div class="min-h-0">
+        <div class="border-t border-border-hairline bg-surface-recess">
+          <!-- literal: 8px gap, 8px 8px 8px 10px padding -->
+          <div
+            class="flex max-phone:flex-wrap items-center gap-(--gap) border-b border-border-hairline bg-surface-recess pt-(--pad) pr-(--pad) pb-(--pad) pl-(--pad-l)"
+            style:--gap="8px"
+            style:--pad="8px"
+            style:--pad-l="10px"
+          >
+            <!-- literal: 6px gap, 24px height, 8px inline padding, 6px dot -->
+            <span
+              data-slot="machine"
+              class="mark-line inline-flex h-(--h) flex-none items-center gap-(--gap) rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
+              style:--gap="6px"
+              style:--h="24px"
+              style:--pad-x="8px"
+              ><span
+                data-slot="dot"
+                class="size-(--dot) rounded-pill bg-hue-green-500"
+                data-box
+                style:--dot="6px"
+              ></span><span>{machineName}</span></span
             >
-            <div class="trail">
-              <div class="ancestors fai-scroll">
+            <!-- literal: 1.4 line height -->
+            <div
+              class="flex max-phone:basis-full max-phone:flex-col min-w-0 flex-1 items-center max-phone:items-start gap-space-row font-mono text-size-label leading-(--lh) font-normal text-ink-muted"
+              style:--lh="1.4"
+            >
+              <div
+                class="fai-scroll flex max-phone:max-w-full min-w-0 items-center gap-space-row overflow-x-auto whitespace-nowrap"
+              >
                 {#each crumbs.slice(0, -1) as crumb (crumb.to)}
+                  <!-- literal: 44px minimum size, 6px inline padding -->
                   <button
                     data-slot="crumb"
-                    class="crumb"
+                    class="min-h-(--min) min-w-(--min) flex-none cursor-pointer rounded-xs border-0 bg-transparent px-(--pad-x) text-inherit hover:bg-surface-hover"
                     onclick={() => list(crumb.to)}
+                    style:--min="44px"
+                    style:--pad-x="6px"
                     type="button"
                   >
                     {crumb.label}
                   </button>
-                  <span aria-hidden="true" class="sep">/</span>
+                  <span aria-hidden="true" class="text-neutral-8">/</span>
                 {/each}
               </div>
+              <!-- literal: 44px minimum size, 8px padding -->
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="crumb current"
+                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-0 bg-surface-lift p-(--pad) text-left wrap-anywhere text-ink-strong hover:bg-surface-hover"
                 onclick={() => list(path)}
+                style:--min="44px"
+                style:--pad="8px"
                 type="button"
               >
                 {crumbs.at(-1)?.label}
               </button>
             </div>
           </div>
-          <div class="folders fai-scroll">
+          <!-- literal: 196px maximum height, 6px padding, 1px gap -->
+          <div
+            class="fai-scroll grid max-h-(--max-h) content-start gap-(--gap) overflow-auto overscroll-contain p-(--pad)"
+            style:--gap="1px"
+            style:--max-h="196px"
+            style:--pad="6px"
+          >
             {#if canGoUp}
-              <button class="folder up press-tint" onclick={goUp} type="button">
-                <Left /><span>Parent folder</span>
+              <!-- literal: 10px gap, 34px / 44px height, 8px inline padding -->
+              <button
+                class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) text-left font-mono text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                onclick={goUp}
+                style:--gap="10px"
+                style:--h="34px"
+                style:--h-phone="44px"
+                style:--pad-x="8px"
+                type="button"
+              >
+                <Left class="size-icon-md flex-none" /><span>Parent folder</span
+                >
               </button>
             {/if}
             {#if listing}
+              <!-- literal: 24px 8px padding -->
               <div
                 data-slot="location-section-empty"
-                class="empty"
+                class="type-meta px-(--pad-x) py-(--pad-y) text-center wrap-anywhere text-ink-subtle"
                 role="status"
+                style:--pad-x="8px"
+                style:--pad-y="24px"
               >
                 Loading folders...
               </div>
             {:else if listError}
+              <!-- literal: 24px 8px padding -->
               <div
                 data-slot="location-section-empty"
-                class="empty error"
+                class="type-meta px-(--pad-x) py-(--pad-y) text-center wrap-anywhere text-status-fail-ink"
                 role="alert"
+                style:--pad-x="8px"
+                style:--pad-y="24px"
               >
                 {listError}
               </div>
             {:else}
               {#each folders as folder (`${path}/${folder.name}`)}
+                <!-- literal: 10px gap, 34px / 44px height, 8px inline padding -->
                 <button
-                  class="folder press-tint"
+                  class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) text-left font-mono text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
                   onclick={() => enter(folder.name)}
+                  style:--gap="10px"
+                  style:--h="34px"
+                  style:--h-phone="44px"
+                  style:--pad-x="8px"
                   title={folder.name}
                   type="button"
                 >
                   <Folder
-                    style={`color:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
+                    class="size-icon-md flex-none text-(--hue)"
+                    style={`--hue:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
                   />
-                  <span data-slot="name" class="name">{folder.name}</span>
-                  <Right class="go" />
+                  <span data-slot="name" class="min-w-0 flex-1 truncate"
+                    >{folder.name}</span
+                  >
+                  <Right class="size-icon-md text-neutral-8" />
                 </button>
               {/each}
               {#if !folders.length}
+                <!-- literal: 24px 8px padding -->
                 <div
                   data-slot="location-section-empty"
-                  class="empty"
+                  class="type-meta px-(--pad-x) py-(--pad-y) text-center wrap-anywhere text-ink-subtle"
                   role="status"
+                  style:--pad-x="8px"
+                  style:--pad-y="24px"
                 >
                   No subfolders
                 </div>
               {/if}
             {/if}
           </div>
-          <div class="use">
-            <span data-slot="path" class="path" title={path}>{path}</span>
+          <!-- literal: 8px gap and padding, 44px button height on a phone, 1.3 line height -->
+          <div
+            class="flex max-phone:flex-wrap items-center justify-between gap-(--gap) border-t border-border-hairline bg-surface-lift p-(--gap)"
+            style:--gap="8px"
+          >
+            <span
+              data-slot="path"
+              class="max-phone:basis-full min-w-0 truncate font-mono text-size-meta leading-(--lh) font-normal text-ink-muted"
+              style:--lh="1.3"
+              title={path}>{path}</span
+            >
             <button
               data-slot="primary"
-              class="ns-btn sm primary touch-hit"
+              class="ns-btn sm primary touch-hit max-phone:min-h-(--min-h) flex-none whitespace-nowrap max-phone:w-full"
               onclick={useFolder}
+              style:--min-h="44px"
               type="button"
             >
               Use this folder
@@ -347,401 +459,111 @@
   </div>
 
   <div class="panel" {@attach folds(() => mode === "repo", PANEL)}>
-    <div class="clip">
+    <div class="min-h-0">
+      <!-- literal: 8px gap, -12px rise -->
       <div
-        class="repo"
-        style={`transform:translateY(${mode === "repo" ? 0 : -12}px);opacity:${mode === "repo" ? 1 : 0};pointer-events:${mode === "repo" ? "auto" : "none"}`}
+        data-slot="repo"
+        class="grid gap-(--gap) transform-(--t) pointer-events-(--pe) opacity-(--o) transition-[opacity] dur-panel ease-out"
+        style:--gap="8px"
+        style:--o={mode === "repo" ? 1 : 0}
+        style:--pe={mode === "repo" ? "auto" : "none"}
+        style:--t={`translateY(${mode === "repo" ? 0 : -12}px)`}
       >
-        <div data-slot="location-section-field" class="field">
-          <div data-slot="row" class="row repo-row">
-            <ProviderLogo class="lead gh" provider="github" size={null} />
+        <div
+          data-slot="location-section-field"
+          class="overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control"
+        >
+          <!-- literal: 8px gap, 42px / 46px height, 0 12px padding -->
+          <div
+            data-slot="row"
+            class="flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) pr-(--pad-x) pl-(--pad-x)"
+            style:--gap="8px"
+            style:--h="42px"
+            style:--h-phone="46px"
+            style:--pad-x="12px"
+          >
+            <ProviderLogo
+              class="size-icon-md flex-none text-hue-amber-500 opacity-80"
+              provider="github"
+              size={null}
+            />
+            <!-- literal: 30px / 44px minimum height, 1.4 line height, 1rem on a phone -->
             <input
               aria-label="Repository"
               autocapitalize="off"
+              class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}
               placeholder="owner/repository"
               spellcheck="false"
+              style:--fs-phone="1rem"
+              style:--lh="1.4"
+              style:--min-h="30px"
+              style:--min-h-phone="44px"
               tabindex={mode === "repo" ? 0 : -1}
               value={repo}
             />
           </div>
         </div>
-        <div data-slot="note" class="note">
-          <Refresh />
-          <span
-            >Cloned into <span class="mono">{dir.trim() || "~"}</span> on each machine,
-            pulled fresh before the agent starts.</span
+        <!-- literal: 8px gap, 9px 10px padding, 1px icon offset -->
+        <div
+          data-slot="note"
+          class="flex items-start gap-(--gap) rounded-md border border-border-hairline bg-surface-recess px-(--pad-x) py-(--pad-y)"
+          style:--gap="8px"
+          style:--mt="1px"
+          style:--pad-x="10px"
+          style:--pad-y="9px"
+        >
+          <Refresh class="mt-(--mt) size-icon-md flex-none text-hue-blue-500" />
+          <span class="type-meta min-w-0 text-pretty text-ink-muted"
+            >Cloned into <span
+              class="min-w-0 font-mono text-size-meta leading-(--lh) font-normal text-pretty text-ink-strong"
+              style:--lh="1.35">{dir.trim() || "~"}</span
+            > on each machine, pulled fresh before the agent starts.</span
           >
         </div>
       </div>
     </div>
   </div>
   {#if !embedded}
-    <p aria-live="polite" class="reading" title={reading} class:informational>
+    <!-- literal: 16px minimum height -->
+    <p
+      aria-live="polite"
+      class="type-meta m-0 min-h-(--min-h) truncate text-status-fail-ink data-informational:text-ink-muted"
+      data-informational={informational || undefined}
+      style:--min-h="16px"
+      title={reading}
+    >
       {reading || " "}
     </p>
   {/if}
 </section>
 
 <style>
-  .loc {
-    display: grid;
-    gap: 8px;
+  /* residual: unmapped */
+  [data-slot="crumb"] {
+    font: inherit;
   }
-  .loc.embedded {
-    padding: 4px;
+  [data-slot="crumb"][aria-current] {
+    font-weight: var(--weight-strong);
   }
-  .loc.embedded > :global(.segmented) {
-    justify-self: start;
-  }
-  .field {
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
-    overflow: hidden;
-    transition: var(--transition-control);
-  }
-  .field.locked {
-    background: var(--surface-recess);
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 42px;
-    padding: 0 6px 0 12px;
-  }
-  .repo-row {
-    padding-right: 12px;
-  }
-  .row :global(svg.lead) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--hue-amber-500);
-  }
-  .row :global(svg.gh) {
-    opacity: 0.8;
-  }
-  input {
-    flex: 1;
-    min-width: 0;
-    min-height: 30px;
-    border: 0;
-    outline: none;
-    background: transparent;
-    font: var(--weight-body) var(--text-label) / 1.4 var(--font-mono);
-    color: var(--ink-strong);
-    padding: 0;
-  }
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 24px;
-    padding: 0 8px;
-    border-radius: var(--radius-sm);
-    background: var(--status-live-bg);
-    color: var(--status-live-ink);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    white-space: nowrap;
-  }
-  .override {
-    flex: none;
-    height: 30px;
-    padding: 0 10px;
-    border: 0;
-    background: transparent;
-    border-radius: var(--radius-sm);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-muted);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .browse {
-    display: inline-flex;
-    flex: none;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--border-control);
-    background: var(--surface-recess);
+  /* The inset ring and raised shadow together. */
+  [data-slot="browse"] {
     box-shadow:
       inset 0 0 0 1px var(--neutral-8),
       var(--shadow-raised);
-    border-radius: var(--radius-sm);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-strong);
-    cursor: pointer;
-    white-space: nowrap;
   }
-  .browse:disabled {
-    animation: none;
-    cursor: not-allowed;
-  }
-  .browse :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .override:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-    .browse:not(:disabled):hover,
-    .crumb:hover {
-      background: var(--surface-hover);
-    }
-    .folder:hover {
-      background: var(--surface-hover);
-    }
-  }
-  /* A panel opens by growing to its content's height and folds shut the
-     same way (--dur-panel, --ease-in-out; motion/fold.svelte.ts). */
-  .clip {
-    min-height: 0;
-  }
-  .browser {
-    border-top: 1px solid var(--border-hairline);
-    background: var(--surface-recess);
-  }
-  .crumbs {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 8px 8px 10px;
-    border-bottom: 1px solid var(--border-hairline);
-    background: var(--surface-recess);
-  }
-  .machine {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 24px;
-    padding: 0 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-lift);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    flex: none;
-  }
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--hue-green-500);
-  }
-  .trail {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    font: var(--weight-body) var(--text-label) / 1.4 var(--font-mono);
-    color: var(--ink-muted);
-  }
-  .ancestors {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 2px;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  .crumb {
-    min-height: 44px;
-    min-width: 44px;
-    flex: none;
-    padding: 0 6px;
-    border: 0;
-    background: transparent;
-    border-radius: var(--radius-xs);
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-  }
-  .crumb.current {
-    max-width: 100%;
-    padding: 8px;
-    background: var(--surface-lift);
-    color: var(--ink-strong);
-    font-weight: var(--weight-strong);
-    text-align: left;
-    overflow-wrap: anywhere;
-  }
-  .sep {
-    color: var(--neutral-8);
-  }
-  .folders {
-    max-height: 196px;
-    overflow: auto;
-    padding: 6px;
-    display: grid;
-    align-content: start;
-    overscroll-behavior: contain;
-    gap: 1px;
-  }
-  .folder {
-    display: flex;
-    justify-content: flex-start;
-    min-width: 0;
-    align-items: center;
-    gap: 10px;
-    height: 34px;
-    padding: 0 8px;
-    border: 0;
-    background: transparent;
-    border-radius: var(--radius-sm);
-    font: var(--weight-body) var(--text-label) / 1 var(--font-mono);
-    color: var(--ink-strong);
-    cursor: pointer;
-    text-align: left;
-  }
-  .folder.up {
-    color: var(--ink-muted);
-  }
-  .folder :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .folder :global(svg.go) {
-    width: 16px;
-    height: 16px;
-    color: var(--neutral-8);
-  }
-  .folder .name {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .empty {
-    padding: 24px 8px;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-  .empty.error {
-    color: var(--status-fail-ink);
-  }
-  .use {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px;
-    border-top: 1px solid var(--border-hairline);
-    background: var(--surface-lift);
-  }
-  .use .ns-btn {
-    flex: none;
-    white-space: nowrap;
-  }
-  .path {
-    font: var(--weight-body) var(--text-meta) / 1.3 var(--font-mono);
-    color: var(--ink-muted);
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .repo {
-    display: grid;
-    gap: 8px;
-    transition: opacity var(--dur-panel) var(--ease-out);
+  /* needs transition token: transform var(--dur-panel) var(--ease-in-out), opacity var(--dur-panel) var(--ease-out) */
+  [data-slot="repo"] {
     @media (prefers-reduced-motion: no-preference) {
       transition:
         transform var(--dur-panel) var(--ease-in-out),
         opacity var(--dur-panel) var(--ease-out);
     }
   }
-  .note {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 9px 10px;
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-  }
-  .note :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    margin-top: 1px;
-    color: var(--hue-blue-500);
-  }
-  .note span {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-    min-width: 0;
-  }
-  .note .mono {
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-  }
-  .reading {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-height: 16px;
-  }
-  .reading.informational {
-    color: var(--ink-muted);
-  }
-  @media (max-width: 640px) {
-    .crumbs {
-      flex-wrap: wrap;
-    }
-    .trail {
-      flex-basis: 100%;
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    .ancestors {
-      max-width: 100%;
-    }
-    .row {
-      height: 46px;
-    }
-    .row:not(.repo-row) {
-      height: 56px;
-    }
-    input {
-      min-height: 44px;
-      font-size: 1rem;
-    }
-    .browse,
-    .override {
-      height: 44px;
-    }
-    .folder {
-      height: 44px;
-    }
-    .use {
-      flex-wrap: wrap;
-    }
-    .path {
-      flex-basis: 100%;
-    }
-    .use .ns-btn {
-      width: 100%;
-      min-height: 44px;
-    }
+  /* residual: keyframes */
+  [data-slot="browse"]:disabled {
+    animation: none;
   }
 </style>
