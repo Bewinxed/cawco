@@ -1424,10 +1424,12 @@
     "rest": "",
     "dropped": [],
     "hooks": [],
-    "rewrites": [],
+    "rewrites": [
+      "WorkTabs.svelte:28 at T, `:global(.work-tabs[data-slot=\"tabs\"]) { background: none }`: the shorthand, every longhand reset"
+    ],
     "ok": true,
-    "today": "bg-transparent p-0",
-    "next": "bg-transparent p-0"
+    "today": "background-none p-0",
+    "next": "background-none p-0"
   },
   {
     "site": "src/lib/cawco/tasks/StagesControl.svelte:201",
