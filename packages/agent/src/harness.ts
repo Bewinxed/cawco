@@ -410,6 +410,19 @@ export interface Harness {
   /** Start a session; resolves once the runtime handle is in place. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession>;
+  /**
+   * A launch in workspace `workspace`, with `cwd` its directory: the folder
+   * where the harness saves a tool result too large to hand the model, which
+   * it tells the model to read, as that session's own (the boundary reads it,
+   * `boundaryFor`), and the spawn as it is launched to keep its results
+   * there. Absent for a harness that saves none.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
+  spill?(
+    spec: SpawnPayload,
+    cwd: string,
+    workspace: string
+  ): Promise<{ dir: string; spec: SpawnPayload }>;
   /** Applies the hub's fleet config to this harness's own files; reports per entry. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   syncFleet?(config: FleetConfig): Promise<FleetSyncReport>;

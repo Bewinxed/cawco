@@ -121,6 +121,7 @@ import {
   workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
+  workspaceSpillsFile,
   workspaceStateDir,
   workspacesDir,
   workspaceTmpDir,
@@ -1756,12 +1757,16 @@ export const hookMissing = (hook: LaunchedHook): string | undefined =>
  * started without it (a later session on another account) is handed over,
  * its form changed with its policy. The project a work item's session
  * belongs to is the workspace's ({@link setProject}), so a workspace cut
- * before it was kept reads its project's folder from its next item on.
+ * before it was kept reads its project's folder from its next item on. The
+ * session's `spill` folder, where its harness saves a tool result too large
+ * to hand the model, is added too ({@link addSpill}): a new session's hands
+ * the boundary over, its form changed with its policy.
  */
 export const boundaryFor = async (
   workspace: WorkspaceRef | undefined,
   account: string | undefined,
-  project?: string
+  project?: string,
+  spill?: string
 ): Promise<Boundary | undefined> => {
   if (!workspace) {
     return;
@@ -1772,7 +1777,36 @@ export const boundaryFor = async (
   if (project) {
     await setProject(workspace.id, project);
   }
+  if (spill) {
+    await addSpill(workspace.id, spill);
+  }
   return ensureBoundary(workspace);
+};
+
+/**
+ * Adds `dir` to the folders workspace `id`'s sessions save tool results in
+ * ({@link workspaceSpillsFile}), once, and makes it: srt binds a read allow
+ * back only where it exists as the sandbox starts, and the harness writes
+ * its first saved result long after. Made owner-only, as Claude Code makes
+ * its own; never taken away while the workspace lives, as a session's
+ * transcript names its saved results for as long as it is resumed.
+ */
+const addSpill = async (id: string, dir: string): Promise<void> => {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const file = workspaceSpillsFile(id);
+  const listed = await reported(
+    readRecord<unknown>(file).then((record = []) => {
+      if (!Array.isArray(record)) {
+        throw new DamagedRecord(file, "it is not a list");
+      }
+      return record as string[];
+    })
+  );
+  if (listed.includes(dir)) {
+    return;
+  }
+  await mkdir(stateDir(id), { recursive: true });
+  await writeWhole(file, `${JSON.stringify([...listed, dir])}\n`, 0o644);
 };
 
 /**

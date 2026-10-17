@@ -772,6 +772,28 @@ export const workspaceAccountsFile = (id: string): string =>
   join(workspaceStateDir(id), "accounts.json");
 
 /**
+ * The folders a workspace's sessions' harnesses save a tool result too large
+ * to hand the model in, a JSON list of absolute paths the agent adds to as
+ * each session spawns there (`boundaryFor`), one per session, so the
+ * workspace reads each (`workspacePolicy`). In the state dir, which nothing
+ * inside the boundary writes.
+ */
+export const workspaceSpillsFile = (id: string): string =>
+  join(workspaceStateDir(id), "spills.json");
+
+/** The dir in a workspace's state dir that holds each {@link workspaceSpillDir}. */
+export const SPILLS_DIR_NAME = "spills";
+
+/**
+ * Where workspace `id`'s pi or OpenCode session `instanceId` keeps its
+ * harness's saved tool results ({@link workspaceSpillsFile}): in the state
+ * dir, which nothing inside the boundary writes, so a command reads them and
+ * never puts a file or a link there for the host to write through.
+ */
+export const workspaceSpillDir = (id: string, instanceId: string): string =>
+  join(workspaceStateDir(id), SPILLS_DIR_NAME, instanceId);
+
+/**
  * The project a workspace's work belongs to, a JSON string of its id the
  * agent writes as the workspace is cut and as each work item's session
  * spawns there (`boundaryFor`), so the workspace reads that project's folder

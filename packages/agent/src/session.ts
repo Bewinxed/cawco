@@ -2715,6 +2715,13 @@ export class SessionSupervisor {
       // it: the boundary reads that account's user layer by the paths the
       // session is given.
       const place = spec.workspace ?? (await cloneHolding(workdir));
+      // A launch in a workspace keeps the tool results its harness saves in
+      // a folder of its own, which its boundary reads (`Harness.spill`); a
+      // reattach launches nothing, and its folder is read already.
+      const spill =
+        place && !spec.reattachOnly
+          ? await adapter.spill?.(spec, workdir, place.id)
+          : undefined;
       // A work item's spawn names its workspace and its project, the
       // workspace's: its boundary reads that project's folder.
       const boundary = await boundaryFor(
@@ -2722,7 +2729,8 @@ export class SessionSupervisor {
         (spec.harness ?? "claude") === "claude"
           ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
           : undefined,
-        spec.workspace ? spec.projectId : undefined
+        spec.workspace ? spec.projectId : undefined,
+        spill?.dir
       );
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(
@@ -2749,7 +2757,7 @@ export class SessionSupervisor {
       this.#unsentFailures.delete(instanceId);
       const session = spec.reattachOnly
         ? await adapter.reattach?.(spec, ctx)
-        : await adapter.spawn(spec, ctx);
+        : await adapter.spawn(spill?.spec ?? spec, ctx);
       if (!session) {
         this.#recoveryUnavailable(
           spec,

@@ -3783,6 +3783,39 @@ export class ClaudeHarness implements Harness {
     }
   }
 
+  /**
+   * Claude Code saves a tool result too large to hand the model under the
+   * session's own folder in its config dir, and tells the model to read it
+   * there: "Output has been saved to <config dir>/projects/<slug>/<session
+   * id>/tool-results/mcp-crw-crw_scrape-….txt … Slice by character range via
+   * Bash instead" (seen on 2026-10-17). So the session's id is known
+   * before its boundary starts: a resume goes on under its own; a new
+   * session or a fork takes one minted here, the SDK's `sessionId` ("Use a
+   * specific session ID … when `forkSession` is also set", sdk.d.ts
+   * 0.3.301). The config dir and slug are the ones {@link spawn} runs it in.
+   */
+  async spill(
+    spec: SpawnPayload,
+    cwd: string
+  ): Promise<{ dir: string; spec: SpawnPayload }> {
+    const goesOn = spec.resume && !spec.resume.fork ? spec.resume : undefined;
+    const sessionId = goesOn ? goesOn.sessionKey : crypto.randomUUID();
+    const account = await launchAccountOf(spec);
+    const real = await realpath(cwd).catch(() => cwd);
+    return {
+      dir: join(
+        sessionConfigDir({ accountId: account ?? null }),
+        "projects",
+        projectSlug(real),
+        sessionId,
+        "tool-results"
+      ),
+      spec: goesOn
+        ? spec
+        : { ...spec, options: { ...(spec.options ?? {}), sessionId } },
+    };
+  }
+
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext
