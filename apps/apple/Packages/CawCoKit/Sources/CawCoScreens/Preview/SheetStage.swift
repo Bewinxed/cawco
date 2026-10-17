@@ -2,37 +2,44 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// What a sheet's pane shows of its stage (PreviewPane.svelte `sheetStage`,
-/// `stageWaiting`, `compileErrors`): the project's own Vite, which the daemon
-/// runs in its workspace. Starting, waking and the page compiling stand on
-/// the loading cover; compile errors on a card over the last render, dimmed;
-/// a stage that didn't start, where the page would be, with Try again.
+/// What the pane shows of a stage (PreviewPane.svelte `staged`,
+/// `stageWaiting`, `compileErrors`): a sheet's, the project's own Vite, or a
+/// workspace preview's server (`serve`), each run by the daemon in its
+/// workspace. Starting, waking and a sheet's page compiling stand on the
+/// loading cover; compile errors on a card over the last render, dimmed; a
+/// stage that didn't start, where the page would be, with Try again.
 struct SheetStageShown: Equatable {
     /// The cover's line while the page is on its way; nil when nothing is.
     var waiting: String?
     /// The first compile error standing now, and how many more stand besides.
     var error: StageError?
     var more = 0
-    /// The stage didn't start or failed its restarts: its Vite root and why.
-    var down: (dir: String, message: String?)?
+    /// The stage didn't start or failed its restarts: what stands where the page would be.
+    var down: Down?
 
-    static func == (a: Self, b: Self) -> Bool {
-        a.waiting == b.waiting && a.error == b.error && a.more == b.more
-            && a.down?.dir == b.down?.dir && a.down?.message == b.down?.message
+    struct Down: Equatable {
+        var title: String
+        var line: String
     }
 
     /// PreviewPane.svelte's derivations, for `stage` while the page has (or
-    /// has not) said it is ready.
-    init(_ stage: StageState?, connected: Bool) {
+    /// has not) said it is ready; `served`, the port of a workspace preview's
+    /// server, nil for a sheet's stage.
+    init(_ stage: StageState?, connected: Bool, served: Int?) {
         guard let stage else { return }
         switch stage.status {
-        case .starting: waiting = Words.Sheet.starting(dir: stage.dir)
+        case .starting: waiting = served == nil ? Words.Sheet.starting(dir: stage.dir) : Words.Sheet.serverStarting
         case .waking, .asleep: waiting = Words.Sheet.waking
         case .live:
-            waiting = connected ? nil : Words.Sheet.compiling
+            waiting = connected || served != nil ? nil : Words.Sheet.compiling
             error = stage.errors.first
             more = max(0, stage.errors.count - 1)
-        case .error: down = (stage.dir, stage.message)
+        case .error:
+            down = if let served {
+                Down(title: Words.Sheet.serverDownTitle(port: served), line: Words.Sheet.serverDownLine(message: stage.message))
+            } else {
+                Down(title: Words.Sheet.downTitle(dir: stage.dir), line: Words.Sheet.downLine(message: stage.message))
+            }
         case .unrecognized: break
         }
     }
@@ -176,11 +183,11 @@ final class SheetDownView: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("SheetDownView is built in code") }
 
-    /// The stage's Vite root and why it did not start, as the pane says them.
-    func show(dir: String, message: String?) {
+    /// What stands where the page would be, as the pane says it.
+    func show(_ down: SheetStageShown.Down) {
         empty?.removeFromSuperview()
         again.removeFromSuperview()
-        let made = KitEmptyState(icon: .alert, title: Words.Sheet.downTitle(dir: dir), line: Words.Sheet.downLine(message: message), action: again)
+        let made = KitEmptyState(icon: .alert, title: down.title, line: down.line, action: again)
         made.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(made)
         let side = Space.space6

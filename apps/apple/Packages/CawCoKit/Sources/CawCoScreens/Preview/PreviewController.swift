@@ -69,9 +69,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The current document finished loading: the cover may go, unless a sheet's stage still has a word for it.
     private var pageLoaded = false
 
-    // A sheet's stage (live components), as its frame carries it (SheetStage.swift).
+    // A sheet's stage (live components), or a workspace preview's server, as its frame carries it (SheetStage.swift).
     private var stage: StageState?
-    private var stageShown = SheetStageShown(nil, connected: false)
+    /// The port of the workspace preview's server the stage is; nil for a sheet's.
+    private var served: Int?
+    private var stageShown = SheetStageShown(nil, connected: false, served: nil)
     /// `.sheet-dim`: the last good render, under the scrim, while it doesn't compile.
     private let dim = UIView()
     private let errorCard = SheetErrorCard()
@@ -708,11 +710,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // Out of sight, the page waits to be seen.
         guard pageShown else { return }
         let origin = route.origin
-        // A sheet's stage rides its frame, published again at the same
-        // revision on each change (core `PreviewFrame.stage`).
-        let shownStage = frame.artifact.kind == .sheet ? frame.stage : nil
-        if shownStage != stage {
+        // A sheet's stage or a workspace preview's server rides its frame,
+        // published again at the same revision on each change (core
+        // `PreviewFrame.stage`; PreviewPane.svelte `served`, `staged`).
+        let port = frame.source?.value1
+        let servedPort = port.flatMap { $0.serve != nil ? Int($0.port) : nil }
+        let shownStage = frame.artifact.kind == .sheet || servedPort != nil ? frame.stage : nil
+        if shownStage != stage || servedPort != served {
             stage = shownStage
+            served = servedPort
             paintStage()
         }
         guard frame.revision != revision else { return }
@@ -1016,12 +1022,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Reduce Motion, since nothing travels.
     private func paintStage() {
         guard isViewLoaded else { return }
-        let next = SheetStageShown(stage, connected: connected)
+        let next = SheetStageShown(stage, connected: connected, served: served)
         let before = stageShown
         stageShown = next
         paintCover(animated: true)
         if let error = next.error { errorCard.show(error, more: next.more) }
-        if let down = next.down { self.down.show(dir: down.dir, message: down.message) }
+        if let down = next.down { self.down.show(down) }
         appear(dim, next.error != nil)
         appear(errorCard, next.error != nil)
         appear(self.down, next.down != nil)
