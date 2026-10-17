@@ -589,7 +589,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:dur-exit data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:group-not-data-instant/tools:data-foot:dur-pop group-data-instant/tools:data-foot:transition-off"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:dur-exit data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:dur-pop group-data-instant/tools:data-foot:transition-off"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >

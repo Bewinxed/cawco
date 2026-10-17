@@ -1249,7 +1249,7 @@
             <span
               data-slot="join"
               aria-hidden="true"
-              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out join-radius-(--join-r) clip-path-(--join-clip) group-data-joined/tools:opacity-100 group-data-joined/tools:group-not-data-instant/tools:dur-pop group-data-instant/tools:transition-off max-[900px]:bottom-(--join-foot) max-[900px]:join-radius-(--join-r-phone) max-[900px]:clip-path-(--join-clip-phone)"
+              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out join-radius-(--join-r) clip-path-(--join-clip) group-data-joined/tools:opacity-100 group-data-joined/tools:not-group-data-instant/tools:dur-pop group-data-instant/tools:transition-off max-[900px]:bottom-(--join-foot) max-[900px]:join-radius-(--join-r-phone) max-[900px]:clip-path-(--join-clip-phone)"
               style:--f="var(--flare)"
               style:--h="calc(100% - 1px)"
               style:--join-foot="calc(-1 * var(--caw-neck))"
