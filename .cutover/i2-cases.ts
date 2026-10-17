@@ -1,7 +1,7 @@
 /**
  * The cases i2-exact.ts renders twice, at their source of record and now.
  * `t` is the element as the source's markup wrote it (ac7b79de8; for a
- * change main made after T, a7e27322c, the case's `at`), with `{S0}` …
+ * change main made after T, 282054d12, the case's `at`), with `{S0}` …
  * where its component's own scoped class went; `now` as the converted tree
  * writes it. A kit part's class is its own `cn(…)` over its recipe, called
  * from that tree, and a component's element is read from its own source
@@ -24,6 +24,12 @@ export interface State {
 export interface Case {
   /** The sha `t` is written at: T unless main changed it after T (M). */
   at?: string;
+  /**
+   * A property an element (its `data-check` key) is directed to compute
+   * differently from its source: the value it must have now, and why. It is
+   * checked against that value instead of the source's.
+   */
+  directed?: { key: string; prop: string; now: string; why: string }[];
   files?: string[];
   name: string;
   now: string;
@@ -178,6 +184,7 @@ const PROJECT_HEAD = "src/lib/cawco/project/ProjectHead.svelte";
 const PANE_TABS = "src/lib/cawco/workspace/PaneTabs.svelte";
 const TAB_ITEM = "lib/components/ui/fluid-tabs/TabItem.svelte";
 const THREAD_PANE = "src/lib/cawco/ThreadPane.svelte";
+const TOOL_GROUP = "src/lib/cawco/transcript/ToolGroup.svelte";
 /** What the fluid-tabs kit sets round a pane tab's cast, on both trees. */
 const TAB_KIT =
   "--flare:8px;--slope-start:1px;--slope-end:1px;--radius:8px;--choose-dur:160ms;--choose-ease:ease";
@@ -442,25 +449,36 @@ export const CASES: Case[] = [
       "DecisionNode.svelte:41 the dot",
       "src/lib/cawco/decisions/graph/DecisionNode.svelte",
       `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "t", 'data-slot="decision-node"', "{S0}")}><span class="{S0} name">Ship it</span><span aria-hidden="true" data-check="ring" class="{S0} ring"></span></div>`,
-      `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'data-slot="decision-node"')}><span class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong">Ship it</span><span aria-hidden="true" data-check="ring" ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'class="ring size-icon-sm')}></span></div>`,
+      `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'data-slot="decision-node"')}><span class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong">Ship it</span><span aria-hidden="true" data-check="ring" ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'class="size-icon-sm flex-none rounded-(--ring-r)')}></span></div>`,
     ],
     [
       "DocThumb.svelte:92 the progress ring",
       "src/lib/cawco/transcript/DocThumb.svelte",
       `<span class="{S0} glyph"><svg data-check="ring" class="{S0} ring" viewBox="0 0 24 24"></svg></span>`,
-      `<span data-slot="glyph" class="grid place-items-center flex-none text-ink-muted"><svg data-check="ring" data-slot="ring" class="ring size-icon-md m-space-1 -rotate-90" viewBox="0 0 24 24"></svg></span>`,
+      `<span data-slot="glyph" class="grid place-items-center flex-none text-ink-muted"><svg data-check="ring" data-slot="ring" class="size-icon-md m-space-1 -rotate-90" viewBox="0 0 24 24"></svg></span>`,
     ],
     [
       "TabsList.svelte:1154 the focus ring",
       "src/lib/components/ui/fluid-tabs/TabsList.svelte",
       `<div class="{S0} tabs-list"><div data-check="ring" aria-hidden="true" class="{S0} ring"></div></div>`,
-      `<div><div data-check="ring" aria-hidden="true" class="ring pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"></div></div>`,
+      `<div><div data-check="ring" aria-hidden="true" class="pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"></div></div>`,
     ],
   ].map(([name, file, t, now]) => ({
     name,
     files: [file],
     t,
     now,
+    // The scoped class `ring` also made Tailwind write its `ring` utility,
+    // a 1px currentcolor shadow none of the three asked for; the class is
+    // gone and the element keeps its hook (the orchestrator, at 282054d12).
+    directed: [
+      {
+        key: "ring",
+        prop: "box-shadow",
+        now: "none",
+        why: "Tailwind's `ring` utility no longer drawn under the scoped class",
+      },
+    ],
   })),
   {
     name: "thinking-indicator.svelte:120 the word",
@@ -794,6 +812,15 @@ export const CASES: Case[] = [
       { name: "desk", width: 1280 },
       { name: "phone", width: 390 },
     ],
+  },
+  {
+    name: "ToolGroup.svelte:417 an artifact's card, drawn whole with its panel closed (main's 877fd14c4)",
+    at: M,
+    files: [TOOL_GROUP],
+    t: `<div data-check="card" class="{S0} preview-tool" data-artifact="a"><button data-check="open" class="{S0} artifact-open" type="button">Notes</button></div>`,
+    now: `<div data-check="card" data-slot="preview-tool" ${attrs(TOOL_GROUP, "now", 'data-slot="preview-tool"')} data-artifact="a"><button data-check="open" data-slot="artifact-open" ${attrs(TOOL_GROUP, "now", 'data-slot="artifact-open"')} type="button">Notes</button></div>`,
+    show: ["opacity", "inline-size", "outline-style"],
+    states: [REST, focus('[data-check="open"]')],
   },
 
   // ----- the codemod's dropped `md:` twins, as the kit fields stand now

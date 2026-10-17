@@ -290,3 +290,18 @@ A wider class, found on the way and not changed here: the conversion turned 239 
 - `bun run lint`: exit 0 (`tokens: … byte for byte the committed file (242 files)`; `variants: 467 named variants, byte for byte the committed file`; `Checked 2113 files in 4s. No fixes applied.`; `style greps: no transition-all, no filter in a transition list, no has-[.class]`; `token contrast: all 90 pairs DESIGN.md names hold`).
 - `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings`; root `tsc -p tsconfig.json`: exit 0.
 - vite build: `✔ done`.
+
+## Main at 282054d12 (M moves forward)
+
+M is now 282054d12 (`.cutover/i2-tree.ts`): a change main made after T is proved against its own rule there. main's dashboard commits since a7e27322c, merged (7bf0941c6):
+- the outbox (ca68d5284, 2d6f37f5a, 05391910b, 8c67081fc): script only. The refused send's Try again and Edit come back after a reload from `client.svelte.ts` and `send-store.ts`, with no markup of their own; TaskActivity, TaskPane, TaskReview, ViewRoutines, project/[id] and project/new take an id per send in their scripts.
+- iOS pairing (1c31deb0b, c7841c159): the dashboard gains `hub-auth.svelte.ts`'s new fields and NeedsCard's words from `pairingWords.asks`. The scoped `class="ring"` the parent's pairing leaf found is on this tree three times, each with a scoped rule that never set `box-shadow`, so Tailwind's `ring` utility (written because the class name is one of its own) drew a 1px currentcolor shadow on it: TabsList's focus ring, DecisionNode's dot, DocThumb's progress ring. The class is gone from all three; TabsList's and DocThumb's elements keep `data-slot="ring"` as their hook, and nothing read DecisionNode's.
+- 7778ccd96 (toasts name a machine by its label): `client.svelte.ts` only.
+- 877fd14c4 (the closed artifact card drawn whole): the converted card's `data-closed` and its `data-closed:opacity-50` are gone; ToolGroup keeps `opened`, which the card's button reads.
+- 7f24eb753 (upstream-guard's leg g): hub only.
+
+Every line main added in its 17 dashboard files is in the merged tree, and none it removed is (a line-by-line check over `git diff a7e27322c 282054d12`). The one conflict was ToolGroup, both hunks the closed card.
+
+Proofs: `bun .cutover/i2-exact.ts`: `i2-exact: 62 cases, 150 element states, 0 differ`. The new case, ToolGroup's card at 282054d12, is the same in all 480 properties at rest and with its button focused (`opacity 1`, `outline-style solid` focused). A case may now name a property it is directed to compute differently, with the value it must have (`directed`); the three ring elements use it: `box-shadow oklch(0.295 0.01 70) 0px 0px 0px 1px → none` (TabsList, DecisionNode), `oklch(0.495 0.014 74) 0px 0px 0px 1px → none` (DocThumb). The merged build's sweep is unchanged: 7 rules restyle every data-slot under a state, 44 a whole subtree.
+
+Gates on the merged tree: `bun run lint` exit 0 (`Checked 2125 files in 3s. No fixes applied.`; `variants: 467 named variants, byte for byte the committed file`; `switch exhaustiveness: every switch over a union or enum is whole (1423 files)`); `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings`; vite build `✔ done`; root `tsc` exit 0. `packages/hub openapi:check` fails, and fails the same on a clean checkout of 282054d12: `The wire would break nightly 3944 (WIRE_PROTOCOL 13), at 2 places: PreviewFrame.stage … SshJoinJob.passwordProblem: the shipped app may read it, and the hub no longer sends it`. It is main's.

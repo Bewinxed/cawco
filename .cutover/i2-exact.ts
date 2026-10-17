@@ -3,7 +3,7 @@
  * `bun .cutover/i2-exact.ts [name filter]`: integration 2's exactness proof.
  * Each case in i2-cases.ts is an element (with the ancestors its states need)
  * written twice: as its source of record rendered it (ac7b79de8, or for a
- * change main made after T, a7e27322c: the case's `at`) and as the
+ * change main made after T, 282054d12: the case's `at`) and as the
  * converted tree does. Each side is its own page in Chromium:
  * - source: that sha's Tailwind build (its src/app.css, from `git archive`)
  *   for exactly the classes on the page, then the case's components' own
@@ -353,9 +353,18 @@ for (const c of cases as Case[]) {
     );
     for (const key of Object.keys(t)) {
       states += 1;
-      const diffs = Object.keys(t[key]).filter(
-        (p) => t[key][p] !== now[key]?.[p]
-      );
+      const directed = (c.directed ?? []).filter((d) => d.key === key);
+      const diffs = Object.keys(t[key]).filter((p) => {
+        const steer = directed.find((d) => d.prop === p);
+        return steer
+          ? now[key]?.[p] !== steer.now
+          : t[key][p] !== now[key]?.[p];
+      });
+      for (const d of directed) {
+        console.log(
+          `directed ${c.name} [${state.name}] ${key}: ${d.prop} ${t[key][d.prop]} → ${now[key]?.[d.prop]} (must be ${d.now}: ${d.why})`
+        );
+      }
       const shown = (c.show ?? [])
         .map((p) => `${p} ${now[key]?.[p]}`)
         .join("; ");
