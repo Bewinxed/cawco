@@ -72,16 +72,37 @@
   <meta content={topColour} name="theme-color" />
 </svelte:head>
 
+<!-- The strips are fixed elements themselves, not a static element's
+     ::after: WebKit finds the colour to extend by hit-testing the middle of
+     each edge of the viewport (ignoring pointer-events) and walking up the
+     hit element's renderer lineage to the first fixed or sticky box, whose
+     own background it takes (LocalFrameView.cpp, fixedContainerEdges:
+     `midpointOnSide`, `findFixedContainer`). A pseudo-element hits as its
+     host, so a static host led the walk to <body> and <html>, found no fixed
+     box, and Safari fell back to the page's background (the body's, the
+     bottom edge): the status bar took the page's ground on the home and the
+     drawer's surface while it was open. Over every layer, toasts' (sonner,
+     1000) included: the strip is the colour of whatever stands on its edge,
+     so it is never seen as itself. -->
 <div
   data-slot="edge-top"
   aria-hidden="true"
-  class="edge-top"
+  class="fixed inset-x-0 -top-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-top-background)"
   ontransitionend={read}
+  style:--edge-h="max(var(--icon-sm), env(safe-area-inset-top))"
   bind:this={top}
 ></div>
-<div data-slot="edge-bottom" aria-hidden="true" class="edge-bottom"></div>
+<div
+  data-slot="edge-bottom"
+  aria-hidden="true"
+  class="fixed inset-x-0 -bottom-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background)"
+  style:--edge-h="max(var(--icon-sm), env(safe-area-inset-bottom))"
+></div>
 
 <style>
+  /* residual: foreign-dom — the document's own root and body, and the
+     states read off the page from its root (the Shell's bar, a scrim, a
+     sheet), which set the edges' colours and clocks. */
   /* css-scope: the screen's edges are the document's own, set on its root */
   :global(:root) {
     --edge-top-under: var(--surface-raised);
@@ -185,38 +206,14 @@
     --edge-bottom-background: var(--sidebar);
   }
 
-  /* The strips are fixed elements themselves, not a static element's
-     ::after: WebKit finds the colour to extend by hit-testing the middle of
-     each edge of the viewport (ignoring pointer-events) and walking up the
-     hit element's renderer lineage to the first fixed or sticky box, whose
-     own background it takes (LocalFrameView.cpp, fixedContainerEdges:
-     `midpointOnSide`, `findFixedContainer`). A pseudo-element hits as its
-     host, so a static host led the walk to <body> and <html>, found no fixed
-     box, and Safari fell back to the page's background (the body's, the
-     bottom edge): the status bar took the page's ground on the home and the
-     drawer's surface while it was open. */
-  .edge-top,
-  .edge-bottom {
-    position: fixed;
-    inset-inline: 0;
-    /* Over every layer, toasts' (sonner, 1000) included: the strip is the
-       colour of whatever stands on its edge, so it is never seen as itself. */
-    z-index: 1001;
-    pointer-events: none;
-    opacity: var(--edge-shown);
-  }
-  .edge-top {
-    top: -7px;
-    block-size: max(12px, env(safe-area-inset-top));
-    background-color: var(--edge-top-background);
+  /* residual: unmapped — each strip's two clocks in one transition, its
+     colour's and its showing's (needs a transition token). */
+  [data-slot="edge-top"] {
     transition:
       background-color var(--edge-top-fade) var(--ease-out),
       opacity var(--edge-show-fade) var(--ease-out);
   }
-  .edge-bottom {
-    bottom: -7px;
-    block-size: max(12px, env(safe-area-inset-bottom));
-    background-color: var(--edge-bottom-background);
+  [data-slot="edge-bottom"] {
     transition:
       background-color var(--edge-bottom-fade) var(--ease-out),
       opacity var(--edge-show-fade) var(--ease-out);
