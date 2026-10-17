@@ -74,7 +74,6 @@
     side: Snippet;
     /** What stands in the split beside its panes: a phone's sheets. */
     after?: Snippet;
-    // eslint-disable-next-line shadcn/require-static-classes -- the main pane's `data-split-main-class={mainClass}` is a hook, not a class: @shadcn/lint reads any attribute ending in "class" as one
   } = $props();
 
   let width = $state(0);

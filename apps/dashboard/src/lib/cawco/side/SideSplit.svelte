@@ -322,7 +322,7 @@
   }}
   landKey="preview:{viewId}"
   main={children}
-  mainClass={"transcript-pane" /* eslint-disable-line shadcn/no-unknown-classes -- a hook word (Split carries it as data-split-main-class), not a class */}
+  mainClass="transcript-pane"
   onescape={(event) => previewPane?.parentEscape(event)}
   open={desktopOpen}
   side={bounded}
