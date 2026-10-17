@@ -1,0 +1,52 @@
+# project surface, read in Chromium by scripts/probe-kit (style-snapshot --surfaces=project --approve), T against this branch
+# T = an ac7b79de8 worktree with this branch's scripts/probe-kit copied in (tooling only); mine = ws/7eb23b78 with the title-tracking fix
+## T
+caw · tablet light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone light · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone light · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone dark · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone dark · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light reduced · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light reduced · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+caw · tablet dark · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.778 0.012 78)
+caw · desk light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+caw · desk dark · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.778 0.012 78)
+caw · phone light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+caw · phone dark · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.778 0.012 78)
+caw · desk light reduced · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+rest · desk light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > header:1 > div:1 > div:2 > h1:1 [title] · letter-spacing = normal
+## mine
+caw · tablet light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk dark · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone light · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone light · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone dark · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · phone dark · body > div:3 > div:2 > div:2 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light reduced · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · desk light reduced · body > div:2 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:2 > div:1 > section:1 > h2:1 > span:1 [dot] · line-height = 0px
+caw · tablet light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+caw · tablet dark · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.778 0.012 78)
+caw · desk light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+caw · desk dark · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.778 0.012 78)
+caw · phone light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+caw · phone dark · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:2 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.778 0.012 78)
+caw · desk light reduced · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > div:1 > section:1 > div:1 > button:1 [button] · color = oklch(0.495 0.014 74)
+rest · desk light · body > div:1 > div:4 > div:1 > main:1 > div:1 > div:1 > div:1 > div:1 > header:1 > div:1 > div:2 > h1:1 [title] · letter-spacing = normal
+## differences T → mine on these elements (snapshot.ts differences())
+21
+## all differences on the surface, T → mine: before the title fix 2740, after 2670
+## the 21 above are all project/new's route heading (main > … > h1:1 [title], letter-spacing normal → -0.19px and its width): routes/(app)/project/new, outside set 5, the same type-title tracking the ProjectHead and PlacePick fixes here correct. Set 5's elements: 0.

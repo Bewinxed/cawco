@@ -400,7 +400,7 @@
               aria-expanded={open}
               onclick={toggle}
               class="last:-me-space-3"
-              expanded="unfilled-at-rest"
+              expanded="unfilled"
               size="sm"
               toggle="last"
               style="--end: calc(var(--space-3) - 1px - 16px * 4.25 / 24); --toggle-start: calc(11px + 8px - var(--end));"
