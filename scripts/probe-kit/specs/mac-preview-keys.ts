@@ -304,19 +304,26 @@ const keys = async (kit: Kit, binary: string) => {
       return;
     }
     /**
-     * A background query click on `field` (its aria-label) in the app's
-     * window: the field's `AXFocused`, no pointer. Then its report with that
-     * focus.
+     * A background query click on `field` (its aria-label): the field's
+     * `AXFocused`, no pointer. Then its report with that focus. The click
+     * finds the field in the newest snapshot, which an AX-only `see` of the
+     * app's exact window takes first (`--tree --no-screenshot`: the
+     * accessibility tree, no pixels). The click names the process, never the
+     * window: a window selector on a click is resolved among the windows
+     * eligible for capture (InteractionCoordinateResolver, Peekaboo 4.9.4),
+     * which a shell without Screen Recording is never shown.
      */
     const focus = async (field: string) => {
       await peekaboo([
-        "click",
-        field,
-        "--pid",
-        String(app.pid),
+        "see",
         "--window-id",
         await windowOf(app.pid),
+        "--pid",
+        String(app.pid),
+        "--tree",
+        "--no-screenshot",
       ]);
+      await peekaboo(["click", field, "--pid", String(app.pid)]);
       return report(0, (m) => m[3] === field, 15_000);
     };
     /** ⌘K as key events to the app's exact window, in the background. */
