@@ -60,9 +60,12 @@
   </div>
   <!-- The two editors cross-fade in one place and the box tweens between
        their heights. -->
-  <div data-slot="swap" class="swap" {@attach morph()}>
+  <div data-slot="swap" class="grid min-w-0" {@attach morph()}>
     {#key json}
-      <div class="alt" transition:crossIn>
+      <div
+        class="col-start-1 row-start-1 flex flex-col gap-space-4 min-w-0"
+        transition:crossIn
+      >
         {#if json}
           <JsonField
             label="JSON Schema"
@@ -153,17 +156,3 @@
     {/key}
   </div>
 </div>
-
-<style>
-  .swap {
-    display: grid;
-    min-width: 0;
-  }
-  .alt {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-</style>

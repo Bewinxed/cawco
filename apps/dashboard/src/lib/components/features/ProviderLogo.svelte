@@ -114,6 +114,7 @@
 {/if}
 
 <style>
+  /* residual: foreign-dom — the icon component's own svg and its paths */
   /* The ink is the mark's `color`, and its shapes fill with `currentColor`.
      `--ink-strong` is a `light-dark()` value, and WebKit resolved that
      function wrongly inside an SVG `fill` (bugs.webkit.org 283489), which

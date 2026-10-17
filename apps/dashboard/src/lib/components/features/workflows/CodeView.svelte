@@ -233,18 +233,16 @@
   });
 </script>
 
-<section aria-label={label} class="code-view" bind:this={host}></section>
+<section
+  aria-label={label}
+  data-slot="code-view"
+  class="h-full min-h-0 bg-surface-recess border border-border-hairline rounded-sm overflow-hidden"
+  bind:this={host}
+></section>
 
 <style>
-  .code-view {
-    height: 100%;
-    min-height: 0;
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-  .code-view :global(.cm-editor) {
+  /* residual: foreign-dom — CodeMirror's own editor root */
+  [data-slot="code-view"] :global(.cm-editor) {
     height: 100%;
   }
 </style>

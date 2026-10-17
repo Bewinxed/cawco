@@ -105,7 +105,7 @@
   }
 </script>
 
-<div class="template" bind:this={template}>
+<div class="relative" bind:this={template}>
   <label for={fieldId}
     >{label}
     {#if multiline}
@@ -135,17 +135,22 @@
     {/if}
   </label>
   {#if matches.length}
+    <!-- literal: 240px, 36px, 44px -->
     <div
       aria-label="Template paths"
-      class="completer kit-pop"
+      class="kit-pop absolute top-full inset-x-0 max-h-(--completer-max) overflow-y-auto z-30 origin-(--origin)"
       data-state="open"
       role="listbox"
-      style:transform-origin={origin}
+      style:--origin={origin}
+      style:--completer-max="240px"
+      style:--option-h="36px"
+      style:--option-hit="44px"
       out:popOut
       {@attach highlight({ rows: "button", hovered: '[aria-selected="true"]' })}
     >
       {#each matches as path, index (path)}
         <button
+          class="block w-full text-start p-space-2 wrap-anywhere font-(family-name:--font-mono) text-size-label min-h-(--option-h) max-wide:min-h-(--option-hit)"
           aria-selected={active === index}
           onclick={() => choose(path)}
           onmousedown={(event) => {
@@ -163,32 +168,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .template {
-    position: relative;
-  }
-  .completer {
-    position: absolute;
-    top: 100%;
-    inset-inline: 0;
-    max-height: 240px;
-    overflow-y: auto;
-    z-index: 30;
-  }
-  button {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: var(--space-2);
-    overflow-wrap: anywhere;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    min-height: 36px;
-  }
-  @media (max-width: 1023px) {
-    button {
-      min-height: 44px;
-    }
-  }
-</style>

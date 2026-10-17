@@ -73,7 +73,7 @@
   }
 
   /** Skeleton rows while a folder is read: a row's height, a few name widths. */
-  const SKELETON_WIDTHS = ["w-28", "w-40", "w-24"];
+  const SKELETON_WIDTHS = ["7rem", "10rem", "6rem"];
 
   /** Only lives while the panel is open — a directory may have changed by the next visit. */
   const cache = new Map<string, FsEntry[]>();
@@ -208,9 +208,16 @@
             {#if loading}
               <div aria-label="Reading directory" role="status">
                 {#each SKELETON_WIDTHS as width (width)}
-                  <div class="flex h-[30px] items-center gap-[7px] px-[11px]">
+                  <!-- literal: 30px -->
+                  <div
+                    class="flex h-(--row-h) items-center gap-space-2 px-space-3"
+                    style:--row-h="30px"
+                  >
                     <Skeleton class="size-icon-md shrink-0" />
-                    <Skeleton class="h-icon-sm {width}" />
+                    <Skeleton
+                      class="h-icon-sm w-(--skeleton-w)"
+                      style="--skeleton-w: {width}"
+                    />
                   </div>
                 {/each}
               </div>

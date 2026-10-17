@@ -111,7 +111,7 @@
 </script>
 
 <div
-  class="rounded-[var(--radius-md)] overflow-hidden border border-border bg-neutral-2"
+  class="rounded-md overflow-hidden border border-border bg-neutral-2"
 >
   <div
     class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-ink-muted"
@@ -133,10 +133,10 @@
 
   <!-- The skeleton and the rows share one cell: the rows lay out under it
        unseen and fade in where it stood. -->
-  <div data-slot="body" class="body" {@attach morph()}>
+  <div data-slot="body" class="relative grid" {@attach morph()}>
     {#if failure}
       <div
-        class="mark-line flex items-center justify-center gap-2 p-space-8 text-label text-error-9"
+        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 text-label text-error-9"
         role="alert"
         in:crossIn
         out:crossOut
@@ -150,19 +150,23 @@
     {:else}
       {#key attempt}
         <div
-          class="diff-content overflow-auto"
-          style:max-block-size={cap}
-          class:veiled={!drawn}
+          class="row-start-1 col-start-1 min-w-0 overflow-auto max-h-(--cap) motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
+          style:--cap={cap}
+          data-veiled={!drawn || undefined}
           {@attach draw(attempt)}
         ></div>
       {/key}
       {#if !drawn}
         <div
+          class="row-start-1 col-start-1 min-w-0"
           aria-label="Loading diff"
           role="status"
           out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
         >
-          <Skeleton class="w-full rounded-none" style="height: {expected}px" />
+          <Skeleton
+            class="w-full h-(--skeleton-h) rounded-none"
+            style="--skeleton-h: {expected}px"
+          />
         </div>
       {/if}
     {/if}
@@ -180,23 +184,3 @@
     }}
   />
 {/if}
-
-<style>
-  .body {
-    position: relative;
-    display: grid;
-  }
-  .body > * {
-    grid-area: 1 / 1;
-    min-width: 0;
-  }
-  .diff-content {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  .diff-content.veiled {
-    visibility: hidden;
-    opacity: 0;
-  }
-</style>

@@ -52,33 +52,24 @@
   });
 </script>
 
-<div data-slot="well" class="well">
+<!-- literal: 10px, 12px -->
+<div
+  data-slot="well"
+  class="bg-(color:--code-syntax-background) rounded-sm py-(--pad-y) px-(--pad-x) overflow-x-auto font-(family-name:--font-mono) text-size-label leading-body text-(color:--code-syntax-foreground)"
+  style:--pad-y="10px"
+  style:--pad-x="12px"
+>
   {#if lines}
-    <pre><code
-        >{#each lines as line}<span class="ln"
-          >{#each line as token}<span style:color={token.color}
+    <pre class="m-0 whitespace-pre"><code
+        >{#each lines as line}<span data-slot="output-block-ln"
+          >{#each line as token}<span
+            class="text-(color:--token-ink)"
+            style:--token-ink={token.color}
             >{token.content}</span
           >{/each}{"\n"}</span
         >{/each}</code
       ></pre>
   {:else}
-    <pre><code>{text}</code></pre>
+    <pre class="m-0 whitespace-pre"><code>{text}</code></pre>
   {/if}
 </div>
-
-<style>
-  .well {
-    background: var(--code-syntax-background);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    line-height: var(--leading-body);
-    color: var(--code-syntax-foreground);
-  }
-  pre {
-    margin: 0;
-    white-space: pre;
-  }
-</style>

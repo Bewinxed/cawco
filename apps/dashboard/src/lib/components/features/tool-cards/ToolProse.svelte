@@ -10,11 +10,16 @@
   let { source }: { source: string } = $props();
 </script>
 
-<div class="tprose"><Markdown {source} /></div>
+<div
+  data-slot="tprose"
+  class="text-size-body font-normal leading-body text-ink-strong"
+>
+  <Markdown {source} />
+</div>
 
 <style>
-  .tprose,
-  .tprose :global(.prose) {
+  /* residual: foreign-dom — the rendered markdown's own DOM */
+  [data-slot="tprose"] :global(.prose) {
     font-size: var(--text-body);
     font-weight: var(--weight-body);
     line-height: var(--leading-body);
@@ -22,50 +27,53 @@
   }
   /* Every block takes the gap and the first gives it back (the more
      specific rule below): `* + *` restyled the whole document per block. */
-  .tprose :global(.prose > *) {
+  [data-slot="tprose"] :global(.prose > *) {
     margin-top: var(--space-2);
   }
-  .tprose :global(.prose > :first-child) {
+  [data-slot="tprose"] :global(.prose > :first-child) {
     margin-top: 0;
   }
-  .tprose :global(.prose > :last-child) {
+  [data-slot="tprose"] :global(.prose > :last-child) {
     margin-bottom: 0;
   }
-  .tprose :global(p),
-  .tprose :global(ul),
-  .tprose :global(ol),
-  .tprose :global(blockquote) {
+  [data-slot="tprose"] :global(p),
+  [data-slot="tprose"] :global(ul),
+  [data-slot="tprose"] :global(ol),
+  [data-slot="tprose"] :global(blockquote) {
     margin-block: 0;
   }
   /* A list holds only items: every one but the first. */
-  .tprose :global(li:where(:not(:first-child))) {
+  [data-slot="tprose"] :global(li:where(:not(:first-child))) {
     margin-top: var(--space-1);
   }
-  .tprose :global(ul),
-  .tprose :global(ol) {
+  [data-slot="tprose"] :global(ul),
+  [data-slot="tprose"] :global(ol) {
     padding-left: var(--space-5);
   }
-  .tprose :global(.prose h1),
-  .tprose :global(.prose h2),
-  .tprose :global(.prose h3),
-  .tprose :global(.prose h4),
-  .tprose :global(.prose h5),
-  .tprose :global(.prose h6) {
+  [data-slot="tprose"] :global(.prose h1),
+  [data-slot="tprose"] :global(.prose h2),
+  [data-slot="tprose"] :global(.prose h3),
+  [data-slot="tprose"] :global(.prose h4),
+  [data-slot="tprose"] :global(.prose h5),
+  [data-slot="tprose"] :global(.prose h6) {
     font-size: var(--text-label);
     line-height: var(--leading-ui);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
-  .tprose :global(.prose > :is(h1, h2, h3, h4):where(:not(:first-child))) {
+  [data-slot="tprose"]
+    :global(.prose > :is(h1, h2, h3, h4):where(:not(:first-child))) {
     margin-top: var(--space-4);
   }
+  /* residual: pseudo */
   /* prose wraps inline code in literal backticks; the code face already
      marks it. */
-  .tprose :global(code::before),
-  .tprose :global(code::after) {
+  [data-slot="tprose"] :global(code::before),
+  [data-slot="tprose"] :global(code::after) {
     content: none;
   }
-  .tprose :global(code) {
+  /* residual: foreign-dom */
+  [data-slot="tprose"] :global(code) {
     font-family: var(--font-mono);
     font-size: var(--text-meta);
   }

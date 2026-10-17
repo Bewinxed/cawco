@@ -114,24 +114,33 @@
 
 <!-- A failure fades up in place (--dur-control), with a retry. -->
 {#if failed}
-  <div data-slot="failed" class="failed" role="alert" in:crossIn>
+  <div
+    data-slot="failed"
+    class="flex flex-wrap items-center gap-space-3 py-space-3 px-space-7 type-label text-status-fail-ink"
+    role="alert"
+    in:crossIn
+  >
     <p>The editor did not load: {failed}</p>
     <Button onclick={load} size="sm" variant="outline">Retry</Button>
   </div>
 {/if}
+<!-- literal: 44px -->
 <section
   aria-label={label}
-  class="crepe-host"
+  data-slot="crepe-host"
+  class="min-h-full"
+  style:--hit="44px"
   bind:this={host}
   {@attach morph()}
 ></section>
 
 <style>
+  /* residual: foreign-dom — Milkdown renders its own DOM */
   /* Crepe's structural CSS reads these off `.milkdown` itself, so they are set
      there rather than on the host — a theme file would otherwise win by
      sitting closer to the element. Every value is an app token, so the editor
      follows light and dark with everything else. */
-  .crepe-host :global(.milkdown) {
+  [data-slot="crepe-host"] :global(.milkdown) {
     --crepe-color-background: var(--surface-recess);
     --crepe-color-on-background: var(--ink-strong);
     --crepe-color-surface: var(--surface-raised);
@@ -163,18 +172,6 @@
     box-shadow: none;
     padding: var(--space-1);
   }
-  .crepe-host {
-    min-height: 100%;
-  }
-  .failed {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-7);
-    font: var(--type-label);
-    color: var(--status-fail-ink);
-  }
   /* Crepe's common stylesheet includes theme typography and motion. Keep its
      structural selectors while enforcing the ledger contract on every widget. */
   /* Crepe's stock CSS sizes text off its own scale, and DESIGN.md admits only
@@ -184,94 +181,94 @@
      body size in 500, code at the label size in the mono.
      Narrowing this to `.ProseMirror` descendants was tried and reverted: it let
      Crepe's own sizes back in on everything the exemptions did not name. */
-  .crepe-host :global(.milkdown *) {
+  [data-slot="crepe-host"] :global(.milkdown *) {
     font-weight: var(--weight-body) !important;
     font-size: var(--text-body) !important;
     line-height: var(--leading-body) !important;
   }
-  .crepe-host :global(.milkdown *),
-  .crepe-host :global(.milkdown *::before),
-  .crepe-host :global(.milkdown *::after) {
+  [data-slot="crepe-host"] :global(.milkdown *),
+  [data-slot="crepe-host"] :global(.milkdown *::before),
+  [data-slot="crepe-host"] :global(.milkdown *::after) {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
   }
-  .crepe-host :global(.milkdown :is(strong, b, h1, h2, h3, h4, h5, h6, th)) {
+  [data-slot="crepe-host"] :global(.milkdown :is(strong, b, h1, h2, h3, h4, h5, h6, th)) {
     font-weight: var(--weight-strong) !important;
   }
-  .crepe-host :global(.milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)) {
     margin-top: var(--space-5);
     padding: var(--space-1) 0;
   }
-  .crepe-host :global(.milkdown .ProseMirror h1) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror h1) {
     font-size: var(--text-title) !important;
   }
-  .crepe-host :global(.milkdown .ProseMirror h2) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror h2) {
     font-size: var(--text-title) !important;
   }
-  .crepe-host :global(.milkdown .ProseMirror :is(h3, h4, h5, h6)) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror :is(h3, h4, h5, h6)) {
     font-size: var(--text-body) !important;
   }
-  .crepe-host :global(.milkdown .ProseMirror) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror) {
     padding: var(--space-4) calc(var(--space-6) - var(--space-1)) var(--space-6)
       calc(var(--space-7) - var(--space-1));
     overflow-wrap: anywhere;
     min-height: calc(var(--space-8) * 8);
   }
-  .crepe-host :global(.milkdown .ProseMirror > :first-child) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror > :first-child) {
     margin-top: 0;
   }
-  .crepe-host :global(.milkdown .ProseMirror p) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror p) {
     padding: var(--space-1) 0;
   }
-  .crepe-host :global(.milkdown .ProseMirror code) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror code) {
     font-size: var(--text-label) !important;
     padding-inline: var(--space-1);
     border-radius: var(--radius-xs);
   }
-  .crepe-host :global(.milkdown .ProseMirror pre) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror pre) {
     padding: var(--space-3);
     border-radius: var(--radius-sm);
     white-space: pre-wrap;
   }
-  .crepe-host :global(.milkdown .ProseMirror blockquote) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror blockquote) {
     padding-left: var(--space-6);
     margin-block: var(--space-1);
   }
-  .crepe-host :global(.milkdown .ProseMirror blockquote::before) {
+  [data-slot="crepe-host"] :global(.milkdown .ProseMirror blockquote::before) {
     width: var(--space-1);
     top: var(--space-1);
     bottom: var(--space-1);
     border-radius: var(--radius-pill);
   }
-  .crepe-host :global(.milkdown .milkdown-code-block) {
+  [data-slot="crepe-host"] :global(.milkdown .milkdown-code-block) {
     padding: var(--space-2) var(--space-3) var(--space-3);
     margin-block: var(--space-2);
     background: var(--surface-recess);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
   }
-  .crepe-host :global(.milkdown :is(.cm-editor, .cm-gutters)) {
+  [data-slot="crepe-host"] :global(.milkdown :is(.cm-editor, .cm-gutters)) {
     background: var(--surface-recess);
   }
-  .crepe-host :global(.milkdown :is(button, input, [role="button"])) {
+  [data-slot="crepe-host"] :global(.milkdown :is(button, input, [role="button"])) {
     border-radius: var(--radius-sm);
     font-size: var(--text-label) !important;
     line-height: var(--leading-ui) !important;
   }
-  .crepe-host :global(.milkdown button) {
+  [data-slot="crepe-host"] :global(.milkdown button) {
     border: 1px solid var(--border-control);
     box-shadow: var(--shadow-tile);
   }
   /* Crepe's own focus styles give way to the app's one ring. */
-  .crepe-host :global(.milkdown :focus-visible) {
+  [data-slot="crepe-host"] :global(.milkdown :focus-visible) {
     outline: var(--focus-ring-width) solid var(--focus-ring) !important;
     outline-offset: var(--focus-ring-offset);
   }
-  .crepe-host :global(.milkdown :is(input, [contenteditable]):focus-visible) {
+  [data-slot="crepe-host"] :global(.milkdown :is(input, [contenteditable]):focus-visible) {
     outline-offset: var(--focus-ring-inset);
   }
-  .crepe-host :global(.milkdown :is(button, [role="button"]):active) {
+  [data-slot="crepe-host"] :global(.milkdown :is(button, [role="button"]):active) {
     background: var(--surface-fill);
     box-shadow: var(--shadow-inset-sel);
   }
@@ -279,7 +276,7 @@
      surface-fill's own step, with its glyph in the strong ink. Styled here
      and not through --crepe-color-selected, which is also the document's
      text selection. */
-  .crepe-host :global(.milkdown .milkdown-block-handle .operation-item.active) {
+  [data-slot="crepe-host"] :global(.milkdown .milkdown-block-handle .operation-item.active) {
     background: light-dark(var(--surface-fill-strong), var(--surface-fill));
 
     & :global(svg) {
@@ -287,7 +284,7 @@
     }
   }
   @media (hover: none) {
-    .crepe-host :global(.milkdown) {
+    [data-slot="crepe-host"] :global(.milkdown) {
       --crepe-color-hover: transparent;
     }
   }
@@ -295,7 +292,7 @@
      `.touch-hit`; on a coarse pointer they keep a 44px box. Links in the
      text flow with it. */
   @media (pointer: coarse) {
-    .crepe-host
+    [data-slot="crepe-host"]
       :global(
         .milkdown
           :is(
@@ -306,8 +303,8 @@
             .milkdown-slash-menu li
           )
       ) {
-      min-width: 44px;
-      min-height: 44px;
+      min-width: var(--hit);
+      min-height: var(--hit);
     }
   }
 </style>
