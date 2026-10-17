@@ -169,7 +169,11 @@ export async function startPairing(): Promise<void> {
         hubAuth.pairing = { kind: "denied", userCode, verificationUriComplete };
         return;
       case "expired_token":
-        hubAuth.pairing = { kind: "expired", userCode, verificationUriComplete };
+        hubAuth.pairing = {
+          kind: "expired",
+          userCode,
+          verificationUriComplete,
+        };
         return;
       case "slow_down":
         interval += 5000;
