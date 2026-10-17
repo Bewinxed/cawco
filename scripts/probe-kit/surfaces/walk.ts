@@ -212,6 +212,8 @@ export async function passPage(
 
 /** How far before the tape's moment the clock is installed, so it can be paused at that moment. */
 const CLOCK_LEAD_MS = 1000;
+/** Real time for the browser's pointer-over under a still pointer once layout has moved (it sends one on a timer). */
+const POINTER_BEAT_MS = 250;
 /** The page time an act is given: its clock stands this far past where the act began, whatever the act took. */
 const ACT_MS = 60_000;
 
@@ -439,16 +441,24 @@ export async function walk(
   const hostOnly = (state: State) => state.hostOnly === true && !scene.split;
   const unstill = (surface: Surface, state: State) =>
     UNSTILL[`${surface.name}/${state.name}`];
-  const absent = (surface: Surface, state: State) =>
-    hostOnly(state) || unstill(surface, state) !== undefined;
+  const absent = (surface: Surface, state: State, width: Width) => {
+    const out = unstill(surface, state);
+    return (
+      hostOnly(state) ||
+      (out !== undefined && (!out.widths || out.widths.includes(width)))
+    );
+  };
   for (const surface of surfaces) {
     for (const state of surface.states) {
       if (hostOnly(state)) {
         kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
       }
-      const why = unstill(surface, state);
-      if (why) {
-        kit.note(`${surface.name}/${state.name}: left out, not still: ${why}`);
+      const out = unstill(surface, state);
+      if (out) {
+        const where = out.widths ? ` (${out.widths.join(", ")})` : "";
+        kit.note(
+          `${surface.name}/${state.name}${where}: left out, not still: ${out.why}`
+        );
       }
     }
   }
@@ -460,7 +470,10 @@ export async function walk(
     await pool(passes, PARALLEL, async (pass) => {
       const states = surface.states.filter(
         (s) =>
-          !(absent(surface, s) || (s.widths && !s.widths.includes(pass.width)))
+          !(
+            absent(surface, s, pass.width) ||
+            (s.widths && !s.widths.includes(pass.width))
+          )
       );
       if (states.length === 0) {
         return;
@@ -482,9 +495,14 @@ export async function walk(
             await arrive(page);
             if (state.act) {
               await acting(page, state.act);
-              // The pointer off the page, so nothing reads hovered because a
-              // click left it there; then measured again at rest, as on
-              // arrival: what the act's motion moved while it measured.
+              // What the act opened drawn under the pointer the click left
+              // there, and the browser's own pointer-over for it sent (it
+              // sends one a beat after layout moves under a still pointer):
+              // then the pointer off the page, so nothing reads hovered and a
+              // hover's highlight is always placed, then hidden. Measured
+              // again at rest, as on arrival.
+              await holdStill(page);
+              await page.waitForTimeout(POINTER_BEAT_MS);
               await page.mouse.move(-1, -1);
               await arrive(page);
             }
@@ -510,12 +528,20 @@ export async function walk(
  * each with its race, left out of every walk with a NOTE (the brief: never
  * change the dashboard to still a capture).
  */
-const UNSTILL: Record<string, string> = Object.fromEntries(
-  ["editor", "program", "launch"].map((state) => [
-    `workflows/${state}`,
-    "the program's CodeView decides its active line once, at mount, by whether it is editable then (CodeView.svelte:177-179; the `editing` reconfigure at 204-211 never adds or drops it), and the workflow that makes it editable and CodeMirror's chunk land in either order",
-  ])
-);
+const UNSTILL: Record<string, { why: string; widths?: Width[] }> = {
+  ...Object.fromEntries(
+    ["editor", "program", "launch"].map((state) => [
+      `workflows/${state}`,
+      {
+        why: "the program's CodeView decides its active line once, at mount, by whether it is editable then (CodeView.svelte:177-179; the `editing` reconfigure at 204-211 never adds or drops it), and the workflow that makes it editable and CodeMirror's chunk land in either order",
+      },
+    ])
+  ),
+  "session/rest": {
+    widths: ["phone"],
+    why: "the Sessions tab strip's segment takes the box of the tab its optimistic selection points at (fluid-tabs/TabsList.svelte:685, 709; the boxes TabRects measured, rects.svelte.ts:71-74), and at the phone's width it is left on Working's box (86px) or Finished's (62px), at Working's place, as the strip's own frames fall; loaded alone it stands at 86px every time",
+  },
+};
 
 /** Passes walked at once: `PROBE_PARALLEL`, or 4. Each holds still on its own page, so how many run never moves a reading. */
 const PARALLEL = Number(process.env.PROBE_PARALLEL) || 4;
