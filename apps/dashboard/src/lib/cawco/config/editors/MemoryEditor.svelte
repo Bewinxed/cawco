@@ -492,7 +492,7 @@
     {/if}
   {/snippet}
   {#snippet header()}
-    <div class="switch">
+    <div class="flex">
       <PickerChip
         label="File"
         onpick={(next) => goto(fileHref(next))}
@@ -514,16 +514,30 @@
         />
       {/if}
     </div>
-    <h1 data-slot="title" class="title">{label}</h1>
+    <h1
+      data-slot="title"
+      class="text-size-title leading-ui font-medium font-mono tracking-title wrap-anywhere text-ink-strong"
+    >{label}</h1>
     {#if !main}
-      <p class="facts">
+      <!-- literal: 12px -->
+      <p
+        class="relative flex flex-wrap gap-x-(--facts-gap) gap-y-space-1 type-meta text-ink-muted"
+        style:--facts-gap="12px"
+      >
         <span>Loaded into: {loadedInto(scope, cawco.projects)}</span>
       </p>
     {/if}
-    <p data-slot="num" class="facts num">
+    <!-- literal: 12px -->
+    <p
+      data-slot="num"
+      class="num relative flex flex-wrap gap-x-(--facts-gap) gap-y-space-1 type-meta text-ink-muted"
+      style:--facts-gap="12px"
+    >
       <span>{formatBytes(bytes)}</span>
+      <!-- literal: 3px -->
       <span
-        class="tokens"
+        class="underline decoration-dotted underline-offset-(--tokens-offset)"
+        style:--tokens-offset="3px"
         title="Roughly what this file costs every session that loads it, at about four bytes a token"
         >~{tokens.toLocaleString()}
         tokens</span
@@ -537,7 +551,7 @@
         <span>Not written yet</span>
       {/if}
       {#if dirty}
-        <span class="unsaved" in:crossIn out:crossOut
+        <span class="font-medium text-ink-strong" in:crossIn out:crossOut
           >Unsaved changes · ⌘S saves</span
         >
       {/if}
@@ -547,8 +561,14 @@
 
   <EditorSection hue={HUE} icon={IconDocument} label="Contents">
     {#if conflict}
-      <div class="conflict" in:unfold out:unfold>
-        <p class="caution">
+      <!-- literal: 8px -->
+      <div
+        class="flex flex-col gap-(--stack-gap)"
+        style:--stack-gap="8px"
+        in:unfold
+        out:unfold
+      >
+        <p class="type-meta text-status-attn-ink">
           Changed elsewhere while you edited. Nothing was overwritten.
         </p>
         {#key conflict.hash}
@@ -558,7 +578,12 @@
             oldContent={conflict.content}
           />
         {/key}
-        <div data-slot="acts" class="acts">
+        <!-- literal: 8px -->
+        <div
+          data-slot="acts"
+          class="flex flex-wrap gap-(--acts-gap)"
+          style:--acts-gap="8px"
+        >
           <Button
             disabled={busy}
             onclick={takeLatest}
@@ -580,7 +605,13 @@
         </div>
       </div>
     {/if}
-    <div data-slot="well" class="well">
+    <!-- literal: 320px, 8px -->
+    <div
+      data-slot="well"
+      class="min-h-(--well-min) rounded-md bg-surface-recess px-(--well-px) py-space-1"
+      style:--well-min="320px"
+      style:--well-px="8px"
+    >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->
       {#if kept.restored}
@@ -597,11 +628,13 @@
 
   <EditorSection hue={HUE} icon={IconHistory} label="History">
     {#if historyError}
-      <p class="caution" role="alert">{historyError}</p>
+      <p class="type-meta text-status-attn-ink" role="alert">{historyError}</p>
     {:else if versions === null}
-      <p data-slot="note" class="note">Loading…</p>
+      <!-- literal: 72ch -->
+      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">Loading…</p>
     {:else if versions.length === 0}
-      <p data-slot="note" class="note">
+      <!-- literal: 72ch -->
+      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
         Nothing replaced yet. Every version a save, an adopt or an overwrite
         replaces is kept here.
       </p>
@@ -609,21 +642,45 @@
       <!-- Rows that come and go (Show all, a new version) go through
            reflow, what follows sliding; a row's compare folds open inside
            it. -->
-      <div class="history" {@attach reflow()}>
-        <ul data-slot="list" class="list">
+      <!-- literal: 8px -->
+      <div
+        class="flex flex-col gap-(--stack-gap)"
+        style:--stack-gap="8px"
+        {@attach reflow()}
+      >
+        <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
           {#each visibleVersions as row (row.id)}
-            <li data-slot="entry" class="entry" data-flip>
-              <div class="line">
-                <span data-slot="memory-editor-label" class="label"
+            <!-- literal: 8px, 10px -->
+            <li
+              data-slot="entry"
+              class="flex flex-col gap-(--entry-gap) rounded-sm bg-surface-recess px-(--entry-px) py-(--entry-gap)"
+              style:--entry-gap="8px"
+              style:--entry-px="10px"
+              data-flip
+            >
+              <!-- literal: 8px, 12px -->
+              <div
+                class="relative flex flex-wrap items-center gap-x-(--line-gap-x) gap-y-(--line-gap-y)"
+                style:--line-gap-x="12px"
+                style:--line-gap-y="8px"
+              >
+                <!-- literal: 72ch -->
+                <span
+                  data-slot="memory-editor-label"
+                  class="type-meta max-w-(--measure) text-ink-strong"
+                  style:--measure="72ch"
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
-                <span data-slot="note" class="note"
+                <!-- literal: 72ch -->
+                <span data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch"
                   >from {sourceLabel(row.source)}</span
                 >
-                <span data-slot="note" class="note font-mono" title={row.hash}
+                <!-- literal: 72ch -->
+                <span data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" title={row.hash}
                   >{row.hash.slice(0, 8)}</span
                 >
-                <span data-slot="note" class="note"
+                <!-- literal: 72ch -->
+                <span data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch"
                   >{formatBytes(row.bytes)}</span
                 >
                 <Button
@@ -638,12 +695,16 @@
               {#if shown === row.id}
                 <!-- The compare folds open (240 / 160); inside, reading
                    cross-fades to the diff as the box follows its height. -->
-                <div class="reveal" in:unfold out:unfold>
-                  <div data-slot="swap" class="swap" {@attach morph()}>
+                <!-- literal: 8px -->
+                <div class="flex flex-col gap-(--stack-gap)" style:--stack-gap="8px" in:unfold out:unfold>
+                  <div data-slot="swap" class="relative flex flex-col" {@attach morph()}>
                     {#if reading[row.id]}
+                      <!-- literal: 72ch, 8px -->
                       <p
                         data-slot="note"
-                        class="note busy mark-line"
+                        class="mark-line flex items-center gap-(--note-gap) type-meta max-w-(--measure) text-ink-muted"
+                        style:--measure="72ch"
+                        style:--note-gap="8px"
                         role="status"
                         in:crossIn
                         out:crossOut
@@ -653,7 +714,8 @@
                         >
                       </p>
                     {:else if contents[row.id] !== undefined}
-                      <div class="reveal" in:crossIn out:crossOut>
+                      <!-- literal: 8px -->
+                      <div class="flex flex-col gap-(--stack-gap)" style:--stack-gap="8px" in:crossIn out:crossOut>
                         {#key `${row.id}:${saved?.hash ?? ""}`}
                           <DiffView
                             filePath={path}
@@ -689,7 +751,7 @@
           {/each}
         </ul>
         {#if versions.length > LATEST}
-          <div data-slot="more" class="more" data-flip>
+          <div data-slot="more" class="self-start" data-flip>
             <Button
               onclick={() => {
                 allVersions = !allVersions;
@@ -712,13 +774,15 @@
   {#if !scoped(savedScope)}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <p data-slot="note" class="note">
+        <!-- literal: 72ch -->
+        <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
-          <p data-slot="note" class="note">
+          <!-- literal: 72ch -->
+          <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch">
             In sync on {applied.length} machine{applied.length === 1
               ? ""
               : "s"}.
@@ -728,14 +792,25 @@
             {/if}
           </p>
         {/if}
-        <ul data-slot="list" class="list">
+        <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
           {#each machines as machine, index (machine.machineId)}
             {@const item = memoryStateOf(machine, path)}
             {@const online = machine.status === "online"}
             {@const drifted = item?.state === "failed"}
             {@const comparingThis = comparing === machine.machineId}
-            <li data-slot="entry" class="entry">
-              <div class="line">
+            <!-- literal: 8px, 10px -->
+            <li
+              data-slot="entry"
+              class="flex flex-col gap-(--entry-gap) rounded-sm bg-surface-recess px-(--entry-px) py-(--entry-gap)"
+              style:--entry-gap="8px"
+              style:--entry-px="10px"
+            >
+              <!-- literal: 8px, 12px -->
+              <div
+                class="relative flex flex-wrap items-center gap-x-(--line-gap-x) gap-y-(--line-gap-y)"
+                style:--line-gap-x="12px"
+                style:--line-gap-y="8px"
+              >
                 <MachineRow
                   hue={machineHue(index, online)}
                   icon={machineIcon(machine.os)}
@@ -748,7 +823,14 @@
                 />
                 {#if drifted || !saved}
                   {@const settle = settling[machine.machineId]}
-                  <span data-slot="acts" class="acts" in:crossIn out:crossOut>
+                  <!-- literal: 8px -->
+                  <span
+                    data-slot="acts"
+                    class="flex flex-wrap gap-(--acts-gap)"
+                    style:--acts-gap="8px"
+                    in:crossIn
+                    out:crossOut
+                  >
                     {#if drifted}
                       <Button
                         disabled={!online}
@@ -786,17 +868,29 @@
               </div>
               <RowFault reason={settleFailed[machine.machineId]} />
               {#if drifted && item?.detail}
-                <pre class="said" in:unfold out:unfold>{item.detail}</pre>
+                <!-- literal: 6rem, 6px, 8px -->
+                <pre
+                  class="max-h-(--said-max) overflow-auto rounded-sm bg-surface-raised px-(--said-px) py-(--said-py) font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
+                  style:--said-max="6rem"
+                  style:--said-px="8px"
+                  style:--said-py="6px"
+                  in:unfold
+                  out:unfold
+                >{item.detail}</pre>
               {/if}
               {#if comparingThis}
                 <!-- The machine's copy folds open under its row; reading
                    cross-fades to what was read as the box follows. -->
-                <div class="reveal" in:unfold out:unfold>
-                  <div data-slot="swap" class="swap" {@attach morph()}>
+                <!-- literal: 8px -->
+                <div class="flex flex-col gap-(--stack-gap)" style:--stack-gap="8px" in:unfold out:unfold>
+                  <div data-slot="swap" class="relative flex flex-col" {@attach morph()}>
                     {#if peeking[machine.machineId]}
+                      <!-- literal: 72ch, 8px -->
                       <p
                         data-slot="note"
-                        class="note busy mark-line"
+                        class="mark-line flex items-center gap-(--note-gap) type-meta max-w-(--measure) text-ink-muted"
+                        style:--measure="72ch"
+                        style:--note-gap="8px"
                         role="status"
                         in:crossIn
                         out:crossOut
@@ -806,11 +900,12 @@
                         >
                       </p>
                     {:else if unread[machine.machineId]}
-                      <p class="caution" role="alert" in:crossIn out:crossOut>
+                      <p class="type-meta text-status-attn-ink" role="alert" in:crossIn out:crossOut>
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
-                      <p data-slot="note" class="note" in:crossIn out:crossOut>
+                      <!-- literal: 72ch -->
+                      <p data-slot="note" class="type-meta max-w-(--measure) text-ink-muted" style:--measure="72ch" in:crossIn out:crossOut>
                         This machine has no copy of this file.
                       </p>
                     {:else if copies[machine.machineId] !== undefined}
@@ -834,117 +929,3 @@
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  .switch {
-    display: flex;
-  }
-  .title {
-    font: var(--type-title);
-    font-family: var(--font-mono);
-    letter-spacing: -0.01em;
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .facts {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .tokens {
-    text-decoration: underline dotted;
-    text-underline-offset: 3px;
-  }
-  .unsaved {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .well {
-    min-height: 320px;
-    padding: 4px 8px;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-  }
-  .conflict {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .note,
-  .label {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .label {
-    color: var(--ink-strong);
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .entry {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .line {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-  }
-  .history,
-  .reveal {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .more {
-    align-self: flex-start;
-  }
-  /* One box the reading line and what was read take turns in: the one
-     leaving is pinned in it (crossOut) while the one arriving sets its
-     height. */
-  .swap {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .said {
-    max-height: 6rem;
-    overflow: auto;
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-</style>
