@@ -200,26 +200,48 @@
 
 {#snippet line(each: Line)}
   {#if each.kind === "comment"}
-    <li data-slot="comment" class="comment">
-      <span class="by"
-        ><span data-slot="who" class="who">{each.who}</span>
+    <li
+      data-slot="comment"
+      class="flex flex-col gap-space-1 rounded-md bg-surface-recess px-space-3 py-space-2"
+    >
+      <span class="flex items-baseline gap-space-2 type-meta"
+        ><span
+          data-slot="who"
+          class="font-body leading-label font-medium text-ink-strong"
+          >{each.who}</span
+        >
         <time
-          class="at"
+          class="type-meta whitespace-nowrap text-ink-subtle"
           datetime={new Date(each.at).toISOString()}
           title={new Date(each.at).toLocaleString()}>{ago(each.at)}</time
         ></span
       >
-      <div class="said"><MessageBody source={each.text} /></div>
+      <div class="min-w-0 type-body wrap-anywhere text-ink-strong">
+        <MessageBody source={each.text} />
+      </div>
     </li>
   {:else}
     <!-- mark-line: the glyph heads words that may wrap: it stands in a mark cell, one line tall, on the first line -->
-    <li data-slot="change" class="change">
-      <span class="mark-cell"><IconHistory aria-hidden="true" /></span>
-      <span data-slot="what" class="what"
-        ><span data-slot="who" class="who">{each.who}</span> {each.text}</span
+    <li
+      data-slot="change"
+      class="grid grid-cols-(--cols) items-start gap-space-2 type-meta text-ink-muted"
+      style:--cols="var(--icon-sm) minmax(0, 1fr) auto"
+    >
+      <span class="mark-cell"
+        ><IconHistory
+          aria-hidden="true"
+          class="size-icon-sm text-ink-subtle"
+        /></span
+      >
+      <span data-slot="what" class="min-w-0 wrap-anywhere"
+        ><span
+          data-slot="who"
+          class="font-body leading-label font-medium text-ink-strong"
+          >{each.who}</span
+        > {each.text}</span
       >
       <time
-        class="at"
+        class="type-meta whitespace-nowrap text-ink-subtle"
         datetime={new Date(each.at).toISOString()}
         title={new Date(each.at).toLocaleString()}>{ago(each.at)}</time
       >
@@ -227,9 +249,11 @@
   {/if}
 {/snippet}
 
-<section data-slot="activity" class="part activity">
-  <div class="part-head">
-    <h3 class="kit-section-head">Activity</h3>
+<section data-slot="activity" class="flex flex-col gap-space-2">
+  <div class="flex items-end gap-space-2">
+    <h3 class="kit-section-head m-0 min-h-c-btn-h-xs flex-auto px-0">
+      Activity
+    </h3>
     <Choice
       label="Show"
       onchange={(next) => {
@@ -246,33 +270,43 @@
     <RowFault again={rereadHistory} reason={historyProblem} />
   {/if}
   {#if history === null && historyProblem === null && only === "all"}
-    <div aria-hidden="true" class="reading">
+    <div aria-hidden="true" class="flex flex-col gap-space-2">
       <Skeleton class="h-space-4 w-2/3" />
       <Skeleton class="h-space-4 w-1/2" />
     </div>
   {:else if pieces.length === 0}
-    <p class="hint">
+    <p class="type-meta text-ink-muted">
       {only === "comments" ? "No comments yet." : "Nothing has happened yet."}
     </p>
   {:else}
-    <ol class="stream">
+    <ol class="m-0 flex list-none flex-col gap-space-2 p-0">
       {#each pieces as piece (piece.kind === "one" ? `${piece.line.kind}-${piece.line.at}-${piece.line.text}` : piece.key)}
         {#if piece.kind === "one"}
           {@render line(piece.line)}
         {:else}
-          <li data-slot="fold" class="fold">
+          <li data-slot="fold">
             <Collapsible.Root>
-              <Collapsible.Trigger class="fold-head press-tint mark-line">
-                <IconChevronRight data-chev aria-hidden="true" class="chev" />
+              <Collapsible.Trigger
+                class="group press-tint mark-line flex w-full cursor-pointer items-center gap-space-1 rounded-sm border-none border-current bg-transparent px-0 py-space-1 type-label text-start text-ink-muted"
+              >
+                <IconChevronRight
+                  data-chev
+                  aria-hidden="true"
+                  class="size-icon-sm flex-none transition-[rotate] dur-control ease-out group-state-open:rotate-90"
+                />
                 <span>{piece.lines.length} changes</span>
-                <span class="at"
+                <span
+                  class="ms-auto type-meta whitespace-nowrap text-ink-subtle"
                   >{ago(piece.lines[0].at)} – {ago(
                     piece.lines.at(-1)?.at ?? piece.lines[0].at
                   )}</span
                 >
               </Collapsible.Trigger>
               <Collapsible.Content fade reveal>
-                <ol data-slot="inner" class="stream inner">
+                <ol
+                  data-slot="inner"
+                  class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pr-0 pb-0 pl-space-5"
+                >
                   {#each piece.lines as each (`${each.at}-${each.text}`)}
                     {@render line(each)}
                   {/each}
@@ -284,14 +318,13 @@
       {/each}
     </ol>
   {/if}
-  <div data-slot="composer" class="composer">
+  <div data-slot="composer" class="flex flex-col gap-space-1">
     <!-- The session Composer, words only; it stands on this box's foot
          (Composer .dock), the box as tall as what it stands. -->
     <div
       data-slot="task-activity-field"
-      class="field"
-      style:block-size="calc({commentFoot}px + var(--space-4) +
-      var(--safe-bottom))"
+      class="relative h-(--foot) w-full"
+      style:--foot="calc({commentFoot}px + var(--space-4) + var(--safe-bottom))"
     >
       <Composer
         agentName={reaches?.kind === "live" ? reaches.session : "The task"}
@@ -312,137 +345,14 @@
       />
     </div>
     {#if reaches?.kind === "live"}
-      <p class="hint">
+      <p class="type-meta text-ink-muted">
         {reaches.session} is working on this task and reads your comment now.
       </p>
     {:else if reaches?.kind === "resumes"}
-      <p class="hint">
+      <p class="type-meta text-ink-muted">
         Your comment picks the work up again: its last session continues, or a
         new session starts on it.
       </p>
     {/if}
   </div>
 </section>
-
-<style>
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .part :global(.kit-section-head) {
-    min-block-size: var(--c-btn-h-xs);
-    margin: 0;
-    padding-inline: 0;
-  }
-  .part-head {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-2);
-  }
-  .part-head :global(.kit-section-head) {
-    flex: 1 1 auto;
-  }
-  .reading {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .stream {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .stream.inner {
-    padding: var(--space-2) 0 0 var(--space-5);
-  }
-  .change {
-    display: grid;
-    grid-template-columns: var(--icon-sm) minmax(0, 1fr) auto;
-    align-items: start;
-    gap: var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .change :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    color: var(--ink-subtle);
-  }
-  .what {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-  }
-  .who {
-    font: var(--type-label);
-    font-size: inherit;
-    color: var(--ink-strong);
-  }
-  .at {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-  }
-  .comment {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-  }
-  .by {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    font: var(--type-meta);
-  }
-  .said {
-    min-inline-size: 0;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .part :global(.fold-head) {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    inline-size: 100%;
-    padding: var(--space-1) 0;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    font: var(--type-label);
-    color: var(--ink-muted);
-    text-align: start;
-    cursor: pointer;
-  }
-  .part :global(.fold-head .at) {
-    margin-inline-start: auto;
-  }
-  .part :global(.chev) {
-    flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    transition: transform var(--dur-control) var(--ease-out);
-  }
-  .part :global(.fold-head[data-state="open"] .chev) {
-    transform: rotate(90deg);
-  }
-  .composer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .field {
-    position: relative;
-    inline-size: 100%;
-  }
-  .hint {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

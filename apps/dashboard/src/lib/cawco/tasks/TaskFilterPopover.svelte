@@ -97,7 +97,7 @@
           data-filter-trigger
           {...props}
           aria-label={compact ? compactName : undefined}
-          class="filter-trigger pressable"
+          class="pressable"
           size={compact ? "icon-sm" : "sm"}
           title={find.problem ?? undefined}
           variant={active > 0 ? "secondary" : "ghost"}
@@ -111,7 +111,12 @@
             <span>Filter</span>
           {/if}
           {#if active > 0}
-            <span data-num data-slot="count" class="count num">{active}</span>
+            <span
+              data-num
+              data-slot="count"
+              class="num inline-grid h-space-5 min-w-space-5 place-items-center rounded-xs bg-brand-wash px-space-1 type-meta text-brand-ink"
+              >{active}</span
+            >
           {/if}
           {#if !compact}
             <IconChevronDown />
@@ -121,7 +126,7 @@
     </Popover.Trigger>
   {/if}
   <Popover.Content align="end" class="w-80" customAnchor={anchor}>
-    <div class="filters">
+    <div class="flex flex-col gap-space-2 p-space-1">
       <Input
         aria-label="Find a task"
         autocomplete="off"
@@ -131,13 +136,22 @@
         value={filter.q}
       />
       {#if find.finding}
-        <span class="finding mark-line" role="status"
-          ><Spinner aria-hidden="true" /><span>Finding…</span></span
+        <span
+          class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
+          role="status"
+          ><Spinner aria-hidden="true" class="size-icon-sm" /><span
+            >Finding…</span
+          ></span
         >
       {/if}
       <RowFault again={() => find.again()} reason={find.problem} />
-      <div data-slot="row" class="row">
-        <span data-slot="name" class="name">Label</span>
+      <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
+        <!-- literal: 3.5rem -->
+        <span
+          data-slot="name"
+          class="w-(--w) flex-none type-label text-ink-muted"
+          style:--w="3.5rem">Label</span
+        >
         <Select.Root
           onValueChange={(value) =>
             onchange({ ...filter, label: value === "any" ? null : value })}
@@ -147,7 +161,7 @@
           <Select.Trigger
             data-task-filter-popover-pick
             aria-label="Label"
-            class="pick"
+            class="min-w-0 shrink grow basis-0"
             size="sm">{filter.label ?? "Any label"}</Select.Trigger
           >
           <Select.Content>
@@ -158,8 +172,13 @@
           </Select.Content>
         </Select.Root>
       </div>
-      <div data-slot="row" class="row">
-        <span data-slot="name" class="name">Type</span>
+      <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
+        <!-- literal: 3.5rem -->
+        <span
+          data-slot="name"
+          class="w-(--w) flex-none type-label text-ink-muted"
+          style:--w="3.5rem">Type</span
+        >
         <Select.Root
           onValueChange={(value) =>
             onchange({ ...filter, type: value === "any" ? null : value })}
@@ -169,7 +188,7 @@
           <Select.Trigger
             data-task-filter-popover-pick
             aria-label="Type"
-            class="pick"
+            class="min-w-0 shrink grow basis-0"
             size="sm">{filter.type ?? "Any type"}</Select.Trigger
           >
           <Select.Content>
@@ -182,7 +201,7 @@
       </div>
       {#if fieldKeys.length > 0}
         {#each rows as [key, value], index (index)}
-          <div data-slot="row" class="row">
+          <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
             <Select.Root
               onValueChange={(next) => setField(index, next, "")}
               type="single"
@@ -191,7 +210,7 @@
               <Select.Trigger
                 data-task-filter-popover-pick
                 aria-label="Field"
-                class="pick"
+                class="min-w-0 shrink grow basis-0"
                 size="sm">{key || "Field"}</Select.Trigger
               >
               <Select.Content>
@@ -200,7 +219,7 @@
                 {/each}
               </Select.Content>
             </Select.Root>
-            <span class="eq">=</span>
+            <span class="flex-none type-meta text-ink-subtle">=</span>
             <Select.Root
               disabled={!key}
               onValueChange={(next) => setField(index, key, next)}
@@ -210,7 +229,7 @@
               <Select.Trigger
                 data-task-filter-popover-pick
                 aria-label="Value"
-                class="pick"
+                class="min-w-0 shrink grow basis-0"
                 size="sm">{value || "value"}</Select.Trigger
               >
               <Select.Content>
@@ -254,55 +273,3 @@
     </div>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  .filters {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-1);
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .row :global(.pick) {
-    flex: 1 1 0;
-    min-inline-size: 0;
-  }
-  .name {
-    flex: none;
-    inline-size: 3.5rem;
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .finding {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-  .eq {
-    flex: none;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .count {
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 18px;
-    block-size: 18px;
-    padding-inline: var(--space-1);
-    border-radius: var(--radius-xs);
-    background: var(--brand-wash);
-    font: var(--type-meta);
-    color: var(--brand-ink);
-  }
-</style>

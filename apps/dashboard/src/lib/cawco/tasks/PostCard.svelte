@@ -50,7 +50,10 @@
   const media = $derived(post.media?.files ?? []);
 </script>
 
-<div class="post" class:compact>
+<div
+  class="group flex min-w-0 flex-col gap-space-2"
+  data-compact={compact || undefined}
+>
   {#if !compact && (post.alternates?.length ?? 0) > 0}
     <Tabs
       onValueChange={(next) => {
@@ -67,58 +70,98 @@
       </TabsList>
     </Tabs>
   {/if}
-  <ol aria-label={parts.length > 1 ? "Thread" : "Post"} class="parts">
+  <ol
+    aria-label={parts.length > 1 ? "Thread" : "Post"}
+    class="m-0 flex list-none flex-col gap-space-2 p-0"
+  >
     {#each parts as text, index (index)}
       {@const length = postLength(text)}
-      <li data-slot="post-card-card" class="card" data-part={index}>
-        <div data-slot="who" class="who mark-line">
-          <span data-slot="mark" aria-hidden="true" class="mark" data-box
+      <li
+        data-slot="post-card-card"
+        class="relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-compact:px-space-3 group-data-compact:py-space-2 group-data-compact:shadow-none"
+        data-part={index}
+      >
+        <div
+          data-slot="who"
+          class="mark-line flex min-w-0 items-center gap-space-2"
+        >
+          <!-- literal: 24px, 50% -->
+          <span
+            data-slot="mark"
+            aria-hidden="true"
+            class="grid size-(--mark) flex-none place-items-center rounded-(--mark-r) bg-surface-fill text-meta font-medium text-ink-strong"
+            data-box
+            style:--mark="24px"
+            style:--mark-r="50%"
             >{handle.slice(0, 1).toUpperCase()}</span
           >
-          <span class="account">{post.account}</span>
+          <span
+            class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+            >{post.account}</span
+          >
           {#if parts.length > 1}
-            <span data-slot="num" class="part num"
+            <span
+              data-slot="num"
+              class="num ms-auto type-meta text-ink-muted"
               >{index + 1}/{parts.length}</span
             >
           {/if}
         </div>
-        <p data-slot="text" class="text">{text}</p>
+        <p
+          data-slot="text"
+          class="m-0 type-body wrap-anywhere whitespace-pre-wrap text-ink-strong group-data-compact:line-clamp-3"
+          >{text}</p
+        >
         {#if !compact}
           <span
             data-num
             data-slot="count"
-            class="count num"
+            class="num self-end type-meta text-ink-muted data-over:text-status-fail-ink"
             title="As X counts it: a link is 23, a line break is one"
-            class:over={length > POST_LIMIT}>{length}/{POST_LIMIT}</span
+            data-over={length > POST_LIMIT || undefined}
+            >{length}/{POST_LIMIT}</span
           >
         {/if}
       </li>
     {/each}
   </ol>
   {#if !compact && (post.community || post.media)}
-    <dl class="about">
+    <dl class="m-0 flex flex-col gap-space-1">
       {#if post.community}
-        <div class="fact">
-          <dt>Community</dt>
-          <dd data-slot="name" class="name">{post.community}</dd>
+        <div class="flex flex-col gap-space-row">
+          <dt class="type-meta text-ink-muted">Community</dt>
+          <dd data-slot="name" class="m-0 type-label text-ink-strong">
+            {post.community}
+          </dd>
         </div>
       {/if}
       {#if media.length > 0}
-        <div class="fact">
-          <dt>Media</dt>
+        <div class="flex flex-col gap-space-row">
+          <dt class="type-meta text-ink-muted">Media</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
-          <dd class="media">
+          <dd
+            class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong"
+          >
             {#each media as file (file)}
               {@const kind = deliverableKind(file)}
               {#if kind === "image"}
-                <img alt="" src={folderRawHref(projectId, file)} />
+                <!-- literal: 16rem -->
+                <img
+                  alt=""
+                  class="max-h-(--max-h) max-w-full rounded-sm"
+                  src={folderRawHref(projectId, file)}
+                  style:--max-h="16rem"
+                />
               {:else if kind === "video"}
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <!-- biome-ignore lint/a11y/useMediaCaption: a post's media file carries no caption track -->
+                <!-- literal: 16rem -->
                 <video
+                  class="max-h-(--max-h) max-w-full rounded-sm"
                   controls
                   preload="metadata"
                   src={folderRawHref(projectId, file)}
+                  style:--max-h="16rem"
                 ></video>
               {:else}
                 <a href={folderRawHref(projectId, file)} target="_blank"
@@ -129,9 +172,14 @@
           </dd>
         </div>
       {:else if post.media}
-        <div class="fact">
-          <dt>Media plan</dt>
-          <dd data-slot="sentence" class="sentence">{post.media.plan}</dd>
+        <div class="flex flex-col gap-space-row">
+          <dt class="type-meta text-ink-muted">Media plan</dt>
+          <dd
+            data-slot="sentence"
+            class="m-0 type-body text-pretty text-ink-strong"
+          >
+            {post.media.plan}
+          </dd>
         </div>
       {/if}
     </dl>
@@ -139,136 +187,14 @@
 </div>
 
 <style>
-  .post {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .parts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  /* A thread's parts are joined down their marks' axis. */
-  .card + .card::before {
+  /* residual: pseudo — a thread's parts are joined down their marks' axis. */
+  [data-slot="post-card-card"] + [data-slot="post-card-card"]::before {
     content: "";
     position: absolute;
     inset-block-start: calc(var(--space-2) * -1 - 1px);
-    inset-inline-start: calc(var(--space-4) + 11px);
+    inset-inline-start: calc(var(--space-4) + var(--space-3));
     inline-size: 2px;
     block-size: calc(var(--space-2) + 1px);
     background: var(--border-control);
-  }
-  .who {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .mark {
-    display: grid;
-    flex: none;
-    place-items: center;
-    inline-size: 24px;
-    block-size: 24px;
-    border-radius: 50%;
-    background: var(--surface-fill);
-    font: var(--type-meta);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .account {
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .part {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .text {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .count {
-    align-self: flex-end;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .count.over {
-    color: var(--status-fail-ink);
-  }
-  .compact .card {
-    padding: var(--space-2) var(--space-3);
-    box-shadow: none;
-  }
-  .compact .text {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-  }
-  .about {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-  }
-  .fact {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  dt {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* What the reviewer reads, by its role (The Role, Not Size Rule): the
-     community is a name, the media plan a sentence. */
-  dd {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  dd.name {
-    font: var(--type-label);
-  }
-  dd.sentence {
-    font: var(--type-body);
-    text-wrap: pretty;
-  }
-  .media {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .media img,
-  .media video {
-    max-inline-size: 100%;
-    max-block-size: 16rem;
-    border-radius: var(--radius-sm);
   }
 </style>

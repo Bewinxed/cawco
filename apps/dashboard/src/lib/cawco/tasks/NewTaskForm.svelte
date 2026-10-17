@@ -72,7 +72,7 @@
 </script>
 
 {#if open}
-  <form class="new-task" onsubmit={submit}>
+  <form class="flex w-full flex-col gap-space-2" onsubmit={submit}>
     <Input
       aria-label="Task title"
       autocomplete="off"
@@ -87,9 +87,9 @@
       bind:value={title}
     />
     {#if problem}
-      <p class="problem" role="alert">{problem}</p>
+      <p class="type-meta text-error-11" role="alert">{problem}</p>
     {/if}
-    <div data-slot="actions" class="actions">
+    <div data-slot="actions" class="flex items-center justify-end gap-space-1">
       {#if stages}
         <Select.Root
           onValueChange={(value) => {
@@ -133,7 +133,7 @@
   </Button>
 {:else}
   <Button
-    class="add-task justify-start text-ink-muted"
+    class="justify-start text-ink-muted"
     onclick={() => {
       open = true;
     }}
@@ -145,22 +145,3 @@
     <span>Add task</span>
   </Button>
 {/if}
-
-<style>
-  .new-task {
-    display: flex;
-    inline-size: 100%;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-1);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-</style>

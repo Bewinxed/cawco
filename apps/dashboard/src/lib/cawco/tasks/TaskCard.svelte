@@ -102,7 +102,7 @@
 
 <a
   data-slot="task-card"
-  class="task-card press-tint focus-inset"
+  class="press-tint focus-inset flex cursor-pointer flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] dur-control ease-out data-dragging:opacity-40 hover:bg-surface-hover"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
@@ -114,13 +114,24 @@
   {@attach land(() => key, { uniform: true })}
 >
   {#if titleFirst}
-    <span data-slot="title" class="title">{task.title}</span>
+    <span
+      data-slot="title"
+      class="line-clamp-2 type-label wrap-anywhere text-ink-row"
+      >{task.title}</span
+    >
   {/if}
-  <span data-slot="head" class="head">
-    <span data-slot="id" class="id">{task.id}</span>
+  <span
+    data-slot="head"
+    class="flex min-h-c-badge-h items-center gap-space-1"
+  >
+    <span
+      data-slot="id"
+      class="text-meta font-(family-name:--font-mono) liga-none text-ink-subtle"
+      >{task.id}</span
+    >
     {#if task.problem}
-      <span class="problem" title={task.problem}>
-        <IconWarningTriangle aria-hidden="true" />
+      <span class="inline-flex text-ink-muted" title={task.problem}>
+        <IconWarningTriangle aria-hidden="true" class="size-icon-sm" />
         <span class="sr-only">{task.problem}</span>
       </span>
     {/if}
@@ -132,21 +143,32 @@
     {/if}
   </span>
   {#if !titleFirst}
-    <span data-slot="title" class="title">{task.title}</span>
+    <span
+      data-slot="title"
+      class="line-clamp-2 type-label wrap-anywhere text-ink-row"
+      >{task.title}</span
+    >
   {/if}
   {#if flags.live || task.kind === "you" || asks || approves || date}
-    <span class="live-foot mark-line">
+    <span
+      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted"
+    >
       {#if asks || approves}
         <!-- Waiting on you outranks working: the attempt is stopped on you. -->
-        <IconNeedsYou aria-hidden="true" class="attn" />
+        <IconNeedsYou
+          aria-hidden="true"
+          class="size-icon-sm flex-none text-status-attn-glyph"
+        />
         <span>{asks ? "its session asks you" : "an action waits on you"}</span>
       {:else if flags.live}
+        <!-- literal: 6px -->
         <span
           data-task-card-live
           data-slot="dot"
           aria-hidden="true"
-          class="dot live"
+          class="size-(--dot) flex-none rounded-pill bg-status-live-glyph"
           data-box
+          style:--dot="6px"
         ></span>
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>
@@ -155,18 +177,29 @@
         {/if}
       {:else if task.kind === "you"}
         <!-- The design's ◆: the house's needs-you glyph, still. -->
-        <IconNeedsYou aria-hidden="true" class="attn" />
+        <IconNeedsYou
+          aria-hidden="true"
+          class="size-icon-sm flex-none text-status-attn-glyph"
+        />
         <span>waiting on you</span>
       {:else if date}
-        <span data-when data-slot="num" class="when num">{date}</span>
+        <span
+          data-when
+          data-slot="num"
+          class="num font-(family-name:--font-mono) liga-none"
+          >{date}</span
+        >
       {/if}
     </span>
   {/if}
   {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0}
-    <span data-slot="foot" class="foot">
+    <span
+      data-slot="foot"
+      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+    >
       {#if task.todos.total > 0}
         <span
-          class="todos mark-line"
+          class="mark-line inline-flex items-center gap-space-1"
           title="{task.todos.done} of {task.todos.total} to-dos done"
         >
           <TaskRing done={task.todos.done} size="sm" total={task.todos.total} />
@@ -176,10 +209,10 @@
         </span>
       {/if}
       {#if waitsOn.length > 0}
-        <span class="after mark-line">
-          <IconLock aria-hidden="true" />
+        <span class="mark-line inline-flex items-center gap-space-1">
+          <IconLock aria-hidden="true" class="size-icon-sm" />
           <span>after</span>
-          <span class="ref">{waitsOn[0]}</span>
+          <span class="font-(family-name:--font-mono) liga-none text-ink-strong">{waitsOn[0]}</span>
           {#if waitsOn.length > 1}
             <span data-slot="num" class="num">+{waitsOn.length - 1}</span>
           {/if}
@@ -198,113 +231,10 @@
 </a>
 
 <style>
-  .task-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    text-decoration: none;
-    cursor: pointer;
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .task-card:hover {
-      background: var(--surface-hover);
-    }
-  }
-  /* The card in the air: its place stays drawn, faint, until it lands. */
-  .task-card:global([data-dragging]) {
-    opacity: 0.4;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-block-size: var(--c-badge-h);
-  }
-  .id {
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  .problem {
-    display: inline-flex;
-    color: var(--ink-muted);
-  }
-  .problem :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  .title {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    font: var(--type-label);
-    color: var(--ink-row);
-    overflow-wrap: anywhere;
-  }
-  .foot {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    margin-block-start: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .live-foot {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .dot {
-    flex: none;
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: var(--radius-pill);
-  }
-  .dot.live {
-    background: var(--status-live-glyph);
-  }
+  /* residual: keyframes — the live dot's pulse. */
   @media (prefers-reduced-motion: no-preference) {
-    .dot.live {
+    [data-slot="dot"] {
       animation: pulse var(--breath) var(--ease-in-out) infinite;
     }
-  }
-  .live-foot :global(.attn) {
-    flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    color: var(--status-attn-glyph);
-  }
-  .when {
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-  }
-  .todos,
-  .after {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .after :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  .ref {
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-strong);
   }
 </style>

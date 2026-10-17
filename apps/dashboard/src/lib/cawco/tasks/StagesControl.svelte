@@ -141,15 +141,15 @@
 <Popover.Root bind:open>
   <Popover.Content
     align="end"
-    class="w-80 gap-[var(--space-2)]"
+    class="w-80 gap-space-2"
     customAnchor={anchor}
     side="bottom"
   >
-    <div class="intro">
-      <p data-slot="lead" class="lead">
+    <div class="flex flex-col gap-space-1 px-space-2 pt-space-2 pb-0">
+      <p data-slot="lead" class="type-label text-ink-strong">
         This project has no stages of its own yet
       </p>
-      <p class="line">
+      <p class="type-meta text-pretty text-ink-muted">
         The code stages stand in until you pick a set. The set is written to
         stages.md in the project folder.
       </p>
@@ -158,16 +158,16 @@
       again={applying === null && lastAsked
         ? () => apply(lastAsked as StagesTemplateView)
         : undefined}
-      class="stages-fault"
+      data-stages-fault
       reason={problem}
     />
-    <ul data-slot="list" class="list">
+    <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
       {#if templates}
         {#each templates as template (template.name)}
           <li>
             <button
               aria-expanded={asks.pending?.at === template.name}
-              class="kit-item template"
+              class="kit-item flex h-auto w-full flex-col items-stretch gap-space-row px-space-3 py-space-2 text-start hover:enabled:bg-surface-hover disabled:opacity-50"
               disabled={applying !== null}
               onclick={() => {
                 lastAsked = template;
@@ -175,25 +175,29 @@
               }}
               type="button"
             >
-              <span data-slot="name" class="name mark-line" data-box>
+              <span
+                data-slot="name"
+                class="mark-line flex items-center type-label text-ink-strong"
+                data-box
+              >
                 <span>{NAMES[template.name]}</span>
                 {#if applying === template.name}
                   <Spinner class="ml-auto" />
                 {/if}
               </span>
-              <span class="chain">
+              <span class="type-meta text-ink-muted">
                 {template.stages
                   .filter((stage) => stage.kind !== "dropped")
                   .map((stage) => stageLabel(stage.name))
                   .join(" → ")}
               </span>
             </button>
-            <AskHere asker={asks} at={template.name} class="stages-ask" />
+            <AskHere asker={asks} at={template.name} />
           </li>
         {/each}
       {:else if !problem}
         {#each [0, 1, 2, 3, 4, 5, 6] as row (row)}
-          <li class="template-skeleton">
+          <li class="flex flex-col gap-space-1 px-space-3 py-space-2">
             <Skeleton class="h-space-4 w-24" />
             <Skeleton class="h-icon-sm w-full" />
           </li>
@@ -204,67 +208,12 @@
 </Popover.Root>
 
 <style>
-  .intro {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-2) 0;
-  }
-  .lead {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .template {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-row);
-    inline-size: 100%;
-    block-size: auto;
-    padding: var(--space-2) var(--space-3);
-    text-align: start;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .template:hover:not(:disabled) {
-      background: var(--surface-hover);
-    }
-  }
-  .template:disabled {
-    opacity: 0.5;
-  }
-  .name {
-    display: flex;
-    align-items: center;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .chain {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .template-skeleton {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-  }
-  :global(.stages-fault) {
+  /* residual: foreign-dom — RowFault and AskHere take their insets as custom properties, and no style prop. */
+  :global([data-stages-fault]) {
     --fault-indent: var(--space-2);
     --fault-end: var(--space-2);
   }
-  :global(.stages-ask) {
+  [data-slot="list"] > li > :global([data-ask]) {
     --ask-indent: var(--space-2);
     --ask-end: var(--space-2);
   }
