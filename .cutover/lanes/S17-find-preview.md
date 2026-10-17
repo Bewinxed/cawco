@@ -28,7 +28,10 @@ Residual sums over the lane: keyframes 9, foreign-dom 12, pseudo 1, svg-paint 0,
 
 Needs variant: none. Needs transition token: none. Needs colour token: none.
 
-## Deferred to integration: FinderCard.svelte
+## Contracts
+deferred-file: apps/dashboard/src/lib/cawco/find/FinderCard.svelte
+
+### Body of the deferred file (FinderCard.svelte)
 Its whole `<style>` is two global rules into DOM other files render. Neither can be a residual (the checker refuses `100vw`, `100dvh`, `24px`, `12px` in one) and neither can be moved without editing a file outside the lane. Values verbatim:
 
 1. `:global(.kit-pop.jump-pop)` (GlassCard's Jump face; GlassCard.svelte:95 `jump: "jump-pop gap-0"`) → goes to GlassCard's `FRAME.jump`:
