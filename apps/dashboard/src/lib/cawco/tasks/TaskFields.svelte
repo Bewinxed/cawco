@@ -152,7 +152,7 @@
     </form>
   {:else}
     <Button
-      class="self-start text-muted-foreground"
+      class="add self-start text-muted-foreground"
       onclick={() => {
         adding = true;
       }}
@@ -245,6 +245,11 @@
   .key-in {
     flex: 0 1 6rem;
     font: var(--type-code);
+  }
+  /* Add field's glyph on the heading's edge: the button gives back its
+     padding (`xs`: px-2) and its border (--hit-edge, its width). */
+  .part :global(.add) {
+    margin-inline-start: calc((var(--spacing) * 2 + var(--hit-edge)) * -1);
   }
   .hint {
     font: var(--type-meta);

@@ -286,10 +286,13 @@
   {/if}
   <div data-slot="composer" class="composer">
     <!-- The session Composer, words only; it stands on this box's foot
-         (Composer .dock), the box as tall as what it stands. -->
+         (Composer .dock), the box as tall as what it stands. The dock
+         rises by the screen's bottom inset, so the box holds it too
+         (--safe-bottom is set only where data-safe-bottom is). -->
     <div
       data-slot="task-activity-field"
       class="field"
+      data-safe-bottom
       style:block-size="calc({commentFoot}px + var(--space-4) +
       var(--safe-bottom))"
     >

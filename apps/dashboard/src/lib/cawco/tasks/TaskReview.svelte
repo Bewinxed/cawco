@@ -647,20 +647,25 @@
     flex-direction: column;
     gap: var(--space-2);
   }
-  /* What it attached: one wrapping row, no heading. */
+  /* What it attached: one wrapping row, no heading. Its words stand
+     --space-3 apart across and down: each chip's target reaches past its
+     words, by its padding across and by its height down, and gives that
+     back in its margins, so the targets overlap and the words keep the gap. */
   .attachments {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-1) var(--space-3);
+    gap: var(--space-3);
   }
   .attachment {
+    --target: var(--c-btn-h-xs);
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
     max-inline-size: 100%;
-    min-block-size: var(--c-btn-h-xs);
+    min-block-size: var(--target);
     padding-inline: var(--space-1);
     margin-inline: calc(var(--space-1) * -1);
+    margin-block: calc((1lh - var(--target)) / 2);
     border-radius: var(--radius-sm);
     font: var(--type-label);
     color: var(--ink-muted);
@@ -679,7 +684,7 @@
   }
   @media (pointer: coarse) {
     .attachment {
-      min-block-size: 44px;
+      --target: 44px;
     }
   }
 
