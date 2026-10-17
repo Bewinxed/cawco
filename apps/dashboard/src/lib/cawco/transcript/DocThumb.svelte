@@ -84,11 +84,22 @@
 
 {#snippet face()}
   {#if uploading}
-    <span data-slot="glyph" aria-hidden="true" class="glyph">
-      <svg aria-hidden="true" class="ring" viewBox="0 0 24 24">
-        <circle class="track" cx="12" cy="12" r="9" />
+    <span data-slot="glyph" aria-hidden="true" class="grid place-items-center flex-none text-ink-muted">
+      <svg
+        data-slot="ring"
+        aria-hidden="true"
+        class="size-icon-md m-space-1 -rotate-90"
+        viewBox="0 0 24 24"
+      >
         <circle
-          class="arc"
+          class="fill-none stroke-current opacity-25"
+          cx="12"
+          cy="12"
+          r="9"
+        />
+        <circle
+          data-slot="arc"
+          class="fill-none stroke-current motion-safe:transition-[stroke-dashoffset] motion-safe:dur-control motion-safe:ease-out"
           cx="12"
           cy="12"
           r="9"
@@ -98,20 +109,25 @@
       </svg>
     </span>
   {:else}
-    <span data-slot="glyph" aria-hidden="true" class="glyph"><Glyph /></span>
+    <!-- literal: 24px -->
+    <span
+      data-slot="glyph"
+      aria-hidden="true"
+      class="grid place-items-center flex-none text-ink-muted"
+      style:--glyph="24px"><Glyph class="size-(--glyph)" /></span>
   {/if}
-  <span data-slot="text" class="text">
-    <span data-slot="name" class="name"
-      ><span data-slot="head" class="head">{name.slice(0, cut)}</span><span
-        class="tail">{name.slice(cut)}</span
+  <span data-slot="text" class="flex flex-col min-w-0">
+    <span data-slot="name" class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
+      ><span data-slot="head" class="min-w-0 truncate">{name.slice(0, cut)}</span><span
+        class="flex-none">{name.slice(cut)}</span
       ></span
     >
     {#if file?.failed}
-      <span data-slot="meta" data-doc-thumb-failed class="meta failed"
+      <span data-slot="meta" data-doc-thumb-failed class="text-size-meta font-normal tabular-nums leading-ui text-status-fail-ink whitespace-nowrap"
         >Couldn't upload</span
       >
     {:else}
-      <span data-slot="meta" class="meta">{meta}</span>
+      <span data-slot="meta" class="text-size-meta font-normal tabular-nums leading-ui text-ink-muted whitespace-nowrap">{meta}</span>
     {/if}
   </span>
 {/snippet}
@@ -120,7 +136,9 @@
   <button
     data-slot="doc"
     aria-label={`Open ${name}`}
-    class="doc press-tint"
+    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
+    style:--doc-h="48px"
+    style:--doc-max="min(100%, 16rem)"
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -133,7 +151,9 @@
   <a
     data-slot="doc"
     aria-label={`Download ${name}`}
-    class="doc press-tint"
+    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
+    style:--doc-h="48px"
+    style:--doc-max="min(100%, 16rem)"
     download={name}
     href={file.href}
     title={name}
@@ -144,7 +164,9 @@
   <button
     data-slot="doc"
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="doc press-tint"
+    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
+    style:--doc-h="48px"
+    style:--doc-max="min(100%, 16rem)"
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"
@@ -157,121 +179,27 @@
       data-slot="doc"
       aria-busy="true"
       aria-label={`Uploading ${name}`}
-      class="doc still"
+      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
+    style:--doc-h="48px"
+    style:--doc-max="min(100%, 16rem)"
       role="status"
       title={name}
     >
       {@render face()}
     </span>
   {:else}
-    <span data-slot="doc" class="doc still" title={name}>{@render face()}</span>
+    <span data-slot="doc" class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
+    style:--doc-h="48px"
+    style:--doc-max="min(100%, 16rem)" title={name}>{@render face()}</span>
   {/if}
 {/if}
 
 <style>
-  /* Shot's thumb box — 48px high, --radius-sm, hairline, recess — with the
-     width of its name. */
-  .doc {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: 48px;
-    max-inline-size: min(100%, 16rem);
-    padding-block: 0;
-    padding-inline: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    text-align: start;
-    cursor: pointer;
-
-    &:hover {
-      background: var(--surface-hover);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .doc {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-  }
-  .glyph {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 24px;
-      block-size: 24px;
-    }
-  }
-  .text {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-  }
-  /* Middle truncation: the head gives way to an ellipsis, the tail — the
-     last characters and the extension — never does. */
-  .name {
-    display: flex;
-    min-inline-size: 0;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-ui);
-    white-space: nowrap;
-  }
-  .head {
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .tail {
-    flex: 0 0 auto;
-  }
-  .meta {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-    line-height: var(--leading-ui);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .meta.failed {
-    color: var(--status-fail-ink);
-  }
-  /* A file this box can do nothing with yet: no press, no hover. */
-  .doc.still {
-    cursor: default;
-
-    &:hover {
-      background: var(--surface-recess);
-    }
-  }
-  /* The kit spinner's ring, filled as far as the upload has gone: the
-     glyph's slot, a 16px ring in it, the track at a quarter. */
-  .glyph .ring {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    margin: var(--space-1);
-    rotate: -90deg;
-  }
-  .ring circle {
-    fill: none;
-    stroke: currentColor;
+  /* residual: svg-paint */
+  [data-slot="ring"] circle {
     stroke-width: 2.5;
   }
-  .ring .track {
-    opacity: 0.25;
-  }
-  .ring .arc {
+  [data-slot="arc"] {
     stroke-linecap: round;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .ring .arc {
-      transition: stroke-dashoffset var(--dur-control) var(--ease-out);
-    }
   }
 </style>

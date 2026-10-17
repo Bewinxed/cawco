@@ -133,13 +133,20 @@
   {#snippet children(limit)}
     {@const drawn = shown.slice(0, limit)}
     {@const runs = wellRuns(drawn)}
-    <div data-slot="inner" class="inner">
+    <!-- The transcript, in a well of its own — concentric with what it holds.
+         Its own x=0 is the host's text column: the well reaches out past it by
+         its padding, and every row inside repeats the columns from there. -->
+    <div
+      data-slot="inner"
+      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-sm bg-surface-recess"
+      style:--well-start="var(--well-at, 0)"
+    >
       {#if loading}
-        <p data-slot="inline-transcript-empty" class="empty">
+        <p data-slot="inline-transcript-empty" class="p-space-2 text-size-meta font-normal text-ink-muted">
           Loading its transcript…
         </p>
       {:else if shown.length === 0 && fault}
-        <p data-slot="inline-transcript-empty" class="empty">
+        <p data-slot="inline-transcript-empty" class="p-space-2 text-size-meta font-normal text-ink-muted">
           {#if fault.reason !== "offline"}
             Its transcript couldn't be read:
           {:else if reconnectingNow(fault)}
@@ -163,7 +170,7 @@
           Try again
         </Button>
       {:else if shown.length === 0}
-        <p data-slot="inline-transcript-empty" class="empty">
+        <p data-slot="inline-transcript-empty" class="p-space-2 text-size-meta font-normal text-ink-muted">
           {id
             ? "Nothing in its transcript yet."
             : "Still starting — no transcript to show."}
@@ -187,7 +194,7 @@
         {:else if r.kind === "thinking"}
           <Thinking live={r.live} text={r.text} />
         {:else if r.kind === "stream"}
-          <div class="say"><MessageBody source={r.text} streaming /></div>
+          <div class="mt-space-4"><MessageBody source={r.text} streaming /></div>
         {:else if r.kind === "single"}
           <MessageRow
             {agentName}
@@ -213,30 +220,12 @@
 </CollapsibleLazy>
 
 <style>
+  /* residual: foreign-dom */
   /* The well's own rows draw their own rails, and they start their own
      line — they must not inherit the continuation the OUTER row published,
      or a nested tool run paints the tail weight and hugs the row above it. */
-  .inner :global(*) {
+  [data-slot="inner"] :global(*) {
     --rail-head: var(--rail);
     --rail-gap: var(--space-4);
-  }
-  /* The transcript, in a well of its own — concentric with what it holds.
-     Its own x=0 is the host's text column: the well reaches out past it by
-     its padding, and every row inside repeats the columns from there. */
-  .inner {
-    margin-block: var(--space-2) 0;
-    margin-inline: var(--well-at, 0) 0;
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .empty {
-    padding: var(--space-2) var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .say {
-    margin-block-start: var(--space-4);
   }
 </style>
