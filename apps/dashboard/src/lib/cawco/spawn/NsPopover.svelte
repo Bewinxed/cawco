@@ -176,14 +176,15 @@
           <!-- Closing, it lets presses through to the page (floating-presence). -->
           <div
             {...wrapperProps}
-            class="ns-pop-shell"
-            style:pointer-events={pressable(open)}
+            class="ns-pop-shell pointer-events-(--press)"
+            style:--press={pressable(open)}
           >
             <div
               {...props}
               id={`${id}-popover`}
               role="presentation"
-              style:pointer-events={pressable(open)}
+              class="pointer-events-(--press)"
+              style:--press={pressable(open)}
               {@attach rows ? highlight({ rows }) : undefined}
               {@attach morph()}
             >
