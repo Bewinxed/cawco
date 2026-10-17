@@ -259,12 +259,16 @@
   {#if out}
     <!-- reflow never copies or uncovers what is inside (`data-flip-anchor`).
          Six rows at most, scrolling in place. The edges fade only while
-         there is more past them. -->
+         there is more past them: a mask on each edge (scrollEdges sets the
+         attributes). -->
     <ul
       data-slot="older-rows-box"
-      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none"
+      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none data-more-above:mask-(--fade-above) data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
       data-flip-anchor
       style:--fade="var(--space-4)"
+      style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
+      style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+      style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
       style:--gap="calc(var(--tree-gap) / 2)"
       style:--older-max="calc(6 * var(--older-h) + 5 * var(--gap))"
       data-keep-scroll="{list}:{id}"
@@ -280,25 +284,3 @@
     </ul>
   {/if}
 </Sidebar.MenuSubItem>
-
-<style>
-  /* residual: unmapped — the box's edge fades: a mask on each edge while
-     there is more past it (scrollEdges sets the attributes). */
-  [data-slot="older-rows-box"][data-more-above] {
-    mask-image: linear-gradient(transparent, var(--mask-opaque) var(--fade));
-  }
-  [data-slot="older-rows-box"][data-more-below] {
-    mask-image: linear-gradient(
-      var(--mask-opaque) calc(100% - var(--fade)),
-      transparent
-    );
-  }
-  [data-slot="older-rows-box"][data-more-above][data-more-below] {
-    mask-image: linear-gradient(
-      transparent,
-      var(--mask-opaque) var(--fade),
-      var(--mask-opaque) calc(100% - var(--fade)),
-      transparent
-    );
-  }
-</style>

@@ -1034,15 +1034,26 @@
            the screen's edges, each inside a landscape notch's inset, so the
            row has no pad of its own; with a conversation in front the bar
            floats over the group's own tab row and takes only its two
-           controls' touches. -->
+           controls' touches. Hosting the tabs, the bar is the shelf they
+           stand on: two steps below the transcript and one below an
+           unchosen tab, so the chosen tab (a sheet in the transcript's own
+           surface) reads as the page it opens. The hairline sits in the
+           bar's bottom pixel, where the sheet ends and covers it. The narrow
+           bar (NARROW_QUERY: under 900px, or a finger held portrait) draws
+           itself raised even while hosting, so the shelf is the wide bar's
+           alone (`min-[900px]:` with `not-coarse:` or `not-portrait:`).
+           Floating over the phone's tab row it draws nothing. -->
+      <!-- literal: 100% 1px (the hairline's band) -->
       <header
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:absolute max-[900px]:data-floating:inset-x-0 max-[900px]:data-floating:top-0 max-[900px]:data-floating:bottom-auto max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none"
+        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:absolute max-[900px]:data-floating:inset-x-0 max-[900px]:data-floating:top-0 max-[900px]:data-floating:bottom-auto max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none min-[900px]:not-coarse:data-hosting:border-b-none min-[900px]:not-coarse:data-hosting:bg-surface-shelf min-[900px]:not-coarse:data-hosting:bg-(image:--hosting-line) min-[900px]:not-coarse:data-hosting:bg-bottom min-[900px]:not-coarse:data-hosting:bg-size-(--hosting-line-size) min-[900px]:not-coarse:data-hosting:bg-no-repeat min-[900px]:not-portrait:data-hosting:border-b-none min-[900px]:not-portrait:data-hosting:bg-surface-shelf min-[900px]:not-portrait:data-hosting:bg-(image:--hosting-line) min-[900px]:not-portrait:data-hosting:bg-bottom min-[900px]:not-portrait:data-hosting:bg-size-(--hosting-line-size) min-[900px]:not-portrait:data-hosting:bg-no-repeat max-[900px]:data-floating:border-b-none max-[900px]:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
+        style:--hosting-line={"linear-gradient(var(--border-hairline), var(--border-hairline))"}
+        style:--hosting-line-size="100% 1px"
       >
         <!-- The sidebar toggle; at the 900px line the rail returns and it
              retires (`min-[900px]:hidden`). On the phone's row it is a bare
@@ -1226,11 +1237,13 @@
                  as it folds, on the card's clock (`data-joined`: from the
                  growth's first frame to the fold's). On the phone's row it
                  reaches on down through the neck to the row's floor, where
-                 it flares out into the card's top edge. -->
+                 it flares out into the card's top edge. A card the keyboard
+                 opened stands open and leaves at once (bar-glass `instant`),
+                 and its join with it. -->
             <span
               data-slot="join"
               aria-hidden="true"
-              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out group-data-joined/tools:opacity-100 group-data-joined/tools:dur-pop max-[900px]:bottom-(--join-foot)"
+              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out group-data-joined/tools:opacity-100 group-data-joined/tools:group-not-data-instant/tools:dur-pop group-data-instant/tools:transition-off max-[900px]:bottom-(--join-foot)"
               style:--f="var(--flare)"
               style:--h="calc(100% - 1px)"
               style:--join-foot="calc(-1 * var(--caw-neck))"
@@ -1358,16 +1371,21 @@
            it stands. Page grounds are the shell's own (surface-recess), so
            the inset beside them is the same ground. Under a finger it owns
            the home-indicator inset where no composer is present to own it
-           (`data-safe`), read off this box itself (data-safe-bottom). -->
+           (`data-safe`), read off this box itself (data-safe-bottom). Under
+           the floating bar the session's tab row is the screen's top row:
+           the insets beside it are its shelf, the rest the shell's ground
+           the transcript stands on. -->
       <main
         data-slot="shell-content"
         data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom)"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-[900px]:data-floating:bg-(image:--shelf-band) max-[900px]:data-floating:bg-top max-[900px]:data-floating:bg-size-(--shelf-band-size) max-[900px]:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"
         style:--content-end="env(safe-area-inset-right, 0px)"
         style:--content-start="env(safe-area-inset-left, 0px)"
+        style:--shelf-band={"linear-gradient(var(--surface-shelf), var(--surface-shelf))"}
+        style:--shelf-band-size="100% var(--c-top-bar-h)"
       >
         <!-- The page is keyed on its route, so a navigation swaps one page for
            the next through their own transitions (motion/route.svelte.ts):
@@ -1498,29 +1516,10 @@
     }
   }
 
-  /* residual: unmapped — the bar's ground while it hosts the tabs or
-     floats (a layered background, or a shorthand reset, with no utility);
-     the shapes the join is cut to (clip-path shape()); and the numbers that
-     switch with the pointer or the layout, which only a rule can set per
-     case. Hosting the tabs, the bar is the shelf they stand on: two steps
-     below the transcript and one below an unchosen tab, so the chosen tab
-     (a sheet in the transcript's own surface) reads as the page it opens.
-     The hairline sits in the bar's bottom pixel, where the sheet ends and
-     covers it. The narrow bar (NARROW_QUERY) draws itself raised even
-     while hosting. Floating over the phone's tab row it draws nothing. */
-  [data-slot="top"][data-hosting] {
-    border-bottom: 0;
-    background:
-      linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
-        100% 1px no-repeat,
-      var(--surface-shelf);
-  }
-  @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
-    [data-slot="top"][data-hosting] {
-      border-bottom: 1px solid var(--seam);
-      background: var(--surface-raised);
-    }
-  }
+  /* residual: unmapped — the shapes the join is cut to (clip-path shape(),
+     needs shared: a clip-path utility), and the numbers that switch with the
+     pointer or the layout, which only a rule can set per case (needs shared:
+     a token or utility for each). */
   /* How far each of the group's items reaches sideways under a finger (the
      kit's .touch-hit reads it): the group's padding, a finger's gap. */
   [data-slot="tools"] {
@@ -1546,11 +1545,6 @@
       close
     );
   }
-  /* A card the keyboard opened stands open and leaves at once (bar-glass
-     `instant`), and its join with it. */
-  [data-slot="tools"][data-instant] [data-slot="join"] {
-    transition: none;
-  }
   @media (max-width: 899px) {
     /* The neck Caw's phone panel hangs through (registered: NeedsCaw reads
        it in px), what the row is taller than his glass. */
@@ -1571,17 +1565,6 @@
         line to 0 100%,
         close
       );
-    }
-    [data-slot="top"][data-floating] {
-      border-bottom: 0;
-      background: none;
-    }
-    /* Under the floating bar the session's tab row is the screen's top
-       row: the insets beside it are its shelf, the rest the shell's ground
-       the transcript stands on. */
-    [data-slot="shell-content"][data-floating] {
-      background: linear-gradient(var(--surface-shelf), var(--surface-shelf))
-        top / 100% var(--c-top-bar-h) no-repeat;
     }
   }
 

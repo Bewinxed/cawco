@@ -645,10 +645,10 @@
 <PeekSheet />
 
 <style>
-  /* residual: unmapped */
-  /* The board under a conversation is skipped outright: its style, layout
-     and paint leave every frame, and its rendering state is kept for its
-     return. */
+  /* residual: unmapped — the board under a conversation is skipped
+     outright: its style, layout and paint leave every frame, and its
+     rendering state is kept for its return (content-visibility has no
+     utility; needs shared: content-visibility-hidden). */
   [data-slot="board"][data-hidden] {
     content-visibility: hidden;
   }

@@ -128,7 +128,7 @@
      A step up while its rows are out (--mark-level): their marks start and
      end their ride under it (app.css, motion/branch). No tile: the face
      stands bare in the slot, in the muted ink (a row that is no session or
-     project: "N older"). -->
+     project: "N older"). The dot's ink is its status's (--dot). -->
 <span
   data-slot="tree-mark"
   class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-mark-glyph data-bare:text-ink-muted"
@@ -140,6 +140,7 @@
   data-open={(parent && open) || undefined}
   data-status-count={countIsStatus ? "" : undefined}
   data-switch={switches || rowToggles ? "" : undefined}
+  style:--dot={dot ? `var(--status-${dot}-glyph)` : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
   style:--size="var(--mark-size, var(--space-5))"
@@ -182,19 +183,25 @@
        way): that number is what transitions (app.css); the swap is by
        opacity, the shrink and the blur are motion and ride on it only where
        motion is welcome. The chevron's turn and the tile's press are
-       numbers of the same kind. -->
+       numbers of the same kind. With a dot the face is cut away round it:
+       a hole in its mask. -->
   <!-- literal: 0.25px -->
   <span
     data-slot="tile"
     aria-hidden="true"
-    class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:dur-toggle motion-safe:ease-out"
+    class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:dur-toggle motion-safe:ease-out group-data-dot/mark:mask-(--hole-mask)"
     style:--hole-edge="0.25px"
+    style:--hole={dot
+      ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
+      : undefined}
+    style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--hole-edge)))"}
   >
     <span
       data-slot="tree-mark-rest"
-      class="col-start-1 row-start-1 inline-grid place-items-center opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale)"
+      class="col-start-1 row-start-1 inline-grid place-items-center opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur)"
       style:--swap-shown="calc(1 - var(--swap-away))"
       style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
+      style:--swap-blur="calc(var(--space-1) * var(--swap-away))"
     >
       {#if has && !faceAlways}
         <!-- The count's box is fixed, and the morph (which animates its own
@@ -214,12 +221,14 @@
     {#if parent && !faceAlways}
       <span
         data-slot="chev"
-        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale)"
+        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur)"
         style:--swap-shown="calc(1 - var(--swap-away))"
         style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
-        ><ChevronIcon
+        style:--swap-blur="calc(var(--space-1) * var(--swap-away))"
+        ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
           class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:dur-toggle motion-safe:ease-out"
+          style={open ? "--swap-turn: 90deg" : undefined}
         /></span
       >
     {/if}
@@ -356,9 +365,9 @@
     }
   }
 
-  /* residual: unmapped — the echo box's cut, a clip-path shape(): the
-     tile's own rounded square is a hole in it, and so is the band of each
-     card that shows under the tile. */
+  /* residual: unmapped — the echo box's cut, a clip-path shape() (needs
+     shared: a clip-path utility): the tile's own rounded square is a hole in
+     it, and so is the band of each card that shows under the tile. */
   [data-slot="tree-mark-echo-box"] {
     clip-path: shape(
       evenodd from 0 0,
@@ -399,19 +408,16 @@
     );
   }
 
-  /* residual: unmapped — the swap, the turn and the press are registered
-     numbers that do not inherit (app.css @property), each moved by its own
-     transition: a state sets one on the element itself, and only a rule
-     can (an inline value would outrank every state). Open, the chevron
-     points down at the rows. It stands in the face's place, unless the
-     count is a status of the parent's own (`countIsStatus`): then the count
-     stays and only a pointer brings the chevron. The chevron's svg is the
-     icon component's own, so its turn keeps the original's :global. */
+  /* residual: unmapped — the swap and the press are registered numbers that
+     do not inherit (app.css @property), each moved by its own transition: a
+     state sets one on the element itself, a pointer's hover or press among
+     them, and only a rule can (an inline value would outrank every state;
+     needs shared: a utility that sets each number, and variants for the
+     press and the beat). Open, the chevron stands in the face's place,
+     unless the count is a status of the parent's own (`countIsStatus`):
+     then the count stays and only a pointer brings the chevron. */
   [data-slot="chev"] {
     --swap-away: 1;
-  }
-  [data-slot="tree-mark"][data-open] [data-slot="chev"] :global(svg) {
-    --swap-turn: 90deg;
   }
   [data-slot="tree-mark"][data-open]:not(
       [data-status-count],
@@ -435,10 +441,6 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    [data-slot="tree-mark-rest"],
-    [data-slot="chev"] {
-      filter: blur(calc(var(--space-1) * var(--swap-away)));
-    }
     /* The press: the tile gives a little under it. */
     [data-slot="tree-mark"]:has([data-slot="hit"]:active)
       [data-slot="tile"]:not([data-echo]) {
@@ -464,30 +466,11 @@
       );
     }
   }
-  /* The face's cut round the dot, and the dot's ink by status (a custom
-     property set by the status). */
-  [data-slot="tree-mark"][data-dot] [data-slot="tile"]:not([data-echo]) {
-    --hole: calc(var(--status-dot-size) / 2 + var(--status-dot-cut));
-    mask-image: radial-gradient(
-      circle at 100% 0,
-      transparent calc(var(--hole) - var(--hole-edge)),
-      var(--mask-opaque) calc(var(--hole) + var(--hole-edge))
-    );
-  }
-  [data-slot="tree-mark"][data-dot="attn"] {
-    --dot: var(--status-attn-glyph);
-  }
-  [data-slot="tree-mark"][data-dot="fail"] {
-    --dot: var(--status-fail-glyph);
-  }
   /* Working: a still dot in the live ink, except while the echo that says it
      beats (motion/echo marks it `data-beating` for exactly that long). The
      still dot is the rule, so the mark says its status wherever no echo
      runs: with reduced motion, once its echoes have played, in a list not
      rendered. The scheduler sets the attribute, so it is global here. */
-  [data-slot="tree-mark"][data-dot="live"] {
-    --dot: var(--status-live-glyph);
-  }
   [data-slot="tree-mark"][data-dot="live"]:has(:global([data-beating])) {
     & [data-slot="dot"] {
       display: none;

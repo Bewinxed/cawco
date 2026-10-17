@@ -1133,7 +1133,8 @@
 
 <style>
   /* residual: unmapped — the transcript's scroll, in reach of its head blur
-     (HeadFade): timeline-scope has no utility. */
+     (HeadFade): timeline-scope has no utility (needs shared:
+     timeline-scope-transcript-head). */
   [data-slot="thread-pane-slide"] {
     timeline-scope: --transcript-head;
   }

@@ -83,20 +83,23 @@
      bottom edge): the status bar took the page's ground on the home and the
      drawer's surface while it was open. Over every layer, toasts' (sonner,
      1000) included: the strip is the colour of whatever stands on its edge,
-     so it is never seen as itself. -->
+     so it is never seen as itself. Each strip runs two clocks in one
+     transition, its colour's and its showing's. -->
 <div
   data-slot="edge-top"
   aria-hidden="true"
-  class="fixed inset-x-0 -top-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-top-background)"
+  class="fixed inset-x-0 -top-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-top-background) transition-[background-color,opacity] duration-(--edge-top-durs) ease-out"
   ontransitionend={read}
   style:--edge-h="max(var(--icon-sm), env(safe-area-inset-top))"
+  style:--edge-top-durs="var(--edge-top-fade), var(--edge-show-fade)"
   bind:this={top}
 ></div>
 <div
   data-slot="edge-bottom"
   aria-hidden="true"
-  class="fixed inset-x-0 -bottom-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background)"
+  class="fixed inset-x-0 -bottom-space-2 z-1001 h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background) transition-[background-color,opacity] duration-(--edge-bottom-durs) ease-out"
   style:--edge-h="max(var(--icon-sm), env(safe-area-inset-bottom))"
+  style:--edge-bottom-durs="var(--edge-bottom-fade), var(--edge-show-fade)"
 ></div>
 
 <style>
@@ -229,18 +232,5 @@
   ) {
     --edge-top-background: var(--sidebar);
     --edge-bottom-background: var(--sidebar);
-  }
-
-  /* residual: unmapped — each strip's two clocks in one transition, its
-     colour's and its showing's (needs a transition token). */
-  [data-slot="edge-top"] {
-    transition:
-      background-color var(--edge-top-fade) var(--ease-out),
-      opacity var(--edge-show-fade) var(--ease-out);
-  }
-  [data-slot="edge-bottom"] {
-    transition:
-      background-color var(--edge-bottom-fade) var(--ease-out),
-      opacity var(--edge-show-fade) var(--ease-out);
   }
 </style>

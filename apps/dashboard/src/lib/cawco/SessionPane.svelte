@@ -1280,8 +1280,9 @@
 </div>
 
 <style>
-  /* residual: unmapped */
-  /* The transcript's scroll, in reach of its head blur (HeadFade). */
+  /* residual: unmapped — the transcript's scroll, in reach of its head blur
+     (HeadFade): timeline-scope has no utility (needs shared:
+     timeline-scope-transcript-head). */
   [data-slot="transcript-slide"] {
     timeline-scope: --transcript-head;
   }

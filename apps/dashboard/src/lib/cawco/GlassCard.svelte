@@ -530,7 +530,8 @@
 </Popover.Root>
 
 <style>
-  /* residual: unmapped — border-radius: inherit */
+  /* residual: unmapped — border-radius: inherit (no utility; needs shared:
+     rounded-inherit) */
   [data-slot="glass-face"] {
     border-radius: inherit;
   }
