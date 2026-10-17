@@ -34,16 +34,19 @@
     "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start";
 </script>
 
-<div class="cell" {@attach morph()}>
+<div class="overflow-hidden" {@attach morph()}>
   {#key cell.row}
-    <div data-slot="swap" class="swap">
+    <div
+      data-slot="swap"
+      class="flex flex-wrap items-center gap-space-2 type-label"
+    >
       {#if cell.plain}
-        <span class="plain">{cell.text}</span>
+        <span class="type-meta text-ink-muted">{cell.text}</span>
       {:else if cell.text}
         {#if cell.icon === "spinner"}
-          <span class="line mark-line">
+          <span class="mark-line inline-flex items-center gap-space-2">
             <Spinner class="size-icon-md shrink-0 text-ink-muted" />
-            <span data-slot="words" class="words">{cell.text}</span>
+            <span data-slot="words">{cell.text}</span>
           </span>
         {:else}
           <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
@@ -59,7 +62,11 @@
           </Badge>
         {/if}
         {#if cell.meta}
-          <span data-num data-slot="meta" class="meta num">{cell.meta}</span>
+          <span
+            data-num
+            data-slot="meta"
+            class="num type-meta text-ink-muted">{cell.meta}</span
+          >
         {/if}
         {#each cell.buttons as button (button)}
           {#if button === "retry"}
@@ -102,52 +109,25 @@
     </div>
   {/key}
   {#if reading && cell.buttons.includes("error")}
-    <pre class="said" transition:unfold>{machine.binaryUpdate?.error ??
+    <!-- literal: 10rem -->
+    <pre
+      class="mx-0 mt-space-2 mb-0 max-h-(--said-max) overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      style:--said-max="10rem"
+      transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>
   {/if}
   <RowFault again={refused?.again} reason={refused?.reason} />
 </div>
 
 <style>
-  .cell {
-    overflow: hidden;
-  }
-  .swap {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
+  /* residual: keyframes */
+  [data-slot="swap"] {
     @media (prefers-reduced-motion: no-preference) {
       animation: swap-in var(--dur-control) var(--ease-out);
     }
     @media (prefers-reduced-motion: reduce) {
       animation: fade-in var(--dur-control) var(--ease-out);
     }
-  }
-  .line {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .plain,
-  .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* The machine's own words, in a well under the cell. */
-  .said {
-    max-block-size: 10rem;
-    margin: var(--space-2) 0 0;
-    padding: var(--space-2);
-    overflow: auto;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-xs);
-    background: var(--surface-well);
-    color: var(--ink-strong);
-    font: var(--type-code);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
   }
   @keyframes swap-in {
     from {

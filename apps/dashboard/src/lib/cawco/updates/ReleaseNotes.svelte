@@ -54,16 +54,25 @@
   const sections = $derived(sectionsOf(source));
 </script>
 
-<div class="release-notes">
+<div data-slot="release-notes" class="grid">
   {#each sections as section, i (i)}
     {#if section.heading}
       {@const known = TONES[section.heading]}
-      <h3 data-slot="release-notes-label" class="label" data-tone={known?.tone}>
+      <!-- A section's name: the badge recipe (DESIGN.md, Badges and state chips),
+           20px at the 5px radius, label role, a 12px glyph, in its hue's ink on
+           that hue's faint fill. -->
+      <!-- literal: 6px -->
+      <h3
+        data-slot="release-notes-label"
+        class="mt-space-3 mb-space-2 inline-flex h-icon-lg items-center justify-self-start gap-space-1 rounded-xs bg-surface-recess px-(--pad) type-label text-ink-strong first:mt-0 tone-fixed:bg-note-fixed-bg tone-fixed:text-note-fixed-ink tone-improved:bg-note-improved-bg tone-improved:text-note-improved-ink tone-new:bg-note-new-bg tone-new:text-note-new-ink"
+        data-tone={known?.tone}
+        style:--pad="6px"
+      >
         {#if known}
           <known.icon
             data-release-notes-glyph
             aria-hidden="true"
-            class="glyph"
+            class="size-icon-sm flex-none"
           />
         {/if}
         {section.heading}
@@ -76,68 +85,32 @@
 </div>
 
 <style>
-  .release-notes {
-    display: grid;
-  }
-  /* A section's name: the badge recipe (DESIGN.md, Badges and state chips),
-     20px at the 5px radius, label role, a 12px glyph, in its hue's ink on
-     that hue's faint fill. */
-  .label {
-    justify-self: start;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    block-size: 20px;
-    margin: var(--space-3) 0 var(--space-2);
-    padding-inline: 6px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .label:first-child {
-    margin-top: 0;
-  }
-  .label :global(.glyph) {
-    inline-size: 12px;
-    block-size: 12px;
-    flex: none;
-  }
-  .label[data-tone="new"] {
-    background: var(--note-new-bg);
-    color: var(--note-new-ink);
-  }
-  .label[data-tone="improved"] {
-    background: var(--note-improved-bg);
-    color: var(--note-improved-ink);
-  }
-  .label[data-tone="fixed"] {
-    background: var(--note-fixed-bg);
-    color: var(--note-fixed-ink);
-  }
   /* Prose's own scale is for a document; notes sit inside a toast or a card
      and take that surface's type, so the prose here inherits it and keeps
      only its structure. Every rule sits one class above prose's `:where()`. */
-  .release-notes :global(.prose) {
+  /* residual: foreign-dom — the Markdown's own elements */
+  [data-slot="release-notes"] :global(.prose) {
     font: inherit;
     color: inherit;
   }
-  .release-notes :global(p) {
+  [data-slot="release-notes"] :global(p) {
     margin: 0;
   }
-  .release-notes :global(ul) {
+  [data-slot="release-notes"] :global(ul) {
     display: grid;
     gap: var(--space-row);
     margin: 0;
     padding-inline-start: var(--space-4);
     list-style: disc;
   }
-  .release-notes :global(li) {
+  [data-slot="release-notes"] :global(li) {
     margin: 0;
     padding: 0;
     overflow-wrap: anywhere;
   }
-  .release-notes :global(li::marker) {
+
+  /* residual: pseudo */
+  [data-slot="release-notes"] :global(li::marker) {
     color: var(--ink-muted);
   }
 </style>
