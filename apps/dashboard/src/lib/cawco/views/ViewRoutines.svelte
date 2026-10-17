@@ -905,19 +905,21 @@
       <!-- New routine: the composer stands over the ledger it will land in. -->
       <div class="p-space-3">{@render askCaw()}</div>
     {/if}
-    <!-- literal: 6rem; calc(var(--c-row-lead) + var(--space-3)); calc(var(--c-btn-h-sm) + var(--space-3) * 2) -->
+    <!-- literal: 6rem; calc(var(--c-row-lead) + var(--space-3)); calc(var(--c-btn-h-sm) + var(--space-3) * 2); 0 -->
     <div
       data-slot="ledger"
       class="@container/routines-ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
       style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
       style:--col-when="6rem"
+      style:--none="0"
     >
       <Table.Root
         data-routines
         aria-label="Routines"
         class="table-fixed border-separate"
         ghostRows="tr[data-view-routines-row]"
+        spacing="flush"
       >
         <Table.Header>
           <Table.Row variant="band">
@@ -968,15 +970,17 @@
       event, like a merged pull request.
     </p>
   {:else}
-    <!-- literal: calc(var(--c-row-lead) + var(--space-3)) -->
+    <!-- literal: calc(var(--c-row-lead) + var(--space-3)); 0 -->
     <div
       data-slot="ledger"
       class="@container/routines-ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
+      style:--none="0"
     >
       <Table.Root
         aria-label="Event sources"
         class="table-fixed border-separate"
+        spacing="flush"
       >
         <Table.Header>
           <Table.Row variant="band">
