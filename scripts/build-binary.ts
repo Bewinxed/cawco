@@ -7,7 +7,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 
-export const PINNED_BUN = "1.4.2";
+export const PINNED_BUN = "1.4.3";
 export const TARGETS = [
   "linux-x64",
   "linux-arm64",
