@@ -24,115 +24,76 @@
   const problem = $derived(problemOf(account));
 </script>
 
-<li class="arow" data-flip>
-  <a class={["link", problem && "two"]} {href}>
+<!-- literal: 56px -->
+<li
+  class="@container/arow flex min-h-(--row-min) min-w-0 border-t border-border-hairline"
+  data-flip
+  style:--row-min="56px"
+>
+  <!-- literal: 10px 16px 2px -->
+  <a
+    class="link grid min-w-0 flex-auto grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill"
+    data-two={Boolean(problem) || undefined}
+    {href}
+    style:--link-cols="10px minmax(0, 1fr) 16px"
+  >
+    <!-- literal: 10px, 50% -->
     <i
       data-slot="dot"
       aria-hidden="true"
-      class="dot"
+      class="size-(--dot) rounded-(--dot-r) bg-(--c) transition-[background-color] dur-fade ease-out"
+      style:--area="dot"
       style:--c={hueVar(account.hue)}
+      style:--dot="10px"
+      style:--dot-r="50%"
     ></i>
-    <span data-slot="name" class="name"
-      ><span data-slot="words" class="words" data-share="title:{href}"
+    <span
+      data-slot="name"
+      class="type-label flex min-w-0 text-ink-row"
+      style:--area="name"
+      ><span
+        data-slot="words"
+        class="truncate"
+        data-share="title:{href}"
         >{name}</span
       ></span
     >
     {#if problem}
-      <span class="problem mark-line" data-flip>
-        <IconWarningTriangle aria-hidden="true" />
+      <span
+        class="mark-line flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] dur-panel ease-out"
+        data-flip
+        style:--area="problem"
+      >
+        <IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" />
         <span><MorphText text={problem} /></span>
       </span>
     {/if}
-    <span data-slot="chev" aria-hidden="true" class="chev"
-      ><IconChevronRight /></span
+    <span
+      data-slot="chev"
+      aria-hidden="true"
+      class="flex text-ink-subtle"
+      style:--area="chev"
+      ><IconChevronRight class="size-icon-md" /></span
     >
   </a>
 </li>
 
 <style>
-  /* The live Accounts row: a hairline above every row, 11px by 7px of
-     padding, 56px tall, its parts 14px apart. */
-  .arow {
-    container: arow / inline-size;
-    display: flex;
-    min-width: 0;
-    min-height: 56px;
-    border-block-start: 1px solid var(--border-hairline);
-  }
+  /* residual: unmapped */
   .link {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: 10px minmax(0, 1fr) 16px;
     grid-template-areas: "dot name chev";
-    align-items: center;
-    column-gap: var(--space-4);
-    row-gap: 2px;
-    padding: var(--space-3) var(--space-2);
-    color: inherit;
-    text-decoration: none;
-    transition: var(--transition-control);
   }
-  .link.two {
+  .link[data-two] {
     grid-template-areas:
       "dot name chev"
       ". problem chev";
   }
-  /* A wide row tints under the press and moves nothing (The Press Rule). */
-  .link:active {
-    background-color: var(--surface-fill);
-  }
-  .link:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .dot {
-    grid-area: dot;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--c);
-    transition: background-color var(--dur-fade) var(--ease-out);
-  }
-  .name {
-    grid-area: name;
-    display: flex;
-    min-width: 0;
-    font: var(--type-label);
-    color: var(--ink-row);
-  }
-  .words {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .problem {
-    grid-area: problem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-width: 0;
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-    transition: color var(--dur-panel) var(--ease-out);
-  }
-  .problem :global(svg) {
-    flex: none;
-    width: 12px;
-    height: 12px;
-  }
-  .chev {
-    grid-area: chev;
-    display: flex;
-    color: var(--ink-subtle);
-  }
-  .chev :global(svg) {
-    width: 16px;
-    height: 16px;
+  .link > * {
+    grid-area: var(--area);
   }
   /* At a phone's width the chevron stands on the name's line. */
   @container arow (width < 480px) {
-    .chev {
+    [data-slot="chev"] {
       grid-row: 1;
     }
   }

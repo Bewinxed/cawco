@@ -44,14 +44,19 @@
         {#each accounts as account (account.id)}
           {@const going = account.id === target}
           <ContextMenu.RadioItem disabled={going} value={account.id}>
+            <!-- literal: 8px -->
             <i
               data-slot="dot"
               aria-hidden="true"
-              class="dot"
+              class="mx-space-1 size-(--dot) flex-none rounded-(--dot-r) bg-(--c)"
               data-box
               style:--c={hueVar(account.hue)}
+              style:--dot="8px"
+              style:--dot-r="50%"
             ></i>
-            <span data-slot="name" class="name"
+            <span
+              data-slot="name"
+              class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
               >{going ? `Moving to ${nameOf(account)}…` : nameOf(account)}</span
             >
           </ContextMenu.RadioItem>
@@ -60,21 +65,3 @@
     </ContextMenu.SubContent>
   </ContextMenu.Sub>
 {/if}
-
-<style>
-  .dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    margin-inline: 4px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  .name {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-</style>

@@ -47,20 +47,26 @@
   }
 </script>
 
-<div class="lim">
-  <h3 data-slot="head" class="head">{words.head}</h3>
-  <div class="switch-line">
-    <label for="{id}-move">{words.move}</label>
+<div class="@container flex flex-col">
+  <h3
+    data-slot="head"
+    class="type-label mb-space-3 text-balance text-ink-strong"
+  >{words.head}</h3>
+  <div
+    class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
+  >
+    <label class="cursor-pointer" for="{id}-move">{words.move}</label>
     <Switch id="{id}-move" bind:checked={atLimit.move} />
   </div>
   {#if atLimit.move}
-    <div class="rows" in:unfold out:unfold>
-      <p class="pr">
+    <!-- literal: 64px -->
+    <div class="flex flex-col" in:unfold out:unfold style:--field-w="64px">
+      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
         <label for="{id}-wait">{words.wait}</label>
         <Input
           data-num
           data-field
-          class="num field"
+          class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
           id="{id}-wait"
           inputmode="numeric"
           min="0"
@@ -72,12 +78,12 @@
         />
         <span>{words.minutes}</span>
       </p>
-      <p class="pr">
+      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
         <label for="{id}-under">{words.under}</label>
         <Input
           data-num
           data-field
-          class="num field"
+          class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
           id="{id}-under"
           inputmode="numeric"
           min="0"
@@ -88,15 +94,15 @@
           value={atLimit.moveWholeUnderK}
         />
         <span>{words.kTokens}</span>
-        <span class="aside">{words.rereads}</span>
+        <span class="type-meta text-ink-muted">{words.rereads}</span>
       </p>
-      <p class="pr">{words.otherwise}</p>
-      <p class="pr">
+      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">{words.otherwise}</p>
+      <p class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row">
         <label for="{id}-at">{words.early}</label>
         <Input
           data-num
           data-field
-          class="num field"
+          class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
           id="{id}-at"
           inputmode="numeric"
           max="100"
@@ -108,96 +114,22 @@
           value={atLimit.prepareAtPct}
         />
         <span>{words.percent}</span>
-        <span class="aside">{words.warm}</span>
+        <span class="type-meta text-ink-muted">{words.warm}</span>
       </p>
-      <div class="figure">
+      <div class="my-space-3">
         <StrategyFigure board="limit" {lanes} playing {policy} />
       </div>
       {#if terms}
         <a
-          class="terms mark-line"
+          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-link-ink no-underline hover:text-link-hover"
           href={TERMS_URL}
           rel="noopener noreferrer"
           target="_blank"
         >
           <span>{words.terms}</span>
-          <IconArrowUpRight />
+          <IconArrowUpRight class="size-icon-sm flex-none" />
         </a>
       {/if}
     </div>
   {/if}
 </div>
-
-<style>
-  .lim {
-    display: flex;
-    flex-direction: column;
-    container-type: inline-size;
-  }
-  .head {
-    margin-block-end: var(--space-3);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .switch-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding-block: var(--space-2) var(--space-3);
-    color: var(--ink-row);
-  }
-  .switch-line label {
-    cursor: pointer;
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-  }
-  .pr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-    color: var(--ink-row);
-    text-wrap: pretty;
-  }
-  .pr :global(.field) {
-    flex: none;
-    width: 64px;
-    height: var(--c-btn-h-sm);
-    padding-inline: var(--space-2);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-  .aside {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .figure {
-    margin-block: var(--space-3);
-  }
-  .terms {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    align-self: flex-start;
-    border-radius: var(--radius-xs);
-    font: var(--type-label);
-    color: var(--link-ink);
-    text-decoration: none;
-    text-wrap: pretty;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .terms:hover {
-      color: var(--link-hover);
-    }
-  }
-  .terms :global(svg) {
-    flex: none;
-    width: 12px;
-    height: 12px;
-  }
-</style>

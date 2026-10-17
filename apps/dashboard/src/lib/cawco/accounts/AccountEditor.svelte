@@ -160,7 +160,7 @@
       bind:value={fields.nickname}
     />
     {#if refused}
-      <p class="problem" role="alert" in:appear>{refused}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{refused}</p>
     {/if}
   {/snippet}
 
@@ -191,17 +191,23 @@
         label={words.editor.neverBackup}
         bind:checked={fields.neverBackup}
       />
-      <div class="reserve">
+      <div
+        class="flex flex-wrap items-center gap-space-3 pt-space-2 text-ink-row"
+      >
         <label for="reserve">{words.editor.reserve}</label>
         <!-- The figure and its unit hold together on one line. -->
-        <span class="amount">
+        <!-- literal: 64px -->
+        <span
+          class="inline-flex flex-none items-center gap-space-3 whitespace-nowrap"
+          style:--field-w="64px"
+        >
           <Input
             data-field
             aria-describedby={reservePct === undefined
               ? "reserve-line"
               : undefined}
             aria-invalid={reservePct === undefined ? "true" : undefined}
-            class="field"
+            class="num h-c-btn-h-sm w-(--field-w) flex-none px-space-2 text-center"
             id="reserve"
             inputmode="numeric"
             bind:value={fields.reserve}
@@ -210,40 +216,10 @@
         </span>
       </div>
       {#if reservePct === undefined}
-        <p class="problem" id="reserve-line" in:appear>
+        <p class="type-meta text-status-fail-ink" id="reserve-line" in:appear>
           {words.editor.reserveInvalid}
         </p>
       {/if}
     </EditorSection>
   {/if}
 </EditorFrame>
-
-<style>
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .reserve {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    padding-block-start: var(--space-2);
-    color: var(--ink-row);
-  }
-  .amount {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-3);
-    white-space: nowrap;
-  }
-  .reserve :global(.field) {
-    flex: none;
-    width: 64px;
-    height: var(--c-btn-h-sm);
-    padding-inline: var(--space-2);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-</style>
