@@ -82,30 +82,54 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="column"
+  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 data-over:bg-surface-hover kind-you:bg-brand-wash"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
   data-picking={picking ? "" : undefined}
   {@attach drop}
 >
-  <header data-slot="head" class="head">
-    <span class="line mark-line">
+  <header
+    data-slot="head"
+    class="flex flex-col gap-0 px-space-2 py-space-1"
+  >
+    <span
+      class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2"
+    >
       {#if kind === "you"}
-        <IconNeedsYou aria-hidden="true" class="you-glyph" />
+        <IconNeedsYou
+          aria-hidden="true"
+          class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
+        />
       {/if}
-      <h3 data-slot="name" class="name">{label}</h3>
-      <span data-num data-slot="count" class="count num"
+      <h3
+        data-slot="name"
+        class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong group-kind-you/col:text-brand-ink"
+        >{label}</h3
+      >
+      <span
+        data-num
+        data-slot="count"
+        class="num ms-auto type-meta text-ink-subtle"
         ><MorphText text={String(count)} /></span
       >
     </span>
-    <span data-slot="kind" class="kind">{kindWord}</span>
+    <span
+      data-slot="kind"
+      class="flex-none type-code whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+      >{kindWord}</span
+    >
   </header>
-  <ol data-slot="cards" class="cards" {@attach reflow()}>
+  <ol
+    data-slot="cards"
+    class="m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible"
+    {@attach reflow()}
+  >
     {#each cards as task (task.id)}
       {@const fault = refused?.(task.id) ?? null}
       {@const on = picked?.(task.id) ?? false}
       <li
+        class="group/card data-pickable:relative"
         aria-busy={moving?.(task.id) || undefined}
         data-archived={archived || undefined}
         data-flip
@@ -122,182 +146,61 @@
         />
         {#if onpick}
           <!-- The tick stands beside the card, not in it: the card is a link. -->
+          <!-- literal: 1rem -->
           <Checkbox
             data-task-column-pick
             aria-label="Pick {task.id} {task.title}"
             checked={on}
-            class="pick"
+            class="absolute end-space-3 top-(--pick-top) opacity-0 transition-[opacity] dur-control ease-out group-focus-within/card:opacity-100 group-data-picked/card:opacity-100 group-data-picking/col:opacity-100 group-hover/card:opacity-100 coarse:opacity-100"
             onclick={(event: MouseEvent) => {
               event.preventDefault();
               onpick(task.id, !on, event.shiftKey);
             }}
+            style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - 1rem) / 2)"
           />
         {/if}
         {#if moving?.(task.id)}
-          <span data-slot="moving" class="moving mark-line"
-            ><Spinner aria-hidden="true" /><span>Moving…</span></span
+          <span
+            data-slot="moving"
+            class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted"
+            ><Spinner aria-hidden="true" class="size-icon-sm" /><span
+              >Moving…</span
+            ></span
           >
         {/if}
-        <RowFault again={fault?.again} reason={fault?.reason} />
+        <RowFault
+          again={fault?.again}
+          reason={fault?.reason}
+          style="--fault-indent: var(--space-2); --fault-end: var(--space-2)"
+        />
       </li>
     {/each}
   </ol>
   {#if foot}
-    <div data-slot="foot" class="foot">{@render foot()}</div>
+    <div data-slot="foot" class="flex-none">{@render foot()}</div>
   {/if}
 </section>
 
 <style>
-  /* A dropped card stands where the hand put it, quieter, saying it moves,
-     until the hub answers. */
+  /* residual: foreign-dom — TaskCard's root and head take no class. A dropped
+     card stands where the hand put it, quieter, saying it moves, until the hub
+     answers; a card that can be picked keeps its head's end clear for the tick;
+     a picked card takes the selected wash. */
   li[data-moving] > :global(:first-child) {
     opacity: 0.6;
   }
-  .moving {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-  /* A card that can be picked keeps its head's end clear for the tick,
-     which stands over it on the head's line. The tick shows under the
-     pointer, on focus, once any card is picked, and always on a finger. */
-  li[data-pickable] {
-    position: relative;
-  }
-  li[data-pickable] > :global(.task-card .head) {
+  li[data-pickable] > :global([data-slot="task-card"] [data-slot="head"]) {
     padding-inline-end: calc(var(--space-4) + var(--space-2));
   }
-  li > :global(.pick) {
-    position: absolute;
-    inset-block-start: calc(var(--space-2) + (var(--c-badge-h) - 1rem) / 2);
-    inset-inline-end: var(--space-3);
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  li:focus-within > :global(.pick),
-  li[data-picked] > :global(.pick),
-  .column[data-picking] li > :global(.pick) {
-    opacity: 1;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    li:hover > :global(.pick) {
-      opacity: 1;
-    }
-  }
-  @media (pointer: coarse) {
-    li > :global(.pick) {
-      opacity: 1;
-    }
-  }
-  /* A picked card takes the selected wash. */
-  li[data-picked] > :global(.task-card) {
+  li[data-picked] > :global([data-slot="task-card"]) {
     background: var(--selected-bg);
   }
-  li > :global(.row-fault) {
-    --fault-indent: var(--space-2);
-    --fault-end: var(--space-2);
-  }
-  .column {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-block-size: 0;
-    padding: var(--space-1);
-    border-radius: var(--radius-lg);
-    background: var(--surface-band);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-out);
-  }
-  /* The column a drop would land in. */
-  .column[data-over] {
-    background: var(--surface-hover);
-  }
-  /* A column the card in the air may not go to: still a target (the hub
-     says why), only quieter. */
-  .column[data-closed] {
-    opacity: 0.5;
-  }
-  /* The `you` column: the brand wash, its name in the brand ink. */
-  .column[data-kind="you"] {
-    background: var(--brand-wash);
-  }
-  .head {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding: var(--space-1) var(--space-2) var(--space-1);
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-xs);
-  }
-  .head :global(.you-glyph) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    flex: none;
-    margin-inline-end: calc(var(--space-1) * -1);
-    color: var(--status-attn-glyph);
-  }
-  .name {
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .column[data-kind="you"] .name {
-    color: var(--brand-ink);
-  }
-  /* A stage's kind is a word of stages.md, set as code. */
-  .kind {
-    flex: none;
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-    white-space: nowrap;
-  }
-  .column[data-kind="you"] .kind {
-    color: var(--status-attn-ink);
-  }
-  .count {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .cards {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-block-size: var(--c-btn-h-lg);
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
-    list-style: none;
-  }
-  /* On a phone the page scrolls, not the column: its cards stand whole. */
-  @media (max-width: 639px) {
-    .cards {
-      flex: none;
-      overflow: visible;
-    }
-  }
-  .foot {
-    flex: none;
-  }
-  .foot :global(.add-task) {
+  /* residual: foreign-dom — the board's New task button, from NewTaskForm. */
+  [data-slot="foot"] > :global([data-slot="button"]) {
     inline-size: 100%;
+  }
+  /* residual: unmapped — the column's hairline ring (no token carries it). */
+  [data-slot="column"] {
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
 </style>
