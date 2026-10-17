@@ -133,6 +133,7 @@ import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
+import { carryHub, stopCarrying } from "./hub-loopback";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
@@ -2383,6 +2384,11 @@ const attach = (
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
         takeUpstream((envelope.payload as RegisterAckPayload).upstream);
+        // localhost on this computer is the hub this connection reached.
+        carryHub(url, {
+          dashboard: (envelope.payload as RegisterAckPayload).dashboardPort,
+          previews: (envelope.payload as RegisterAckPayload).previewPorts,
+        });
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(
           identity.machineId,
@@ -2692,6 +2698,8 @@ export const startDaemon = (rediscover = false) =>
       Effect.promise(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
+    // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
+    yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.

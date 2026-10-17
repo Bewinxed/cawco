@@ -93,6 +93,12 @@ export type Engine = "chromium" | "webkit" | "firefox";
 export interface PageOptions {
   /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
   engine?: Engine;
+  /**
+   * Chromium only: its `--host-resolver-rules`, where a spec needs a name to
+   * reach one address alone (`MAP localhost [::1]`: an agent's loopback
+   * beside a scratch hub on 127.0.0.1).
+   */
+  hostRules?: string;
   /** Scripts installed before the page's own, in order. */
   init?: (() => void)[];
   /**
@@ -311,9 +317,10 @@ const viteBuild = async (): Promise<void> => {
 async function serve(
   how: "dev" | "preview",
   hub: string,
-  env: Record<string, string> = {}
+  /** The port to serve on: a fleet's `dashboardPort`, the one its hub names; any free one when unset. */
+  at?: number
 ) {
-  const port = await freePort();
+  const port = at ?? (await freePort());
   const child = Bun.spawn(
     [
       "bunx",
@@ -329,7 +336,6 @@ async function serve(
       cwd: DASHBOARD,
       env: {
         ...process.env,
-        ...env,
         CAWCO_DEV_HUB_URL: hub,
         CAWCO_HUB_URL: hub,
       },
@@ -392,18 +398,20 @@ export class Run {
   /** The dashboard served (`serve`), under the run's slot. */
   private async startServer(
     how: "dev" | "preview",
-    hub: string
+    hub: string,
+    port?: number
   ): Promise<{ base: string; child: Bun.Subprocess }> {
     await this.heavy();
-    return serve(how, hub);
+    return serve(how, hub, port);
   }
 
   browser(
     engine: Engine,
     revision?: string,
-    oneProcess = false
+    oneProcess = false,
+    hostRules?: string
   ): Promise<Browser> {
-    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}`;
+    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}${hostRules ? `-hosts:${hostRules}` : ""}`;
     const known = this.browsers.get(key);
     if (known) {
       return known;
@@ -436,6 +444,7 @@ export class Run {
                   "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
                 ]
               : []),
+            ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
           ],
           env,
         }),
@@ -540,7 +549,7 @@ export class Run {
         return Object.assign(fleet, {
           dashboard: () => {
             served ??= this.build().then(() =>
-              this.startServer("preview", fleet.base)
+              this.startServer("preview", fleet.base, fleet.dashboardPort)
             );
             return served.then((s) => s.base);
           },
@@ -555,7 +564,8 @@ export class Run {
         const browser = await this.browser(
           options.engine ?? "chromium",
           options.engine === "webkit" ? options.webkit : undefined,
-          options.oneProcess
+          options.oneProcess,
+          options.hostRules
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({

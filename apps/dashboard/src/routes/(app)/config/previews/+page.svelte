@@ -97,6 +97,10 @@
       dashboard's storage or sign-ins. Every open preview moves to the new
       address once this is saved.
     </p>
+    <p data-slot="note" class="note">
+      On a computer running CawCo, open <code>http://localhost:3000</code>;
+      previews there run in their own process on Chrome, Edge and Brave.
+    </p>
     <Field
       hint={mode === "port"
         ? `Each session's previews take a port of ${settings?.ports ?? "the hub's range"} on the host you reach the dashboard by. Nothing to set up; the ports have to be reachable from your browser.`

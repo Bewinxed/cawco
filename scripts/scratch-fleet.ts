@@ -1030,6 +1030,9 @@ async function standUp(
   const hubPort = await freePort();
   const previewPorts = await freePortRange(PREVIEW_PORTS);
   const mcpPort = await freePort();
+  // The hub names it to every agent, which serves it on its loopback (agent
+  // hub-loopback.ts): never the host's own dashboard port.
+  const dashboardPort = await freePort();
   const base = `http://127.0.0.1:${hubPort}`;
 
   // ── The mock model endpoint ───────────────────────────────────────────
@@ -1269,6 +1272,7 @@ async function standUp(
     CAWCO_HUB_PORT: String(hubPort),
     CAWCO_PREVIEW_PORTS: previewPorts,
     CAWCO_MCP_PORT: String(mcpPort),
+    CAWCO_DASHBOARD_PORT: String(dashboardPort),
     HOST: "127.0.0.1",
     CAWCO_HUB_URL: `ws://127.0.0.1:${hubPort}/ws`,
     CAWCO_NO_MDNS: "1",
@@ -2062,6 +2066,8 @@ async function standUp(
   return {
     /** The hub's own address, `http://127.0.0.1:<port>`. */
     base,
+    /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
+    dashboardPort,
     sandbox,
     home,
     sessiondSocket,

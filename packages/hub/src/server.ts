@@ -424,10 +424,12 @@ import {
 import {
   ARTIFACTS_ROOT,
   BIND_HOST,
+  DASHBOARD_PORT,
   DB_PATH,
   GIT_ROOT,
   HUB_VERSION,
   LFS_ROOT,
+  PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
 import { connectionRoutes, createConnections } from "./connections";
@@ -1420,6 +1422,9 @@ const registerAck = (
     machineCredential,
     sessionLimits,
     upstream,
+    // What the agent serves on its own computer's loopback (agent hub-loopback.ts).
+    dashboardPort: DASHBOARD_PORT,
+    previewPorts: PREVIEW_PORTS,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
   },
