@@ -9,7 +9,7 @@
  * Each delegate of one parent commits a file and leaves a folder in its
  * TMPDIR (as a scratch fleet a SIGKILL cut short leaves one); the probe gives
  * L's and K's clones an Apple build root in the workspaces' cache, as
- * build-both.sh makes one (`xdg/cawco-apple/<clone's folder>` and its lock),
+ * build-both.sh makes one (`xdg/cawco-apple.noindex/<clone's folder>` and its lock),
  * as each starts. Each calls finish_item and the hub lands its commit; K
  * calls it blocked, so its item fails with its commit on no remote.
  *
@@ -861,7 +861,13 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
   const { check } = kit;
   const { fleet, workspaceOf, stateBecomes } = scene;
   const { home } = fleet;
-  const apple = join(home, ".cawco", "workspace-cache", "xdg", "cawco-apple");
+  const apple = join(
+    home,
+    ".cawco",
+    "workspace-cache",
+    "xdg",
+    "cawco-apple.noindex"
+  );
   // Each clone's Apple build root, as build-both.sh leaves one, as it starts.
   const buildRoot = async (workspace: Workspace) => {
     await mkdir(join(apple, basename(workspace.path), "DerivedData"), {

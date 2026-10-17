@@ -26,7 +26,7 @@
  * took alone would wait on this process's own simulator.
  *
  * Over SSH the slot script is build-both.sh's copy of apps/apple on the Mac
- * (~/build/cawco-apple/<build>/apps/apple), so a probe compiles first; there
+ * (~/build/cawco-apple.noindex/<build>/apps/apple), so a probe compiles first; there
  * mac-slot.sh holds the Mac's own heavy run, and this machine's is not taken.
  */
 import { basename, join, resolve } from "node:path";
@@ -134,7 +134,7 @@ function slotScript(ssh: boolean): string {
     return join(root, "apps", "apple", "scripts", "mac-slot.sh");
   }
   const build = root === join(home, "cockpit") ? "main" : basename(root);
-  return `build/cawco-apple/${build}/apps/apple/scripts/mac-slot.sh`;
+  return `build/cawco-apple.noindex/${build}/apps/apple/scripts/mac-slot.sh`;
 }
 
 /** Takes a simulator slot (waiting for one, as mac-slot.sh prints); the booted simulator's UDID. */

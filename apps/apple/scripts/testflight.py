@@ -14,7 +14,8 @@ import time
 import urllib.parse
 
 HOME = pathlib.Path.home()
-ROOT = HOME / "build/cawco-testflight"
+# .noindex: Spotlight indexes no build output.
+ROOT = HOME / "build/cawco-testflight.noindex"
 TEAM = "FN5LJSPX2R"
 
 # One App Store record (6819139448, a universal purchase) ships both: the

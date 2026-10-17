@@ -9,7 +9,7 @@
  * - state dirs, `~/.cawco/workspaces/<id>`;
  * - scratch dirs, `~/.cawco/tmp/<id8>`;
  * - door dirs, `$XDG_RUNTIME_DIR/cawco-ws/<id8>`;
- * - Apple build roots, `~/.cawco/workspace-cache/xdg/cawco-apple/<clone>`.
+ * - Apple build roots, `~/.cawco/workspace-cache/xdg/cawco-apple.noindex/<clone>`.
  * Then the live workspaces, by state, with their clone's size and how much
  * of its `node_modules` is files of its own (link count 1) and how much is
  * shared with the workspaces' bun cache.
@@ -188,7 +188,7 @@ if (runtime) {
   }
 }
 
-const apple = join(workspaceCacheDir(), "xdg", "cawco-apple");
+const apple = join(workspaceCacheDir(), "xdg", "cawco-apple.noindex");
 for (const name of await list(apple)) {
   const id8 = CLONE.exec(name)?.[1];
   if (!id8) {

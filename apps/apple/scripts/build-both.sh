@@ -38,12 +38,15 @@
 # The builds run one after the other into one DerivedData: two xcodebuilds
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
-# Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
-# and logs; `--gate` builds in ~/build/cawco-apple/gate. Mac-side locks cover retirement, rsync and both builds; a
+# Each workspace owns ~/build/cawco-apple.noindex/<workspace>, including DerivedData
+# and logs; `--gate` builds in ~/build/cawco-apple.noindex/gate. Every build
+# root's name ends in .noindex, so Spotlight indexes none of what a build
+# writes (mds_stores and mdworker were among the Mac's top users while builds
+# ran). Mac-side locks cover retirement, rsync and both builds; a
 # second build of the same workspace, and builds from different
 # workspaces, wait their turn.
 # The Mac build slot (one Xcode build at a time) is one lock for every caller,
-# in ~/.cawco/workspace-cache/xdg/cawco-apple/.locks: workspaces, a person's
+# in ~/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks: workspaces, a person's
 # or the orchestrator's SSH, and TestFlight's archive all wait on it. Each
 # launch boots its simulator in one of the Mac's two simulator slots.
 # Simulators and builds outside build-both.sh go through mac-slot.sh.
@@ -57,7 +60,7 @@
 # it was stopping lived on under launchd.
 # Run on the Mac itself, the Mac side runs here through the same steps and
 # the same link, with no SSH, under one root for every caller,
-# ~/.cawco/workspace-cache/xdg/cawco-apple: a CawCo workspace's own cache,
+# ~/.cawco/workspace-cache/xdg/cawco-apple.noindex: a CawCo workspace's own cache,
 # where its boundary lets it write builds, and the same folder from the
 # owner's shell, so the app a probe finds is the one this script last built
 # (scripts/lib/apple-app.ts). Each simulator build leaves CawCo.app.tree
@@ -93,13 +96,13 @@ if [[ -n ${CAWCO_MAC_SLOT:-} ]]; then
 fi
 if [[ $(uname -s) == Darwin ]]; then
   MAC=(perl -e 'setpgrp(0, 0); exec @ARGV or die "exec: $!\n"' bash --norc -c)
-  APPLE_ROOT=$HOME/.cawco/workspace-cache/xdg/cawco-apple
+  APPLE_ROOT=$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex
 elif [[ -n ${CAWCO_WORKSPACE:-} ]]; then
   echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios\", expect: \"LAUNCHED iOS 18.5\" }, or delegate the work to the Mac." >&2
   exit 2
 else
   MAC=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
-  # Empty: the Mac side's own ~/build/cawco-apple.
+  # Empty: the Mac side's own ~/build/cawco-apple.noindex.
   APPLE_ROOT=
 fi
 ROOT=$(git rev-parse --show-toplevel)
@@ -116,7 +119,7 @@ if [[ $COMPILE_ONLY == --gate ]]; then
   LOG_RUN=$(git rev-parse --short=12 HEAD)-$(date +%Y%m%d-%H%M%S)
 fi
 [[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
-REMOTE=build/cawco-apple/$BUILD/apps/apple
+REMOTE=build/cawco-apple.noindex/$BUILD/apps/apple
 
 # Every path below is the repo root's: a caller anywhere in the repo (a check
 # run from apps/apple) builds the same tree.
@@ -154,12 +157,12 @@ read -r -d '' PREPARE <<'EOF' || true
 set -euo pipefail
 BUILD=$1
 shift
-ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple}
+ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple.noindex}
 mkdir -p "$ROOT/.locks"
 LOCK="$ROOT/.locks/$BUILD"
 command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
 # The one build slot every caller shares (mac-slot.sh holds the same lock).
-SLOTS="$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks"
+SLOTS="$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks"
 mkdir -p "$SLOTS"
 MACHINE_LOCK="$SLOTS/.machine"
 MACHINE_OWNER="$SLOTS/.machine.owner"
@@ -489,7 +492,7 @@ if [[ -n $APPLE_ROOT ]]; then
   echo "BUILD DIRECTORY $APPLE_ROOT/$BUILD"
   "${SYNC[@]}" apps/apple/ "$APPLE_ROOT/$BUILD/apps/apple/"
 else
-  echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
+  echo "BUILD DIRECTORY mac:~/build/cawco-apple.noindex/$BUILD"
   "${SYNC[@]}" -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" apps/apple/ "mac:$REMOTE/"
 fi
 if [[ $(bash apps/apple/scripts/tree-stamp.sh) != "$TREE" ]]; then

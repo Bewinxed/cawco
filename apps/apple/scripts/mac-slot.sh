@@ -33,7 +33,7 @@
 # macOS bash 3.2: no flock, so shlock.
 set -euo pipefail
 
-LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks
+LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks
 usage() {
   echo "usage: mac-slot.sh build -- <cmd...> | mac-slot.sh sim [--runtime <id>] [--device <type name or id>] -- <cmd...>" >&2
   exit 2

@@ -790,24 +790,25 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
  * The folders in the workspaces' cache (paths.ts `workspaceCacheDir`) that
  * belong to the clone at `clone` alone, each built from it and read by
  * nothing else:
- * - its Apple build root, `xdg/cawco-apple/<clone's folder name>`, where
- *   build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and its lock;
+ * - its Apple build root, `xdg/cawco-apple.noindex/<clone's folder name>`,
+ *   where build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and
+ *   its lock;
  * - on macOS, Xcode's DerivedData folders whose `info.plist` names a project
  *   inside the clone (the boundary's xcodebuild puts every build's in
- *   `DerivedData/`), and SwiftPM's build dirs for each of the clone's
+ *   `DerivedData.noindex/`), and SwiftPM's build dirs for each of the clone's
  *   packages, `swiftpm/build/<md5 of the package dir>` (boundary.ts's swift
  *   shim names them so).
  * Read before the clone goes: its packages are found in it.
  */
 const cacheOfClone = async (clone: string): Promise<string[]> => {
   const cache = workspaceCacheDir();
-  const apple = join(cache, "xdg", "cawco-apple");
+  const apple = join(cache, "xdg", "cawco-apple.noindex");
   const name = basename(clone);
   const owned = [join(apple, name), join(apple, ".locks", name)];
   if (process.platform !== "darwin") {
     return owned;
   }
-  const derived = join(cache, "DerivedData");
+  const derived = join(cache, "DerivedData.noindex");
   const builds = await readdir(derived).catch(() => [] as string[]);
   const ofClone = await Promise.all(
     builds.map(async (build) => {

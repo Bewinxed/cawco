@@ -791,7 +791,8 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  * - `xcodebuild` gets the IDE defaults that turn off its package manifest and
  *   plugin sandboxes, as nixpkgs builds Xcode projects under its own sandbox,
  *   and `-disable-sandbox` in OTHER_SWIFT_FLAGS for macro plugin servers. Its
- *   DerivedData goes in the workspaces' cache through the
+ *   DerivedData goes in the workspaces' cache, `DerivedData.noindex` (a
+ *   name Spotlight never indexes), through the
  *   `IDECustomDerivedDataLocation` default, which every action takes, where
  *   `-derivedDataPath` is refused by some (`-showsdks`, exit 64); its
  *   package cache through `-packageCachePath`, which only a build or a
@@ -963,7 +964,7 @@ done
 # A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
 mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
 export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
-run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData"))} "\${args[@]}")
+run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}")
 [ -z "$compiles" ] || ${heavyRunLine}
 exec "\${run[@]}"
 `,
