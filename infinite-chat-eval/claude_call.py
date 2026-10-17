@@ -228,8 +228,7 @@ def call(key, phase, system, user, cache, session=None, meta=None):
         refused = (res or {}).get("stop_reason") == "refusal"
         ok = not refused and code == 0 and res is not None and not res.get("is_error") and bool(text.strip())
         if not ok:  # set before the slot is released, so no waiting call starts after a failure
-            where = f" ({meta['span']})" if meta and meta.get("span") else ""
-            stop(f"{key}{where}: exit {code}: " +(("refusal: " if refused else "") + (text or err or out or f"exit {code}").strip())[:400])
+            stop(f"{key}: exit {code}: " + (("refusal: " if refused else "") + (text or err or out or f"exit {code}").strip())[:400])
     models = sorted(((res or {}).get("modelUsage") or {}).keys())
     off = [m for m in models if not m.startswith(MODEL)]
     usage = _usage(res)

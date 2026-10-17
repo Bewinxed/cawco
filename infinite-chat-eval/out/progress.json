@@ -1,29 +1,40 @@
 {
- "build-A": {
-  "calls": 131,
-  "seconds": 1352.9,
-  "cost_millicents": 561527,
-  "input": 262,
-  "cache_write": 1033701,
+ "build": {
+  "calls": 53,
+  "seconds": 1235.3,
+  "cost_millicents": 356210,
+  "input": 780777,
+  "cache_write": 0,
   "cache_write_1h": 0,
-  "cache_read": 12919678,
-  "output": 173921,
-  "thinking": 0
+  "cache_read": 0,
+  "output": 200077,
+  "thinking": 77
  },
- "build-B": {
-  "calls": 719,
-  "seconds": 5955.199999999999,
-  "cost_millicents": 2077011,
-  "input": 1438,
-  "cache_write": 4417339,
+ "answer": {
+  "calls": 757,
+  "seconds": 4335.600000000003,
+  "cost_millicents": 561296,
+  "input": 1514,
+  "cache_write": 1002028,
   "cache_write_1h": 0,
-  "cache_read": 18501696,
-  "output": 787734,
+  "cache_read": 10349002,
+  "output": 207412,
+  "thinking": 53647
+ },
+ "judge": {
+  "calls": 190,
+  "seconds": 827.3,
+  "cost_millicents": 103552,
+  "input": 348238,
+  "cache_write": 0,
+  "cache_write_1h": 0,
+  "cache_read": 0,
+  "output": 33982,
   "thinking": 0
  },
  "projection": {
-  "rest_seconds": 569,
-  "rest_input": 10602418,
-  "rest_output": 300020
+  "rest_seconds": 47,
+  "rest_input": 240582,
+  "rest_output": 13877
  }
 }
