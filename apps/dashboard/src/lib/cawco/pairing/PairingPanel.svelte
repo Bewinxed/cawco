@@ -95,7 +95,8 @@
       return "loading";
     }
     // Approved, the code stands through its hold: the screen leaves next.
-    return kind === "waiting" || kind === "approved" ? "code" : "gone";
+    // A code that can no longer be scanned falls away.
+    return kind === "waiting" || kind === "approved" ? "code" : "fall";
   });
   const words = $derived<Words>(answered ? (kind as Words) : "pair");
   const foot = $derived<Foot>(

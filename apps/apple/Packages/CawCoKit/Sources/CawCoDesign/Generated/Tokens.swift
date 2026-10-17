@@ -888,8 +888,10 @@ public enum Motion {
     public static let swapRise: Double = 4
     /// Degrees a done check turns through as it arrives (transitions-dev Success check): upright from check-turn, rising pop-rise, sharpening from fold-blur, over dur-pop, its stroke drawn after dur-ghost.
     public static let checkTurn: Double = 80
-    /// A pairing QR that can no longer be scanned (denied, expired): its modules stay, this faint, so the card still reads as the code that was, not as one that failed to load.
-    public static let qrVoidOpacity: Double = 0.12
+    /// The share of a pending pairing QR card's edge its lit segment covers, travelling the card's rounded rect once a breath while the code waits to be scanned.
+    public static let qrEdgeShare: Double = 0.18
+    /// How far a pending pairing QR card's breathing ring grows from the card's edge as it fades, once a breath.
+    public static let qrPulseScale: Double = 1.04
     /// Where a done check grows from as it takes a ring's place (TaskRing finished, the pairing scanner's approval), over dur-toggle or dur-exit on ease-out.
     public static let checkScale: Double = 0.6
 }
