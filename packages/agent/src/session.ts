@@ -204,7 +204,9 @@ export interface SessiondAdoption {
 
 /** The words of whatever was thrown. */
 const errorText = (problem: unknown): string =>
-  problem instanceof Error ? problem.message : String(problem);
+  (problem instanceof Error ? problem.message : String(problem))
+    .replace(/\s+/g, " ")
+    .trim();
 
 /** A surviving child one reattach has claimed, and what it decided about it. */
 interface Claimed {

@@ -590,7 +590,7 @@ final class TaskLabelsPart: UIView {
             field.widthAnchor.constraint(equalToConstant: 128).isActive = true
             items.append(field)
         } else {
-            let add = KitButton.make("label", glyph: .plus, variant: .ghost, height: .xs) { [weak self] in
+            let add = KitButton.make("label", glyph: .plus, variant: .outline, height: .xs) { [weak self] in
                 guard let self else { return }
                 adding = true
                 field.text = ""

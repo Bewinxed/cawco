@@ -13,7 +13,7 @@ export const previewWords = {
    */
   stoppedTitle: "This page stopped",
   stoppedLine:
-    "It closed while it ran, most likely because it needed more memory than this device gives a page. Try again loads it again.",
+    "It closed while it ran, most likely because it needed more memory than this device gives a page.",
   /** The state's way back: the page loaded afresh. */
   tryAgain: "Try again",
   /** Try again while the page loads. */
