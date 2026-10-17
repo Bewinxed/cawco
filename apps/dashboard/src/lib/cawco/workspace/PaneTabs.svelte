@@ -2178,15 +2178,11 @@
   /* ── A tab carried along its strip (tab-drag.svelte.ts) ────────────
      The tab itself is what moves. Lifted, it stands over every tab in the
      strip, in front of both neighbours (the track ranks it so: both its
-     feet drawn, TabsList), and casts both its edges. It follows the
-     pointer with no easing (`data-following`); its neighbours slide into
-     the slots it leaves on the strip's own slide (PaneTabs `slide`), and it
-     takes the same on its way back. With less motion they stand in their
-     slots at once. */
-  .tab[data-lifted] {
-    --lone-start: 0;
-    --lone-end: 0;
-  }
+     feet drawn, TabsList), and casts both its edges (`.shade`). It follows
+     the pointer with no easing (`data-following`); its neighbours slide
+     into the slots it leaves on the strip's own slide (PaneTabs `slide`),
+     and it takes the same on its way back. With less motion they stand in
+     their slots at once. */
   @media (prefers-reduced-motion: no-preference) {
     :global(.ff-tabs-list[data-reordering]) > .tab:not([data-following]) {
       transition: translate var(--dur-panel) var(--ease-drawer);
@@ -2205,7 +2201,8 @@
      shadows on each other because now the tab that is inactive between
      two tabs that are active has no silhouette"). Only sideways: not from
      the strip's first tab's leading side or its last tab's trailing side
-     (`--lone-start`/`--lone-end`), and nothing above a tab's top or below
+     (`--lone-start`/`--lone-end`) unless it is lifted (`data-lifted`),
+     standing over the strip, and nothing above a tab's top or below
      the shelf's line. A side under its neighbour casts onto nothing that
      shows: the neighbour, a stack above it, covers the cast with the side.
      By day it is warm ink; at night the tabs are the darkest surfaces,
@@ -2273,6 +2270,9 @@
     & > .e {
       box-shadow: var(--shadow-tab-end);
       opacity: calc(1 - var(--lone-end, 0));
+    }
+    .tab:global([data-lifted]) > & > :is(.s, .e) {
+      opacity: 1;
     }
     :global([data-chosen]) > & > .s {
       box-shadow: var(--shadow-tab-start-chosen);
