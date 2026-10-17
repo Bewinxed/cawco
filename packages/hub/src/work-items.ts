@@ -1669,7 +1669,14 @@ type Landed =
       prUrl?: string;
     }
   | { kind: "refused"; line: string; gate: GateRun; prUrl?: string }
-  | { kind: "retry"; text: string };
+  | { kind: "retry"; text: string }
+  | { kind: "stopped"; text: string };
+
+/** A landing its item's stop ended before it pushed (landing.ts `Stopped`): nothing landed, nothing reported. */
+const stoppedLanding = (item: WorkItemRow): Landed => ({
+  kind: "stopped",
+  text: `${item.title} was stopped while it landed; nothing was landed or reported.`,
+});
 
 /** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
 const dirtyText = (files: string, where: string): string =>
@@ -1717,7 +1724,7 @@ const refusedLine = (
  * landed, the line on the outputs that did not arrive.
  */
 const failureOf = (
-  landing: Exclude<Landed, { kind: "retry" }>,
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
   collected: { ok: boolean; line: string }
 ): string | undefined => {
   if (landing.kind !== "done") {
@@ -1743,7 +1750,7 @@ const gateSection = (run: GateRun): string => {
  */
 const finishedReport = (
   summary: string,
-  landing: Exclude<Landed, { kind: "retry" }>,
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
   collected: { ok: boolean; line: string },
   tail: string
 ): string => {
@@ -1758,7 +1765,7 @@ const finishedReport = (
 
 /** A push to an item's own branch that did not happen, as its landing. */
 const unpushed = (
-  pushed: Exclude<BranchOutcome, { kind: "pushed" }>,
+  pushed: Exclude<BranchOutcome, { kind: "pushed" | "stopped" }>,
   workspace: WorkspaceRow,
   branch: string,
   lands: LandsMode,
@@ -2972,8 +2979,9 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
   ): string | undefined => {
-    // An item stopped while its landing was queued still lands, in the
-    // clone: closing it under that landing would leave its commits behind.
+    // A stopped item's landing runs on in the clone until its next turn or
+    // push ends it (landing.ts `stopped`): closing the clone under it would
+    // cut its commands off mid-rebase.
     const landing = items.find((item) => finishing.has(item.id));
     if (landing) {
       return `the landing of its item ${landing.id} still runs`;
@@ -4667,6 +4675,24 @@ export const createWorkItems = ({
     machineCalled(machineId, db.listAgents());
 
   /**
+   * Whether the landing `item` is in was stopped ({@link LandingDeps.stopped}):
+   * the item ended (a stop cancels it and clears its `landingSince`), or its
+   * row marks a landing other than the one `item` was read in.
+   */
+  const landingStopped = (item: WorkItemRow): (() => boolean) => {
+    const since = item.landingSince?.getTime();
+    return () => {
+      const now = db.workItem(item.id);
+      return !(
+        now &&
+        LIVE.has(now.state) &&
+        since !== undefined &&
+        now.landingSince?.getTime() === since
+      );
+    };
+  };
+
+  /**
    * A finished item running again in the same session: its held workspace's
    * hold ended, its result and end cleared. It ends again the usual way, with
    * a new report to its parent.
@@ -4761,6 +4787,14 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(
         409,
         "the landing gate is already running for this item; its outcome comes to you when it settles"
+      );
+    }
+    // A stop ends its landing at the next turn or push; a gate step running
+    // then runs to its end first, and one landing at a time per item.
+    if (finishing.has(item.id)) {
+      throw new WorkItemRefusal(
+        409,
+        "the landing this item's stop cut short is still ending (a landing gate step runs to its end); call finish_item again in a minute"
       );
     }
     return { row, item };
@@ -5385,10 +5419,13 @@ export const createWorkItems = ({
       },
       queue: landings,
       skip: item.outputs ?? [],
+      stopped: landingStopped(item),
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
     const { gate } = runs;
     switch (outcome.kind) {
+      case "stopped":
+        return stoppedLanding(item);
       case "landed":
         return {
           kind: "done",
@@ -5501,8 +5538,12 @@ export const createWorkItems = ({
       turn: turnOf(item),
       queue: landings,
       skip: item.outputs ?? [],
+      stopped: landingStopped(item),
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
+    if (pushed.kind === "stopped") {
+      return stoppedLanding(item);
+    }
     if (pushed.kind !== "pushed") {
       return unpushed(
         pushed,
@@ -5711,6 +5752,10 @@ export const createWorkItems = ({
       update(item.id, settled);
       return { done: false, text: landing.text };
     }
+    // Its stop settled the row already.
+    if (landing.kind === "stopped") {
+      return { done: false, text: landing.text };
+    }
     const collected =
       landing.kind === "done"
         ? await collectOutputs(workspace, item)
@@ -5890,16 +5935,15 @@ export const createWorkItems = ({
         return { done: false, text: gateFailedText(run, "your commits") };
       }
       // The gate took its time: the item may have been stopped since.
-      const stopped = db.workItem(item.id) ?? item;
-      if (!LIVE.has(stopped.state)) {
-        update(item.id, settled);
+      const current = db.workItem(item.id) ?? item;
+      if (landingStopped(current)()) {
         return {
           done: false,
-          text: `${stopped.title} is ${stopped.state} now; nothing was landed or reported.`,
+          text: `${current.title} is ${current.state} now; nothing was landed or reported.`,
         };
       }
       return await landAndReport(
-        stopped,
+        current,
         row,
         workspace,
         steps,

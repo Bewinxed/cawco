@@ -35,14 +35,16 @@
  *     the same session goes on there (same work item, same transcript): its
  *     shell reads that path and M's landed file. It finishes again and its
  *     workspace retires again.
- * (q) Q commits a file and a package.json whose typecheck sleeps then fails,
- *     pushes its commit to origin's `probe-keep-Q` (as the conductor pushed
- *     K1's by hand on 2026-10-17), and calls finish_item; its parent stops
- *     it while its landing gate runs. Nothing lands on main, its workspace
+ * (q) Q commits a file and a package.json whose typecheck sleeps, then
+ *     passes; pushes its commit to origin's `probe-keep-Q` (as the conductor
+ *     pushed K1's by hand on 2026-10-17), and calls finish_item; its parent
+ *     stops it while its landing gate runs. The stop ends the landing: the
+ *     gate passes and nothing is pushed to main all the same. Its workspace
  *     retires once the landing has ended (not under it), and its row records
  *     its head as that commit on `probe-keep-Q`. A handoff cuts its clone
  *     again there, not at main: the same session's shell reads the same path,
- *     HEAD at that commit and Q's file; it fixes the gate and lands.
+ *     HEAD at that commit, not on origin's main, and Q's file; it speeds its
+ *     gate up and lands.
  * (o) O commits and finishes, done; in the same turn, on no new word, it
  *     commits again and calls finish_item again: the hub runs the item again
  *     and lands the second commit (its report lists it) rather than
@@ -129,9 +131,10 @@ const Q_PWD = /Q-PWD=([^\s\\"]+)/;
 const Q_HEAD = /Q-HEAD=([0-9a-f]{40})/;
 const Q_FILE = /Q-FILE:([^\n\\"]*)/;
 const Q_RAN = "Q-RECUT-42";
-/** The branch of origin Q pushes its commit to, and the gate its commit carries: it sleeps, then fails. */
+/** The branch of origin Q pushes its commit to, and the gate its commit carries: it sleeps, then passes, so only the stop keeps it off main. */
 const Q_KEEP = "probe-keep-Q";
-const Q_GATE = '{"scripts":{"typecheck":"sleep 30 && exit 1"}}';
+const Q_GATE = '{"scripts":{"typecheck":"sleep 30"}}';
+const Q_ON_MAIN = /Q-ON-MAIN=(yes|no)/;
 /** What finish_item answers an item that landed and is done. */
 const ITEM_DONE = "The item is done";
 /** A free-space threshold no disk meets. */
@@ -162,9 +165,10 @@ const commitCommand = (tag: string) =>
   ].join(" && ");
 
 /** What Q's shell read in its clone cut again. */
-const qSeen: { pwd?: string; head?: string; file?: string } = {};
+const qSeen: { pwd?: string; head?: string; file?: string; onMain?: string } =
+  {};
 
-/** Q, handed off after its stopped landing's workspace retired: its shell in the clone cut again, its gate fixed, then finish_item again. */
+/** Q, handed off after its stopped landing's workspace retired: its shell in the clone cut again, its gate sped up, then finish_item again. */
 const qRecutTurn = (
   request: Seen,
   step: { againFinish?: boolean; againSearched?: boolean }
@@ -175,17 +179,20 @@ const qRecutTurn = (
         `printf 'Q-PWD=%s\\n' "$(pwd)"`,
         `printf 'Q-HEAD=%s\\n' "$(git rev-parse HEAD)"`,
         `printf 'Q-FILE:%s\\n' "$(cat retire-Q.txt 2>&1)"`,
+        "git fetch -q origin main",
+        `printf 'Q-ON-MAIN=%s\\n' "$(git merge-base --is-ancestor HEAD origin/main && echo yes || echo no)"`,
         `printf '%s\\n' '{"scripts":{"typecheck":"true"}}' > package.json`,
         "git add package.json",
         `${COMMIT} 'Q gate passes'`,
         "echo Q-RECUT-$((40+2))",
       ].join("; "),
-      description: "Where am I, and fix the gate",
+      description: "Where am I, and speed the gate up",
     });
   }
   qSeen.pwd = Q_PWD.exec(request.all)?.[1];
   qSeen.head = Q_HEAD.exec(request.all)?.[1];
   qSeen.file = Q_FILE.exec(request.all)?.[1];
+  qSeen.onMain = Q_ON_MAIN.exec(request.all)?.[1];
   return finishing(
     request,
     {
@@ -199,8 +206,8 @@ const qRecutTurn = (
       step.againSearched = true;
     },
     {
-      headline: "Went on in the clone cut again, its gate fixed.",
-      summary: "Went on in the clone cut again, its gate fixed.",
+      headline: "Went on in the clone cut again, its gate sped up.",
+      summary: "Went on in the clone cut again, its gate sped up.",
     }
   );
 };
@@ -825,7 +832,12 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     JSON.stringify({ seen: qSeen, path: wq.path, sha })
   );
   check(
-    "(q) with its gate fixed on top of Q's commit there, Q's reopened item lands on main and is done",
+    "(q) the stop ended Q's landing though its gate passed: its commit is not on origin's main",
+    qSeen.onMain === "no",
+    JSON.stringify({ seen: qSeen, path: wq.path, sha })
+  );
+  check(
+    "(q) with its gate sped up on top of Q's commit there, Q's reopened item lands on main and is done",
     ended?.state === "done" &&
       (ended.result ?? "").includes("Q gate passes") &&
       (ended.result ?? "").includes("Landed on main"),
@@ -1236,6 +1248,7 @@ const spec: Spec = {
     qSeen.pwd = undefined;
     qSeen.head = undefined;
     qSeen.file = undefined;
+    qSeen.onMain = undefined;
     launchTimes.length = 0;
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
