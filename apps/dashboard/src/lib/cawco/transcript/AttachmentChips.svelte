@@ -44,73 +44,115 @@
 </script>
 
 {#if folded || draft.images.length || draft.texts.length || draft.files.length}
-  <div data-slot="atts" class="atts" transition:unfold {@attach reflow()}>
+  <!-- The row scrolls, so on a coarse pointer it takes 8px more padding into
+       an equal negative margin: the remove buttons' touch areas fit inside
+       its clip, nothing moves. -->
+  <!-- literal: 180px, -8px -->
+  <div
+    data-slot="atts"
+    style:--hit-gap-x="var(--space-2)"
+    style:--hit-gap-y="var(--space-2)"
+    style:--atts-max-h="180px"
+    style:--atts-pad-coarse="calc(var(--space-1) + 8px)"
+    style:--atts-m-coarse="-8px"
+    class="atts flex flex-wrap gap-space-2 max-h-(--atts-max-h) overflow-y-auto p-space-1 coarse:p-(--atts-pad-coarse) coarse:m-(--atts-m-coarse)"
+    transition:unfold
+    {@attach reflow()}
+  >
     {#if folded}
       <!-- The canvas, folded: a tap opens it again out of this box. -->
       <span
         data-slot="canvas-chip"
-        class="att canvas-chip"
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pr-space-1 pl-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong data-canvas-hidden:invisible"
         data-artifact={folded.id}
+        data-canvas-hidden={canvasHidden || undefined}
         data-flip="pop"
         bind:this={canvasChip}
-        style:visibility={canvasHidden ? "hidden" : null}
       >
+        <!-- The canvas's chip opens the canvas from its picture and name;
+             the picture box holds the pen glyph until the picture is drawn. -->
         <button
           data-slot="canvas-open"
           aria-label="Open the canvas"
-          class="canvas-open mark-line touch-hit"
+          class="inline-flex place-items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-0 rounded-xs bg-transparent text-ink-strong cursor-pointer flex-none mark-line touch-hit"
           onclick={onopencanvas}
           type="button"
         >
           {#if folded.thumb}
-            <img alt="" src="data:image/png;base64,{folded.thumb}" />
+            <img
+              alt=""
+              class="size-icon-lg rounded-xs object-cover flex-none"
+              src="data:image/png;base64,{folded.thumb}"
+            />
           {:else}
-            <IconArtifactCanvas aria-hidden="true" />
+            <IconArtifactCanvas
+              aria-hidden="true"
+              class="size-icon-md flex-none text-ink-muted"
+            />
           {/if}
-          <span data-slot="att-name" class="att-name">Canvas</span>
+          <!-- The name carries the ellipsis, so the chip itself does not
+               clip its remove button's touch area. -->
+          <span
+            data-slot="att-name"
+            class="min-w-0 overflow-clip whitespace-nowrap text-ellipsis"
+            >Canvas</span
+          >
         </button>
         <button
           aria-label="Remove the canvas"
-          class="touch-hit"
+          class="grid place-items-center size-icon-lg border-0 rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           onclick={onremovecanvas}
           type="button"
         >
-          <IconClose />
+          <IconClose class="size-icon-md" />
         </button>
       </span>
     {/if}
     {#each draft.images as img, i (img.name + i)}
-      <span class="att mark-line" data-flip="pop">
-        <img alt="" src="data:{img.mediaType};base64,{img.data}" />
-        <span data-slot="att-name" class="att-name">{img.name}</span>
+      <span
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pr-space-1 pl-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong mark-line"
+        data-flip="pop"
+      >
+        <img
+          alt=""
+          class="size-icon-lg rounded-xs object-cover flex-none"
+          src="data:{img.mediaType};base64,{img.data}"
+        />
+        <span
+          data-slot="att-name"
+          class="min-w-0 overflow-clip whitespace-nowrap text-ellipsis"
+          >{img.name}</span
+        >
         <button
           aria-label={`Remove ${img.name}`}
-          class="touch-hit"
+          class="grid place-items-center size-icon-lg border-0 rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           data-box
           onclick={() => removeImage(i)}
           type="button"
         >
-          <IconClose />
+          <IconClose class="size-icon-md" />
         </button>
       </span>
     {/each}
     <!-- A file looks here as it will in the sent turn: its DocThumb, which
-       previews it the same way, with its remove on the corner. -->
+       previews it the same way, with its remove on the corner, clear of the
+       name. The row pads by --space-1, so the corner sits inside its clip. -->
     {#each draft.texts as t, i (t.name + i)}
-      <span class="doc-att" data-flip="pop">
+      <span class="relative inline-flex max-w-full" data-flip="pop">
         <DocThumb content={t.content} name={t.name} />
         <button
           aria-label={`Remove ${t.name}`}
-          class="doc-remove touch-hit"
+          style:--hit-edge="1px"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
           onclick={() => removeText(i)}
           type="button"
         >
-          <IconClose />
+          <IconClose class="size-space-4" />
         </button>
       </span>
     {/each}
     {#each draft.files as f (f.id)}
-      <span class="doc-att" data-flip="pop">
+      <span class="relative inline-flex max-w-full" data-flip="pop">
         <DocThumb
           failed={f.error}
           name={f.name}
@@ -120,11 +162,12 @@
         />
         <button
           aria-label={`Remove ${f.name}`}
-          class="doc-remove touch-hit"
+          style:--hit-edge="1px"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
           onclick={() => removeFile(f.id)}
           type="button"
         >
-          <IconClose />
+          <IconClose class="size-space-4" />
         </button>
       </span>
     {/each}
@@ -132,124 +175,12 @@
 {/if}
 
 <style>
-  /* The row scrolls, so on a coarse pointer it takes 8px more padding into
-     an equal negative margin: the remove buttons' touch areas fit inside its
-     clip, nothing moves. */
+  /* residual: unmapped: the step-aside transition token has no utility;
+     the class also anchors Composer's `:global(.atts)` rules. */
   .atts {
-    --hit-gap-x: var(--space-2);
-    --hit-gap-y: var(--space-2);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    max-height: 180px;
-    overflow-y: auto;
-    padding: var(--space-1);
     transition: var(--step-aside);
-
-    @media (pointer: coarse) {
-      padding: calc(var(--space-1) + 8px);
-      margin: -8px;
-    }
   }
-  .att {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    max-width: 100%;
-    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  /* The name carries the ellipsis, so the chip itself does not clip its
-     remove button's touch area. */
-  .att-name {
-    min-width: 0;
-    overflow: clip;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .att img {
-    width: 20px;
-    height: 20px;
-    border-radius: var(--radius-xs);
-    object-fit: cover;
-    flex: 0 0 auto;
-  }
-  .att button {
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-muted);
-    cursor: pointer;
-    flex: 0 0 auto;
-  }
-  .att button:hover {
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-  }
-  /* A file's DocThumb with its remove sat on the corner, clear of the name. */
-  .doc-att {
-    position: relative;
-    display: inline-flex;
-    max-width: 100%;
-  }
-  .doc-remove {
-    --hit-edge: 1px;
-    position: absolute;
-    /* The row pads by --space-1, so the corner sits inside its clip. */
-    inset-block-start: calc(var(--space-1) * -1);
-    inset-inline-end: calc(var(--space-1) * -1);
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
-    cursor: pointer;
-
-    & :global(svg) {
-      inline-size: 14px;
-      block-size: 14px;
-    }
-    &:hover {
-      color: var(--ink-strong);
-    }
-  }
-  .att button :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  /* The canvas's chip opens the canvas from its picture and name; the
-     picture box holds the pen glyph until the picture is drawn. */
-  .att .canvas-open {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: auto;
-    min-width: 0;
-    height: 20px;
-    padding: 0;
-    color: var(--ink-strong);
+  [data-slot="canvas-open"] {
     font: inherit;
-
-    & :global(svg) {
-      flex: 0 0 auto;
-      color: var(--ink-muted);
-    }
-    &:hover {
-      background: none;
-      color: var(--ink-strong);
-    }
   }
 </style>
