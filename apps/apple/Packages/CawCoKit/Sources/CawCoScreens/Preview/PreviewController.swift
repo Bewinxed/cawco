@@ -162,11 +162,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var silence: Task<Void, Never>?
     /// How long a loaded page has for its overlay to answer the hello (PreviewPane.svelte `PAGE_SILENT_MS`).
     private static let silentAfter = Duration.seconds(3)
-    #if DEBUG
-    private var commentedAtLaunch = false
-    private var sentAtLaunch = false
-    private var repliedAtLaunch = false
-    #endif
 
     init(hub: HubConnection, instanceId: String) {
         self.hub = hub
@@ -994,17 +989,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if !pinsShown { deliver(["type": "cawco:pins-shown", "shown": false]) }
         if let openPin { deliver(["type": "cawco:track-pin", "id": openPin]) }
         if let revision { word(revision, failure: nil) }
-        #if DEBUG
-        if PreviewProbe.commentAtLaunch, !commentedAtLaunch {
-            commentedAtLaunch = true
-            setMode(.comment)
-            if PreviewProbe.tapAtLaunch {
-                web.evaluateJavaScript(PreviewProbe.click) { value, error in
-                    PreviewProbe.say("preview probe click \((value as? String) ?? error?.localizedDescription ?? "?")")
-                }
-            }
-        }
-        #endif
     }
 
     // MARK: A sheet's stage
@@ -1292,19 +1276,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) picks=\(read.unsentPicks) sent=\(read.sentAt ?? "-") " + read.pins.map {
             "\($0.label)=\($0.moved ? "moved" : $0.resolved ? "resolved" : "open"):\($0.thread.count)\($0.unsent ? ":unsent" : "")"
         }.joined(separator: " "))
-        if PreviewProbe.sendAtLaunch, !sentAtLaunch, read.unsentPicks > 0, connected {
-            sentAtLaunch = true
-            send()
-        }
-        if PreviewProbe.replyAtLaunch, !repliedAtLaunch, let openPin, connected, !sending,
-           read.pins.first(where: { $0.id == openPin })?.sentAt != nil {
-            repliedAtLaunch = true
-            Task { [weak self] in
-                self?.reply("Make it bigger")
-                while self?.replying == true { try? await Task.sleep(for: .milliseconds(100)) }
-                self?.resolve(true)
-            }
-        }
         #endif
     }
 

@@ -875,27 +875,8 @@ private final class PinField: UITextView {
 /// points, where a simulator touch lands.
 enum PreviewProbe {
     static let on = ProcessInfo.processInfo.arguments.contains("-preview-probe")
-    /// `-preview-comment`: Comment turns on once the page is ready, for a run that cannot tap.
-    static let commentAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment")
-    /// `-preview-comment-tap`: with it, the page's first button takes one click at its centre, as a tap would land.
-    static let tapAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment-tap")
     /// `-preview-working`: the session counts as mid-turn, for the live dot (the probe's mock session ends its turns at once).
     static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
-    /// `-preview-reply`: once the open card's pin has gone with a send, the card's Reply runs once, then Resolve.
-    static let replyAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-reply")
-    /// `-preview-send`: Send picks runs once, the first time a pick is unsent.
-    static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
-    /// The click, in the page: what the overlay's Comment mode hears from a mouse.
-    static let click = """
-    (() => {
-      const el = document.querySelector("button");
-      if (!el) return "no button";
-      const r = el.getBoundingClientRect();
-      const at = { clientX: r.x + r.width / 2, clientY: r.y + r.height / 2, bubbles: true, cancelable: true, view: window };
-      el.dispatchEvent(new MouseEvent("click", at));
-      return "clicked " + Math.round(at.clientX) + "," + Math.round(at.clientY);
-    })()
-    """
 
     static func say(_ line: String) {
         guard on else { return }
