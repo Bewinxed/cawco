@@ -87,9 +87,9 @@
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--row-h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) group-data-embedded:top-0 group-data-embedded:inset-x-0 motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-in-out"
-    style:--o={rows.some((row) => row.value === value) ? 1 : 0}
-    style:--shift={`translateY(calc(${index} * (var(--row-h) + 2px)))`}
+    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--row-h) rounded-sm bg-surface-fill group-data-embedded:top-0 group-data-embedded:inset-x-0 motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-in-out"
+    style:transform={`translateY(calc(${index} * (var(--row-h) + 2px)))`}
+    style:opacity={rows.some((row) => row.value === value) ? 1 : 0}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
@@ -116,9 +116,9 @@
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile) text-(--hue)"
-        style:--hue={row.hue}
-        style:--tile="26px"><Icon class="size-icon-md" /></span
+        class="ns-tile size-(--tile)"
+        style:--tile="26px"
+        style:color={row.hue}><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">
         <span data-slot="name" class="type-label block">{row.name}</span>

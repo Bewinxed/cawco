@@ -3007,8 +3007,8 @@
            laid out. -->
       <div
         data-slot="stack"
-        class="relative flex-none h-(--stack-h)"
-        style:--stack-h="{stack}px"
+        class="relative flex-none"
+        style:block-size="{stack}px"
       >
         {#each offered as row (row.id)}
           <!-- The step under a card parked, on the card's own row; nothing
@@ -3271,11 +3271,11 @@
         <div
           data-composer-shown={edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) bottom-(--edit-foot) h-(--edit-h) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:transition-[opacity] [&_[data-keep]]:dur-fade [&_[data-keep]]:ease-out [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:transition-[opacity] [&_[data-keep]]:dur-fade [&_[data-keep]]:ease-out [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
           bind:this={editRow}
           style:--edit-inset="{edit.inset}px"
-          style:--edit-foot="{edit.base}px"
-          style:--edit-h="{edit.row}px"
+          style:bottom="{edit.base}px"
+          style:height="{edit.row}px"
         >
           <span
             data-slot="what"
@@ -3598,20 +3598,20 @@
             >
               <span
                 data-slot="flight-text"
-                class="row-start-1 col-start-1 justify-self-box-start w-(--flight-w) opacity-(--flight-o) transform-(--flight-from) translate-y-(--flight-drop)"
+                class="row-start-1 col-start-1 justify-self-box-start"
                 data-rest="{flight.outRest}&#8203;"
                 bind:this={flightOut}
-                style:--flight-w="{flight.outWrap}px"
-                style:--flight-o={flight.from.opacity}
-                style:--flight-from={flight.from.transform}
-                style:--flight-drop="{flight.outDrop}px">{flight.out}</span
+                style:inline-size="{flight.outWrap}px"
+                style:opacity={flight.from.opacity}
+                style:transform={flight.from.transform}
+                style:translate="0 {flight.outDrop}px">{flight.out}</span
               >
               <span
                 data-slot="flight-text"
-                class="row-start-1 col-start-1 justify-self-box-start opacity-0 translate-y-(--flight-drop)"
+                class="row-start-1 col-start-1 justify-self-box-start opacity-0"
                 data-rest="{flight.text.slice(typed.length)}&#8203;"
                 bind:this={flightIn}
-                style:--flight-drop="{inDrop}px">{typed}</span
+                style:translate="0 {inDrop}px">{typed}</span
               >
             </span>
           {/if}

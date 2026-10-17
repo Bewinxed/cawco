@@ -36,10 +36,10 @@
   <!-- literal: 4px inset, 36px height, 38px row pitch -->
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-in-out"
+    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) rounded-sm bg-surface-fill motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-in-out"
     style:--h="36px"
-    style:--o={items.length ? 1 : 0}
-    style:--shift={`translateY(calc(${index} * 38px))`}
+    style:transform={`translateY(calc(${index} * 38px))`}
+    style:opacity={items.length ? 1 : 0}
   ></span>
   {#each items as item (item.key)}
     {@const Icon = item.icon}
@@ -60,9 +60,9 @@
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile) rounded-xs text-(--hue)"
-        style:--hue={item.hue}
-        style:--tile="22px"><Icon class="size-icon-sm" /></span
+        class="ns-tile size-(--tile) rounded-xs"
+        style:--tile="22px"
+        style:color={item.hue}><Icon class="size-icon-sm" /></span
       >
       <span
         data-slot="trigger-menu-label"

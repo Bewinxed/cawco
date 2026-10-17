@@ -126,9 +126,9 @@
 <!-- literal: the figure's sizes the build (figure.ts) draws it at; none has a token -->
 <div
   data-slot="stage"
-  class="relative box-content h-(--stage-h) overflow-hidden contain-layout contain-paint rounded-md border border-border-well bg-surface-recess"
+  class="relative box-content overflow-hidden contain-layout contain-paint rounded-md border border-border-well bg-surface-recess"
   bind:this={stage}
-  style:--stage-h="{figureHeight(
+  style:height="{figureHeight(
     board,
     lanes.length,
     captioned(board, limits) ? 1 : 0

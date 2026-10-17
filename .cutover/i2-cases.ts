@@ -320,13 +320,13 @@ export const CASES: Case[] = [
     name: "UsageMeter.svelte:547 the +N slot (type-roles on set 7)",
     files: ["src/lib/cawco/UsageMeter.svelte"],
     t: `<div style="font-style:italic;font-variant-ligatures:none"><span class="{S0} cell" data-cell="claude"><span class="{S0} l1"><span class="{S0} marks" data-strip-marks style="flex-basis:60px"><span data-check="more" data-slot="slot" data-more class="{S0} slot more" style="inset-inline-start:32px">+2</span></span></span></span></div>`,
-    now: `<div style="font-style:italic;font-variant-ligatures:none"><span ${attrs("src/lib/cawco/UsageMeter.svelte", "now", 'data-cell="claude"')} data-cell="claude"><span ${attrs("src/lib/cawco/UsageMeter.svelte", "now", "gap-(--l1-gap) whitespace-nowrap")}><span class="${element("src/lib/cawco/UsageMeter.svelte", "now", "data-strip-marks").cls}" data-strip-marks style="--mark-min:16px;--marks-basis:60px"><span data-check="more" data-slot="slot" data-more class="${element("src/lib/cawco/UsageMeter.svelte", "now", "data-strip-more").cls}" style="--more-lh:16px;--slot-at:32px">+2</span></span></span></span></div>`,
+    now: `<div style="font-style:italic;font-variant-ligatures:none"><span ${attrs("src/lib/cawco/UsageMeter.svelte", "now", 'data-cell="claude"')} data-cell="claude"><span ${attrs("src/lib/cawco/UsageMeter.svelte", "now", "gap-(--l1-gap) whitespace-nowrap")}><span class="${element("src/lib/cawco/UsageMeter.svelte", "now", "data-strip-marks").cls}" data-strip-marks style="--mark-min:16px;flex-basis:60px"><span data-check="more" data-slot="slot" data-more class="${element("src/lib/cawco/UsageMeter.svelte", "now", "data-strip-more").cls}" style="--more-lh:16px;inset-inline-start:32px">+2</span></span></span></span></div>`,
   },
   {
     name: "MentionField.svelte:711 editor and :766 tip handle (type-roles on set 9)",
     files: ["src/lib/cawco/find/MentionField.svelte"],
     t: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" data-slot="editor" class="{S0} editor" contenteditable="true">hi</div><div class="{S0} tip" style="left:40px;top:80px"><span class="{S0} tip-facts">Ada</span><span class="{S0} tip-handle" data-check="handle">@a</span></div></div>`,
-    now: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" data-slot="editor" ${attrs("src/lib/cawco/find/MentionField.svelte", "now", "data-editor")} contenteditable="true">hi</div><div data-slot="tip" class="${element("src/lib/cawco/find/MentionField.svelte", "now", 'data-slot="tip"').cls}" style="--tip-x:40px;--tip-y:80px;--tip-max-w:320px;--tip-pad-y:6px;--tip-pad-x:10px;--tip-shift-x:-50%;--tip-shift-y:calc(-100% - 8px)"><span>Ada</span><span class="type-code opacity-80" data-check="handle">@a</span></div></div>`,
+    now: `<div style="font-style:italic;font-variant-numeric:tabular-nums"><div data-check="editor" data-slot="editor" ${attrs("src/lib/cawco/find/MentionField.svelte", "now", "data-editor")} contenteditable="true">hi</div><div data-slot="tip" class="${element("src/lib/cawco/find/MentionField.svelte", "now", 'data-slot="tip"').cls}" style="left:40px;top:80px;--tip-max-w:320px;--tip-pad-y:6px;--tip-pad-x:10px;--tip-shift-x:-50%;--tip-shift-y:calc(-100% - 8px)"><span>Ada</span><span class="type-code opacity-80" data-check="handle">@a</span></div></div>`,
   },
 
   // ------------------------------------- outline: none → outline-off (18)
@@ -456,7 +456,7 @@ export const CASES: Case[] = [
       "TabsList.svelte:1154 the focus ring",
       "src/lib/components/ui/fluid-tabs/TabsList.svelte",
       `<div class="{S0} tabs-list"><div data-check="ring" aria-hidden="true" class="{S0} ring"></div></div>`,
-      `<div><div data-check="ring" aria-hidden="true" class="ring pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"></div></div>`,
+      `<div><div data-check="ring" aria-hidden="true" class="ring pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"></div></div>`,
     ],
   ].map(([name, file, t, now]) => ({
     name,

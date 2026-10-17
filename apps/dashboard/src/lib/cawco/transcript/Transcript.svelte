@@ -3574,9 +3574,9 @@
     data-transcript-shown={shown || undefined}
     data-slot="listing"
     data-shown={shown || undefined}
-    class="isolate pt-(--spare-top) not-data-shown:invisible"
+    class="isolate not-data-shown:invisible"
     bind:this={listing}
-    style:--spare-top={spare ? `${spare}px` : undefined}
+    style:padding-top={spare ? `${spare}px` : undefined}
     {@attach wholeHeight}
   >
     <Virtualizer

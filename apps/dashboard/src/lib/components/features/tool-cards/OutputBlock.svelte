@@ -62,9 +62,8 @@
   {#if lines}
     <pre class="m-0 whitespace-pre"><code
         >{#each lines as line}<span data-slot="output-block-ln"
-          >{#each line as token}<span
-            class="text-(color:--token-ink)"
-            style:--token-ink={token.color}>{token.content}</span
+          >{#each line as token}<span style:color={token.color}
+            >{token.content}</span
           >{/each}{"\n"}</span
         >{/each}</code
       ></pre>

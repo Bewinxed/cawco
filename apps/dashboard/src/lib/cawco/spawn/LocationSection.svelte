@@ -197,10 +197,9 @@
           <Folder class="text-hue-amber-500" />
         {:else}
           <ProviderLogo
-            fade="set"
             provider="github"
             size={null}
-            style={`--o:${on ? 1 : 0.6}`}
+            style={`opacity:${on ? 1 : 0.6}`}
           />
         {/if}
       {/snippet}
@@ -268,7 +267,7 @@
         <button
           data-slot="browse"
           aria-expanded={browsing}
-          class="ns-in inline-flex h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer items-center justify-start gap-(--gap) rounded-sm border border-border-control bg-surface-recess px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong opacity-(--o) shadow-(--browse-shadow) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
+          class="ns-in inline-flex h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer items-center justify-start gap-(--gap) rounded-sm border border-border-control bg-surface-recess px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-(--browse-shadow) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
@@ -276,8 +275,8 @@
           style:--gap="6px"
           style:--h="30px"
           style:--h-phone="44px"
-          style:--o={machineId ? 1 : 0.5}
           style:--pad-x="10px"
+          style:opacity={machineId ? 1 : 0.5}
           type="button"
         >
           {#if browsing}
@@ -410,8 +409,8 @@
                   type="button"
                 >
                   <Folder
-                    class="size-icon-md flex-none text-(--hue)"
-                    style={`--hue:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
+                    class="size-icon-md flex-none"
+                    style={`color:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
                   />
                   <span data-slot="name" class="min-w-0 flex-1 truncate"
                     >{folder.name}</span
@@ -466,13 +465,11 @@
       <!-- literal: 8px gap, -12px rise -->
       <div
         data-slot="repo"
-        class={[
-          "grid gap-(--gap) transform-(--t) opacity-(--o) transition-[opacity] dur-panel ease-out motion-safe:transition-panel-travel",
-          mode === "repo" ? "pointer-events-auto" : "pointer-events-none",
-        ]}
+        class="grid gap-(--gap) transition-[opacity] dur-panel ease-out motion-safe:transition-panel-travel"
         style:--gap="8px"
-        style:--o={mode === "repo" ? 1 : 0}
-        style:--t={`translateY(${mode === "repo" ? 0 : -12}px)`}
+        style:transform={`translateY(${mode === "repo" ? 0 : -12}px)`}
+        style:opacity={mode === "repo" ? 1 : 0}
+        style:pointer-events={mode === "repo" ? "auto" : "none"}
       >
         <div
           data-slot="location-section-field"

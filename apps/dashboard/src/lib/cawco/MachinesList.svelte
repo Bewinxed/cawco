@@ -210,8 +210,8 @@
         >
           <span
             data-slot="glyph"
-            class="inline-grid w-icon-md flex-none place-items-center text-(color:--glyph-ink)"
-            style:--glyph-ink={way.hue}><Icon class="size-icon-md" /></span
+            class="inline-grid w-icon-md flex-none place-items-center"
+            style:color={way.hue}><Icon class="size-icon-md" /></span
           >
           <span data-slot="words" class="flex min-w-0 flex-col">
             <span data-slot="name" class="type-label text-ink-strong"

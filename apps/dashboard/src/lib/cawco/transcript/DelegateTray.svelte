@@ -1148,10 +1148,10 @@
     <!-- literal: 50% -->
     <span
       data-slot="dot"
-      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph anim-delay-(--dot-delay)"
+      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph"
       style:--dot="5px"
       style:--dot-r="50%"
-      style:--dot-delay="-{Date.now() % 2000}ms"
+      style:animation-delay="-{Date.now() % 2000}ms"
     ></span>
   {:else if tone === "asked" || tone === "needs"}
     <IconAsk class="size-icon-md block" />
@@ -1173,9 +1173,9 @@
   <!-- A chip: the tray row's (app.css .kit-tray-chip), its surface on a
        layer of its own so it can arrive after a mark that flew in. Its
        floor is measured (`measureFloor`); the failure chip stands at the
-       row's end, next to the plan. Its floor and cap are classes: fly()
-       clones the chip and rewrites the copy's inline style, so the copy
-       keeps them, the live chip's measured floor (inline --floor) first.
+       row's end, next to the plan. Its least floor and its cap are classes:
+       fly() clones the chip and rewrites the copy's inline style, so the
+       copy keeps them, under the live chip's measured floor (inline).
        A delegate that needs you is in the ask ink wherever its state shows:
        its chip, its folded row's words, its state cell. -->
   <button
@@ -1183,7 +1183,7 @@
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="group/chip kit-tray-chip touch-hit flex-initial min-w-(--floor,var(--c-tray-chip-min)) max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
+    class="group/chip kit-tray-chip touch-hit flex-initial min-w-c-tray-chip-min max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
     data-delegate-tray-tone={tone}
     data-finished={(tone === "done" && (item.endedAt ?? 0) > mountedAt) ||
       undefined}
@@ -1204,7 +1204,7 @@
     onpointerenter={() => onchipenter(item.id)}
     tabindex={current === at ? 0 : -1}
     type="button"
-    style:--floor="{floorOf(item.id)}px"
+    style:min-inline-size="{floorOf(item.id)}px"
     {@attach measureFloor(item.id)}
   >
     {@render mark(item, flies)}

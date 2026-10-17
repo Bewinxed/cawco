@@ -1905,8 +1905,8 @@
     >
       <div
         data-slot="details-morph"
-        class="h-(--morph-h) max-h-inherit w-full overflow-hidden motion-safe:in-[[data-session-details-popover][data-morph]]:transition-[height] motion-safe:in-[[data-session-details-popover][data-morph]]:dur-pop motion-safe:in-[[data-session-details-popover][data-morph]]:ease-drawer"
-        style:--morph-h={detailsHeight ? `${detailsHeight}px` : undefined}
+        class="max-h-inherit w-full overflow-hidden motion-safe:in-[[data-session-details-popover][data-morph]]:transition-[height] motion-safe:in-[[data-session-details-popover][data-morph]]:dur-pop motion-safe:in-[[data-session-details-popover][data-morph]]:ease-drawer"
+        style:height={detailsHeight ? `${detailsHeight}px` : undefined}
       >
         <div
           data-slot="details-measure"

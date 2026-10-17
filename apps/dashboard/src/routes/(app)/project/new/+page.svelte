@@ -191,9 +191,9 @@
     </h1>
     <div
       data-slot="new-page-field"
-      class="relative h-(--field-h) w-full max-w-(--field-max)"
-      style:--field-h="calc({footHeight}px + var(--space-4))"
+      class="relative w-full max-w-(--field-max)"
       style:--field-max="570px"
+      style:block-size="calc({footHeight}px + var(--space-4))"
     >
       <Composer
         agentName="Caw"

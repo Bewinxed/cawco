@@ -141,7 +141,7 @@
 {#snippet permissionChip()}
   {#if look}
     {@const Icon = look.icon}
-    <Icon class="text-(--hue)" style={`--hue:${look.hue}`} />
+    <Icon style={`color:${look.hue}`} />
     <span data-slot="chip-label">{look.name}</span>
   {/if}
 {/snippet}

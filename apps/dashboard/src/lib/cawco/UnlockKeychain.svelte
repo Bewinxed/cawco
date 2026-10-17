@@ -176,8 +176,8 @@
     >
       {#key view}
         <div
-          class="flex min-h-(--held-min) flex-col gap-space-3"
-          style:--held-min={phase.kind === "working" ? `${held}px` : undefined}
+          class="flex flex-col gap-space-3"
+          style:min-height={phase.kind === "working" ? `${held}px` : undefined}
           in:crossIn
           out:crossOut
         >

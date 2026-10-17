@@ -784,9 +784,9 @@
         <span
           data-slot="rail"
           aria-hidden="true"
-          class="absolute top-0 start-0 w-px block-(--rail-h) translate-y-(--rail-y) bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:dur-control motion-safe:ease-drawer"
-          style:--rail-h="{rail.height}px"
-          style:--rail-y="{rail.top}px"
+          class="absolute top-0 start-0 w-px bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:dur-control motion-safe:ease-drawer"
+          style:block-size="{rail.height}px"
+          style:translate="0 {rail.top}px"
         ></span>
       {/if}
       {#each questions as q, qi (q.question)}

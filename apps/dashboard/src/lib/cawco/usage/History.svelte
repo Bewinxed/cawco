@@ -322,9 +322,9 @@
               {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
                 <div
                   aria-hidden="true"
-                  class="pointer-events-none absolute inset-x-0 top-0 animate-(--swap-anim)"
+                  class="pointer-events-none absolute inset-x-0 top-0"
                   inert
-                  style:--swap-anim={bodySwap.leaveAnim(i)}
+                  style:animation={bodySwap.leaveAnim(i)}
                 >
                   {#if gone.view === "chart"}
                     {@render plot(chart, false)}
@@ -335,8 +335,7 @@
               {/each}
               {#key bodySwap.gen}
                 <div
-                  class="animate-(--swap-anim)"
-                  style:--swap-anim={bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}
+                  style:animation={bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}
                 >
                   {#if view === "chart"}
                     {@render plot(chart, true)}

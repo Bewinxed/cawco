@@ -88,19 +88,19 @@
       <span
         data-slot="frame"
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
+        class="pointer-events-none absolute inset-y-0 z-1 rounded-md border border-brand-solid bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
         data-dir={index === 1 ? "end" : "start"}
-        style:--frame-end={index === 0 ? HALF : "0"}
-        style:--frame-start={index === 0 ? "0" : HALF}
+        style:inset-inline-end={index === 0 ? HALF : "0"}
+        style:inset-inline-start={index === 0 ? "0" : HALF}
       ></span>
     {:else}
       {#key chosen}
         <span
           data-slot="frame"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 z-1 end-(--frame-end) start-(--frame-start) rounded-md border border-brand-solid bg-surface-recess"
-          style:--frame-end={index === 0 ? HALF : "0"}
-          style:--frame-start={index === 0 ? "0" : HALF}
+          class="pointer-events-none absolute inset-y-0 z-1 rounded-md border border-brand-solid bg-surface-recess"
+          style:inset-inline-end={index === 0 ? HALF : "0"}
+          style:inset-inline-start={index === 0 ? "0" : HALF}
           in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
           out:fade={{ duration: dur("--dur-exit") }}
         ></span>
@@ -173,22 +173,22 @@
       <!-- Caw: his box stands on the chosen card, painted over it. -->
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute top-(--caw-top) left-(--caw-left) z-3 size-(--caw-peek)"
+        class="pointer-events-none absolute top-(--caw-top) z-3 size-(--caw-peek)"
         in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
         out:fade={{ duration: dur("--dur-exit") }}
-        style:--caw-left={index === 0
+        style:--caw-top="calc(var(--caw-peek-rise) * -1)"
+        style:left={index === 0
           ? "calc((100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"
           : "calc(100% - (100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"}
-        style:--caw-top="calc(var(--caw-peek-rise) * -1)"
       >
         <!-- literal: 50% 56.84% -->
         <img
           alt=""
-          class="absolute inset-0 size-full origin-(--origin) transform-(--scaled) select-none"
+          class="absolute inset-0 size-full origin-(--origin) select-none"
           draggable="false"
           src={dark ? PICTURES[chosen].dark : PICTURES[chosen].light}
           style:--origin="50% 56.84%"
-          style:--scaled="scale({PICTURES[chosen].scale})"
+          style:transform="scale({PICTURES[chosen].scale})"
         />
       </span>
     {/key}

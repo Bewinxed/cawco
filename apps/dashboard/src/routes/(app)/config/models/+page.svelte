@@ -337,10 +337,8 @@
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
-      class="h-(--morph-size) overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
-      style:--morph-size={openrouterHeight
-        ? `${openrouterHeight}px`
-        : undefined}
+      class="overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
+      style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
       <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
       <div data-slot="stack" class="grid" bind:clientHeight={openrouterHeight}>
@@ -490,8 +488,8 @@
       />
     </Field>
     <div
-      class="h-(--morph-size) overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
-      style:--morph-size={keyHeight ? `${keyHeight}px` : undefined}
+      class="overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
+      style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
       <div data-slot="stack" class="grid" bind:clientHeight={keyHeight}>
         {#key keyPhase}

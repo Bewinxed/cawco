@@ -401,8 +401,8 @@
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="pointer-events-none absolute inset-(--drop-inset) z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:dur-morph motion-safe:ease-in-out"
-      style:--drop-inset={previewInset}
+      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:dur-morph motion-safe:ease-in-out"
+      style:inset={previewInset}
       transition:previewFade
     ></div>
   {/if}

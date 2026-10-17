@@ -416,10 +416,7 @@
           data-slot="row"
           class="flex-none h-(--row) flex items-center gap-space-2 px-space-2 min-w-0 text-size-meta whitespace-nowrap"
         >
-          <Skeleton
-            class="h-icon-sm w-(--skeleton-w)"
-            style="--skeleton-w: {width}px"
-          />
+          <Skeleton class="h-icon-sm" style="inline-size: {width}px" />
         </div>
       {/each}
     </div>

@@ -1139,10 +1139,10 @@
     <div
       data-slot="segment"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-1 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
-      style:--box-at="translate({at.left}px,{at.top}px)"
-      style:--box-w="{at.width}px"
-      style:--box-h="{at.height}px"
+      class="pointer-events-none absolute start-0 top-0 z-1 rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
+      style:transform="translate({at.left}px,{at.top}px)"
+      style:width="{at.width}px"
+      style:height="{at.height}px"
       data-travelling={travelRect !== undefined || undefined}
     ></div>
   {/if}
@@ -1153,10 +1153,10 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="ring pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"
-      style:--box-at="translate({focusRect.left}px,{focusRect.top}px)"
-      style:--box-w="{focusRect.width}px"
-      style:--box-h="{focusRect.height}px"
+      class="ring pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"
+      style:transform="translate({focusRect.left}px,{focusRect.top}px)"
+      style:width="{focusRect.width}px"
+      style:height="{focusRect.height}px"
       style:--ring-z="calc(var(--stack-top) + 2)"
       style:--ring-r="calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0"
     ></div>

@@ -61,10 +61,10 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute top-(--pad) bottom-(--pad) left-(--pad) w-(--thumb-w) transform-(--shift) rounded-sm bg-surface-lift shadow-raised transition-[transform] duration-(--ns-thumb-ms) ease-in-out"
+    class="pointer-events-none absolute top-(--pad) bottom-(--pad) left-(--pad) w-(--thumb-w) rounded-sm bg-surface-lift shadow-raised transition-[transform] duration-(--ns-thumb-ms) ease-in-out"
     style:--pad="3px"
-    style:--shift={`translateX(calc(${index} * (100% + 2px)))`}
     style:--thumb-w="calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n))"
+    style:transform={`translateX(calc(${index} * (100% + 2px)))`}
   ></span>
   {#each items as item (item.value)}
     <!-- literal: 6px gap, 10px inline padding -->

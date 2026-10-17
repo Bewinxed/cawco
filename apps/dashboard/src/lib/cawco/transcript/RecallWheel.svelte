@@ -880,7 +880,7 @@
 <div
   data-slot="ghosts"
   aria-label="What you sent here"
-  class="absolute z-3 start-0 bottom-(--ghosts-bottom) h-(--ghosts-h) w-(--ghosts-w) overflow-hidden perspective-(--ghosts-depth) perspective-origin-bottom touch-none select-none cursor-ns-resize"
+  class="absolute z-3 start-0 overflow-hidden perspective-origin-bottom touch-none select-none cursor-ns-resize"
   {id}
   onpointercancel={onup}
   onpointerdown={ondown}
@@ -890,10 +890,10 @@
   role="listbox"
   tabindex="-1"
   bind:this={ghosts}
-  style:--ghosts-bottom="{box.bottom}px"
-  style:--ghosts-h="{box.height}px"
-  style:--ghosts-depth="{DEPTH}px"
-  style:--ghosts-w="{box.width}px"
+  style:bottom="{box.bottom}px"
+  style:height="{box.height}px"
+  style:perspective="{DEPTH}px"
+  style:width="{box.width}px"
 >
   {#each mounted as { entry, k } (entry.key)}
     <!-- The keys are the field's (↑ ↓ Enter); a click is the pointer's way
@@ -959,11 +959,11 @@
 {#if query.trim()}
   <!-- The query, on the field's line at its end, wherever the rows roll. -->
   <div
-    class="absolute z-4 flex items-center justify-end pointer-events-none bottom-(--chip-line-bottom) h-(--chip-line-h) left-(--chip-line-left) w-(--chip-line-w)"
-    style:--chip-line-bottom="{box.bottom}px"
-    style:--chip-line-h="{row}px"
-    style:--chip-line-left="{measured.line.left}px"
-    style:--chip-line-w="{measured.line.width}px"
+    class="absolute z-4 flex items-center justify-end pointer-events-none"
+    style:bottom="{box.bottom}px"
+    style:height="{row}px"
+    style:left="{measured.line.left}px"
+    style:width="{measured.line.width}px"
   >
     <!-- literal: 45%, the hairline ring -->
     <span

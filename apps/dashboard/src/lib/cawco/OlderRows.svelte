@@ -213,11 +213,11 @@
            to the kit's spinner, as a pending Button's icon does. -->
       <button
         {...props}
-        class={[props.class, "mark-line", motion && "animate-(--swap-anim)"]}
+        class={[props.class, "mark-line"]}
         aria-busy={pending || undefined}
         aria-expanded={out}
         onclick={toggle}
-        style:--swap-anim={motion}
+        style:animation={motion}
         type="button"
       >
         <TreeMark
@@ -242,8 +242,8 @@
         </TreeMark>
         <span data-slot="num" class="num"
           ><span
-            class="inline-grid w-(--digits-w)"
-            style:--digits-w="{String(count).length}ch"
+            class="inline-grid"
+            style:inline-size="{String(count).length}ch"
             ><MorphText text={String(count)} /></span
           >
           older</span

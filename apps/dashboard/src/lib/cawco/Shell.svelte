@@ -944,11 +944,11 @@
        footer stand on a keyboard (cawco/visible-viewport `floor`). -->
   <div
     data-slot="shell"
-    class="flex h-(--shell-h,100dvh) w-full bg-surface-recess overflow-hidden"
+    class="flex h-dvh w-full bg-surface-recess overflow-hidden"
     style="--sidebar-width: var(--rail-w, {railWidth === null
       ? 'var(--c-sidebar-w)'
       : `${railWidth}px`})"
-    style:--shell-h={floor.bottom > 0 ? `${floor.bottom}px` : null}
+    style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
     <!-- The rail holds the screen's leading edge, so it keeps a landscape
          notch's inset clear inside its own width, in the sidebar's ground:

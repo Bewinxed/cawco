@@ -127,18 +127,167 @@ export default defineConfig([
       "shadcn/no-inline-styles": ["error", { allow: ["pointer-events"] }],
     },
   },
-  // A pane's composer dock takes its width inline, as at main: the
-  // transcript's share of the pane, which changes as a preview takes it.
-  // Written as a custom property for a utility to read, it is inherited, and
-  // each change restyled the whole composer under the dock; `width` restyles
-  // the dock alone.
-  {
-    files: [
-      "src/lib/cawco/workspace/PaneLeaf.svelte",
-      "src/routes/**/motion/delegate-tray/+page.svelte",
+  // A value that changes while its element is mounted is written inline as
+  // the standard property main (282054d12) wrote it, in each file below: a
+  // custom property changing on an element restyles its whole subtree in
+  // Blink (it is inherited), a standard inline property restyles the element
+  // alone. So for these files the rule's own advice ("use CSS custom
+  // properties for dynamic values") is what it may not have; `allow`
+  // "Exempts CSS properties from inline-style checks"
+  // (https://raw.githubusercontent.com/shadcn-ui/lint/main/docs/rules/no-inline-styles.md),
+  // file by file, only the properties that file writes inline at main.
+  ...Object.entries({
+    "src/lib/cawco/ContextMeter.svelte": ["background-color", "width"],
+    "src/lib/cawco/HoverPanel.svelte": ["block-size", "inline-size"],
+    "src/lib/cawco/MachinesEmpty.svelte": ["animation"],
+    "src/lib/cawco/MachinesList.svelte": ["color"],
+    "src/lib/cawco/OlderRows.svelte": ["animation", "inline-size"],
+    "src/lib/cawco/Shell.svelte": ["height"],
+    "src/lib/cawco/UnlockKeychain.svelte": ["min-height"],
+    "src/lib/cawco/UsageMeter.svelte": ["flex-basis", "inset-inline-start"],
+    "src/lib/cawco/accounts/OrderList.svelte": ["transform"],
+    "src/lib/cawco/accounts/StrategyFigure.svelte": ["height"],
+    "src/lib/cawco/blocks/Block.svelte": ["grid-column"],
+    "src/lib/cawco/config/ConfigRail.svelte": ["color"],
+    "src/lib/cawco/config/EditorFrame.svelte": ["color", "min-height"],
+    "src/lib/cawco/config/SectionFrame.svelte": ["min-height"],
+    "src/lib/cawco/config/SectionRow.svelte": ["color"],
+    "src/lib/cawco/decisions/DecisionsView.svelte": ["animation"],
+    "src/lib/cawco/decisions/graph/DecisionGroup.svelte": [
+      "block-size",
+      "inline-size",
     ],
-    rules: {
-      "shadcn/no-inline-styles": ["error", { allow: ["width"] }],
-    },
-  },
+    "src/lib/cawco/find/MentionField.svelte": ["left", "top"],
+    "src/lib/cawco/home/HomeRecent.svelte": ["inline-size"],
+    "src/lib/cawco/home/NeedsCard.svelte": ["color"],
+    "src/lib/cawco/home/SessionTree.svelte": ["animation"],
+    "src/lib/cawco/home/WorkTabs.svelte": ["animation", "opacity"],
+    "src/lib/cawco/lightbox/Lightbox.svelte": ["pointer-events"],
+    "src/lib/cawco/motion/Rail.svelte": [
+      "height",
+      "opacity",
+      "transform",
+      "width",
+    ],
+    "src/lib/cawco/preview/PinCard.svelte": ["left", "max-width", "top"],
+    "src/lib/cawco/project/CardFace.svelte": ["color"],
+    "src/lib/cawco/project/TemplateCards.svelte": ["translate"],
+    "src/lib/cawco/side/SideSheet.svelte": ["height"],
+    "src/lib/cawco/spawn/EffortPips.svelte": [
+      "left",
+      "opacity",
+      "pointer-events",
+      "width",
+    ],
+    "src/lib/cawco/spawn/LifetimeChip.svelte": ["color"],
+    "src/lib/cawco/spawn/LocationSection.svelte": [
+      "color",
+      "opacity",
+      "pointer-events",
+      "transform",
+    ],
+    "src/lib/cawco/spawn/MachinesChip.svelte": [
+      "border-radius",
+      "opacity",
+      "transform",
+    ],
+    "src/lib/cawco/spawn/ModelSection.svelte": [
+      "animation",
+      "height",
+      "opacity",
+      "transform",
+    ],
+    "src/lib/cawco/spawn/NewSessionDialog.svelte": ["pointer-events"],
+    "src/lib/cawco/spawn/NsPopover.svelte": ["pointer-events"],
+    "src/lib/cawco/spawn/NsPopoverGroup.svelte": ["height", "pointer-events"],
+    "src/lib/cawco/spawn/PermissionSection.svelte": [
+      "color",
+      "opacity",
+      "transform",
+    ],
+    "src/lib/cawco/spawn/ProjectChip.svelte": ["color"],
+    "src/lib/cawco/spawn/Segmented.svelte": ["transform"],
+    "src/lib/cawco/spawn/ToolChips.svelte": ["color"],
+    "src/lib/cawco/spawn/TriggerMenu.svelte": ["color", "opacity", "transform"],
+    "src/lib/cawco/tasks/TaskActivity.svelte": ["block-size"],
+    "src/lib/cawco/transcript/Composer.svelte": [
+      "block-size",
+      "bottom",
+      "height",
+      "inline-size",
+      "opacity",
+      "transform",
+      "translate",
+    ],
+    "src/lib/cawco/transcript/DelegateTail.svelte": ["inline-size"],
+    "src/lib/cawco/transcript/DelegateTray.svelte": [
+      "animation-delay",
+      "min-inline-size",
+    ],
+    // `-webkit-backdrop-filter`, in the spelling the rule takes an entry in.
+    "src/lib/cawco/transcript/HeadFade.svelte": [
+      "WebkitBackdropFilter",
+      "backdrop-filter",
+      "mask-image",
+    ],
+    "src/lib/cawco/transcript/Prompt.svelte": ["block-size", "translate"],
+    "src/lib/cawco/transcript/RecallWheel.svelte": [
+      "bottom",
+      "height",
+      "left",
+      "perspective",
+      "width",
+    ],
+    "src/lib/cawco/transcript/Transcript.svelte": ["padding-top"],
+    "src/lib/cawco/transcript/TranscriptSkeleton.svelte": ["width"],
+    "src/lib/cawco/updates/ChannelCards.svelte": [
+      "inset-inline-end",
+      "inset-inline-start",
+      "left",
+      "transform",
+    ],
+    "src/lib/cawco/usage/History.svelte": ["animation"],
+    "src/lib/cawco/usage/Relay.svelte": ["flex-grow", "inset-inline-start"],
+    "src/lib/cawco/usage/Rings.svelte": ["stroke-dashoffset"],
+    "src/lib/cawco/usage/SessionsChip.svelte": ["min-block-size"],
+    "src/lib/cawco/usage/WeekMark.svelte": ["stroke-dashoffset"],
+    "src/lib/cawco/usage/WhereItGoes.svelte": ["animation", "opacity"],
+    "src/lib/cawco/views/ViewPipeline.svelte": ["inline-size"],
+    "src/lib/cawco/views/canvas/TaskEdgeLine.svelte": [
+      "stroke",
+      "stroke-dasharray",
+      "stroke-linecap",
+      "stroke-width",
+    ],
+    "src/lib/cawco/views/ViewRoutines.svelte": ["block-size"],
+    "src/lib/cawco/workspace/PaneLeaf.svelte": ["inset", "width"],
+    "src/lib/cawco/workspace/PaneTabs.svelte": ["height"],
+    "src/lib/components/features/DiffView.svelte": ["height", "max-block-size"],
+    "src/lib/components/features/tool-cards/OutputBlock.svelte": ["color"],
+    "src/lib/components/features/workflows/TemplateInput.svelte": [
+      "transform-origin",
+    ],
+    "src/lib/components/features/workflows/WorkflowEdge.svelte": [
+      "stroke",
+      "stroke-width",
+    ],
+    "src/lib/components/ui/fluid-tabs/TabsList.svelte": [
+      "height",
+      "transform",
+      "width",
+    ],
+    "src/lib/components/ui/machine-row/machine-row.svelte": ["color"],
+    "src/lib/components/ui/progress/progress.svelte": ["transform"],
+    "src/lib/components/ui/section-header/section-header.svelte": ["color"],
+    "src/routes/(app)/config/models/+page.svelte": ["block-size"],
+    "src/routes/(app)/motion/delegate-tray/+page.svelte": ["width"],
+    "src/routes/(app)/project/\\[id\\]/+page.svelte": [
+      "animation",
+      "block-size",
+    ],
+    "src/routes/(app)/project/new/+page.svelte": ["block-size"],
+  }).map(([file, allow]) => ({
+    files: [file],
+    rules: { "shadcn/no-inline-styles": ["error", { allow }] },
+  })),
 ]);

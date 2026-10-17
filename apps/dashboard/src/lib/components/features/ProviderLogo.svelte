@@ -2,11 +2,11 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: at the opacity the caller sets (`--o`), or at
-      80%. A caller never tints a mark, so no look carries a colour. */
+  /** Its callers' look: at 80%. A caller never tints a mark, so no look
+      carries a colour. */
   export const providerLogoVariants = tv({
     variants: {
-      fade: { set: "opacity-(--o)", dim: "opacity-80" },
+      fade: { dim: "opacity-80" },
     },
   });
 

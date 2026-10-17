@@ -108,9 +108,9 @@
       >
         {#each lines as width (width)}
           <Skeleton
-            class="w-(--ln-w) h-(--ln-h) my-(--ln-my)"
+            class="h-(--ln-h) my-(--ln-my)"
             radius="text"
-            style="--ln-w: {width}"
+            style="width: {width}"
           />
         {/each}
       </div>
@@ -131,10 +131,10 @@
           style="--tk-w: 40px"
         />
         <Skeleton
-          class="w-(--arg-w) h-space-3"
+          class="h-space-3"
           radius="text"
           data-box
-          style="--arg-w: {width}"
+          style="width: {width}"
         />
       </div>
     {/each}
@@ -167,9 +167,9 @@
     >
       {#each AFTER as width (width)}
         <Skeleton
-          class="w-(--ln-w) h-(--ln-h) my-(--ln-my)"
+          class="h-(--ln-h) my-(--ln-my)"
           radius="text"
-          style="--ln-w: {width}"
+          style="width: {width}"
         />
       {/each}
     </div>

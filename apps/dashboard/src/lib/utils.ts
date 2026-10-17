@@ -104,7 +104,6 @@ const twMergeConfig = {
       "line-clamp-undo": ["line-clamp-undo"],
       "translate-raw": [{ "translate-raw": arbitrary }],
       "clip-margin": [{ "clip-margin": [validators.isAny] }],
-      "anim-delay": [{ "anim-delay": arbitrary }],
       "overflow-anchor": ["anchor-none"],
       "scroll-timeline": ["scroll-timeline-transcript-head"],
       // Recipes: each sets its own custom properties.
@@ -165,7 +164,6 @@ const twMerge = extendTailwindMerge<
   | "line-clamp-undo"
   | "translate-raw"
   | "clip-margin"
-  | "anim-delay"
   | "overflow-anchor"
   | "scroll-timeline"
   | "pane-tab-pads"

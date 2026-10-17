@@ -209,7 +209,7 @@
             <span
               {...props}
               aria-label={tip}
-              class="min-w-0 shrink basis-0 grow-(--grow) rounded-hair bg-(--c) transition-[flex-grow] dur-panel ease-out group-data-instant/relay:transition-none data-stale:opacity-(--account-stale-opacity) motion-reduce:transition-none"
+              class="min-w-0 shrink basis-0 rounded-hair bg-(--c) transition-[flex-grow] dur-panel ease-out group-data-instant/relay:transition-none data-stale:opacity-(--account-stale-opacity) motion-reduce:transition-none"
               data-relay-band={id}
               data-stale={seg.ring.state === "stale" || undefined}
               onpointerenter={(event) => {
@@ -228,7 +228,7 @@
               }}
               role="img"
               style:--c={seg.ring.color}
-              style:--grow={seg.ms}
+              style:flex-grow={seg.ms}
               in:fade={bandIn()}
               out:bandOut
             ></span>
@@ -240,9 +240,9 @@
         <span
           data-stop={seg.key === stopKey || undefined}
           aria-hidden="true"
-          class="min-w-0 shrink basis-0 grow-(--grow) bg-(image:--hatch) transition-[flex-grow] dur-panel ease-out group-data-instant/relay:transition-none data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-none"
+          class="min-w-0 shrink basis-0 bg-(image:--hatch) transition-[flex-grow] dur-panel ease-out group-data-instant/relay:transition-none data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-none"
           data-relay-stop={seg.key === stopKey ? "" : undefined}
-          style:--grow={seg.ms}
+          style:flex-grow={seg.ms}
           style:--hatch={"repeating-linear-gradient(-45deg, var(--border-control) 0 1px, var(--ring-ground, var(--surface-raised)) 1px var(--space-1))"}
         ></span>
       {/if}
@@ -257,10 +257,10 @@
       <!-- mark-line: the tick stands above its hour, not beside it -->
       <span
         data-end={tick.hour === 5 || undefined}
-        class="absolute inset-y-0 start-(--tick-at) flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] dur-panel ease-out group-data-instant/relay:transition-none not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-none"
+        class="absolute inset-y-0 flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] dur-panel ease-out group-data-instant/relay:transition-none not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-none"
         data-start={tick.hour === 0 || undefined}
         data-tick={tick.hour}
-        style:--tick-at={tick.at}
+        style:inset-inline-start={tick.at}
       >
         <!-- literal: 3px -->
         <span

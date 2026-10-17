@@ -138,10 +138,10 @@
     <!-- literal: 240px, 36px, 44px -->
     <div
       aria-label="Template paths"
-      class="kit-pop absolute top-full inset-x-0 max-h-(--completer-max) overflow-y-auto z-30 origin-(--origin)"
+      class="kit-pop absolute top-full inset-x-0 max-h-(--completer-max) overflow-y-auto z-30"
       data-state="open"
       role="listbox"
-      style:--origin={origin}
+      style:transform-origin={origin}
       style:--completer-max="240px"
       style:--option-h="36px"
       style:--option-hit="44px"

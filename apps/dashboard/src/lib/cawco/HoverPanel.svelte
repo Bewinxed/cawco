@@ -218,9 +218,9 @@
     >
       {#key key}
         <div
-          class="col-start-1 row-start-1 min-w-0 h-(--held-h) w-(--held-w)"
-          style:--held-h={pending && held ? `${held.h}px` : null}
-          style:--held-w={pending && held ? `${held.w}px` : null}
+          class="col-start-1 row-start-1 min-w-0"
+          style:block-size={pending && held ? `${held.h}px` : null}
+          style:inline-size={pending && held ? `${held.w}px` : null}
           in:swapIn
           out:swapOut
           {@attach measure}

@@ -235,9 +235,9 @@
       >
         <span
           data-slot="tile"
-          class="ns-tile size-(--tile) text-(--hue)"
-          style:--hue={row.hue}
-          style:--tile="24px"><Files class="size-icon-md" /></span
+          class="ns-tile size-(--tile)"
+          style:--tile="24px"
+          style:color={row.hue}><Files class="size-icon-md" /></span
         >
         <span data-slot="text" class="min-w-0 flex-1">
           <span data-slot="name" class="type-label block">{row.name}</span>

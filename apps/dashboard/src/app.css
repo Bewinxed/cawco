@@ -2483,9 +2483,6 @@
 @utility clip-margin-* {
   overflow-clip-margin: --value(--spacing-*, [*]);
 }
-@utility anim-delay-* {
-  animation-delay: --value([*]);
-}
 @utility anchor-none {
   overflow-anchor: none;
 }

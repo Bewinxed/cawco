@@ -675,8 +675,8 @@
 {#snippet askCaw()}
   <div
     data-slot="ask-caw"
-    class="relative h-(--ask-h) w-full flex-none"
-    style:--ask-h="calc({askFoot}px + var(--space-4))"
+    class="relative w-full flex-none"
+    style:block-size="calc({askFoot}px + var(--space-4))"
   >
     <Composer
       agentName="Caw"

@@ -31,10 +31,10 @@
 <!-- literal: 26px -->
 <span
   data-slot="tile"
-  class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised text-(--tile-hue) shadow-tile data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none"
+  class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised shadow-tile data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none"
   data-ink={ink || undefined}
   style:--tile="26px"
-  style:--tile-hue={ink ? undefined : hue}
+  style:color={ink ? undefined : hue}
   ><Icon class="size-icon-md flex-none" /></span
 >
 <span data-slot="text" class="min-w-0 flex-1">

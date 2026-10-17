@@ -97,8 +97,8 @@
             >
               <span
                 data-slot="tile"
-                class="inline-flex items-center justify-center flex-none size-(--tile) rounded-xs bg-surface-tile shadow-tile text-(--tile-ink)"
-                style:--tile-ink={section.hue}><section.icon /></span
+                class="inline-flex items-center justify-center flex-none size-(--tile) rounded-xs bg-surface-tile shadow-tile"
+                style:color={section.hue}><section.icon /></span
               >
               <span
                 data-slot="name"

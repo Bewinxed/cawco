@@ -333,9 +333,10 @@
          (--safe-bottom is set only where data-safe-bottom is). -->
     <div
       data-slot="task-activity-field"
-      class="relative h-(--foot) w-full"
+      class="relative w-full"
       data-safe-bottom
-      style:--foot="calc({commentFoot}px + var(--space-4) + var(--safe-bottom))"
+      style:block-size="calc({commentFoot}px + var(--space-4) +
+      var(--safe-bottom))"
     >
       <Composer
         agentName={reaches?.kind === "live" ? reaches.session : "The task"}

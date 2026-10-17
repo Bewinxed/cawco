@@ -582,12 +582,10 @@
             <!-- Where these ran, said once for the rows under it. -->
             <h3
               data-slot="machine"
-              class="mark-line type-label m-0 flex animate-(--swap-anim) items-center gap-space-2 py-space-1 text-ink-muted opacity-(--head-opacity)"
+              class="mark-line type-label m-0 flex items-center gap-space-2 py-space-1 text-ink-muted"
               data-key="head:{id}"
-              style:--swap-anim={headAnim(entry.kind, id)}
-              style:--head-opacity={headHidden(entry.kind, id)
-                ? "0"
-                : undefined}
+              style:animation={headAnim(entry.kind, id)}
+              style:opacity={headHidden(entry.kind, id) ? "0" : undefined}
             >
               <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
               <span>{entry.group.name}</span>
@@ -603,8 +601,7 @@
               <div
                 data-flip={plan ? undefined : ""}
                 data-key={item.id}
-                class="animate-(--swap-anim)"
-                style:--swap-anim={enterAnim(item.id)}
+                style:animation={enterAnim(item.id)}
               >
                 {@render line(item, true)}
               </div>
@@ -624,18 +621,14 @@
         data-machine="more"
       >
         {#if more}
-          <span
-            data-key="more"
-            class="animate-(--swap-anim)"
-            style:--swap-anim={enterAnim("more")}
-          >
+          <span data-key="more" style:animation={enterAnim("more")}>
             <Button label={more} onclick={showAll} size="sm" variant="ghost" />
           </span>
         {:else if plan?.more}
           <span
             aria-hidden="true"
-            class="type-label animate-(--swap-anim) text-ink-muted"
-            style:--swap-anim={leaveAnim("more")}>{plan.more}</span
+            class="type-label text-ink-muted"
+            style:animation={leaveAnim("more")}>{plan.more}</span
           >
         {/if}
       </div>
@@ -730,7 +723,7 @@
     inert
   >
     {#each lines.filter((l) => l.row) as l (l.key)}
-      <div class="animate-(--swap-anim)" style:--swap-anim={leaveAnim(l.key)}>
+      <div style:animation={leaveAnim(l.key)}>
         {@render line(l.row as Item, false)}
       </div>
     {/each}

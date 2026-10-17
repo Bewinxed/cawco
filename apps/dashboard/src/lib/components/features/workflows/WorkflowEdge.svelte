@@ -33,14 +33,12 @@
   );
 </script>
 
-<!-- xyflow's own custom properties: its sheet draws the path from them, and
-     the selected state reads its own, so both carry the one colour. -->
+<!-- The path's paint, inline: it stands over xyflow's sheet, selected or
+     not, and a change restyles the path alone. -->
 <BaseEdge
   {id}
   path={route[0]}
-  style="--xy-edge-stroke: var(--neutral-8); --xy-edge-stroke-selected: var(--neutral-8); --xy-edge-stroke-width: {selected
-    ? 3
-    : 1.5}px"
+  style={`stroke: var(--neutral-8); stroke-width: ${selected ? 3 : 1.5}px`}
 />
 <EdgeLabel selectEdgeOnClick transparent x={route[1]} y={route[2]}>
   <div

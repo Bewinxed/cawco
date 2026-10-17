@@ -2054,8 +2054,8 @@
       >
         {#key shown}
           <div
-            class="flex min-h-0 animate-(--swap-anim) flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
-            style:--swap-anim={swap.rowAnim(0, ListSwap.leaveEnd(0))}
+            class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+            style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
             out:leave
           >
             {#if shown === "awaiting"}
@@ -2085,8 +2085,8 @@
       style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--space-3)))"
     >
       <div
-        class="relative h-(--ask-h) w-full"
-        style:--ask-h="calc({viewFoot}px + var(--space-4))"
+        class="relative w-full"
+        style:block-size="calc({viewFoot}px + var(--space-4))"
       >
         <Composer
           agentName="Caw"

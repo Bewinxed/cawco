@@ -545,8 +545,8 @@
           <IconFolder
             data-needs-card-mark
             aria-hidden="true"
-            class="size-icon-md flex-none text-(--folder-ink)"
-            style="--folder-ink: var(--mark-{item.project.hue})"
+            class="size-icon-md flex-none"
+            style="color: var(--mark-{item.project.hue})"
           />
           <span data-slot="project-name" class="type-label text-ink-strong"
             >{item.project.name}</span
@@ -631,8 +631,8 @@
           <IconFolder
             data-needs-card-mark
             aria-hidden="true"
-            class="size-icon-md flex-none text-(--folder-ink)"
-            style="--folder-ink: var(--mark-{item.project.hue})"
+            class="size-icon-md flex-none"
+            style="color: var(--mark-{item.project.hue})"
           />
           <span data-slot="project-name" class="type-label text-ink-strong"
             >{item.project.name}</span
@@ -669,8 +669,8 @@
           <IconFolder
             data-needs-card-mark
             aria-hidden="true"
-            class="size-icon-md flex-none text-(--folder-ink)"
-            style="--folder-ink: var(--mark-{item.project.hue})"
+            class="size-icon-md flex-none"
+            style="color: var(--mark-{item.project.hue})"
           />
           <span data-slot="project-name" class="type-label text-ink-strong"
             >{item.project.name}</span

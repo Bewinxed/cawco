@@ -128,9 +128,11 @@
       <li
         data-slot="slot"
         data-held={held === account.id || undefined}
-        class="group relative translate-y-(--carry) data-held:z-2"
+        class="group relative data-held:z-2"
         data-flip={held === account.id ? undefined : ""}
-        style:--carry={held === account.id ? `${carried}px` : undefined}
+        style:transform={held === account.id
+          ? `translateY(${carried}px)`
+          : undefined}
       >
         <button
           data-slot="row"

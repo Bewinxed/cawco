@@ -118,7 +118,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-(--r) border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-surface-fill disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-surface-fill disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
         data-fh="1"
         disabled={!row.online}
         onclick={() => ontoggle(row.id)}
@@ -127,7 +127,7 @@
         style:--h="44px"
         style:--pad-x="8px"
         style:--pad-y="6px"
-        style:--r={radius(index, on)}
+        style:border-radius={radius(index, on)}
         type="button"
       >
         <MachineRow
@@ -139,8 +139,8 @@
           presence={presenceOf(row)}
         />
         <Check
-          class="size-icon-md flex-none transform-(--t) text-ink-strong opacity-(--o) transition-[opacity] dur-toggle ease-out motion-safe:transition-[opacity,transform]"
-          style={`--o:${on ? 1 : 0};--t:scale(${on ? 1 : 0.94})`}
+          class="size-icon-md flex-none text-ink-strong transition-[opacity] dur-toggle ease-out motion-safe:transition-[opacity,transform]"
+          style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
         />
       </button>
     {/each}

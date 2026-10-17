@@ -15,6 +15,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
     type PopoverMember,
@@ -135,10 +136,7 @@
         >
           {#snippet child({ props, wrapperProps, open })}
             <!-- Closing, it lets presses through to the page (floating-presence). -->
-            <div
-              {...wrapperProps}
-              class={open ? "pointer-events-auto" : "pointer-events-none"}
-            >
+            <div {...wrapperProps} style:pointer-events={pressable(open)}>
               <!-- The label names what the trigger holds, so it changes as the
                  reader types or picks inside the surface, and the morph mark
                  changes as the surface retargets. Both are set here, on the
@@ -151,14 +149,14 @@
                 data-morph={morphing ? "" : undefined}
                 id={`${shown?.id}-popover`}
                 role="presentation"
-                class={open ? "pointer-events-auto" : "pointer-events-none"}
+                style:pointer-events={pressable(open)}
                 {@attach shown?.rows
                   ? highlight({ rows: shown.rows })
                   : undefined}
               >
                 <div
-                  class="ns-morph h-(--h)"
-                  style:--h={height ? `${height}px` : undefined}
+                  class="ns-morph"
+                  style:height={height ? `${height}px` : undefined}
                 >
                   <div bind:offsetHeight={height}>
                     {#key shown?.id}

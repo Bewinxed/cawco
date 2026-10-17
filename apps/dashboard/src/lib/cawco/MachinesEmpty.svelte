@@ -100,13 +100,13 @@
             {#each JOIN_WAYS as card, index (card.way)}
               <button
                 aria-haspopup="dialog"
-                class="icon-card animate-(--row-anim)"
+                class="icon-card"
                 data-open={addMachine.open && addMachine.way === card.way
                   ? ""
                   : undefined}
                 onclick={() => addMachine.show(card.way)}
                 type="button"
-                style:--row-anim={enter.rowAnim(index)}
+                style:animation={enter.rowAnim(index)}
               >
                 <CardFace
                   hue={card.hue}

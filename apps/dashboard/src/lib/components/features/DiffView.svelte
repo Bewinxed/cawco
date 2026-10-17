@@ -150,8 +150,8 @@
     {:else}
       {#key attempt}
         <div
-          class="row-start-1 col-start-1 min-w-0 overflow-auto max-h-(--cap) motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
-          style:--cap={cap}
+          class="row-start-1 col-start-1 min-w-0 overflow-auto motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
+          style:max-block-size={cap}
           data-veiled={!drawn || undefined}
           {@attach draw(attempt)}
         ></div>
@@ -164,9 +164,9 @@
           out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
         >
           <Skeleton
-            class="w-full h-(--skeleton-h)"
+            class="w-full"
             radius="flush"
-            style="--skeleton-h: {expected}px"
+            style="height: {expected}px"
           />
         </div>
       {/if}

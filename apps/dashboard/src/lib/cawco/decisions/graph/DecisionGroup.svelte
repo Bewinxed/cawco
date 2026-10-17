@@ -13,10 +13,10 @@
 <!-- literal: inset 0 0 0 1px (frame ring) -->
 <div
   data-slot="decision-group"
-  class="pointer-events-none relative rounded-lg shadow-(--group-ring) h-(--group-h) w-(--group-w)"
+  class="pointer-events-none relative rounded-lg shadow-(--group-ring)"
   style:--group-ring="inset 0 0 0 1px var(--border-control)"
-  style:--group-h="{height}px"
-  style:--group-w="{width}px"
+  style:block-size="{height}px"
+  style:inline-size="{width}px"
 >
   <span
     data-slot="decision-group-label"

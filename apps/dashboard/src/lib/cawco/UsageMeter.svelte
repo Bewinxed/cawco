@@ -518,17 +518,17 @@
                  stand whole inside the cells' clip. -->
             <!-- literal: 16px -->
             <span
-              class="relative h-icon-md min-w-(--mark-min) shrink grow-0 basis-(--marks-basis)"
+              class="relative h-icon-md min-w-(--mark-min) shrink grow-0"
               data-strip-marks
               style:--mark-min="16px"
-              style:--marks-basis="{claude.accounts.length * SLOT - 4}px"
+              style:flex-basis="{claude.accounts.length * SLOT - 4}px"
               {@attach roomFor}
             >
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
-                  style:--slot-at={slotAt(
+                  class="absolute top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
+                  style:inset-inline-start={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
                   )}
@@ -544,10 +544,10 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center type-meta leading-(--more-lh) num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-(--mark-min) place-items-center type-meta leading-(--more-lh) num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:--more-lh="16px"
-                  style:--slot-at={slotAt(
+                  style:inset-inline-start={slotAt(
                     stripMarks.length,
                     stripMarks.length + 1
                   )}>+{stripMore}</span

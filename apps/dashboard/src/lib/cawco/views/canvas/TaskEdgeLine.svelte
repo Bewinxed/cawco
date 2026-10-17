@@ -38,48 +38,36 @@
       borderRadius: 8,
     })
   );
-  /* Svelte Flow's edge path reads `--xy-edge-stroke` and
-     `--xy-edge-stroke-width`; the dashes and the cap are the residual below. */
-  const DASHES: Partial<Record<TaskEdgeKind, string>> = {
-    related: "edge-related",
-    found_in: "edge-found-in",
-  };
-  /** An edge's ink and width, for `--xy-edge-stroke` and `--xy-edge-stroke-width`. */
-  interface Stroke {
-    ink: string;
-    width: string;
-  }
-  /** A landed `after` edge's stroke, muted to the control edge. */
-  const LANDED: Stroke = { ink: "var(--border-control)", width: "1.5px" };
-  /** Every other kind's own stroke; an `after` still waiting takes PLAIN. */
-  const STROKES: Partial<Record<TaskEdgeKind, Stroke>> = {
-    parent: { ink: "var(--nest-ink)", width: "var(--nest-line, 1px)" },
-    related: { ink: "var(--ink-muted)", width: "2px" },
-    found_in: { ink: "var(--ink-subtle)", width: "1px" },
-  };
-  const PLAIN: Stroke = { ink: "var(--ink-muted)", width: "1.5px" };
-  const stroke = $derived(
-    edge.kind === "after" && edge.landed
-      ? LANDED
-      : (STROKES[edge.kind] ?? PLAIN)
-  );
 </script>
 
-<BaseEdge
-  {id}
-  class={DASHES[edge.kind]}
-  markerEnd={edge.kind === "after" ? `url(#${edge.marker})` : undefined}
-  path={route[0]}
-  style="--xy-edge-stroke: {stroke.ink}; --xy-edge-stroke-width: {stroke.width}"
-/>
-
-<style>
-  /* residual: svg-paint */
-  :global(.edge-related) {
-    stroke-dasharray: 0 6;
-    stroke-linecap: round;
-  }
-  :global(.edge-found-in) {
-    stroke-dasharray: 6 4;
-  }
-</style>
+<!-- An edge's paint, inline on its path, one kind's own: it replaces Svelte
+     Flow's `--xy-edge-stroke*` defaults, and a change restyles the path
+     alone. -->
+{#if edge.kind === "parent"}
+  <BaseEdge
+    {id}
+    path={route[0]}
+    style="stroke: var(--nest-ink); stroke-width: var(--nest-line, 1px)"
+  />
+{:else if edge.kind === "related"}
+  <BaseEdge
+    {id}
+    path={route[0]}
+    style="stroke: var(--ink-muted); stroke-width: 2px; stroke-dasharray: 0 6; stroke-linecap: round"
+  />
+{:else if edge.kind === "found_in"}
+  <BaseEdge
+    {id}
+    path={route[0]}
+    style="stroke: var(--ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4"
+  />
+{:else}
+  <BaseEdge
+    {id}
+    markerEnd={`url(#${edge.marker})`}
+    path={route[0]}
+    style={edge.landed
+      ? "stroke: var(--border-control); stroke-width: 1.5px"
+      : "stroke: var(--ink-muted); stroke-width: 1.5px"}
+  />
+{/if}

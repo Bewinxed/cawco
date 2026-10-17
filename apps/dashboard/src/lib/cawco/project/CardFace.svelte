@@ -37,9 +37,9 @@
   <!-- literal: 26px -->
   <span
     data-slot="tile"
-    class="inline-grid size-(--tile) flex-none place-items-center rounded-sm bg-surface-tile text-(color:--tile-hue) shadow-tile"
+    class="inline-grid size-(--tile) flex-none place-items-center rounded-sm bg-surface-tile shadow-tile"
     style:--tile="26px"
-    style:--tile-hue={hue}><Icon /></span
+    style:color={hue}><Icon /></span
   >
   {@render aside?.()}
 </span>

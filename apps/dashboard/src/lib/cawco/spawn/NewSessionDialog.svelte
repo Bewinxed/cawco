@@ -36,6 +36,7 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     machineHue,
     machineIcon,
@@ -1794,12 +1795,7 @@
         class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none! motion-reduce:transition-none!"
       >
         {#snippet child({ props, open: shown })}
-          <div
-            {...props}
-            class="{props.class} {shown
-              ? 'pointer-events-auto'
-              : 'pointer-events-none'}"
-          ></div>
+          <div {...props} style:pointer-events={pressable(shown)}></div>
         {/snippet}
       </DialogPrimitive.Overlay>
       <DialogPrimitive.Content
@@ -1821,12 +1817,7 @@
         bind:ref={card}
       >
         {#snippet child({ props, open: shown })}
-          <div
-            {...props}
-            class="{props.class} {shown
-              ? 'pointer-events-auto'
-              : 'pointer-events-none'}"
-          >
+          <div {...props} style:pointer-events={pressable(shown)}>
             <DialogTitle class="sr-only">New session</DialogTitle>
             {@render formContent()}
           </div>

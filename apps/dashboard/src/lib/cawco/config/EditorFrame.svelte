@@ -149,12 +149,12 @@
     <!-- literal: 980px, 8px, 26px -->
     <div
       data-slot="body"
-      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-(--body-max) py-space-6 px-space-7 rounded-lg bg-surface-raised min-h-(--card-h)"
+      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-(--body-max) py-space-6 px-space-7 rounded-lg bg-surface-raised"
       bind:this={body}
       style:--body-max="980px"
       style:--head-gap="8px"
       style:--tile="26px"
-      style:--card-h={card === null ? undefined : `${card}px`}
+      style:min-height={card === null ? undefined : `${card}px`}
       {@attach cawco.hub === "connected" && !settling
         ? rememberCard(page.url.pathname)
         : undefined}
@@ -172,9 +172,9 @@
         {:else if section}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-(--tile) mt-space-row rounded-sm bg-surface-raised shadow-tile text-(--tile-ink)"
+            class="inline-flex items-center justify-center flex-none size-(--tile) mt-space-row rounded-sm bg-surface-raised shadow-tile"
             data-share="icon:{page.url.pathname}"
-            style:--tile-ink={section.hue}
+            style:color={section.hue}
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
             <section.icon />

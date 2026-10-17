@@ -61,10 +61,7 @@
         class="swap inline-flex items-center gap-(--gap)"
         style:--gap="6px"
       >
-        <Icon
-          class="size-icon-md flex-none text-(--hue)"
-          style={`--hue:${current.hue}`}
-        />
+        <Icon class="size-icon-md flex-none" style={`color:${current.hue}`} />
         <span data-slot="chip-label">{current.name}</span>
       </span>
     {/key}
@@ -92,9 +89,9 @@
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile) text-(--hue)"
-        style:--hue={option.hue}
-        style:--tile="26px"><Icon class="size-icon-md" /></span
+        class="ns-tile size-(--tile)"
+        style:--tile="26px"
+        style:color={option.hue}><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">
         <span data-slot="name" class="type-label block">{option.name}</span>

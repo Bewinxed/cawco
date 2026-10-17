@@ -25,12 +25,8 @@
   style:--gap="8px"
 >
   <!-- literal: 8px -->
-  <div
-    class="flex items-center gap-(--gap)"
-    style:--gap="8px"
-    style:--hue={hue}
-  >
-    <Icon class="size-icon-md flex-none text-(--hue)" />
+  <div class="flex items-center gap-(--gap)" style:--gap="8px">
+    <Icon class="size-icon-md flex-none" style={`color:${hue}`} />
     <span class="type-label">{label}</span>
   </div>
   {#if right}

@@ -101,9 +101,9 @@
   <!-- literal: 980px -->
   <div
     data-slot="body"
-    class="flex max-w-(--body-max) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-7 py-space-6 min-h-(--card-min)"
+    class="flex max-w-(--body-max) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-7 py-space-6"
     style:--body-max="980px"
-    style:--card-min={card === null ? undefined : `${card}px`}
+    style:min-height={card === null ? undefined : `${card}px`}
     {@attach morph()}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >

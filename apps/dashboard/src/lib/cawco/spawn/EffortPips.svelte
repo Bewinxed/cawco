@@ -172,11 +172,9 @@
   style:--pad-y="10px"
 >
   <div
-    class={[
-      "col-start-1 row-start-1 grid content-start opacity-(--o) transition-[opacity] dur-pop ease-out",
-      n ? "pointer-events-auto" : "pointer-events-none",
-    ]}
-    style:--o={n ? 1 : 0.55}
+    class="col-start-1 row-start-1 grid content-start transition-[opacity] dur-pop ease-out"
+    style:opacity={n ? 1 : 0.55}
+    style:pointer-events={n ? "auto" : "none"}
   >
     <div
       data-slot="track"
@@ -200,18 +198,18 @@
     >
       <div
         data-slot="fill"
-        class="pointer-events-none absolute top-0 bottom-0 left-0 flex w-(--w) items-center justify-end rounded-(--r) bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out"
+        class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-(--r) bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out"
         style:--r="calc(var(--radius-md) - 1px)"
-        style:--w={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
+        style:width={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
       >
         <!-- literal: 8px inline padding -->
         <div
           data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num opacity-(--o) shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
           style:--knob-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
-          style:--o={n ? 1 : 0.7}
+          style:opacity={n ? 1 : 0.7}
           style:--pad-x="8px"
           bind:offsetWidth={knobWidth}
         >
@@ -281,13 +279,13 @@
         <!-- literal: 5px dot, -2.5px offset -->
         <span
           data-slot="pip"
-          class="pointer-events-none absolute top-1/2 left-(--left) mt-(--mt) size-(--dot) rounded-pill bg-ink-strong opacity-(--o) transition-[opacity] dur-control ease-out motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
+          class="pointer-events-none absolute top-1/2 mt-(--mt) size-(--dot) rounded-pill bg-ink-strong transition-[opacity] dur-control ease-out motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
           style:--dot="5px"
           style:--pip-durs="var(--ns-fill-ms), var(--dur-control)"
           style:--pip-eases="var(--ease-in-out), var(--ease-out)"
-          style:--left={`calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)))`}
           style:--mt="-2.5px"
-          style:--o={pip.on ? 0.3 : 0}
+          style:left={`calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)))`}
+          style:opacity={pip.on ? 0.3 : 0}
         ></span>
       {/each}
       <input

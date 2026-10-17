@@ -559,10 +559,7 @@
     );
   }
 
-  /**
-   * A row's arrival in the swap, as an `animation` value (the element reads
-   * it as `--swap-anim`); none when it does not move.
-   */
+  /** A row's arrival in the swap, as an `animation` value; none when it does not move. */
   const enterAnim = (key: string): string | undefined => {
     const at = plan?.enter.get(key);
     return at ? swap.rowAnim(at.i, at.notBefore) : undefined;
@@ -628,14 +625,11 @@
   <!-- literal: 22px -->
   <h3
     data-slot="machine"
-    class={[
-      "mark-line mx-0 mt-space-2 mb-space-1 flex min-h-(--machine-min) items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted",
-      anim && "animate-(--swap-anim)",
-      unseen && "opacity-0",
-    ]}
+    class="mark-line mx-0 mt-space-2 mb-space-1 flex min-h-(--machine-min) items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted"
     data-key="head:{group.machineId}"
-    style:--swap-anim={anim}
     style:--machine-min="22px"
+    style:animation={anim}
+    style:opacity={unseen ? "0" : undefined}
   >
     <OsMark class="size-space-4" os={group.os} />
     <span>{group.name}</span>
@@ -690,11 +684,7 @@
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
   <li data-tree-node class="relative" style:--leave={leave}>
-    <div
-      data-slot="tree-line"
-      class={["relative", leave && "animate-(--swap-anim)"]}
-      style:--swap-anim={leave}
-    >
+    <div data-slot="tree-line" class="relative" style:animation={leave}>
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
@@ -949,22 +939,18 @@
                line, inside its machine's box. -->
               {#if entry.kind !== "gone" && more.get(id)}
                 {@const line = more.get(id) as More}
-                {@const arrive = enterAnim(moreKey(id))}
                 <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
                 <!-- literal: 28px; 0.3em -->
                 <button
                   data-slot="more"
-                  class={[
-                    "focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted",
-                    arrive && "animate-(--swap-anim)",
-                  ]}
+                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
                   data-flip={plan ? undefined : ""}
                   data-key={moreKey(id)}
                   data-rail-row
                   onclick={() => fold(id)}
-                  style:--swap-anim={arrive}
                   style:--more-min="28px"
+                  style:animation={enterAnim(moreKey(id))}
                   type="button"
                 >
                   {line.words}
@@ -976,17 +962,14 @@
                   {/if}
                 </button>
               {:else if plan?.more.get(id)}
-                {@const leave = leaveAnim(moreKey(id))}
                 <!-- literal: 28px -->
                 <span
                   data-slot="more"
                   aria-hidden="true"
-                  class={[
-                    "mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted",
-                    leave && "animate-(--swap-anim)",
-                  ]}
-                  style:--swap-anim={leave}
-                  style:--more-min="28px">{plan.more.get(id)}</span
+                  class="mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
+                  style:--more-min="28px"
+                  style:animation={leaveAnim(moreKey(id))}
+                  >{plan.more.get(id)}</span
                 >
               {/if}
             </div>

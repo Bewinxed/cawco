@@ -211,10 +211,10 @@
     {#key shown}
       <div
         data-slot="dview"
-        class="flex min-h-0 animate-(--row-anim) flex-col gap-space-3 group-mode-graph/decisions:flex-auto group-mode-page/decisions:flex-auto data-under-seg:pt-(--seg-pad)"
+        class="flex min-h-0 flex-col gap-space-3 group-mode-graph/decisions:flex-auto group-mode-page/decisions:flex-auto data-under-seg:pt-(--seg-pad)"
         data-under-seg={(graphed && !page) || undefined}
         out:leave
-        style:--row-anim={swap.rowAnim(0, ListSwap.leaveEnd(0))}
+        style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
         style:--seg-pad="calc(var(--seg-h) + var(--space-3))"
       >
         {#if page}

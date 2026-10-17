@@ -70,7 +70,7 @@
   <SheetOverlay bind:ref={scrim} />
   <SheetPrimitive.Content
     class={cn(
-      "pointer-events-auto fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-ink-strong text-label shadow-[var(--shadow-drawer)] data-is-shut:pointer-events-none data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=left]:phone:max-w-96 data-[side=right]:phone:max-w-96 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l",
+      "fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-ink-strong text-label shadow-[var(--shadow-drawer)] data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=left]:phone:max-w-96 data-[side=right]:phone:max-w-96 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l",
       sheetContentVariants({ pad }),
       className
     )}
@@ -86,7 +86,7 @@
     {#snippet child({ props, open })}
       <div
         {...props}
-        data-is-shut={pressable(open) === "none" || undefined}
+        style:pointer-events={pressable(open)}
         style:--sheet-away={AWAY[side]}
       >
         {@render children?.()}

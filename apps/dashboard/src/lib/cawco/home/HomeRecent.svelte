@@ -110,8 +110,8 @@
            tells the reader a running session is in it. -->
       <span data-num data-slot="count" class="num count" data-box>
         <span
-          class="inline-grid w-(--count-w)"
-          style:--count-w="{String(home.recentCount).length}ch"
+          class="inline-grid"
+          style:inline-size="{String(home.recentCount).length}ch"
           ><MorphText text={String(home.recentCount)} /></span
         >
         {#if !recentOpen && home.recentRunning > 0}

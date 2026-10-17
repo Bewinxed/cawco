@@ -433,10 +433,10 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
-          style:--h={`${chosenHeight}px`}
-          style:--o={hiOpacity}
-          style:--shift={`translateY(calc(${modelIdx} * 46px))`}
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-sm bg-surface-fill transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
+          style:transform={`translateY(calc(${modelIdx} * 46px))`}
+          style:height={`${chosenHeight}px`}
+          style:opacity={hiOpacity}
         ></span>
         {#if swap.leaving.length}
           <div
@@ -449,8 +449,8 @@
               <!-- literal: 10px gap, 44px height, 6px 8px padding -->
               <div
                 data-slot="row"
-                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed animate-(--anim) border border-transparent bg-transparent"
-                style:--anim={swap.leaveAnim(i)}
+                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed border border-transparent bg-transparent"
+                style:animation={swap.leaveAnim(i)}
                 style:--gap="10px"
                 style:--h="44px"
                 style:--pad-x="8px"
@@ -526,8 +526,8 @@
                line of their own under it where it cannot (a phone). -->
           <div
             data-slot="option"
-            class="relative flex animate-(--anim) flex-wrap items-center justify-end"
-            style:--anim={swap.rowAnim(i)}
+            class="relative flex flex-wrap items-center justify-end"
+            style:animation={swap.rowAnim(i)}
             {@attach picked && tools ? chosen : undefined}
           >
             <!-- literal: 10px gap, 44px height, 6px 8px padding, 12rem basis -->

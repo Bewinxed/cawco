@@ -40,17 +40,16 @@
     <!-- The layer's blur and its slice (progressive-blur.ts). -->
     <div
       data-slot="layer"
-      class="absolute inset-0 opacity-0 backdrop-filter-(--layer-blur) mask-(--layer-mask)"
-      style:--layer-blur={layerBlur(layer)}
-      style:--layer-mask={layerMask(layer)}
+      class="absolute inset-0 opacity-0"
+      style="-webkit-backdrop-filter: {layerBlur(
+        layer
+      )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
     ></div>
   {/each}
-  <!-- The chosen tab's sheet, over the blur, on the ramp. It sets no blur,
-       so it draws none. -->
+  <!-- The chosen tab's sheet, over the blur, on the ramp. -->
   <div
     data-slot="layer"
-    class="absolute inset-0 opacity-0 bg-tab-sheet backdrop-filter-(--layer-blur) mask-(--layer-mask)"
-    style:--layer-mask="var(--head-tint-ramp)"
+    class="absolute inset-0 opacity-0 bg-tab-sheet mask-(--head-tint-ramp)"
   ></div>
 </div>
 

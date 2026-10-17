@@ -190,7 +190,7 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-(--bits-popover-anchor-width) overflow-hidden min-h-(--reach)"
+    class="w-(--bits-popover-anchor-width) overflow-hidden"
     customAnchor={anchor}
     data-sessions-flyover
     frame="raised"
@@ -202,7 +202,7 @@
     pad="none"
     side="bottom"
     sideOffset={4}
-    style={reach > 0 ? `--reach: ${reach}px` : undefined}
+    style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
     <div data-slot="sessions-chip-card" class="flex flex-col" bind:this={card}>

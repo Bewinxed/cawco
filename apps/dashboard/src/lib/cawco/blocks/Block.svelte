@@ -108,13 +108,13 @@
   data-narrow={width === "narrow" || undefined}
   data-slot="block"
   aria-labelledby={headId}
-  class="group/block relative col-(--block-col) flex min-w-0 flex-col gap-space-2 data-dragging:rounded-lg data-dragging:bg-surface-recess data-dragging:-outline-offset-1 data-dragging:outline-1 data-dragging:outline-border-control data-dragging:outline-dashed"
+  class="group/block relative flex min-w-0 flex-col gap-space-2 data-dragging:rounded-lg data-dragging:bg-surface-recess data-dragging:-outline-offset-1 data-dragging:outline-1 data-dragging:outline-border-control data-dragging:outline-dashed"
   data-block={id}
   data-body={body}
   data-dragging={drag.dragging === id ? "" : undefined}
   data-flip
   data-span={span}
-  style:--block-col="span {span}"
+  style:grid-column="span {span}"
   style:--fill-h-coarse={"calc(var(--block-fill) - var(--c-btn-h-lg) - var(--space-2))"}
   style:--fill-h-fine={"calc(var(--block-fill) - var(--c-btn-h-sm) - var(--space-2))"}
   {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}

@@ -36,16 +36,16 @@
     cy="5"
     pathLength="100"
     r="2.5"
-    style:--share-offset={(100 - shown).toFixed(2)}
     style:--share-origin="5px 5px"
     style:--share-turn="rotate(-90deg)"
+    style:stroke-dashoffset={(100 - shown).toFixed(2)}
   />
 </svg>
 
 <style>
   /* residual: svg-paint — a sector: a stroke as wide as its circle's
      diameter, so it fills the disc from the centre out (as Rings draws its
-     disc), in the rim's own shade. */
+     disc), in the rim's own shade (its offset inline). */
   .share {
     stroke: color-mix(
       in oklch,
@@ -53,6 +53,5 @@
       var(--account-week-toward) calc(var(--account-week-mix) * 100%)
     );
     stroke-dasharray: 100 100;
-    stroke-dashoffset: var(--share-offset);
   }
 </style>

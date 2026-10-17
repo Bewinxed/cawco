@@ -758,10 +758,10 @@
   <!-- literal: 320px, 6px, 10px, -50%, calc(-100% - 8px) -->
   <div
     data-slot="tip"
-    class="fixed z-60 grid gap-space-row max-w-(--tip-max-w) py-(--tip-pad-y) px-(--tip-pad-x) rounded-sm bg-ink-solid text-on-ink type-meta left-(--tip-x) top-(--tip-y) translate-x-(--tip-shift-x) translate-y-(--tip-shift-y) pointer-events-none"
+    class="fixed z-60 grid gap-space-row max-w-(--tip-max-w) py-(--tip-pad-y) px-(--tip-pad-x) rounded-sm bg-ink-solid text-on-ink type-meta translate-x-(--tip-shift-x) translate-y-(--tip-shift-y) pointer-events-none"
     role="tooltip"
-    style:--tip-x={`${tip.x}px`}
-    style:--tip-y={`${tip.y}px`}
+    style:left={`${tip.x}px`}
+    style:top={`${tip.y}px`}
     style:--tip-max-w="320px"
     style:--tip-pad-y="6px"
     style:--tip-pad-x="10px"

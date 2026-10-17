@@ -193,12 +193,12 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute top-0 left-0 h-(--thumb-h) w-(--thumb-w) transform-(--thumb-move) rounded-sm bg-surface-lift opacity-(--thumb-opacity) shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:dur-morph motion-safe:data-placed:ease-in-out"
+    class="pointer-events-none absolute top-0 left-0 rounded-sm bg-surface-lift shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:dur-morph motion-safe:data-placed:ease-in-out"
     data-placed={placed || undefined}
-    style:--thumb-h={thumbBox ? `${thumbBox.h}px` : undefined}
-    style:--thumb-move={translate(thumbBox, "both")}
-    style:--thumb-opacity={thumbBox ? 1 : 0}
-    style:--thumb-w={thumbBox ? `${thumbBox.w}px` : undefined}
+    style:height={thumbBox ? `${thumbBox.h}px` : undefined}
+    style:opacity={thumbBox ? 1 : 0}
+    style:transform={translate(thumbBox, "both")}
+    style:width={thumbBox ? `${thumbBox.w}px` : undefined}
   ></span>
   {#each items as entry, i (entry.id)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a designed radio group; a native radio cannot carry the mark, thumb and travelling label -->
@@ -230,13 +230,13 @@
     <span
       data-slot="tip"
       aria-hidden="true"
-      class="pointer-events-none absolute top-0 left-0 z-5 flex h-(--tip-h) w-(--tip-w) transform-(--tip-move) items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 opacity-(--tip-opacity) shadow-raised transition-[opacity] dur-control ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-top) group-axis-y/rail:left-(--tip-left)"
-      style:--tip-h={tipBox ? `${tipBox.h}px` : undefined}
+      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 shadow-raised transition-[opacity] dur-control ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-top) group-axis-y/rail:left-(--tip-left)"
       style:--tip-left="calc(100% + 6px)"
-      style:--tip-move={translate(tipBox, axis)}
-      style:--tip-opacity={tip >= 0 ? 1 : 0}
       style:--tip-top="calc(100% + 6px)"
-      style:--tip-w="{tipWidth}px"
+      style:height={tipBox ? `${tipBox.h}px` : undefined}
+      style:opacity={tip >= 0 ? 1 : 0}
+      style:transform={translate(tipBox, axis)}
+      style:width="{tipWidth}px"
     >
       {#key shownTip}
         <!-- literal: 6px -->

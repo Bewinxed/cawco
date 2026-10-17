@@ -23,9 +23,8 @@
   {...restProps}
 >
   <div
-    class="size-full flex-1 bg-[var(--brand-solid)] transition-transform duration-[var(--dur-panel)] ease-out transform-(--progress-shift)"
+    class="size-full flex-1 bg-[var(--brand-solid)] transition-transform duration-[var(--dur-panel)] ease-out"
     data-slot="progress-indicator"
-    style:--progress-shift="translateX(-{100 -
-      (100 * (value ?? 0)) / (max ?? 1)}%)"
+    style:transform="translateX(-{100 - (100 * (value ?? 0)) / (max ?? 1)}%)"
   ></div>
 </ProgressPrimitive.Root>

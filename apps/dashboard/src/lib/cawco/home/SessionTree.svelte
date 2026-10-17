@@ -60,9 +60,9 @@
 <li data-tree-node class="relative" data-flip={flip ? "box" : undefined}>
   <div
     data-slot="tree-line"
-    class={["relative", motion && "animate-(--swap-anim)"]}
+    class="relative"
     data-key={row.id}
-    style:--swap-anim={motion}
+    style:animation={motion}
   >
     {#if shape?.parent && shape.depth > 0}
       {@const above = shape.parent}

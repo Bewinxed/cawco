@@ -220,7 +220,7 @@
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
-      class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-space-4 outline-off data-pressable:pointer-events-auto"
+      class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-space-4 outline-off"
       onEscapeKeydown={(event) => {
         event.preventDefault();
         dismiss();
@@ -232,10 +232,7 @@
       restoreScrollDelay={0}
     >
       {#snippet child({ props, open })}
-        <div
-          {...props}
-          data-pressable={pressable(open) === "auto" || undefined}
-        >
+        <div {...props} style:pointer-events={pressable(open)}>
           {@render docView()}
         </div>
       {/snippet}

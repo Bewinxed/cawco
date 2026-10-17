@@ -119,10 +119,10 @@
     <!-- literal: 26px -->
     <span
       data-slot="tile"
-      class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised text-(color:--tile-ink) shadow-tile"
+      class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile"
       data-share={href ? `icon:${href}` : undefined}
       style:--tile="26px"
-      style:--tile-ink={hue ?? "var(--ink-muted)"}
+      style:color={hue}
       {@attach land(() => {
         const key = href ?? share;
         return key ? `icon:${key}` : undefined;

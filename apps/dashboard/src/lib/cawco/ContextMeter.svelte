@@ -167,9 +167,9 @@
         >
           {#each usage.categories as category, index (category.name)}
             <span
-              class="h-full w-(--seg-w) bg-(--seg-bg)"
-              style:--seg-bg={swatch(index)}
-              style:--seg-w="{(category.tokens / usage.totalTokens) * 100}%"
+              class="h-full"
+              style:width="{(category.tokens / usage.totalTokens) * 100}%"
+              style:background-color={swatch(index)}
             ></span>
           {/each}
         </div>
@@ -183,8 +183,8 @@
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 text-label">
             <span
-              class="size-2 shrink-0 rounded-hair bg-(--seg-bg)"
-              style:--seg-bg={swatch(index)}
+              class="size-2 shrink-0 rounded-hair"
+              style:background-color={swatch(index)}
             ></span>
             <span class="min-w-0 flex-1 truncate">{category.name}</span>
             <span class="tabular-nums text-ink-muted"
