@@ -1,6 +1,6 @@
 # Lane S02-cawco-top
 
-19 of 20 files done. **STOP on OpenCodeLogo.svelte** (below).
+20 of 20 files done. No STOPs (delta O applied).
 
 ## Per-file table
 file · rules moved · residual (1 keyframes/2 foreign-dom/3 pseudo/4 svg-paint/5 unmapped) · literals preserved · breakpoint edges
@@ -9,7 +9,7 @@ file · rules moved · residual (1 keyframes/2 foreign-dom/3 pseudo/4 svg-paint/
 |---|---|---|---|---|
 | MachineMenu | 0 (no `<style>`) | 0/0/0/0/0 | | |
 | ModelCombobox | 0 (no `<style>`) | 0/0/0/0/0 | | |
-| OpenCodeLogo | 0 | STOP: 2 colour-literal rules left as found | | |
+| OpenCodeLogo | 2 (colours to token references) | 0/0/0/2/0 | | |
 | PairingScreen | 8 | 0/0/0/0/0 | 100dvh, 80px, 34rem, 26rem | |
 | PeekPane | 3 (+ arbitrary `w-[3px]`) | 0/0/0/0/1 | 3px | |
 | ProjectMark | 1 | 0 | | |
@@ -28,8 +28,12 @@ file · rules moved · residual (1 keyframes/2 foreign-dom/3 pseudo/4 svg-paint/
 | ToolMatrix | 1 | 0/0/0/0/1 | | |
 | UnlockKeychain | 4 (+ arbitrary gaps/min-height) | 0 | | |
 
-## STOP: OpenCodeLogo.svelte
-`apps/dashboard/src/lib/cawco/OpenCodeLogo.svelte:21` `.core { fill: light-dark(#cfcecd, #4b4646); }` and `:24` `.frame { fill: light-dark(#211e1e, #f1ecec); }`. Colour literals (the brand's, not tokens). File left untouched. Needs a decision: brand-colour tokens in the token JSON, or an allowance.
+## needs colour token
+- needs colour token: --opencode-logo-core: light-dark(#cfcecd, #4b4646) (OpenCodeLogo.svelte:21)
+- needs colour token: --opencode-logo-frame: light-dark(#211e1e, #f1ecec) (OpenCodeLogo.svelte:24)
+
+## cross-file hook
+- cross-file hook: MachineMenu.svelte:211 .machine-ask → [data-slot="machine-menu-ask"]; selected by MachinesList.svelte:265
 
 ## Kind-5 declarations (verbatim)
 - PeekPane.svelte `[data-slot="cwd"] { direction: rtl; }` (was `[direction:rtl]`)
@@ -49,7 +53,6 @@ none.
 - `type-title` (StatTile `max-desk:`) and the other `type-*` utilities carry letter-spacing / tabular-nums where the old `font:` shorthand did not (`--track-title` for type-title). Taken as `lane-a.md` maps it.
 
 ## Other reports
-- MachineMenu.svelte:211 `class="machine-ask"` on `<AskHere>`: flagged `no-unknown-classes`, left; MachinesList.svelte uses it as `.list :global(.machine-ask)` (cross-file, STOP rule E).
 - PeekPane.svelte:279 `style={identityVar(cwd)}` flagged `no-inline-styles`: converting to `style:--identity-h={folderPrefs.hue(cwd)}` needs a script/import change; left.
 - Moved onto utilities via a state attribute: `data-hidden` (SessionSurface board/groups), `data-over` (SessionSurface empty-detail), `data-err` (RunSteps line/result).
 - Custom-property moves: `--nest-gap`, `--well-at` (RunSteps), `--fault-indent` / `--fault-end` set on the row's wrapper in StopTray instead of on RowFault's root (RowFault takes no `style:`; they inherit to it).

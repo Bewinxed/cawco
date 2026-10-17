@@ -18,10 +18,11 @@
 </svg>
 
 <style>
+  /* residual: svg-paint */
   .core {
-    fill: light-dark(#cfcecd, #4b4646);
+    fill: var(--opencode-logo-core);
   }
   .frame {
-    fill: light-dark(#211e1e, #f1ecec);
+    fill: var(--opencode-logo-frame);
   }
 </style>
