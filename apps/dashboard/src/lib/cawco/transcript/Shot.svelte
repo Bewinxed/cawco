@@ -234,7 +234,7 @@
     >
       <span>{video ? "Video" : "Image"} not available</span>
       {#if path}
-        <span data-slot="path" class="font-mono wrap-anywhere">{path}</span>
+        <span data-slot="path" class="font-(family-name:--font-mono) wrap-anywhere">{path}</span>
       {/if}
     </div>
   {:else}
@@ -292,7 +292,7 @@
         <span>{caption}</span>
       {/if}
       {#if path}
-        <span data-slot="path" class="font-mono wrap-anywhere">{path}</span>
+        <span data-slot="path" class="font-(family-name:--font-mono) wrap-anywhere">{path}</span>
       {/if}
     </figcaption>
   {/if}

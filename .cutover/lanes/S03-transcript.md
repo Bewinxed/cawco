@@ -52,3 +52,11 @@ Sums: kind 1 = 5, kind 2 = 2, kind 3 = 0, kind 4 = 2, kind 5 = 1.
 
 ## shadcn variant lines
 - none
+
+## Delta R
+- R3 fixed: apps/dashboard/src/lib/cawco/transcript/Shot.svelte:237
+- R3 fixed: apps/dashboard/src/lib/cawco/transcript/Shot.svelte:295
+- R2: no `border: 0` / `border: none` in this lane's files.
+- R1: every box-shadow here is a utility (`shadow-overlay`, `shadow-hairline`); no residual box-shadow, no `shadow kept residual`.
+
+## Contracts
