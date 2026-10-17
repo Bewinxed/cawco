@@ -116,8 +116,10 @@
   >
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
-      class="h-6 w-6 ml-2 shrink-0"
+      class="shrink-0"
       disabled={!drawn || failure !== null}
+      fit="square-24"
+      margin="start-gap"
       onclick={() => {
         showModal = true;
       }}
@@ -162,7 +164,8 @@
           out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
         >
           <Skeleton
-            class="w-full h-(--skeleton-h) rounded-none"
+            class="w-full h-(--skeleton-h)"
+            radius="flush"
             style="--skeleton-h: {expected}px"
           />
         </div>

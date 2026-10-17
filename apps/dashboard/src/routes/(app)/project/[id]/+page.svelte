@@ -1640,13 +1640,13 @@
                 >
                   <IconMore />
                 </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end" class="w-auto min-w-48">
+                <DropdownMenu.Content align="end" class="w-auto">
                   <DropdownMenu.Sub>
                     <DropdownMenu.SubTrigger>
                       <IconLayers />
                       <span>Place on a page</span>
                     </DropdownMenu.SubTrigger>
-                    <DropdownMenu.SubContent class="w-auto min-w-40">
+                    <DropdownMenu.SubContent class="w-auto" min="compact">
                       {#each BLOCK_PAGES as target (target)}
                         <DropdownMenu.Item
                           onSelect={() => placeView(view.name, target)}
@@ -1668,7 +1668,7 @@
         />
       </div>
     {:else}
-      <Skeleton class="h-64 w-full rounded-lg" />
+      <Skeleton class="w-full" height="board" radius="card" />
     {/if}
   {:else if value === "routines" && project}
     <!-- The routines, the strip's fourth tab: a page of blocks. -->
@@ -1713,7 +1713,7 @@
     </div>
   {:else if empty && !adding}
     {#if !lead.view}
-      <Skeleton class="h-48 w-full max-w-144 rounded-lg" />
+      <Skeleton class="w-full" height="chart" radius="card" width="chart-cap" />
     {:else if canTalk}
       <div data-slot="caw-empty" class="mx-auto w-full max-w-(--c-starters-w)">
         <EmptyState line={cawLine} title="Nothing on the board yet">
@@ -1808,7 +1808,7 @@
       tasks={shownTasks}
     />
   {:else}
-    <Skeleton class="h-64 w-full rounded-lg" />
+    <Skeleton class="w-full" height="board" radius="card" />
   {/if}
 {/snippet}
 
@@ -1823,8 +1823,9 @@
     <!-- A phone: the task is its own page, with Back to the view. -->
     <div
       data-slot="project-page"
-      class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)"
+      class="flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)"
       style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
+      style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
     >
       <TaskPane
         {allowedFrom}
@@ -1843,13 +1844,17 @@
   {:else}
     <!-- The frame the phone's views bar docks in, over the page's foot. -->
     <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <!-- A phone: the page is the one scroller, so iOS never chains two. The
+           foot's edge fade ends at the bar's top edge, a step of air under
+           the reach. -->
       <div
         data-slot="project-page"
         class={[
-          "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach)",
+          "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:fade-inset-end-(--bar-fade-inset)",
           fadeOn === "page" && "kit-edge-fade-block",
         ]}
         style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
+        style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
       >
         <ProjectHead
           bind:this={head}
@@ -2031,8 +2036,8 @@
             style:--card-h="54px"
           >
             <Skeleton class="h-space-4 w-3/5" />
-            <Skeleton class="h-(--card-h) w-full rounded-sm" />
-            <Skeleton class="h-(--card-h) w-full rounded-sm" />
+            <Skeleton class="h-(--card-h) w-full" radius="chip" />
+            <Skeleton class="h-(--card-h) w-full" radius="chip" />
           </div>
         {/each}
       </div>
@@ -2049,7 +2054,7 @@
             out:leave
           >
             {#if shown === "awaiting"}
-              <Skeleton class="h-64 w-full rounded-lg" />
+              <Skeleton class="w-full" height="board" radius="card" />
             {:else}
               {@render pane(shown)}
             {/if}
@@ -2139,13 +2144,6 @@
     /* residual: foreign-dom */
     [data-slot="project-page"] > :global(*) {
       flex-shrink: 0;
-    }
-    /* residual: unmapped — a custom property under a query (needs shared utility) */
-    /* A phone: the page is the one scroller, so iOS never chains two. The
-       foot's edge fade ends at the bar's top edge, a step of air under the
-       reach (--bar-reach, set on the page). */
-    [data-slot="project-page"] {
-      --fade-inset-end: calc(var(--bar-reach) - var(--space-3));
     }
   }
 </style>

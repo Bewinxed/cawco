@@ -411,7 +411,7 @@
         />
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-auto min-w-44">
+    <DropdownMenu.Content align="end" class="w-auto" min="regular">
       {#each SERVICES as service (service.service)}
         <DropdownMenu.Item onSelect={() => startAdding(service)}>
           <ProviderLogo provider={service.service} />
@@ -729,7 +729,7 @@
     }
   }
 >
-  <Popover.Content align="end" class="w-64" customAnchor={chooseAnchor}>
+  <Popover.Content align="end" customAnchor={chooseAnchor} width="narrow">
     {#if choosing}
       {@const row = choosing}
       <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">

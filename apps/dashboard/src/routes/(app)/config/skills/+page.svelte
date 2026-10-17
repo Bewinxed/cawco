@@ -530,7 +530,7 @@
                     role="status"
                   >
                     {#each [0, 1] as line (line)}
-                      <Skeleton class="h-10 w-full" />
+                      <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else}
@@ -627,7 +627,7 @@
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
-                      <Skeleton class="h-10 w-full" />
+                      <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else if unread[row.name]}

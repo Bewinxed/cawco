@@ -349,7 +349,8 @@
       <Textarea
         data-note
         aria-label="Add a note for the session"
-        class="max-h-(--note-max-h) min-h-c-composer-field min-w-0 flex-auto border-transparent bg-transparent px-0 py-space-2 leading-(--note-leading) shadow-none coarse:text-(length:--note-fs) max-phone:text-(length:--note-fs) placeholder-shown:truncate"
+        class="max-h-(--note-max-h) min-h-c-composer-field flex-auto"
+        look="note"
         style="--note-max-h: 200px; --note-leading: 1.25; --note-fs: max(16px, var(--text-body))"
         oninput={() => {
           refusal = null;
@@ -366,10 +367,11 @@
       />
       <Button
         aria-label="Send"
-        class="size-c-composer-field flex-none rounded-xs"
+        class="size-c-composer-field flex-none"
         disabled={!note.trim()}
         icon={IconSend}
         pending={sendingNote}
+        shape="inset"
         size="icon"
         style="--btn-icon: 16px"
         type="submit"
@@ -379,12 +381,13 @@
         <span class="flex flex-none overflow-hidden">
           <Button
             data-primary
-            class="h-c-composer-field rounded-xs"
+            class="h-c-composer-field"
             {failed}
             label={primary.label}
             onclick={() => act(primary.act)}
             pending={acting || shown?.state === "making"}
             pendingLabel={primary.pendingLabel}
+            shape="inset"
           />
         </span>
       {/if}

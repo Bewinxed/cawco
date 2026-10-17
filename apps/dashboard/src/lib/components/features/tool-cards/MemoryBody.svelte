@@ -196,7 +196,7 @@
 >
   {#if (writes && written !== undefined) || removes}
     {#if before.kind === "loading"}
-      <Skeleton class="h-20 w-full" />
+      <Skeleton class="w-full" height="block" />
     {:else if before.kind === "missing"}
       <p class="text-size-label text-ink-muted" role="alert">
         The version this {removes ? "removed" : "replaced"} can't be shown:

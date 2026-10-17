@@ -752,7 +752,10 @@
             {#if narrow.current}
               {@render canvas()}
             {:else}
-              <Resizable.PaneGroup class="min-h-0 flex-1" direction="horizontal"
+              <Resizable.PaneGroup
+                class="flex-1"
+                direction="horizontal"
+                height="shrink"
                 ><Resizable.Pane
                   collapsedSize={railSize}
                   collapsible
@@ -884,7 +887,7 @@
        drawn on (from the bottom for the settings), and follows a drag 1:1
        back out. -->
   <Drawer.Root direction={inspectorSide} bind:open={inspectorOpen}>
-    <Drawer.Content class="min-h-0">
+    <Drawer.Content height="shrink">
       <Drawer.Title class="sr-only">Workflow inspector</Drawer.Title>
       <Drawer.Description class="sr-only"
         >Edit the selected node or workflow settings.</Drawer.Description

@@ -124,7 +124,7 @@
        twice (its head and body hidden). -->
   <header
     data-slot="block-head"
-    class="mark-line press-tint flex min-h-c-btn-h-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none group-data-dragging/block:invisible coarse:min-h-c-btn-h-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-overlay"
+    class="mark-line press-tint flex min-h-c-btn-h-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-c-btn-h-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-overlay"
     {@attach dragHead(drag, () => ({ block: id, page }))}
   >
     <span
@@ -163,7 +163,7 @@
         >
           <IconMore />
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-auto min-w-48">
+        <DropdownMenu.Content align="end" class="w-auto">
           <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
             <IconArrowUp />
             <span>Move up</span>
@@ -214,7 +214,7 @@
   <div
     data-card={card || undefined}
     data-slot="block-body"
-    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-c-block-body-max group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-tile"
+    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-c-block-body-max group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden group-not-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-tile"
   >
     {@render children()}
   </div>
@@ -236,10 +236,6 @@
   [data-slot="glyph"] :global(svg) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-  }
-  /* residual: unmapped */
-  [data-slot="block-head"] {
-    -webkit-touch-callout: none;
   }
   /* residual: pseudo */
   [data-slot="drop"]::before {

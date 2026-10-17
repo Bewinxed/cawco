@@ -93,8 +93,9 @@
       problem={refused}
     >
       <NativeSelect
-        class="w-full max-w-96"
+        class="w-full"
         id="spend-on-cap"
+        measure="cap-md"
         onchange={(event) =>
           choose((event.currentTarget as HTMLSelectElement).value as OnCap)}
         value={onCap ?? ""}

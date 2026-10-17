@@ -182,6 +182,7 @@
           data-toggle
           aria-controls="{fid}-others"
           aria-expanded={open}
+          expanded="unfilled-at-rest"
           onclick={() => {
             open = !open;
           }}
@@ -211,7 +212,7 @@
       >
         <div
           data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
         >
           <div class="flex flex-col gap-space-2 pt-space-3">
             {#if card.why}
@@ -252,10 +253,5 @@
   /* residual: foreign-dom */
   [data-slot="fold-row"] :global([data-chev] path) {
     vector-effect: non-scaling-stroke;
-  }
-  /* residual: unmapped */
-  [data-slot="fold-row"]
-    :global([data-toggle][aria-expanded="true"]:not(:hover)) {
-    background-color: transparent;
   }
 </style>

@@ -113,8 +113,9 @@
       problem={mode === "port" ? refused : undefined}
     >
       <NativeSelect
-        class="w-full max-w-96"
+        class="w-full"
         id="preview-mode"
+        measure="cap-md"
         onchange={(event) => {
           mode = (event.currentTarget as HTMLSelectElement).value as
             "port" | "host";
@@ -137,8 +138,9 @@
       >
         <Input
           autocomplete="off"
-          class="w-full max-w-96"
+          class="w-full"
           id="preview-pattern"
+          measure="cap-md"
           placeholder={"https://p-{port}.example.com"}
           spellcheck={false}
           bind:value={pattern}

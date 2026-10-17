@@ -332,7 +332,7 @@
               >
               <IconChevronDown />
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end" class="w-auto min-w-48">
+            <DropdownMenu.Content align="end" class="w-auto">
               {#each hidden as place (place.block)}
                 <DropdownMenu.Item
                   onSelect={() =>
