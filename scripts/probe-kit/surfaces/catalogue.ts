@@ -19,8 +19,8 @@ import { DELEGATE_TITLE, type Scene, STUDIO_HOST, type Variant } from "./scene";
 export type Width = "desk" | "tablet" | "phone";
 
 export interface State {
-  /** What opens it, on its route freshly loaded (the walk loads each state's route anew). */
-  act?: (page: Page) => Promise<unknown>;
+  /** What opens it, on its route freshly loaded (the walk loads each state's route anew), with the scene's ids. */
+  act?: (page: Page, scene: Scene) => Promise<unknown>;
   /**
    * It stands on the scene's delegate, which only a host records (a
    * workspace has no user namespaces): read only from a tape whose scene
@@ -121,6 +121,8 @@ const BULK_LABEL = /^Label$/;
 /** The project head's More menu, and its stages picker. */
 const PROJECT_MORE = /More for cawco/;
 const PICK_STAGES = /Pick stages/;
+/** A column's way to a new task (NewTaskForm, closed). */
+const ADD_TASK = /^Add task$/;
 /** The board's Archived rail, folded. */
 const ARCHIVED_RAIL = /^Archived, /;
 /** A task sheet's Details tab, beside Review. */
@@ -444,6 +446,119 @@ const composerFails = async (page: Page) => {
   await page.locator("[data-region-failed=composer]").first().waitFor();
 };
 
+declare global {
+  interface Window {
+    /** Set by `caughtUp`: the rebuild scheduler's turns skipped (`holdableTurns`). */
+    probeTurnsHeld?: true;
+  }
+}
+
+/** How often an unfocused pane's turn comes round (workspace/scheduler.svelte.ts `CADENCE`): the one interval at it. */
+const TURN_MS = 250;
+
+/**
+ * In the page, before it loads: every interval at `ms` (the rebuild
+ * scheduler's one timer) skips its turns while `probeTurnsHeld` is set, so
+ * a tab behind the one shown keeps the rows it built and none of what came
+ * since (Transcript.svelte: an unfocused pane builds only on its turn).
+ */
+function holdableTurns(ms: number): void {
+  const real = window.setInterval.bind(window);
+  window.setInterval = ((
+    handler: TimerHandler,
+    delay?: number,
+    ...rest: unknown[]
+  ) =>
+    real(
+      typeof handler === "function" && delay === ms
+        ? (...args: unknown[]) => {
+            if (!window.probeTurnsHeld) {
+              handler(...args);
+            }
+          }
+        : handler,
+      delay,
+      ...rest
+    )) as typeof window.setInterval;
+}
+
+/** What the transcript says while it catches up (CatchUp's words). */
+const CATCHING_UP = "Catching up";
+/** Where the pointer rests: over the shown transcript, never the strip (a tab under it builds its pane: PaneTabs `onpointerenter`). */
+const REST_AT = { x: 900, y: 500 };
+
+/** The deploy push's permission on its needs card (NeedsCard's Approve). */
+const APPROVE_PUSH = /^Approve .+ on Approve the deploy push$/;
+
+/** How long the push's session takes to answer its approval: its tool run and its reply. */
+const ANSWER_MS = 3000;
+
+/**
+ * A tab switched to whose session moved on behind the tab shown: the
+ * switch paints the rows it kept, and "Catching up…" stands over them
+ * until the catch-up appends, one frame later (Transcript.svelte `hold`).
+ *
+ * The deploy push's session (the route) is put behind the chips session's
+ * tab and built there. Its scheduler turns are then held (`holdableTurns`),
+ * and its permission approved from the needs panel: the hub answers with
+ * its turn (recorded on the `written` hub), which its rows have not built.
+ * Its tab is activated as Enter activates it, with no pointer on the strip
+ * (a tab under the pointer builds its pane: PaneTabs `prepare`), and the
+ * frame callbacks it asks for are taken and never run until the line is
+ * drawn: the catch-up's release waits on one, so the line stays.
+ */
+const caughtUp = async (page: Page, scene: Scene) => {
+  const behind = scene.permission;
+  await page.mouse.move(REST_AT.x, REST_AT.y);
+  await page.context().addInitScript(holdableTurns, TURN_MS);
+  await page.goto(new URL(`/session/${scene.chips}`, page.url()).href, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForFunction(() => window.kitHydrated === true);
+  // Built behind the shown tab (PaneLeaf mounts the others once the strip
+  // is left alone, SessionPane builds a hidden one on its turn), and a turn
+  // or two after it.
+  await page
+    .locator(`[data-pane="${behind}"] [role=log]`)
+    .waitFor({ state: "attached" });
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => {
+    window.probeTurnsHeld = true;
+  });
+  await page.click("[data-needs-caw]");
+  await page
+    .getByRole("button", { name: APPROVE_PUSH })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page.waitForTimeout(ANSWER_MS);
+  await page.keyboard.press("Escape");
+  await page.mouse.move(REST_AT.x, REST_AT.y);
+  await page.evaluate(
+    async ({ id, words }) => {
+      const frame = window.requestAnimationFrame;
+      window.requestAnimationFrame = () => 0;
+      try {
+        document
+          .querySelector<HTMLElement>(`[data-session-tab="${CSS.escape(id)}"]`)
+          ?.click();
+        for (
+          let wait = 0;
+          wait < 100 && !document.body.innerText.includes(words);
+          wait += 1
+        ) {
+          // biome-ignore lint/performance/noAwaitInLoops: polled until the line is drawn
+          await new Promise((done) => setTimeout(done, 30));
+        }
+      } finally {
+        window.requestAnimationFrame = frame;
+      }
+    },
+    { id: behind, words: CATCHING_UP }
+  );
+  await page.getByText(CATCHING_UP).first().waitFor();
+};
+
 const BENCHES: [string, string][] = [
   ["caw", "/motion/caw"],
   ["caw-notices", "/motion/caw-notices?fixture=full"],
@@ -561,9 +676,10 @@ const EDITORS: Record<string, State[]> = {
       root: "body",
     },
     {
-      // The fleet not read yet: the section's skeleton rows. Last (its route stays).
+      // The fleet not read yet: the section's skeleton rows, the hub's
+      // answer held back on its tape (scene.ts `HOLDS`).
       name: "reading",
-      act: reloadedWith((page) => page.route("**/api/fleet", () => undefined)),
+      hub: "reading",
       root: "body",
     },
   ],
@@ -692,12 +808,10 @@ export const SURFACES: Surface[] = [
         root: "body",
       },
       {
-        // The hub's socket open and silent: the status line, on the way.
-        // Last (its route stays).
+        // The hub's socket open and silent on its tape (scene.ts `HOLDS`):
+        // the status line, on the way.
         name: "connecting",
-        act: reloadedWith((page) =>
-          page.routeWebSocket(DASHBOARD_SOCKET, () => undefined)
-        ),
+        hub: "silent",
         root: "body",
       },
     ],
@@ -1045,6 +1159,8 @@ export const SURFACES: Surface[] = [
         root: MAIN,
         widths: ["desk"],
       },
+      // A column's Add task pressed: the new task's form, open in its column.
+      { name: "new-task", act: press(ADD_TASK), root: MAIN },
       // The Archived rail open, the bulk bar's two popovers, the stages picker.
       { name: "archive", act: press(ARCHIVED_RAIL), root: MAIN },
       {
@@ -1395,6 +1511,23 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: (s) => `/session/${s.chips}`,
     states: [{ name: "composer", act: composerFails, root: "body" }],
+  },
+  {
+    // A tab switched to with more to draw than it built: "Catching up…"
+    // over the rows it kept. Its own surface: the page's turns stay held.
+    name: "catch-up",
+    serve: "built",
+    route: (s) => `/session/${s.permission}`,
+    // It answers the push's permission, so it reads the hub writes leave.
+    states: [
+      {
+        name: "switch",
+        hub: "written",
+        act: caughtUp,
+        root: MAIN,
+        widths: ["desk"],
+      },
+    ],
   },
   {
     name: "not-found",

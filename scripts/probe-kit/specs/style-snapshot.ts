@@ -54,6 +54,7 @@ import { chosen, type Surface } from "../surfaces/catalogue";
 import { PROPS, readSurface } from "../surfaces/read";
 import {
   enterVariant,
+  HOLDS,
   sceneHub,
   scriptedReply,
   seedScene,
@@ -303,7 +304,13 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
       }
       // biome-ignore lint/performance/noAwaitInLoops: the fleet moves from one hub state to the next
       await enterVariant(fleet, hub);
-      const section: TapeHub = { http: [], preview: [], sockets: [] };
+      const held = HOLDS[hub];
+      const section: TapeHub = {
+        http: [],
+        preview: [],
+        sockets: [],
+        ...(held ? { held } : {}),
+      };
       await recordOn(section, reading);
       tape.variants = { ...tape.variants, [hub]: section };
     }

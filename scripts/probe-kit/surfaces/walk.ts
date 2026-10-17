@@ -315,6 +315,36 @@ export interface Visit {
   surface: Surface;
 }
 
+/** `state` on its route freshly loaded at `base`, hydrated, its act done, standing still. */
+async function opened(
+  page: Page,
+  base: string,
+  surface: Surface,
+  state: State,
+  scene: Scene
+): Promise<void> {
+  const route = (state.route ?? surface.route)(scene);
+  await open(
+    page,
+    `${base}${route}`,
+    () => window.kitHydrated === true,
+    60_000
+  );
+  // The dev server built the route's modules for that load: loaded again,
+  // the page hydrates on modules already built.
+  if (surface.serve === "dev") {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.kitHydrated === true);
+  }
+  await hydrated(page, "body");
+  await arrive(page);
+  if (state.act) {
+    await state.act(page, scene);
+    await stand(page);
+    await hydrated(page, state.root);
+  }
+}
+
 /**
  * Walks `surfaces` at `passes`, handing each state to `visit` once it
  * stands still. A state that cannot open (its control gone) is reported to
@@ -357,27 +387,8 @@ export async function walk(
         for (const state of states) {
           const what = `${surface.name}/${state.name} · ${pass.name}`;
           try {
-            const route = (state.route ?? surface.route)(scene);
             // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
-            await open(
-              page,
-              `${base}${route}`,
-              () => window.kitHydrated === true,
-              60_000
-            );
-            // The dev server built the route's modules for that load: loaded
-            // again, the page hydrates on modules already built.
-            if (surface.serve === "dev") {
-              await page.reload({ waitUntil: "domcontentloaded" });
-              await page.waitForFunction(() => window.kitHydrated === true);
-            }
-            await hydrated(page, "body");
-            await arrive(page);
-            if (state.act) {
-              await state.act(page);
-              await stand(page);
-              await hydrated(page, state.root);
-            }
+            await opened(page, base, surface, state, scene);
             await visit({ page, pass, state, surface });
           } catch (error) {
             failed(what, String(error).split("\n")[0] ?? "");

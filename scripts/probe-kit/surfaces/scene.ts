@@ -45,6 +45,7 @@ import {
 import { seedDecisions } from "../../decisions-preview/seed";
 import type { Machine, Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
+import type { TapeHold } from "../hub-tape";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet } from "../kit";
 import { type McpOauthMock, mcpOauthMock, signIn } from "../mcp-oauth-mock";
@@ -811,8 +812,10 @@ export interface Scene {
 
 /**
  * The hub states the scene moves the fleet into once the main recording is
- * done, in this order (each leaves the fleet in it): composer suggestions
- * switched on; `written`, the hub as states that write to it leave it (an
+ * done, in this order (each leaves the fleet in it): `reading`, the scene's
+ * hub not yet answering Configure's fleet read, and `silent`, its socket
+ * open and nothing said on it yet (each held at play: {@link HOLDS});
+ * composer suggestions switched on; `written`, the hub as states that write to it leave it (an
  * account made, a key sent), kept apart so no other state reads what they
  * wrote; `moving`, a move nobody said yes to parked on its approval (the
  * scene's `moving`: its session); every machine offline; every machine
@@ -821,6 +824,8 @@ export interface Scene {
  * (hub-tape.ts `variants`).
  */
 export const VARIANTS = [
+  "reading",
+  "silent",
   "suggesting",
   "written",
   "moving",
@@ -829,6 +834,17 @@ export const VARIANTS = [
   "pairing",
 ] as const;
 export type Variant = (typeof VARIANTS)[number];
+
+/**
+ * What a hub state's tape holds back at play, recorded answered
+ * (hub-tape.ts `held`): Configure's read of the fleet, whose skeleton rows
+ * stand until it lands (SectionFrame); the dashboard's socket, whose status
+ * line says the hub is on its way until it speaks (StatusLine).
+ */
+export const HOLDS: Partial<Record<Variant, TapeHold>> = {
+  reading: { http: ["/api/fleet"], sockets: [] },
+  silent: { http: [], sockets: ["/ws/dashboard"] },
+};
 
 /** Moves the scene's fleet into `variant` (after the ones before it in {@link VARIANTS}). */
 export async function enterVariant(
@@ -851,6 +867,10 @@ export async function enterVariant(
   }
   if (variant === "written") {
     // Nothing moves: its states' own acts write to the hub.
+    return;
+  }
+  if (variant === "reading" || variant === "silent") {
+    // Nothing moves: recorded as the scene's hub, its tape holds back at play.
     return;
   }
   if (variant === "moving") {
@@ -957,7 +977,11 @@ async function startMove(fleet: KitFleet): Promise<void> {
     id: string;
     targetInstanceId: string;
   };
-  type Job = { askId?: string; id: string; stage: string };
+  interface Job {
+    askId?: string;
+    id: string;
+    stage: string;
+  }
   const job = () =>
     fleet
       .api<Job[]>("/api/moves")
