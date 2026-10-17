@@ -240,20 +240,22 @@
           onSelect={() => choose(artifact)}
         >
           <Glyph />
-          <span
-            data-slot="row-name"
-            class="row-name"
-            id={part(artifact.id, "name")}>{artifact.name}</span
-          >
-          {#if artifact.promoted}
+          <span class="row-text" data-box>
             <span
-              data-slot="row-promoted"
-              class="row-promoted"
-              id={part(artifact.id, "promoted")}
-              title="Promoted into the project's folder at artifacts/{artifact.name}/"
-              >Promoted {artifact.promoted.commit.slice(0, 7)}</span
+              data-slot="row-name"
+              class="row-name"
+              id={part(artifact.id, "name")}>{artifact.name}</span
             >
-          {/if}
+            {#if artifact.promoted}
+              <span
+                data-slot="row-promoted"
+                class="row-promoted"
+                id={part(artifact.id, "promoted")}
+                title="Promoted into the project's folder at artifacts/{artifact.name}/"
+                >Promoted {artifact.promoted.commit.slice(0, 7)}</span
+              >
+            {/if}
+          </span>
           {#if artifact.createdAt}
             <span
               data-slot="row-age"
@@ -309,9 +311,15 @@
   /* The name is what a row is chosen by: it keeps its own width, and in a
      row too narrow for everything the promoted tag gives up its room first
      (its title and the row's name still say it). */
-  .row-name {
+  .row-text {
+    display: flex;
     flex: 1 1 auto;
+    gap: inherit;
     min-width: 0;
+  }
+  .row-name {
+    flex: 0 0 auto;
+    max-inline-size: 100%;
     overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -324,7 +332,7 @@
     font-variant-numeric: tabular-nums;
   }
   .row-promoted {
-    flex-shrink: 100;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: clip;
     text-overflow: ellipsis;
