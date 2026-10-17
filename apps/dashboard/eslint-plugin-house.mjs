@@ -1411,6 +1411,32 @@ function recipeDefinition(name, text, file, imports) {
   return target ? exportedRecipe(target, binding.imported, 0) : null;
 }
 
+const QUOTES = new Set(['"', "'", "`"]);
+
+/**
+ * The last character of the string, template or comment that starts at
+ * `i`, or `i` itself where none does.
+ */
+function tokenEnd(text, i) {
+  const ch = text[i];
+  if (ch === "/" && text[i + 1] === "/") {
+    const end = text.indexOf("\n", i);
+    return end === -1 ? text.length : end;
+  }
+  if (ch === "/" && text[i + 1] === "*") {
+    const end = text.indexOf("*/", i + 2);
+    return end === -1 ? text.length : end + 1;
+  }
+  if (!QUOTES.has(ch)) {
+    return i;
+  }
+  let j = i + 1;
+  while (j < text.length && text[j] !== ch) {
+    j += text[j] === "\\" ? 2 : 1;
+  }
+  return j;
+}
+
 /**
  * The arguments of the call whose `(` opens at `open`, read as script, not
  * as a selector: a parenthesis or quote inside a string, a template or a
@@ -1418,26 +1444,10 @@ function recipeDefinition(name, text, file, imports) {
  */
 function callArguments(text, open) {
   let depth = 0;
-  for (let i = open; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === "/" && text[i + 1] === "/") {
-      i = text.indexOf("\n", i);
-      if (i === -1) {
-        break;
-      }
-    } else if (ch === "/" && text[i + 1] === "*") {
-      i = text.indexOf("*/", i + 2) + 1;
-      if (i === 0) {
-        break;
-      }
-    } else if (ch === '"' || ch === "'" || ch === "`") {
-      i += 1;
-      while (i < text.length && text[i] !== ch) {
-        i += text[i] === "\\" ? 2 : 1;
-      }
-    } else if (ch === "(") {
+  for (let i = open; i < text.length; i = tokenEnd(text, i) + 1) {
+    if (text[i] === "(") {
       depth += 1;
-    } else if (ch === ")") {
+    } else if (text[i] === ")") {
       depth -= 1;
       if (depth === 0) {
         return text.slice(open + 1, i);
@@ -1467,9 +1477,7 @@ function recipeClasses(expression, text, file, imports, props = new Map()) {
     const [first, second] = call?.arguments ?? [];
     const recipe =
       found.match[1] === "tv" ? recipeOf(first) : recipeOf(second, first);
-    const gate = props.get(
-      expression.slice(0, called.index).match(GATED)?.[1]
-    );
+    const gate = props.get(expression.slice(0, called.index).match(GATED)?.[1]);
     if (gate) {
       recipe.classes = recipe.classes.map((c) => ({
         ...c,
@@ -1518,29 +1526,29 @@ function componentImports(ast) {
   return bindings;
 }
 
+/** The `{ … } = $props()` pattern of a component's instance script, if any. */
+function propsPattern(ast) {
+  for (const statement of ast.instance?.content.body ?? []) {
+    const declarator = (statement.declarations ?? []).find(
+      (d) => d.init?.callee?.name === "$props" && d.id.type === "ObjectPattern"
+    );
+    if (declarator) {
+      return declarator.id;
+    }
+  }
+  return null;
+}
+
 /** A component's props by local name, from its `$props()` destructuring. */
 function propLocals(ast) {
   const locals = new Map();
-  for (const statement of ast.instance?.content.body ?? []) {
-    for (const declarator of statement.declarations ?? []) {
-      if (
-        declarator.init?.callee?.name !== "$props" ||
-        declarator.id.type !== "ObjectPattern"
-      ) {
-        continue;
-      }
-      for (const property of declarator.id.properties) {
-        const value =
-          property.value?.type === "AssignmentPattern"
-            ? property.value.left
-            : property.value;
-        if (property.type === "Property" && value?.type === "Identifier") {
-          locals.set(
-            value.name,
-            property.key.name ?? String(property.key.value)
-          );
-        }
-      }
+  for (const property of propsPattern(ast)?.properties ?? []) {
+    const value =
+      property.value?.type === "AssignmentPattern"
+        ? property.value.left
+        : property.value;
+    if (property.type === "Property" && value?.type === "Identifier") {
+      locals.set(value.name, property.key.name ?? String(property.key.value));
     }
   }
   return locals;

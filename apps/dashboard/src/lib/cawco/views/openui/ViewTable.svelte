@@ -63,10 +63,8 @@
         <Table.Row variant="band">
           {#each group.headers as header (header.id)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              class="h-c-toolbar-ctl"
-              scope="col"
-              variant="caps">{header.column.columnDef.header}</Table.Head
+            <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+              >{header.column.columnDef.header}</Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the head above -->
           {/each}
