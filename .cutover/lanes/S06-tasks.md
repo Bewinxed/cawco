@@ -49,7 +49,7 @@ None.
 
 - shadcn variant: TaskColumn.svelte:85 data-closed opacity (`data-closed:opacity-50`, from `.column[data-closed] { opacity: 0.5 }`)
 
-## shadcn/no-restyle hits (file:line, component, class): 43
+## shadcn/no-restyle hits (file:line, component, class): 42
 
 ```
 BulkBar.svelte:153 <Button> pressable
