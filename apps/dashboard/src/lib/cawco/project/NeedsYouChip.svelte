@@ -41,5 +41,5 @@
     class="size-icon-md text-status-attn-glyph"
   />
   <span>Needs you</span>
-  <span data-slot="num" class="text-status-attn-ink">{count}</span>
+  <span data-slot="num" class="num text-status-attn-ink">{count}</span>
 </button>
