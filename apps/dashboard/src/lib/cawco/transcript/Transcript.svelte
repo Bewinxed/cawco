@@ -3388,7 +3388,7 @@
 <p
   aria-atomic="true"
   aria-live="polite"
-  class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
+  class="sr-only border-none border-current"
   role="status"
 >
   {announcement}
@@ -3396,7 +3396,7 @@
 <p
   aria-atomic="true"
   aria-live="assertive"
-  class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
+  class="sr-only border-none border-current"
 >
   {blockedNote || trayAlert}
 </p>
@@ -3406,13 +3406,17 @@
      (`.foot`), which what floats over it stands on, is --foot-room. What
      scrolls here is its own stacking context, so nothing in it (a row's
      raised mark, a card's z-index) rises over the pane's fades (FootFade,
-     HeadFade): every child but the dock is isolated. -->
+     HeadFade): every child but the dock is isolated. The view is kept in
+     place by this component alone (`keepPlace`, and virtua inside its
+     list): a browser that anchors scrolling moved it a second time for the
+     strip before the list. Its scroll drives the pane's head blur
+     (HeadFade), which the pane brings in scope with `timeline-scope`. -->
 <div
   data-tx-columns
   data-slot="tr"
   aria-label="Session transcript"
   style:--foot-room={"max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"}
-  class="flex-auto overflow-y-auto py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
+  class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   {onscroll}
   role="log"
   bind:this={scroller}
@@ -3653,7 +3657,7 @@
        not-caught-up line over them. -->
   <div
     data-slot="dock"
-    class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col items-center gap-space-2 pointer-events-none"
+    class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight + shelfHeight}px"
     style:--dock-bottom={"calc(var(--foot-room) + var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))))"}
@@ -3681,7 +3685,7 @@
       </p>
     {/if}
     {#if catching || showLatest}
-      <div class="pills flex justify-center gap-space-2">
+      <div class="flex justify-center items-box-end gap-space-2">
         {#if catching}
           <CatchUp />
         {/if}
@@ -3737,25 +3741,5 @@
   [data-slot="livetool"] [data-slot="rail-cell"] :global(svg) {
     inline-size: var(--w-glyph);
     block-size: var(--w-glyph);
-  }
-  /* residual: unmapped: no utility for these. The view is kept in place by
-     this component alone (`keepPlace`, and virtua inside its list): a
-     browser that anchors scrolling moved it a second time for the strip
-     before the list. Its scroll drives the pane's head blur (HeadFade),
-     which the pane brings in scope with `timeline-scope`. */
-  [data-slot="tr"] {
-    overflow-anchor: none;
-    scroll-timeline: --transcript-head block;
-  }
-  /* The live region is read, never seen: clipped to nothing. */
-  .spoken {
-    clip-path: inset(50%);
-  }
-  /* `end`, which the theme's justify-end / items-end write as flex-end. */
-  [data-slot="dock"] {
-    justify-content: end;
-  }
-  .pills {
-    align-items: end;
   }
 </style>

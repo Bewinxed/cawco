@@ -688,11 +688,17 @@
      waiting when there are several ("2 of 3"): they come one at a time.
      The title, the body and the foot come up with the shape one after the
      other, by opacity and translate alone, and sink back together as it
-     folds (`.part`; its transition stays in the style block). -->
+     folds, each a stagger after the one before (`--part`); the delay
+     outranks the shorthand, which resets it. No filter: a blur
+     transitioning on a part hung WebKit's web process for good as the card
+     came up (Playwright WebKit 2359 at an iPhone's size, the owner's iPhone
+     Safari: "stop responding and it didn't even show"; with the blur
+     snapped instead of transitioned, or none, it never hung). -->
 {#snippet title(text: string)}
   <h2
-    class="part mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+    class="mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
     style:--part="0"
+    style:--part-delay="calc(var(--part) * var(--dur-stagger))"
   >
     <!-- What asks, in the title's ink. Solar draws the question-circle's
          disc at 20/24 of its box, so the box is --icon-lg for the disc
@@ -725,7 +731,9 @@
            own height (its 24px box overhangs the label line). -->
       <Button
         aria-label="Minimize question"
-        class="touch-hit flex-none -my-space-1 ms-auto peer-data-num/place:ms-0 text-ink-muted"
+        class="touch-hit flex-none -my-space-1 ms-auto"
+        margin="beside-num"
+        tone="muted"
         data-box
         onclick={onminimize}
         size="icon-xs"
@@ -766,9 +774,10 @@
          past the card. -->
     <div
       data-slot="body"
-      class="group/body part kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
       style:--part="1"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <!-- The live question's rail, on its lede's inline edge. -->
       {#if rail}
@@ -835,7 +844,7 @@
             <ToggleGroup.Item
               data-sel={sel || undefined}
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:min-w-0{sel
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0{sel
                 ? ' sel'
                 : ''}"
               onkeydown={optionKey}
@@ -851,7 +860,7 @@
             <ToggleGroup.Item
               data-sel={otherPicked(q) || otherAt === qi || undefined}
               aria-keyshortcuts={live ? String(own + 1) : undefined}
-              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:min-w-0{otherPicked(
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0{otherPicked(
                 q
               ) || otherAt === qi
                 ? ' sel'
@@ -873,7 +882,8 @@
         <!-- The chip row is the kit's option-chip recipe (.kit-chips /
              .kit-chip in app.css); the card only sets where it sits. The list
              form is the chip recipe grown to one full-width row per option:
-             one column the card's width (`minmax(0, 1fr)`). -->
+             one column the card's width (`minmax(0, 1fr)`), each row
+             standing its keycap on the label's first line. -->
         {#if q.multiSelect}
           <!-- literal: minmax(0, 1fr) -->
           <!-- literal: auto minmax(0, 1fr) -->
@@ -935,13 +945,15 @@
          fine, 44 coarse. -->
     <div
       data-slot="foot"
-      class="part flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       style:--part="2"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <div class="flex gap-space-2">
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium"
+          class="h-space-8 coarse:h-(--btn-h-coarse)"
+          fit="prompt-wide"
           disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
           failed={failedOf("answer")}
           icon={IconCheck}
@@ -953,8 +965,9 @@
         />
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+          class="h-space-8 coarse:h-(--btn-h-coarse)"
           disabled={disabledOf("deny")}
+          fit="prompt"
           failed={failedOf("deny")}
           label="Dismiss"
           onclick={dismissQuestion}
@@ -974,8 +987,9 @@
          iOS and Telegram; secrets in the fields are already hidden. -->
     <div
       data-slot="body"
-      class="part relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       style:--part="1"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <!-- What will happen, in the title's weight: the line the grant is
            made on. -->
@@ -1018,7 +1032,8 @@
               aria-label={commandOpen
                 ? "Show the command on one line"
                 : "Show the whole command"}
-              class="touch-hit flex-none -my-space-1 text-ink-muted"
+              class="touch-hit flex-none -my-space-1"
+              tone="muted"
               onclick={() => {
                 commandOpen = !commandOpen;
               }}
@@ -1064,7 +1079,7 @@
               </dt>
               <!-- literal: 200px -->
               <dd
-                class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap"
+                class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-word"
                 style:--value-max="200px"
               >
                 {field.value}
@@ -1076,8 +1091,9 @@
     </div>
     <div
       data-slot="foot"
-      class="part flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       style:--part="2"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <!-- JOURNEY §Triage: the full row width sits between grant and
            refusal. At --space-2 the two sat 7px apart, close enough that a
@@ -1100,7 +1116,10 @@
              move never makes one the more inviting. -->
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess"
+          answer="approve-strong"
+          class="h-space-8 coarse:h-(--btn-h-coarse) flex-none"
+          fit="prompt"
+          width="shrink"
           data-prompt-grant={grant}
           disabled={disabledOf("allow")}
           failed={failedOf("allow")}
@@ -1114,7 +1133,10 @@
         />
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess"
+          answer="deny-strong"
+          class="h-space-8 coarse:h-(--btn-h-coarse) flex-none"
+          fit="prompt"
+          width="shrink"
           data-prompt-refuse={refuse}
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
@@ -1151,8 +1173,9 @@
              (warning tint, warning ink, a real edge). -->
           <!-- literal: 12px, 2.75rem -->
           <Button
-            class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+            class="h-space-8 coarse:h-(--btn-h-coarse)"
             disabled={disabledOf("always")}
+            fit="prompt"
             failed={failedOf("always")}
             icon={IconShield}
             label="Always allow {rule.short}"
@@ -1167,36 +1190,3 @@
     </div>
   {/if}
 </section>
-
-<style>
-  /* residual: unmapped */
-  /* The title, the body and the foot come up with the shape one after the
-     other, by opacity and translate alone, and sink back together as it
-     folds. No filter: a blur transitioning on a part hung WebKit's web
-     process for good as the card came up (Playwright WebKit 2359 at an
-     iPhone's size, the owner's iPhone Safari: "stop responding and it didn't
-     even show"; with the blur snapped instead of transitioned, or none, it
-     never hung). Two durations and two curves in one transition: no
-     utility carries them. */
-  @media (prefers-reduced-motion: no-preference) {
-    .part {
-      transition:
-        opacity var(--dur-fade) var(--ease-out),
-        translate var(--dur-panel) var(--ease-drawer);
-    }
-  }
-  /* The stagger: it must outrank the shorthand above, which resets the
-     delay, so it stands beside it rather than as a utility under it. */
-  [data-shown] .part {
-    transition-delay: calc(var(--part) * var(--dur-stagger));
-  }
-  [data-slot="prompt-field"] > dd {
-    word-break: break-word;
-  }
-  /* A list-form option row stands its keycap on the label's first line:
-     the cross axis starts at `start` (items-start writes `flex-start`). The
-     row is bits-ui's ToggleGroup item, reached through the body. */
-  [data-slot="body"] :global([data-list] > .kit-chip) {
-    align-items: start;
-  }
-</style>

@@ -32,10 +32,7 @@
 >
   <!-- Read, never seen: off-screen rather than `display: none`, which
        assistive tech skips entirely. -->
-  <span
-    class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
-    >Reading transcript…</span
-  >
+  <span class="sr-only border-none border-current">Reading transcript…</span>
 
   <!-- The reader's turn: its mark on the pane, one short line in the well,
        exactly as MessageRow draws a run of one: under the header, its start
@@ -43,9 +40,10 @@
        18px mark at --radius-xs and the speaker's name, on the line box
        Who.svelte's label sets. A paragraph as MessageBody sets it: --text-body
        at --leading-body in a 74ch measure, each bar centred in one line box,
-       so the pitch is the prose's pitch. -->
+       so the pitch is the prose's pitch. The well pads by the turn's --pad,
+       which steps down at the narrow breakpoint (`turn-pad`). -->
   <!-- literal: 64px, 74ch, 0.75em -->
-  <div data-you data-slot="block" class="mt-space-4">
+  <div data-you data-slot="block" class="mt-space-4 turn-pad">
     <div
       data-slot="who"
       style:--who-h="max(var(--space-5), 1lh)"
@@ -53,10 +51,12 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-space-5 flex-none rounded-xs"
+        class="size-space-5 flex-none"
+        radius="text"
       /><Skeleton
         data-transcript-skeleton-name
-        class="w-(--name-w) h-icon-sm rounded-xs"
+        class="w-(--name-w) h-icon-sm"
+        radius="text"
         style="--name-w: 64px"
       />
     </div>
@@ -72,7 +72,8 @@
         class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
       >
         <Skeleton
-          class="w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs"
+          class="w-(--ln-w) h-(--ln-h) my-(--ln-my)"
+          radius="text"
           style="--ln-w: 52%"
         />
       </div>
@@ -89,10 +90,12 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-space-5 flex-none rounded-xs"
+        class="size-space-5 flex-none"
+        radius="text"
       /><Skeleton
         data-transcript-skeleton-name
-        class="w-(--name-w) h-icon-sm rounded-xs"
+        class="w-(--name-w) h-icon-sm"
+        radius="text"
         style="--name-w: 64px"
       />
     </div>
@@ -105,7 +108,8 @@
       >
         {#each lines as width (width)}
           <Skeleton
-            class="w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs"
+            class="w-(--ln-w) h-(--ln-h) my-(--ln-my)"
+            radius="text"
             style="--ln-w: {width}"
           />
         {/each}
@@ -120,13 +124,15 @@
   <div data-slot="tools" data-transcript-skeleton-rail-row class="rail-row">
     {#each TOOLS as width (width)}
       <div style:--trow-h="26px" class="min-h-(--trow-h) rail-line">
-        <Skeleton data-rail-cell class="rounded-xs rail-cell" /><Skeleton
-          class="w-(--tk-w) h-space-3 flex-none rounded-xs"
+        <Skeleton data-rail-cell radius="text" cell="rail" data-box /><Skeleton
+          class="w-(--tk-w) h-space-3 flex-none"
+          radius="text"
           data-box
           style="--tk-w: 40px"
         />
         <Skeleton
-          class="w-(--arg-w) h-space-3 rounded-xs"
+          class="w-(--arg-w) h-space-3"
+          radius="text"
           data-box
           style="--arg-w: {width}"
         />
@@ -144,10 +150,12 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-space-5 flex-none rounded-xs"
+        class="size-space-5 flex-none"
+        radius="text"
       /><Skeleton
         data-transcript-skeleton-name
-        class="w-(--name-w) h-icon-sm rounded-xs"
+        class="w-(--name-w) h-icon-sm"
+        radius="text"
         style="--name-w: 64px"
       />
     </div>
@@ -159,27 +167,11 @@
     >
       {#each AFTER as width (width)}
         <Skeleton
-          class="w-(--ln-w) h-(--ln-h) my-(--ln-my) rounded-xs"
+          class="w-(--ln-w) h-(--ln-h) my-(--ln-my)"
+          radius="text"
           style="--ln-w: {width}"
         />
       {/each}
     </div>
   </div>
 </div>
-
-<style>
-  /* residual: unmapped: the reader's well pads by the turn's --pad, which
-     steps down at the narrow breakpoint (a custom property under a media
-     query has no utility); the spoken line is clipped to nothing (no
-     clip-path utility). */
-  [data-you] {
-    --pad: var(--space-3);
-
-    @media (width <= 900px) {
-      --pad: var(--space-2);
-    }
-  }
-  .spoken {
-    clip-path: inset(50%);
-  }
-</style>

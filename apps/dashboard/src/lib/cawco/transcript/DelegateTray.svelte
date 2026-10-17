@@ -1137,11 +1137,13 @@
       role="presentation"
     />
   {:else if tone === "running"}
+    <!-- The dot's phase is set from the clock, so every running dot reads
+         as one beat. -->
     <!-- literal: 5px -->
     <!-- literal: 50% -->
     <span
       data-slot="dot"
-      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph"
+      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph anim-delay-(--dot-delay)"
       style:--dot="5px"
       style:--dot-r="50%"
       style:--dot-delay="-{Date.now() % 2000}ms"
@@ -1166,13 +1168,17 @@
   <!-- A chip: the tray row's (app.css .kit-tray-chip), its surface on a
        layer of its own so it can arrive after a mark that flew in. Its
        floor is measured (`measureFloor`); the failure chip stands at the
-       row's end, next to the plan. -->
+       row's end, next to the plan. Its floor and cap are classes: fly()
+       clones the chip and rewrites the copy's inline style, so the copy
+       keeps them, the live chip's measured floor (inline --floor) first.
+       A delegate that needs you is in the ask ink wherever its state shows:
+       its chip, its folded row's words, its state cell. -->
   <button
     data-end={failed || undefined}
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="group/chip kit-tray-chip touch-hit flex-initial data-end:ms-auto status-failed:text-status-fail-ink"
+    class="group/chip kit-tray-chip touch-hit flex-initial min-w-(--floor,var(--c-tray-chip-min)) max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
     data-delegate-tray-tone={tone}
     data-finished={(tone === "done" && (item.endedAt ?? 0) > mountedAt) ||
       undefined}
@@ -1213,25 +1219,25 @@
       {#if item.queued}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
           >{queuedWords(item)}</span
         >
       {:else if item.checkQueue}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
           >{checkQueueWords(item)}</span
         >
       {:else if tone === "needs"}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
           >{questionWords(chip.questions)}</span
         >
       {:else if tone === "failed" || tone === "cancelled"}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
           >{tone}</span
         >
       {/if}
@@ -1239,7 +1245,7 @@
     <span
       data-slot="slot"
       aria-hidden="true"
-      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink"
+      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted"
       data-box
     >
       {#key slotOf(tone)}
@@ -1333,7 +1339,7 @@
                  over the shelf's own rows, and a press in it is the shelf's. -->
             <DropdownMenu.Content
               align="start"
-              class="w-auto min-w-48"
+              class="w-auto"
               portalProps={{ disabled: true }}
               side="bottom"
             >
@@ -1388,7 +1394,8 @@
           bind:value={
             () => reasons.get(item.id) ?? "", (v) => reasons.set(item.id, v)
           }
-          class="flex-auto min-w-0 h-c-btn-h-sm"
+          class="flex-auto h-c-btn-h-sm"
+          measure="shrink"
           placeholder="Why this is no longer owed"
         />
         <Button
@@ -1432,13 +1439,13 @@
       >
       <!-- A folded delegate's state gives way before its title does. -->
       <span
-        class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis"
+        class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn-ink"
         data-delegate-tray-tone={tone}
         data-status={tone}>{stateWords(chip)}</span
       >
       <span
         aria-hidden="true"
-        class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink"
+        class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
         data-delegate-tray-tone={tone}
         data-box
         data-status={tone}
@@ -1674,7 +1681,8 @@
                   >
                     <Input
                       aria-label="Why all {failures.length} are no longer owed"
-                      class="flex-auto min-w-0 h-c-btn-h-sm"
+                      class="flex-auto h-c-btn-h-sm"
+                      measure="shrink"
                       placeholder="Why these are no longer owed"
                       bind:ref={allField}
                       bind:value={allReason}
@@ -1732,7 +1740,7 @@
               >
               <span
                 aria-label={stateWords(openChip)}
-                class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink"
+                class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
                 data-delegate-tray-tone={tone}
                 data-box
                 data-status={tone}
@@ -1820,38 +1828,5 @@
   button[data-status="failed"]::before,
   [data-slot="end"]::before {
     background-color: var(--status-fail-bg);
-  }
-
-  /* residual: unmapped */
-  /* A delegate that needs you, in the ask ink wherever its state shows:
-     its chip, its folded row's words, its state cell. */
-  [data-status="needs"] {
-    color: var(--status-attn-ink);
-  }
-  /* The slot's glyph in the muted ink for the states with no tone of their
-     own (running's and done's are utilities on the slot). */
-  :is(
-      [data-status="starting"],
-      [data-status="asked"],
-      [data-status="cancelled"]
-    )
-    [data-slot="slot"] {
-    color: var(--ink-muted);
-  }
-  [data-status="cancelled"] [data-slot="note"] {
-    color: var(--ink-muted);
-  }
-  /* The dot's phase, set from the clock so every running dot reads as one
-     beat; animation-delay has no utility. */
-  [data-slot="dot"] {
-    animation-delay: var(--dot-delay);
-  }
-  /* A working chip's floor and cap (--c-tray-chip-min, --c-tray-chip-max).
-     fly() clones the chip and rewrites the copy's inline style, so both
-     come from here, where the copy keeps them; the live chip's measured
-     floor (inline --floor) comes first. */
-  button[data-key][data-status] {
-    min-inline-size: var(--floor, var(--c-tray-chip-min));
-    max-inline-size: var(--c-tray-chip-max);
   }
 </style>

@@ -152,7 +152,16 @@
 </script>
 
 <!-- Half the chevron's mark and gap: how far the centre and each arm move to
-     hold it. -->
+     hold it. The chevron's clock and the line's ink are custom properties
+     the button's own states rewrite (`divider-chevron`: focus, open, hover,
+     a finger, settling), and every part of the row reads them. How far in
+     the chevron is: 0 away, 1 beside the word. It leaves a little quicker
+     than it arrives; a state that shows it names the arrival's clock, since
+     a transition runs on the clock of the state it is going to. Each arm
+     draws back from the centre as the chevron comes in. While the word
+     turns from "Compacting…" to "Compacted" its box takes the new word's
+     width at once and the letters leaving fade past its end: clipped
+     across, never up or down, the word is its box throughout. -->
 <!-- literal: minmax(0, 1fr) auto minmax(0, 1fr), 12px -->
 <button
   data-compaction-divider-live={live || undefined}
@@ -162,7 +171,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="group/divider grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="group/divider divider-chevron grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
@@ -180,7 +189,8 @@
   <!-- Mirrored, so both arms run outward from the word.
        literal: scaleX(-1) -->
   <span
-    class="arm start @container group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
+    class="@container clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg
       aria-hidden="true"
@@ -200,10 +210,13 @@
        and the chevron's 12px mark a --space-1 gap after it. The chevron
        takes no room in the layout, in or out: as it comes in the centre
        makes room by moving, never by resizing; pressed, the centre gives
-       and the line holds. -->
+       and the line holds; it moves on two clocks, the chevron's and the
+       press's. -->
   <span
     style:--mid-x="calc(var(--chev) * var(--room) * -1)"
-    class="mid whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
+    style:--mid-durs="var(--chev-dur), var(--dur-toggle)"
+    style:--mid-eases="var(--chev-ease), var(--ease-out)"
+    class="whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:transition-[translate,scale] motion-safe:duration-(--mid-durs) motion-safe:ease-(--mid-eases) motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
     ><!-- Caw's slot: his still's box, its middle on the word's x-height; as
           wide as Caw at work while it runs, closing to his mark's box as it
           ends, on the line's clock. --><span
@@ -243,7 +256,7 @@
       {/if}</span
     ><!-- literal: -0.5em --><span
       style:--word-clip="inset(-0.5em 0)"
-      class="word"
+      class="group-data-settling/divider:clip-path-(--word-clip)"
       >{#if failed}
         <!-- A compaction that failed never reads "Compacted", seen or not. -->
       {:else if watched}
@@ -254,20 +267,26 @@
     ><!-- A zero-width box on the word's line, `middle` setting its mark on
           the word's x-height; the mark hangs out of it after the gap,
           sliding out from the word's edge as it comes in, and points down
-          while the brief is open. --><!-- literal: 4px --><span
+          while the brief is open. The mark sharpens as it comes in, and
+          turns on the spot (on-screen movement, not an entrance): the
+          chevron's clock, and the turn's. --><!-- literal: 4px --><span
       data-slot="chev"
       style:--chev-x="calc(var(--chev) * var(--space-1))"
       style:--chev-scale="calc(0.25 + 0.75 * var(--chev))"
       style:--chev-blur="calc((1 - var(--chev)) * 4px)"
+      style:--chev-filter="blur(var(--chev-blur))"
+      style:--chev-durs={"var(--chev-dur), var(--chev-dur), var(--chev-dur), var(--dur-toggle)"}
+      style:--chev-eases={"var(--chev-ease), var(--chev-ease), var(--chev-ease), var(--ease-in-out)"}
       class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
         aria-hidden="true"
-        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) group-aria-expanded/divider:rotate-90"
+        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) filter-(--chev-filter) group-aria-expanded/divider:rotate-90 motion-safe:transition-[translate,scale,filter,rotate] motion-safe:duration-(--chev-durs) motion-safe:ease-(--chev-eases)"
       /></span
     ></span
   >
   <span
-    class="arm @container group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    style:--arm-clip="inset(0 0 0 calc(var(--chev) * var(--room)))"
+    class="@container clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg aria-hidden="true" class="wave block w-full h-(--tx-compact-wave)"
       ><path
@@ -282,10 +301,14 @@
   {#if failed}
     <!-- The transcript's failure line, on the rail: what happened on the
          line, why and the way on hung at the text column (SystemLine). No
-         line, no Caw — he is never in an error — and nothing centred. -->
+         line, no Caw — he is never in an error — and nothing centred. Its
+         rail is a 2px band of the failure ink down its start edge. -->
+    <!-- literal: 2px 100% -->
     <span
       style:--fail-pad="calc(var(--x-glyph) - var(--x-rail))"
-      class="fail block ms-(--x-rail) ps-(--fail-pad) text-size-label font-medium leading-body"
+      style:--fail-rail={"linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"}
+      style:--fail-rail-size="2px 100%"
+      class="block ms-(--x-rail) ps-(--fail-pad) text-size-label font-medium leading-body bg-(image:--fail-rail) bg-left-top bg-size-(--fail-rail-size) bg-no-repeat"
       in:fade={{ duration: dur("--dur-fade") }}
     >
       <span class="rail-line"
@@ -320,86 +343,6 @@
 {/if}
 
 <style>
-  /* residual: unmapped: the chevron's clock and the line's ink are custom
-     properties the button's own states rewrite (focus, open, hover, a
-     finger, settling), and every part of the row reads them; a state has no
-     utility that sets a custom property. How far in the chevron is: 0
-     away, 1 beside the word. It leaves a little quicker than it arrives; a
-     state that shows it names the arrival's clock, since a transition runs
-     on the clock of the state it is going to. */
-  [data-slot="divider"] {
-    --line: var(--brand-solid);
-    --chev: 0;
-    --chev-dur: var(--dur-control);
-    --chev-ease: var(--ease-out);
-
-    /* The chevron is in for keyboard focus and while the brief is open. */
-    &:is(:focus-visible, [aria-expanded="true"]) {
-      --chev: 1;
-      --chev-dur: var(--dur-toggle);
-      --chev-ease: var(--ease-arrive);
-    }
-    /* Under the pointer the line and word step to the stronger vermillion
-       and the chevron comes in; nothing else. */
-    @media (hover: hover) and (pointer: fine) {
-      &:hover:not(:disabled) {
-        --line: var(--brand-ink-strong);
-        --chev: 1;
-        --chev-dur: var(--dur-toggle);
-        --chev-ease: var(--ease-arrive);
-      }
-    }
-    /* A finger has no hover: what opens always shows that it does. */
-    @media (pointer: coarse) {
-      &:not(:disabled) {
-        --chev: 1;
-      }
-    }
-    /* Settling, nothing offers the brief yet: the chevron comes in once the
-       word reads "Compacted", on its own clock. */
-    &[data-settling] {
-      --chev: 0;
-    }
-  }
-  /* While the word turns from "Compacting…" to "Compacted" its box takes the
-     new word's width at once and the letters leaving fade past its end.
-     Clipped across, never up or down, the word is its box throughout. Each
-     arm draws back from the centre as the chevron comes in. */
-  [data-settling] .word {
-    clip-path: var(--word-clip);
-  }
-  .arm {
-    clip-path: inset(0 0 0 calc(var(--chev) * var(--room)));
-
-    &.start {
-      clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
-    }
-  }
-  /* The failure line's rail. */
-  .fail {
-    background: linear-gradient(var(--status-fail-ink), var(--status-fail-ink))
-      left top / 2px 100% no-repeat;
-  }
-  /* The chevron's mark sharpens as it comes in. */
-  [data-slot="chev"] :global(svg) {
-    filter: blur(var(--chev-blur));
-  }
-  /* Two clocks per element: the chevron's, and the press's or the turn's. */
-  @media (prefers-reduced-motion: no-preference) {
-    .mid {
-      transition:
-        translate var(--chev-dur) var(--chev-ease),
-        scale var(--dur-toggle) var(--ease-out);
-    }
-    /* The mark turns on the spot: on-screen movement, not an entrance. */
-    [data-slot="chev"] :global(svg) {
-      transition:
-        translate var(--chev-dur) var(--chev-ease),
-        scale var(--chev-dur) var(--chev-ease),
-        filter var(--chev-dur) var(--chev-ease),
-        rotate var(--dur-toggle) var(--ease-in-out);
-    }
-  }
   /* residual: svg-paint: how much of the path the arm shows, along the
      curve: the wave is 1.087px long for each pixel it crosses. Dashed to
      that length, the line ends on a round cap just inside the column. */

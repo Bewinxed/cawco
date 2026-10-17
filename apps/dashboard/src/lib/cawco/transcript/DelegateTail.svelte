@@ -318,11 +318,12 @@
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <!-- literal: 24px -->
 <div
-  class="flex flex-col justify-end h-(--tail-h) overflow-hidden -mx-space-2 text-ink-strong"
+  class="flex flex-col justify-end h-(--tail-h) overflow-hidden -mx-space-2 text-ink-strong data-full:mask-(--tail-fade)"
   style:--row="{ROW}px"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
   style:--fade-run="24px"
+  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--fade-run))"}
   data-full={shown.length >= SLOTS || undefined}
 >
   {#if shown.length}
@@ -336,7 +337,7 @@
         {@const row = dataOf(key)}
         <div
           data-slot="row"
-          class="mark-line flex-none h-(--row) flex items-center gap-space-2 px-space-2 min-w-0 text-size-meta whitespace-nowrap"
+          class="mark-line flex-none h-(--row) flex items-center gap-space-2 px-space-2 min-w-0 text-size-meta whitespace-nowrap kind-ask:text-status-attn-ink kind-asked:text-ink-muted kind-fail:text-status-fail-ink"
           data-delegate-tail-kind={row?.kind}
           data-kind={row?.kind}
         >
@@ -420,28 +421,6 @@
 </div>
 
 <style>
-  /* residual: unmapped */
-  /* The fade over the top row once the tail is full. mask-image has no
-     utility. */
-  [data-full] {
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      var(--mask-opaque) var(--fade-run)
-    );
-  }
-  /* The row the tail ends on: the question waiting, the one put to the
-     parent, the failure. No tone-of-kind variant exists yet. */
-  [data-kind="ask"] {
-    color: var(--status-attn-ink);
-  }
-  [data-kind="asked"] {
-    color: var(--ink-muted);
-  }
-  [data-kind="fail"] {
-    color: var(--status-fail-ink);
-  }
-
   /* residual: foreign-dom */
   /* The line being written, one line tall however the message renders:
      every element MessageBody renders inside it. */

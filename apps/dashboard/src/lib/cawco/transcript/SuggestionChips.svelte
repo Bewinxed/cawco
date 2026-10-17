@@ -219,11 +219,16 @@
      going or changing never move the transcript. Past its width the line
      scrolls sideways. The row takes no pointer of its own; what is in it
      does. -->
+<!-- The hint and a failure line are bare text over the transcript, so a row
+     with anything in it lifts off the page on the transcript's own field: a
+     gradient in sRGB, which the theme's gradient utilities (oklab) would
+     repaint. -->
 <div
   data-slot="suggest"
   style:--chip-block="var(--c-suggest-chip)"
   style:--suggest-bottom="calc(100% + var(--space-2))"
-  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none"
+  style:--suggest-lift={"linear-gradient(to top, var(--surface-recess) 55%, var(--surface-recess-clear))"}
+  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none has-[[data-slot=suggest-chip],[data-slot=suggest-shimmer],[data-slot=suggest-fail]]:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure. Its row is kept whether it is drawn or not
@@ -242,10 +247,12 @@
       {#each shown as { candidate, noul }, i (candidate.id)}
         <!-- Tinted by confidence: `--conf` runs 0 → 1 across the shown range
              (noul 0.6 → 1), and the accent's share of the fill runs 8% → 32%
-             with it. -->
+             with it. The border takes the fill's share at 1.5×, mixed in
+             sRGB so the accent reads as if laid over the surface; a
+             confidence that moves in place re-tints over --dur-panel. -->
         <button
           data-slot="suggest-chip"
-          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 rounded-sm shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:active:transform-(--chip-press) mark-line touch-hit"
+          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) [&:hover]:bg-suggest-tint-hover hover:text-ink-strong mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
@@ -327,55 +334,3 @@
   {/if}
   <p aria-live="polite" class="sr-only">{announced}</p>
 </div>
-
-<style>
-  /* residual: unmapped: the hint and a failure line are bare text over the
-     transcript, so a row with anything in it lifts off the page on the
-     transcript's own field; a gradient in sRGB, which the theme's gradient
-     utilities (oklab) would repaint. */
-  [data-slot="suggest"]:has(
-    [data-slot="suggest-chip"],
-    [data-slot="suggest-shimmer"],
-    [data-slot="suggest-fail"]
-  ) {
-    background: linear-gradient(
-      to top,
-      var(--surface-recess) 55%,
-      var(--surface-recess-clear)
-    );
-  }
-  /* The chip's tint is a mix per chip: the border takes the fill's share at
-     1.5×, mixed in sRGB so the accent reads as if laid over the surface. A
-     colour in an inline custom property is refused, and no utility mixes.
-     A confidence that moves in place re-tints over --dur-panel. */
-  [data-slot="suggest-chip"] {
-    border: 1px solid
-      color-mix(
-        in srgb,
-        var(--action-solid) calc(var(--tint) * 1.5),
-        var(--surface-raised)
-      );
-    background: color-mix(
-      in srgb,
-      var(--action-solid) var(--tint),
-      var(--surface-raised)
-    );
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-toggle) var(--ease-out),
-        background-color var(--dur-panel) var(--ease-out),
-        border-color var(--dur-panel) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-    }
-
-    &:hover {
-      background: color-mix(
-        in srgb,
-        var(--action-solid) calc(var(--tint) + 6%),
-        var(--surface-raised)
-      );
-      color: var(--ink-strong);
-    }
-  }
-</style>

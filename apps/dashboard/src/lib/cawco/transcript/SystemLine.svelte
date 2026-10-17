@@ -475,7 +475,7 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none data-code:bg-auto data-code:bg-repeat rail-row"
     data-code={wokeCaw || undefined}
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
@@ -528,7 +528,7 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none data-code:bg-auto data-code:bg-repeat rail-row"
     data-code={wokeCaw || undefined}
   >
     <span
@@ -569,14 +569,5 @@
   .unread .rail-cell :global(svg) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-  }
-  /* residual: unmapped: code drops the rail's whole background shorthand
-     (image, position, size, repeat), which no single utility resets; the
-     responses name takes its line's font whole. */
-  [data-slot="note"][data-code] {
-    background: none;
-  }
-  [data-slot="aname"] {
-    font: inherit;
   }
 </style>
