@@ -154,6 +154,35 @@ async function devServer(hub: string) {
   return { base, child };
 }
 
+declare global {
+  interface Window {
+    /** Set once the root layout has mounted: the page's whole tree hydrated (`markHydrated`). */
+    kitHydrated?: true;
+  }
+}
+
+/**
+ * Marks the page hydrated when the root layout's `onMount` calls
+ * `releaseHeldTaps` (routes/+layout.svelte: effects flush only once the whole
+ * tree has hydrated), which app.html defines after this runs. A page the
+ * server drew stands still before it hydrates, and the dev server's takes
+ * seconds to: a state opened on it reads the server's markup and clicks
+ * buttons nothing listens to yet.
+ */
+function markHydrated(): void {
+  let release: (() => void) | undefined;
+  Object.defineProperty(window, "releaseHeldTaps", {
+    configurable: true,
+    get: () => () => {
+      window.kitHydrated = true;
+      release?.();
+    },
+    set: (fn: () => void) => {
+      release = fn;
+    },
+  });
+}
+
 /** A page for `pass`: its width, theme and motion, the reader installed, its clock held at `at`. */
 export async function passPage(
   kit: Kit,
@@ -167,6 +196,7 @@ export async function passPage(
     await page.emulateMedia({ reducedMotion: "reduce" });
   }
   await page.context().addInitScript(installReader, PROPS);
+  await page.context().addInitScript(markHydrated);
   await page.clock.setFixedTime(at);
   // A state whose control is gone fails in seconds, not the default 30.
   page.setDefaultTimeout(10_000);
@@ -271,7 +301,7 @@ export async function walk(
             await open(
               page,
               `${base}${route}`,
-              () => document.readyState !== "loading",
+              () => window.kitHydrated === true,
               60_000
             );
             await arrive(page);

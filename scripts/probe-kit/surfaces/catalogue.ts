@@ -14,7 +14,7 @@
  */
 import type { Page } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
-import { DELEGATE_TITLE, type Scene } from "./scene";
+import { DELEGATE_TITLE, type Scene, STUDIO_HOST } from "./scene";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -113,6 +113,47 @@ const PERMISSION_CHIP = /^Permission mode: /;
 const ACCOUNT_CHIP = /^Account: /;
 /** The artifact's page in its session's pane. */
 const PREVIEW_FRAME = 'iframe[title="Preview"]';
+/** The machines popover's trigger, Connect a machine's, and the routing's Fill first card. */
+const MACHINES = /machine/;
+const ADD_MACHINE = /^Add machine$/;
+const FILL_FIRST = /^Fill first/;
+/** The project's ⋯ menu. */
+const MORE_FOR_CAWCO = /More for cawco/;
+/** A session row's Peek (a wide layout's; the phone has none). */
+const PEEK_IDLE = /^Peek Fix tray chip overflow/;
+/** The picture riding on your words in Caw's thread (MessageRow's Shot). */
+const THREAD_PICTURE = "Attachment 1 sent with this message";
+
+/** The project's ⋯ menu, then its row named `item`. */
+const fromMore = (item: string) => async (page: Page) => {
+  await press(MORE_FOR_CAWCO)(page);
+  await page.getByRole("menuitem", { name: item }).click();
+};
+
+/** Caw's seat on the project page, then `then` in his thread. */
+const inCawThread =
+  (then: (page: Page) => Promise<unknown>) => async (page: Page) => {
+    await press(CAW_SEAT)(page);
+    await then(page);
+  };
+
+/**
+ * The page in the preview asking for a place, as its bridge asks
+ * (`cawco/pick-place`, preview/wire.ts `previewPickPlace`): the pane's
+ * place picker opens over it.
+ */
+const askPlace = async (page: Page) => {
+  const frame = page.frameLocator(PREVIEW_FRAME);
+  await frame.locator("h1").waitFor();
+  await frame
+    .locator("body")
+    .evaluate(() =>
+      window.parent.postMessage(
+        { jsonrpc: "2.0", method: "cawco/pick-place", id: 1 },
+        "*"
+      )
+    );
+};
 
 /**
  * A pin on the preview, as a person drops one: C turns the pane's Comment
@@ -215,17 +256,55 @@ const EDITORS: Record<string, State[]> = {
           route: () => `/config/${section}/new`,
           root: "body",
         },
+        // The scene's own: the hook saved twice (its previous version), the MCP server.
+        ...(section === "hooks"
+          ? [{ name: "hook", route: (s: Scene) => `/config/hooks/${s.hook}`, root: "body" }]
+          : []),
       ],
     ])
   ),
   skills: [{ name: "fetch", act: press(FETCH_SKILL), root: "body" }],
-  memory: [{ name: "new", act: press(NEW_MEMORY), root: "body" }],
+  memory: [
+    { name: "new", act: press(NEW_MEMORY), root: "body" },
+    {
+      // A filter nothing matches: the page's own line saying so.
+      name: "filtered",
+      act: (page) =>
+        page
+          .getByRole("textbox", { name: "Filter memory files" })
+          .fill("no-such-file"),
+      root: "body",
+    },
+    // The fleet's memory in its editor.
+    { name: "editor", route: () => "/config/memory/CLAUDE.md", root: "body" },
+  ],
+  connections: [
+    {
+      // The add menu: a row per service, each with its logo.
+      name: "add",
+      act: press("Sign in to a service"),
+      root: LAYER,
+    },
+  ],
+  updates: [
+    {
+      // Connect a machine, on its one-command tab: the command and the wait for the machine.
+      name: "add-machine",
+      act: async (page) => {
+        await press(ADD_MACHINE)(page);
+        await page.getByRole("tab", { name: "With one command" }).click();
+      },
+      root: LAYER,
+    },
+  ],
   rules: [
     {
       name: "editor",
       route: () => "/config/rules/new",
       root: "body",
     },
+    // The scene's rule: what it has caught.
+    { name: "rule", route: (s) => `/config/rules/${s.rule}`, root: "body" },
     // `/config` itself: the section list and its first section.
     { name: "index", route: () => "/config", root: "body" },
   ],
@@ -247,6 +326,13 @@ const EDITORS: Record<string, State[]> = {
       route: () => "/config/accounts/anthropic/routing",
       root: "body",
     },
+    {
+      // Fill first chosen: its order of the two accounts.
+      name: "fill-first",
+      route: () => "/config/accounts/anthropic/routing",
+      act: (page) => page.getByRole("radio", { name: FILL_FIRST }).click(),
+      root: "body",
+    },
   ],
 };
 
@@ -262,6 +348,32 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         act: press(/machine/),
         root: LAYER,
+      },
+      {
+        // The offline Mac's menu in the machines list: Unlock keychain…, its dialog.
+        name: "keychain",
+        widths: ["desk"],
+        act: async (page) => {
+          await press(MACHINES)(page);
+          await page
+            .locator(LAYER)
+            .getByText(STUDIO_HOST, { exact: true })
+            .first()
+            .click({ button: "right" });
+          await page.getByRole("menuitem", { name: "Unlock keychain…" }).click();
+        },
+        root: "body",
+      },
+      {
+        // A session row's Peek: the tail of it in the peek sheet.
+        name: "peek",
+        widths: ["desk", "tablet"],
+        act: async (page) => {
+          await openRail(page);
+          await page.getByRole("link", { name: IDLE_ROW }).first().hover();
+          await press(PEEK_IDLE)(page);
+        },
+        root: "body",
       },
     ],
   },
@@ -421,6 +533,21 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.runner}`,
         root: MAIN,
       },
+      {
+        // ⌘⇧D in the composer: the canvas, standing over the field.
+        // Last: the canvas it opens is the session's from then on.
+        name: "canvas",
+        act: async (page) => {
+          await emptyComposer(page);
+          await page.keyboard.press("ControlOrMeta+Shift+KeyD");
+          await page
+            .locator("iframe[title='Canvas']")
+            .first()
+            .waitFor({ state: "attached" });
+        },
+        root: "body",
+        widths: ["desk"],
+      },
     ],
   },
   {
@@ -429,9 +556,30 @@ export const SURFACES: Surface[] = [
     route: (s) => `/project/${s.project}`,
     states: [
       { name: "rest", root: "body" },
-      { name: "more-menu", act: press(/More for cawco/), root: LAYER },
+      { name: "more-menu", act: press(MORE_FOR_CAWCO), root: LAYER },
       // Caw's seat: his thread beside the board.
       { name: "caw", act: press(CAW_SEAT), root: "body" },
+      // His thread's picture, opened in the lightbox.
+      {
+        name: "caw-picture",
+        act: inCawThread((page) =>
+          page.getByAltText(THREAD_PICTURE).first().click()
+        ),
+        root: "body",
+      },
+      // The file he wrote in the folder, opened from his message.
+      {
+        name: "caw-file",
+        act: inCawThread((page) =>
+          page.locator("[data-folder-chip]").filter({ visible: true }).first().click()
+        ),
+        root: "body",
+      },
+      // The ⋯ menu's rows: the project's details, Caw's settings, its stages, and the forget it asks.
+      { name: "details", act: fromMore("Project details…"), root: "body" },
+      { name: "caw-settings", act: fromMore("Caw settings…"), root: "body" },
+      { name: "stages", act: fromMore("Pick stages…"), root: "body" },
+      { name: "forget", act: fromMore("Forget project…"), root: "body" },
       {
         name: "new",
         route: () => "/project/new",
@@ -491,7 +639,17 @@ export const SURFACES: Surface[] = [
     route: (s) => `/project/${s.project}`,
     // Each view is the project's route with its `view` (the view tabs' own
     // hrefs): a made view's tab is `view:<name>` (+page.svelte's `tabs`).
-    states: ["table", "pipeline", "routines", "decisions", "view:week"].map(
+    // Made is what the tasks handed in (the review task's post and notes);
+    // Canvas, the tasks' graph (the scene's edges).
+    states: [
+      "table",
+      "pipeline",
+      "routines",
+      "decisions",
+      "view:week",
+      "made",
+      "canvas",
+    ].map(
       (view): State => ({
         name: view.replace("view:", ""),
         route: (s) => `/project/${s.project}?view=${view}`,
@@ -539,7 +697,15 @@ export const SURFACES: Surface[] = [
     name: "usage",
     serve: "built",
     route: () => "/usage",
-    states: [{ name: "rest", root: "body" }],
+    states: [
+      { name: "rest", root: "body" },
+      // One project's spend.
+      {
+        name: "project",
+        route: (s) => `/usage?project=${s.project}`,
+        root: "body",
+      },
+    ],
   },
   {
     name: "new-session",
@@ -657,6 +823,22 @@ export const SURFACES: Surface[] = [
         name: "pin",
         route: (s) => `/session/${s.art}`,
         act: dropPin,
+        root: "body",
+        widths: ["desk"],
+      },
+      // The pane's Comments panel: its pins' list.
+      {
+        name: "comments",
+        route: (s) => `/session/${s.art}`,
+        act: press(/^Comments, /),
+        root: "body",
+        widths: ["desk"],
+      },
+      // The page asking for a place: the pane's place picker.
+      {
+        name: "place-pick",
+        route: (s) => `/session/${s.art}`,
+        act: askPlace,
         root: "body",
         widths: ["desk"],
       },

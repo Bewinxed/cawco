@@ -249,12 +249,111 @@ function styled(): string[] {
   return out.sort();
 }
 
+/** A component's `<style>` block, its CSS captured. */
+const STYLE_BLOCK = /<style[^>]*>([\s\S]*?)<\/style>/;
+const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
+/** A `:global(…)` group, its parentheses balanced one deep. */
+const GLOBAL_GROUP = /:global\((?:[^()]|\([^()]*\))*\)/g;
+/** What a selector holds once its globals are gone that names no element: pseudo-classes and -elements, combinators, nesting's `&`. */
+const NO_ELEMENT = /::?[a-z-]+(\((?:[^()]|\([^()]*\))*\))?|[\s>+~&,]/g;
+
+/**
+ * Whether a file's `<style>` holds a rule Svelte scopes to its own elements:
+ * a selector that still names something once its `:global(…)` groups are
+ * gone. A `:global { … }` block, keyframes and at-rules' preludes are not.
+ */
+function scoped(file: string): boolean {
+  const source = readFileSync(join(ROOT, file), "utf8");
+  const css = (source.match(STYLE_BLOCK)?.[1] ?? "").replace(CSS_COMMENT, "");
+  let prelude = "";
+  /** Depth inside a block whose insides are no selectors (keyframes, `:global { }`); 0 outside one. */
+  let skip = 0;
+  for (const ch of css) {
+    if (ch === "{") {
+      const head = prelude.trim();
+      prelude = "";
+      if (skip > 0) {
+        skip += 1;
+      } else if (head.startsWith("@keyframes") || head === ":global") {
+        skip = 1;
+      } else if (
+        !head.startsWith("@") &&
+        head.replace(GLOBAL_GROUP, "").replace(NO_ELEMENT, "") !== ""
+      ) {
+        return true;
+      }
+    } else if (ch === "}") {
+      prelude = "";
+      skip = Math.max(0, skip - 1);
+    } else if (ch === ";") {
+      prelude = "";
+    } else {
+      prelude += ch;
+    }
+  }
+  return false;
+}
+
+/**
+ * In the page: the files of every element under `root` (its largest match,
+ * or the body), by the dev server's `__svelte_meta`: `own`, the file each
+ * element is written in; `chain`, every file up its `parent` chain (svelte
+ * context.js `add_svelte_meta`: each block or component tag names the file
+ * it is written in), so a component whose template is only other
+ * components (ProjectMark's TreeMark) is heard too.
+ */
+function filesUnder(root: string): { chain: string[]; own: string[] } {
+  interface Stack {
+    file?: string;
+    parent?: Stack | null;
+  }
+  const pool = [...document.querySelectorAll(root)];
+  const own = new Set<string>();
+  const chain = new Set<string>();
+  for (const top of pool.length > 0 ? pool : [document.body]) {
+    for (const el of [top, ...top.querySelectorAll("*")]) {
+      const meta = (
+        el as unknown as {
+          __svelte_meta?: { loc?: { file?: string }; parent?: Stack };
+        }
+      ).__svelte_meta;
+      if (meta?.loc?.file) {
+        own.add(meta.loc.file);
+      }
+      let at: Stack | null | undefined = meta?.parent;
+      for (; at; at = at.parent) {
+        if (at.file) {
+          chain.add(at.file);
+        }
+      }
+    }
+  }
+  return { own: [...own], chain: [...chain] };
+}
+
+/** Each of `files` (as `__svelte_meta` names them) heard on `surface`, repo-relative. */
+function heard(
+  into: Map<string, Set<string>>,
+  files: string[],
+  surface: string
+): void {
+  for (const file of files) {
+    const at = file.includes("apps/dashboard/")
+      ? file.slice(file.indexOf("apps/dashboard/"))
+      : `apps/dashboard/${file.replace(LEADING_DOT, "")}`;
+    const set = into.get(at) ?? new Set<string>();
+    set.add(surface);
+    into.set(at, set);
+  }
+}
+
 /** Which surfaces render an element of each styled file: the dev server's `__svelte_meta`. */
 async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   const tape = await readTape(TAPE);
   const hub = player(tape);
   const servers = new Servers(kit, hub);
   const seen = new Map<string, Set<string>>();
+  const chained = new Map<string, Set<string>>();
   try {
     await walk(
       kit,
@@ -263,30 +362,9 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
       surfaces.map((s) => ({ ...s, serve: "dev" as const })),
       PASSES.filter((p) => !p.reduced && p.theme === "light"),
       async ({ page, state, surface }) => {
-        const files = await page.evaluate((root) => {
-          const pool = [...document.querySelectorAll(root)];
-          const els = pool.length > 0 ? pool : [document.body];
-          const out = new Set<string>();
-          for (const top of els) {
-            for (const el of [top, ...top.querySelectorAll("*")]) {
-              const meta = (
-                el as unknown as { __svelte_meta?: { loc?: { file?: string } } }
-              ).__svelte_meta;
-              if (meta?.loc?.file) {
-                out.add(meta.loc.file);
-              }
-            }
-          }
-          return [...out];
-        }, state.root);
-        for (const file of files) {
-          const at = file.includes("apps/dashboard/")
-            ? file.slice(file.indexOf("apps/dashboard/"))
-            : `apps/dashboard/${file.replace(LEADING_DOT, "")}`;
-          const set = seen.get(at) ?? new Set<string>();
-          set.add(surface.name);
-          seen.set(at, set);
-        }
+        const read = await page.evaluate(filesUnder, state.root);
+        heard(seen, read.own, surface.name);
+        heard(chained, read.chain, surface.name);
       },
       (what, why) => kit.note(`${what}: did not open (${why})`)
     );
@@ -297,7 +375,10 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   const map: Record<string, string[]> = {};
   const uncovered: string[] = [];
   for (const file of styled()) {
-    const by = [...(seen.get(file) ?? [])].sort();
+    // Rendered through a child alone, a file proves only its unscoped rules:
+    // a scoped one matches its own elements, none of which stood there.
+    const through = scoped(file) ? [] : [...(chained.get(file) ?? [])];
+    const by = [...new Set([...(seen.get(file) ?? []), ...through])].sort();
     map[file] = by;
     if (by.length === 0) {
       uncovered.push(file);

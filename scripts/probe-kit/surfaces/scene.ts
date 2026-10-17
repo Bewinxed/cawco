@@ -98,6 +98,30 @@ const REVIEW_REPORT =
   "I read the push probe's last six runs. It never reads a push sent while the phone is locked, and it counts a burst of three as one. The post says what changed for the tray; the notes list each miss with its run.";
 const FAILED_WHY =
   "The attempt's session ended before it handed anything in: the token sheet's build failed on a missing font.";
+/** The fleet's memory, saved twice: the second keeps the first as a version. */
+const MEMORY_V1 = "# Fleet\n\nSay what changed and how it was proven.\n";
+const MEMORY_V2 =
+  "# Fleet\n\nSay what changed and how it was proven.\n\nRead a file whole before editing it.\n";
+/** A model's document under the memory (a models/<model>.md). */
+const MODEL_DOC = "models/claude-opus-5-5.md";
+const MCP_NAME = "tray-docs";
+const HOOK_ID = "lint-written";
+/** The second machine: a Mac, offline, its keychain locked. */
+export const STUDIO_HOST = "studio";
+const STUDIO_MACHINE = "machine-studio-mac";
+/** The file Caw says he wrote in the cawco project's folder (his message's `files`). */
+const BRIEF_FILE = "notes/tray-brief.md";
+const BRIEF = `# The tray's brief
+
+- The count badge never shrinks.
+- A long branch name clips with an ellipsis.
+`;
+/** The note pasted beside your picture in the thread. */
+const PHONE_NOTES =
+  "At 390px the badge is cut after the second chip.\nThe branch name was 40 characters.";
+/** The picture your thread message carried: a 4×2 PNG, the tray's two chips in its two hues. */
+const TRAY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAGElEQVR4nGOwaPlv0fL//yqN/6s0GJA5ALfCDjHN4/54AAAAAElFTkSuQmCC";
 /** Caw's words in the cawco project's thread, over the two tasks that wait on you. */
 const CAW_SAYS =
   "The push probe audit is ready for your review, and the token sheet's attempt failed: it needs you to say whether to try again.";
@@ -695,6 +719,40 @@ export async function seedScene(
     );
     tasks.push(made.id);
   }
+  // The first task filled in as a person fills one (its description,
+  // criteria, labels, checks and to-dos), waiting on the second and related
+  // to the third, and the fourth its child: the task pane's fields and
+  // relations, and the board's task graph (the Canvas tab, `taskEdges`).
+  const [chipTask, tokenSheet, hangNames, boardPhone] = tasks as [
+    string,
+    string,
+    string,
+    string,
+  ];
+  await send(`/api/projects/${project.id}/tasks/${chipTask}`, "PATCH", {
+    description:
+      "A long branch name pushes the tray's count badge out of the row.",
+    acceptance: "The badge stays whole at 390px with a 40-character branch.",
+    labels: ["tray", "ui"],
+    checks: ["bun run lint"],
+  });
+  for (const todo of ["Let the label shrink", "Keep the badge whole"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: the list's order is the order they are added
+    await fleet.api(`/api/projects/${project.id}/tasks/${chipTask}/todos`, {
+      text: todo,
+    });
+  }
+  for (const [from, edge, to] of [
+    [chipTask, "after", tokenSheet],
+    [chipTask, "related", hangNames],
+    [boardPhone, "parent", chipTask],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one edge at a time, each a write to the task's file
+    await fleet.api(`/api/projects/${project.id}/tasks/${from}/links`, {
+      edge,
+      to,
+    });
+  }
   const now = Date.now();
   fleet.write(
     "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, enabled, created_by, keep, expires_at, next_slot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'none', 1, 'session', 0, ?, ?, ?)",
@@ -711,6 +769,19 @@ export async function seedScene(
   );
   await mkdir(join(fleet.repo, "notes"), { recursive: true });
 
+  async function send(path: string, method: string, body: object) {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `${method} ${path}: ${response.status} ${await response.text()}`
+      );
+    }
+    return response.json() as Promise<{ id?: string }>;
+  }
   const put = async (projectId: string, path: string, content: string) => {
     const response = await fetch(
       `${fleet.base}/api/projects/${projectId}/folder/file`,
@@ -973,6 +1044,65 @@ export async function seedScene(
     now - 5 * MINUTE,
     now - 4 * MINUTE
   );
+  // Before that: your words with a picture and a pasted note riding on them
+  // (the row's chips, the picture's lightbox), Caw's reply naming the file
+  // he wrote in the folder (FolderFiles), and the notes of a routine made
+  // and of his design-system offer (their actions under the line).
+  await put(project.id, BRIEF_FILE, BRIEF);
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, images, attachments, created_at) VALUES (?, ?, 'you', ?, ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "Here is the tray at 390px, and my notes from the phone.",
+    JSON.stringify([{ mediaType: "image/png", src: TRAY_PNG }]),
+    JSON.stringify([
+      { kind: "text", name: "phone-notes.txt", content: PHONE_NOTES },
+    ]),
+    now - 9 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, files, created_at) VALUES (?, ?, 'caw', ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "I wrote the tray's brief into the folder from your notes.",
+    JSON.stringify([BRIEF_FILE]),
+    now - 8 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, note_title, event, created_at) VALUES (?, ?, 'event', '', ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "A session made the routine Weekly digest",
+    JSON.stringify({
+      kind: "routine-made",
+      by: "session",
+      expiresAt: now + 7 * DAY,
+      instanceId: chips,
+      name: "Weekly digest",
+      routineId: "routine-weekly-digest",
+      schedule: {
+        cron: "0 9 * * 1",
+        nextAt: now + 3 * DAY,
+        timeZone: "UTC",
+        words: "At 09:00, on Monday (UTC)",
+      },
+      why: "You asked for the week's digest every Monday.",
+    }),
+    now - 7 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, note_title, event, created_at) VALUES (?, ?, 'event', '', ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "Caw offers to build the project's design system",
+    JSON.stringify({
+      kind: "design-offer",
+      projectId: project.id,
+      sources: ["the repository's styles and components"],
+      taskId: review.id,
+    }),
+    now - 6 * MINUTE
+  );
   fleet.write(
     "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'you', ?, ?)",
     crypto.randomUUID(),
@@ -1111,6 +1241,78 @@ export async function seedScene(
     );
   }
 
+  // The fleet's configuration, filed once every turn is at rest so no
+  // session runs under it: the memory saved twice (a version behind it) and
+  // a model's document, an MCP server the hub signs in to (McpSignIn), a
+  // hook saved twice (its previous version), and a rule.
+  await send("/api/fleet/memory", "PUT", { content: MEMORY_V1 });
+  await send("/api/fleet/memory", "PUT", { content: MEMORY_V2 });
+  await send("/api/fleet/memory/docs", "PUT", {
+    path: MODEL_DOC,
+    content: "# Opus\n\nKeep each brief under a page.\n",
+  });
+  await send(`/api/fleet/mcp/${MCP_NAME}`, "PUT", {
+    config: { type: "http", url: "https://mcp.tray-docs.test/mcp" },
+    enabled: true,
+    projectId: null,
+  });
+  // Its server asks for OAuth, as the hub learns on its first read of it
+  // (fleet-mcp.ts): signed in by no one yet.
+  fleet.write(
+    "UPDATE mcp_servers SET auth_mode = 'oauth' WHERE name = ?",
+    MCP_NAME
+  );
+  for (const command of ["bunx biome check --write", "bunx biome check"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: the second save keeps the first as a version
+    await send(`/api/fleet/hooks/${HOOK_ID}`, "PUT", {
+      name: "Lint what was written",
+      enabled: true,
+      event: "PostToolUse",
+      matcher: "Write|Edit",
+      handler: { type: "command", command },
+    });
+  }
+  const rule = await send("/api/rules", "POST", {
+    name: "Finish the TODO",
+    enabled: true,
+    matchKind: "phrase",
+    pattern: "TODO",
+    caseSensitive: false,
+    wholeWord: true,
+    repeat: false,
+    reply: "Finish the TODO before you stop.",
+    scope: {},
+    timing: "turn",
+    watch: "text",
+  });
+  // A second machine, a Mac, offline since its last report: its keychain
+  // locked Claude Code's login (`unreadable-credentials`, the machine
+  // menu's Unlock keychain…), and its last converge failed to write the
+  // memory, the model's document and the MCP server (each row's fault).
+  const denied = (path: string) =>
+    `EACCES: permission denied, open '/Users/owner/${path}'`;
+  fleet.write(
+    "INSERT INTO agents (machine_id, hostname, home, os, status, auth, fleet, last_seen_at, created_at) VALUES (?, ?, '/Users/owner', 'darwin', 'offline', 'unreadable-credentials', ?, ?, ?)",
+    STUDIO_MACHINE,
+    STUDIO_HOST,
+    JSON.stringify({
+      at: now - 2 * 60 * MINUTE,
+      marketplaces: {},
+      mcp: {
+        [MCP_NAME]: { state: "failed", detail: denied(".claude.json") },
+      },
+      memory: { state: "failed", detail: denied(".claude/CLAUDE.md") },
+      memoryDocs: {
+        [MODEL_DOC]: {
+          state: "failed",
+          detail: denied(`.claude/memories/${MODEL_DOC}`),
+        },
+      },
+    }),
+    now - 2 * 60 * MINUTE,
+    now - 30 * DAY
+  );
+
   if (unoffered.length > 0) {
     throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
   }
@@ -1138,5 +1340,8 @@ export async function seedScene(
     tray: tray.id,
     account: ACCOUNT,
     second: SECOND_ACCOUNT,
+    rule: rule.id as string,
+    hook: HOOK_ID,
+    memoryDoc: MODEL_DOC,
   };
 }
