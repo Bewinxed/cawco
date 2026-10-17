@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * `bun .cutover/i2-exact.ts [name filter]`: integration 2's exactness proof.
  * Each case in i2-cases.ts is an element (with the ancestors its states need)

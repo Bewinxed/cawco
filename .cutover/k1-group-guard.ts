@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 // K1's group guard check: `rule="between"` draws
 // `group-not-first/row:border-t group-not-first/row:border-t-border-hairline`,
 // a look that needs a `group/row` ancestor. For each site that passes it

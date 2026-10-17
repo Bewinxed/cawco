@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 // K1's base-modifier check. At ac7b79de8 (T) a consumer's unlayered scoped rule
 // beat the kit bases' layered modifiers (`[&:has([role=checkbox])]:pr-0` on
 // TableCell and TableHead, `[&_tr:last-child]:border-0` on TableBody); now the

@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * `bun .cutover/k2-looks.ts`: each K2 look that carries a variant-order
  * guard, and each element a K2 hook class named, rendered in Chromium

@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 /**
  * One class at ac7b79de8 against what it became, on bare elements: T's
  * classes on T's build (T's src/app.css), the converted classes (with the
