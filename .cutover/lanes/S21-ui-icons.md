@@ -46,3 +46,10 @@ none.
 ## Delta O lines
 - cross-file hook: thinking-steps-header.svelte:20 .thinking-header → [data-slot="thinking-steps-header"]; selected by transcript/Thinking.svelte:239
 - needs colour token: --mask-opaque: #000 (thinking-indicator.svelte:141)
+
+## Delta R lines
+R2 fixed: apps/dashboard/src/lib/components/ui/thinking-steps/thinking-steps-header.svelte:20
+(R1: machine-row's tile takes every box-shadow state from utilities; sonner's box-shadow is one residual state. R3: the only mono family, thinking-step's, is on `<code>` inside a residual.)
+
+## Contracts
+(none)
