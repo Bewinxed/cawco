@@ -20,7 +20,9 @@
 # the last tree it compiled: the rsync below makes the root's apps/apple
 # that tree exactly (--checksum --delete; a changed file is written anew,
 # an unchanged one keeps its mtime), and Xcode's incremental build follows.
-# No probe reads that root; a workspace's own builds stay in its own.
+# No probe reads that root; a workspace's own builds stay in its own. Each
+# gate run's logs are a folder of their own there, logs/<commit>-<time>, so a
+# failure's log outlives the runs after it; the newest 20 stay.
 # Every build compiles against the SwiftPM versions committed in
 # apps/apple/Package.resolved, resolution off (-disableAutomaticPackageResolution;
 # a resolved file Package.swift no longer matches fails the build, saying so),
@@ -47,6 +49,12 @@
 # Simulators and builds outside build-both.sh go through mac-slot.sh.
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
+# Run on the Mac itself, the Mac side leads a process group of its own as
+# well, as mac-slot.sh's keeper does: a cut-off that KILLs this script's
+# group (a check's runner sends TERM, then KILL 4 s later) never reaches it,
+# so it reads the link's EOF and ends the build group with its whole grace.
+# In this script's group it was KILLed inside that grace, and the build group
+# it was stopping lived on under launchd.
 # Run on the Mac itself, the Mac side runs here through the same steps and
 # the same link, with no SSH, under one root for every caller,
 # ~/.cawco/workspace-cache/xdg/cawco-apple: a CawCo workspace's own cache,
@@ -84,7 +92,7 @@ if [[ -n ${CAWCO_MAC_SLOT:-} ]]; then
   exit 2
 fi
 if [[ $(uname -s) == Darwin ]]; then
-  MAC=(bash --norc -c)
+  MAC=(perl -e 'setpgrp(0, 0); exec @ARGV or die "exec: $!\n"' bash --norc -c)
   APPLE_ROOT=$HOME/.cawco/workspace-cache/xdg/cawco-apple
 elif [[ -n ${CAWCO_WORKSPACE:-} ]]; then
   echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios\", expect: \"LAUNCHED iOS 18.5\" }, or delegate the work to the Mac." >&2
@@ -100,9 +108,12 @@ COMPILE_ONLY=${2:-}
 [[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only || $COMPILE_ONLY == --gate ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only|--gate]" >&2; exit 2; }
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
+# A gate run's logs folder: the commit it compiles (the item's last) and when.
+LOG_RUN=
 if [[ $COMPILE_ONLY == --gate ]]; then
   BUILD=gate
   COMPILE_ONLY=--compile-only
+  LOG_RUN=$(git rev-parse --short=12 HEAD)-$(date +%Y%m%d-%H%M%S)
 fi
 [[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
 REMOTE=build/cawco-apple/$BUILD/apps/apple
@@ -268,6 +279,12 @@ eval "$DISK_ROOM"
 disk_room "$ROOT" "build-both.sh $PLATFORM ($BUILD)"
 mkdir -p "$ROOT/$BUILD/apps/apple"
 rm -f "$ROOT/$BUILD/tree"
+# A gate run's logs are a folder of their own (LOG_RUN): the newest 19 before
+# it stay, with it 20.
+if [[ -n $LOG_RUN ]]; then
+  mkdir -p "$ROOT/$BUILD/logs"
+  ls -1t "$ROOT/$BUILD/logs" | tail -n +20 | while IFS= read -r old; do rm -rf -- "${ROOT:?}/$BUILD/logs/$old"; done
+fi
 echo READY
 # The same SSH process keeps the locks while the caller rsyncs; GO starts the
 # build. A failed sync ends the caller, and its EOF releases the locks.
@@ -288,7 +305,7 @@ PLATFORM=$2
 BUILD=$3
 COMPILE_ONLY=$4
 DD="$5/$BUILD/DerivedData"
-LOGS="$5/$BUILD/logs"
+LOGS="$5/$BUILD/logs${LOG_RUN:+/$LOG_RUN}"
 mkdir -p "$LOGS"
 SETTLE=8
 # The apps/apple synced here, as the caller stamped it with GO.
@@ -430,8 +447,8 @@ if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
 DISK_ROOM=$(<scripts/lib/disk-room.sh)
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&

@@ -10,11 +10,12 @@
  * The runner dials the simulator's testmanagerd socket: a CawCo workspace's
  * boundary lets that one socket through (boundary.ts `TEST_MANAGER_SOCKET`)
  * and gives Maestro its home in the workspace (paths.ts `workspaceMaestroEnv`).
+ * The runner ends with the slot's simulator: mac-slot.sh's keeper ends it as
+ * it deletes the simulator, however the probe ends (lib/mac-sim.ts).
  *
  *   const finger = simTouch(udid);
  *   await finger.front();            // "CawCo": starts the runner, reads what stands in front
  *   await finger.touch({ x, y });    // window points
- *   await finger.stop();
  */
 
 /**
@@ -25,8 +26,6 @@
  * (MAESTRO_OPTS reaches its `java` line).
  */
 const MAESTRO = `JAVA_HOME=/opt/homebrew/opt/openjdk MAESTRO_OPTS="\${MAESTRO_OPTS:-} --enable-final-field-mutation=ALL-UNNAMED" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro`;
-/** Maestro's runner app in the simulator. */
-const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
 /** What Maestro's CLI prints after its error, before the stack. */
 const MAESTRO_STACK = "The stack trace was:";
 
@@ -110,13 +109,6 @@ export function simTouch(udid: string, app = "dev.cawco.app") {
         endY: Math.round(to.y),
         duration: seconds,
       }),
-    /** The runner app and the `xcodebuild` keeping it up (the bracket keeps the pattern off the shell running the match). */
-    stop: async () => {
-      await sh(`xcrun simctl terminate ${udid} ${RUNNER} >/dev/null 2>&1 || true
-pkill -f "[x]codebuild test-without-building .*-destination id=${udid} " || true`).catch(
-        () => undefined
-      );
-    },
   };
 }
 

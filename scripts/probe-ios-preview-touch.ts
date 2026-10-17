@@ -53,7 +53,7 @@ import { join, resolve } from "node:path";
 import { simulatorApp, staleApp } from "./lib/apple-app";
 import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import { type SimTouch, simTouch } from "./lib/sim-touch";
+import { simTouch } from "./lib/sim-touch";
 
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
@@ -466,8 +466,6 @@ const fleet = await scratchFleet({
 });
 let sim: MacSim | undefined;
 let stream: ReturnType<typeof Bun.spawn> | undefined;
-/** Maestro's runner in the simulator (lib/sim-touch.ts), once it has one. */
-let finger: SimTouch | undefined;
 
 try {
   fleet.launch("sessiond");
@@ -550,7 +548,6 @@ xcrun simctl install ${udid} "${app}"`);
   // page's rects), not the accessibility tree. The touches are Maestro's
   // runner's, in points (lib/sim-touch.ts): its first read starts it.
   const touches = simTouch(udid);
-  finger = touches;
   const { front, type } = touches;
   /** The artifact's pins as the hub has them (`comment_read`'s route). */
   const pinsOnHub = async () =>
@@ -1346,7 +1343,6 @@ xcrun simctl install ${udid} "${app}"`);
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
   stream?.kill();
-  await finger?.stop();
   await sim?.release();
   await fleet.close();
   if (failed.length > 0) {

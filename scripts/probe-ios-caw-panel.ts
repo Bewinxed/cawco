@@ -260,8 +260,6 @@ const pause = (ms: number) => Bun.sleep(ms);
  * `brew --prefix openjdk` names: `brew` itself cannot run in a workspace.
  */
 const MAESTRO = `JAVA_HOME=/opt/homebrew/opt/openjdk MAESTRO_OPTS="\${MAESTRO_OPTS:-} --enable-final-field-mutation=ALL-UNNAMED" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro`;
-/** Maestro's runner app: one per simulator, kept up by an `xcodebuild test-without-building` on the Mac. */
-const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
 /**
  * Each simulator's runner port, a free one on the Mac picked before its first
  * read. Maestro's default, 22087, is every simulator's, and the CLI takes
@@ -435,14 +433,6 @@ async function tap(udid: string, p: { x: number; y: number }) {
   );
   maestroLog(udid).taps.push(Date.now() - started);
 }
-/**
- * The simulator's runner, stopped: its app, and the `xcodebuild` keeping it
- * up, as `pkill -f` matches it (the bracket keeps the pattern off the shell
- * running the match, whose own command line holds it).
- */
-const stopRunner = (udid: string) =>
-  mac(`xcrun simctl terminate ${udid} ${RUNNER} >/dev/null 2>&1 || true
-pkill -f "[x]codebuild test-without-building .*-destination id=${udid} " || true`);
 /** What each simulator's Maestro calls took, and how big its app's tree read, for the summary: a line per simulator. */
 function maestroTimes(): string {
   const spread = (values: number[], unit: string) => {
@@ -599,14 +589,6 @@ async function simulator(pattern: string): Promise<MacSim> {
   const sim = await macSim({ newest: pattern, ssh: true });
   sims.push(sim);
   return sim;
-}
-
-/** Stops the Maestro runner on `sim`, then gives its slot back. */
-async function endSim(sim: MacSim) {
-  await stopRunner(sim.udid).catch((error) =>
-    console.log(`  Maestro runner cleanup: ${error}`)
-  );
-  await sim.release();
 }
 
 type Kind = "phone" | "pad";
@@ -1674,7 +1656,7 @@ try {
   const phone = await simulator("iPhone \\d+ Pro");
   console.log(`  phone simulator ${phone.udid}`);
   await pass("phone", phone.udid, port, rowSession, false);
-  await endSim(phone);
+  await phone.release();
   const pad = await simulator("iPad Pro.*");
   console.log(`  iPad simulator ${pad.udid}`);
   await pass("pad", pad.udid, port, rowSession, true);
@@ -1682,8 +1664,8 @@ try {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
   for (const sim of sims) {
-    // biome-ignore lint/performance/noAwaitInLoops: one ssh session at a time, each simulator torn down in turn
-    await endSim(sim);
+    // biome-ignore lint/performance/noAwaitInLoops: one ssh session at a time, each simulator torn down in turn (its slot's keeper ends its Maestro runner, mac-slot.sh)
+    await sim.release();
   }
   tunnel?.kill();
   await fleet.close();
