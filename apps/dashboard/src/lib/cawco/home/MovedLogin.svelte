@@ -40,91 +40,44 @@
       size={28}
     />
   {/snippet}
-  <span data-slot="name" class="name">{one.name}</span>
-  <span data-slot="sub" class="sub">
-    <span data-slot="from" class="from">{one.from}</span>
+  <!-- An entry under the group's head: body type in row ink, a step under the
+       head's label, so the head reads as the heading and the entries as its
+       list. The name gives way first (The Truncate Inside Rule). -->
+  <span
+    data-slot="name"
+    class="pe-(--x-room) type-body text-ink-row truncate">{one.name}</span
+  >
+  <!-- Where it was found, and the to-do at the line's trailing edge; the
+       to-do wraps under it when both don't fit. -->
+  <span
+    data-slot="sub"
+    class="flex min-w-0 flex-wrap items-baseline justify-between gap-x-space-2"
+  >
+    <span
+      data-slot="from"
+      class="type-meta text-ink-muted wrap-anywhere">{one.from}</span
+    >
     {#if one.missing > 0}
+      <!-- Its chevron's ink ends on the panel's trailing edge: the link hangs
+           past it by the 12px chevron's side bearing (its stroke ends at 15.75
+           of 24). -->
       <a
         data-slot="todo"
-        class="todo mark-line"
+        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-link-ink no-underline whitespace-nowrap transition-[opacity] dur-control ease-out hover:text-link-hover active:opacity-72"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
+        style:--hang="calc(-12px * 8.25 / 24)"
         ><span>Sign in on {plural(one.missing, "machine")}</span>
-        <IconChevronRight aria-hidden="true" /></a
+        <IconChevronRight aria-hidden="true" class="size-icon-sm" /></a
       >
     {:else}
-      <span data-slot="done" class="done mark-line"
-        ><IconSuccess aria-hidden="true" /><span>Signed in everywhere</span
+      <span
+        data-slot="done"
+        class="mark-line ms-auto inline-flex items-center gap-space-1 type-meta text-ink-muted whitespace-nowrap"
+        ><IconSuccess aria-hidden="true" class="size-icon-sm" /><span
+          >Signed in everywhere</span
         ></span
       >
     {/if}
   </span>
 </NoticeRow>
-
-<style>
-  /* An entry under the group's head: body type in row ink, a step under the
-     head's label, so the head reads as the heading and the entries as its
-     list. The name gives way first (The Truncate Inside Rule). */
-  .name {
-    overflow: hidden;
-    padding-inline-end: var(--x-room);
-    font: var(--type-body);
-    color: var(--ink-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* Where it was found, and the to-do at the line's trailing edge; the
-     to-do wraps under it when both don't fit. */
-  .sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    column-gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .from {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  /* Its chevron's ink ends on the panel's trailing edge: the link hangs past
-     it by the 12px chevron's side bearing (its stroke ends at 15.75 of 24). */
-  .todo {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    margin-inline: auto calc(-12px * 8.25 / 24);
-    border-radius: var(--radius-xs);
-    font: var(--type-meta);
-    color: var(--link-ink);
-    text-decoration: none;
-    white-space: nowrap;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .todo:hover {
-      color: var(--link-hover);
-    }
-  }
-  .todo:active {
-    opacity: 0.72;
-  }
-  .todo :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  .done {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .done :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-</style>

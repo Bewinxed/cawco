@@ -35,11 +35,21 @@
      over each other mid-fade. Live and read has no line: the whole block
      leaves the same way. -->
 {#if home.status !== "connected"}
-  <div class="status" role="status" out:crossOut>
+  <!-- literal: 28px -->
+  <div
+    class="relative min-h-(--line-h) type-meta text-ink-muted"
+    role="status"
+    style:--line-h="28px"
+    out:crossOut
+  >
     {#key home.status === "unreachable"}
-      <div class="line" in:crossIn out:crossOut>
+      <div
+        class="flex min-h-(--line-h) flex-wrap items-center gap-x-space-2 gap-y-space-1"
+        in:crossIn
+        out:crossOut
+      >
         {#if home.status === "unreachable"}
-          <span data-slot="down" class="down mark-line">
+          <span data-slot="down" class="mark-line inline-flex items-center gap-space-1 text-status-fail-ink">
             <IconWarningTriangle aria-hidden="true" />
             <span
               >Hub unreachable,
@@ -69,28 +79,10 @@
 {/if}
 
 <style>
-  .status {
-    position: relative;
-    min-height: 28px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    min-height: 28px;
-  }
-  .status :global(svg) {
-    width: 12px;
-    height: 12px;
+  /* residual: foreign-dom */
+  [role="status"] :global(svg) {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
     flex: none;
-  }
-  .down {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    color: var(--status-fail-ink);
   }
 </style>

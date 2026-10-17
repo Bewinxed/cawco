@@ -74,22 +74,10 @@
   }
 </script>
 
-<span aria-hidden="true" class="pose" style:--side="{size}px">
-  <canvas {@attach paint}></canvas>
+<span
+  aria-hidden="true"
+  class="block flex-none size-(--side) pointer-events-none select-none"
+  style:--side="{size}px"
+>
+  <canvas class="block size-full" {@attach paint}></canvas>
 </span>
-
-<style>
-  .pose {
-    display: block;
-    flex: none;
-    inline-size: var(--side);
-    block-size: var(--side);
-    pointer-events: none;
-    user-select: none;
-  }
-  canvas {
-    display: block;
-    inline-size: 100%;
-    block-size: 100%;
-  }
-</style>

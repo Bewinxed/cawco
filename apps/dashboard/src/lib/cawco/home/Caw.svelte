@@ -712,23 +712,24 @@
 
 <div
   aria-hidden="true"
-  class="caw"
+  class="relative h-(--height) w-(--side) pointer-events-none select-none"
   style:--artboard="{(size * ARTBOARD) / BOX.side}px"
   style:--height="{ledge ? size * LEDGE_LINE : size}px"
   style:--left="{(-size * BOX.x) / BOX.side}px"
   style:--side="{size}px"
   style:--top="{(-size * BOX.y) / BOX.side}px"
 >
+  <!-- One per file, the slot's own box and never transformed, so a clip on it
+       holds its line while his canvas fades and scales inside. -->
   {#each layers as layer (layer.id)}
     <div
       data-slot="layer"
       data-behind={(ledge && layer.status !== "peek") || undefined}
-      class="layer"
-      class:behind={ledge && layer.status !== "peek"}
+      class="absolute inset-0"
     >
       <canvas
         data-caw-shown={layer.shown || undefined}
-        class:shown={layer.shown}
+        class="absolute top-(--top) left-(--left) size-(--artboard) opacity-0"
         {@attach mount(layer)}
       ></canvas>
     </div>
@@ -736,34 +737,14 @@
 </div>
 
 <style>
-  .caw {
-    position: relative;
-    width: var(--side);
-    height: var(--height);
-    pointer-events: none;
-    user-select: none;
-  }
-  /* One per file, the slot's own box and never transformed, so a clip on it
-     holds its line while his canvas fades and scales inside. */
-  .layer {
-    position: absolute;
-    inset: 0;
-  }
+  /* residual: unmapped */
   /* A status file behind the edge: his acting still reaches past the box
      above and to the sides, and nothing of him draws below the slot's
      bottom. peek.riv draws its own wing tips in front of the edge. */
-  .behind {
+  [data-slot="layer"][data-behind] {
     clip-path: inset(calc(var(--artboard) * -1) calc(var(--artboard) * -1) 0);
   }
-  canvas {
-    position: absolute;
-    left: var(--left);
-    top: var(--top);
-    width: var(--artboard);
-    height: var(--artboard);
-    opacity: 0;
-  }
-  canvas.shown {
+  canvas[data-caw-shown] {
     opacity: 1;
   }
 </style>
