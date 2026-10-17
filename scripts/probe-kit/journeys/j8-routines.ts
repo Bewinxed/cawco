@@ -10,6 +10,7 @@
  * where one can start (the host), never inside a workspace.
  */
 import { join } from "node:path";
+import { SESSION_TITLE_MAX } from "../../../packages/hub/src/work-items";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { callsInOrder, say } from "./mock";
@@ -50,14 +51,20 @@ const runsOf = (fleet: KitFleet, routine: string) =>
 async function walk(leg: Leg): Promise<void> {
   const { fleet, page, base } = leg;
   const { projectId } = leg.seeded as Seeded;
-  const name = leg.title(`Morning board check ${leg.id}`);
+  // A routine's name runs to the hub's limit for a session's name
+  // (routines.ts `checked`): the stretched data set stretches it up to the
+  // limit, never past. Its instruction has no limit, and stretches whole.
+  const name = leg
+    .title(`Morning board check ${leg.id}`)
+    .slice(0, SESSION_TITLE_MAX)
+    .trimEnd();
   const routine = await fleet.api<{ id: string }>("/api/routines", {
     projectId,
     name,
     cron: "0 6 1 1 *",
     timeZone: "UTC",
     target: "delegate",
-    prompt: `JOURNEY-ROUTINE ${leg.id} check the board and report what is stuck.`,
+    prompt: `JOURNEY-ROUTINE ${leg.id} ${leg.title("check the board and report what is stuck.")}`,
   });
   // Made, a routine runs once as its test: that run settles first.
   await eventually(
