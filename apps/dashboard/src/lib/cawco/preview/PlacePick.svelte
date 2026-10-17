@@ -3,8 +3,11 @@
    * `cawco.pickPlace()` (wire.ts): a page asks the person for a machine and a
    * folder on it, and gets CawCo's own pickers, over the whole of the
    * preview's well: the machine select and the folder browser New Session
-   * uses. "Use this place" answers the page; Cancel or Escape answers null.
+   * uses. "Use this place" answers the page with the machine, its label (the
+   * name the dashboard shows it by) and the folder; Cancel or Escape answers
+   * null.
    */
+  import { machineLabel } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -18,7 +21,11 @@
     onpick,
     oncancel,
   }: {
-    onpick: (place: { machineId: string; path: string }) => Promise<void>;
+    onpick: (place: {
+      label: string;
+      machineId: string;
+      path: string;
+    }) => Promise<void>;
     oncancel: () => void;
   } = $props();
 
@@ -57,7 +64,11 @@
     saving = true;
     problem = null;
     try {
-      await onpick({ machineId: machine.machineId, path: folder });
+      await onpick({
+        label: machineLabel(machine.hostname),
+        machineId: machine.machineId,
+        path: folder,
+      });
     } catch (error) {
       problem = failureWords(error);
     } finally {
@@ -100,12 +111,17 @@
         class="w-full text-foreground"
         size="sm"
       >
-        {machine ? `${machine.hostname} · ${machine.os}` : "No machines online"}
+        {machine
+          ? `${machineLabel(machine.hostname)} · ${machine.os}`
+          : "No machines online"}
       </Select.Trigger>
       <Select.Content>
         {#each onlineMachines as row (row.machineId)}
-          <Select.Item label="{row.hostname} · {row.os}" value={row.machineId}>
-            {row.hostname}
+          <Select.Item
+            label="{machineLabel(row.hostname)} · {row.os}"
+            value={row.machineId}
+          >
+            {machineLabel(row.hostname)}
             · {row.os}
           </Select.Item>
         {:else}

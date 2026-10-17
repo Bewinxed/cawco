@@ -10,8 +10,10 @@
  * state and the card's words:
  *
  * A. The machine online: the picker opens with it, a folder typed, a click on
- *    Use this place: the hub holds the place (the machine and the folder) and
- *    the card names the folder.
+ *    Use this place: the hub holds the place (the machine, its label and the
+ *    folder), and the card reads "<label> — <path>" from what pickPlace
+ *    answered, the label the dashboard names the machine by (core
+ *    `machineLabel`, the picker's select included).
  * B. The picker opened while the only machine is offline, which then comes
  *    back: the picker offers it as soon as it is online, and the same typed
  *    folder and click send the place. (Main seeded the machine once, as the
@@ -21,6 +23,7 @@
  *   bun scripts/probe-kit/run.ts place-pick
  */
 import type { Page } from "playwright-core";
+import { machineLabel } from "../../../packages/core/src/index";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -30,7 +33,7 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const NAME = "place";
 
-/** One card, as the setup page's: a button that asks for the place, and what was picked. */
+/** One card, as the setup page's: a button that asks for the place, and the place picked as "<label> — <path>". */
 const PAGE = `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Where the work happens</title></head>
@@ -44,7 +47,7 @@ const PAGE = `<!doctype html>
     document.querySelector("[data-pick]").addEventListener("click", async () => {
       const place = await window.cawco.pickPlace();
       document.querySelector("[data-place]").textContent = place
-        ? place.machineId + " " + place.path
+        ? place.label + " — " + place.path
         : "Not picked";
     });
   </script>
@@ -99,15 +102,26 @@ const respond = (request: Seen): Reply => {
 };
 
 interface Placed {
+  label?: string;
   machineId?: string;
   path?: string;
 }
 
+interface AgentRow {
+  hostname: string;
+  machineId: string;
+  status: string;
+}
+
+/** The hub's row for the fleet's one machine. */
+const machineRow = async (fleet: KitFleet): Promise<AgentRow | undefined> =>
+  (await fleet.api<AgentRow[]>("/api/agents")).find(
+    (row) => row.machineId === MACHINE
+  );
+
 /** The hub's online word on the fleet's one machine. */
 const machineOnline = async (fleet: KitFleet): Promise<boolean> =>
-  (
-    await fleet.api<{ machineId: string; status: string }[]>("/api/agents")
-  ).some((row) => row.machineId === MACHINE && row.status === "online");
+  (await machineRow(fleet))?.status === "online";
 
 /** The bar's machines glyph's hue, as the dashboard's fleet store has it: `fail` while a machine is down. */
 const machinesTone = (page: Page): Promise<string | null> =>
@@ -210,15 +224,24 @@ const run = async (kit: Kit) => {
     .locator("[data-pick]")
     .waitFor({ timeout: 60_000 });
 
+  // The name the dashboard shows the machine by.
+  const label = machineLabel((await machineRow(fleet))?.hostname ?? "");
+  /** The place sent whole: held with its label, named on the card and in the select as the dashboard names it. */
+  const whole = (picked: Awaited<ReturnType<typeof pick>>, folder: string) =>
+    label.length > 0 &&
+    picked.held?.machineId === MACHINE &&
+    picked.held.label === label &&
+    picked.held.path === folder &&
+    picked.card === `${label} — ${folder}` &&
+    picked.trigger.startsWith(`${label} · `) &&
+    picked.problem === null;
+
   // A. The machine online, a folder typed, a real click.
   const first = `${fleet.repo}/a`;
   const a = await pick(page, fleet, read, first);
   kit.check(
-    "A: with the machine online, a typed folder and a click on Use this place send the place; the card names it",
-    a.held?.machineId === MACHINE &&
-      a.held.path === first &&
-      a.card === `${MACHINE} ${first}` &&
-      a.problem === null,
+    `A: with the machine online, a typed folder and a click on Use this place send the place with the machine's label; the card reads "${label} — <path>"`,
+    whole(a, first),
     JSON.stringify(a)
   );
 
@@ -248,12 +271,8 @@ const run = async (kit: Kit) => {
     );
   });
   kit.check(
-    "B: a picker opened while the machine was offline sends the place once it is back: a typed folder and a click on Use this place",
-    b.online &&
-      b.held?.machineId === MACHINE &&
-      b.held.path === second &&
-      b.card === `${MACHINE} ${second}` &&
-      b.problem === null,
+    `B: a picker opened while the machine was offline sends the place once it is back, with the machine's label: a typed folder and a click on Use this place; the card reads "${label} — <path>"`,
+    b.online && whole(b, second),
     JSON.stringify(b)
   );
 };

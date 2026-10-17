@@ -781,6 +781,7 @@
   let picking = $state<{ id: number | string } | null>(null);
   /** The place picked goes back to the page, which keeps it in its state. */
   function pickedPlace(place: {
+    label: string;
     machineId: string;
     path: string;
   }): Promise<void> {

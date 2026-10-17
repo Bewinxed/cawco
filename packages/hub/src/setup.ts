@@ -13,7 +13,8 @@
  *   answered it (`upstream_settings`).
  * - `stages`: the template's stages, names editable (`cawco.set`).
  * - `delegates`: delegate types suggested for the template, several picks.
- * - `place`: the machine and folder its work happens in (`cawco.pickPlace`).
+ * - `place`: the machine and folder its work happens in (`cawco.pickPlace`,
+ *   stored as `{ machineId, label, path }`).
  */
 import type { ChoiceEntry } from "@cawco/core";
 import {
@@ -151,7 +152,7 @@ export const setupEvent = (ask: SetupAsk): string => {
       ...(ask.askUpstream ? [upstreamCard] : []),
       `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,
       `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type with one line on the work it takes: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
-      `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\`. Once picked, the card names the machine and the folder, from \`cawco.on("picks", …)\`.`,
+      `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
       "No routines, relays or other cards.",
       'Write the page in CawCo\'s voice (WORDS.md): sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
     ].join("\n"),

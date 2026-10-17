@@ -644,15 +644,25 @@ declare global {
   }
 }
 
-/** A machine and a folder on it, as `cawco.pickPlace` answers. */
+/**
+ * A machine and a folder on it, as `cawco.pickPlace` answers: the machine's
+ * id, its label (the name the dashboard shows it by, core `machineLabel`)
+ * and the folder's full path.
+ */
 interface PlacePick {
+  label: string;
   machineId: string;
   path: string;
 }
 
-const isPlace = (value: unknown): value is PlacePick =>
-  typeof (value as PlacePick | null)?.machineId === "string" &&
-  typeof (value as PlacePick).path === "string";
+const placeOf = (value: unknown): PlacePick | null => {
+  const raw = value as Partial<Record<keyof PlacePick, unknown>> | null;
+  return typeof raw?.machineId === "string" &&
+    typeof raw.label === "string" &&
+    typeof raw.path === "string"
+    ? { label: raw.label, machineId: raw.machineId, path: raw.path }
+    : null;
+};
 
 Object.defineProperty(window, "cawco", {
   value: Object.freeze({
@@ -681,8 +691,8 @@ Object.defineProperty(window, "cawco", {
       return () => listeners.delete(listener);
     },
     pickPlace: async () => {
-      const place = await askHost("cawco/pick-place", { pageHash });
-      if (!isPlace(place)) {
+      const place = placeOf(await askHost("cawco/pick-place", { pageHash }));
+      if (!place) {
         return null;
       }
       await change({ choice: "place", pageHash, value: place });
