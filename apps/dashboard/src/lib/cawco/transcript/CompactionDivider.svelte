@@ -275,12 +275,10 @@
       style:--chev-scale="calc(0.25 + 0.75 * var(--chev))"
       style:--chev-blur="calc((1 - var(--chev)) * 4px)"
       style:--chev-filter="blur(var(--chev-blur))"
-      style:--chev-durs={"var(--chev-dur), var(--chev-dur), var(--chev-dur), var(--dur-toggle)"}
-      style:--chev-eases={"var(--chev-ease), var(--chev-ease), var(--chev-ease), var(--ease-in-out)"}
       class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
         aria-hidden="true"
-        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) filter-(--chev-filter) group-aria-expanded/divider:rotate-90 motion-safe:transition-[translate,scale,filter,rotate] motion-safe:duration-(--chev-durs) motion-safe:ease-(--chev-eases)"
+        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) filter-(--chev-filter) group-aria-expanded/divider:rotate-90 motion-safe:divider-chevron-turn"
       /></span
     ></span
   >

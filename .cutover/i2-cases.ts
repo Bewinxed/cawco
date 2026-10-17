@@ -158,6 +158,9 @@ const PROJECT_CHIP = "src/lib/cawco/spawn/ProjectChip.svelte";
 const PROMPT_EDITOR = "src/lib/cawco/spawn/PromptEditor.svelte";
 const COMPOSER = "src/lib/cawco/transcript/Composer.svelte";
 const SHOT = "src/lib/cawco/transcript/Shot.svelte";
+const DIVIDER = "src/lib/cawco/transcript/CompactionDivider.svelte";
+/** The chevron's Solar icon as unplugin-icons renders it, on both trees. */
+const CHEVRON_SVG = `aria-hidden="true" width="1.2em" height="1.2em" viewBox="0 0 24 24"`;
 const BADGE = "sidebar/sidebar-menu-badge.svelte";
 /** The rail's menu button a badge follows: the peer its states read. */
 const MENU_BUTTON = `<a href="#x" class="peer/menu-button" data-sidebar="menu-button" data-size="default">Fleet</a>`;
@@ -614,6 +617,39 @@ export const CASES: Case[] = [
         ],
       },
       { name: "dark", dark: true },
+    ],
+  },
+
+  {
+    name: "CompactionDivider.svelte:283 the chevron's turn (divider-chevron-turn)",
+    files: [DIVIDER],
+    t: `<button data-slot="divider" aria-expanded="false" class="{S0} divider focus-inset touch-hit" type="button"><span class="{S0} mid"><span data-slot="chev" class="{S0} chev"><svg data-check="mark" ${CHEVRON_SVG}></svg></span></span></button>`,
+    now: `<button data-slot="divider" aria-expanded="false" ${attrs(DIVIDER, "now", 'data-slot="divider"')} type="button"><span ${attrs(DIVIDER, "now", "style:--mid-durs")}><span data-slot="chev" ${attrs(DIVIDER, "now", 'data-slot="chev"')}><svg data-check="mark" ${CHEVRON_SVG} class="${element(DIVIDER, "now", "<IconChevron").cls}"></svg></span></span></button>`,
+    show: [
+      "transition-property",
+      "transition-duration",
+      "transition-timing-function",
+      "rotate",
+      "filter",
+    ],
+    states: [
+      REST,
+      focus('[data-slot="divider"]'),
+      {
+        name: "open",
+        attrs: [
+          {
+            sel: '[data-slot="divider"]',
+            name: "aria-expanded",
+            value: "true",
+          },
+        ],
+      },
+      {
+        name: "hovered",
+        force: [{ sel: '[data-slot="divider"]', pseudo: ["hover"] }],
+      },
+      { name: "reduced motion", motion: "reduce" },
     ],
   },
 

@@ -2581,6 +2581,19 @@
     --chev: 0;
   }
 }
+/* The divider chevron's mark turning on the spot (CompactionDivider): it
+   slides, grows and sharpens on the row's chevron clock, and turns on the
+   toggle's. Set on the mark, so `--chev-dur` and `--chev-ease` resolve
+   there. A transitioned filter can hang WebKit; this mark is driven on
+   WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other
+   element takes this. */
+@utility divider-chevron-turn {
+  transition:
+    translate var(--chev-dur) var(--chev-ease),
+    scale var(--chev-dur) var(--chev-ease),
+    filter var(--chev-dur) var(--chev-ease),
+    rotate var(--dur-toggle) var(--ease-in-out);
+}
 /* A turn's pad (the transcript skeleton's reader well), a step down at the
    narrow breakpoint. */
 @utility turn-pad {
