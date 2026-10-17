@@ -294,12 +294,24 @@
   });
 </script>
 
+<!-- Held by its top, as tall as the room above the composer. A height
+     between a top and a bottom is the fixed layer's container's, which
+     WebKit walks through stale sizes for frames while a keyboard resizes the
+     web view (Brave): a host held that way grew to 1106px and shrank by the
+     keyboard twice in one opening, throwing the sheet down and back.
+     What stands below the composer is clipped, and the host is no scroll
+     container: with `overflow: hidden` a page in the sheet that scrolled
+     something into view (an anchor, a focused field) scrolled the host too,
+     236px on a phone, throwing the sheet over the whole screen while vaul
+     still held it at the middle snap, so its grabber and its taps no longer
+     matched what was drawn. -->
 <Portal
   ><div
     data-slot="preview-sheet-host"
-    class="preview-sheet-host"
+    class="fixed top-(--host-top) inset-x-0 z-40 overflow-clip pointer-events-none h-(--host-h)"
     data-active-snap={typeof snap === "string" ? 0.6 : snap}
-    style={`height:${availableHeight}px`}
+    style:--host-top="env(safe-area-inset-top, 0px)"
+    style:--host-h="{availableHeight}px"
     bind:this={host}
   ></div></Portal
 >
@@ -323,7 +335,6 @@
   >
     <Drawer.Content
       data-preview-sheet
-      class="preview-sheet"
       hosted
       modal={false}
       onCloseAutoFocus={(event) => event.preventDefault()}
@@ -336,22 +347,24 @@
         event.preventDefault();
       }}
       onOpenAutoFocus={(event) => event.preventDefault()}
-      style="inset:0;width:100%;height:100%;{initial
-        ? `--initial-transform:${initial}`
-        : ''}"
+      style={initial ? `--initial-transform:${initial}` : undefined}
       trapFocus={false}
       bind:ref={drawer}
     >
       <Drawer.Title class="sr-only">Beside the conversation</Drawer.Title>
+      <!-- literal: 100px, 6px, 44px -->
       <div
         data-slot="sheet"
-        class="sheet"
+        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-raised shadow-drawer"
         style:--sheet-hidden="{hidden}px"
+        style:--grab-left="calc(50% - 50px)"
+        style:--grab-w="100px"
+        style:--grab-h="6px"
+        style:--grab-hit="44px"
         {@attach land(() => share, { mode: "clip" })}
       >
         <Vaul.Handle
           data-preview-grab
-          class="preview-grab"
           onclick={cycleSnap}
           onpointerdown={(event) => {
             handleStartY = event.clientY;
@@ -371,77 +384,51 @@
 {/if}
 
 <style>
-  /* css-scope .preview-sheet: the canvas stage finds this sheet by it */
-  /* Held by its top, as tall as the room above the composer. A height
-     between a top and a bottom is the fixed layer's container's, which
-     WebKit walks through stale sizes for frames while a keyboard resizes the
-     web view (Brave): a host held that way grew to 1106px and shrank by the
-     keyboard twice in one opening, throwing the sheet down and back.
-     What stands below the composer is clipped, and the host is no scroll
-     container: with `overflow: hidden` a page in the sheet that scrolled
-     something into view (an anchor, a focused field) scrolled the host too,
-     236px on a phone, throwing the sheet over the whole screen while vaul
-     still held it at the middle snap, so its grabber and its taps no longer
-     matched what was drawn. */
-  .preview-sheet-host {
-    position: fixed;
-    top: env(safe-area-inset-top, 0px);
-    left: 0;
-    right: 0;
-    z-index: 40;
-    overflow: clip;
-    pointer-events: none;
-  }
+  /* residual: foreign-dom */
   /* The sheet fills its host (the space above the composer) edge to edge,
      so the kit content's inset card, its top margin, its height cap, its
-     padding and its drawn grab bar give way to `.sheet`, which draws the
-     surface and holds the vaul handle: the one box that comes out of the
-     Preview button. */
-  :global(.preview-sheet) {
+     padding and its drawn grab bar give way to the sheet div, which draws
+     the surface and holds the vaul handle: the one box that comes out of the
+     Preview button. The kit's own classes are utilities in a layer; these
+     stand over them. */
+  :global([data-preview-sheet][data-slot="drawer-content"]) {
     position: absolute;
+    inset: 0;
     z-index: 40;
     display: flex;
     flex-direction: column;
+    width: 100%;
+    height: 100%;
     max-height: none;
     margin: 0;
     padding: 0;
     outline: none;
   }
-  /* Whole selectors inside :global(): nested under it, the `div` is scoped
-     to this component and never matches the kit's own bar. */
-  :global(.preview-sheet::before),
-  :global(.preview-sheet > div:first-child) {
+  :global([data-preview-sheet][data-slot="drawer-content"]::before),
+  :global([data-preview-sheet][data-slot="drawer-content"] > div:first-child) {
     display: none;
   }
-  .sheet {
-    position: relative;
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;
-    padding-top: var(--space-3);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-drawer);
-  }
-  :global(.preview-sheet .preview-grab[data-vaul-handle]) {
+  /* The vaul handle (its own unlayered styles stand under these). */
+  :global([data-preview-sheet] [data-preview-grab][data-vaul-handle]) {
     touch-action: none;
     position: absolute;
     top: var(--space-1);
-    left: calc(50% - 50px);
-    width: 100px;
-    height: 6px;
+    left: var(--grab-left);
+    width: var(--grab-w);
+    height: var(--grab-h);
     border-radius: var(--radius-pill);
     background: var(--border-control);
     margin: 0;
     opacity: 1;
   }
-  :global(.preview-sheet [data-vaul-handle-hitarea]) {
-    height: 44px;
+  :global([data-preview-sheet] [data-vaul-handle-hitarea]) {
+    height: var(--grab-hit);
   }
   /* The card is as tall as what the snap shows (`--sheet-hidden` stands
      below the composer), so its well keeps its foot and radius above it. */
-  :global(.preview-sheet .sheet > .side-card) {
+  :global(
+      [data-preview-sheet] [data-slot="sheet"] > [data-slot="side-card"]
+    ) {
     flex: 1;
     height: auto;
     max-block-size: calc(100% - var(--sheet-hidden, 0px));

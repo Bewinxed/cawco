@@ -72,153 +72,71 @@
 <!-- With its mark the line is a mark line (app.css): the name and the clock
      stand on the mark's middle. Grouped it has no mark, and its clock keeps
      its own line box in the body's first line. -->
+<!-- literal: 9ch -->
 <h2
   data-slot="who"
   data-grouped={grouped || undefined}
-  class="who"
-  class:grouped
-  class:mark-line={!grouped}
+  class={[
+    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-(--who-clock-w) data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
+    !grouped && "mark-line",
+  ]}
+  style:--who-clock-w="9ch"
+  style:--who-line-h="calc(var(--text-body) * var(--leading-body))"
 >
   {#if grouped}
     <span class="sr-only">{name}</span>
   {:else}
     {#if !you && voice?.face}
-      <span data-slot="dot" aria-hidden="true" class="dot face" data-box
-        >{@render voice.face(live)}</span
+      <!-- A pane's own face for its speaker stands bare in the mark's box. -->
+      <span
+        data-slot="dot"
+        aria-hidden="true"
+        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-none flex-none overflow-visible"
+        data-face
+        data-box>{@render voice.face(live)}</span
       >
     {:else}
+      <!-- The reader's mark, on the pane above their well, in the action
+           material: 17×17 with the top-highlight gradient and the pale glyph.
+           1px narrower than the agent's 18px box, so it is centred on the same
+           track by half a pixel either side. -->
       <span
         data-u={you || undefined}
         data-slot="dot"
         data-a={!you || undefined}
         aria-hidden="true"
-        class="dot {you ? 'u' : 'a'}"
+        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-none flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-row-mark data-u:bg-action-surface data-u:text-on-action data-a:bg-brand-solid data-a:text-on-brand"
         data-box
       >
         {#if you}
-          <IconUser />
+          <IconUser class="block size-(--row-mark-glyph)" />
         {:else}
-          <IconAgent />
+          <IconAgent class="block size-icon-sm" />
         {/if}
       </span>
     {/if}
-    <span data-slot="role" class="role">{name}</span>
+    <span data-slot="role" class="text-size-label font-medium text-ink-strong">{name}</span>
   {/if}
   {#if note}
-    <span data-slot="note" class="note">{note}</span>
+    <span data-slot="note" class="ms-auto text-size-meta font-normal text-ink-muted">{note}</span>
   {/if}
   {#if validAt}
-    <time data-slot="when" class="when" datetime={validAt.toISOString()}
-      >{clock}</time
+    <time
+      data-slot="when"
+      data-after-note={note || undefined}
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-after-note:ms-0"
+      datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}
 </h2>
 
 <style>
-  .who {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-label);
-    color: var(--ink-muted);
-    font-weight: var(--weight-strong);
-    margin-block-end: var(--space-2);
-
-    /* One line box of the body tall, so the clock sits centred on the turn's
-       first line; the body wraps around it rather than moving down. As wide
-       as the widest word the slot holds ("sending…"), whatever it holds now,
-       so the first line wraps the same while sending, queued, streaming and
-       settled — settling moves nothing. */
-    &.grouped {
-      float: inline-end;
-      justify-content: flex-end;
-      font-size: var(--text-meta);
-      min-inline-size: 9ch;
-      min-block-size: calc(var(--text-body) * var(--leading-body));
-      margin-block-end: 0;
-      margin-inline-start: var(--space-3);
-    }
-  }
-  .dot {
-    inline-size: var(--row-mark-box);
-    block-size: var(--row-mark-box);
-    border-radius: var(--radius-xs);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* an inline svg would otherwise sit on the line box's baseline */
-    line-height: 0;
-    flex: 0 0 auto;
-
-    & :global(svg) {
-      display: block;
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    /* The reader's mark, on the pane above their well, in the action
-       material: 17×17 with the top-highlight gradient and the pale glyph.
-       1px narrower than the agent's 18px box, so it is centred on the same
-       track by half a pixel either side. */
-    &.u {
-      inline-size: var(--row-mark);
-      block-size: var(--row-mark);
-      margin-inline: var(--well-x);
-      border-radius: var(--row-mark-r);
-      background: var(--action-surface);
-      color: var(--on-action);
-
-      & :global(svg) {
-        inline-size: var(--row-mark-glyph);
-        block-size: var(--row-mark-glyph);
-      }
-    }
-    &.a {
-      background: var(--brand-solid);
-      color: var(--on-brand);
-    }
-    /* A pane's own face for its speaker stands bare in the mark's box. */
-    &.face {
-      overflow: visible;
-    }
-  }
-  .role {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  /* Where the clock would be, at the same size and colour, because it is the
-     same slot answering a different question: not "when did this happen" but
-     "this has not happened yet". */
-  .note {
-    margin-inline-start: auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  /* The clock is context, not content: it appears when the reader is on the
-     turn and is otherwise absent from the skim. */
-  .when {
-    margin-inline-start: auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-    opacity: 0;
-
-    :global(.turn:hover) &,
-    :global(.turn:focus-within) & {
-      opacity: 1;
-    }
-    /* No hover to reveal it with, so it is simply always there. */
-    @media (hover: none), (pointer: coarse) {
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  /* A note and a clock together: the note takes the push, the clock follows it. */
-  .note + .when {
-    margin-inline-start: 0;
+  /* residual: foreign-dom */
+  /* A pane's own face (a snippet this file does not render) sits in the
+     mark's box at the icon step. */
+  [data-slot="dot"][data-face] :global(svg) {
+    display: block;
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
   }
 </style>

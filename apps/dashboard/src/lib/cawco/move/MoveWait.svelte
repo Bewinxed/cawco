@@ -407,14 +407,23 @@
   const cancellable = $derived(waiting && job.stage !== "start");
 </script>
 
-<div data-slot="wait" class="wait" data-move={job.id} class:phone>
+<!-- literal: 560px, 128px, 96px -->
+<div
+  data-slot="wait"
+  class="group/wait flex flex-col items-center justify-center gap-space-5 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-surface-recess data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
+  data-move={job.id}
+  data-phone={phone || undefined}
+  style:--col-w="min(560px, 100%)"
+  style:--caw-min-h="128px"
+  style:--caw-min-h-phone="96px"
+  style:--wait-pad-end="calc(var(--space-4) + env(safe-area-inset-bottom))"
+>
   <!-- A stopped move has no Caw and no room for him: its column starts at
        the same top whatever stage it stopped at, as on the phone app. -->
   <div
     data-move-wait-empty={!cawThere || undefined}
-    class="caw"
-    class:empty={!cawThere}
-    class:gone={job.stage === "cancelled"}
+    data-gone={job.stage === "cancelled" || undefined}
+    class="grid place-items-center min-h-(--caw-min-h) group-data-phone/wait:min-h-(--caw-min-h-phone) data-move-wait-empty:invisible data-gone:hidden"
   >
     {#if cawThere}
       <Caw
@@ -433,10 +442,19 @@
   </div>
 
   {#if columnShown}
-    <div data-slot="column" class="column" in:crossIn>
+    <div
+      data-slot="column"
+      class="grid gap-space-3 w-(--col-w)"
+      in:crossIn
+    >
       <ThinkingSteps>
         {#each rows as row, index (row.step)}
-          <div data-slot="row" class="row" data-phase={row.phase} out:unfold>
+          <div
+            data-slot="row"
+            class="min-w-0"
+            data-phase={row.phase}
+            out:unfold
+          >
             <ThinkingStep
               icon={GLYPHS[row.phase]}
               isLast={index === rows.length - 1}
@@ -444,18 +462,23 @@
               status={STATUS[row.phase]}
             >
               {#if row.step === "snapshot" && job.snapshot?.branch && row.phase !== "ahead"}
-                <code data-slot="sub" class="sub mono"
+                <code
+                  data-slot="sub"
+                  class="type-code text-ink-muted wrap-anywhere"
                   >{job.snapshot.branch}</code
                 >
               {/if}
               {#if (row.step === "clone" || row.step === "lfs") && row.phase === "active" && job.progress}
                 {@const progress = job.progress}
-                <div class="bytes" in:unfold out:unfold>
+                <div class="grid gap-space-1 pbs-space-1" in:unfold out:unfold>
                   <Progress
                     aria-label={row.label}
                     value={share(progress.bytes, progress.total)}
                   />
-                  <span data-num data-slot="meta" class="meta num"
+                  <span
+                    data-num
+                    data-slot="meta"
+                    class="type-meta text-ink-muted tabular-nums"
                     >{share(progress.bytes, progress.total)}% ·
                     {partWords(progress.bytes, progress.total)}{left
                       ? ` · ${left}`
@@ -467,47 +490,57 @@
                    the stage, and its row would repeat the bar above. -->
               {#if row.step === "lfs" && row.phase === "active" && job.lfsFile && (job.lfs?.files ?? 0) > 1}
                 {@const file = job.lfsFile}
-                <div class="file" in:unfold out:unfold>
+                <!-- literal: 96px -->
+                <div
+                  class="grid grid-cols-(--file-cols) items-center gap-space-2"
+                  style:--file-cols="minmax(0, 1fr) 96px auto"
+                  in:unfold
+                  out:unfold
+                >
                   {#key file.file}
                     <span
                       data-slot="path"
-                      class="path"
+                      class="row-start-1 col-start-1 truncate text-left type-code text-ink-muted"
                       title={file.file}
                       in:crossIn
                       out:crossOut><bdi>{file.file}</bdi></span
                     >
                   {/key}
-                  <Progress
-                    class="file-bar"
-                    value={share(file.bytes, file.total)}
-                  />
-                  <span data-num data-slot="meta" class="meta num"
+                  <Progress value={share(file.bytes, file.total)} />
+                  <span
+                    data-num
+                    data-slot="meta"
+                    class="type-meta text-ink-muted tabular-nums"
                     >{partWords(file.bytes, file.total)}</span
                   >
                 </div>
               {/if}
               {#if row.step === "install" && (row.phase === "active" || row.phase === "failed") && job.install}
-                <code data-slot="sub" class="sub mono"
+                <code
+                  data-slot="sub"
+                  class="type-code text-ink-muted wrap-anywhere"
                   >{job.install.command}</code
                 >
               {/if}
               {#if row.phase === "asking" && job.ask}
                 <div
                   data-slot="move-wait-card"
-                  class="card"
+                  class="grid gap-space-3 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-stat"
                   in:unfold
                   out:unfold
                 >
-                  <p class="card-title">{job.ask.title}</p>
+                  <p class="m-0 type-label text-ink-strong">{job.ask.title}</p>
                   <MoveAskBody ask={job.ask} />
-                  <div class="answers">
+                  <div
+                    class="flex justify-between gap-space-8 group-data-phone/wait:gap-space-4"
+                  >
                     <Button
                       disabled={answered !== null}
                       onclick={() => answer(DONT_MOVE)}
                       size="sm"
                       variant="secondary"
                     >
-                      <IconClose data-slot="deny" class="deny" />
+                      <IconClose data-slot="deny" class="text-ink-muted" />
                       <span>{DONT_MOVE}</span>
                     </Button>
                     <!-- The yes is the action, coral as in New session's step 2. -->
@@ -523,7 +556,12 @@
                 </div>
               {/if}
               {#if row.phase === "failed" && job.error}
-                <div data-slot="failure" class="failure" in:unfold out:unfold>
+                <div
+                  data-slot="failure"
+                  class="mbs-space-1"
+                  in:unfold
+                  out:unfold
+                >
                   <Alert role="alert" variant="destructive">
                     <IconError />
                     <!-- The machine's words, unless they only repeat the step's. -->
@@ -532,14 +570,19 @@
                     {/if}
                     <AlertDescription>
                       {#if job.error.detail}
-                        <code data-slot="detail" class="detail mono"
+                        <code
+                          data-slot="detail"
+                          class="block type-code whitespace-pre-wrap wrap-anywhere"
                           >{job.error.detail}</code
                         >
                       {/if}
                       {#if job.error.stage === "clone"}
                         <span>The partial clone is removed first.</span>
                       {/if}
-                      <span data-slot="alert-actions" class="alert-actions">
+                      <span
+                        data-slot="alert-actions"
+                        class="flex flex-wrap justify-end gap-space-2 mbs-space-2"
+                      >
                         <Button
                           disabled={retrying}
                           failed={refused?.by === "cancel"}
@@ -573,18 +616,21 @@
         {/each}
       </ThinkingSteps>
       {#if job.stage === "cancelled"}
-        <p class="stopped" in:crossIn>
+        <p class="m-0 type-meta text-ink-muted" in:crossIn>
           {["Stopped.", job.kept].filter(Boolean).join(" ")}
         </p>
       {/if}
     </div>
     <!-- Cancel and Close are one control in one place: bordered, its edge on
          the glyph column, the foot's whole width on a phone (design 2g). -->
-    <div data-slot="foot" class="foot">
+    <div
+      data-slot="foot"
+      class="flex flex-col items-start gap-space-1 w-(--col-w) group-data-phone/wait:mbs-auto"
+    >
       {#if cancellable}
         <Button
           data-foot-button
-          class="foot-button"
+          class="group-data-phone/wait:w-full"
           failed={refused?.by === "cancel"}
           label="Cancel"
           onclick={cancel}
@@ -598,7 +644,7 @@
       {:else if job.stage === "cancelled"}
         <Button
           data-foot-button
-          class="foot-button"
+          class="group-data-phone/wait:w-full"
           onclick={() => workspace.close(job.targetInstanceId)}
           variant="secondary">Close</Button
         >
@@ -608,164 +654,32 @@
 </div>
 
 <style>
-  /* The wait fills the transcript area, centred in it, on its plain recess. */
-  .wait {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-5);
-    flex: 1 1 auto;
-    min-block-size: 0;
-    overflow-y: auto;
-    padding: var(--space-8) var(--space-6);
-    background: var(--surface-recess);
-  }
-  .caw {
-    display: grid;
-    place-items: center;
-    min-block-size: 128px;
-  }
-  .phone .caw {
-    min-block-size: 96px;
-  }
-  .caw.empty {
-    visibility: hidden;
-  }
-  .caw.gone {
-    display: none;
-  }
-  .column,
-  .foot {
-    inline-size: min(560px, 100%);
-  }
-  .column {
-    display: grid;
-    gap: var(--space-3);
-  }
-  .row {
-    min-inline-size: 0;
-  }
+  /* residual: foreign-dom */
   /* The glyph says where each step stands, in its status ink. */
-  .row[data-phase="done"] :global(.icon) {
+  [data-slot="row"][data-phase="done"] :global(.icon) {
     color: var(--status-done-glyph);
   }
-  .row[data-phase="active"] :global(.icon) {
+  [data-slot="row"][data-phase="active"] :global(.icon) {
     color: var(--ink-strong);
   }
-  .row[data-phase="failed"] :global(.icon) {
+  [data-slot="row"][data-phase="failed"] :global(.icon) {
     color: var(--status-fail-glyph);
   }
-  .row[data-phase="asking"] :global(.icon) {
+  [data-slot="row"][data-phase="asking"] :global(.icon) {
     color: var(--status-attn-glyph);
   }
-  .row[data-phase="stopped"] :global(.icon) {
+  [data-slot="row"][data-phase="stopped"] :global(.icon) {
     color: var(--ink-muted);
   }
   /* The step's label wraps, never truncates. */
-  .row :global(.label) {
+  [data-slot="row"] :global(.label) {
     overflow-wrap: anywhere;
   }
-  .sub {
-    font: var(--type-code);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .bytes {
-    display: grid;
-    gap: var(--space-1);
-    padding-block-start: var(--space-1);
-  }
-  .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
-  }
-  /* The large file in flight: its path cut from the start, its own bar. */
-  .file {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 96px auto;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* Cut from the start (rtl), read from the left like every line above it. */
-  .path {
-    grid-area: 1 / 1;
-    overflow: hidden;
+
+  /* residual: unmapped */
+  /* The large file in flight: its path cut from the start (rtl), read from
+     the left like every line above it. */
+  [data-slot="path"] {
     direction: rtl;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-code);
-    color: var(--ink-muted);
-  }
-  /* The approval: the permission card's recipe, standing in its step. */
-  .card {
-    display: grid;
-    gap: var(--space-3);
-    margin-block-start: var(--space-1);
-    padding: 11px;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-stat);
-  }
-  .card-title {
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  /* The no at the start, the yes (the action) at the end. */
-  .answers {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-8);
-  }
-  .answers :global(svg.deny) {
-    color: var(--ink-muted);
-  }
-  .failure {
-    margin-block-start: var(--space-1);
-  }
-  .detail {
-    display: block;
-    font: var(--type-code);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .alert-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .stopped {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .foot {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-1);
-  }
-  /* On a phone Cancel is the foot's whole width, clear of the safe area. */
-  .phone {
-    justify-content: flex-start;
-    padding: var(--space-6) var(--space-4)
-      calc(var(--space-4) + env(safe-area-inset-bottom));
-  }
-  .phone .foot {
-    margin-block-start: auto;
-  }
-  .phone .foot :global(.foot-button) {
-    inline-size: 100%;
-  }
-  .phone .answers {
-    gap: var(--space-4);
   }
 </style>

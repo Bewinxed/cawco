@@ -26,14 +26,14 @@
   data-slot="plan-ring"
   aria-label={total > 0 ? `Plan, ${done} of ${total} done` : "Plan"}
   aria-pressed={open}
-  class="plan-ring kit-tray-chip touch-hit"
+  class="kit-tray-chip touch-hit text-ink-muted aria-pressed:text-ink-strong"
   onclick={onopen}
   type="button"
 >
   {#if total > 0}
     <TaskRing {done} size="md" {total} />
     <span>Plan</span>
-    <span data-slot="num" class="num">{done}/{total}</span>
+    <span data-slot="num" class="tabular-nums">{done}/{total}</span>
   {:else}
     <IconToolTodo aria-hidden="true" />
     <span>Plan</span>
@@ -41,17 +41,8 @@
 </button>
 
 <style>
-  .plan-ring {
-    color: var(--ink-muted);
-  }
-  .plan-ring[aria-pressed="true"] {
-    color: var(--ink-strong);
-
-    &::before {
-      background-color: var(--surface-fill);
-    }
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
+  /* residual: pseudo */
+  [data-slot="plan-ring"][aria-pressed="true"]::before {
+    background-color: var(--surface-fill);
   }
 </style>
