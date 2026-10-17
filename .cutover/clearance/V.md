@@ -1,0 +1,131 @@
+# V: variant order
+
+Invariant: on every element, when two of its utilities set the same CSS property to different values under state variants that can hold at the same time, the winner is the one the source of record made win. Tailwind's own sort order never decides it.
+
+## The rule
+
+`house/variant-order`, in `apps/dashboard/eslint-plugin-house.mjs`, registered in `apps/dashboard/eslint.config.mjs` for `src/**/*.svelte` and `src/**/*.ts` (the kit included), so `bun run lint` gates it.
+
+- **Theme.** Tailwind's own design system over `src/app.css` (`__unstable__loadDesignSystem` from `@tailwindcss/node` 4.3.3, the loader @shadcn/lint's oracle uses), loaded once when the config loads.
+- **Classes.** @shadcn/lint exports none of its readers, so the rule reads the same nodes itself. One list per element: `class="…"` plus every `class:x` directive. Each other `*class*` attribute is its own list, and so is every outermost `cn`/`clsx`/`cx`/`twMerge`/`twJoin`/`classNames`/`tv`/`cva` call outside markup. Strings, templates, arrays, object keys, same-file `const`s and `$derived(…)` are followed. The two sides of a ternary or `||`, two values of one recipe variant and two recipe slots never stand together.
+- **Per pair.** Each class's rules come from `candidatesToAst`. Each variant is compiled alone to get its condition, and `getClassOrder` gives the winner. Shorthands are expanded to physical longhands, so logical and physical forms of one side overlap. A pair is flagged when: both carry a variant; their declarations land on the same element (`*:`, `[&>svg]:` and `before:` move the subject); they write one longhand with different values; neither is `!important` alone; they have equal specificity; neither chain's states contain the other's; and no state of one excludes a state of the other.
+- **Exclusive** means: one attribute at the same place with different values; `x` and `not-x` (including `group-not-`, `peer-not-`, `has-not-` and `not-hover`'s two rules); queries that cannot both match (`not (…)`, a discrete feature such as `hover`/`pointer`/`prefers-reduced-motion` with two values, disjoint width ranges, so `min-[900px]`/`max-[900px]`, `desk`/`max-desk`, `coarse`/`fine`, `hover`/`no-hover`/`hover-none`, `motion-safe`/`motion-reduce`); and variants.css's named complements `data-open`/`data-closed`, `data-checked`/`data-unchecked`, `dark`/`light`.
+- **Not seen:** class strings in a `.ts` file outside a helper call, a constant imported from another file, and a class prop passed to a component (the sweep below covers that).
+
+## Pairs fixed
+
+Every flagged pair in files outside sets 1–9 and the kit: 7 pairs in 5 files. All their classes already stood in the markup at T (1bd709672), so the source winner is Tailwind's today. Each loser takes the winner's negation. No single state changes: the negation only removes the loser where the winner already won, and no other utility on these elements sets the same property between the loser's old and new specificity.
+
+| file:line | A | B | source winner | fix |
+|---|---|---|---|---|
+| `apps/dashboard/src/lib/cawco/find/Finder.svelte:487` | `hover:bg-surface-hover` | `active:bg-surface-fill` | `active:` (markup at T; Tailwind's) | `not-active:hover:bg-surface-hover` |
+| `apps/dashboard/src/lib/cawco/preview/PinList.svelte:76` | `hover:bg-surface-hover` | `active:bg-surface-fill` | `active:` (markup at T) | `not-active:not-aria-current:hover:bg-surface-hover` |
+| `apps/dashboard/src/lib/cawco/preview/PinList.svelte:76` | `hover:bg-surface-hover` | `aria-current:bg-surface-fill` | `aria-current:` (markup at T) | (the same class) |
+| `apps/dashboard/src/lib/cawco/join/JoinedRow.svelte:107` | `data-attn:text-status-attn-ink` | `data-done:text-status-done-ink` | `data-done:` (markup at T) | `not-data-done:data-attn:text-status-attn-ink` |
+| `apps/dashboard/src/lib/cawco/turn/Well.svelte:40` | `data-grouped:pbs-space-2` | `data-lifted:py-0` | `data-lifted:` (markup at T) | `not-data-lifted:data-grouped:pbs-space-2` |
+| `apps/dashboard/src/lib/cawco/turn/Well.svelte:40` | `data-grouped:pbs-space-2` | `data-lifted:pbs-0` | `data-lifted:` (markup at T) | (the same class) |
+| `apps/dashboard/src/lib/cawco/turn/Who.svelte:108` | `data-u:text-on-action` | `data-a:text-on-brand` | `data-u:` (markup at T) | `not-data-u:data-a:text-on-brand` |
+
+## Cross-file sweep: a class prop on a component root's state variants
+
+Every `<Component class=…>` whose classes carry a variant (184 site × root pairs) was joined with the classes on the root element that takes the component's `class` prop, then run through the rule. 14 cross pairs at 5 sites came back. Every consumer is in a set file and every root in the kit, so none is fixed here. In all of them, both sides' classes stood in markup at T, so the source winner is Tailwind's (named last). The fix goes on the loser, in whichever file its owner holds.
+
+| consumer site | root | consumer class | root class | property | winner |
+|---|---|---|---|---|---|
+| `src/lib/cawco/tasks/TaskColumn.svelte:150` (set 3) `<Checkbox>` | `ui/checkbox/checkbox.svelte:16` | `group-focus-within/card:opacity-100`, `group-data-picked/card:opacity-100`, `group-data-picking/col:opacity-100`, `group-hover/card:opacity-100` | `disabled:opacity-50`, `group-data-[disabled=true]/field:opacity-50` | opacity (8 pairs) | the root's two |
+| `src/lib/cawco/tasks/TaskTable.svelte:305` (set 3) `<Table.Row>` | `ui/table/table-row.svelte:14` | `data-picked:max-phone:bg-selected-bg` | `data-[state=selected]:bg-neutral-2` | background-color | `data-picked:max-phone:bg-selected-bg` |
+| `src/lib/cawco/side/Split.svelte:368` (set 5) `<Resizable.Handle>` | `ui/resizable/resizable-handle.svelte:16` | `group-data-split-expanded/split:after:left-space-1`, `…:after:w-(--divider-hit)` | `data-[direction=vertical]:after:left-0`, `…:after:w-full` | left, width | the root's two |
+| `src/lib/cawco/project/ViewBar.svelte:147` (set 5) `<Select.Trigger>` | `ui/select/select-trigger.svelte:26` | `group-data-bar:h-c-composer-field` | `data-[size=default]:h-9`, `data-[size=sm]:h-[30px]` | height | the root's two |
+| `src/lib/cawco/preview/ArtifactMenu.svelte:233` (set 5) `<DropdownMenu.Item>` | `ui/dropdown-menu/dropdown-menu-item.svelte:18` | `aria-current:text-ink-strong` | `data-[variant=destructive]:text-error-9` | color | `data-[variant=destructive]:text-error-9` |
+
+## Left in set and kit files
+
+48 flagged pairs remain, 33 in set files and 15 in the kit. The sets and K1/K2 fix their own when they merge this branch. Two kinds of kit flag hold by selector, though the states are never meant to meet:
+- `field-description`'s `nth-last-2:`/`last:` cannot both match. The rule does not treat structural pseudo-classes as exclusive.
+- `switch`'s `data-unchecked:` against `data-[state=checked]:` is not exclusive by selector, because `data-unchecked` also matches a bare `[data-unchecked]`.
+
+| owner | file | pairs |
+|---|---|---|
+| set 1 | `src/lib/cawco/transcript/ToolGroup.svelte` | 1 |
+| set 2 | `src/lib/cawco/usage/Relay.svelte` | 2 |
+| set 2 | `src/lib/cawco/usage/Rings.svelte` | 1 |
+| set 3 | `src/lib/cawco/tasks/TaskColumn.svelte` | 1 |
+| set 3 | `src/lib/cawco/tasks/TaskOutput.svelte` | 2 |
+| set 3 | `src/lib/cawco/tasks/TaskTable.svelte` | 4 |
+| set 4 | `src/lib/cawco/routines/RoutineDetail.svelte` | 1 |
+| set 5 | `src/lib/cawco/home/MovedLogins.svelte` | 2 |
+| set 5 | `src/lib/cawco/home/UpdateCard.svelte` | 2 |
+| set 5 | `src/lib/cawco/preview/PinCard.svelte` | 1 |
+| set 5 | `src/lib/cawco/project/ProjectHead.svelte` | 3 |
+| set 5 | `src/lib/cawco/workspace/PaneGrid.svelte` | 2 |
+| set 5 | `src/lib/cawco/workspace/PaneTabs.svelte` | 1 |
+| set 8 | `src/lib/cawco/accounts/AccountSetup.svelte` | 1 |
+| set 8 | `src/lib/cawco/accounts/StrategyPicker.svelte` | 1 |
+| set 8 | `src/lib/cawco/config/RolloutChip.svelte` | 1 |
+| set 8 | `src/lib/cawco/spawn/PromptEditor.svelte` | 1 |
+| set 8 | `src/lib/cawco/updates/ChannelCards.svelte` | 1 |
+| set 9 | `src/lib/cawco/blocks/Block.svelte` | 1 |
+| set 9 | `src/lib/cawco/decisions/DecisionsView.svelte` | 1 |
+| set 9 | `src/lib/cawco/decisions/RecordCard.svelte` | 2 |
+| set 9 | `src/lib/components/features/workflows/WorkflowEdge.svelte` | 1 |
+| K1/K2 (kit) | `src/lib/components/ui/checkbox/checkbox.svelte` | 1 |
+| K1/K2 (kit) | `src/lib/components/ui/field/field-description.svelte` | 3 |
+| K1/K2 (kit) | `src/lib/components/ui/input-group/input-group-addon.svelte` | 2 |
+| K1/K2 (kit) | `src/lib/components/ui/machine-row/machine-row.svelte` | 1 |
+| K1/K2 (kit) | `src/lib/components/ui/switch/switch.svelte` | 4 |
+| K1/K2 (kit) | `src/lib/components/ui/toggle/toggle.svelte` | 2 |
+| K2 (kit) | `src/lib/components/ui/fluid-tabs/TabItem.svelte` | 1 |
+| K2 (kit) | `src/lib/components/ui/thinking-steps/thinking-step.svelte` | 1 |
+
+Each pair (line, A, B, shared property, Tailwind's winner today):
+
+| file:line | A | B | property | Tailwind's winner |
+|---|---|---|---|---|
+| `src/lib/cawco/accounts/AccountSetup.svelte:442` | `data-account-setup-done:text-ink-row` | `data-cur:text-selected-ink` | color | `data-cur:text-selected-ink` |
+| `src/lib/cawco/accounts/StrategyPicker.svelte:140` | `hover:border-border-control` | `aria-checked:border-focus-ring` | border-top-color | `aria-checked:border-focus-ring` |
+| `src/lib/cawco/blocks/Block.svelte:217` | `group-body-capped/block:phone:overflow-y-auto` | `data-card:overflow-hidden` | overflow-y | `group-body-capped/block:phone:overflow-y-auto` |
+| `src/lib/cawco/config/RolloutChip.svelte:121` | `hover:bg-surface-hover` | `data-fail:bg-status-fail-bg` | background-color | `data-fail:bg-status-fail-bg` |
+| `src/lib/cawco/decisions/DecisionsView.svelte:325` | `@decisions-520px/decisions:grid-cols-2` | `@decisions-900px/decisions:grid-cols-4` | grid-template-columns | `@decisions-900px/decisions:grid-cols-4` |
+| `src/lib/cawco/decisions/RecordCard.svelte:214` | `group-data-open/fold:dur-panel` | `motion-reduce:transition-[opacity]` | transition-duration | `motion-reduce:transition-[opacity]` |
+| `src/lib/cawco/decisions/RecordCard.svelte:214` | `group-data-open/fold:dur-panel` | `motion-reduce:dur-fade` | transition-duration | `motion-reduce:dur-fade` |
+| `src/lib/cawco/home/MovedLogins.svelte:153` | `group-data-open:dur-panel` | `motion-reduce:transition-[opacity]` | transition-duration | `motion-reduce:transition-[opacity]` |
+| `src/lib/cawco/home/MovedLogins.svelte:153` | `group-data-open:dur-panel` | `motion-reduce:dur-fade` | transition-duration | `motion-reduce:dur-fade` |
+| `src/lib/cawco/home/UpdateCard.svelte:329` | `group-data-open/fold:dur-panel` | `motion-reduce:transition-[opacity]` | transition-duration | `motion-reduce:transition-[opacity]` |
+| `src/lib/cawco/home/UpdateCard.svelte:329` | `group-data-open/fold:dur-panel` | `motion-reduce:dur-fade` | transition-duration | `motion-reduce:dur-fade` |
+| `src/lib/cawco/preview/PinCard.svelte:297` | `data-placed:left-(--card-left)` | `data-sheet:inset-x-0` | left | `data-sheet:inset-x-0` |
+| `src/lib/cawco/project/ProjectHead.svelte:482` | `max-[900px]:shrink` | `max-phone:shrink-0` | flex-shrink | `max-phone:shrink-0` |
+| `src/lib/cawco/project/ProjectHead.svelte:482` | `max-[900px]:grow` | `max-phone:grow-0` | flex-grow | `max-phone:grow-0` |
+| `src/lib/cawco/project/ProjectHead.svelte:482` | `max-[900px]:basis-full` | `max-phone:basis-auto` | flex-basis | `max-phone:basis-auto` |
+| `src/lib/cawco/routines/RoutineDetail.svelte:245` | `group-outcome-failed/run:text-status-fail-ink` | `hover:text-link-ink` | color | `hover:text-link-ink` |
+| `src/lib/cawco/spawn/PromptEditor.svelte:325` | `max-phone:transition-none` | `motion-safe:transition-[height]` | transition-property | `max-phone:transition-none` |
+| `src/lib/cawco/tasks/TaskColumn.svelte:85` | `data-over:bg-surface-hover` | `kind-you:bg-brand-wash` | background-color | `kind-you:bg-brand-wash` |
+| `src/lib/cawco/tasks/TaskOutput.svelte:148` | `group-data-compact:p-space-2` | `data-roomy:px-space-4` | padding-right | `data-roomy:px-space-4` |
+| `src/lib/cawco/tasks/TaskOutput.svelte:148` | `group-data-compact:p-space-2` | `data-roomy:pb-space-4` | padding-bottom | `data-roomy:pb-space-4` |
+| `src/lib/cawco/tasks/TaskTable.svelte:313` | `max-phone:block` | `@max-decisions-900px:hidden` | display | `@max-decisions-900px:hidden` |
+| `src/lib/cawco/tasks/TaskTable.svelte:315` | `max-phone:block` | `@max-decisions-900px:hidden` | display | `@max-decisions-900px:hidden` |
+| `src/lib/cawco/tasks/TaskTable.svelte:321` | `@max-decisions-900px:hidden` | `max-phone:block` | display | `@max-decisions-900px:hidden` |
+| `src/lib/cawco/tasks/TaskTable.svelte:323` | `@max-decisions-900px:hidden` | `max-phone:block` | display | `@max-decisions-900px:hidden` |
+| `src/lib/cawco/transcript/ToolGroup.svelte:357` | `data-add:text-data-ok` | `data-del:text-data-bad` | color | `data-del:text-data-bad` |
+| `src/lib/cawco/updates/ChannelCards.svelte:113` | `hover:bg-surface-hover` | `active:bg-surface-fill` | background-color | `active:bg-surface-fill` |
+| `src/lib/cawco/usage/Relay.svelte:257` | `data-start:translate-none` | `data-end:-translate-x-full` | translate | `data-start:translate-none` |
+| `src/lib/cawco/usage/Relay.svelte:257` | `data-start:items-start` | `data-end:items-end` | align-items | `data-start:items-start` |
+| `src/lib/cawco/usage/Rings.svelte:164` | `group-data-stale/rings:opacity-(--account-stale-opacity)` | `data-off:opacity-0` | opacity | `data-off:opacity-0` |
+| `src/lib/cawco/workspace/PaneGrid.svelte:205` | `hover:bg-border-control` | `active-keyboard:bg-ink-muted` | background-color | `active-keyboard:bg-ink-muted` |
+| `src/lib/cawco/workspace/PaneGrid.svelte:205` | `hover:bg-border-control` | `active-pointer:bg-ink-muted` | background-color | `active-pointer:bg-ink-muted` |
+| `src/lib/cawco/workspace/PaneTabs.svelte:1791` | `hover:text-ink-strong` | `data-refused:text-status-fail-glyph` | color | `data-refused:text-status-fail-glyph` |
+| `src/lib/components/features/workflows/WorkflowEdge.svelte:59` | `motion-safe:scale-(--pop-scale)` | `coarse:scale-100` | scale | `coarse:scale-100` |
+| `src/lib/components/ui/checkbox/checkbox.svelte:25` | `data-checked:bg-action-solid` | `dark:bg-input/30` | background-color | `data-checked:bg-action-solid` |
+| `src/lib/components/ui/field/field-description.svelte:18` | `[[data-variant=legend]+&]:-mt-1.5` | `nth-last-2:-mt-space-1` | margin-top | `[[data-variant=legend]+&]:-mt-1.5` |
+| `src/lib/components/ui/field/field-description.svelte:18` | `[[data-variant=legend]+&]:-mt-1.5` | `last:mt-0` | margin-top | `[[data-variant=legend]+&]:-mt-1.5` |
+| `src/lib/components/ui/field/field-description.svelte:18` | `nth-last-2:-mt-space-1` | `last:mt-0` | margin-top | `nth-last-2:-mt-space-1` |
+| `src/lib/components/ui/fluid-tabs/TabItem.svelte:288` | `can-hover:data-ghosted:text-ink-strong` | `in-variant-folder:data-tab-item-selected:text-ink-muted` | color | `can-hover:data-ghosted:text-ink-strong` |
+| `src/lib/components/ui/input-group/input-group-addon.svelte:9` | `has-[>button]:-ml-space-1` | `has-[>kbd]:ml-[-0.15rem]` | margin-left | `has-[>kbd]:ml-[-0.15rem]` |
+| `src/lib/components/ui/input-group/input-group-addon.svelte:11` | `has-[>button]:-mr-space-1` | `has-[>kbd]:mr-[-0.15rem]` | margin-right | `has-[>kbd]:mr-[-0.15rem]` |
+| `src/lib/components/ui/machine-row/machine-row.svelte:52` | `data-is-away:bg-hue-orange-500` | `data-is-online:bg-hue-green-500` | background-color | `data-is-online:bg-hue-green-500` |
+| `src/lib/components/ui/switch/switch.svelte:38` | `group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)]` | `rtl:data-[state=checked]:translate-x-[calc(-100%)]` | --tw-translate-x | `group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)]` |
+| `src/lib/components/ui/switch/switch.svelte:38` | `group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)]` | `rtl:data-[state=checked]:translate-x-[calc(-100%)]` | --tw-translate-x | `group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)]` |
+| `src/lib/components/ui/switch/switch.svelte:38` | `group-data-[size=default]/switch:data-unchecked:translate-x-0` | `rtl:data-[state=checked]:translate-x-[calc(-100%)]` | --tw-translate-x | `group-data-[size=default]/switch:data-unchecked:translate-x-0` |
+| `src/lib/components/ui/switch/switch.svelte:38` | `group-data-[size=sm]/switch:data-unchecked:translate-x-0` | `rtl:data-[state=checked]:translate-x-[calc(-100%)]` | --tw-translate-x | `group-data-[size=sm]/switch:data-unchecked:translate-x-0` |
+| `src/lib/components/ui/thinking-steps/thinking-step.svelte:128` | `status-ahead:text-ink-muted` | `motion-safe:data-shimmer:text-transparent` | color | `status-ahead:text-ink-muted` |
+| `src/lib/components/ui/toggle/toggle.svelte:6` | `hover:bg-[var(--surface-hover)]` | `aria-pressed:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` | background-color | `aria-pressed:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` |
+| `src/lib/components/ui/toggle/toggle.svelte:6` | `hover:bg-[var(--surface-hover)]` | `data-[state=on]:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` | background-color | `data-[state=on]:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` |
