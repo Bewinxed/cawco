@@ -340,6 +340,15 @@ async function run(kit: Kit): Promise<void> {
       const heardSince = (start: number, test: (line: string) => boolean) =>
         heard.slice(start).find(test);
       /**
+       * An action's card left the sheet: gone, or no longer shown (its row
+       * reloaded, the old cell kept hidden for reuse until the list takes
+       * it again; TaskSheetProbe reports a part hidden only when no shown
+       * one stands).
+       */
+      const cardLeft = (id: string) => (line: string) =>
+        line === `gone task-action-${id}` ||
+        (line.startsWith(`part task-action-${id} `) && line.includes("shows=false"));
+      /**
        * The element whose accessibility identifier is `id`, tapped at its
        * activation point once it stands (axe waits up to 15 s). One that
        * never stands leaves the screen's tree beside the captures.
@@ -476,7 +485,7 @@ async function run(kit: Kit): Promise<void> {
       ).catch(() => undefined);
       const gone = await until(
         `${at}: 2: its card gone`,
-        () => heardSince(from, (line) => line === `gone task-action-${first}`),
+        () => heardSince(from, cardLeft(first)),
         Boolean,
         30_000
       ).catch(() => undefined);
@@ -521,7 +530,7 @@ async function run(kit: Kit): Promise<void> {
       const removed = await tap(`task-action-remove-${left}`);
       const checked = await until(
         `${at}: 2: Remove puts it away`,
-        () => heardSince(from, (line) => line === `gone task-action-${left}`),
+        () => heardSince(from, cardLeft(left)),
         Boolean,
         30_000
       ).catch(() => undefined);
