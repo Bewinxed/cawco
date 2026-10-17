@@ -11,8 +11,8 @@
  * `data-slot` is shown beside the key, as a label.
  *
  * Read with time held: every running animation and transition finished (a
- * finite one) or paused at its start (an infinite one) before any value is
- * read, and again after every forced state.
+ * finite one) or cancelled (an infinite one, which has no end to stand at)
+ * before any value is read, and again after every forced state.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the page's reader is one init script (it runs in the page and can import nothing), read in the order the page is walked.
 import type { CDPSession, Page } from "playwright-core";
@@ -360,9 +360,14 @@ export function installReader(props: readonly string[]): void {
             run.finish();
             held += 1;
           }
-        } else if (run.playState !== "paused" || run.currentTime !== 0) {
-          run.pause();
-          run.currentTime = 0;
+        } else {
+          // An infinite one is cancelled: what is read is the element's own
+          // style. Paused at its start instead, a spinner read its first
+          // frame's transform, but Chromium kept the scrollable overflow of
+          // whatever angle it had turned to, and its row read 18px or 16px of
+          // scroll height by the race (bench-updates, the Spinner's
+          // animate-spin); cancelled, the row lays out without it.
+          run.cancel();
           held += 1;
         }
       } catch {
