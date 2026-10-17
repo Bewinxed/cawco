@@ -1,3 +1,23 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a list of things one of which is current
+      (`aria-current`, in the strong ink) and any of which may be busy
+      (`aria-busy`, at half). */
+  export const dropdownMenuItemVariants = tv({
+    variants: {
+      marks: {
+        "current-busy": "aria-busy:opacity-50 aria-current:text-ink-strong",
+      },
+    },
+  });
+
+  export type DropdownMenuItemLooks = VariantProps<
+    typeof dropdownMenuItemVariants
+  >;
+</script>
+
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import { cn } from "#lib/utils.js";
@@ -7,11 +27,13 @@
     class: className,
     inset,
     variant = "default",
+    marks,
     ...restProps
-  }: DropdownMenuPrimitive.ItemProps & {
-    inset?: boolean;
-    variant?: "default" | "destructive";
-  } = $props();
+  }: DropdownMenuPrimitive.ItemProps &
+    DropdownMenuItemLooks & {
+      inset?: boolean;
+      variant?: "default" | "destructive";
+    } = $props();
 </script>
 
 <DropdownMenuPrimitive.Item
@@ -26,6 +48,7 @@
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     "px-2.5 data-[variant=destructive]:*:[svg]:text-error-9",
+    dropdownMenuItemVariants({ marks }),
     className
   )}
   data-inset={inset}

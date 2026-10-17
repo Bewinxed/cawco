@@ -1,5 +1,9 @@
 {
   "size": {
+    "c-peek-glyph": {
+      "$type": "dimension",
+      "$value": "{size.icon-lg}"
+    },
     "c-tray-chip": {
       "$type": "dimension",
       "$value": {

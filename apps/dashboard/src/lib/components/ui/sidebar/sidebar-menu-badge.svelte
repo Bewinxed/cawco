@@ -1,3 +1,23 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: a live count in the live pair, which turns to
+      the attention pair while something is blocked (`data-blocked`), its
+      ink held over the row's hover and selection. */
+  export const sidebarMenuBadgeVariants = tv({
+    variants: {
+      tone: {
+        live: "bg-status-live-bg text-status-live-ink! data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink!",
+      },
+    },
+  });
+
+  export type SidebarMenuBadgeLooks = VariantProps<
+    typeof sidebarMenuBadgeVariants
+  >;
+</script>
+
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "#lib/utils.js";
@@ -5,9 +25,11 @@
   let {
     ref = $bindable(null),
     class: className,
+    tone,
     children,
     ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLElement>> = $props();
+  }: WithElementRef<HTMLAttributes<HTMLElement>> &
+    SidebarMenuBadgeLooks = $props();
 </script>
 
 <div
@@ -23,6 +45,7 @@
     "peer-data-[size=lg]/menu-button:top-2.5",
     "peer-data-[size=sm]/menu-button:top-space-1",
     "peer-data-active/menu-button:text-selected-ink",
+    sidebarMenuBadgeVariants({ tone }),
     className
   )}
   data-sidebar="menu-badge"
