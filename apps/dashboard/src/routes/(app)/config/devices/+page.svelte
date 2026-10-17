@@ -240,7 +240,7 @@
           <!-- literal: 12px, 10px -->
           <li
             data-slot="row"
-            class="grid items-center gap-(--row-gap) border-t border-border-hairline py-(--row-pad-y) first:border-t-0"
+            class="grid items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
             style:--row-gap="12px"
             style:--row-pad-y="10px"
           >
@@ -286,7 +286,7 @@
           <!-- literal: 12px, 10px -->
           <li
             data-slot="row"
-            class="grid items-center gap-(--row-gap) border-t border-border-hairline py-(--row-pad-y) first:border-t-0"
+            class="grid items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
             style:--row-gap="12px"
             style:--row-pad-y="10px"
           >
@@ -347,7 +347,7 @@
           <li
             data-slot="row"
             data-devices
-            class="grid items-center gap-(--row-gap) border-t border-border-hairline py-(--row-pad-y) first:border-t-0"
+            class="grid items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
             style:--row-gap="12px"
             style:--row-pad-y="10px"
           >

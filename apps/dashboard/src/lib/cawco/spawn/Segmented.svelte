@@ -72,7 +72,7 @@
     <button
       data-slot="tab"
       aria-checked={item.value === value}
-      class="press-tint relative inline-flex h-(--tab-h) max-phone:h-(--tab-h-phone) min-w-0 cursor-pointer items-center justify-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong"
+      class="press-tint relative inline-flex h-(--tab-h) max-phone:h-(--tab-h-phone) min-w-0 cursor-pointer items-center justify-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong"
       onclick={() => onchange(item.value)}
       role="radio"
       style:--gap="6px"

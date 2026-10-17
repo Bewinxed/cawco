@@ -356,7 +356,7 @@
         ondismiss={noop}
       />
     </div>
-    <div class="type-meta border-t border-border-hairline p-space-3 text-ink-muted" data-flip="box">
+    <div class="type-meta border-t border-t-border-hairline p-space-3 text-ink-muted" data-flip="box">
       The next row of the panel follows the row's edge
     </div>
   </div>

@@ -317,7 +317,7 @@
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-start gap-(--rail-gap) rounded-l-md border-r border-border-hairline bg-surface-recess p-(--rail-pad)"
+        class="grid content-start gap-(--rail-gap) rounded-l-md border-r border-r-border-hairline bg-surface-recess p-(--rail-pad)"
         itemClass="ns-in touch-hit press-tint grid size-(--rail-radio) place-items-center"
         stagger={30}
         items={railItems}
@@ -362,7 +362,7 @@
       <!-- literal: 8px gap, 42px / 44px height, 12px inline padding -->
       <label
         data-slot="search"
-        class="field-underline flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) border-b border-border-hairline px-(--pad-x)"
+        class="field-underline flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) border-b border-b-border-hairline px-(--pad-x)"
         style:--gap="8px"
         style:--h="42px"
         style:--h-phone="44px"
@@ -378,7 +378,7 @@
           aria-label="Search models"
           autocapitalize="off"
           autocorrect="off"
-          class="h-full min-w-0 flex-1 border-0 bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong max-phone:text-(length:--fs-phone)"
+          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong max-phone:text-(length:--fs-phone)"
           id={`${uid}-search`}
           oninput={(event) => {
             query = event.currentTarget.value;
@@ -404,7 +404,7 @@
           <button
             data-slot="clear"
             aria-label="Clear"
-            class="inline-flex size-(--box) cursor-pointer items-center justify-center rounded-xs border-0 bg-transparent text-ink-subtle hover:text-ink-strong"
+            class="inline-flex size-(--box) cursor-pointer items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong"
             onclick={() => {
               query = "";
             }}
@@ -492,7 +492,7 @@
               >
               <span
                 data-slot="meta"
-                class="block truncate font-mono text-size-meta leading-meta font-normal text-ink-muted"
+                class="block truncate font-(family-name:--font-mono) text-size-meta leading-meta font-normal text-ink-muted"
                 >{query}</span
               >
             </span>
@@ -599,7 +599,7 @@
   <span data-slot="text" class="min-w-0 flex-1">
     <span
       data-slot="name"
-      class="type-label block truncate group-disabled:opacity-50 data-mono:font-mono"
+      class="type-label block truncate group-disabled:opacity-50 data-mono:font-(family-name:--font-mono)"
       data-mono={entry.mono || undefined}>{entry.name}</span
     >
     {#if reason}
@@ -610,14 +610,14 @@
       >
     {:else}
       <span data-slot="meta" class="type-meta block truncate text-ink-subtle"
-        ><span class="font-mono">{entry.id}</span>
+        ><span class="font-(family-name:--font-mono)">{entry.id}</span>
         {vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}</span
       >
     {/if}
   </span>
   {#if ctx(entry)}
     <span
-      class="font-mono text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
+      class="font-(family-name:--font-mono) text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
       >{ctx(entry)}</span
     >
   {/if}

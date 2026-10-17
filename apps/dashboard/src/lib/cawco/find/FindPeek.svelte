@@ -57,7 +57,7 @@
 <div
   data-slot="peek"
   {id}
-  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pr-0 pl-space-3 border-s border-border-control font-body text-size-meta font-normal leading-(--peek-lh) data-phone:text-size-label data-phone:leading-(--peek-lh-phone)"
+  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pr-0 pl-space-3 border-s border-s-border-control font-body text-size-meta font-normal leading-(--peek-lh) data-phone:text-size-label data-phone:leading-(--peek-lh-phone)"
   data-phone={phone || undefined}
   style:--peek-cols="max-content minmax(0, 1fr)"
   style:--peek-ms="calc(var(--space-3) + var(--icon-md) + var(--space-2))"

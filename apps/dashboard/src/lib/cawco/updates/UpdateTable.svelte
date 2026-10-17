@@ -47,7 +47,7 @@
     <Table.Root class="border-collapse text-left max-phone:block">
       <Table.Header class="max-phone:hidden">
         <Table.Row
-          class="align-top max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center max-phone:border-b max-phone:border-border-hairline max-phone:last:border-b-0"
+          class="align-top max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none"
         >
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
@@ -70,7 +70,7 @@
           {@const os = machineOs(machine.os)}
           {@const online = isOnline(machine)}
           <Table.Row
-            class="max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center max-phone:border-b max-phone:border-border-hairline max-phone:last:border-b-0 {online
+            class="max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none {online
               ? ''
               : 'opacity-50'}"
           >
@@ -104,7 +104,7 @@
               </span>
             </Table.Head>
             <Table.Cell
-              class="border-l border-border px-space-4 py-space-2 max-phone:border-l-0"
+              class="border-l border-border px-space-4 py-space-2 max-phone:border-l-none"
             >
               <span class="mark-line inline-flex items-center gap-space-1 type-label">
                 {#if isCurrent(machine)}
@@ -116,7 +116,7 @@
               </span>
             </Table.Cell>
             <Table.Cell
-              class="border-l border-border px-space-4 py-space-2 whitespace-normal max-phone:col-span-full max-phone:border-l-0 max-phone:pt-0"
+              class="border-l border-border px-space-4 py-space-2 whitespace-normal max-phone:col-span-full max-phone:border-l-none max-phone:pt-0"
             >
               <UpdateCell {machine} {policy} />
             </Table.Cell>

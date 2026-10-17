@@ -533,7 +533,7 @@
           <li>
             <button
               data-slot="connections-page-card"
-              class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-center gap-space-2 rounded-lg border-0 bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+              class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
               onclick={() => startAdding(service)}
               type="button"
             >
@@ -588,7 +588,7 @@
               <form
                 data-slot="row-ask"
                 aria-label="{labelOf(row)} key"
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-0 p-0 type-meta text-ink-strong"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current p-0 type-meta text-ink-strong"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveKey(row);
@@ -629,7 +629,7 @@
               <fieldset
                 data-slot="row-ask"
                 aria-label="Remove {labelOf(row)}"
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-0 p-0 type-meta text-ink-strong"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current p-0 type-meta text-ink-strong"
                 transition:unfold
               >
                 <span

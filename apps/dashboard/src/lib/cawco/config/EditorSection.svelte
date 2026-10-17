@@ -24,7 +24,7 @@
 <!-- literal: 8px -->
 <section
   data-slot="section"
-  class="flex flex-col gap-(--section-gap) min-w-0 pt-space-5 border-t border-border-hairline"
+  class="flex flex-col gap-(--section-gap) min-w-0 pt-space-5 border-t border-t-border-hairline"
   style:--section-gap="8px"
 >
   <SectionHeader {hue} {icon} {label} {right} wrap />

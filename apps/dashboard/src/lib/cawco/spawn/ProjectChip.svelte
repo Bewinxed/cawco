@@ -140,7 +140,7 @@
         <input
           aria-label="Project name"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-0 bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong outline-none max-phone:text-(length:--fs-phone)"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong outline-none max-phone:text-(length:--fs-phone)"
           oninput={(event) => onName(event.currentTarget.value)}
           placeholder="Project name"
           spellcheck="false"
@@ -163,7 +163,7 @@
         <input
           aria-label="Project path"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-size-body leading-(--lh) font-normal text-ink-strong outline-none max-phone:text-(length:--fs-phone)"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-(--lh) font-normal text-ink-strong outline-none max-phone:text-(length:--fs-phone)"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };
@@ -223,7 +223,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-surface-fill motion-safe:transition-[background-color,transform]"
+        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-surface-fill motion-safe:transition-[background-color,transform]"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
@@ -261,7 +261,7 @@
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };

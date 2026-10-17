@@ -2261,6 +2261,33 @@
   }
 }
 
+/* One side's border taken away whole, as `border-bottom: 0` takes it: no
+   width, no style, the colour back to currentcolor. Tailwind's `border-b-0`
+   only zeroes the width, leaving the side solid in the base border colour;
+   and it has no per-side style. Each is the shorthand itself, which sorts
+   after every border utility of its variant, so it wins over the side's
+   width and colour on the same element as the source rule did. */
+@utility border-t-none {
+  border-top: none;
+}
+@utility border-b-none {
+  border-bottom: none;
+}
+@utility border-l-none {
+  border-left: none;
+}
+@utility border-r-none {
+  border-right: none;
+}
+@utility border-s-none {
+  border-inline-start: none;
+}
+/* One side dashed, the others left as they are (`border-dashed` dashes all
+   four). */
+@utility border-t-dashed {
+  border-top-style: dashed;
+}
+
 /* A field that frames a borderless editor with its own controls beside it
    (a composer, a search box with an icon): the frame is the text field. Its
    border takes the ring while the text inside has focus, not while one of

@@ -592,7 +592,7 @@
           data-choice
           {...props}
           aria-disabled={free ? undefined : "true"}
-          class="mark-line grid min-h-c-btn-h-lg w-full cursor-pointer grid-cols-(--choice-cols) items-center gap-space-3 border-0 bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:cursor-default aria-disabled:opacity-50"
+          class="mark-line grid min-h-c-btn-h-lg w-full cursor-pointer grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:cursor-default aria-disabled:opacity-50"
           onclick={(event) => {
             if (free) {
               choose(
@@ -627,7 +627,7 @@
           >
         </button>
       {/snippet}
-      <li class="not-first:border-t not-first:border-border-hairline">
+      <li class="not-first:border-t not-first:border-t-border-hairline">
         {#if free}
           {@render button({})}
         {:else}
@@ -701,7 +701,7 @@
           {@const device = devices.get(machine.machineId)}
           {#if device}
             <li
-              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-start"
+              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-start"
               data-device
             >
               <b
@@ -735,7 +735,7 @@
                  and Done. Continue is how a machine is skipped. -->
             {@const asked = paste.phase !== "idle" || paste.url !== null}
             <li
-              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-cols-(--mrow-cols-two)"
+              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-cols-(--mrow-cols-two)"
               data-paste
             >
               <b
@@ -854,7 +854,7 @@
           {/if}
         {:else}
           <li
-            class="type-meta border-t border-border-hairline px-0 py-space-3 text-ink-muted"
+            class="type-meta border-t border-t-border-hairline px-0 py-space-3 text-ink-muted"
           >
             {words.none(harnessWords(choice?.provider ?? CLAUDE_PROVIDER))}
           </li>

@@ -339,7 +339,7 @@
 {#snippet plot(chart: Chart, live: boolean)}
   <div class="flex flex-col gap-space-1">
     <!-- literal: 96px -->
-    <div class="flex h-(--bars-h) items-end gap-space-row border-b border-border-hairline" style:--bars-h="96px">
+    <div class="flex h-(--bars-h) items-end gap-space-row border-b border-b-border-hairline" style:--bars-h="96px">
       {#each chart.points as point (point.at)}
         {#if !live}
           <span data-slot="slot" class="group flex min-w-0 flex-1 items-end h-full"
@@ -391,8 +391,8 @@
   <table class="type-meta w-full border-collapse">
     <thead>
       <tr>
-        <th class="type-label border-b border-border-hairline px-0 py-space-1 text-start text-ink-muted" scope="col">{byHour ? "Hour" : "Day"}</th>
-        <th data-slot="num" class="type-label border-b border-border-hairline px-0 py-space-1 text-end text-ink-muted" scope="col">
+        <th class="type-label border-b border-b-border-hairline px-0 py-space-1 text-start text-ink-muted" scope="col">{byHour ? "Hour" : "Day"}</th>
+        <th data-slot="num" class="type-label border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted" scope="col">
           {chart.harness === "claude" ? "API price" : "Spend"}
         </th>
       </tr>
@@ -400,8 +400,8 @@
     <tbody>
       {#each chart.points as point (point.at)}
         <tr>
-          <td class="border-b border-border-hairline px-0 py-space-1 text-ink-strong">{periodLabel(point.at)}</td>
-          <td data-slot="num" class="border-b border-border-hairline px-0 py-space-1 text-end text-ink-strong">{chart.approx}{money(point.cost)}</td>
+          <td class="border-b border-b-border-hairline px-0 py-space-1 text-ink-strong">{periodLabel(point.at)}</td>
+          <td data-slot="num" class="border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong">{chart.approx}{money(point.cost)}</td>
         </tr>
       {/each}
     </tbody>

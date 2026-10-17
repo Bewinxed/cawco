@@ -67,7 +67,7 @@
     class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 pe-space-1 rounded-sm bg-surface-recess"
   >
     <button
-      class="flex flex-auto items-center gap-space-2 min-w-0 min-h-c-btn-h-sm px-space-2 border-0 rounded-sm bg-transparent text-start cursor-pointer press-tint focus-inset"
+      class="flex flex-auto items-center gap-space-2 min-w-0 min-h-c-btn-h-sm px-space-2 border-none border-current rounded-sm bg-transparent text-start cursor-pointer press-tint focus-inset"
       onclick={() => onopen(id)}
       title={byId.get(id)?.title}
       type="button"

@@ -30,7 +30,7 @@
 <div class="flex min-h-0 flex-1 flex-col" {@attach reflow()}>
   <p
     data-slot="note"
-    class="wf-muted border-b border-border-hairline px-space-5 py-space-3 max-wide:px-space-4"
+    class="wf-muted border-b border-b-border-hairline px-space-5 py-space-3 max-wide:px-space-4"
   >
     {#if origin === "editor"}
       Compiled from this graph on save. Edit the graph to change it.
@@ -60,7 +60,7 @@
     <!-- literal: 30dvh -->
     <section
       aria-label="Problems"
-      class="wf-stack max-h-(--problems-max) gap-space-2 overflow-y-auto border-t border-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
+      class="wf-stack max-h-(--problems-max) gap-space-2 overflow-y-auto border-t border-t-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
       data-flip
       style:--problems-max="30dvh"
       {@attach reflow()}

@@ -676,7 +676,7 @@
            at the top of the controls. No pad at the foot: the held feedback
            line is the space under the group. -->
       <div
-        class="relative border-t border-border-hairline px-space-5 pt-space-4 pb-0"
+        class="relative border-t border-t-border-hairline px-space-5 pt-space-4 pb-0"
       >
         <!-- The four settings (model, effort, permission, account) as one
              group: the same chip height and the same gap across and down,
@@ -801,7 +801,7 @@
   </div>
   <!-- A meter wrapping to a second line tweens the strip's height (morph). -->
   <div
-    class="flex flex-none flex-wrap items-center gap-space-4 gap-y-space-2 border-t border-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
+    class="flex flex-none flex-wrap items-center gap-space-4 gap-y-space-2 border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
     bind:this={statsEl}
     {@attach morph()}
   >

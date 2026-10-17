@@ -105,13 +105,13 @@
 >
   {#if !phone}
     <header
-      class="flex h-c-top-bar-h flex-none items-center justify-between border-b border-border-hairline bg-surface-raised ps-space-6 pe-space-1"
+      class="flex h-c-top-bar-h flex-none items-center justify-between border-b border-b-border-hairline bg-surface-raised ps-space-6 pe-space-1"
     >
       <span data-slot="title" class="type-label text-ink-muted"
         >Finder bench</span
       >
       <button
-        class="inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-0 bg-transparent px-space-3 type-label text-ink-muted"
+        class="inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => (open ? hide() : show())}
         type="button"
@@ -153,7 +153,7 @@
         >
         <button
           data-slot="send"
-          class="h-(--btn-h) rounded-xs border-0 bg-action-solid px-space-3 type-label text-on-action"
+          class="h-(--btn-h) rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
           data-send
           onclick={() => send(message)}
           style:--btn-h="34px"
@@ -163,7 +163,7 @@
     </div>
     {#if phone}
       <button
-        class="absolute top-space-3 end-space-3 inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-0 bg-transparent px-space-3 type-label text-ink-muted"
+        class="absolute top-space-3 end-space-3 inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => show()}
         type="button">Jump</button
@@ -201,7 +201,7 @@
       <!-- literal: 100dvh, 24px -->
       <div
         data-slot="finder-page-card"
-        class="absolute end-0 top-c-top-bar-h z-20 flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-t-0 border-border-control bg-surface-raised shadow-overlay-hung"
+        class="absolute end-0 top-c-top-bar-h z-20 flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
         data-finder-card
         role="dialog"
         aria-label="Jump"

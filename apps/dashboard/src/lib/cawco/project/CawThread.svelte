@@ -252,7 +252,7 @@
 <div class="flex h-full min-h-0 flex-auto flex-col" data-caw-panel>
   <div
     data-slot="head"
-    class="flex min-h-c-btn-h-sm flex-none items-center gap-space-2 border-b border-border-hairline pt-space-2 pr-space-2 pb-space-2 pl-space-4"
+    class="flex min-h-c-btn-h-sm flex-none items-center gap-space-2 border-b border-b-border-hairline pt-space-2 pr-space-2 pb-space-2 pl-space-4"
     data-caw-head
   >
     <div class="flex min-w-0 flex-auto flex-col items-start">

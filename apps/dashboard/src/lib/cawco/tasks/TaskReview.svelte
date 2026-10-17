@@ -432,7 +432,7 @@
   {#if !compact}
     <div
       data-slot="stage"
-      class="flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-0"
+      class="flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
       data-band="stage"
       data-framed={!!presented || undefined}
       id="stage-{task.id}"

@@ -119,7 +119,7 @@
   <figcaption
     data-slot="row"
     data-with-body={kind !== "file" || undefined}
-    class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-border-well mark-line"
+    class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-b-border-well mark-line"
   >
     <IconDocument class="flex-none size-icon-md" />
     <bdi

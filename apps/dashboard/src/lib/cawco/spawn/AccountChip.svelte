@@ -101,7 +101,7 @@
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group type-label grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-0 bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
+      class="group type-label grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
@@ -121,7 +121,7 @@
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-0 bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
+        class="group grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}

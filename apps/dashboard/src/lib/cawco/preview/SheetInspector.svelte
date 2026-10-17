@@ -188,7 +188,7 @@
 <aside
   data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
-  class="absolute inset-y-0 end-0 z-2 grid grid-rows-(--insp-rows) w-c-sheet-inspector-w max-w-full border-s border-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-0 data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-(--sheet-max) data-sheet:border-s-0 data-sheet:border-t data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
+  class="absolute inset-y-0 end-0 z-2 grid grid-rows-(--insp-rows) w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-0 data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-(--sheet-max) data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
   data-inspector={layout}
   style:--insp-rows="auto 1fr auto"
   style:--sheet-max="60%"
@@ -199,7 +199,7 @@
 >
   <header
     data-slot="head"
-    class="flex items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-border-hairline"
+    class="flex items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
   >
     <h2 data-slot="title" class="flex-1 m-0 text-ink-strong type-label">Inspect</h2>
     <Button
@@ -455,7 +455,7 @@
   </div>
 
   <footer
-    class="grid gap-space-2 px-space-3 pt-space-2 pb-(--foot-pb) border-t border-border-hairline"
+    class="grid gap-space-2 px-space-3 pt-space-2 pb-(--foot-pb) border-t border-t-border-hairline"
   >
     {#if inspector.problem}
       <p class="m-0 text-data-bad type-meta" role="alert">{inspector.problem}</p>

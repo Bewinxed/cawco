@@ -695,7 +695,7 @@
 {/snippet}
 
 {#snippet routineRows(routine: Routine)}
-  {@const rule = sorted[0]?.id === routine.id ? "" : "border-t border-border-hairline"}
+  {@const rule = sorted[0]?.id === routine.id ? "" : "border-t border-t-border-hairline"}
   {@const lead = LEAD[leadOf(routine)]}
   {@const line = scheduleLine(routine)}
   {@const last = lastOf(routine)}
@@ -721,7 +721,7 @@
         data-routine={routine.id}
         data-zone={routine.timeZone}
       >
-        <Table.Row data-view-routines-row class="relative border-b-0">
+        <Table.Row data-view-routines-row class="relative border-b-none">
           <Table.Cell
             class="h-c-btn-h-lg w-(--col-state) px-space-3 py-space-2 type-meta text-ink-muted group-state-open:bg-surface-well {rule}"
           >
@@ -738,7 +738,7 @@
           >
             <Collapsible.Trigger
               data-opener
-              class="focus-inset block max-w-full cursor-pointer border-0 bg-transparent p-0 text-start text-inherit"
+              class="focus-inset block max-w-full cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit"
             >
               <span
                 data-slot="name"
@@ -813,7 +813,7 @@
               <fieldset
                 data-slot="row-ask"
                 aria-label="Delete {routine.name}"
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-0 px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
               >
                 <span
                   >Delete {routine.name}? It stops now; its past runs stay in
@@ -991,8 +991,8 @@
         </Table.Header>
         <Table.Body>
           {#each routes as route, index (route.id)}
-            {@const rule = index > 0 ? "border-t border-border-hairline" : ""}
-            <Table.Row data-view-routines-row class="relative border-b-0">
+            {@const rule = index > 0 ? "border-t border-t-border-hairline" : ""}
+            <Table.Row data-view-routines-row class="relative border-b-none">
               <Table.Cell
                 class="h-c-btn-h-lg w-(--col-state) px-space-3 py-space-2 type-meta text-ink-muted {rule}"
                 ><span
@@ -1038,9 +1038,9 @@
           {#each polls as poll, index (poll.id)}
             {@const rule =
               routes.length > 0 || index > 0
-                ? "border-t border-border-hairline"
+                ? "border-t border-t-border-hairline"
                 : ""}
-            <Table.Row data-view-routines-row class="relative border-b-0">
+            <Table.Row data-view-routines-row class="relative border-b-none">
               <Table.Cell
                 class="h-c-btn-h-lg w-(--col-state) px-space-3 py-space-2 type-meta text-ink-muted {rule}"
                 ><span

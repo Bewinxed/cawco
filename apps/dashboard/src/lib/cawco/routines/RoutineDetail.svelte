@@ -214,7 +214,7 @@
                 data-outcome={outcome.status}
               >
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--when-w) border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
+                  class="h-c-btn-h-lg w-(--when-w) border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
                   data-cell="when"
                 >
                   <time
@@ -225,19 +225,19 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--outcome-w) border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
+                  class="h-c-btn-h-lg w-(--outcome-w) border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
                   data-cell="outcome"
                 >
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--took-w) border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:hidden"
+                  class="h-c-btn-h-lg w-(--took-w) border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:hidden"
                   data-cell="took"
                 >
                   <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num"
+                  class="h-c-btn-h-lg border-t border-t-border-hairline px-space-3 py-0 type-meta text-ink-muted num"
                   data-cell="result"
                 >
                   {#if href}

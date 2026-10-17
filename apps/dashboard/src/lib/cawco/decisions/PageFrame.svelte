@@ -195,7 +195,7 @@
 {:else if src}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <iframe
-    class="block min-h-0 w-full flex-auto border-0 bg-transparent"
+    class="block min-h-0 w-full flex-auto border-none border-current bg-transparent"
     onload={hello}
     {src}
     title="Decision page: {title}"

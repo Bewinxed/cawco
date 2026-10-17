@@ -95,7 +95,7 @@
 
 <!-- literal: 8px, 6px, 10px, 44px, 72ch, 240px -->
 <div
-  class="flex flex-col gap-(--inv-gap) border-t border-border-hairline pt-space-5"
+  class="flex flex-col gap-(--inv-gap) border-t border-t-border-hairline pt-space-5"
   style:--inv-gap="8px"
   style:--inv-head-h="44px"
   style:--inv-measure="72ch"
@@ -196,7 +196,7 @@
                       <span class="flex flex-wrap items-center gap-(--inv-tight)">
                         <span
                           data-slot="name"
-                          class="font-mono text-size-meta text-ink-strong"
+                          class="font-(family-name:--font-mono) text-size-meta text-ink-strong"
                           >{row.name}</span>
                         <Badge variant="outline"><span>{row.scope}</span></Badge
                         >

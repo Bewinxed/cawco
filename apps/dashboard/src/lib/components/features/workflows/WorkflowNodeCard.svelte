@@ -148,7 +148,7 @@
   {#if ports.length > 1}
     <div
       data-slot="ports"
-      class="relative border-t border-border-hairline py-space-2"
+      class="relative border-t border-t-border-hairline py-space-2"
       bind:this={portsEl}
     >
       {#each ports as port (port)}

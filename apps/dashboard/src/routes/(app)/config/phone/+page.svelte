@@ -185,7 +185,7 @@
           <!-- literal: 12px, 10px -->
           <li
             data-slot="device"
-            class="grid items-center gap-(--device-gap) border-t border-border-hairline py-(--device-pad-y) first:border-t-0"
+            class="grid items-center gap-(--device-gap) not-first:border-t not-first:border-t-border-hairline py-(--device-pad-y)"
             style:--device-gap="12px"
             style:--device-pad-y="10px"
           >

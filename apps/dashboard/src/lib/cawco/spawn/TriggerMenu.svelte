@@ -46,7 +46,7 @@
     <!-- literal: 9px gap, 36px height, 8px inline padding, 22px tile -->
     <button
       data-slot="row"
-      class="press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) text-left text-ink-strong"
+      class="press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();

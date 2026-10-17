@@ -127,7 +127,7 @@
       data-standing={stage.at === "composer" || undefined}
       data-canvas-stages-docked={stage.at === "panel" || undefined}
       data-slot="canvas-stage"
-      class="fixed z-15 overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-standing:border-b data-standing:border-border-hairline"
+      class="fixed z-15 overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-standing:border-b data-standing:border-b-border-hairline"
       data-artifact={stage.id}
       hidden
       bind:this={stage.el}
@@ -139,7 +139,7 @@
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
         <iframe
           allow="clipboard-write"
-          class="block size-full border-0"
+          class="block size-full border-none border-current"
           onload={(event) =>
             loaded(stage, event.currentTarget as HTMLIFrameElement)}
           src={stage.src}

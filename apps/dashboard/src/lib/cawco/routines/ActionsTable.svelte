@@ -122,7 +122,7 @@
           data-status={said.status}
         >
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 pe-0 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            class="h-c-btn-h-lg px-space-3 py-space-2 pe-0 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
             ><span
               data-slot="mark"
               class="grid w-c-row-lead place-items-center"
@@ -133,7 +133,7 @@
             ></Table.Cell
           >
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
           >
             <span
               data-slot="what"
@@ -149,13 +149,13 @@
             {/if}
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
             data-cell="status"
           >
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-t-border-hairline"
             data-cell="when"
           >
             {#if said.at !== null}

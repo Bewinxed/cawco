@@ -322,7 +322,7 @@
   <!-- The rims' tokens, tuned live. The bench's own controls, at the foot,
        clear of every strip. -->
   <div
-    class="type-label flex flex-wrap gap-x-space-5 gap-y-space-2 border-t border-border-hairline bg-surface-raised px-space-5 py-space-3 text-ink-muted"
+    class="type-label flex flex-wrap gap-x-space-5 gap-y-space-2 border-t border-t-border-hairline bg-surface-raised px-space-5 py-space-3 text-ink-muted"
   >
     <label class="flex items-center gap-space-2">
       <span>Taper</span>

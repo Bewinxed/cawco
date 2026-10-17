@@ -164,7 +164,7 @@
 
 <!-- literal: 56px / 64px height, 10px 12px padding, 30px / 38px track -->
 <div
-  class="relative grid h-(--h) max-phone:h-(--h-phone) overflow-hidden rounded-md border border-border-hairline bg-surface-recess px-(--pad-x) py-(--pad-y) data-embedded:h-auto data-embedded:border-0 data-embedded:bg-transparent data-embedded:p-0"
+  class="relative grid h-(--h) max-phone:h-(--h-phone) overflow-hidden rounded-md border border-border-hairline bg-surface-recess px-(--pad-x) py-(--pad-y) data-embedded:h-auto data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
   data-embedded={embedded || undefined}
   style:--h="56px"
   style:--h-phone="64px"

@@ -77,7 +77,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="ns-in press-tint relative flex min-h-(--min-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-pressed:bg-surface-fill"
+      class="ns-in press-tint relative flex min-h-(--min-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-pressed:bg-surface-fill"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);

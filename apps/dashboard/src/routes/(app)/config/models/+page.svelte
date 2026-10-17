@@ -403,7 +403,7 @@
   <!-- literal: 8px -->
   <form
     data-slot="group"
-    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
     data-group="jev"
     style:--gap="8px"
     style:--note-measure="72ch"
@@ -530,7 +530,7 @@
   <!-- literal: 8px -->
   <div
     data-slot="group"
-    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
     style:--gap="8px"
     style:--note-measure="72ch"
   >

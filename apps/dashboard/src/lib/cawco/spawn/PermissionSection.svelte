@@ -77,7 +77,7 @@
 <div
   data-slot="perms"
   aria-label="Permission mode"
-  class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:border-0 data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
+  class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
   data-embedded={embedded || undefined}
   role="radiogroup"
   style:--row-h="44px"

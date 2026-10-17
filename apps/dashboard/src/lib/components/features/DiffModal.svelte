@@ -84,7 +84,7 @@
     <!-- literal: gap 8px 12px, padding 12px 52px 12px 16px -->
     <header
       data-slot="head"
-      class="flex flex-wrap items-center justify-between gap-y-(--head-gap-y) gap-x-(--head-gap-x) pt-(--head-pad-y) pr-(--head-pad-end) pb-(--head-pad-y) pl-(--head-pad-start) border-b border-border-hairline"
+      class="flex flex-wrap items-center justify-between gap-y-(--head-gap-y) gap-x-(--head-gap-x) pt-(--head-pad-y) pr-(--head-pad-end) pb-(--head-pad-y) pl-(--head-pad-start) border-b border-b-border-hairline"
       style:--head-gap-y="8px"
       style:--head-gap-x="12px"
       style:--head-pad-y="12px"

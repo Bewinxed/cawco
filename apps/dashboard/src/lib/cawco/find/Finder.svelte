@@ -455,7 +455,7 @@
 {#snippet field_()}
   <div
     data-slot="finder-field"
-    class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-3 pe-space-1 border-b border-border-hairline group-data-phone/finder:h-(--field-h-phone) group-data-phone/finder:border-b-0 group-data-phone/finder:border-t group-data-phone/finder:border-border-hairline"
+    class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-3 pe-space-1 border-b border-b-border-hairline group-data-phone/finder:h-(--field-h-phone) group-data-phone/finder:border-b-none group-data-phone/finder:border-t group-data-phone/finder:border-t-border-hairline"
   >
     <SearchIcon
       data-finder-lead
@@ -612,7 +612,7 @@
     <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->
     <div
       data-slot="acts"
-      class="flex flex-none flex-col ms-(--acts-ms) ps-space-3 border-s border-border-control mb-space-2"
+      class="flex flex-none flex-col ms-(--acts-ms) ps-space-3 border-s border-s-border-control mb-space-2"
       aria-label={`${item.result.title}, what to do`}
       data-flip
       role="group"
@@ -726,7 +726,7 @@
       >
     </div>
   {:else if item.t === "rule"}
-    <hr class="flex-none my-space-1 mx-(--rule-mx) border-0 border-t border-border-hairline" data-flip />
+    <hr class="flex-none my-space-1 mx-(--rule-mx) border-t border-t-border-hairline border-r-none border-b-none border-l-none" data-flip />
   {:else if item.t === "skeleton"}
     <div class="flex-none px-space-3 py-(--sk-pad)" aria-hidden="true" data-flip>
       <Skeleton
@@ -766,7 +766,7 @@
 
 {#snippet waitingList()}
   <div
-    class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-1 pe-space-2 border-b border-border-hairline"
+    class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-1 pe-space-2 border-b border-b-border-hairline"
   >
     <button
       class="grid place-items-center size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
@@ -906,7 +906,7 @@
   {:else}
     <div
       data-slot="hints"
-      class="flex items-center gap-space-4 flex-none h-(--hints-h) px-space-3 border-t border-border-hairline type-meta text-ink-subtle"
+      class="flex items-center gap-space-4 flex-none h-(--hints-h) px-space-3 border-t border-t-border-hairline type-meta text-ink-subtle"
       aria-hidden="true"
     >
       {#if finder.view === "waiting"}

@@ -26,7 +26,7 @@
 
 <!-- literal: 56px -->
 <li
-  class="@container/arow flex min-h-(--row-min) min-w-0 border-t border-border-hairline"
+  class="@container/arow flex min-h-(--row-min) min-w-0 border-t border-t-border-hairline"
   data-flip
   style:--row-min="56px"
 >

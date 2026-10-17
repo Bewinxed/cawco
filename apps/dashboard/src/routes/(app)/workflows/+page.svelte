@@ -161,7 +161,7 @@
       <tbody aria-hidden="true" class="workflow-cards:block workflow-cards:w-full">
         {#each [0, 1, 2] as index (index)}
           <tr
-            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
+            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
             data-slot="workflow-row"
           >
             <td
@@ -225,7 +225,7 @@
       <tbody class="workflow-cards:block workflow-cards:w-full">
         {#each rows as { workflow, runs, last } (workflow.id)}
           <tr
-            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
+            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
             data-slot="workflow-row"
           >
             <td>

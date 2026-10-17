@@ -225,7 +225,7 @@
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
-              class="kit-item px-(--choice-pad) text-left font-mono text-size-meta text-ink-strong focus-inset"
+              class="kit-item px-(--choice-pad) text-left font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset"
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"

@@ -1869,7 +1869,7 @@
   </div>
   {#if failure}
     <div
-      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
+      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-t-border-hairline"
       role="alert"
       transition:appear
     >

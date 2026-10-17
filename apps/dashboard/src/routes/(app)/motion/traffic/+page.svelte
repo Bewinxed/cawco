@@ -361,7 +361,7 @@
      is a fixed box; virtua resizing it from inside its own measure was a
      ResizeObserver loop no real pane has. -->
 <div class="flex min-h-0 flex-auto flex-col bg-surface-recess">
-  <header class="border-b border-border-hairline px-space-5 py-space-4">
+  <header class="border-b border-b-border-hairline px-space-5 py-space-4">
     <h1 class="text-size-title font-medium text-ink-strong">Arrival traffic</h1>
     <p class="mt-space-1 text-size-body font-normal text-ink-muted">
       The real transcript, driven without a model. Sequence it from

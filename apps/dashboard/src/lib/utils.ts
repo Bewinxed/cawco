@@ -47,12 +47,29 @@ const twMergeConfig = {
       duration: [{ dur: durations }],
       "animation-duration": [{ "anim-dur": durations }],
       "type-role": [{ type: utilities("type") }],
+      // app.css's per-side shorthands, one group to a side, which
+      // tailwind-merge would otherwise read as that side's colour and drop
+      // beside the side's real colour. They sort after every border utility,
+      // so they stand beside them.
+      "border-none-t": ["border-t-none"],
+      "border-none-b": ["border-b-none"],
+      "border-none-l": ["border-l-none"],
+      "border-none-r": ["border-r-none"],
+      "border-none-s": ["border-s-none"],
+      "border-style-t": ["border-t-dashed"],
     },
   },
 };
-const twMerge = extendTailwindMerge<"animation-duration" | "type-role">(
-  twMergeConfig
-);
+const twMerge = extendTailwindMerge<
+  | "animation-duration"
+  | "type-role"
+  | "border-none-t"
+  | "border-none-b"
+  | "border-none-l"
+  | "border-none-r"
+  | "border-none-s"
+  | "border-style-t"
+>(twMergeConfig);
 
 /** `tv` for kit recipes, merging with the same theme as `cn`. */
 export const tv = createTV({ twMergeConfig });

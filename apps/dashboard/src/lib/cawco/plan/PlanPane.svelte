@@ -222,19 +222,19 @@
   >
     {#if steps.length > 0}
       {#if stepsHeaded}
-        <h3 class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-border-hairline">Steps</h3>
+        <h3 class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline">Steps</h3>
       {/if}
       {@render tree(steps, false)}
     {/if}
 
     {#if plan?.spec}
-      <h3 class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-border-hairline">Spec</h3>
+      <h3 class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline">Spec</h3>
       <MessageBody source={plan.spec.markdown} />
     {/if}
 
     {#if showsTodos && plan?.taskId}
       {#if !onlyTodos}
-        <h3 class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-border-hairline">
+        <h3 class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline">
           To-dos <span class="type-code text-ink-subtle">{plan.taskId}</span>
         </h3>
       {/if}

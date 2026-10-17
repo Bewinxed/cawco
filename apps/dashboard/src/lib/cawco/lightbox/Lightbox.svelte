@@ -258,7 +258,7 @@
     >
       <header
         data-slot="doc-head"
-        class="flex items-center gap-space-1 border-b border-border-hairline py-space-2 ps-space-4 pe-space-2"
+        class="flex items-center gap-space-1 border-b border-b-border-hairline py-space-2 ps-space-4 pe-space-2"
       >
         <DialogPrimitive.Title
           class="min-w-0 flex-1 truncate text-size-label font-medium"

@@ -158,7 +158,7 @@
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
         <li
-          class="flex min-h-c-btn-h flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-border-hairline"
+          class="flex min-h-c-btn-h flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-t-border-hairline"
         >
           <span
             data-slot="pick"

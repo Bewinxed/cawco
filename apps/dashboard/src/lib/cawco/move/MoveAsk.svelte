@@ -24,7 +24,7 @@
   <Collapsible.Root bind:open>
     <!-- literal: 26px -->
     <Collapsible.Trigger
-      class="mark-line press-tint inline-flex items-center gap-space-1 justify-self-start min-h-(--details-min-h) p-0 border-0 rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong"
+      class="mark-line press-tint inline-flex items-center gap-space-1 justify-self-start min-h-(--details-min-h) p-0 border-none border-current rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong"
     >
       <span>Details</span>
       <span

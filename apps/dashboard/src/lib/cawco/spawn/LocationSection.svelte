@@ -231,7 +231,7 @@
         aria-invalid={reading && !informational ? true : undefined}
         aria-label="Directory"
         autocapitalize="off"
-        class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
+        class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
         onkeydown={commitOnEnter}
@@ -253,7 +253,7 @@
         >
         <!-- literal: 30px / 44px height, 10px inline padding -->
         <button
-          class="ns-in h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer rounded-sm border-0 bg-transparent px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted hover:bg-surface-hover hover:text-ink-strong"
+          class="ns-in h-(--h) max-phone:h-(--h-phone) flex-none cursor-pointer rounded-sm border-none border-current bg-transparent px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted hover:bg-surface-hover hover:text-ink-strong"
           onclick={onoverride}
           style="--delay:40ms"
           style:--h="30px"
@@ -292,10 +292,10 @@
     </div>
     <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
       <div class="min-h-0">
-        <div class="border-t border-border-hairline bg-surface-recess">
+        <div class="border-t border-t-border-hairline bg-surface-recess">
           <!-- literal: 8px gap, 8px 8px 8px 10px padding -->
           <div
-            class="flex max-phone:flex-wrap items-center gap-(--gap) border-b border-border-hairline bg-surface-recess pt-(--pad) pr-(--pad) pb-(--pad) pl-(--pad-l)"
+            class="flex max-phone:flex-wrap items-center gap-(--gap) border-b border-b-border-hairline bg-surface-recess pt-(--pad) pr-(--pad) pb-(--pad) pl-(--pad-l)"
             style:--gap="8px"
             style:--pad="8px"
             style:--pad-l="10px"
@@ -316,7 +316,7 @@
             >
             <!-- literal: 1.4 line height -->
             <div
-              class="flex max-phone:basis-full max-phone:flex-col min-w-0 flex-1 items-center max-phone:items-start gap-space-row font-mono text-size-label leading-(--lh) font-normal text-ink-muted"
+              class="flex max-phone:basis-full max-phone:flex-col min-w-0 flex-1 items-center max-phone:items-start gap-space-row font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-muted"
               style:--lh="1.4"
             >
               <div
@@ -326,7 +326,7 @@
                   <!-- literal: 44px minimum size, 6px inline padding -->
                   <button
                     data-slot="crumb"
-                    class="min-h-(--min) min-w-(--min) flex-none cursor-pointer rounded-xs border-0 bg-transparent px-(--pad-x) text-inherit hover:bg-surface-hover"
+                    class="min-h-(--min) min-w-(--min) flex-none cursor-pointer rounded-xs border-none border-current bg-transparent px-(--pad-x) text-inherit hover:bg-surface-hover"
                     onclick={() => list(crumb.to)}
                     style:--min="44px"
                     style:--pad-x="6px"
@@ -341,7 +341,7 @@
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-0 bg-surface-lift p-(--pad) text-left wrap-anywhere text-ink-strong hover:bg-surface-hover"
+                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-none border-current bg-surface-lift p-(--pad) text-left wrap-anywhere text-ink-strong hover:bg-surface-hover"
                 onclick={() => list(path)}
                 style:--min="44px"
                 style:--pad="8px"
@@ -361,7 +361,7 @@
             {#if canGoUp}
               <!-- literal: 10px gap, 34px / 44px height, 8px inline padding -->
               <button
-                class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) text-left font-mono text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
                 onclick={goUp}
                 style:--gap="10px"
                 style:--h="34px"
@@ -399,7 +399,7 @@
               {#each folders as folder (`${path}/${folder.name}`)}
                 <!-- literal: 10px gap, 34px / 44px height, 8px inline padding -->
                 <button
-                  class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) text-left font-mono text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                  class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
                   onclick={() => enter(folder.name)}
                   style:--gap="10px"
                   style:--h="34px"
@@ -434,12 +434,12 @@
           </div>
           <!-- literal: 8px gap and padding, 44px button height on a phone, 1.3 line height -->
           <div
-            class="flex max-phone:flex-wrap items-center justify-between gap-(--gap) border-t border-border-hairline bg-surface-lift p-(--gap)"
+            class="flex max-phone:flex-wrap items-center justify-between gap-(--gap) border-t border-t-border-hairline bg-surface-lift p-(--gap)"
             style:--gap="8px"
           >
             <span
               data-slot="path"
-              class="max-phone:basis-full min-w-0 truncate font-mono text-size-meta leading-(--lh) font-normal text-ink-muted"
+              class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) text-size-meta leading-(--lh) font-normal text-ink-muted"
               style:--lh="1.3"
               title={path}>{path}</span
             >
@@ -495,7 +495,7 @@
             <input
               aria-label="Repository"
               autocapitalize="off"
-              class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
+              class="min-h-(--min-h) max-phone:min-h-(--min-h-phone) max-phone:text-(length:--fs-phone) min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-(--lh) font-normal text-ink-strong outline-none"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}
@@ -522,7 +522,7 @@
           <Refresh class="mt-(--mt) size-icon-md flex-none text-hue-blue-500" />
           <span class="type-meta min-w-0 text-pretty text-ink-muted"
             >Cloned into <span
-              class="min-w-0 font-mono text-size-meta leading-(--lh) font-normal text-pretty text-ink-strong"
+              class="min-w-0 font-(family-name:--font-mono) text-size-meta leading-(--lh) font-normal text-pretty text-ink-strong"
               style:--lh="1.35">{dir.trim() || "~"}</span
             > on each machine, pulled fresh before the agent starts.</span
           >

@@ -290,23 +290,23 @@
         {@const on = picked?.(task.id) ?? false}
         <Table.Row
           data-task-table-row
-          class="group/row relative border-b-0 data-picked:max-phone:bg-selected-bg max-phone:grid max-phone:grid-cols-(--row-cols) group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick) max-phone:items-center max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:px-space-3 max-phone:border-b max-phone:border-border-hairline max-phone:last:border-b-0"
+          class="group/row relative border-b-none data-picked:max-phone:bg-selected-bg max-phone:grid max-phone:grid-cols-(--row-cols) group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick) max-phone:items-center max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:px-space-3 max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none"
           data-picked={on || undefined}
           data-task={task.id}
         >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
               class={cell.column.id === "pick"
-                ? "h-c-btn-h-lg py-0 px-space-3 border-b border-border-hairline type-meta text-ink-muted group-last/row:border-b-0 group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-0 max-phone:row-(--pick-row) max-phone:col-start-1"
+                ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-(--pick-row) max-phone:col-start-1"
                 : cell.column.id === "title"
-                  ? "h-c-btn-h-lg py-0 px-space-3 border-b border-border-hairline type-meta text-ink-muted group-last/row:border-b-0 group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-0 max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1"
+                  ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1"
                   : cell.column.id === "labels"
-                    ? "h-c-btn-h-lg py-0 px-space-3 border-b border-border-hairline type-meta text-ink-muted group-last/row:border-b-0 group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:hidden"
+                    ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:hidden"
                     : cell.column.id === "created"
-                      ? "h-c-btn-h-lg py-0 px-space-3 border-b border-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-0 group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent @max-decisions-900px:hidden"
+                      ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent @max-decisions-900px:hidden"
                       : cell.column.id === "updated"
-                        ? "h-c-btn-h-lg py-0 px-space-3 border-b border-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-0 group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-0 max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5"
-                        : "h-c-btn-h-lg py-0 px-space-3 border-b border-border-hairline type-meta text-ink-muted group-last/row:border-b-0 group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-0"}
+                        ? "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5"
+                        : "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current"}
               data-task-table-col={cell.column.id}
             >
               {#if cell.column.id === "pick"}

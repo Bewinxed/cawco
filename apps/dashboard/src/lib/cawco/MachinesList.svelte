@@ -108,14 +108,14 @@
   <!-- Machines waiting to be admitted (hub hub-auth.ts): first, as they wait on you. -->
   <ul
     data-slot="list"
-    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-row border-b border-seam px-0 pt-0 pb-space-1"
+    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-row border-b border-b-seam px-0 pt-0 pb-space-1"
   >
     {#each hubAuth.waiting as machine (machine.machineId)}
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
       <!-- literal: 44px -->
       <li
         data-slot="row"
-        class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-0 bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-default"
+        class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-default"
         data-waiting={machine.machineId}
         style:--row-touch="44px"
       >
@@ -168,7 +168,7 @@
         <button
           data-slot="row"
           aria-haspopup="dialog"
-          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-0 bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-pointer press-tint focus-inset"
+          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-pointer press-tint focus-inset"
           onclick={() => {
             onleave?.();
             addMachine.show(way.way);
@@ -210,7 +210,7 @@
           <!-- literal: 44px -->
           <div
             data-slot="row"
-            class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-0 bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover press-tint focus-inset"
+            class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover press-tint focus-inset"
             style:--row-touch="44px"
             tabindex="-1"
           >
@@ -241,7 +241,7 @@
   <button
     data-slot="row"
     data-add
-    class="mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 cursor-pointer items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-seam bg-transparent px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover"
+    class="mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 cursor-pointer items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-t-seam border-r-none border-b-none border-l-none bg-transparent px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover"
     style:--row-touch="44px"
     onclick={() => {
       onleave?.();

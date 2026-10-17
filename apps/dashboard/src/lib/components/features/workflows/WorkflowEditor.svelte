@@ -596,7 +596,7 @@
   bind:clientWidth={panelWidth}
 >
   <header
-    class="wf-stack border-b border-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"
+    class="wf-stack border-b border-b-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"
   >
     <div class="wf-row wf-spread">
       <!-- literal: 220px, 24px, 44px, 300px -->
@@ -791,7 +791,7 @@
                    listed, moves the rows the house way (motion/rows). -->
               <!-- literal: 300px -->
               <aside
-                class="wf-stack w-(--list-w) shrink-0 overflow-y-auto border-r border-border-hairline p-space-3 max-wide:w-full max-wide:border-r-0"
+                class="wf-stack w-(--list-w) shrink-0 overflow-y-auto border-r border-r-border-hairline p-space-3 max-wide:w-full max-wide:border-r-none"
                 style:--list-w="300px"
                 {@attach reflow()}
               >
@@ -835,7 +835,7 @@
                     : undefined}
                   <a
                     data-slot="run-entry"
-                    class="wf-stack border-b border-border-hairline p-space-3 text-left text-inherit no-underline"
+                    class="wf-stack border-b border-b-border-hairline p-space-3 text-left text-inherit no-underline"
                     data-flip
                     href={runHref(run.id)}
                   >

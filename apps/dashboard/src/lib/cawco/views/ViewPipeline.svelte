@@ -101,7 +101,7 @@
   </ol>
   {#if dropped.length > 0}
     <ol
-      class="m-0 flex list-none flex-col gap-space-1 border-t border-dashed border-border-hairline p-0 pt-space-3"
+      class="m-0 flex list-none flex-col gap-space-1 border-t border-t-dashed border-t-border-hairline p-0 pt-space-3"
     >
       {#each dropped as stage (stage.name)}
         {@render row(stage)}

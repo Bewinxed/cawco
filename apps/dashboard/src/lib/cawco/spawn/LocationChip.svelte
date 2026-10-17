@@ -82,7 +82,7 @@
     {/if}
     <span
       data-slot="chip-label"
-      class="data-mono:font-mono"
+      class="data-mono:font-(family-name:--font-mono)"
       data-mono={!empty || undefined}
       title={mode === "repo" ? repo : dir}>{label}</span
     >

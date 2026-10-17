@@ -34,7 +34,7 @@
 
 <div
   bind:this={shelf}
-  class="mx-auto my-0 hidden max-w-(--c-composer-w) flex-col gap-space-2 border-0 bg-transparent p-0 inset-x-space-3 top-space-3 bottom-auto open:flex"
+  class="mx-auto my-0 hidden max-w-(--c-composer-w) flex-col gap-space-2 border-none border-current bg-transparent p-0 inset-x-space-3 top-space-3 bottom-auto open:flex"
   popover="manual"
 >
   {#each broken as law (law.law)}

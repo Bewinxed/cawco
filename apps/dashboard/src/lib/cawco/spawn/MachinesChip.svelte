@@ -118,7 +118,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-(--r) border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-surface-fill disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-(--r) border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-surface-fill disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
         data-fh="1"
         disabled={!row.online}
         onclick={() => ontoggle(row.id)}
@@ -163,7 +163,7 @@
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color,border-radius] dur-toggle ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color,border-radius] dur-toggle ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"

@@ -124,7 +124,7 @@
       {@const flow = flows.get(machine.machineId)}
       {@const open = openOn === machine.machineId}
       <li
-        class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:border-t not-first:border-border-hairline"
+        class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:border-t not-first:border-t-border-hairline"
         data-flip
       >
         <span class="type-label truncate text-ink-strong">{name}</span>

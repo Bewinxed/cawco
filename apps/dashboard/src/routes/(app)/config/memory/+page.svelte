@@ -230,7 +230,7 @@
     <!-- literal: 8px -->
     <div
       data-slot="group"
-      class="flex flex-col gap-(--group-gap) border-t border-border-hairline pt-space-5"
+      class="flex flex-col gap-(--group-gap) border-t border-t-border-hairline pt-space-5"
       style:--group-gap="8px"
       style:--note-measure="72ch"
     >
