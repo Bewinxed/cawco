@@ -22,7 +22,10 @@
  *
  * 1. The agent says it serves the hub on 127.0.0.1 and ::1, the dashboard at P.
  * 1b. The agent listens on P and the preview range alone (`ss`), never 3000.
- * 1c. A dev server started on 3000 after the agent registered binds it.
+ * 1c. A dev server started on 3000 after the agent registered binds it on
+ *    each of 127.0.0.1 and ::1 that 3000 was free on before the agent
+ *    started; a family something else held then (a host's own dashboard
+ *    socket on 0.0.0.0:3000) is said with its holder, and rests on 1b.
  * 2. `GET /` at P through the agent: 200, the dashboard.
  * 3. The dashboard's `/ws/dashboard` through the agent: a page of its own
  *    origin reaches the hub (it speaks), a page of another origin is closed
@@ -45,7 +48,9 @@ import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
   devServerOn3000,
+  type HeldBefore,
   hasIpv6Loopback,
+  holdersOf3000,
   listening,
   loopbackPorts,
   portList,
@@ -105,8 +110,16 @@ const app = () =>
     },
   });
 
-/** 1, 1b, 1c: what the agent (`pid`) says it serves and listens on, and 3000 left free. */
-async function carries(kit: Kit, fleet: KitFleet, pid: number) {
+/**
+ * 1, 1b, 1c: what the agent (`pid`) says it serves and listens on, and 3000
+ * left to a dev server on each family it was free on before (`before`).
+ */
+async function carries(
+  kit: Kit,
+  fleet: KitFleet,
+  pid: number,
+  before: HeldBefore
+) {
   const dashboard = fleet.localDashboardPort;
   const families = hasIpv6Loopback() ? "127.0.0.1 and ::1" : "127.0.0.1";
   const line = await until(
@@ -132,11 +145,11 @@ async function carries(kit: Kit, fleet: KitFleet, pid: number) {
       JSON.stringify(expected.toSorted((a, b) => a - b)),
     `listening ${portList([...new Set(held)])}; expected ${portList(expected)}`
   );
-  const devServer = await devServerOn3000();
+  const devServer = await devServerOn3000(before);
   kit.check(
-    "1c: a dev server started on 3000 after the agent registered binds it on 127.0.0.1 and ::1",
-    devServer.every((one) => one.includes('answers "dev server"')),
-    devServer.join("; ")
+    "1c: a dev server started on 3000 after the agent registered binds it on each loopback family 3000 was free on before",
+    devServer.ok,
+    devServer.said.join("; ")
   );
 }
 
@@ -316,10 +329,11 @@ const run = async (kit: Kit) => {
     fleet.launch("hub");
     await fleet.hubUp();
     fleet.fileAccount();
+    const before = await holdersOf3000();
     const agent = fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    await carries(kit, fleet, agent.pid);
+    await carries(kit, fleet, agent.pid, before);
     const session = await fleet.spawn("claude", "Loopback", fleet.repo);
     await fleet.api(`/api/instances/${session}/artifacts`, {
       kind: "preview",

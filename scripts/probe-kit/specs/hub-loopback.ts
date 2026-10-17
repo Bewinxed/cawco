@@ -12,7 +12,8 @@
  *    in turn: each time it says the hub is on its computer and listens on
  *    neither P nor any preview port nor 3000 (`ss`, by its pid).
  * 8b. A dev server started on 3000 after the agent registered binds it on
- *    127.0.0.1 and ::1.
+ *    each of 127.0.0.1 and ::1 that 3000 was free on before the agent
+ *    started; a family something else held then is said with its holder.
  * 9. The hub's computer: the dashboard's socket unit and plist as the
  *    installer writes them name the network address, 127.0.0.1:P and, where
  *    this computer has an IPv6 loopback, [::1]:P; serve.js, run under
@@ -119,10 +120,61 @@ export const hasIpv6Loopback = (): boolean => {
   }
 };
 
-/** A dev server on 3000, on 127.0.0.1 and ::1 in turn: each bound and answering, or why not. */
-export const devServerOn3000 = async (): Promise<string[]> => {
+const FAMILIES = ["127.0.0.1", "::1"] as const;
+
+/** What held 3000 on each loopback family before the agent started, as `ss` names it; absent where 3000 was free. */
+export type HeldBefore = Partial<Record<(typeof FAMILIES)[number], string>>;
+
+/**
+ * Who holds 3000 on 127.0.0.1 and on ::1 now, read before the agent starts:
+ * a host's own dashboard socket holds `0.0.0.0:3000` (obelisk's
+ * cawco-dashboard.socket), so its 127.0.0.1:3000 was never free, whatever
+ * the agent does.
+ */
+export const holdersOf3000 = async (): Promise<HeldBefore> => {
+  const holders = (await $`ss -Hltnp`.text())
+    .split("\n")
+    .map((line) => line.split(SPACES))
+    .filter((fields) => fields[3]?.endsWith(":3000"))
+    .map(
+      (fields) =>
+        `${fields[3]} ${fields.slice(5).join(" ") || "(a process this user cannot see)"}`
+    )
+    .join("; ");
+  const held: HeldBefore = {};
+  for (const hostname of FAMILIES) {
+    try {
+      Bun.serve({
+        hostname,
+        port: 3000,
+        fetch: () => new Response(null),
+      }).stop(true);
+    } catch (error) {
+      held[hostname] = holders || (error as Error).message;
+    }
+  }
+  return held;
+};
+
+/**
+ * A dev server on 3000, on each loopback family 3000 was free on before the
+ * agent started (`before`, {@link holdersOf3000}): each must bind and answer.
+ * A family something else held then is said with its holder and asserts
+ * nothing; that the agent holds no 3000 is `ss`'s word on it (1b, 8).
+ */
+export const devServerOn3000 = async (
+  before: HeldBefore
+): Promise<{ ok: boolean; said: string[] }> => {
   const said: string[] = [];
-  for (const hostname of ["127.0.0.1", "::1"]) {
+  let ok = true;
+  for (const hostname of FAMILIES) {
+    const holder = before[hostname];
+    if (holder) {
+      said.push(
+        `${hostname}:3000 was held before the agent started, by ${holder}`
+      );
+      continue;
+    }
     try {
       const dev = Bun.serve({
         hostname,
@@ -134,12 +186,14 @@ export const devServerOn3000 = async (): Promise<string[]> => {
         `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:3000/`
       ).then((one) => one.text());
       said.push(`${hostname}:3000 bound, answers "${answer}"`);
+      ok &&= answer === "dev server";
       await dev.stop(true);
     } catch (error) {
       said.push(`${hostname}:3000 ${(error as Error).message}`);
+      ok = false;
     }
   }
-  return said;
+  return { ok, said };
 };
 
 const freePort = async (): Promise<number> => {
@@ -326,6 +380,7 @@ const run = async (kit: Kit) => {
     fleet.launch("hub");
     await fleet.hubUp();
     fleet.fileAccount();
+    const before = await holdersOf3000();
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
@@ -334,11 +389,11 @@ const run = async (kit: Kit) => {
     await nothingOnTheHubsComputer(kit, fleet);
 
     // 8b.
-    const devServer = await devServerOn3000();
+    const devServer = await devServerOn3000(before);
     kit.check(
-      "8b: a dev server started on 3000 after the agent registered binds it on 127.0.0.1 and ::1",
-      devServer.every((line) => line.includes('answers "dev server"')),
-      devServer.join("; ")
+      "8b: a dev server started on 3000 after the agent registered binds it on each loopback family 3000 was free on before",
+      devServer.ok,
+      devServer.said.join("; ")
     );
 
     // 9.
