@@ -325,15 +325,18 @@ const keys = async (kit: Kit, binary: string) => {
      * and menu click before it advances the desktop-mutation watermark that
      * hides the implicit latest snapshot, while explicit snapshots are kept
      * (Peekaboo CHANGELOG: mutations "advance implicit-snapshot watermarks …
-     * and preserve explicit snapshot history"). The `see` names no window:
-     * Peekaboo then pins the app's focused AX window, else its main, else its
-     * first (DetachedAXObservationWorker `resolveWindow`, Peekaboo 4.9.4),
-     * and says its CGWindowID in `target_receipt.window_id`, the window ⌘K
-     * goes to. A `see --window-id` resolves the other way, to the AX window
-     * whose own id is the one given, and stood as `application_partial` with
-     * no snapshot when none was: the window server's largest window of the
-     * app is not the Catalyst window AX serves. A `see` with no reusable
-     * snapshot or no pinned window is said as it is. The click names the
+     * and preserve explicit snapshot history"). The `see` names the app's
+     * first window as AX lists it (`--window-index 0`): without Screen
+     * Recording Peekaboo lists an app's windows from AX alone, each by the
+     * CGWindowID `_AXUIElementGetWindow` gives (ApplicationWindowEnumeration
+     * Context `buildAXOnlyResult`, Peekaboo 4.9.4), so the exact-window
+     * observation finds that very window, binds its receipt, and says its id
+     * in `target_receipt.window_id`, the window ⌘K goes to. A `see
+     * --window-id` of the window server's largest window of the app stood as
+     * `application_partial` with no snapshot (no AX window has that id), and
+     * a `see --pid` alone pins a window but keeps a process-scoped receipt
+     * with no window id. A `see` with no reusable snapshot or no pinned
+     * window is said as it is. The click names the
      * process, never the window: a window selector on a click is resolved
      * among the windows eligible for capture (InteractionCoordinateResolver,
      * Peekaboo 4.9.4), which a shell without Screen Recording is never shown.
@@ -344,6 +347,8 @@ const keys = async (kit: Kit, binary: string) => {
           "see",
           "--pid",
           String(app.pid),
+          "--window-index",
+          "0",
           "--tree",
           "--no-screenshot",
         ])
