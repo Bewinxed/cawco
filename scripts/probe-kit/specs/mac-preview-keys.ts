@@ -38,11 +38,14 @@
  * (`synthOnly`), since the page's claim on keys is what is proven; the menu
  * item is an Accessibility press. So the run asks Accessibility and Event
  * Synthesizing of its responsible process, and says which it lacks before
- * any input. Peekaboo keeps its state in the run's own scratch folder
- * (`PEEKABOO_CONFIG_DIR`), gone with the run.
+ * any input. Every input first writes Peekaboo's desktop-mutation barrier
+ * under the user's own `~/.peekaboo` (its home from the user record, not
+ * `$HOME`, and no setting moves it), which a CawCo workspace's boundary
+ * refuses: the run is the Mac's own shell's (the owner's, or an SSH one),
+ * and says so before the fleet starts when it cannot write there.
  */
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { macProbeApp } from "../../lib/apple-app";
 import { until } from "../../scratch-fleet";
@@ -79,14 +82,12 @@ report();
 </script></body></html>`;
 
 /**
- * Runs Peekaboo in its own process with `args`, its state in `home`; its
- * stdout, or throws with what it said: its JSON's `error` (and the last of
- * its debug lines) when it wrote JSON, else its own words.
+ * Runs Peekaboo in its own process with `args`; its stdout, or throws with
+ * what it said: its JSON's `error` (and the last of its debug lines) when
+ * it wrote JSON, else its own words.
  */
-async function peekaboo(home: string, args: string[]): Promise<string> {
-  const env = { ...process.env, PEEKABOO_CONFIG_DIR: home };
+async function peekaboo(args: string[]): Promise<string> {
   const run = await Bun.$`${PEEKABOO} ${args} --no-remote --json`
-    .env(env)
     .quiet()
     .nothrow();
   if (run.exitCode !== 0) {
@@ -122,10 +123,8 @@ const GRANTS = ["Accessibility", "Event Synthesizing"];
  * The grants of `GRANTS` the run's responsible process lacks, as Peekaboo
  * finds them in its own process (`permissions status --no-remote`).
  */
-async function lacking(home: string): Promise<string[]> {
-  const status = JSON.parse(
-    await peekaboo(home, ["permissions", "status"])
-  ) as {
+async function lacking(): Promise<string[]> {
+  const status = JSON.parse(await peekaboo(["permissions", "status"])) as {
     data?: { permissions?: { isGranted?: boolean; name?: string }[] };
   };
   const granted = new Set(
@@ -134,6 +133,23 @@ async function lacking(home: string): Promise<string[]> {
       .map((one) => one.name)
   );
   return GRANTS.filter((grant) => !granted.has(grant));
+}
+
+/**
+ * Whether this run can write `~/.peekaboo`, where every Peekaboo input
+ * takes its desktop-mutation barrier: null when it can, else what refused.
+ */
+async function barrierRefused(): Promise<string | null> {
+  const folder = join(homedir(), ".peekaboo");
+  const probe = join(folder, `.mac-preview-keys-${process.pid}`);
+  try {
+    await mkdir(folder, { recursive: true });
+    await writeFile(probe, "");
+    await rm(probe, { force: true });
+    return null;
+  } catch (error) {
+    return `${folder}: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 /**
@@ -198,29 +214,36 @@ const run = async (kit: Kit) => {
   ) {
     return;
   }
-  const home = await mkdtemp(join(tmpdir(), "mac-preview-keys-peekaboo-"));
-  try {
-    // The grants the input uses, said before anything starts.
-    const lacks = await lacking(home);
-    if (
-      !kit.check(
-        "the run's responsible process holds what its input uses: Accessibility and Event Synthesizing",
-        lacks.length === 0,
-        lacks.length === 0
-          ? "granted"
-          : `lacks ${lacks.join(", ")}: macOS weighs Peekaboo's own process against the process responsible for the run (a CawCo session's agent, an SSH shell's sshd-keygen-wrapper); run it from a shell whose responsible process holds them`
-      )
-    ) {
-      return;
-    }
-    await keys(kit, binary, home);
-  } finally {
-    await rm(home, { force: true, recursive: true });
+  // What the input needs of the run, said before anything starts.
+  const refused = await barrierRefused();
+  if (
+    !kit.check(
+      "the run can write Peekaboo's desktop-mutation barrier (~/.peekaboo)",
+      refused === null,
+      refused === null
+        ? "written"
+        : `${refused}: a CawCo workspace's boundary refuses it; run this from the Mac's own shell (the owner's, or an SSH one)`
+    )
+  ) {
+    return;
   }
+  const lacks = await lacking();
+  if (
+    !kit.check(
+      "the run's responsible process holds what its input uses: Accessibility and Event Synthesizing",
+      lacks.length === 0,
+      lacks.length === 0
+        ? "granted"
+        : `lacks ${lacks.join(", ")}: macOS weighs Peekaboo's own process against the process responsible for the run (a CawCo session's agent, an SSH shell's sshd-keygen-wrapper); run it from a shell whose responsible process holds them`
+    )
+  ) {
+    return;
+  }
+  await keys(kit, binary);
 };
 
-/** The fleet, the Mac app and the three checks, every input through Peekaboo in its own process, its state in `home`. */
-const keys = async (kit: Kit, binary: string, home: string) => {
+/** The fleet, the Mac app and the three checks, every input through Peekaboo in its own process. */
+const keys = async (kit: Kit, binary: string) => {
   const fleet = await kit.fleet(() => ({ everyMs: 10, words: ["ok"] }));
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -286,7 +309,7 @@ const keys = async (kit: Kit, binary: string, home: string) => {
      * focus.
      */
     const focus = async (field: string) => {
-      await peekaboo(home, [
+      await peekaboo([
         "click",
         field,
         "--pid",
@@ -298,7 +321,7 @@ const keys = async (kit: Kit, binary: string, home: string) => {
     };
     /** ⌘K as key events to the app's exact window, in the background. */
     const commandK = async () => {
-      await peekaboo(home, [
+      await peekaboo([
         "press",
         "cmd+k",
         "--window-id",
@@ -365,7 +388,7 @@ const keys = async (kit: Kit, binary: string, home: string) => {
     // 3. The menu bar stays live to the pointer while the page holds the keyboard.
     await focus("probe-leave");
     mark = app.lines.length;
-    await peekaboo(home, [
+    await peekaboo([
       "menu",
       "click",
       "--pid",
