@@ -78,9 +78,19 @@
   <Dialog.Content
     aria-label={`Diff: ${filePath}`}
     bodyClass="flex h-full flex-col gap-0 overflow-hidden p-0"
-    class="h-[90vh] w-[95vw] phone:max-w-320"
+    class="h-(--modal-h) w-(--modal-w) phone:max-w-320"
+    style="--modal-h: 90vh; --modal-w: 95vw"
   >
-    <header data-slot="head" class="head">
+    <!-- literal: gap 8px 12px, padding 12px 52px 12px 16px -->
+    <header
+      data-slot="head"
+      class="flex flex-wrap items-center justify-between gap-y-(--head-gap-y) gap-x-(--head-gap-x) pt-(--head-pad-y) pr-(--head-pad-end) pb-(--head-pad-y) pl-(--head-pad-start) border-b border-border-hairline"
+      style:--head-gap-y="8px"
+      style:--head-gap-x="12px"
+      style:--head-pad-y="12px"
+      style:--head-pad-end="52px"
+      style:--head-pad-start="16px"
+    >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
           <Dialog.Title class="truncate font-mono text-label"
@@ -117,11 +127,14 @@
       </ToggleGroup.Root>
     </header>
 
-    <div class="scroll">
+    <div class="relative flex-auto min-h-0 overflow-auto">
       {#key diffStyle}
         <div
           data-slot="layer"
-          class="layer"
+          class="min-h-full"
+          style:--diffs-font-size="0.8125rem"
+          style:--diffs-line-height="1.6"
+          style:--diffs-bg-separator-override="var(--muted)"
           in:crossIn
           out:crossOut
           {@attach drawn(diffStyle)}
@@ -130,31 +143,3 @@
     </div>
   </Dialog.Content>
 </Dialog.Root>
-
-<style>
-  /* Room on the inline end for the dialog's own close button. */
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px 12px;
-    padding: 12px 52px 12px 16px;
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  .scroll {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: auto;
-  }
-  /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
-     the inherited custom properties it documents in its core stylesheet;
-     every diff's colours are app.css's, the full view's size is its own. */
-  .layer {
-    min-height: 100%;
-    --diffs-font-size: 0.8125rem;
-    --diffs-line-height: 1.6;
-    --diffs-bg-separator-override: var(--muted);
-  }
-</style>
