@@ -97,7 +97,7 @@
       <!-- literal: 12px -->
       <p
         data-slot="layer"
-        class="p-(--layer-pad)"
+        class="col-start-1 row-start-1 p-(--layer-pad) break-words whitespace-pre-wrap"
         style:--layer-pad="12px"
       >
         {sample}
@@ -107,7 +107,7 @@
         <p
           data-slot="layer"
           aria-hidden="true"
-          class="p-(--layer-pad) text-transparent"
+          class="col-start-1 row-start-1 p-(--layer-pad) break-words whitespace-pre-wrap text-transparent"
           style:--layer-pad="12px"
           in:crossIn
           out:crossOut
@@ -126,12 +126,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="layer"] {
-    grid-area: 1 / 1;
-    overflow-wrap: break-word;
-    white-space: pre-wrap;
-  }
-</style>

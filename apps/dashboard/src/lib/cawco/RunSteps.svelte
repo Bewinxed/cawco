@@ -160,12 +160,17 @@
 </script>
 
 {#snippet line(step: WorkflowStep)}
-  <span data-slot="title" class="title">{titleOf(step)}</span>
+  <span
+    data-slot="title"
+    class="min-w-0 flex-auto truncate group-data-err:text-status-fail-ink"
+    >{titleOf(step)}</span
+  >
 {/snippet}
 
 {#if steps.length > 0}
   <ul
-    class="kit-nest run-steps"
+    class="kit-nest m-0 mt-space-1 flex min-w-0 list-none flex-col gap-(--nest-gap) py-0 pr-0 pl-(--nest-pad)"
+    style:--nest-gap="var(--space-row)"
     {@attach nestFrom(glyph, STEP_GLYPH)}
     {@attach reflow()}
     {@attach clock.watch}
@@ -181,38 +186,52 @@
       <li data-flip="box">
         <!-- Its words, the way into its own tab, its time, and last, at the
              trailing edge, the count of what it folds. -->
-        <div class="step">
+        <div class="flex min-w-0 items-center gap-space-1">
           <!-- The glyph stands before the row's control, at the row's own
                edge: the line ends on it and a child's line leaves its foot,
                and neither ever runs inside a control. -->
           <SessionStatus compact step={step.status} />
           {#if foldable}
+            <!-- literal: 26px, 44px -->
             <button
               aria-expanded={opened.has(step.id)}
-              class="line press-tint focus-inset"
+              class="press-tint focus-inset cursor-pointer group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-0 bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
+              data-err={step.status === "failed" || undefined}
               onclick={() => toggle(step.id)}
               type="button"
-              class:err={step.status === "failed"}
+              style:--step-h="26px"
+              style:--step-h-coarse="44px"
+              style:--line-pad-start="calc(var(--space-2) - var(--space-1))"
             >
               {@render line(step)}
             </button>
           {:else}
-            <div class="line" class:err={step.status === "failed"}>
+            <!-- literal: 26px, 44px -->
+            <div
+              class="group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-0 bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
+              data-err={step.status === "failed" || undefined}
+              style:--step-h="26px"
+              style:--step-h-coarse="44px"
+              style:--line-pad-start="calc(var(--space-2) - var(--space-1))"
+            >
               {@render line(step)}
             </div>
           {/if}
           {#if tab}
+            <!-- literal: 26px, 44px -->
             <a
               aria-label="Open {titleOf(step)}"
-              class="jump touch-hit focus-inset"
+              class="touch-hit focus-inset grid size-(--jump-size) flex-none place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out coarse:min-h-(--jump-size-coarse) hover:bg-surface-hover hover:text-brand-ink"
               href={tab}
+              style:--jump-size="26px"
+              style:--jump-size-coarse="44px"
               title="Open {titleOf(step)}"
             >
-              <IconExternal aria-hidden="true" />
+              <IconExternal aria-hidden="true" class="size-icon-sm" />
               <span class="sr-only">Open {titleOf(step)}</span>
             </a>
           {/if}
-          <span data-slot="time" data-num class="num time"
+          <span data-slot="time" data-num class="num flex-none text-size-meta text-ink-muted"
             >{duration(step.startedAt, step.endedAt, clock.now)}</span
           >
           {#if foldable}
@@ -231,16 +250,18 @@
         {/if}
         {#if foldable && opened.has(step.id)}
           <div
-            class="opened"
+            class="flex flex-col items-start gap-space-2 ms-(--opened-inset) pt-space-1 pb-space-2"
             data-flip-anchor
             in:branch={RESULT}
             out:branch={RESULT}
+            style:--opened-inset="calc(var(--w-glyph) + var(--space-2))"
+            style:--well-at="calc(-1 * var(--space-1))"
           >
             {#if step.instanceId}
               {@const row = cawco.instanceIndex.byId.get(step.instanceId)}
               <div
                 data-slot="well"
-                class="well"
+                class="min-w-0 self-stretch"
                 data-branch-item
                 {@attach following(step.instanceId)}
               >
@@ -252,14 +273,16 @@
               </div>
             {/if}
             {#if result}
+              <!-- literal: 240px -->
               <pre
                 data-slot="result"
-                class="result"
+                class="m-0 max-h-(--result-max) self-stretch overflow-auto rounded-xs bg-surface-recess px-space-3 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong data-err:text-status-fail-ink"
                 data-branch-item
-                class:err={!!step.failure}>{result}</pre>
+                data-err={!!step.failure || undefined}
+                style:--result-max="240px">{result}</pre>
             {/if}
             {#if more}
-              <div data-slot="more" class="more" data-branch-item>
+              <div data-slot="more" data-branch-item>
                 {@render more(step)}
               </div>
             {/if}
@@ -269,125 +292,3 @@
     {/each}
   </ul>
 {/if}
-
-<style>
-  /* The rail under the parent's glyph; each curved arm ends on the step's
-     status glyph, level with it (both measured, `nestFrom`). The glyph leads
-     the row outside its control, so no line runs inside one. */
-  .run-steps {
-    --nest-gap: var(--space-row);
-    list-style: none;
-    margin: var(--space-1) 0 0;
-    padding: 0 0 0 var(--nest-pad);
-    display: flex;
-    flex-direction: column;
-    gap: var(--nest-gap);
-    min-inline-size: 0;
-  }
-  .step {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .line {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    min-block-size: 26px;
-    display: flex;
-    align-items: center;
-    /* The words stand at the text column: the glyph, then --space-2 to the
-       words, the row's gap included. */
-    padding: 0 var(--space-1) 0 calc(var(--space-2) - var(--space-1));
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-strong);
-    font: inherit;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    text-align: start;
-  }
-  button.line {
-    cursor: pointer;
-  }
-  .title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .time {
-    flex: none;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  .line.err .title {
-    color: var(--status-fail-ink);
-  }
-  /* The way into the step's own tab: a glyph beside the line, muted until
-     pointed at, as the delegate card's is. */
-  .jump {
-    flex: none;
-    inline-size: 26px;
-    block-size: 26px;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-xs);
-    color: var(--ink-muted);
-    transition:
-      color var(--dur-control) var(--ease-out),
-      background var(--dur-control) var(--ease-out);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .jump:hover {
-      color: var(--brand-ink);
-      background: var(--surface-hover);
-    }
-  }
-  /* What a step folds open hangs at its text column (the glyph, the gap to
-     the words), clear of the line under its glyph; its transcript's well
-     reaches out past that column by its padding. */
-  .opened {
-    --well-at: calc(-1 * var(--space-1));
-    display: flex;
-    flex-direction: column;
-    align-items: start;
-    gap: var(--space-2);
-    margin-inline-start: calc(var(--w-glyph) + var(--space-2));
-    padding-block: var(--space-1) var(--space-2);
-  }
-  .well {
-    align-self: stretch;
-    min-inline-size: 0;
-  }
-  .result {
-    align-self: stretch;
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    max-block-size: 240px;
-    overflow: auto;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .result.err {
-    color: var(--status-fail-ink);
-  }
-  @media (pointer: coarse) {
-    .line,
-    .jump {
-      min-block-size: 44px;
-    }
-  }
-</style>

@@ -263,7 +263,7 @@
   }
 </script>
 
-<div data-slot="peek" class="peek flex min-h-0 flex-1 flex-col overflow-hidden">
+<div data-slot="peek" class="flex min-h-0 flex-1 flex-col overflow-hidden">
   <ContextMenu.Root>
     <ContextMenu.Trigger class="contents">
       <header class="flex items-start gap-2 px-4 py-3">
@@ -294,7 +294,8 @@
               <!-- Truncated from the left, as every path in the app is: the
                    leaf is what tells two checkouts apart. -->
               <span
-                class="min-w-0 truncate font-mono [direction:rtl]"
+                data-slot="cwd"
+                class="min-w-0 truncate font-mono"
                 title={cwd}
               >
                 <bdi>{cwd}</bdi>
@@ -423,11 +424,14 @@
       {:else}
         <!-- Equal peers at opposite ends, each outlined in its tint
              (DESIGN.md, The Peer Rule's apart form). -->
-        <div data-slot="choice" class="choice">
+        <div
+          data-slot="choice"
+          class="flex items-center justify-between gap-space-8"
+        >
           <Button
             data-deny
             aria-label="Deny {summary}"
-            class="peer deny"
+            class="border-status-fail-ink bg-surface-recess text-ink-strong hover:border-status-fail-ink hover:bg-surface-recess hover:text-ink-strong"
             onclick={() => answer(request, "deny")}
             size="sm"
             variant="secondary"
@@ -438,7 +442,7 @@
           <Button
             data-approve
             aria-label="Approve {summary}"
-            class="peer approve"
+            class="border-status-done-ink bg-surface-recess text-ink-strong hover:border-status-done-ink hover:bg-surface-recess hover:text-ink-strong"
             onclick={() => answer(request, "allow")}
             size="sm"
             variant="secondary"
@@ -538,8 +542,10 @@
         {#if session?.streaming}
           <p class="text-body break-words whitespace-pre-wrap">
             {streamed}
+            <!-- literal: 3px -->
             <span
-              class="inline-block h-icon-md w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
+              class="inline-block h-icon-md w-(--caret) rounded-xs bg-action-solid/60 align-text-bottom"
+              style:--caret="3px"
             ></span>
           </p>
         {/if}
@@ -549,30 +555,8 @@
 </div>
 
 <style>
-  /* The peek's answer row is The Peer Rule's apart form, as the transcript's
-     card is: Deny and Approve at the row's two ends, never less than
-     --space-8 apart, nothing between them. Both keep the one untinted
-     recessed fill, each wears a 1px outline in its tint (Approve the done
-     ink, Deny the fail ink), and both labels and glyphs are in ink-strong,
-     so neither leans. Neither the fill nor the outline changes under the
-     pointer. */
-  .choice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-8);
-  }
-  .choice > :global(.peer),
-  .choice > :global(.peer:hover) {
-    background-color: var(--surface-recess);
-    color: var(--ink-strong);
-  }
-  .choice > :global(.approve),
-  .choice > :global(.approve:hover) {
-    border-color: var(--status-done-ink);
-  }
-  .choice > :global(.deny),
-  .choice > :global(.deny:hover) {
-    border-color: var(--status-fail-ink);
+  /* residual: unmapped */
+  [data-slot="cwd"] {
+    direction: rtl;
   }
 </style>
