@@ -124,7 +124,9 @@
   const rowHeights = new Map<string, number>();
   /** Every options row's height and every option's place, as the card settles. */
   function measure(root: HTMLElement): void {
-    for (const row of root.querySelectorAll<HTMLElement>(".qopts")) {
+    for (const row of root.querySelectorAll<HTMLElement>(
+      '[data-slot="qopts"]'
+    )) {
       rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
       for (const option of row.querySelectorAll<HTMLElement>(".kit-chip")) {
         stood.set(option, {
@@ -198,8 +200,9 @@
       return;
     }
     untrack(() => {
-      for (const row of section?.querySelectorAll<HTMLElement>(".qopts") ??
-        []) {
+      for (const row of section?.querySelectorAll<HTMLElement>(
+        '[data-slot="qopts"]'
+      ) ?? []) {
         settleRow(row, row.dataset.question ?? "");
       }
     });
@@ -215,68 +218,100 @@
 </script>
 
 <!-- `data-frame`: the card's surface is its frame, opened before what is
-     on it (Row's arrival). -->
+     on it (Row's arrival). The surface starts on the rail's edge; inside
+     it, the content starts on the glyph column, so the head and everything
+     under it sit on the same columns as every rail row around the card. -->
 <section
   data-slot="hitl"
   aria-label="Question from {asker}"
-  class="hitl"
+  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-border-control rounded-lg bg-surface-raised shadow-hairline"
   data-frame
   bind:this={section}
+  style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - 1px)"
 >
   <!-- The card's head is a rail line: its state's mark in the glyph cell,
-       the title at the text column, the state in words after it. -->
-  <h2 class="rail-line">
-    <span data-slot="rail-cell" class="state rail-cell">
+       the title at the text column, the state in words after it. Each
+       state cell is one grid cell, so the outgoing mark or word and the
+       incoming one cross-fade in place. -->
+  <h2
+    class="rail-line text-size-label font-medium text-ink-strong mb-space-2"
+  >
+    <span data-slot="rail-cell" class="rail-cell inline-grid">
       {#if answered}
         <span
           data-slot="mark"
           data-question-card-done
-          class="mark done"
+          class="col-start-1 row-start-1 grid place-items-center text-status-done-ink"
           in:pillSwap
-          out:pillSwap><IconCheck /></span
+          out:pillSwap><IconCheck class="size-(--w-glyph)" /></span
         >
       {:else if dismissed || failed}
-        <span data-slot="mark" class="mark muted" in:pillSwap out:pillSwap
-          ><IconClose /></span
+        <span
+          data-slot="mark"
+          class="col-start-1 row-start-1 grid place-items-center text-ink-muted"
+          in:pillSwap
+          out:pillSwap><IconClose class="size-(--w-glyph)" /></span
         >
       {:else}
-        <span data-slot="mark" class="mark attn" in:pillSwap out:pillSwap
-          ><IconAsk /></span
+        <span
+          data-slot="mark"
+          class="col-start-1 row-start-1 grid place-items-center text-status-attn-ink"
+          in:pillSwap
+          out:pillSwap><IconAsk class="size-(--w-glyph)" /></span
         >
       {/if}
     </span>
     <span>Question from {asker}</span>
-    <span class="state" data-box>
+    <span class="inline-grid" data-box>
       {#if answered}
         <span
           data-slot="done"
-          class="pill done mark-line"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-status-done-bg text-status-done-ink"
           in:pillSwap
           out:pillSwap><span>answered</span></span
         >
       {:else if dismissed}
-        <span class="pill muted mark-line" in:pillSwap out:pillSwap
-          ><span>dismissed</span></span
+        <span
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          in:pillSwap
+          out:pillSwap><span>dismissed</span></span
         >
       {:else if withdrawn}
-        <span class="pill muted mark-line" in:pillSwap out:pillSwap
-          ><span>withdrawn</span></span
+        <span
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          in:pillSwap
+          out:pillSwap><span>withdrawn</span></span
         >
       {:else if failed}
-        <span class="pill muted mark-line" in:pillSwap out:pillSwap
-          ><span>not asked</span></span
+        <span
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          in:pillSwap
+          out:pillSwap><span>not asked</span></span
         >
       {:else}
-        <span class="pill attn mark-line" in:pillSwap out:pillSwap
-          ><span>needs you</span></span
+        <span
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-status-attn-bg text-status-attn-ink"
+          in:pillSwap
+          out:pillSwap><span>needs you</span></span
         >
       {/if}
     </span>
   </h2>
 
   {#each questions as q (q.question)}
-    <p data-slot="lede" class="lede rail-hang">{q.question}</p>
-    <div class="qopts kit-chips rail-hang" data-question={q.question}>
+    <!-- literal: 72ch -->
+    <p
+      data-slot="lede"
+      class="rail-hang text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-(--measure)"
+      style:--measure="72ch">{q.question}</p>
+    <!-- The settled record is the live card's anatomy, inert: the same kit
+         option chips (.kit-chips / .kit-chip / .kit-keycap in app.css), so a
+         pick looks picked, not flagged, and the card settles without a jump. -->
+    <div
+      data-slot="qopts"
+      class="kit-chips rail-hang relative mt-space-row mb-space-2"
+      data-question={q.question}
+    >
       {#each settled ? [] : q.options as opt, i (opt.label)}
         <span
           class="kit-chip"
@@ -303,122 +338,31 @@
       {/if}
     </div>
     {#if otherText(q)}
-      <p class="answer-free rail-hang" in:crossIn>
-        <span class="lbl">Answered</span>{otherText(q)}
+      <!-- literal: 72ch -->
+      <p
+        class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-(--measure) flex gap-space-2 items-baseline"
+        in:crossIn
+        style:--measure="72ch"
+      >
+        <span
+          class="text-size-label font-medium uppercase tracking-caps text-ink-muted flex-none"
+          >Answered</span
+        >{otherText(q)}
       </p>
     {/if}
   {/each}
 
   {#if freeform}
-    <p class="answer-free rail-hang" in:crossIn>
-      <span class="lbl">In your own words</span>{freeform}
+    <!-- literal: 72ch -->
+    <p
+      class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-(--measure) flex gap-space-2 items-baseline"
+      in:crossIn
+      style:--measure="72ch"
+    >
+      <span
+        class="text-size-label font-medium uppercase tracking-caps text-ink-muted flex-none"
+        >In your own words</span
+      >{freeform}
     </p>
   {/if}
 </section>
-
-<style>
-  /* The surface starts on the rail's edge; inside it, the content starts on
-     the glyph column, so the head and everything under it sit on the same
-     columns as every rail row around the card. */
-  .hitl {
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    margin-block-start: var(--space-4);
-    margin-inline-start: var(--x-rail);
-    padding: var(--space-3);
-    padding-inline-start: calc(var(--x-glyph) - var(--x-rail) - 1px);
-    box-shadow: var(--shadow-hairline, var(--shadow-tile));
-  }
-  h2 {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    margin-block-end: var(--space-2);
-  }
-  /* One cell, so the outgoing mark or word and the incoming one cross-fade
-     in place. */
-  .state {
-    display: inline-grid;
-
-    & > :global(*) {
-      grid-area: 1 / 1;
-    }
-  }
-  .mark {
-    display: grid;
-    place-items: center;
-
-    & :global(svg) {
-      inline-size: var(--w-glyph);
-      block-size: var(--w-glyph);
-    }
-    &.attn {
-      color: var(--status-attn-ink);
-    }
-    &.done {
-      color: var(--status-done-ink, var(--ink-strong));
-    }
-    &.muted {
-      color: var(--ink-muted);
-    }
-  }
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    block-size: 20px;
-    padding-block: 0;
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-pill);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    white-space: nowrap;
-
-    &.attn {
-      background: var(--status-attn-bg);
-      color: var(--status-attn-ink);
-    }
-    &.done {
-      background: var(--status-done-bg, var(--surface-recess));
-      color: var(--status-done-ink, var(--ink-strong));
-    }
-    &.muted {
-      background: var(--surface-recess);
-      color: var(--ink-muted);
-    }
-  }
-  .lede {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    margin-block-end: var(--space-2);
-    max-inline-size: 72ch;
-  }
-  .qopts {
-    /* The settled record is the live card's anatomy, inert: the same kit
-       option chips (.kit-chips / .kit-chip / .kit-keycap in app.css), so a
-       pick looks picked, not flagged, and the card settles without a jump. */
-    position: relative;
-    margin-block: 2px var(--space-2);
-  }
-  .answer-free {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    max-inline-size: 72ch;
-    display: flex;
-    gap: var(--space-2);
-    align-items: baseline;
-
-    & .lbl {
-      font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-      text-transform: uppercase;
-      letter-spacing: var(--track-caps);
-      color: var(--ink-muted);
-      flex: 0 0 auto;
-    }
-  }
-</style>
