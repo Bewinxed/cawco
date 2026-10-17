@@ -244,13 +244,29 @@
 
 <!-- Over the shell and anything it draws (a hub banner): one group, its
      strip on the shelf and its panes under it. -->
+<!-- literal: 2147483000 -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="proof" data-head-tint onclickcapture={benchClick}>
+<div
+  class="@container/leaf fixed inset-0 z-(--bench-z) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
+  data-head-tint
+  onclickcapture={benchClick}
+  style:--bench-z="2147483000"
+>
   <PaneTabs {leaf} />
-  <div data-slot="stack" class="stack">
+  <!-- The group's panes (PaneLeaf `.stack`, `.pane`, `.pane-hidden`): every
+       one laid out in the same box, only the chosen one drawn. -->
+  <div
+    data-slot="stack"
+    class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden bg-surface-recess"
+  >
     {#each ids as id (id)}
       {@const shown = leaf.active === id}
-      <div data-slot="slot" class="slot" data-pane={id} class:hidden={!shown}>
+      <div
+        data-slot="slot"
+        class="absolute inset-0 flex data-hidden:pointer-events-none"
+        data-hidden={!shown || undefined}
+        data-pane={id}
+      >
         <SessionPane
           active={shown}
           browsing={null}
@@ -266,42 +282,14 @@
 </div>
 
 <style>
-  /* A group as the workspace lays one out (PaneLeaf `.leaf`), over the
-     whole window, a strip's room above it on the shelf. */
-  .proof {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    container: leaf / inline-size;
-    display: flex;
-    flex-direction: column;
-    padding-block-start: var(--space-7);
-    background: var(--surface-shelf);
-    color: var(--ink-strong);
-  }
+  /* residual: foreign-dom */
   /* What the strip opens (the session card, a tab's menu) is portalled to
      the body and stands over the bench. */
   :global(body:has([data-head-tint]) [data-bits-floating-content-wrapper]) {
     z-index: 2147483001 !important;
   }
-  /* The group's panes (PaneLeaf `.stack`, `.pane`, `.pane-hidden`): every
-     one laid out in the same box, only the chosen one drawn. */
-  .stack {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    min-inline-size: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-  }
-  .slot {
-    position: absolute;
-    inset: 0;
-    display: flex;
-  }
-  .slot.hidden {
+  /* residual: unmapped */
+  [data-slot="slot"][data-hidden] {
     content-visibility: hidden;
-    pointer-events: none;
   }
 </style>

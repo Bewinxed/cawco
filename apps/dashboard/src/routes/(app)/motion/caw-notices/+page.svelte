@@ -360,7 +360,8 @@
         align="end"
         anchor={glass}
         aria-label="Needs you"
-        class="caw-pop gap-0"
+        class="gap-0"
+        data-slot="caw-pop"
         collisionPadding={placement.collisionPadding}
         customAnchor={glass}
         escapeKeydownBehavior="ignore"
@@ -383,12 +384,18 @@
 {/if}
 
 {#if !framed}
-  <main>
-    <div data-slot="controls" class="controls">
-      <h1>Caw's notices</h1>
-      <div class="switch">
+  <main class="flex flex-wrap items-start gap-space-6 p-space-5">
+    <!-- literal: 380px -->
+    <div
+      data-slot="controls"
+      class="grid max-w-(--measure) justify-items-start gap-space-4"
+      style:--measure="380px"
+    >
+      <h1 class="type-title m-0">Caw's notices</h1>
+      <div class="type-meta grid gap-space-1 text-ink-muted">
         <span>Fixture</span>
         <ToggleGroup.Root
+          class="flex-wrap"
           onValueChange={(next) => {
             if (next) {
               fixture = next as Fixture;
@@ -405,9 +412,10 @@
           <ToggleGroup.Item value="none">Nothing</ToggleGroup.Item>
         </ToggleGroup.Root>
       </div>
-      <div class="switch">
+      <div class="type-meta grid gap-space-1 text-ink-muted">
         <span>Width</span>
         <ToggleGroup.Root
+          class="flex-wrap"
           onValueChange={(next) => {
             if (next) {
               width = next as Width;
@@ -424,8 +432,11 @@
     </div>
     {#if width === "phone"}
       {#key `${search}:${generation}`}
+        <!-- literal: 390px, 844px -->
         <iframe
-          class="phone"
+          class="h-(--frame-h) w-(--frame-w) rounded-lg border border-border-hairline bg-surface-page"
+          style:--frame-h="844px"
+          style:--frame-w="390px"
           src="/motion/caw-notices?frame&{search}"
           title="Caw's panel on a 390px phone"
         ></iframe>
@@ -433,39 +444,3 @@
     {/if}
   </main>
 {/if}
-
-<style>
-  main {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--space-6);
-    padding: var(--space-5);
-  }
-  h1 {
-    margin: 0;
-    font: var(--type-title);
-  }
-  .controls {
-    display: grid;
-    gap: var(--space-4);
-    justify-items: start;
-    max-inline-size: 380px;
-  }
-  .switch {
-    display: grid;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .switch :global([data-slot="toggle-group"]) {
-    flex-wrap: wrap;
-  }
-  .phone {
-    inline-size: 390px;
-    block-size: 844px;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-page);
-  }
-</style>

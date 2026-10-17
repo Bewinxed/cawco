@@ -92,7 +92,7 @@
 
 <nav
   aria-label="Readiness state"
-  class="bench"
+  class="fixed inset-x-space-2 top-space-2 z-60 flex pointer-events-auto flex-wrap gap-space-1"
   onpointerdown={(event) => event.stopPropagation()}
 >
   {#each STATES as each (each.id)}
@@ -104,16 +104,3 @@
     >
   {/each}
 </nav>
-
-<style>
-  .bench {
-    position: fixed;
-    inset-block-start: var(--space-2);
-    inset-inline: var(--space-2);
-    z-index: 60;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    pointer-events: auto;
-  }
-</style>

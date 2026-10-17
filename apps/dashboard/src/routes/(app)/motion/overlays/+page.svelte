@@ -75,16 +75,21 @@
 
 <svelte:head><title>Overlays bench · CawCo</title></svelte:head>
 
-<main>
-  <div data-slot="openers" class="openers">
+<main class="type-body grid gap-space-5 p-space-5 text-ink-strong">
+  <div
+    data-slot="openers"
+    class="relative z-1 flex flex-wrap gap-space-2"
+  >
     {#if shows("sheet")}
       <Sheet.Root bind:open={open.sheet}>
-        <Sheet.Trigger data-open="sheet">Sheet</Sheet.Trigger>
+        <Sheet.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="sheet">Sheet</Sheet.Trigger>
         <Sheet.Content side="left">
           <Sheet.Header>
             <Sheet.Title>Sheet</Sheet.Title>
           </Sheet.Header>
-          <div data-slot="body" class="body">
+          <div data-slot="body" class="p-space-4">
             <Button data-inside="sheet" onclick={() => inside("sheet")}
               >Press</Button
             >
@@ -95,7 +100,9 @@
 
     {#if shows("dialog")}
       <Dialog.Root bind:open={open.dialog}>
-        <Dialog.Trigger data-open="dialog">Dialog</Dialog.Trigger>
+        <Dialog.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="dialog">Dialog</Dialog.Trigger>
         <Dialog.Content>
           <Dialog.Header>
             <Dialog.Title>Dialog</Dialog.Title>
@@ -109,7 +116,9 @@
 
     {#if shows("alert-dialog")}
       <AlertDialog.Root bind:open={open["alert-dialog"]}>
-        <AlertDialog.Trigger data-open="alert-dialog"
+        <AlertDialog.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="alert-dialog"
           >Alert dialog</AlertDialog.Trigger
         >
         <AlertDialog.Content>
@@ -129,12 +138,14 @@
 
     {#if shows("drawer")}
       <Drawer.Root bind:open={open.drawer}>
-        <Drawer.Trigger data-open="drawer">Drawer</Drawer.Trigger>
+        <Drawer.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="drawer">Drawer</Drawer.Trigger>
         <Drawer.Content>
           <Drawer.Header>
             <Drawer.Title>Drawer</Drawer.Title>
           </Drawer.Header>
-          <div data-slot="body" class="body">
+          <div data-slot="body" class="p-space-4">
             <Button data-inside="drawer" onclick={() => inside("drawer")}
               >Press</Button
             >
@@ -145,7 +156,9 @@
 
     {#if shows("dropdown-menu")}
       <DropdownMenu.Root bind:open={open["dropdown-menu"]}>
-        <DropdownMenu.Trigger data-open="dropdown-menu"
+        <DropdownMenu.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="dropdown-menu"
           >Dropdown menu</DropdownMenu.Trigger
         >
         <DropdownMenu.Content>
@@ -160,7 +173,9 @@
 
     {#if shows("popover")}
       <Popover.Root bind:open={open.popover}>
-        <Popover.Trigger data-open="popover">Popover</Popover.Trigger>
+        <Popover.Trigger
+          class="rounded-sm border border-border-control px-space-3 py-space-2"
+          data-open="popover">Popover</Popover.Trigger>
         <Popover.Content>
           <Button data-inside="popover" onclick={() => inside("popover")}
             >Press</Button
@@ -179,7 +194,9 @@
         value={chosen}
         bind:open={open.select}
       >
-        <Select.Trigger data-open="select">{chosen || "Select"}</Select.Trigger>
+        <Select.Trigger class="rounded-sm border border-border-control px-space-3 py-space-2" data-open="select"
+          >{chosen || "Select"}</Select.Trigger
+        >
         <Select.Content>
           <Select.Item data-inside="select" label="Press" value="press" />
           <Select.Item label="Another" value="another" />
@@ -190,7 +207,7 @@
     {#if shows("context-menu")}
       <ContextMenu.Root bind:open={open["context-menu"]}>
         <ContextMenu.Trigger>
-          <div class="context" data-open="context-menu">Context menu</div>
+          <div class="rounded-sm border border-border-control px-space-3 py-space-2" data-open="context-menu">Context menu</div>
         </ContextMenu.Trigger>
         <ContextMenu.Content>
           <ContextMenu.Item
@@ -204,9 +221,10 @@
   </div>
 
   <!-- The page: what a press after an overlay closes must reach, wherever
-       the overlay stood. -->
+       the overlay stood. The whole screen under the openers, so a press where
+       an overlay stood lands on it once the overlay has gone. -->
   <button
-    class="page"
+    class="fixed inset-0 z-0 grid items-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
     data-page
     onclick={() => {
       counts.page += 1;
@@ -216,41 +234,3 @@
     The page · {counts.page}
   </button>
 </main>
-
-<style>
-  main {
-    display: grid;
-    gap: var(--space-5);
-    padding: var(--space-5);
-    color: var(--ink-strong);
-    font: var(--type-body);
-  }
-  .openers {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .openers :global([data-open]) {
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-  }
-  .body {
-    padding: var(--space-4);
-  }
-  /* The whole screen under the openers, so a press where an overlay stood
-     lands on it once the overlay has gone. */
-  .page {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    display: grid;
-    place-items: end center;
-    padding: var(--space-5);
-    border: 0;
-    background: none;
-    color: var(--ink-muted);
-  }
-</style>

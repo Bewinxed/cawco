@@ -284,11 +284,13 @@
 
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
+<!-- literal: 2147483000 -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-  class="proof"
+  class="fixed inset-0 z-(--bench-z) flex flex-col bg-surface-recess text-ink-strong"
   data-folder-proof
   bind:this={proofEl}
+  style:--bench-z="2147483000"
   style:--tab-rim-mix-subtle={subtle === null
     ? undefined
     : String(subtle / 100)}
@@ -298,26 +300,29 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     data-slot="group"
-    class="group"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
     data-strip="session"
     onclickcapture={benchClick(leaf)}
   >
     <PaneTabs {leaf} />
-    <div class="page"></div>
+    <div class="h-space-7 bg-surface-recess"></div>
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     data-slot="group"
-    class="group"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
     data-strip="session-idle"
     onclickcapture={benchClick(idleLeaf)}
   >
     <PaneTabs leaf={idleLeaf} />
-    <div class="page"></div>
+    <div class="h-space-7 bg-surface-recess"></div>
   </div>
-  <!-- The rims' tokens, tuned live. -->
-  <div class="dials">
-    <label>
+  <!-- The rims' tokens, tuned live. The bench's own controls, at the foot,
+       clear of every strip. -->
+  <div
+    class="type-label flex flex-wrap gap-x-space-5 gap-y-space-2 border-t border-border-hairline bg-surface-raised px-space-5 py-space-3 text-ink-muted"
+  >
+    <label class="flex items-center gap-space-2">
       <span>Taper</span>
       <input
         max="32"
@@ -331,9 +336,13 @@
           }
         }
       />
-      <output>{taper ?? "–"}px</output>
+      <!-- literal: 4ch -->
+      <output
+        class="num min-w-(--output-w) text-ink-strong"
+        style:--output-w="4ch"
+      >{taper ?? "–"}px</output>
     </label>
-    <label>
+    <label class="flex items-center gap-space-2">
       <span>Subtle</span>
       <input
         max="100"
@@ -347,9 +356,13 @@
           }
         }
       />
-      <output>{subtle ?? "–"}%</output>
+      <!-- literal: 4ch -->
+      <output
+        class="num min-w-(--output-w) text-ink-strong"
+        style:--output-w="4ch"
+      >{subtle ?? "–"}%</output>
     </label>
-    <label>
+    <label class="flex items-center gap-space-2">
       <span>Thickness</span>
       <input
         max="4"
@@ -363,13 +376,26 @@
           }
         }
       />
-      <output>{width ?? "–"}px</output>
+      <!-- literal: 4ch -->
+      <output
+        class="num min-w-(--output-w) text-ink-strong"
+        style:--output-w="4ch"
+      >{width ?? "–"}px</output>
     </label>
   </div>
   <!-- The home's Working and Finished as the shell hosts them: in the
        rail's column on the desk, across the phone's home page under a
        finger. -->
-  <div class="home" data-strip="work" bind:this={workEl}>
+  <!-- The rail's column (Shell .rail, Home .rail .groups) on the desk; the
+       phone's home page (Home .page .groups) under 900px. Both stand on
+       surface-recess. -->
+  <!-- literal: 260px -->
+  <div
+    class="min-h-0 w-(--home-w) flex-auto overflow-hidden bg-surface-recess px-space-2 pt-space-1 pb-space-2 max-desk:w-full max-desk:px-space-5 max-desk:pt-space-2 max-desk:pb-space-7"
+    data-strip="work"
+    bind:this={workEl}
+    style:--home-w="260px"
+  >
     <WorkTabs
       onstart={() => undefined}
       stale={false}
@@ -380,72 +406,11 @@
 </div>
 
 <style>
-  .proof {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-  }
+  /* residual: foreign-dom */
   /* What the strips open (the session card, a tab's menu) is portalled to
      the body and stands over the bench, so a finger reaches it. bits-ui
      writes the wrapper's z-index inline, from the surface's own. */
   :global(body:has([data-folder-proof]) [data-bits-floating-content-wrapper]) {
     z-index: 2147483001 !important;
-  }
-  /* A group as the workspace lays one out: its strip on the shelf, then
-     the page the chosen tab opens into. */
-  .group {
-    container: leaf / inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    padding-block-start: var(--space-7);
-    background: var(--surface-shelf);
-  }
-  .group .page {
-    block-size: var(--space-7);
-    background: var(--surface-recess);
-  }
-  /* The bench's own controls, at the foot, clear of every strip. */
-  .dials {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-5);
-    padding: var(--space-3) var(--space-5);
-    background: var(--surface-raised);
-    border-block-start: 1px solid var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-muted);
-
-    & label {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-    & output {
-      min-inline-size: 4ch;
-      color: var(--ink-strong);
-      font-variant-numeric: tabular-nums;
-    }
-  }
-  /* The rail's column (Shell .rail, Home .rail .groups) on the desk; the
-     phone's home page (Home .page .groups) under 900px. Both stand on
-     surface-recess. */
-  .home {
-    flex: 1 1 auto;
-    min-block-size: 0;
-    inline-size: 260px;
-    padding: var(--space-1) var(--space-2) var(--space-2);
-    overflow: hidden;
-    background: var(--surface-recess);
-
-    @media (max-width: 899px) {
-      inline-size: 100%;
-      padding: var(--space-2) var(--space-5) var(--space-7);
-    }
   }
 </style>
