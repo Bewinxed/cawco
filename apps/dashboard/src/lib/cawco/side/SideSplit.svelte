@@ -232,6 +232,7 @@
     <PreviewPane
       instanceId={previewId}
       linkSession={previewId !== viewId}
+      onScreen={visible}
       switcher={switched}
       bind:this={previewPane}
     />
