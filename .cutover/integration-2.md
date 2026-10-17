@@ -38,7 +38,7 @@ Type-roles' site commit (d1bc87e3c) touches 44 component files; 25 of them a set
 
 Every other type-roles line is in the merged tree (`$TMPDIR/scripts/tr-check.sh`: each added line found verbatim, the four above aside).
 
-Files waiting on type-roles' per-site lists: the four above, for a re-check against `site-map.txt`.
+Files waiting on type-roles' per-site lists: the four above carry `changes.md`'s swaps (3d5220be2); their re-check against `site-map.tsv`, which type-roles' README names and which comes with its ce177f8d4 (not on origin, which holds 3d5220be2), runs when that head is merged. ce177f8d4's outline list (11 sites, as the orchestrator gave it) is already applied: fix 3.
 
 ## Step 2a: static gates
 
