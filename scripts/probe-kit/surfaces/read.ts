@@ -253,6 +253,12 @@ interface PageReader {
   };
   done: () => void;
   /**
+   * The browser's own next `count` frames, in real time, whatever the walk's
+   * clock: each runs a whole rendering update, a ResizeObserver's delivery
+   * and what it sets included.
+   */
+  frames: (count: number) => Promise<void>;
+  /**
    * While an act runs (on), every animation held as it starts, each frame:
    * what the act opens is at rest before anything under the pointer
    * measures it (highlight.svelte.ts measures rows as a sheet slides in).
@@ -281,6 +287,10 @@ declare global {
 
 /** Installs `window.__ssReader` (an init script; it runs in the page, so it is self-contained). */
 export function installReader(props: readonly string[]): void {
+  // The browser's own frames, kept before the walk's clock (installed after
+  // this script, walk.ts passPage) puts the page's requestAnimationFrame on
+  // its paused time: each is a whole rendering update, observers included.
+  const nativeFrame = window.requestAnimationFrame.bind(window);
   const ROUND = (v: number) => Math.round(v * 2) / 2;
   const SKIP = new Set([
     "SCRIPT",
@@ -459,6 +469,19 @@ export function installReader(props: readonly string[]): void {
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     },
     still,
+    frames: (count) =>
+      new Promise<void>((done) => {
+        let left = count;
+        const each = () => {
+          left -= 1;
+          if (left <= 0) {
+            done();
+            return;
+          }
+          nativeFrame(each);
+        };
+        nativeFrame(each);
+      }),
     holding: (on) => {
       cancelAnimationFrame(holdFrame);
       holdFrame = 0;
@@ -534,6 +557,14 @@ export function installReader(props: readonly string[]): void {
         if (el.matches(INTERACTIVE)) {
           interactive.push(el);
           interactiveAt.push(index);
+        }
+        // What a box skips (`content-visibility: hidden`: the home board put
+        // away under a conversation) is not rendered, and the page keeps none
+        // of it current: a skipped subtree fires no ResizeObserver
+        // (lib/utils/rendered.ts), so what it measured stands at whenever the
+        // box was put away. The box itself is read; what it skips is not.
+        if (getComputedStyle(el).contentVisibility === "hidden") {
+          return;
         }
         const counts = new Map<string, number>();
         const kids = [
@@ -622,18 +653,18 @@ export function installReader(props: readonly string[]): void {
   window.__ssReader = reader;
 }
 
-/** Two frames at 60 Hz, in real time. */
-const TWO_FRAMES_MS = 34;
-
-/** Holds every animation still until two frames pass with nothing left to hold (at most 8 rounds). */
+/**
+ * Holds every animation still until two frames pass with nothing left to
+ * hold (at most 8 rounds). The frames are the browser's own, waited for
+ * whatever they take on a busy machine: what finishing an animation set off
+ * (a tab grown to its width, re-measured by its ResizeObserver, which fires
+ * only in a rendering update) has landed before anything is read.
+ */
 export async function holdStill(page: Page): Promise<void> {
   for (let round = 0; round < 8; round += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each round reads what the last one left
     const held = await page.evaluate(() => window.__ssReader?.still() ?? 0);
-    // Two of the browser's own frames, in real time: the page's
-    // requestAnimationFrame is the walk's paused clock's (walk.ts passPage),
-    // and fires only when the walk runs it on.
-    await page.waitForTimeout(TWO_FRAMES_MS);
+    await page.evaluate(() => window.__ssReader?.frames(2));
     if (held === 0) {
       return;
     }
