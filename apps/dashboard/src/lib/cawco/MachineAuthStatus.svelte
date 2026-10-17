@@ -49,7 +49,7 @@
 <div class="relative flex flex-1 flex-col">
   {#key outcome.kind}
     <div
-      class="flex flex-1 flex-col gap-[var(--space-4)]"
+      class="flex flex-1 flex-col gap-space-4"
       in:crossIn
       out:crossOut
     >
@@ -57,15 +57,27 @@
         <!-- mark-line: a column; the mark stands above the title -->
         <div
           aria-live="polite"
-          class="flex flex-col gap-[var(--space-2)] outline-none"
+          class="flex flex-col gap-space-2 outline-none"
           tabindex="-1"
           {@attach (node) => node.focus()}
         >
-          <span data-slot="mark" class="mark text-ink-muted">
+          <!-- literal: 2.25rem -->
+          <span
+            data-slot="mark"
+            class="grid size-(--mark-size) place-items-center text-ink-muted"
+            style:--mark-size="2.25rem"
+          >
             <Spinner aria-hidden="true" class="size-6" role="presentation" />
           </span>
-          <p data-slot="title" class="title" id={titleId}>{working.title}</p>
-          <p data-slot="body" class="body">{working.step}</p>
+          <p
+            data-slot="title"
+            class="m-0 type-label text-balance text-ink-strong"
+            id={titleId}
+          >{working.title}</p>
+          <p
+            data-slot="body"
+            class="m-0 type-meta text-pretty text-ink-muted"
+          >{working.step}</p>
         </div>
         <!-- Closing does not stop the machine; it only stops watching. -->
         <div class="mt-auto flex justify-end">
@@ -75,11 +87,15 @@
         </div>
       {:else if answer}
         <!-- mark-line: a column; the mark stands above the title -->
-        <div class="flex flex-col gap-[var(--space-2)]" role="status">
+        <div class="flex flex-col gap-space-2" role="status">
+          <!-- literal: 2.25rem -->
           <span
             data-slot="mark"
             data-enter
-            class="mark enter {ok ? 'text-success-9' : 'text-warning-9'}"
+            class="enter grid size-(--mark-size) place-items-center {ok
+              ? 'text-success-9'
+              : 'text-warning-9'}"
+            style:--mark-size="2.25rem"
           >
             {#if ok}
               <IconSuccess class="size-9" />
@@ -87,8 +103,15 @@
               <IconWarningTriangle class="size-9" />
             {/if}
           </span>
-          <p data-slot="title" class="title" id={titleId}>{answer.title}</p>
-          <p data-slot="body" class="body">{answer.body}</p>
+          <p
+            data-slot="title"
+            class="m-0 type-label text-balance text-ink-strong"
+            id={titleId}
+          >{answer.title}</p>
+          <p
+            data-slot="body"
+            class="m-0 type-meta text-pretty text-ink-muted"
+          >{answer.body}</p>
         </div>
         <div class="mt-auto flex justify-end">
           <Button
@@ -105,28 +128,9 @@
   {/key}
 </div>
 
-<style>
-  /* The mark's slot is the same box waiting and answered, so the spinner
-     and the icon that replaces it stand in one place. */
-  .mark {
-    display: grid;
-    place-items: center;
-    width: 2.25rem;
-    height: 2.25rem;
-  }
-  .title {
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .body {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-  }
 
+<style>
+  /* residual: keyframes */
   @media (prefers-reduced-motion: no-preference) {
     .enter {
       animation: mark-in var(--dur-pop) var(--ease-out) both;
@@ -137,7 +141,7 @@
     from {
       opacity: 0;
       scale: 0.25;
-      filter: blur(4px);
+      filter: blur(var(--space-1));
     }
   }
 </style>

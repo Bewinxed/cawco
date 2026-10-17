@@ -91,7 +91,8 @@
   /** Each card's own frame: its width, its padding (their components). */
   const FRAME = {
     caw: "caw-pop gap-0",
-    machines: "machines-pop w-[min(20rem,calc(100vw-16px))] gap-0",
+    /* literal: min(20rem, calc(100vw - 16px)), set on the card as --machines-frame-w */
+    machines: "machines-pop w-(--machines-frame-w) gap-0",
     jump: "jump-pop gap-0",
   } as const satisfies Record<Card, string>;
   const LABEL = {
@@ -408,6 +409,9 @@
     aria-label={LABEL[shown]}
     class={[FRAME[shown], rehearsing && "invisible"]}
     data-glass-card-frame={FRAME[shown]}
+    style={shown === "machines"
+      ? "--machines-frame-w: min(20rem, calc(100vw - 16px))"
+      : undefined}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
     escapeKeydownBehavior={shown === "jump" ? "ignore" : "close"}

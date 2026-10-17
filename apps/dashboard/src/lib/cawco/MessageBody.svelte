@@ -25,18 +25,18 @@
   } = $props();
 </script>
 
-<div data-slot="msg" class="msg">
+<!-- literal: 74ch -->
+<div
+  data-slot="msg"
+  class="max-w-(--measure) text-size-body leading-body font-normal text-ink-strong"
+  style:--measure="74ch"
+>
   <Markdown {fades} {source} {streaming} />
 </div>
 
 <style>
-  .msg {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    max-inline-size: 74ch;
-
+  /* residual: foreign-dom — every rule below styles the Markdown component's own DOM */
+  [data-slot="msg"] {
     & :global(.prose) {
       font-size: var(--text-body);
       font-weight: var(--weight-body);
