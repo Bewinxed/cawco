@@ -280,12 +280,13 @@
   }
 </script>
 
-<section data-slot="model" class="model">
+<!-- literal: 8px gap -->
+<section data-slot="model" class="grid gap-(--gap)" style:--gap="8px">
   {#if !runtime}
     <SectionHeader hue="var(--hue-cyan-500)" icon={Cpu} {label}>
       {#snippet right()}
         {#if account}
-          <span class="account">
+          <span class="flex min-w-0 justify-end">
             <AccountChip
               id={uid}
               onchange={(value) => {
@@ -299,12 +300,25 @@
       {/snippet}
     </SectionHeader>
   {/if}
-  <div data-slot="picker" class="picker" class:railed={!runtime}>
+  <!-- literal: rail 40px step (44px on a coarse pointer), 36px radio, 6px padding -->
+  <div
+    data-slot="picker"
+    class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs data-railed:grid-cols-(--cols)"
+    data-railed={!runtime || undefined}
+    style:--cols="auto minmax(0, 1fr)"
+    style:--hit-gap-x="calc(var(--rail-step) - var(--rail-radio))"
+    style:--hit-gap-y="calc(var(--rail-step) - var(--rail-radio))"
+    style:--rail-gap="calc(var(--rail-step) - var(--rail-radio))"
+    style:--rail-pad="6px"
+    style:--rail-radio="36px"
+    style:--rail-step-coarse="44px"
+    style:--rail-step-fine="40px"
+  >
     {#if !runtime}
       <Rail
         axis="y"
-        class="harness-rail"
-        itemClass="harness-tab ns-in touch-hit press-tint"
+        class="grid content-start gap-(--rail-gap) rounded-l-md border-r border-border-hairline bg-surface-recess p-(--rail-pad)"
+        itemClass="ns-in touch-hit press-tint grid size-(--rail-radio) place-items-center"
         itemStyle={(i: number) => `--delay:${i * 30}ms`}
         items={railItems}
         label="Harness"
@@ -313,7 +327,11 @@
       >
         {#snippet item(tab: (typeof railItems)[number])}
           {#if tab.id === "codex"}
-            <ProviderLogo class="codex-mark" provider="openai" size={16} />
+            <ProviderLogo
+              class="size-icon-md flex-none"
+              provider="openai"
+              size={16}
+            />
           {:else}
             <HarnessLogo harness={tab.id as HarnessKind} />
           {/if}
@@ -327,21 +345,40 @@
         {/snippet}
         {#snippet tipExtra(tab: (typeof railItems)[number])}
           {#if tab.soon}
-            <span class="soon">soon</span>
+            <span
+              class="font-body text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
+              >soon</span
+            >
           {:else if tab.disabled}
-            <span class="soon">not installed</span>
+            <span
+              class="font-body text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
+              >not installed</span
+            >
           {/if}
         {/snippet}
       </Rail>
     {/if}
-    <div data-slot="pick" class="pick">
-      <label data-slot="search" class="search field-underline">
-        <Search data-model-section-lead class="lead" />
+    <div data-slot="pick" class="grid min-w-0">
+      <!-- literal: 8px gap, 42px / 44px height, 12px inline padding -->
+      <label
+        data-slot="search"
+        class="field-underline flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) border-b border-border-hairline px-(--pad-x)"
+        style:--gap="8px"
+        style:--h="42px"
+        style:--h-phone="44px"
+        style:--pad-x="12px"
+      >
+        <Search
+          data-model-section-lead
+          class="size-icon-md flex-none text-ink-subtle"
+        />
+        <!-- literal: 1.4 line height, 1rem on a phone -->
         <input
           aria-controls={`${uid}-models`}
           aria-label="Search models"
           autocapitalize="off"
           autocorrect="off"
+          class="h-full min-w-0 flex-1 border-0 bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong max-phone:text-(length:--fs-phone)"
           id={`${uid}-search`}
           oninput={(event) => {
             query = event.currentTarget.value;
@@ -357,30 +394,36 @@
           }}
           placeholder="Search or paste a model id…"
           spellcheck="false"
+          style:--fs-phone="1rem"
+          style:--lh="1.4"
           value={query}
           {@attach autowidth(() => query)}
         />
         {#if query}
+          <!-- literal: 22px box -->
           <button
             data-slot="clear"
             aria-label="Clear"
-            class="clear"
+            class="inline-flex size-(--box) cursor-pointer items-center justify-center rounded-xs border-0 bg-transparent text-ink-subtle hover:text-ink-strong"
             onclick={() => {
               query = "";
             }}
+            style:--box="22px"
             type="button"
           >
-            <Clear />
+            <Clear class="size-icon-md" />
           </button>
         {/if}
       </label>
 
+      <!-- literal: 300px height, 4px padding -->
       <div
         data-slot="list"
         aria-label={`${harnessName(listHarness)} models`}
-        class="list fai-scroll"
+        class="fai-scroll relative grid h-(--h) content-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
         id={`${uid}-models`}
         role="listbox"
+        style:--h="300px"
         tabindex="-1"
         bind:this={list}
         {@attach highlight({ rows: "[data-fh]" })}
@@ -390,16 +433,28 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="fill"
-          style={`transform:translateY(calc(${modelIdx} * 46px));height:${chosenHeight}px;opacity:${hiOpacity}`}
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) transform-(--shift) rounded-sm bg-surface-fill opacity-(--o) transition-[opacity] dur-control ease-out"
+          style:--h={`${chosenHeight}px`}
+          style:--o={hiOpacity}
+          style:--shift={`translateY(calc(${modelIdx} * 46px))`}
         ></span>
         {#if swap.leaving.length}
-          <div aria-hidden="true" class="leaving" data-leaving inert>
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 grid content-start gap-space-row"
+            data-leaving
+            inert
+          >
             {#each swap.leaving as entry, i (entry.id)}
+              <!-- literal: 10px gap, 44px height, 6px 8px padding -->
               <div
                 data-slot="row"
-                class="row"
-                style={`animation:${swap.leaveAnim(i)}`}
+                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed animate-(--anim) border border-transparent bg-transparent"
+                style:--anim={swap.leaveAnim(i)}
+                style:--gap="10px"
+                style:--h="44px"
+                style:--pad-x="8px"
+                style:--pad-y="6px"
               >
                 {@render rowBody(entry)}
               </div>
@@ -409,24 +464,52 @@
         <!-- One slot for the custom row and the empty line, ahead of the rows:
              the one leaving keeps its place while the other fades in. -->
         {#if showCustomRow}
+          <!-- literal: 10px gap, 44px height, 6px 8px padding, 26px tile -->
           <button
             data-slot="row"
-            class="row custom press-tint"
+            class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
+            style:--gap="10px"
+            style:--h="44px"
+            style:--pad-x="8px"
+            style:--pad-y="6px"
             type="button"
             in:crossIn
             out:crossOut
           >
-            <span data-slot="tile" class="ns-tile tile ink"><Code /></span>
-            <span data-slot="text" class="text">
-              <span data-slot="name" class="name">Use custom model id</span>
-              <span data-slot="meta" class="meta mono">{query}</span>
+            <span
+              data-slot="tile"
+              class="ns-tile ink size-(--tile)"
+              style:--tile="26px"><Code class="size-icon-md" /></span
+            >
+            <span data-slot="text" class="min-w-0 flex-1">
+              <span
+                data-slot="name"
+                class="type-label block truncate group-disabled:opacity-50"
+                >Use custom model id</span
+              >
+              <span
+                data-slot="meta"
+                class="block truncate font-mono text-size-meta leading-meta font-normal text-ink-muted"
+                >{query}</span
+              >
             </span>
-            <span class="hint">↵ Enter</span>
+            <span
+              class="font-body text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
+              >↵ Enter</span
+            >
           </button>
         {:else if noResults}
-          <div class="none" in:crossIn out:crossOut>
+          <!-- literal: 6px gap, 22px 12px padding -->
+          <div
+            class="type-meta grid place-items-center gap-(--gap) px-(--pad-x) py-(--pad-y) text-center text-pretty text-ink-subtle"
+            style:--gap="6px"
+            style:--pad-x="12px"
+            style:--pad-y="22px"
+            in:crossIn
+            out:crossOut
+          >
             {#if q}
               No {harnessName(listHarness)} models match "{query}"
             {:else}
@@ -442,20 +525,26 @@
                line of their own under it where it cannot (a phone). -->
           <div
             data-slot="option"
-            class="option"
-            style={`animation:${swap.rowAnim(i)}`}
+            class="relative flex animate-(--anim) flex-wrap items-center justify-end"
+            style:--anim={swap.rowAnim(i)}
             {@attach picked && tools ? chosen : undefined}
           >
+            <!-- literal: 10px gap, 44px height, 6px 8px padding, 12rem basis -->
             <button
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="row press-tint"
+              class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--basis) border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}
               onclick={() => pick(entry)}
               role="option"
+              style:--basis="12rem"
+              style:--gap="10px"
+              style:--h="44px"
+              style:--pad-x="8px"
+              style:--pad-y="6px"
               type="button"
             >
               {@render rowBody(entry, reason)}
@@ -463,8 +552,22 @@
             {#if picked && tools}
               <!-- The chips' line folds open and shut under the name, so the
                    rows after it glide; the chips glide between rows in it. -->
-              <div data-slot="tools" class="tools" in:line out:line>
-                <div data-slot="chips" class="chips" in:toolsIn out:toolsOut>
+              <!-- literal: 44px height, 4px / 6px inline padding, 28px chips -->
+              <div
+                data-slot="tools"
+                class="flex h-(--h) flex-none items-center justify-end ps-space-1 pe-(--pe)"
+                style:--chip-h="28px"
+                style:--h="44px"
+                style:--pe="6px"
+                in:line
+                out:line
+              >
+                <div
+                  data-slot="chips"
+                  class="flex items-center gap-space-1"
+                  in:toolsIn
+                  out:toolsOut
+                >
                   <ToolChips {tools} />
                 </div>
               </div>
@@ -479,172 +582,57 @@
 {#snippet rowBody(entry: ModelEntry, reason?: string)}
   {@const provider = providerOf(entry.id)}
   {#if mixedMakers}
-    <span data-slot="tile" class="ns-tile tile vendor">
+    <!-- literal: 26px tile -->
+    <span
+      data-slot="tile"
+      class="ns-tile size-(--tile) overflow-hidden group-disabled:opacity-50"
+      style:--tile="26px"
+    >
       {#if provider}
-        <ProviderLogo model={entry.id} size={16} />
+        <ProviderLogo class="size-icon-md" model={entry.id} size={16} />
       {:else}
         <HarnessLogo harness={listHarness} />
       {/if}
     </span>
   {/if}
-  <span data-slot="text" class="text">
-    <span data-slot="name" class="name" class:mono={entry.mono}
-      >{entry.name}</span
+  <span data-slot="text" class="min-w-0 flex-1">
+    <span
+      data-slot="name"
+      class="type-label block truncate group-disabled:opacity-50 data-mono:font-mono"
+      data-mono={entry.mono || undefined}>{entry.name}</span
     >
     {#if reason}
-      <span data-slot="reason" data-meta class="meta reason">{reason}</span>
+      <span
+        data-slot="reason"
+        data-meta
+        class="type-meta block truncate text-ink-muted">{reason}</span
+      >
     {:else}
-      <span data-slot="meta" class="meta"
-        ><span class="mono">{entry.id}</span>
+      <span data-slot="meta" class="type-meta block truncate text-ink-subtle"
+        ><span class="font-mono">{entry.id}</span>
         {vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}</span
       >
     {/if}
   </span>
   {#if ctx(entry)}
-    <span class="ctx">{ctx(entry)}</span>
+    <span
+      class="font-mono text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
+      >{ctx(entry)}</span
+    >
   {/if}
 {/snippet}
 
 <style>
-  .model {
-    display: grid;
-    gap: 8px;
-  }
-  /* One panel: the harness rail down its left edge, search and list beside. */
-  .picker {
-    position: relative;
-    display: grid;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
-  }
-  .picker.railed {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .pick {
-    display: grid;
-    min-width: 0;
-  }
-  /* One 36px radio plus its gap, which the thumb and the tip travel by. On
-     a coarse pointer the gap opens to 8px, so each radio's touch area
-     reaches 44px before meeting its neighbour's. */
-  /* The harness rail (motion/Rail) down the panel's left edge: one 36px
-     radio plus its gap per step. On a coarse pointer the gap opens to 8px,
-     so each radio's touch area reaches 44px before meeting its neighbour's. */
-  :global(.harness-rail) {
-    --rail-step: 40px;
-    --hit-gap-x: calc(var(--rail-step) - 36px);
-    --hit-gap-y: calc(var(--rail-step) - 36px);
-    display: grid;
-    align-content: start;
-    gap: calc(var(--rail-step) - 36px);
-
+  /* residual: unmapped */
+  /* One 36px radio plus its gap, which the thumb and the tip travel by: 40px, and 44px on a coarse pointer, so each radio's touch area reaches 44px before meeting its neighbour's. */
+  [data-slot="picker"] {
+    --rail-step: var(--rail-step-fine);
     @media (pointer: coarse) {
-      --rail-step: 44px;
-    }
-    padding: 6px;
-    border-right: 1px solid var(--border-hairline);
-    background: var(--surface-recess);
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
-  }
-  :global(.harness-tab) {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-  }
-  :global(.harness-tab .harness-logo),
-  :global(.harness-tab .codex-mark) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .soon {
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    opacity: 0.6;
-  }
-  .search {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 42px;
-    padding: 0 12px;
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  .search :global(svg.lead) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-subtle);
-  }
-  .search input {
-    flex: 1;
-    height: 100%;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-    font: var(--weight-body) var(--text-body) / 1.4 var(--font-body);
-    color: var(--ink-strong);
-    padding: 0;
-  }
-  .clear {
-    display: inline-flex;
-    width: 22px;
-    height: 22px;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    background: transparent;
-    color: var(--ink-subtle);
-    cursor: pointer;
-    border-radius: var(--radius-xs);
-  }
-  .clear :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (hover: hover) {
-    .clear:hover {
-      color: var(--ink-strong);
-    }
-    .custom:hover {
-      background: var(--surface-hover);
+      --rail-step: var(--rail-step-coarse);
     }
   }
-  .list {
-    position: relative;
-    display: grid;
-    gap: 2px;
-    align-content: start;
-    height: 300px;
-    /* Scrolls down only: the rows' 18px sideways slide on a harness change
-       would otherwise overflow it and flash a horizontal scrollbar. */
-    overflow: hidden auto;
-    padding: 4px;
-  }
-  /* The outgoing rows, over the incoming ones so both staggers run at once. */
-  .leaving {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    display: grid;
-    gap: 2px;
-    align-content: start;
-    pointer-events: none;
-  }
-  .fill {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    background: var(--surface-fill);
-    border-radius: var(--radius-sm);
-    transition: opacity var(--dur-control) var(--ease-out);
-    pointer-events: none;
+  /* needs transition token: transform var(--dur-toggle) var(--ease-in-out), height var(--dur-toggle) var(--ease-in-out), opacity var(--dur-control) var(--ease-out) */
+  [data-slot="fill"] {
     @media (prefers-reduced-motion: no-preference) {
       transition:
         transform var(--dur-toggle) var(--ease-in-out),
@@ -652,142 +640,9 @@
         opacity var(--dur-control) var(--ease-out);
     }
   }
-  /* The account chip on the heading's line, at its end; its name gives way
-     before the line wraps. */
-  .account {
-    display: flex;
-    justify-content: flex-end;
-    min-width: 0;
-  }
-  /* A row and the chosen one's chips: the chips keep the row's end, and drop
-     to a line of their own under it once the row would be left less than
-     12rem for its name (`flex-basis`), so they never stand over its text.
-     Relative, so the chips leaving it are lifted where they stand. */
-  .option {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-  }
-  /* The chosen model's run settings: effort and permission chips. */
-  .tools {
-    display: flex;
-    flex: none;
-    align-items: center;
-    justify-content: flex-end;
-    height: 44px;
-    padding-inline: 4px 6px;
-  }
-  .chips {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .tools :global(.ns-chip-btn.tool) {
-    height: 28px;
+  /* residual: foreign-dom */
+  [data-slot="tools"] :global(.ns-chip-btn.tool) {
+    height: var(--chip-h);
     background: var(--surface-raised);
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    height: 44px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-  }
-  .option > .row {
-    flex: 1 1 12rem;
-    min-width: 0;
-  }
-  .custom {
-    background: var(--surface-raised);
-    border: 1px dashed var(--neutral-8);
-  }
-  .tile {
-    width: 26px;
-    height: 26px;
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .vendor {
-    overflow: hidden;
-  }
-  .vendor :global(svg),
-  .vendor :global(.harness-logo) {
-    width: 16px;
-    height: 16px;
-  }
-  .text {
-    flex: 1;
-    min-width: 0;
-  }
-  .name {
-    display: block;
-    font: var(--type-label);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .meta {
-    display: block;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .mono {
-    font-family: var(--font-mono);
-  }
-  .custom .meta {
-    color: var(--ink-muted);
-  }
-  /* A model that cannot take the job stays listed, with why, but inert. */
-  .row:disabled {
-    cursor: not-allowed;
-  }
-  .row:disabled .name,
-  .row:disabled .tile {
-    opacity: 0.5;
-  }
-  .reason {
-    color: var(--ink-muted);
-  }
-  .hint,
-  .ctx {
-    font: var(--weight-body) var(--text-meta) / 1 var(--font-mono);
-    color: var(--ink-subtle);
-    white-space: nowrap;
-  }
-  .hint {
-    font-family: var(--font-body);
-  }
-  .none {
-    display: grid;
-    place-items: center;
-    gap: 6px;
-    padding: 22px 12px;
-    color: var(--ink-subtle);
-    font: var(--type-meta);
-    text-align: center;
-    text-wrap: pretty;
-  }
-  @media (max-width: 640px) {
-    .search {
-      height: 44px;
-    }
-    .search input {
-      font-size: 1rem;
-    }
   }
 </style>
