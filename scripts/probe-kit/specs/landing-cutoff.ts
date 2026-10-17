@@ -25,8 +25,9 @@
  *   the file it was; the sandbox is the one it was (the agent's log says no
  *   restart); and its `sleep` still runs.
  * - B, the end state when a push is cut off all the same: a delegate commits
- *   a large file's pointer, so the door's `git lfs push` asks the mock for a
- *   batch. The mock holds that answer {@link SLOW_MS}, and as the request
+ *   a large file, so the door's `git lfs push` asks the mock for a batch
+ *   and uploads it there (the mock keeps it, and C's checkout downloads it
+ *   from there). The mock holds that answer {@link SLOW_MS}, and as the request
  *   comes it replaces the clone's `.git/config` on the host with the same
  *   bytes (a new inode, as any host write makes), standing in for whatever
  *   else may stop a sandbox mid-push. The agent's log says the sandbox
@@ -59,6 +60,8 @@ const SLOW_MS = 4000;
 /** A process's entry in `/proc`. */
 const PID = /^\d+$/;
 const LFS_JSON = { "content-type": "application/vnd.git-lfs+json" };
+/** An object's own URL on the mock LFS server, which its batch answers name. */
+const OBJECT_PATH = /^\/lfs\/objects\/([0-9a-f]{64})$/;
 
 /** What each delegate commits: A a plain file, B a large file's pointer with its object; C nothing. */
 const COMMIT: Partial<Record<Tag, string>> = {
@@ -206,6 +209,10 @@ const run = async (kit: Kit) => {
 
   const mock = {
     asked: [] as string[],
+    /** The large files pushed to it, by oid: a later checkout downloads them. */
+    objects: new Map<string, ArrayBuffer>(),
+    /** Its own address, once it listens. */
+    server: "",
     /** B's clone config, replaced as the first batch request comes. */
     replace: undefined as string | undefined,
   };
@@ -234,8 +241,20 @@ const run = async (kit: Kit) => {
           headers: LFS_JSON,
         });
       }
-      const { objects = [] } = (await request.json()) as {
+      const object = OBJECT_PATH.exec(path)?.[1];
+      if (object && request.method === "PUT") {
+        mock.objects.set(object, await request.arrayBuffer());
+        return new Response(null, { status: 200 });
+      }
+      if (object) {
+        const held = mock.objects.get(object);
+        return held
+          ? new Response(held)
+          : new Response("no such object", { status: 404 });
+      }
+      const { operation, objects = [] } = (await request.json()) as {
         objects?: { oid: string; size: number }[];
+        operation?: string;
       };
       const { replace } = mock;
       mock.replace = undefined;
@@ -243,11 +262,24 @@ const run = async (kit: Kit) => {
         await replaceInPlace(replace);
       }
       await Bun.sleep(SLOW_MS);
-      // Every object the server has already: nothing to upload.
+      // A store as the LFS batch API has it: an upload for each object it
+      // lacks, a download for each it holds, and an error for one it lacks.
+      const href = (oid: string): { href: string } => ({
+        href: `${mock.server}/lfs/objects/${oid}`,
+      });
       return new Response(
         JSON.stringify({
           transfer: "basic",
-          objects: objects.map(({ oid, size }) => ({ oid, size })),
+          objects: objects.map(({ oid, size }) => {
+            if (mock.objects.has(oid)) {
+              return operation === "download"
+                ? { oid, size, actions: { download: href(oid) } }
+                : { oid, size };
+            }
+            return operation === "download"
+              ? { oid, size, error: { code: 404, message: "no such object" } }
+              : { oid, size, actions: { upload: href(oid) } };
+          }),
         }),
         { headers: LFS_JSON }
       );
@@ -266,6 +298,7 @@ const run = async (kit: Kit) => {
 
     const home = fleet.env.HOME as string;
     const server = `http://127.0.0.1:${lfs.port}`;
+    mock.server = server;
     // The machine's own credential for the LFS server, as gh's is for
     // GitHub: git-lfs asks it only after a 401.
     await writeFile(
