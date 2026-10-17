@@ -48,7 +48,12 @@
   );
 </script>
 
-<p data-slot="note" class="note">
+<!-- literal: 72ch -->
+<p
+  data-slot="note"
+  class="max-w-(--measure) type-meta text-ink-muted"
+  style:--measure="72ch"
+>
   Sessions see the reply but never this rule's history, so this is the only
   place it is visible.
 </p>
@@ -56,46 +61,95 @@
 <!-- Rows that arrive, leave or move (a catch coming in, Show all) go
      through reflow: uncovered and faded in, closed and faded out, what
      follows sliding (motion/rows.svelte.ts). -->
-<div data-slot="activity" class="activity" {@attach reflow()}>
+<!-- literal: 8px -->
+<div
+  data-slot="activity"
+  class="flex flex-col gap-(--activity-gap)"
+  style:--activity-gap="8px"
+  {@attach reflow()}
+>
   {#if loading}
-    <p data-slot="note" class="note">Loading…</p>
+    <!-- literal: 72ch -->
+    <p
+      data-slot="note"
+      class="max-w-(--measure) type-meta text-ink-muted"
+      style:--measure="72ch"
+    >
+      Loading…
+    </p>
   {:else if failed}
-    <p class="caution" role="alert">{failed}</p>
+    <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if rows.length === 0}
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p
+      data-slot="note"
+      class="max-w-(--measure) type-meta text-ink-muted"
+      style:--measure="72ch"
+    >
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
   {:else}
     {#if waiting > 0}
-      <p data-slot="num" class="caution num" data-flip>
+      <p data-slot="num" class="num type-meta text-status-attn-ink" data-flip>
         {waiting}
         {waiting === 1 ? "session is" : "sessions are"}
         still pending — it clears when their next turn ends without matching.
       </p>
     {/if}
-    <ul data-slot="list" class="list">
+    <ul
+      data-slot="list"
+      class="m-0 flex list-none flex-col gap-space-row p-0"
+    >
       {#each visible as row (row.instanceId)}
-        <li data-slot="entry" class="entry" data-flip>
-          <div data-slot="top" class="top">
-            <span data-slot="where" class="where">
-              <span data-slot="path" class="path">{row.where}</span>
+        <!-- literal: 8px, 10px -->
+        <li
+          data-slot="entry"
+          class="flex flex-col gap-space-1 rounded-sm bg-surface-recess px-(--entry-pad-x) py-(--entry-pad-y)"
+          data-flip
+          style:--entry-pad-x="10px"
+          style:--entry-pad-y="8px"
+        >
+          <!-- literal: 8px -->
+          <div
+            data-slot="top"
+            class="flex flex-wrap items-baseline justify-between gap-(--top-gap)"
+            style:--top-gap="8px"
+          >
+            <!-- literal: 8px -->
+            <span
+              data-slot="where"
+              class="flex min-w-0 items-baseline gap-(--where-gap)"
+              style:--where-gap="8px"
+            >
+              <span
+                data-slot="path"
+                class="font-(family-name:--font-mono) text-size-meta wrap-anywhere text-ink-strong"
+              >{row.where}</span>
               {#if row.harness}
-                <span class="muted">{row.harness}</span>
+                <!-- literal: 72ch -->
+                <span
+                  class="max-w-(--measure) type-meta text-ink-muted"
+                  style:--measure="72ch">{row.harness}</span
+                >
               {/if}
             </span>
-            <span class="muted">
+            <!-- literal: 72ch -->
+            <span
+              class="max-w-(--measure) type-meta text-ink-muted"
+              style:--measure="72ch"
+            >
               {times(row.totalFires)}, last {since(row.lastFiredAt)}
             </span>
           </div>
 
           {#if row.status === "pending"}
-            <p class="caution">Fired {times(row.fireCount)} in a row.</p>
+            <p class="type-meta text-status-attn-ink">Fired {times(row.fireCount)} in a row.</p>
           {/if}
         </li>
       {/each}
     </ul>
     {#if rows.length > LATEST}
-      <div data-slot="more" class="more" data-flip>
+      <div data-slot="more" class="self-start" data-flip>
         <Button
           onclick={() => {
             all = !all;
@@ -109,59 +163,3 @@
     {/if}
   {/if}
 </div>
-
-<style>
-  .activity {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .more {
-    align-self: flex-start;
-  }
-  .note,
-  .muted {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .entry {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .where {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-  }
-  .path {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-</style>

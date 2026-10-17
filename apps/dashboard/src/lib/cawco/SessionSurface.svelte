@@ -538,16 +538,16 @@
   });
 </script>
 
-<div class="surface">
+<div class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden">
   <!-- The board is a HOME rather than a peer: it is what is there when no
        conversation is, and it holds its scroll position underneath the
        groups rather than being rebuilt on every visit. -->
   <div
     data-slot="board"
-    class="board"
+    class="absolute inset-0 flex min-h-0 min-w-0 data-hidden:pointer-events-none"
+    data-hidden={boardHidden || undefined}
     inert={!onBoard}
     bind:this={boardEl}
-    class:hidden-surface={boardHidden}
   >
     {#if homePage}
       <Home variant="page" />
@@ -555,10 +555,10 @@
   </div>
 
   <div
-    class="groups"
+    class="absolute inset-0 flex min-h-0 min-w-0 data-hidden:pointer-events-none data-hidden:invisible"
+    data-hidden={groupsHidden || undefined}
     inert={onBoard}
     bind:this={groupsEl}
-    class:hidden-surface={groupsHidden}
   >
     <!-- A phone shows one group at a time; the grid is a desktop arrangement.
          The tree still holds whatever splits were made at a desk, and the
@@ -576,9 +576,15 @@
            he fades out over it: the ground clears at once and the
            conversation is never kept waiting on him. The line under him
            cross-fades in one cell. -->
-      <div class="empty-detail" class:over={!detailShown}>
+      <div
+        class="relative flex flex-auto items-center justify-center bg-surface-recess type-body text-ink-muted transition-[background-color] dur-fade ease-out data-over:pointer-events-none data-over:absolute data-over:inset-0 data-over:z-1 data-over:bg-transparent"
+        data-over={!detailShown || undefined}
+      >
         {#if machinesThere}
-          <div class="machines-state">
+          <div
+            class="max-h-full w-full self-start overflow-y-auto px-space-6 pt-(--pad-top) pb-space-8"
+            style:--pad-top="calc(var(--space-8) * 2)"
+          >
             <MachinesEmpty
               fleet={machinesThere}
               ongone={() => {
@@ -589,7 +595,10 @@
           </div>
         {/if}
         {#if cawThere}
-          <div class="detail-state" {@attach holdWhileEntering}>
+          <div
+            class="flex flex-col items-center gap-space-3"
+            {@attach holdWhileEntering}
+          >
             <Caw
               next={[
                 "loading",
@@ -608,7 +617,7 @@
               size={150}
               status={detailState}
             />
-            <div class="detail-line">
+            <div class="relative text-center">
               {#if cawShown && detailShown}
                 {#key detailLine}
                   <p in:crossIn out:crossOut>{detailLine}</p>
@@ -636,86 +645,11 @@
 <PeekSheet />
 
 <style>
-  .surface {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .board,
-  .groups {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    min-width: 0;
-    min-height: 0;
-  }
-
-  /* Never `display`: a surface put away keeps its layout, so the
-     virtualisers inside it keep their measurements, its scroll stays where
-     it was, and revealing it costs nothing. */
-  .hidden-surface {
-    pointer-events: none;
-  }
+  /* residual: unmapped */
   /* The board under a conversation is skipped outright: its style, layout
-     and paint leave every frame, and its rendering state — layout, scroll
-     offsets — is kept for its return. `visibility: hidden` left the whole
-     board in each restyle, reflow and layerize of the page while the
-     conversation above it streamed. A skipped subtree cannot be painted by
-     a descendant either, which `visibility` allowed. */
-  .board.hidden-surface {
+     and paint leave every frame, and its rendering state is kept for its
+     return. */
+  [data-slot="board"][data-hidden] {
     content-visibility: hidden;
-  }
-  /* The groups under the board keep laying out while it is shown, so a
-     conversation streaming behind it is measured and current when it comes
-     back. Only the HIDDEN state is declared: `visibility` inherits, but a
-     descendant re-declaring `visible` un-hides itself through a hidden
-     ancestor, so a single `visibility: visible` deeper in the tree would
-     paint a surface that is supposed to be put away. */
-  .groups.hidden-surface {
-    visibility: hidden;
-  }
-  .empty-detail {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface-recess);
-    color: var(--ink-muted);
-    font: var(--type-body);
-    transition: background-color var(--dur-fade) var(--ease-out);
-  }
-  /* A conversation has landed under him: only Caw fading out is left of
-     the detail area, drawn over it and out of the pointer's way. */
-  .empty-detail.over {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background-color: transparent;
-    pointer-events: none;
-  }
-  /* The empty fleet stands where New project's ask does: from the top,
-     padded as that page pads (routes/project/new), not centred. */
-  .machines-state {
-    align-self: flex-start;
-    inline-size: 100%;
-    max-block-size: 100%;
-    overflow-y: auto;
-    padding: calc(var(--space-8) * 2) var(--space-6) var(--space-8);
-  }
-  .detail-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  /* The line's states share this cell: the one leaving is pinned in it (crossOut). */
-  .detail-line {
-    position: relative;
-    text-align: center;
   }
 </style>

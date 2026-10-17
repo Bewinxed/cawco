@@ -97,7 +97,7 @@
     >
   {/if}
   <span
-    class="shrink-0 font-mono text-meta text-ink-muted tabular-nums {blocker
+    class="shrink-0 font-(family-name:--font-mono) text-meta text-ink-muted tabular-nums {blocker
       ? ''
       : 'ml-auto'}"
     data-tabular>#{task.id}</span
@@ -133,10 +133,12 @@
           {@render line(task, blocker)}
         </Collapsible.Trigger>
         <Collapsible.Content>
+          <!-- literal: 60ch -->
           <p
-            class="max-w-[60ch] pb-2 text-body whitespace-pre-line {dense
+            class="max-w-(--measure) pb-2 text-body whitespace-pre-line {dense
               ? 'pr-2 pl-7'
               : 'pr-3 pl-space-8'}"
+            style:--measure="60ch"
           >
             {task.description}
           </p>

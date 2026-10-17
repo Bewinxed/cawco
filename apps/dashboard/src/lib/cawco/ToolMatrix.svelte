@@ -108,10 +108,10 @@
   {@const failed = cellKey(machine.machineId, spec.id) in refused}
 
   {#if shown === "installed"}
-    <span class="flex items-center gap-[var(--space-1)]">
+    <span class="flex items-center gap-space-1">
       <Badge class="{CHIP} text-success-9" variant="ghost">
         <IconCheck class="size-icon-md shrink-0" />
-        <span data-slot="num" class="num font-mono"
+        <span data-slot="num" class="num font-(family-name:--font-mono)"
           >{toolStatus?.version ?? "—"}</span
         >
       </Badge>
@@ -148,7 +148,7 @@
       variant="outline"
     />
   {:else if shown === "failed"}
-    <span class="flex items-center gap-[var(--space-1)]">
+    <span class="flex items-center gap-space-1">
       <Popover.Root>
         <Popover.Trigger>
           {#snippet child({ props })}
@@ -168,26 +168,26 @@
         </Popover.Trigger>
         <Popover.Content
           align="start"
-          class="w-96 rounded-[var(--radius-lg)] p-0 shadow-xl"
+          class="w-96 rounded-lg p-0 shadow-xl"
         >
           <header
-            class="flex items-baseline gap-[var(--space-1)] border-b border-border px-[var(--space-3)] py-[var(--space-2)]"
+            class="flex items-baseline gap-space-1 border-b border-border px-space-3 py-space-2"
           >
             <span class="text-label text-ink-strong"
               >{spec.name}
               did not install</span
             >
             {#if toolStatus?.method}
-              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
+              <span class="ml-auto shrink-0 font-(family-name:--font-mono) text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
           </header>
           <pre
-            class="max-h-56 overflow-auto px-[var(--space-3)] py-[var(--space-2)] font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
+            class="max-h-56 overflow-auto px-space-3 py-space-2 font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
               "The machine did not say why."}</pre>
           <footer
-            class="border-t border-border px-[var(--space-3)] py-[var(--space-2)]"
+            class="border-t border-border px-space-3 py-space-2"
           >
             <Button
               disabled={!online}
@@ -232,21 +232,21 @@
       </Popover.Trigger>
       <Popover.Content
         align="start"
-        class="w-80 rounded-[var(--radius-lg)] shadow-xl"
+        class="w-80 rounded-lg shadow-xl"
       >
-        <p class="font-mono text-label">
+        <p class="font-(family-name:--font-mono) text-label">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
       </Popover.Content>
     </Popover.Root>
   {:else}
-    <span class="flex items-center gap-[var(--space-1)]">
+    <span class="flex items-center gap-space-1">
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <Badge
               {...props}
-              class="{CHIP} text-[var(--ink-subtle)]"
+              class="{CHIP} text-ink-subtle"
               variant="ghost"><span>Unknown</span></Badge
             >
           {/snippet}
@@ -293,13 +293,13 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <div class="matrix">
+  <div class="matrix overflow-x-auto rounded-md bg-surface-raised">
     <Table.Root class="border-collapse text-left">
       <Table.Header>
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
-            class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-3)] text-meta text-ink-muted"
+            class="sticky left-0 z-10 h-auto bg-surface-raised px-space-4 py-space-3 text-meta text-ink-muted"
             scope="col">Machine</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -307,11 +307,11 @@
             {@const policy = policyOf(spec)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] whitespace-normal"
+              class="h-auto min-w-56 border-l border-border px-space-4 py-space-3 whitespace-normal"
               scope="col"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <div class="flex flex-col items-start gap-[var(--space-2)]">
+              <div class="flex flex-col items-start gap-space-2">
                 <span class="mark-line flex items-center gap-1.5">
                   <span class="text-label text-ink-strong">{spec.name}</span>
                   <a
@@ -332,7 +332,7 @@
                 >
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch is a bits-ui button[role=switch], which the label-click passthrough this markup relies on already recognizes as labelable — swapping to a `for`/id pairing would drop nothing biome can see but would change nothing real either. -->
                 <label
-                  class="flex items-center gap-[var(--space-2)] text-label text-ink-muted"
+                  class="flex items-center gap-space-2 text-label text-ink-muted"
                 >
                   <Switch
                     checked={policy.required}
@@ -358,17 +358,17 @@
           <Table.Row class={online ? "" : "opacity-50"}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)]"
+              class="sticky left-0 z-10 h-auto bg-surface-raised px-space-4 py-space-2"
               scope="row"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <span class="flex items-center gap-[var(--space-2)]">
+              <span class="flex items-center gap-space-2">
                 <OsMark
                   class="size-icon-md shrink-0 text-ink-muted"
                   os={machine.os}
                 />
                 <span class="flex min-w-0 flex-col">
-                  <span class="flex items-center gap-[var(--space-2)]">
+                  <span class="flex items-center gap-space-2">
                     <span class="truncate text-label text-ink-strong"
                       >{machineLabel(machine.hostname)}</span
                     >
@@ -386,7 +386,7 @@
             </Table.Head>
             {#each columns as spec (spec.id)}
               <Table.Cell
-                class="group/cell border-l border-border px-[var(--space-4)] py-[var(--space-2)] whitespace-normal"
+                class="group/cell border-l border-border px-space-4 py-space-2 whitespace-normal"
               >
                 {@render cell(machine, spec, online)}
               </Table.Cell>
@@ -399,11 +399,9 @@
 {/if}
 
 <style>
+  /* residual: unmapped */
   /* The matrix scrolls sideways inside the section; the page never does. */
   .matrix {
-    overflow-x: auto;
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
     box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
 </style>

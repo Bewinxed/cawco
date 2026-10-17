@@ -774,11 +774,15 @@
         cwd: row.s.cwd,
         id: row.s.id,
       })}
-    <li data-row={row.s.id} {@attach item(row.s.id)}>
-      <div class="rin">
+    <li class="relative" data-row={row.s.id} {@attach item(row.s.id)}>
+      <div
+        class="min-w-0"
+        style:--fault-end="var(--row-compact-pad-end)"
+        style:--fault-indent="calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px))"
+      >
         <div
           data-slot="row"
-          class="row mark-line"
+          class="mark-line group flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) py-0 pr-(--row-compact-pad-end) pl-(--row-compact-gap) text-ink-strong @max-stop-tray/stop-tray:data-away:flex-wrap"
           data-away={row.state === "away" || undefined}
         >
           <TreeMark
@@ -789,45 +793,74 @@
             status={markOf(row)}
           >
             {#snippet face()}
-              <Sprite aria-hidden="true" class="stop-mark-glyph" />
+              <Sprite aria-hidden="true" class="size-icon-sm" />
             {/snippet}
           </TreeMark>
-          <span data-slot="title" class="title"
+          <span data-slot="title" class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
             ><span class="sr-only">{status.word}: </span>
             {#if shownAs.href}
-              <a href={shownAs.href}>{title}</a>
+              <a
+                class="text-inherit no-underline hover:underline hover:underline-offset-3"
+                href={shownAs.href}>{title}</a
+              >
             {:else}
               {title}
             {/if}</span
           >
+          <!-- literal: 16px, 13ch -->
           <span
-            class="stat mark-line {status.tone}"
+            class="mark-line inline-flex min-w-(--stat-min) flex-none items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:min-w-(--stat-min-narrow) @max-stop-tray/stop-tray:group-data-away:order-1 @max-stop-tray/stop-tray:group-data-away:basis-full @max-stop-tray/stop-tray:group-data-away:min-w-0 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
+            style:--stat-away-indent="calc(var(--mark-size, 18px) + var(--row-compact-gap))"
+            style:--stat-min="calc(16px + var(--space-1) + 13ch)"
+            style:--stat-min-narrow="13ch"
           >
-            <span data-slot="glyph" class="glyph" data-box>
+            <span
+              data-slot="glyph"
+              class="inline-grid flex-none @max-stop-tray/stop-tray:hidden {status.tone === 'working' ? 'text-status-live-glyph' : status.tone === 'attention' ? 'text-status-attn-glyph' : status.tone === 'failed' ? 'text-status-fail-glyph' : status.tone === 'quiet' ? 'text-status-idle-glyph' : ''}"
+              data-box
+            >
               {#key status.word}
-                <span data-slot="mark" class="mark" in:glyphIn out:glyphOut>
+                <span
+                  data-slot="mark"
+                  class="col-start-1 row-start-1 inline-flex"
+                  in:glyphIn
+                  out:glyphOut
+                >
                   {#if status.icon}
-                    <status.icon aria-hidden="true" />
+                    <status.icon aria-hidden="true" class="size-icon-md" />
                   {:else}
-                    <Spinner aria-hidden="true" role="presentation" />
+                    <Spinner
+                      aria-hidden="true"
+                      class="size-icon-md"
+                      role="presentation"
+                    />
                   {/if}
                 </span>
               {/key}
             </span>
-            <span class="word"><MorphText text={status.word} /></span>
+            <span class={status.tone === "failed" ? "text-status-fail-ink" : ""}
+              ><MorphText text={status.word} /></span
+            >
           </span>
-          <span data-slot="num" class="trail num">{trailOf(row)}</span>
+          <!-- literal: 3ch -->
+          <span
+            data-slot="num"
+            class="num w-(--trail-w) flex-none type-meta text-end whitespace-nowrap text-ink-muted"
+            style:--trail-w="3ch">{trailOf(row)}</span
+          >
         </div>
         <RowFault
           again={() => stop([row.s.id])}
-          class="err"
           reason={row.state === "failed" ? row.error : null}
         />
       </div>
       {#if kids.length > 0}
-        <ul class="kit-nest" {@attach nestFrom(".tree-mark")}>
+        <ul
+          class="kit-nest m-0 list-none p-0"
+          {@attach nestFrom(".tree-mark")}
+        >
           {@render branch(row.s.id)}
         </ul>
       {/if}
@@ -839,11 +872,12 @@
   {#each arrivals as arrival (arrival.id)}
     {@const Sprite = sessionSprite(arrival.id)}
     <span
-      class="landed"
+      class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay text-mark-glyph"
       style:--fill={arrival.fill}
+      style:--landed-icon="calc(var(--btn-icon) * 2 / 3)"
       out:intoRing
       {@attach land(() => `${uid}-stop:${arrival.id}`, { uniform: true })}
-      ><Sprite aria-hidden="true" /></span
+      ><Sprite aria-hidden="true" class="size-(--landed-icon)" /></span
     >
   {/each}
 {/snippet}
@@ -852,22 +886,33 @@
   <!-- Unfolds under what asked for it, in the page's flow. -->
   <section
     aria-labelledby="{uid}-title"
-    class={cn("stop-tray", className)}
+    class={cn(
+      "@container/stop-tray min-w-0 py-space-1 ps-(--ask-indent) pe-(--ask-end)",
+      className
+    )}
     data-stop-tray={projectId}
     transition:unfold
     {@attach unfoldHere}
   >
-    <div data-slot="tile" class="tile">
-      <div data-slot="head" class="head">
+    <div
+      data-slot="tile"
+      class="grid gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+    >
+      <div data-slot="head" class="flex min-w-0 gap-space-3">
         <!-- The caller's place in the tray's head: empty, it takes no room. -->
-        <div aria-hidden="true" class="caw-slot">{@render head?.()}</div>
-        <div data-slot="words" class="words">
-          <p data-slot="title" class="title" id="{uid}-title">{words.title}</p>
+        <div
+          aria-hidden="true"
+          class="aspect-square flex-none self-stretch empty:hidden"
+        >{@render head?.()}</div>
+        <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
+          <p data-slot="title" class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong" id="{uid}-title">
+            {words.title}
+          </p>
           <!-- As wide as the head, whatever its words: sized to them, it
                followed the morph's own box and narrowed mid-morph. Its
                words say each state ("Stopped 3 sessions."), so they are
                announced as they change. -->
-          <p aria-live="polite" class="line">
+          <p aria-live="polite" class="m-0 type-meta text-ink-muted">
             <MorphText text={description} wrap />
           </p>
           <!-- The end, or the other way out, refused: the hub's words, where
@@ -880,13 +925,18 @@
         <ul
           data-slot="sessions"
           aria-label="Running sessions"
-          class="sessions"
+          class="mx-(--pull-x) my-(--pull-y) list-none overflow-x-clip px-space-2 py-space-1"
+          style:--pull-x="calc(-1 * var(--space-2))"
+          style:--pull-y="calc(-1 * var(--space-1))"
           {@attach echoBeat()}
         >
           {@render branch(null)}
         </ul>
       {/if}
-      <div data-slot="actions" class="actions">
+      <div
+        data-slot="actions"
+        class="flex flex-wrap justify-end gap-space-2"
+      >
         <Button
           data-stop-cancel
           label={cancelLabel}
@@ -919,211 +969,3 @@
     </div>
   </section>
 {/if}
-
-<style>
-  /* Under its control, in the page's flow, as a question asked there
-     (AskHere) stands: a raised tile, indented as its host says. Its own
-     width decides its rows' shape, so the rail and a phone read alike. */
-  .stop-tray {
-    container: stop-tray / inline-size;
-    min-inline-size: 0;
-    padding-block: var(--space-1);
-    padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
-  }
-  /* A delegate's mark, sized here as SessionMark sizes its own: under
-     SessionMark's class it took that size only while SessionMark's global
-     rule was loaded. */
-  .stop-tray :global(.stop-mark-glyph) {
-    inline-size: 12px;
-    block-size: 12px;
-  }
-  .tile {
-    display: grid;
-    gap: var(--space-3);
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-raised);
-  }
-  /* The caller's slot leads the head, as tall as the title and its line;
-     empty, it is not drawn at all. */
-  .head {
-    display: flex;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .caw-slot {
-    flex: none;
-    align-self: stretch;
-    aspect-ratio: 1;
-  }
-  .caw-slot:empty {
-    display: none;
-  }
-  .words {
-    display: grid;
-    flex: 1 1 auto;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .title {
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .line {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-
-  /* The rows: the rail's compact session row, nested as the rail nests
-     delegates. */
-  .sessions,
-  .sessions :global(ul) {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .sessions {
-    /* The status dot and the echo stand out of the tile: room for them. */
-    margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
-    padding: var(--space-1) var(--space-2);
-    overflow-x: clip;
-  }
-  .sessions :global(li) {
-    position: relative;
-  }
-  .rin {
-    min-inline-size: 0;
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--row-compact-gap);
-    min-block-size: var(--row-compact-h);
-    padding: 0 var(--row-compact-pad-end) 0 var(--row-compact-gap);
-    color: var(--ink-strong);
-  }
-  .title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .title a {
-    color: inherit;
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .title a:hover {
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-  }
-  .stat {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-1);
-    /* As wide as its longest word ("Couldn't stop"), so the title beside it
-       holds still as the word changes. */
-    min-inline-size: calc(16px + var(--space-1) + 13ch);
-    color: var(--ink-muted);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    white-space: nowrap;
-  }
-  .glyph {
-    display: inline-grid;
-    flex: none;
-  }
-  .mark {
-    grid-area: 1 / 1;
-    display: inline-flex;
-  }
-  .stat :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .working .glyph {
-    color: var(--status-live-glyph);
-  }
-  .attention .glyph {
-    color: var(--status-attn-glyph);
-  }
-  .failed .glyph {
-    color: var(--status-fail-glyph);
-  }
-  .failed .word {
-    color: var(--status-fail-ink);
-  }
-  .quiet .glyph {
-    color: var(--status-idle-glyph);
-  }
-  .trail {
-    flex: none;
-    inline-size: 3ch;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-    text-align: end;
-    white-space: nowrap;
-  }
-  /* Why it could not be stopped, under the row, from where its title starts. */
-  .rin > :global(.err) {
-    --fault-indent: calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px));
-    --fault-end: var(--row-compact-pad-end);
-  }
-  /* A narrow tray (a phone, the rail): the word alone says the status. */
-  @container stop-tray (width < 420px) {
-    .glyph {
-      display: none;
-    }
-    .stat {
-      min-inline-size: 13ch;
-    }
-    /* "Stops when <machine> is back" left the title a few letters: the row
-       stands on two lines, the word under the title, where the title starts. */
-    .row[data-away] {
-      flex-wrap: wrap;
-    }
-    .row[data-away] .stat {
-      order: 1;
-      flex-basis: 100%;
-      min-inline-size: 0;
-      padding-inline-start: calc(
-        var(--mark-size, 18px) + var(--row-compact-gap)
-      );
-      padding-block-end: var(--space-1);
-    }
-  }
-
-  /* A row's tile, landed in the button's slot: the tile at the slot's size. */
-  .landed {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-xs);
-    background-color: var(--fill);
-    background-image: var(--mark-overlay);
-    color: var(--mark-glyph);
-
-    /* The sprite at the share of the tile it has on a row (12 of 18px). */
-    & :global(svg) {
-      inline-size: calc(var(--btn-icon) * 2 / 3);
-      block-size: calc(var(--btn-icon) * 2 / 3);
-    }
-  }
-</style>

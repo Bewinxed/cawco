@@ -47,7 +47,7 @@
   <RegionHeld />
   {@render children()}
   {#snippet failed(_error, reset)}
-    <div class="region-failed" data-region-failed={region}>
+    <div class="flex-auto min-w-0 p-space-3" data-region-failed={region}>
       <Alert variant="warning">
         <AlertDescription
           >The {region} stopped after an error. {kept ?? ""} The rest of the page
@@ -65,11 +65,3 @@
     </div>
   {/snippet}
 </svelte:boundary>
-
-<style>
-  .region-failed {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    padding: var(--space-3);
-  }
-</style>

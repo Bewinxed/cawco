@@ -60,7 +60,10 @@
     viewBox="0 0 {box} {box}"
     width={box}
   >
-    <g data-shown={!finished}>
+    <g
+      class="origin-center transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
+      data-shown={!finished}
+    >
       <circle
         class="stroke-border"
         cx={box / 2}
@@ -70,7 +73,7 @@
         stroke-width={stroke}
       />
       <circle
-        class="arc"
+        class="arc origin-center -rotate-90 transition-[stroke-dasharray] dur-pop ease-out motion-reduce:dur-control"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -81,7 +84,10 @@
         stroke-width={stroke}
       />
     </g>
-    <g class="text-success-9" data-shown={finished}>
+    <g
+      class="origin-center text-success-9 transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
+      data-shown={finished}
+    >
       <polyline
         fill="none"
         points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box *
@@ -96,37 +102,13 @@
 {/if}
 
 <style>
+  /* residual: unmapped */
   /* Wound from the top, as a clock is read. */
   .task-ring .arc {
     transform-box: view-box;
-    transform-origin: center;
-    rotate: -90deg;
-    transition: stroke-dasharray var(--dur-pop) var(--ease-out);
   }
 
   .task-ring g {
     transform-box: fill-box;
-    transform-origin: center;
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      scale var(--dur-exit) var(--ease-out);
-  }
-
-  .task-ring g[data-shown="false"] {
-    opacity: 0;
-    scale: 0.6;
-  }
-
-  /* Clamped, never zeroed, and the travel goes — the swap still reads as one
-     thing becoming another rather than two frames. */
-  @media (prefers-reduced-motion: reduce) {
-    .task-ring .arc,
-    .task-ring g {
-      transition-duration: var(--dur-control);
-    }
-
-    .task-ring g[data-shown="false"] {
-      scale: 1;
-    }
   }
 </style>

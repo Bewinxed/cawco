@@ -208,7 +208,11 @@
     {/if}
   </ContextMenu.Content>
 </ContextMenu.Root>
-<AskHere asker={machineAsks} at={machine.machineId} class="machine-ask" />
+<AskHere
+  asker={machineAsks}
+  at={machine.machineId}
+  data-slot="machine-menu-ask"
+/>
 
 {#if isMac}
   <UnlockKeychain {machine} bind:open={unlocking} />

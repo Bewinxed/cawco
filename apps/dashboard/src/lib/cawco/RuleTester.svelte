@@ -62,13 +62,13 @@
 </script>
 
 <div
-  class="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--surface-recess)] p-3"
+  class="flex flex-col gap-2 rounded-md bg-surface-recess p-3"
 >
   <div class="flex flex-wrap items-baseline justify-between gap-2">
     <span class="text-label text-ink-strong">Try it</span>
     <span
       aria-live="polite"
-      class="text-meta transition-colors duration-(--dur-pop) ease-out {firing
+      class="text-meta transition-colors dur-pop ease-out {firing
         ? 'text-success-9'
         : 'text-ink-muted'}"
       role="status"
@@ -79,7 +79,7 @@
 
   <Textarea
     aria-label="Sample text to test this rule against"
-    class="resize-y bg-surface-page font-mono text-label"
+    class="resize-y bg-surface-page font-(family-name:--font-mono) text-label"
     placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
     rows={3}
     spellcheck="false"
@@ -92,20 +92,29 @@
          over --dur-control while the words stay put. -->
     <div
       data-slot="grid"
-      class="preview relative grid max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-surface-page font-mono text-label leading-relaxed"
+      class="relative grid max-h-40 overflow-y-auto rounded-sm bg-surface-page font-(family-name:--font-mono) text-label leading-relaxed"
     >
-      <p data-slot="layer" class="layer">{sample}</p>
+      <!-- literal: 12px -->
+      <p
+        data-slot="layer"
+        class="col-start-1 row-start-1 p-(--layer-pad) break-words whitespace-pre-wrap"
+        style:--layer-pad="12px"
+      >
+        {sample}
+      </p>
       {#key marked}
+        <!-- literal: 12px -->
         <p
           data-slot="layer"
           aria-hidden="true"
-          class="layer marks"
+          class="col-start-1 row-start-1 p-(--layer-pad) break-words whitespace-pre-wrap text-transparent"
+          style:--layer-pad="12px"
           in:crossIn
           out:crossOut
         >
           {#each segments as segment, index (index)}
             {#if segment.hit}
-              <mark class="rounded-[var(--radius-xs)] bg-success-9/25"
+              <mark class="rounded-xs bg-success-9/25 text-transparent"
                 >{segment.text}</mark
               >
             {:else}
@@ -117,18 +126,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .layer {
-    grid-area: 1 / 1;
-    padding: 12px;
-    overflow-wrap: break-word;
-    white-space: pre-wrap;
-  }
-  /* Only the marks' fill shows: the words are the ones drawn under them,
-     which is why a mark takes no padding of its own. */
-  .marks,
-  .marks mark {
-    color: transparent;
-  }
-</style>
