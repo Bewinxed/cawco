@@ -48,4 +48,4 @@ none
 - LinkMarketplacePopover.svelte:150 Popover.Content gap-3, p-3; :169, :193 Input font-mono
 - NewMemoryPopover.svelte:100 Popover.Content gap-3, p-3; :121 Input font-mono
 - PickerChip.svelte:50 Popover.Trigger gap-(--chip-gap), px-(--chip-pad), border, border-border-control, rounded-md, bg-surface-raised, type-label, text-ink-strong, transition-control, hover:bg-surface-hover; :57 Popover.Content max-h-80, w-64, gap-0
-Not no-restyle but remaining: EditorFrame.svelte:189 shadcn/require-static-classes (class={buttonVariants(...)}, pre-existing).
+EditorFrame trigger: the dropdown trigger now renders through `child` snippet as Button variant=ghost size=icon (same button, same classes) so its class is static; the require-static-classes hit is gone.

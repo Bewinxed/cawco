@@ -25,7 +25,7 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore, IconTrash } from "#lib/icons.js";
@@ -184,11 +184,17 @@
         {#if ondelete && deleteLabel}
           <span class="hidden max-phone:inline-flex">
             <DropdownMenu.Root>
-              <DropdownMenu.Trigger
-                aria-label={configureWords.more}
-                class={buttonVariants({ variant: "ghost", size: "icon" })}
-              >
-                <IconMore />
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    aria-label={configureWords.more}
+                    size="icon"
+                    variant="ghost"
+                  >
+                    <IconMore />
+                  </Button>
+                {/snippet}
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end" class="w-auto min-w-44">
                 <DropdownMenu.Item
