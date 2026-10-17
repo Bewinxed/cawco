@@ -102,7 +102,7 @@
 
 <a
   data-slot="task-card"
-  class="task-card press-tint focus-inset flex cursor-pointer flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] dur-control ease-out data-dragging:opacity-40 hover:bg-surface-hover"
+  class="press-tint focus-inset flex cursor-pointer flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] dur-control ease-out data-dragging:opacity-40 hover:bg-surface-hover"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
