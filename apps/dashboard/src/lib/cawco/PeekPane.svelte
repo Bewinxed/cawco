@@ -401,14 +401,14 @@
       ? "asked a question"
       : request.presentation.summary}
     <div
-      class="flex flex-col gap-2 border-t border-border/50 bg-[var(--status-attn-bg)] px-4 py-3"
+      class="flex flex-col gap-2 border-t border-border/50 bg-status-attn-bg px-4 py-3"
     >
       <p class="text-body">{summary}</p>
       {#if !question && request.presentation.command}
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
           data-slot="block"
-          class="block truncate whitespace-pre border-l-2 border-[var(--border-hairline)] ps-2 font-mono text-meta text-[var(--ink-muted)]"
+          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-mono text-meta text-ink-muted"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}

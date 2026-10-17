@@ -127,7 +127,7 @@
    * a start-aligned block set in the middle.
    */
   const STATEFUL =
-    "m-auto max-w-[46ch] items-center px-[var(--space-6)] text-center";
+    "m-auto max-w-[46ch] items-center px-space-6 text-center";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):

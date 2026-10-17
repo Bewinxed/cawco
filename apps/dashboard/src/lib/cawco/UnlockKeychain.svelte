@@ -166,15 +166,18 @@
   <section
     data-slot="unlock"
     aria-labelledby="{id}-title"
-    class="unlock"
+    class="min-w-0 px-space-2 py-space-1"
     transition:unfold
     {@attach arrive}
   >
-    <div data-slot="tile" class="tile">
+    <div
+      data-slot="tile"
+      class="relative grid rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+    >
       {#key view}
         <div
-          class="flex flex-col gap-[var(--space-3)]"
-          style:min-height={phase.kind === "working" ? `${held}px` : undefined}
+          class="flex min-h-(--held-min) flex-col gap-space-3"
+          style:--held-min={phase.kind === "working" ? `${held}px` : undefined}
           in:crossIn
           out:crossOut
         >
@@ -190,19 +193,19 @@
               }}
             />
           {:else}
-            <div class="flex flex-col gap-[var(--space-1)]">
-              <p data-slot="title" class="title mark-line" id="{id}-title">
+            <div class="flex flex-col gap-space-1">
+              <p data-slot="title" class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong" id="{id}-title">
                 <IconKey class="size-icon-md text-warning-9" />
                 <span>Unlock {machine.hostname}</span>
               </p>
-              <p data-slot="body" class="body">
+              <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted">
                 Its login keychain is locked, so Claude Code there cannot read
                 its credentials. This is the macOS login password for that
                 machine.
               </p>
             </div>
 
-            <form class="flex flex-col gap-[var(--space-2)]" onsubmit={unlock}>
+            <form class="flex flex-col gap-space-2" onsubmit={unlock}>
               <Input
                 aria-describedby={phase.kind === "error"
                   ? `${id}-error`
@@ -219,17 +222,21 @@
               />
 
               {#if phase.kind === "error"}
-                <p class="fail" id="{id}-error" role="alert">
+                <p
+                  class="m-0 type-meta text-status-fail-ink"
+                  id="{id}-error"
+                  role="alert"
+                >
                   {phase.message}
                 </p>
               {:else}
-                <p data-slot="body" class="body" id="{id}-note">
+                <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted" id="{id}-note">
                   Sent over your tunnel to that machine, used once, and not
                   stored anywhere.
                 </p>
               {/if}
 
-              <div class="flex justify-end gap-[var(--space-2)]">
+              <div class="flex justify-end gap-space-2">
                 <Button onclick={close} size="sm" type="button" variant="ghost">
                   Cancel
                 </Button>
@@ -244,40 +251,3 @@
     </div>
   </section>
 {/if}
-
-<style>
-  /* Under the machine's row, inside the list's edges: the in-page tile
-     (AskHere's), the rest of the list live around it. */
-  .unlock {
-    min-inline-size: 0;
-    padding: var(--space-1) var(--space-2);
-  }
-  .tile {
-    position: relative;
-    display: grid;
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-raised);
-  }
-  .title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .body {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-  }
-  .fail {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

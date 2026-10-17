@@ -76,19 +76,28 @@
   <div
     data-slot="row-fault"
     data-row-fault
-    class={cn("row-fault", className)}
+    class={cn("min-w-0", className)}
     {...rest}
     transition:unfold
   >
     {#if children}
       {@render children()}
     {:else}
-      <div class="line">
-        <p data-slot="reason" class="reason" role="alert">{said}</p>
+      <div
+        class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 ps-(--fault-indent) pe-(--fault-end) py-space-1"
+      >
+        <p
+          data-slot="reason"
+          class="m-0 min-w-0 flex-initial type-meta text-(--reason-ink) wrap-anywhere"
+          role="alert"
+          style:--reason-ink="var(--fault-ink, var(--status-fail-ink))"
+        >
+          {said}
+        </p>
         {#if again}
           <Button
             data-again
-            class="again"
+            class="flex-none"
             icon={IconRefresh}
             label={againLabel}
             onclick={tryAgain}
@@ -102,34 +111,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  /* One line under the row, from where the row's words start (the caller
-     sets --fault-indent to its mark's column): the reason in the fail
-     status's ink (or the caller's --fault-ink, where nothing failed), the
-     way on beside it, wrapping under it when narrow. */
-  .row-fault {
-    min-width: 0;
-  }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    column-gap: var(--space-2);
-    row-gap: var(--space-1);
-    padding-block: var(--space-1);
-    padding-inline: var(--fault-indent, 0) var(--fault-end, 0);
-    min-width: 0;
-  }
-  .reason {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--fault-ink, var(--status-fail-ink));
-    overflow-wrap: anywhere;
-  }
-  .line > :global(.again) {
-    flex: none;
-  }
-</style>

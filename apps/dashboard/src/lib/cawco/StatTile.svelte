@@ -30,81 +30,28 @@
   }: Props = $props();
 </script>
 
-<div class="st-card" data-tone={tone} {...rest}>
-  <span class="st-label">{label}</span>
-  <span class="st-figure">
+<div
+  class="group flex h-full min-h-c-stat-h flex-col justify-start gap-space-2 rounded-lg bg-surface-raised px-space-5 py-space-4 shadow-tile"
+  data-tone={tone}
+  {...rest}
+>
+  <span class="type-label text-ink-muted">{label}</span>
+  <span class="flex flex-wrap items-baseline gap-x-space-2">
     <!-- A new figure morphs out of the old one, digit by digit, in place. -->
-    <span data-slot="num" class="st-value num"
+    <!-- literal: 1lh -->
+    <span
+      data-slot="num"
+      class="num min-h-(--line-min) type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink max-desk:type-title"
+      style:--line-min="1lh"
       ><MorphText text={String(value)} /></span
     >
     {#if unit}
       {#key unit}
-        <span data-slot="num" class="st-unit num" data-flip="pop">{unit}</span>
+        <span data-slot="num" class="num type-meta text-ink-muted" data-flip="pop">{unit}</span>
       {/key}
     {/if}
   </span>
   {#if action}
-    <span class="st-action">{@render action()}</span>
+    <span class="flex flex-wrap items-center gap-space-2">{@render action()}</span>
   {/if}
 </div>
-
-<style>
-  .st-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: var(--space-2);
-    block-size: 100%;
-    min-block-size: var(--c-stat-h);
-    padding: var(--space-4) var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .st-label {
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  /* The value and its unit share a baseline; a long unit wraps under the
-     value rather than pushing out of the tile. */
-  .st-figure {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    column-gap: var(--space-2);
-  }
-  /* The line stands even for an empty figure, so nothing below it moves
-     when one lands. */
-  .st-value {
-    min-block-size: 1lh;
-    font: var(--type-kpi);
-    color: var(--ink-stat);
-  }
-  .st-card[data-tone="live"] .st-value {
-    color: var(--status-live-ink);
-  }
-  .st-card[data-tone="attn"] .st-value {
-    color: var(--status-attn-ink);
-  }
-  .st-card[data-tone="done"] .st-value {
-    color: var(--status-done-ink);
-  }
-  .st-card[data-tone="fail"] .st-value {
-    color: var(--status-fail-ink);
-  }
-  .st-action {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .st-unit {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  @media (max-width: 900px) {
-    .st-value {
-      font: var(--type-title);
-    }
-  }
-</style>
