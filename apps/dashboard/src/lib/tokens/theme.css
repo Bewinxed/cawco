@@ -47,6 +47,8 @@
   --color-spark: var(--spark);
   --color-paper: var(--paper);
   --color-crow-ink: var(--crow-ink);
+  --color-opencode-logo-core: var(--opencode-logo-core);
+  --color-opencode-logo-frame: var(--opencode-logo-frame);
   --color-error-3: var(--error-3);
   --color-error-9: var(--error-9);
   --color-error-11: var(--error-11);
@@ -105,6 +107,13 @@
   --color-surface-raised: var(--surface-raised);
   --color-surface-card: var(--surface-card);
   --color-surface-recess: var(--surface-recess);
+  --color-surface-recess-clear: var(--surface-recess-clear);
+  --color-mask-opaque: var(--mask-opaque);
+  --color-mask-opaque-a10: var(--mask-opaque-a10);
+  --color-mask-opaque-a15: var(--mask-opaque-a15);
+  --color-mask-opaque-a50: var(--mask-opaque-a50);
+  --color-mask-opaque-a60: var(--mask-opaque-a60);
+  --color-mask-opaque-a90: var(--mask-opaque-a90);
   --color-surface-band: var(--surface-band);
   --color-surface-recess-deep: var(--surface-recess-deep);
   --color-surface-well: var(--surface-well);
@@ -389,6 +398,8 @@
   --spacing-c-tray-gap: var(--c-tray-gap);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-tray-row: var(--c-tray-row);
+  --spacing-c-tray-chip-min: var(--c-tray-chip-min);
+  --spacing-c-tray-chip-max: var(--c-tray-chip-max);
   --spacing-icon-sm: var(--icon-sm);
   --spacing-icon-md: var(--icon-md);
   --spacing-icon-lg: var(--icon-lg);
@@ -429,6 +440,7 @@
   --duration-wait-grace: var(--dur-wait-grace);
   --duration-pop: var(--dur-pop);
   --duration-panel: var(--dur-panel);
+  --duration-pick-up: var(--dur-pick-up);
   --duration-grow: var(--dur-grow);
   --duration-grow-exit: var(--dur-grow-exit);
   --duration-lift: var(--dur-lift);
@@ -615,6 +627,90 @@
 
 @utility transition-control {
   transition: var(--transition-control);
+}
+
+@utility transition-fade-show {
+  transition: var(--transition-fade-show);
+}
+
+@utility transition-fade-hide {
+  transition: var(--transition-fade-hide);
+}
+
+@utility transition-exit-show {
+  transition: var(--transition-exit-show);
+}
+
+@utility transition-exit-hide {
+  transition: var(--transition-exit-hide);
+}
+
+@utility transition-fade-slide {
+  transition: var(--transition-fade-slide);
+}
+
+@utility transition-tint-press {
+  transition: var(--transition-tint-press);
+}
+
+@utility transition-control-press {
+  transition: var(--transition-control-press);
+}
+
+@utility transition-control-scale {
+  transition: var(--transition-control-scale);
+}
+
+@utility transition-control-slide {
+  transition: var(--transition-control-slide);
+}
+
+@utility transition-control-ring {
+  transition: var(--transition-control-ring);
+}
+
+@utility transition-tint-scale {
+  transition: var(--transition-tint-scale);
+}
+
+@utility transition-pick-card {
+  transition: var(--transition-pick-card);
+}
+
+@utility transition-frame-end-first {
+  transition: var(--transition-frame-end-first);
+}
+
+@utility transition-frame-start-first {
+  transition: var(--transition-frame-start-first);
+}
+
+@utility transition-split-surface {
+  transition: var(--transition-split-surface);
+}
+
+@utility transition-ring-arc {
+  transition: var(--transition-ring-arc);
+}
+
+@utility transition-rail-tip {
+  transition: var(--transition-rail-tip);
+}
+
+@utility transition-panel-travel {
+  transition: var(--transition-panel-travel);
+}
+
+@utility transition-panel-resize {
+  transition: var(--transition-panel-resize);
+}
+
+@utility transition-suggest-chip {
+  transition: var(--transition-suggest-chip);
+}
+
+@utility transition-segment {
+  transition: var(--transition-segment);
 }
 
 @utility liga-none {

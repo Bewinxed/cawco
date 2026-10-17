@@ -344,7 +344,7 @@
           aria-busy={opening}
           data-slot="aname"
           style:--name-offset="0.2em"
-          class="py-space-1 px-0 border-none border-current bg-transparent text-ink-strong cursor-pointer underline decoration-(--link-underline) underline-offset-(--name-offset) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
+          class="py-space-1 px-0 border-none border-current bg-transparent text-ink-strong cursor-pointer underline decoration-current/35 underline-offset-(--name-offset) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.name}"
           type="button"

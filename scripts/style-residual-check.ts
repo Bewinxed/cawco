@@ -23,6 +23,7 @@
  *   bun scripts/style-residual-check.ts <file…>             a lane: at most 5 unmapped declarations per file
  *   bun scripts/style-residual-check.ts --no-cap <file…>    an Opus lane: unmapped uncapped
  *   bun scripts/style-residual-check.ts                     every .svelte under apps/dashboard/src: unmapped must be 0
+ *   bun scripts/style-residual-check.ts --list [file…]      also print every unmapped declaration as `file:line  property: value`
  *
  * Prints, per file with a `<style>`, its declarations by kind, then each
  * violation as `file:line  what`. Exits 1 on any violation.
@@ -87,6 +88,8 @@ interface Report {
   counts: Record<Kind, number>;
   file: string;
   hasStyle: boolean;
+  /** Each unmapped declaration as `file:line  property: value`. */
+  unmapped: string[];
   violations: string[];
 }
 
@@ -171,7 +174,13 @@ function check(path: string): Report {
     Kind,
     number
   >;
-  const report: Report = { file, hasStyle: false, counts, violations: [] };
+  const report: Report = {
+    file,
+    hasStyle: false,
+    counts,
+    unmapped: [],
+    violations: [],
+  };
   let ast: ReturnType<typeof parse>;
   try {
     ast = parse(source, { modern: true });
@@ -231,6 +240,11 @@ function check(path: string): Report {
     if (kind) {
       counts[kind] += 1;
     }
+    if (kind === "unmapped") {
+      report.unmapped.push(
+        `${at(node.start)}  ${node.property}: ${(node.value ?? "").replace(/\s+/g, " ").trim()}`
+      );
+    }
     for (const literal of literals(node.value ?? "")) {
       report.violations.push(
         `${at(node.start)}  ${node.property}: ${node.value}  holds a ${literal} (only var(--…), calc() of them, 0, 1px, 2px, percentages and keywords)`
@@ -288,7 +302,8 @@ function svelteFiles(dir: string): string[] {
 
 const args = process.argv.slice(2);
 const noCap = args.includes("--no-cap");
-const named = args.filter((arg) => arg !== "--no-cap");
+const list = args.includes("--list");
+const named = args.filter((arg) => arg !== "--no-cap" && arg !== "--list");
 const whole = named.length === 0;
 const files = whole
   ? svelteFiles(SOURCE)
@@ -327,6 +342,11 @@ for (const path of files) {
     );
   } else if (!whole) {
     console.log(`${report.file}: no <style>`);
+  }
+  if (list) {
+    for (const line of report.unmapped) {
+      console.log(`  unmapped ${line}`);
+    }
   }
   for (const line of report.violations) {
     console.log(`  ${line}`);

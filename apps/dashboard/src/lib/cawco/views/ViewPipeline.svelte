@@ -76,12 +76,11 @@
         class="block h-(--track-h) rounded-pill"
         style:--track-h="8px"
       >
-        <!-- literal: 2px; 260ms -->
+        <!-- literal: 2px -->
         <span
-          class="block h-full w-(--bar-w) min-w-(--bar-min) rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:duration-(--bar-dur) motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-dropped:bg-transparent group-kind-dropped:outline-1 group-kind-dropped:outline-dashed group-kind-dropped:outline-border-control group-kind-dropped:-outline-offset-1 group-kind-you:bg-brand-solid"
+          class="block h-full w-(--bar-w) min-w-(--bar-min) rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:dur-pop motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-dropped:bg-transparent group-kind-dropped:outline-1 group-kind-dropped:outline-dashed group-kind-dropped:outline-border-control group-kind-dropped:-outline-offset-1 group-kind-you:bg-brand-solid"
           style:--bar-w="{(count / most) * 100}%"
           style:--bar-min="2px"
-          style:--bar-dur="260ms"
         ></span>
       </span>
       <span

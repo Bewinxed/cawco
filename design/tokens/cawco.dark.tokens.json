@@ -505,6 +505,22 @@
         "components": [0.222, 0.006, 70]
       }
     },
+    "opencode-logo-core": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.294117647059, 0.274509803922, 0.274509803922],
+        "hex": "#4b4646"
+      }
+    },
+    "opencode-logo-frame": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.945098039216, 0.925490196078, 0.925490196078],
+        "hex": "#f1ecec"
+      }
+    },
     "surface-band": {
       "$type": "color",
       "$value": {
@@ -1563,6 +1579,19 @@
       "$extensions": {
         "dev.cawco": {
           "css": "oklch(from {color.background} l c h / {effect.scrim-mix})"
+        }
+      }
+    },
+    "surface-recess-clear": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.222, 0.006, 70],
+        "alpha": 0
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-recess} l c h / 0)"
         }
       }
     }

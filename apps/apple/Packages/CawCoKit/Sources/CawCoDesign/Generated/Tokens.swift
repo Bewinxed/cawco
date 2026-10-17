@@ -26,6 +26,10 @@ public enum Palette {
     public static let spark = Palette.named("spark")
     public static let paper = Palette.named("paper")
     public static let crowInk = Palette.named("crow-ink")
+    /// OpenCode's published square logo, its inner square: the brand's own colouring per scheme (https://opencode.ai/brand, logo light square and logo dark square), never a house colour.
+    public static let opencodeLogoCore = Palette.named("opencode-logo-core")
+    /// OpenCode's published square logo, its frame: the brand's own colouring per scheme (https://opencode.ai/brand), never a house colour.
+    public static let opencodeLogoFrame = Palette.named("opencode-logo-frame")
     /// Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action.
     public static let error3 = Palette.named("error-3")
     public static let error9 = Palette.named("error-9")
@@ -112,6 +116,20 @@ public enum Palette {
     public static let surfaceRaised = Palette.named("surface-raised")
     public static let surfaceCard = Palette.named("surface-card")
     public static let surfaceRecess = Palette.named("surface-recess")
+    /// The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue.
+    public static let surfaceRecessClear = Palette.named("surface-recess-clear")
+    /// An alpha mask's opaque stop. A mask reads alpha alone, so its colour never draws.
+    public static let maskOpaque = Palette.named("mask-opaque")
+    /// An alpha mask's stop at 10% (the phone tab strip's end fade).
+    public static let maskOpaqueA10 = Palette.named("mask-opaque-a10")
+    /// An alpha mask's stop at 15% (the phone tab strip's start fade).
+    public static let maskOpaqueA15 = Palette.named("mask-opaque-a15")
+    /// An alpha mask's stop at 50% (the phone tab strip's end fade).
+    public static let maskOpaqueA50 = Palette.named("mask-opaque-a50")
+    /// An alpha mask's stop at 60% (the phone tab strip's start fade).
+    public static let maskOpaqueA60 = Palette.named("mask-opaque-a60")
+    /// An alpha mask's stop at 90% (the phone tab strip's end fade).
+    public static let maskOpaqueA90 = Palette.named("mask-opaque-a90")
     /// A table's header band, one step under the field.
     public static let surfaceBand = Palette.named("surface-band")
     public static let surfaceRecessDeep = Palette.named("surface-recess-deep")
@@ -645,6 +663,10 @@ public enum Size {
     /// `cTrayGap` under a coarse pointer (touch).
     public static let cTrayGapCoarse: Double = 11
     public static let cTrayRow: Double = 35
+    /// A working tray chip's narrowest: the floor under its measured width.
+    public static let cTrayChipMin: Double = 120
+    /// A working tray chip's widest, past which its words truncate.
+    public static let cTrayChipMax: Double = 224
     public static let iconSm: Double = 12
     public static let iconMd: Double = 16
     public static let iconLg: Double = 20
@@ -818,6 +840,9 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
+    /// A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is.
+    /// In seconds.
+    public static let durPickUp: TimeInterval = 0.168
     /// The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited.
     /// In seconds.
     public static let durGrow: TimeInterval = 0.32

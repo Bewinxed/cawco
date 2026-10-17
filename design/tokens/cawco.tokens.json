@@ -414,6 +414,24 @@
         "hex": "#171715"
       }
     },
+    "opencode-logo-core": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.811764705882, 0.807843137255, 0.803921568627],
+        "hex": "#cfcecd"
+      },
+      "$description": "OpenCode's published square logo, its inner square: the brand's own colouring per scheme (https://opencode.ai/brand, logo light square and logo dark square), never a house colour."
+    },
+    "opencode-logo-frame": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.129411764706, 0.117647058824, 0.117647058824],
+        "hex": "#211e1e"
+      },
+      "$description": "OpenCode's published square logo, its frame: the brand's own colouring per scheme (https://opencode.ai/brand), never a house colour."
+    },
     "error-3": {
       "$type": "color",
       "$value": {
@@ -890,6 +908,74 @@
         "colorSpace": "oklch",
         "components": [0.967, 0.008, 84]
       }
+    },
+    "surface-recess-clear": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.967, 0.008, 84],
+        "alpha": 0
+      },
+      "$description": "The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-recess} l c h / 0)"
+        }
+      }
+    },
+    "mask-opaque": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "hex": "#000000"
+      },
+      "$description": "An alpha mask's opaque stop. A mask reads alpha alone, so its colour never draws."
+    },
+    "mask-opaque-a10": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0.1
+      },
+      "$description": "An alpha mask's stop at 10% (the phone tab strip's end fade)."
+    },
+    "mask-opaque-a15": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0.15
+      },
+      "$description": "An alpha mask's stop at 15% (the phone tab strip's start fade)."
+    },
+    "mask-opaque-a50": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0.5
+      },
+      "$description": "An alpha mask's stop at 50% (the phone tab strip's end fade)."
+    },
+    "mask-opaque-a60": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0.6
+      },
+      "$description": "An alpha mask's stop at 60% (the phone tab strip's start fade)."
+    },
+    "mask-opaque-a90": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0.9
+      },
+      "$description": "An alpha mask's stop at 90% (the phone tab strip's end fade)."
     },
     "surface-band": {
       "$type": "color",
@@ -4453,6 +4539,22 @@
         }
       }
     },
+    "c-tray-chip-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "A working tray chip's narrowest: the floor under its measured width."
+    },
+    "c-tray-chip-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 224,
+        "unit": "px"
+      },
+      "$description": "A working tray chip's widest, past which its words truncate."
+    },
     "icon-sm": {
       "$type": "dimension",
       "$value": {
@@ -5108,6 +5210,19 @@
         "unit": "ms"
       }
     },
+    "dur-pick-up": {
+      "$type": "duration",
+      "$value": {
+        "value": 168,
+        "unit": "ms"
+      },
+      "$description": "A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({motion.dur-panel} * 0.6)"
+        }
+      }
+    },
     "dur-grow": {
       "$type": "duration",
       "$value": {
@@ -5283,6 +5398,300 @@
       "$extensions": {
         "dev.cawco": {
           "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-fade-show": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-fade}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-fade} {motion.ease-out}, visibility 0s"
+        }
+      }
+    },
+    "transition-fade-hide": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-fade}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "Something stepping aside: its fade, and its visibility gone once the fade is done (the composer's parts under an ask, a drawing, a minimized pill).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-fade} {motion.ease-out}, visibility 0s linear {motion.dur-fade}"
+        }
+      }
+    },
+    "transition-exit-show": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-exit}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "The composer's tray coming back: the exit's beat, its visibility back at once.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility 0s"
+        }
+      }
+    },
+    "transition-exit-hide": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-exit}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "The composer's tray leaving: the exit's beat, its visibility gone once the fade is done.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-exit} {motion.ease-out}, visibility 0s {motion.dur-exit}"
+        }
+      }
+    },
+    "transition-fade-slide": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-fade}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A part that fades as it slides into place on the drawer curve (the composer's edit row, a question's parts).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-fade} {motion.ease-out}, translate {motion.dur-panel} {motion.ease-drawer}"
+        }
+      }
+    },
+    "transition-tint-press": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-control}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A chip's fill and ink on the control's beat, and its press scale (transform) on the toggle's (the tree's count, a needs card's chip, a notice row).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, transform {motion.dur-toggle} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-control-press": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-control}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "transition-control, and the press's transform on the toggle's beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, transform {motion.dur-toggle} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-control-scale": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-control}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "transition-control, and the press's scale property on the toggle's beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, scale {motion.dur-toggle} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-control-slide": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-control}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "transition-control, and a swiped row's translate home on the exit's beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, translate {motion.dur-exit} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-control-ring": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-control}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "transition-control, and a ring drawn as a box-shadow on the same beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, box-shadow {motion.dur-control} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-tint-scale": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-panel}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A chip whose fill and ink settle on the panel's beat, its press scale on the toggle's (a rollout's state chip).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "background-color {motion.dur-panel} {motion.ease-out}, color {motion.dur-panel} {motion.ease-out}, scale {motion.dur-toggle} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-pick-card": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-fade}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A choice card's outline and fill on the fade's beat, its press scale on the control's (the account strategy picker).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "border-color {motion.dur-fade} {motion.ease-out}, background-color {motion.dur-fade} {motion.ease-out}, scale {motion.dur-control} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-frame-end-first": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-fade}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-in-out}"
+      },
+      "$description": "A frame gliding between cards: its leading edge moves at once, its trailing edge a ghost's beat later, so it stretches then settles (the channel cards).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "inset-inline-end {motion.dur-fade} {motion.ease-in-out} 0ms, inset-inline-start {motion.dur-fade} {motion.ease-in-out} {motion.dur-ghost}"
+        }
+      }
+    },
+    "transition-frame-start-first": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-fade}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-in-out}"
+      },
+      "$description": "transition-frame-end-first's mirror, for a glide the other way.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "inset-inline-start {motion.dur-fade} {motion.ease-in-out} 0ms, inset-inline-end {motion.dur-fade} {motion.ease-in-out} {motion.dur-ghost}"
+        }
+      }
+    },
+    "transition-split-surface": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-panel}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A side surface sliding in beside the main pane: its fade and travel on ease-out, its room (padding) on the drawer curve.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "opacity {motion.dur-panel} {motion.ease-out}, transform {motion.dur-panel} {motion.ease-out}, padding {motion.dur-panel} {motion.ease-drawer}"
+        }
+      }
+    },
+    "transition-ring-arc": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-panel}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-in-out}"
+      },
+      "$description": "A usage ring's arc drawing to its new length, its stroke and fade on the toggle's beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "stroke-dashoffset {motion.dur-panel} {motion.ease-in-out}, stroke {motion.dur-toggle} {motion.ease-out}, opacity {motion.dur-toggle} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-rail-tip": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-morph}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-in-out}"
+      },
+      "$description": "A rail's selection tip gliding and resizing to its new item, fading on the control's beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "transform {motion.dur-morph} {motion.ease-in-out}, width {motion.dur-morph} {motion.ease-in-out}, opacity {motion.dur-control} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-panel-travel": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-panel}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-in-out}"
+      },
+      "$description": "A panel travelling to its new place on ease-in-out while it fades on ease-out (the new-session location panels).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "transform {motion.dur-panel} {motion.ease-in-out}, opacity {motion.dur-panel} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-panel-resize": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-toggle}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-in-out}"
+      },
+      "$description": "A panel moving and taking its new height on the toggle's beat, fading on the control's (the model list's panel).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "transform {motion.dur-toggle} {motion.ease-in-out}, height {motion.dur-toggle} {motion.ease-in-out}, opacity {motion.dur-control} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-suggest-chip": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-toggle}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A suggestion chip: its press on the toggle's beat, its tint and outline on the panel's, its ink on the control's.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "transform {motion.dur-toggle} {motion.ease-out}, background-color {motion.dur-panel} {motion.ease-out}, border-color {motion.dur-panel} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+        }
+      }
+    },
+    "transition-segment": {
+      "$type": "transition",
+      "$value": {
+        "duration": "{motion.dur-toggle}",
+        "delay": { "value": 0, "unit": "ms" },
+        "timingFunction": "{motion.ease-out}"
+      },
+      "$description": "A segmented control's thumb gliding and resizing to its tab, fading on the ghost's beat.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "transform {motion.dur-toggle} {motion.ease-out}, width {motion.dur-toggle} {motion.ease-out}, height {motion.dur-toggle} {motion.ease-out}, opacity {motion.dur-ghost} {motion.ease-out}"
         }
       }
     }

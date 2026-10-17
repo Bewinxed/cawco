@@ -158,7 +158,7 @@
           <a
             data-slot="name"
             style:--name-offset="0.2em"
-            class="text-ink-strong relative z-1 py-space-1 underline decoration-(--link-underline) underline-offset-(--name-offset) hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
+            class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-(--name-offset) hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
             href={conversationHref(senderId, cawco.instanceIndex)}>{row.name}</a
           >
         {:else}

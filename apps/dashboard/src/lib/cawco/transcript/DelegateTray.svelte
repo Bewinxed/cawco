@@ -1842,16 +1842,12 @@
   [data-slot="dot"] {
     animation-delay: var(--dot-delay);
   }
-  /* A working chip's floor and cap: 120px and 224px. fly() clones the chip
-     and rewrites the copy's inline style, so both come from here, where
-     the copy keeps them; the live chip's measured floor (inline --floor)
-     comes first. The size tokens integration adds take over; until then,
-     30 and 56 steps of --space-1 (4px) are the same 120px and 224px. */
+  /* A working chip's floor and cap (--c-tray-chip-min, --c-tray-chip-max).
+     fly() clones the chip and rewrites the copy's inline style, so both
+     come from here, where the copy keeps them; the live chip's measured
+     floor (inline --floor) comes first. */
   button[data-key][data-status] {
-    min-inline-size: var(
-      --floor,
-      var(--tray-chip-min, calc(var(--space-1) * 30))
-    );
-    max-inline-size: var(--tray-chip-max, calc(var(--space-1) * 56));
+    min-inline-size: var(--floor, var(--c-tray-chip-min));
+    max-inline-size: var(--c-tray-chip-max);
   }
 </style>

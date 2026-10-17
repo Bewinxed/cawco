@@ -92,15 +92,14 @@
            symmetric, and long enough that the card is seen arriving. The
            set-down is declared on the base rule and the pick-up on the
            lifted one, which is how a single `transition` property gets a
-           different value in each direction. The pick-up: 180ms, derived
-           from the base beat the way `--breath` is. Fewer and gentler under
+           different value in each direction. The pick-up is `--dur-pick-up`,
+           derived from the base beat the way `--breath` is. Fewer and gentler under
            reduced motion, not none: the fades stay, the movement goes. -->
       <div
         data-slot="lift"
-        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:duration-(--pick-up) motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-none"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-none"
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
-        style:--pick-up="calc(var(--dur-panel) * 0.6)"
       >
         <div data-slot="clip" class="flex min-h-0 min-w-0 flex-auto overflow-hidden">
           <PaneLeaf {leaf} swipeable={focused} />

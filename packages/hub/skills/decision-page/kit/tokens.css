@@ -24,6 +24,10 @@
     --spark: #f2d36b;
     --paper: #f4f0e6;
     --crow-ink: #171715;
+    /* OpenCode's published square logo, its inner square: the brand's own colouring per scheme (https://opencode.ai/brand, logo light square and logo dark square), never a house colour. */
+    --opencode-logo-core: light-dark(#cfcecd, #4b4646);
+    /* OpenCode's published square logo, its frame: the brand's own colouring per scheme (https://opencode.ai/brand), never a house colour. */
+    --opencode-logo-frame: light-dark(#211e1e, #f1ecec);
     /* Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action. */
     --error-3: light-dark(oklch(90% 0.05 12), oklch(30% 0.08 12));
     --error-9: light-dark(oklch(50% 0.17 15), oklch(58% 0.17 15));
@@ -137,6 +141,20 @@
     --surface-raised: light-dark(var(--neutral-1), var(--neutral-3));
     --surface-card: var(--surface-raised);
     --surface-recess: light-dark(oklch(96.7% 0.008 84), oklch(22.2% 0.006 70));
+    /* The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue. */
+    --surface-recess-clear: oklch(from var(--surface-recess) l c h / 0);
+    /* An alpha mask's opaque stop. A mask reads alpha alone, so its colour never draws. */
+    --mask-opaque: #000000;
+    /* An alpha mask's stop at 10% (the phone tab strip's end fade). */
+    --mask-opaque-a10: rgb(0 0 0 / 0.1);
+    /* An alpha mask's stop at 15% (the phone tab strip's start fade). */
+    --mask-opaque-a15: rgb(0 0 0 / 0.15);
+    /* An alpha mask's stop at 50% (the phone tab strip's end fade). */
+    --mask-opaque-a50: rgb(0 0 0 / 0.5);
+    /* An alpha mask's stop at 60% (the phone tab strip's start fade). */
+    --mask-opaque-a60: rgb(0 0 0 / 0.6);
+    /* An alpha mask's stop at 90% (the phone tab strip's end fade). */
+    --mask-opaque-a90: rgb(0 0 0 / 0.9);
     /* A table's header band, one step under the field. */
     --surface-band: light-dark(oklch(95.7% 0.009 84), oklch(21.4% 0.006 70));
     --surface-recess-deep: light-dark(var(--neutral-4), var(--neutral-1));
@@ -807,6 +825,10 @@
     --c-tray-chip: 28px;
     --c-tray-gap: var(--space-2);
     --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
+    /* A working tray chip's narrowest: the floor under its measured width. */
+    --c-tray-chip-min: 120px;
+    /* A working tray chip's widest, past which its words truncate. */
+    --c-tray-chip-max: 224px;
     --icon-sm: 12px;
     --icon-md: 16px;
     --icon-lg: 20px;
@@ -957,6 +979,8 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
+    /* A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is. */
+    --dur-pick-up: calc(var(--dur-panel) * 0.6);
     /* The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited. */
     --dur-grow: 320ms;
     /* The grown composer folding back into its pill, shorter than its growth. */
@@ -1004,6 +1028,106 @@
       background-color var(--dur-control) var(--ease-out),
       border-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
+    /* Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go). */
+    --transition-fade-show:
+      opacity var(--dur-fade) var(--ease-out), visibility 0s;
+    /* Something stepping aside: its fade, and its visibility gone once the fade is done (the composer's parts under an ask, a drawing, a minimized pill). */
+    --transition-fade-hide:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s linear var(--dur-fade);
+    /* The composer's tray coming back: the exit's beat, its visibility back at once. */
+    --transition-exit-show:
+      opacity var(--dur-exit) var(--ease-out), visibility 0s;
+    /* The composer's tray leaving: the exit's beat, its visibility gone once the fade is done. */
+    --transition-exit-hide:
+      opacity var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
+    /* A part that fades as it slides into place on the drawer curve (the composer's edit row, a question's parts). */
+    --transition-fade-slide:
+      opacity var(--dur-fade) var(--ease-out),
+      translate var(--dur-panel) var(--ease-drawer);
+    /* A chip's fill and ink on the control's beat, and its press scale (transform) on the toggle's (the tree's count, a needs card's chip, a notice row). */
+    --transition-tint-press:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+    /* transition-control, and the press's transform on the toggle's beat. */
+    --transition-control-press:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+    /* transition-control, and the press's scale property on the toggle's beat. */
+    --transition-control-scale:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      scale var(--dur-toggle) var(--ease-out);
+    /* transition-control, and a swiped row's translate home on the exit's beat. */
+    --transition-control-slide:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      translate var(--dur-exit) var(--ease-out);
+    /* transition-control, and a ring drawn as a box-shadow on the same beat. */
+    --transition-control-ring:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+    /* A chip whose fill and ink settle on the panel's beat, its press scale on the toggle's (a rollout's state chip). */
+    --transition-tint-scale:
+      background-color var(--dur-panel) var(--ease-out),
+      color var(--dur-panel) var(--ease-out),
+      scale var(--dur-toggle) var(--ease-out);
+    /* A choice card's outline and fill on the fade's beat, its press scale on the control's (the account strategy picker). */
+    --transition-pick-card:
+      border-color var(--dur-fade) var(--ease-out),
+      background-color var(--dur-fade) var(--ease-out),
+      scale var(--dur-control) var(--ease-out);
+    /* A frame gliding between cards: its leading edge moves at once, its trailing edge a ghost's beat later, so it stretches then settles (the channel cards). */
+    --transition-frame-end-first:
+      inset-inline-end var(--dur-fade) var(--ease-in-out) 0ms,
+      inset-inline-start var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
+    /* transition-frame-end-first's mirror, for a glide the other way. */
+    --transition-frame-start-first:
+      inset-inline-start var(--dur-fade) var(--ease-in-out) 0ms,
+      inset-inline-end var(--dur-fade) var(--ease-in-out) var(--dur-ghost);
+    /* A side surface sliding in beside the main pane: its fade and travel on ease-out, its room (padding) on the drawer curve. */
+    --transition-split-surface:
+      opacity var(--dur-panel) var(--ease-out),
+      transform var(--dur-panel) var(--ease-out),
+      padding var(--dur-panel) var(--ease-drawer);
+    /* A usage ring's arc drawing to its new length, its stroke and fade on the toggle's beat. */
+    --transition-ring-arc:
+      stroke-dashoffset var(--dur-panel) var(--ease-in-out),
+      stroke var(--dur-toggle) var(--ease-out),
+      opacity var(--dur-toggle) var(--ease-out);
+    /* A rail's selection tip gliding and resizing to its new item, fading on the control's beat. */
+    --transition-rail-tip:
+      transform var(--dur-morph) var(--ease-in-out),
+      width var(--dur-morph) var(--ease-in-out),
+      opacity var(--dur-control) var(--ease-out);
+    /* A panel travelling to its new place on ease-in-out while it fades on ease-out (the new-session location panels). */
+    --transition-panel-travel:
+      transform var(--dur-panel) var(--ease-in-out),
+      opacity var(--dur-panel) var(--ease-out);
+    /* A panel moving and taking its new height on the toggle's beat, fading on the control's (the model list's panel). */
+    --transition-panel-resize:
+      transform var(--dur-toggle) var(--ease-in-out),
+      height var(--dur-toggle) var(--ease-in-out),
+      opacity var(--dur-control) var(--ease-out);
+    /* A suggestion chip: its press on the toggle's beat, its tint and outline on the panel's, its ink on the control's. */
+    --transition-suggest-chip:
+      transform var(--dur-toggle) var(--ease-out),
+      background-color var(--dur-panel) var(--ease-out),
+      border-color var(--dur-panel) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+    /* A segmented control's thumb gliding and resizing to its tab, fading on the ghost's beat. */
+    --transition-segment:
+      transform var(--dur-toggle) var(--ease-out),
+      width var(--dur-toggle) var(--ease-out),
+      height var(--dur-toggle) var(--ease-out),
+      opacity var(--dur-ghost) var(--ease-out);
   }
 
   :root.dark {

@@ -1,0 +1,22 @@
+{
+  "lane: needs colour token": 27,
+  "lane: needs size token": 2,
+  "lane: needs transition token": 24,
+  "lane: needs variant": 13,
+  "lane: cross-file hook": 86,
+  "lane: contract": 163,
+  "lane: deferred-file": 7,
+  "lane: shadcn variant": 33,
+  "lane: important kept": 13,
+  "lane: shadow kept residual": 3,
+  "lane: R2 fixed": 91,
+  "lane: R3 fixed": 41,
+  "tree: kind-5 declarations": 527,
+  "tree: files with kind-5": 114,
+  "eslint: shadcn/no-arbitrary-values": 3,
+  "eslint: shadcn/no-inline-styles": 12,
+  "eslint: shadcn/no-restyle": 1364,
+  "eslint: shadcn/no-unknown-classes": 251,
+  "eslint: shadcn/require-static-classes": 9,
+  "eslint: files with no-restyle": 120
+}

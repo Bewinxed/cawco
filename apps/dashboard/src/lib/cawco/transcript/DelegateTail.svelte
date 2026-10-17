@@ -393,14 +393,12 @@
 <style>
   /* residual: unmapped */
   /* The fade over the top row once the tail is full. mask-image has no
-     utility; its opaque stop is the token integration adds (delta O1).
-     Until then the tail's own ink stands in: a mask reads only alpha, and
-     --ink-strong is opaque in both themes, so the fade is the same. */
+     utility. */
   [data-full] {
     mask-image: linear-gradient(
       to bottom,
       transparent,
-      var(--mask-opaque, currentcolor) var(--fade-run)
+      var(--mask-opaque) var(--fade-run)
     );
   }
   /* The row the tail ends on: the question waiting, the one put to the
