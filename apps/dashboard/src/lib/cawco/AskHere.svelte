@@ -98,21 +98,38 @@
   <section
     {...rest}
     aria-labelledby="{id}-title"
-    class={cn("ask-here", className)}
+    class={cn("ps-(--ask-indent-in) pe-(--ask-end-in) min-w-0 py-space-1", className)}
     data-ask={at}
+    style:--ask-end-in="var(--ask-end, 0)"
+    style:--ask-indent-in="var(--ask-indent, 0)"
     transition:unfold
     {@attach arrive}
   >
-    <div data-slot="tile" class="tile">
-      <p data-slot="title" class="title" id="{id}-title">{asked.title}</p>
+    <!-- literal: minmax(0, 1fr) -->
+    <div
+      data-slot="tile"
+      class="grid grid-cols-(--tile-cols) gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      style:--tile-cols="minmax(0, 1fr)"
+    >
+      <p
+        data-slot="title"
+        class="m-0 type-label text-balance wrap-anywhere text-ink-strong"
+        id="{id}-title"
+      >{asked.title}</p>
       {#each paragraphs as paragraph, index (index)}
-        <p data-slot="body" class="body">{paragraph}</p>
+        <p
+          data-slot="body"
+          class="m-0 type-meta text-pretty wrap-anywhere text-ink-muted"
+        >{paragraph}</p>
       {/each}
       {#if items.length > 0}
         <AskItems {items} label="What this reaches" />
       {/if}
       <RowFault reason={failure} />
-      <div data-slot="actions" class="actions">
+      <div
+        data-slot="actions"
+        class="flex flex-wrap justify-end gap-space-2"
+      >
         <Button
           data-ask-cancel
           disabled={running}
@@ -135,46 +152,3 @@
     </div>
   </section>
 {/if}
-
-<style>
-  /* Under its control, in the page's flow: the recess the frame is made of,
-     holding the question as a raised tile, as the rows around it are. */
-  .ask-here {
-    min-inline-size: 0;
-    padding-block: var(--space-1);
-    padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
-  }
-  /* One track no wider than the question: a long word in its words (a path
-     it names) wraps rather than widening the tile past a narrow rail, where
-     its buttons went under the pane beside it. */
-  .tile {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-2);
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-raised);
-  }
-  .title {
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-wrap: balance;
-    overflow-wrap: anywhere;
-  }
-  .body {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
-    overflow-wrap: anywhere;
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-</style>

@@ -106,7 +106,7 @@
     aria-label={compacting
       ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
-    class="mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
+    class="mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5
            text-label tabular-nums
            hover:bg-neutral-2
            transition-[background-color,color] duration-(--dur-control) ease-out
@@ -142,7 +142,7 @@
 
   <Popover.Content
     align="end"
-    class="w-72 rounded-[var(--radius-lg)] shadow-lg p-0"
+    class="w-72 rounded-lg shadow-lg p-0"
     side="top"
   >
     <div
@@ -169,9 +169,9 @@
         >
           {#each usage.categories as category, index (category.name)}
             <span
-              class="h-full"
-              style="width: {(category.tokens / usage.totalTokens) *
-                100}%; background-color: {swatch(index)}"
+              class="h-full w-(--seg-w) bg-(--seg-bg)"
+              style:--seg-bg={swatch(index)}
+              style:--seg-w="{(category.tokens / usage.totalTokens) * 100}%"
             ></span>
           {/each}
         </div>
@@ -185,8 +185,8 @@
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 text-label">
             <span
-              class="size-2 shrink-0 rounded-hair"
-              style="background-color: {swatch(index)}"
+              class="size-2 shrink-0 rounded-hair bg-(--seg-bg)"
+              style:--seg-bg={swatch(index)}
             ></span>
             <span class="min-w-0 flex-1 truncate">{category.name}</span>
             <span class="tabular-nums text-ink-muted"

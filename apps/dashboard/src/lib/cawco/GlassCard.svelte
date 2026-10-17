@@ -512,7 +512,7 @@
     {#each faces as one (one.card)}
       <div
         data-slot="glass-face"
-        class="glass-face"
+        class="flex min-h-0 w-full flex-auto flex-col self-end"
         data-face={one.card}
         {@attach mountFace(one.card)}
       >
@@ -528,19 +528,10 @@
   </HangCard>
 </Popover.Root>
 
+
 <style>
-  /* One card's contents, as they stood straight in the card: a column that
-     gives its own scroller (Caw's list, Jump's results) the card's bounds.
-     As wide as the card, and standing on its trailing edge: while the box
-     tweens (motion/morph holds the face at its own width) the card's
-     leading edge moves over it and clips it, and its rows never rewrap. */
-  .glass-face {
-    display: flex;
-    min-block-size: 0;
-    flex: 1 1 auto;
-    flex-direction: column;
-    align-self: flex-end;
-    inline-size: 100%;
+  /* residual: unmapped — border-radius: inherit */
+  [data-slot="glass-face"] {
     border-radius: inherit;
   }
 </style>

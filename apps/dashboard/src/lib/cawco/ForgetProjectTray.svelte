@@ -143,8 +143,18 @@
   <!-- The forget was pressed: said here while what runs is read, so the
        press is answered before the tray can be. -->
   {#if sessions === null && unread === null}
-    <p class={cn("reading", "mark-line", className)} role="status">
-      <Spinner aria-hidden="true" />
+    <!-- Where the tray will stand, in its host's indent: the meta line, a
+         spinner at its start. -->
+    <p
+      class={cn(
+        "mark-line m-0 flex items-center gap-space-1 py-space-1 ps-(--ask-indent-in) pe-(--ask-end-in) type-meta text-ink-muted",
+        className
+      )}
+      role="status"
+      style:--ask-end-in="var(--ask-end, 0)"
+      style:--ask-indent-in="var(--ask-indent, 0)"
+    >
+      <Spinner aria-hidden="true" class="size-icon-sm" />
       <span>Reading what runs in {asked.name}…</span>
     </p>
   {/if}
@@ -165,22 +175,3 @@
     {words}
   />
 {/if}
-
-<style>
-  /* Where the tray will stand, in its host's indent: the meta line, a
-     spinner at its start. */
-  .reading {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: 0;
-    padding-block: var(--space-1);
-    padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-</style>

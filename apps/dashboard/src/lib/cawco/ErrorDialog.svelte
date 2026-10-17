@@ -43,8 +43,9 @@
       </Dialog.Header>
 
       <pre
-        class="error-text max-h-[60vh] overflow-auto whitespace-pre-wrap break-words"
-        data-error-text>{message}</pre>
+        class="m-0 max-h-(--error-max) overflow-auto break-words whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
+        data-error-text
+        style:--error-max="60vh">{message}</pre>
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">
@@ -66,18 +67,3 @@
     </div>
   </Dialog.Content>
 </Dialog.Root>
-
-<style>
-  .error-text {
-    margin: 0;
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    line-height: 1.55;
-    user-select: text;
-  }
-</style>

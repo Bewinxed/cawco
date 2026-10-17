@@ -27,8 +27,11 @@
 {#snippet branch(parentId: string | null)}
   {#each under(parentId) as item (item.id)}
     {@const kids = under(item.id)}
-    <li data-item={item.id}>
-      <div data-slot="row" class="row mark-line">
+    <li class="relative" data-item={item.id}>
+      <div
+        data-slot="row"
+        class="mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) py-0 pe-(--row-compact-pad-end) ps-(--row-compact-gap) text-ink-strong"
+      >
         {#if item.lead.kind === "session"}
           <SessionMark
             caw={item.lead.caw ?? null}
@@ -38,21 +41,40 @@
             status={item.lead.status ?? "idle"}
           />
         {:else if item.lead.kind === "machine"}
-          <span data-slot="lead" class="lead" data-box
+          <!-- literal: var(--mark-size, 18px) -->
+          <span
+            data-slot="lead"
+            class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
+            data-box
+            style:--lead-size="var(--mark-size, 18px)"
             ><OsMark class="size-icon-md" os={item.lead.os} /></span
           >
         {:else}
-          <span data-slot="lead" class="lead" data-box
-            ><item.lead.icon aria-hidden="true" /></span
+          <!-- literal: var(--mark-size, 18px) -->
+          <span
+            data-slot="lead"
+            class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
+            data-box
+            style:--lead-size="var(--mark-size, 18px)"
+            ><item.lead.icon aria-hidden="true" class="size-icon-md" /></span
           >
         {/if}
-        <span data-slot="title" class="title">{item.title}</span>
+        <span
+          data-slot="title"
+          class="min-w-0 flex-auto overflow-clip type-label text-ellipsis whitespace-nowrap"
+          >{item.title}</span
+        >
         {#if item.status}
-          <span class="status">{item.status}</span>
+          <span class="flex-none type-meta whitespace-nowrap text-ink-muted"
+            >{item.status}</span
+          >
         {/if}
       </div>
       {#if kids.length > 0}
-        <ul class="kit-nest" {@attach nestFrom(".tree-mark")}>
+        <ul
+          class="kit-nest m-0 list-none p-0"
+          {@attach nestFrom(".tree-mark")}
+        >
           {@render branch(item.id)}
         </ul>
       {/if}
@@ -60,64 +82,12 @@
   {/each}
 {/snippet}
 
-<ul data-slot="reach" aria-label={label} class="reach" {@attach echoBeat()}>
+<ul
+  data-slot="reach"
+  aria-label={label}
+  class="-mx-space-2 my-0 max-h-(--reach-max) list-none justify-self-stretch overflow-y-auto overflow-x-clip overscroll-contain px-space-2 py-space-1"
+  style:--reach-max="calc(var(--row-compact-h) * 8)"
+  {@attach echoBeat()}
+>
   {@render branch(null)}
 </ul>
-
-<style>
-  /* The rail's compact row: mark, title, status word, nested as it nests. */
-  .reach,
-  .reach :global(ul) {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .reach {
-    /* As wide as the question, whatever its parent's alignment. */
-    justify-self: stretch;
-    /* The status dot and the echo stand out of the tile: room for them. */
-    margin: 0 calc(-1 * var(--space-2));
-    padding: var(--space-1) var(--space-2);
-    max-block-size: calc(var(--row-compact-h) * 8);
-    overflow-x: clip;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .reach :global(li) {
-    position: relative;
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--row-compact-gap);
-    min-block-size: var(--row-compact-h);
-    padding: 0 var(--row-compact-pad-end) 0 var(--row-compact-gap);
-    color: var(--ink-strong);
-  }
-  .lead {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    inline-size: var(--mark-size, 18px);
-    block-size: var(--mark-size, 18px);
-    color: var(--ink-muted);
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-  }
-  .title {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .status {
-    flex: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-</style>
