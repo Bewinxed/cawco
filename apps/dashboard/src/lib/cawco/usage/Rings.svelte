@@ -161,7 +161,7 @@
     style:--arc-offset={off(rim)}
   />
   <circle
-    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 data-off:group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}

@@ -313,7 +313,7 @@
               No 5-hour window is running.
             </p>
           {:else if !ready}
-            <Skeleton class="h-24 w-full" />
+            <Skeleton class="w-full" height="plot" />
           {:else}
             {@const i = chart.harness === "claude" ? 0 : 1}
             <!-- One slot: the old view leaves over its top while the new one

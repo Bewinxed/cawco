@@ -257,7 +257,7 @@
       <!-- mark-line: the tick stands above its hour, not beside it -->
       <span
         data-end={tick.hour === 5 || undefined}
-        class="absolute inset-y-0 start-(--tick-at) flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] dur-panel ease-out group-data-instant/relay:transition-none data-start:translate-none data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-none"
+        class="absolute inset-y-0 start-(--tick-at) flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] dur-panel ease-out group-data-instant/relay:transition-none not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-none"
         data-start={tick.hour === 0 || undefined}
         data-tick={tick.hour}
         style:--tick-at={tick.at}
