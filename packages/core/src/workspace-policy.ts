@@ -263,7 +263,7 @@ const findIn = (
 const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
 
 /**
- * The protected config a lead's place has now, anywhere in it but installed
+ * The protected config a place has now, anywhere in it but installed
  * dependencies ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}): each a dir
  * or file of its own, which srt binds onto itself and so leaves nothing on
  * the host. One that is absent is never denied to srt, which would make its
@@ -279,7 +279,7 @@ const protectedIn = async (root: string): Promise<string[]> => {
 
 /**
  * Whether `path` is still exactly a stand-in an earlier build made in a
- * lead's place (an empty dir, or a file holding a stand-in's text): left
+ * place (an empty dir, or a file holding a stand-in's text): left
  * unbound so the agent can take it away (stand-ins.ts `removeStandIns`); the
  * place's guard still sees every change to it.
  */
@@ -326,7 +326,7 @@ const foundProtected = (root: string): Promise<string[]> =>
 
 /**
  * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}).
- * A lead's place keeps only the protected config it has
+ * A place keeps only the protected config it has
  * ({@link protectedIn}), each with nothing to stand in for it: a person's own
  * folder is never written into.
  */
@@ -382,7 +382,7 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
   );
 
 /**
- * What in a lead's place shares its inodes with files elsewhere: each
+ * What in a place shares its inodes with files elsewhere: each
  * installed dependencies dir (bun installs by hardlinking from its cache),
  * and every other file with more than one link. A clone's are copied apart
  * but those linked to the workspaces' own bun cache (boundary.ts
@@ -892,8 +892,8 @@ export const workspacePolicy = async (
     ...(await projectFolder(workspace.id)),
     ...(await spillDirs(workspace.id)),
   ]);
-  // A lead's place: what only its owner may read in it is hidden from the
-  // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).
+  // A place: what only its owner may read in it is hidden from the
+  // shell and file tools in it, for reading and writing (`ownerOnlyIn`).
   const lead = isPlace(workspace.id);
   const ownerOnly = lead ? await ownerOnlyIn(clone) : [];
   // What shares an inode with a file elsewhere is only read (`linkedIn`).
