@@ -37,10 +37,8 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   RoutineMadeEvent,
-  Rule,
   RuleMatchKind,
   RuleScope,
-  RuleState,
   RuleTiming,
   RuleWatch,
   SendAttachment,
@@ -2543,19 +2541,46 @@ export const ruleState = sqliteTable(
   ]
 );
 
+/** What a config delete can move into {@link configTrash}. */
+export type TrashKind =
+  | "rule"
+  | "hook"
+  | "skill"
+  | "plugin"
+  | "marketplace"
+  | "agent"
+  | "mcp"
+  | "delegateType"
+  | "memory"
+  | "memoryDoc"
+  | "connection";
+
+/** One table's rows, as the driver reads them: every column, sealed ones still sealed. */
+export interface TrashedRows {
+  rows: Record<string, string | number | null>[];
+  table: string;
+}
+
 /**
- * A deleted rule, kept whole for its undo window (rules-trash.ts): the rule
- * and every session's standing with it, as they stood. Out of `rules` and
- * `rule_state`, so nothing that reads them sees it while it waits. It goes
- * with its project, as the rule itself does.
+ * A deleted config item, kept whole for its undo window (JOURNEY.md Flow 5:
+ * "an undo affordance after the fact rather than a confirm dialog before
+ * it"): its row and every row that hangs off it (a rule's sessions'
+ * standing, an MCP server's sign-in, a document's projects), as the driver
+ * read them, so a restore puts back every column, dates and sealed secrets
+ * as they were. Out of the live tables, so nothing that reads them sees it
+ * while it waits. One bound to a project goes with its project, as the item
+ * itself does. The id is what the dashboard's Undo names.
  */
-export const ruleTrash = sqliteTable("rule_trash", {
-  ruleId: text("rule_id").primaryKey(),
-  scopeProjectId: text("scope_project_id").references(() => projects.id, {
+export const configTrash = sqliteTable("config_trash", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").$type<TrashKind>().notNull(),
+  /** The item's own key: a rule's id, a skill's name, a document's path. */
+  key: text("key").notNull(),
+  projectId: text("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
-  rule: text("rule", { mode: "json" }).$type<Rule>().notNull(),
-  states: text("states", { mode: "json" }).$type<RuleState[]>().notNull(),
+  /** The item's own table first, then what hangs off it, in insert order. */
+  rows: text("rows", { mode: "json" }).$type<TrashedRows[]>().notNull(),
   deletedAt: timestamp("deleted_at").notNull(),
 });
 

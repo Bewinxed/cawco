@@ -1,4 +1,4 @@
-import type { DelegateType } from "@cawco/core";
+import type { DelegateType, Deleted } from "@cawco/core";
 import { HARNESSES } from "@cawco/core";
 
 /**
@@ -70,15 +70,13 @@ export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
     `save ${draft.name || "the delegate type"}`
   );
 
-export const removeDelegateType = async (name: string): Promise<void> => {
-  const response = await fetch(
+/** Deletes a type, into the hub's trash for its Undo (config/undo.ts). */
+export const removeDelegateType = (name: string): Promise<Deleted> =>
+  send<Deleted>(
     `/api/delegate-types/${encodeURIComponent(name)}`,
-    { method: "DELETE" }
+    { method: "DELETE" },
+    `delete ${name}`
   );
-  if (!response.ok) {
-    throw new Error(`Could not delete ${name} — ${await said(response)}.`);
-  }
-};
 
 /** A blank draft, on the defaults that make the common case one field of typing. */
 export const blankDelegateType = (): DelegateType => ({

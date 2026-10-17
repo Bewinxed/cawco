@@ -1,9 +1,7 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { holders } from "#lib/cawco/config/holders.js";
+  import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
@@ -15,7 +13,6 @@
   import {
     describeMcp,
     isRemoteMcp,
-    removeMcpServer,
     saveMcpServer,
     syncFleet,
   } from "#lib/cawco/fleet.js";
@@ -23,6 +20,7 @@
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
@@ -79,35 +77,18 @@
   }
 
   /**
-   * Removing a server pulls it from every machine that holds it: the
-   * question stands under its row, in the page, naming them, each with
-   * whether it has it now.
+   * Remove: at once, from every machine, with Undo in the toast for as long
+   * as the hub holds it, sign-in and all (deletes.ts).
    */
-  const asks = new Asker<AskHereRequest>();
-  async function askRemove(row: FleetMcpServer) {
-    await asks.ask({
-      at: row.name,
-      title: `Remove ${row.name} everywhere?`,
-      body: `It leaves the fleet and every machine that holds it. It can't be undone.`,
-      confirmLabel: "Remove everywhere",
-      destructive: true,
-      items: () => holders(machines, "mcp", row.name),
-      pendingLabel: "Removing…",
-      run: async () => {
-        busy[row.name] = true;
-        try {
-          await removeMcpServer(row.name);
-          const fleet = store.fleet.value;
-          if (fleet) {
-            fleet.config.mcp = fleet.config.mcp.filter(
-              (other) => other.name !== row.name
-            );
-          }
-        } finally {
-          delete busy[row.name];
-        }
-      },
-    });
+  async function remove(row: FleetMcpServer) {
+    busy[row.name] = true;
+    try {
+      await deleteMcpServer(store, row.name);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete busy[row.name];
+    }
   }
 
   async function syncAll() {
@@ -171,7 +152,8 @@
               label: "Remove everywhere",
               icon: IconTrash,
               destructive: true,
-              onselect: () => askRemove(row),
+              disabled: busy[row.name] === true,
+              onselect: () => remove(row),
             },
           ]}
           enabled={row.enabled}
@@ -198,7 +180,6 @@
             <McpSignIn server={row} />
           {/snippet}
           {#snippet below()}
-            <AskHere asker={asks} at={row.name} />
             <RowFault
               again={() => toggle(row, !row.enabled)}
               reason={toggleFailed[row.name]}

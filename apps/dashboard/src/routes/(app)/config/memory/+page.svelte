@@ -1,7 +1,6 @@
 <script lang="ts">
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { deleteMemory } from "#lib/cawco/config/deletes.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
     byteLength,
@@ -20,14 +19,11 @@
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import FleetFault from "#lib/cawco/FleetFault.svelte";
-  import {
-    type FleetMemoryDocRow,
-    formatBytes,
-    removeMemory,
-    removeMemoryDoc,
-  } from "#lib/cawco/fleet.js";
+  import { type FleetMemoryDocRow, formatBytes } from "#lib/cawco/fleet.js";
   import { causeOf } from "#lib/cawco/fleet-faults.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconBook, IconTrash, IconWarningTriangle } from "#lib/icons.js";
@@ -76,37 +72,17 @@
   const drafted = (path: string) =>
     drafts.paths.has(fileHref(path)) ? " · unsaved draft" : "";
 
-  /** Delete asks under the file's row, in the page. */
-  const asks = new Asker<AskHereRequest>();
-  async function askRemove(path: string) {
-    if (!fleet) {
-      return;
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  async function remove(path: string) {
+    busy[path] = true;
+    try {
+      await deleteMemory(store, path);
+      drafts.forget(fileHref(path));
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete busy[path];
     }
-    await asks.ask({
-      at: path,
-      title: `Delete ${fileLabel(path)}?`,
-      body: "It is taken off every machine that still has CawCo's copy. A machine's own edited copy is left where it is.",
-      confirmLabel: "Delete everywhere",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        busy[path] = true;
-        try {
-          if (path === MAIN) {
-            await removeMemory();
-            fleet.memory = null;
-          } else {
-            await removeMemoryDoc(path);
-            fleet.memoryDocs = fleet.memoryDocs.filter(
-              (doc) => doc.path !== path
-            );
-          }
-          drafts.forget(fileHref(path));
-        } finally {
-          delete busy[path];
-        }
-      },
-    });
   }
 
   function created(row: FleetMemoryDocRow) {
@@ -149,7 +125,7 @@
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[MAIN] === true,
-                onselect: () => askRemove(MAIN),
+                onselect: () => remove(MAIN),
               },
             ]
           : []}
@@ -169,7 +145,6 @@
           {/if}
         {/snippet}
         {#snippet below()}
-          <AskHere asker={asks} at={MAIN} />
           <RowFaults key="" kind="memory" {machines} />
         {/snippet}
       </SectionRow>
@@ -182,7 +157,7 @@
             icon: IconTrash,
             destructive: true,
             disabled: busy[doc.path] === true,
-            onselect: () => askRemove(doc.path),
+            onselect: () => remove(doc.path),
           },
         ]}
         flash={store.flash === doc.path}
@@ -208,7 +183,6 @@
           {/if}
         {/snippet}
         {#snippet below()}
-          <AskHere asker={asks} at={doc.path} />
           <RowFaults key={doc.path} kind="memoryDocs" {machines} />
         {/snippet}
       </SectionRow>

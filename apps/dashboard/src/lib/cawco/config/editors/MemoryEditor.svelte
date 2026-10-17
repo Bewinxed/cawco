@@ -37,8 +37,6 @@
     memoryVersion,
     peekMemory,
     pushMemory,
-    removeMemory,
-    removeMemoryDoc,
     restoreMemory,
     saveMemory,
     saveMemoryDoc,
@@ -46,8 +44,8 @@
   import AddMachineLink from "../../join/AddMachineLink.svelte";
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
+  import { deleteMemory } from "../deletes";
   import { drafts, keepDraft } from "../drafts.svelte";
-  import { EditorQuestion } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import {
@@ -141,7 +139,8 @@
   /** Why the last save was refused (not a conflict): said under the title. */
   let saveProblem = $state<string | null>(null);
   let deleting = $state(false);
-  let deleteFailed = $state(false);
+  /** Why the last delete was refused: said under the title. */
+  let deleteProblem = $state<string | null>(null);
   let conflict = $state<FleetMemoryRow | null>(null);
 
   /** Puts a row the hub answered with where the section reads it. */
@@ -217,42 +216,19 @@
     void goto("/config/memory");
   }
 
-  async function askRemove() {
-    if (!fleet) {
-      return;
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  async function remove() {
+    deleting = true;
+    deleteProblem = null;
+    try {
+      await deleteMemory(store, path, () => {
+        kept.drop();
+        return goto("/config/memory");
+      });
+    } catch (caught) {
+      deleting = false;
+      deleteProblem = message(caught);
     }
-    await question.ask({
-      title: `Delete ${label}?`,
-      body: "It is taken off every machine that still has CawCo's copy. A machine's own edited copy is left where it is.",
-      confirmLabel: "Delete everywhere",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        deleting = true;
-        deleteFailed = false;
-        try {
-          if (main) {
-            await removeMemory();
-          } else {
-            await removeMemoryDoc(path);
-          }
-          kept.drop();
-          // Back to the list first, so the file is seen leaving it.
-          await goto("/config/memory");
-          if (main) {
-            fleet.memory = null;
-          } else {
-            fleet.memoryDocs = fleet.memoryDocs.filter(
-              (doc) => doc.path !== path
-            );
-          }
-        } catch (caught) {
-          deleteFailed = true;
-          deleting = false;
-          throw caught;
-        }
-      },
-    });
   }
 
   function keydown(event: KeyboardEvent) {
@@ -458,9 +434,6 @@
     failed: "Kept its own copy",
     removed: "Taken off",
   };
-
-  /** Delete asks in this editor's own footer. */
-  const question = new EditorQuestion();
 </script>
 
 <svelte:window onkeydown={keydown} />
@@ -469,11 +442,10 @@
   canSave={dirty}
   deleteLabel={saved ? "Delete everywhere" : undefined}
   {deleting}
-  failed={saveFailed || deleteFailed}
+  failed={saveFailed || deleteProblem !== null}
   oncancel={cancel}
-  ondelete={saved ? askRemove : undefined}
+  ondelete={saved ? remove : undefined}
   onsubmit={() => save()}
-  {question}
   saveLabel="Save"
   saving={busy && !forcing}
   settling={!drawn || (versions === null && historyError === null)}
@@ -541,6 +513,7 @@
       {/if}
     </p>
     <RowFault again={() => save()} reason={saveProblem} />
+    <RowFault again={remove} reason={deleteProblem} />
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconDocument} label="Contents">

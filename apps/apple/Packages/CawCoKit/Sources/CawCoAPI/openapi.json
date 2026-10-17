@@ -825,7 +825,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiDelegateTypesByName200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -10637,7 +10637,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiConnectionsByName200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -18934,7 +18934,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMcpByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMcpByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -19363,7 +19373,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiRulesById200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiRulesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -19371,7 +19391,7 @@
         }
       }
     },
-    "/api/rules/{id}/restore": {
+    "/api/trash/{id}/restore": {
       "post": {
         "parameters": [
           {
@@ -19379,28 +19399,55 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
-        "operationId": "postApiRulesByIdRestore",
+        "operationId": "postApiTrashByIdRestore",
         "responses": {
           "200": {
-            "description": "postApiRulesByIdRestore 200",
+            "description": "postApiTrashByIdRestore 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiRulesByIdRestore200"
+                  "$ref": "#/components/schemas/postApiTrashByIdRestore200"
                 }
               }
             }
           },
           "404": {
-            "description": "postApiRulesByIdRestore 404",
+            "description": "postApiTrashByIdRestore 404",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiTrashByIdRestore 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiTrashByIdRestore 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -19997,7 +20044,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMarketplacesByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMarketplacesByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20137,7 +20194,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetPluginsById200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetPluginsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20369,7 +20436,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetSkillsByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetSkillsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20703,7 +20780,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetAgentsByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetAgentsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20793,7 +20880,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMemory200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMemory 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20932,7 +21029,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMemoryDocs200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -21488,7 +21585,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetHooksById200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -24301,17 +24398,6 @@
           "types"
         ]
       },
-      "deleteApiDelegateTypesByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "deleteApiProjectsByIdTasksByTaskId200": {
         "type": "object",
         "properties": {
@@ -24735,17 +24821,6 @@
         },
         "required": [
           "connections"
-        ]
-      },
-      "deleteApiConnectionsByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
         ]
       },
       "postApiConnectionsByNameSignIn200": {
@@ -26670,17 +26745,6 @@
           "unpushable"
         ]
       },
-      "deleteApiFleetMcpByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "postApiFleetMcpOauthComplete200": {
         "type": "object",
         "properties": {
@@ -26819,112 +26883,17 @@
           "templates"
         ]
       },
-      "deleteApiRulesById200": {
+      "postApiTrashByIdRestore200": {
         "type": "object",
         "properties": {
-          "ok": {
-            "type": "boolean"
+          "kind": {
+            "$ref": "#/components/schemas/TrashKind"
           },
-          "restorableForMs": {
-            "type": "number"
-          }
+          "row": {}
         },
         "required": [
-          "ok",
-          "restorableForMs"
-        ]
-      },
-      "postApiRulesByIdRestore200": {
-        "type": "object",
-        "properties": {
-          "stats": {
-            "$ref": "#/components/schemas/RuleStats"
-          },
-          "orphaned": {
-            "type": "object",
-            "properties": {
-              "machineId": {
-                "type": "string"
-              },
-              "name": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "removedAt": {
-                "type": [
-                  "null",
-                  "number"
-                ]
-              }
-            },
-            "required": [
-              "machineId",
-              "name",
-              "removedAt"
-            ]
-          },
-          "caseSensitive": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "number"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "matchKind": {
-            "$ref": "#/components/schemas/RuleMatchKind"
-          },
-          "name": {
-            "description": "What the rule is called in the list, and in the reply the session reads.",
-            "type": "string"
-          },
-          "pattern": {
-            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
-            "type": "string"
-          },
-          "repeat": {
-            "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
-            "type": "boolean"
-          },
-          "reply": {
-            "description": "What the session is sent when the rule fires.",
-            "type": "string"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/RuleScope"
-          },
-          "timing": {
-            "$ref": "#/components/schemas/RuleTiming"
-          },
-          "watch": {
-            "$ref": "#/components/schemas/RuleWatch"
-          },
-          "wholeWord": {
-            "description": "Phrase mode only: refuse matches that sit inside a longer word.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "caseSensitive",
-          "createdAt",
-          "enabled",
-          "id",
-          "matchKind",
-          "name",
-          "pattern",
-          "repeat",
-          "reply",
-          "scope",
-          "stats",
-          "timing",
-          "watch",
-          "wholeWord"
+          "kind",
+          "row"
         ]
       },
       "getApiRulesByIdActivity200": {
@@ -27192,39 +27161,6 @@
           "notices"
         ]
       },
-      "deleteApiFleetMarketplacesByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiFleetPluginsById200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiFleetSkillsByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "getApiFleetSkillsHistory200": {
         "type": "array",
         "items": {
@@ -27232,17 +27168,6 @@
         }
       },
       "postApiFleetSkillsByNamePush200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiFleetAgentsByName200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -27311,17 +27236,6 @@
           "updatedAt"
         ]
       },
-      "deleteApiFleetMemory200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "putApiFleetMemoryDocs409": {
         "type": "object",
         "properties": {
@@ -27348,17 +27262,6 @@
           "hash",
           "path",
           "updatedAt"
-        ]
-      },
-      "deleteApiFleetMemoryDocs200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
         ]
       },
       "postApiFleetMemoryAdopt200": {
@@ -27533,17 +27436,6 @@
           "hash",
           "id",
           "name"
-        ]
-      },
-      "deleteApiFleetHooksById200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
         ]
       },
       "getApiFleetHooksHistory200": {
@@ -31354,6 +31246,27 @@
           "harness",
           "model",
           "name"
+        ]
+      },
+      "Undoable": {
+        "description": "What a config delete answers: core's {@link Deleted}, the entry the dashboard's Undo names.",
+        "type": "object",
+        "properties": {
+          "ok": {
+            "description": "Always true: what every delete has answered since before the trash.",
+            "type": "boolean"
+          },
+          "restorableForMs": {
+            "type": "number"
+          },
+          "restore": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ok",
+          "restorableForMs",
+          "restore"
         ]
       },
       "DelegateCatalog": {
@@ -45116,6 +45029,23 @@
           "timing",
           "watch",
           "wholeWord"
+        ]
+      },
+      "TrashKind": {
+        "description": "What a config delete can move into {@link configTrash}.",
+        "type": "string",
+        "enum": [
+          "agent",
+          "connection",
+          "delegateType",
+          "hook",
+          "marketplace",
+          "mcp",
+          "memory",
+          "memoryDoc",
+          "plugin",
+          "rule",
+          "skill"
         ]
       },
       "FleetWatchSettings": {

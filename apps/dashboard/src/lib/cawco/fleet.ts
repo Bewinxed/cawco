@@ -9,6 +9,7 @@
 import {
   CAWCO_OAUTH_URL,
   type ConfigInspection,
+  type Deleted,
   type FleetAgent,
   type FleetConfig,
   type FleetFetchFrame,
@@ -348,28 +349,30 @@ const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
   );
 
 /**
- * `body` is for the one row whose identity will not fit in a path: a linked
- * document is keyed by `models/claude-opus-5.md`, and a slash in a route
- * parameter is a route somewhere else.
+ * A config delete: the hub moves the row into its trash and answers the
+ * entry its Undo names (config/undo.ts). `body` is for the one row whose
+ * identity will not fit in a path: a linked document is keyed by
+ * `models/claude-opus-5.md`, and a slash in a route parameter is a route
+ * somewhere else.
  */
-async function erase(
+const erase = (
   url: string,
   attempt: string,
   body?: unknown
-): Promise<void> {
-  const response = await fetch(url, {
-    method: "DELETE",
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-  });
-  if (!response.ok) {
-    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
-  }
-}
+): Promise<Deleted> =>
+  send<Deleted>(
+    url,
+    {
+      method: "DELETE",
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+    },
+    attempt
+  );
 
 /**
  * Saves an MCP server. `projectId` binds it to one project, placed at each of
@@ -387,7 +390,7 @@ export const saveMcpServer = (
     `save ${name}`
   );
 
-export const removeMcpServer = (name: string): Promise<void> =>
+export const removeMcpServer = (name: string): Promise<Deleted> =>
   erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
 
 /**
@@ -569,7 +572,7 @@ export const linkMarketplace = async (
   return link.marketplace;
 };
 
-export const removeMarketplace = (name: string): Promise<void> =>
+export const removeMarketplace = (name: string): Promise<Deleted> =>
   erase(
     `/api/fleet/marketplaces/${encodeURIComponent(name)}`,
     `unlink ${name}`
@@ -671,7 +674,7 @@ export const switchSkill = (
 ): Promise<FleetSkillMeta> =>
   switchRow(`/api/fleet/skills/${encodeURIComponent(name)}`, enabled, name);
 
-export const removePlugin = (id: string): Promise<void> =>
+export const removePlugin = (id: string): Promise<Deleted> =>
   erase(`/api/fleet/plugins/${encodeURIComponent(id)}`, `remove ${id}`);
 
 /**
@@ -799,7 +802,7 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
       )
   );
 
-export const removeSkill = (name: string): Promise<void> =>
+export const removeSkill = (name: string): Promise<Deleted> =>
   erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
 
 /**
@@ -819,7 +822,7 @@ export const saveAgent = (name: string, content: string): Promise<FleetAgent> =>
  * delete — so discovery lists it as unmanaged until the daemon can take it
  * away itself.
  */
-export const removeAgent = (name: string): Promise<void> =>
+export const removeAgent = (name: string): Promise<Deleted> =>
   erase(`/api/fleet/agents/${encodeURIComponent(name)}`, `remove ${name}`);
 
 /** Writes the subagents again, at every machine that is online. */
@@ -1056,7 +1059,7 @@ export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
   );
 
 /** Drops it, and with it the copy on every machine that still has cawco's. */
-export const removeMemory = (): Promise<void> =>
+export const removeMemory = (): Promise<Deleted> =>
   erase("/api/fleet/memory", "remove the memory");
 
 /**
@@ -1089,7 +1092,7 @@ export async function saveMemoryDoc(
 }
 
 /** Drops one document, and with it the copy on every machine that has cawco's. */
-export const removeMemoryDoc = (path: string): Promise<void> =>
+export const removeMemoryDoc = (path: string): Promise<Deleted> =>
   erase("/api/fleet/memory/docs", `remove ${path}`, { path });
 
 /**

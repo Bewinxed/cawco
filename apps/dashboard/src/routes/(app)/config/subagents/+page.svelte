@@ -4,9 +4,8 @@
     machineLabel,
     parseAgentFrontMatter,
   } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
+  import { deleteAgent } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -16,13 +15,13 @@
     type DiscoveredAgent,
     discoverAgents,
     pushAgents,
-    removeAgent,
     saveAgent,
   } from "#lib/cawco/fleet.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -115,30 +114,16 @@
     return parts.join(" · ");
   }
 
-  /** Remove asks under the subagent's row, in the page. */
-  const asks = new Asker<AskHereRequest>();
-  async function askForget(row: FleetAgent) {
-    await asks.ask({
-      at: row.name,
-      title: `Remove ${row.name}?`,
-      body: "The fleet forgets it. Every machine keeps the file it was already given, and lists it below as unmanaged, until the daemon can take one away itself.",
-      confirmLabel: "Remove",
-      pendingLabel: "Removing…",
-      run: async () => {
-        busy[row.name] = true;
-        try {
-          await removeAgent(row.name);
-          const fleet = store.fleet.value;
-          if (fleet) {
-            fleet.agents = fleet.agents.filter(
-              (other) => other.name !== row.name
-            );
-          }
-        } finally {
-          delete busy[row.name];
-        }
-      },
-    });
+  /** Remove: at once, with Undo in the toast (deletes.ts). */
+  async function forget(row: FleetAgent) {
+    busy[row.name] = true;
+    try {
+      await deleteAgent(store, row.name);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete busy[row.name];
+    }
   }
 
   async function adopt(machineId: string, row: DiscoveredAgent) {
@@ -226,7 +211,7 @@
               icon: IconTrash,
               destructive: true,
               disabled: busy[row.name] === true,
-              onselect: () => askForget(row),
+              onselect: () => forget(row),
             },
           ]}
           flash={store.flash === row.name}
@@ -236,11 +221,7 @@
           meta={describe(row)}
           mono
           name={row.name}
-        >
-          {#snippet below()}
-            <AskHere asker={asks} at={row.name} />
-          {/snippet}
-        </SectionRow>
+        />
       {/each}
     </RowList>
   {/if}

@@ -1597,6 +1597,20 @@
       "when": 1792238460038,
       "tag": "0227_drop_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "6",
+      "when": 1792243987873,
+      "tag": "0228_config_trash",
+      "breakpoints": true
+    },
+    {
+      "idx": 229,
+      "version": "6",
+      "when": 1792243994785,
+      "tag": "0229_drop_rule_trash",
+      "breakpoints": true
     }
   ]
 }

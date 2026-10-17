@@ -1,17 +1,14 @@
 <script lang="ts">
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { deleteDelegateType } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
-  import {
-    type DelegateType,
-    removeDelegateType,
-  } from "#lib/cawco/delegate-types.js";
+  import type { DelegateType } from "#lib/cawco/delegate-types.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconPlus, IconTrash } from "#lib/icons.js";
@@ -48,26 +45,16 @@
     return parts.join(" · ");
   }
 
-  /** Delete asks under the type's row, in the page. */
-  const asks = new Asker<AskHereRequest>();
-  async function askRemove(row: DelegateType) {
-    await asks.ask({
-      at: row.name,
-      title: `Delete ${row.name}?`,
-      body: "A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.",
-      confirmLabel: "Delete delegate type",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        busy[row.name] = true;
-        try {
-          await removeDelegateType(row.name);
-          store.types.value = types.filter((other) => other.name !== row.name);
-        } finally {
-          delete busy[row.name];
-        }
-      },
-    });
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  async function remove(row: DelegateType) {
+    busy[row.name] = true;
+    try {
+      await deleteDelegateType(store, row.name);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete busy[row.name];
+    }
   }
 </script>
 
@@ -104,7 +91,7 @@
               icon: IconTrash,
               destructive: true,
               disabled: busy[row.name] === true,
-              onselect: () => askRemove(row),
+              onselect: () => remove(row),
             },
           ]}
           flash={store.flash === row.name}
@@ -115,9 +102,6 @@
         >
           {#snippet tile()}
             <HarnessLogo harness={row.harness} />
-          {/snippet}
-          {#snippet below()}
-            <AskHere asker={asks} at={row.name} />
           {/snippet}
         </SectionRow>
       {/each}

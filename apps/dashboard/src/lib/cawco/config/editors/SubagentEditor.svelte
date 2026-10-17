@@ -12,9 +12,10 @@
   import { IconDocument } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { removeAgent, saveAgent } from "../../fleet";
+  import { saveAgent } from "../../fleet";
+  import { deleteAgent } from "../deletes";
   import { keepDraft } from "../drafts.svelte";
-  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import { configStore, upsert } from "../store.svelte";
@@ -111,38 +112,23 @@ You are a <role>, working in one repository at a time.
     void goto("/config/subagents");
   }
 
-  async function askForget() {
+  /** Remove: at once, with Undo in the toast (deletes.ts). */
+  async function forget() {
     if (!agent) {
       return;
     }
-    await question.ask({
-      title: `Remove ${agent.name}?`,
-      body: "The fleet forgets it. Every machine keeps the file it was already given, and lists it as unmanaged, until the daemon can take one away itself.",
-      confirmLabel: "Remove",
-      pendingLabel: "Removing…",
-      run: async () => {
-        deleting = true;
-        try {
-          await removeAgent(agent.name);
-          kept.drop();
-          // Back to the list first, so the row is seen leaving it.
-          await goto("/config/subagents");
-          const fleet = store.fleet.value;
-          if (fleet) {
-            fleet.agents = fleet.agents.filter(
-              (row) => row.name !== agent.name
-            );
-          }
-        } catch (error) {
-          deleting = false;
-          throw error;
-        }
-      },
-    });
+    deleting = true;
+    refused = undefined;
+    try {
+      await deleteAgent(store, agent.name, () => {
+        kept.drop();
+        return goto("/config/subagents");
+      });
+    } catch (error) {
+      deleting = false;
+      refused = failureWords(error);
+    }
   }
-
-  /** Remove asks in this editor's own footer. */
-  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -151,9 +137,8 @@ You are a <role>, working in one repository at a time.
   {deleting}
   failed={refused !== undefined}
   oncancel={cancel}
-  ondelete={agent ? askForget : undefined}
+  ondelete={agent ? forget : undefined}
   onsubmit={save}
-  {question}
   saveLabel={agent ? "Save changes" : "Create subagent"}
   {saving}
   title={agent ? agent.name : "New subagent"}

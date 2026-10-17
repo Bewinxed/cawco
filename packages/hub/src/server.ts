@@ -464,13 +464,14 @@ import {
   checkoutOf,
   hashHookMaterial,
   listedAt,
-  RULE_UNDO_MS,
+  MEMORY_ID,
   TURN_UNRECORDED,
 } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
-import type { PriorConversation } from "./db/schema";
+import type { PriorConversation, TrashKind } from "./db/schema";
+import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
   createDecisions,
@@ -15002,17 +15003,20 @@ export const createServer = (
     }
   };
 
-  /** A document leaving the set, kept whole — nothing else has a copy of it. */
-  const keepRemovedDoc = (doc: {
-    path: string;
+  /**
+   * The main file or a document leaving the fleet, kept in its history —
+   * nothing else has a copy of it once the trash lets it go.
+   */
+  const keepRemovedMemory = (row: {
+    path?: string;
     content: string;
     hash: string;
   }): void => {
     db.recordFleetMemory({
-      content: doc.content,
-      hash: doc.hash,
+      content: row.content,
+      hash: row.hash,
       source: "fleet",
-      path: doc.path,
+      ...(row.path === undefined ? {} : { path: row.path }),
     });
   };
 
@@ -18828,6 +18832,8 @@ export const createServer = (
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
+    trash: (name) =>
+      db.trash.put({ kind: "connection", key: name }, Date.now()),
     typeConnections: (row) =>
       row.delegateType
         ? (projectTypes.resolveTypeFor(
@@ -20967,6 +20973,56 @@ export const createServer = (
     publishInstances(message.machineId);
   };
 
+  /**
+   * A config item the trash just put back (db/trash.ts): what its delete
+   * stopped, started again, and the item as its list reads it.
+   */
+  const returned = async (kind: TrashKind, key: string): Promise<unknown> => {
+    switch (kind) {
+      case "rule": {
+        ruleEngine.reload();
+        const rule = db.getRule(key);
+        return rule ? ruleRowsOf([rule])[0] : null;
+      }
+      case "hook":
+        fanOutFleet();
+        return db.getFleetHook(key) ?? null;
+      case "skill":
+        fanOutFleet();
+        return db.listSkills().find((row) => row.name === key) ?? null;
+      case "plugin":
+        fanOutFleet();
+        return db.listPlugins().find((row) => row.id === key) ?? null;
+      case "marketplace":
+        fanOutFleet();
+        return (
+          db.fleetConfig().marketplaces.find((row) => row.name === key) ?? null
+        );
+      case "agent":
+        fanOutAgents();
+        return db.listFleetAgents().find((row) => row.name === key) ?? null;
+      case "mcp":
+        await fleetMcp.probe(key);
+        announceMcp();
+        return db.fleetConfig().mcp.find((row) => row.name === key) ?? null;
+      case "delegateType":
+        return delegateTypes.get(key) ?? null;
+      case "memory":
+        fanOutFleet();
+        return {
+          memory: db.getFleetMemory() ?? null,
+          docs: db.listFleetMemoryDocs(),
+        };
+      case "memoryDoc":
+        fanOutFleet();
+        return db.getFleetMemoryDoc(key) ?? null;
+      case "connection":
+        return connections.returned(key);
+      default:
+        throw unreachable(kind);
+    }
+  };
+
   // Everything is made: a hub that serves starts its work off the boot path.
   // One built only to be read starts none of it.
   if (background) {
@@ -21031,7 +21087,9 @@ export const createServer = (
         websocket(),
         hubAuth.routes(),
         dashboardErrorsRoutes(),
-        delegateTypesRoutes(delegateTypes),
+        delegateTypesRoutes(delegateTypes, (name) =>
+          db.trash.put({ kind: "delegateType", key: name }, Date.now())
+        ),
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)
         ),
@@ -22771,11 +22829,18 @@ export const createServer = (
           return saved;
         }
       )
-      .delete("/api/fleet/mcp/:name", ({ params }) => {
-        db.deleteMcpServer(params.name);
+      // Into the trash with its sign-in, off every machine at once.
+      .delete("/api/fleet/mcp/:name", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "mcp", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no MCP server ${params.name}`);
+        }
         fleetMcp.forget(params.name);
         announceMcp();
-        return { ok: true };
+        return undoable(trashed);
       })
       .post("/api/fleet/mcp/:name/sign-in", async ({ params, status }) => {
         try {
@@ -22866,30 +22931,42 @@ export const createServer = (
         ruleEngine.reload();
         return rule;
       })
-      /**
-       * A delete is undone, not confirmed (JOURNEY.md Flow 5: "an undo
-       * affordance after the fact rather than a confirm dialog before it"):
-       * the rule stops at once and waits whole in the trash for
-       * `restorableForMs`, the window the dashboard's Undo stands for.
-       */
-      .delete("/api/rules/:id", ({ params }) => {
-        const trashed = db.trashRule(params.id, Date.now());
-        ruleEngine.reload();
-        return { ok: true, restorableForMs: trashed ? RULE_UNDO_MS : 0 };
-      })
-      /** Undo: the deleted rule back whole, as the list reads it. */
-      .post("/api/rules/:id/restore", ({ params, status }) => {
-        const rule = db.restoreRule(params.id, Date.now());
-        if (!rule) {
-          return status(
-            404,
-            "That rule can no longer be brought back: its undo has run out."
-          );
+      // The rule stops at once, into the trash with every session's standing.
+      .delete("/api/rules/:id", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "rule", key: params.id },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `there is no rule ${params.id}`);
         }
         ruleEngine.reload();
-        const [row] = ruleRowsOf([rule]);
-        return row;
+        return undoable(trashed);
       })
+      /**
+       * Undo, for every config delete (db/trash.ts): the item back whole,
+       * what its putting back sets going (a fan-out, a probe, the rule engine)
+       * set going, and the item as its list reads it, under `row`.
+       */
+      .post(
+        "/api/trash/:id/restore",
+        { params: t.Object({ id: t.Numeric() }) },
+        async ({ params, status }) => {
+          const back = db.trash.take(params.id, Date.now());
+          if (!back.ok) {
+            return back.why === "taken"
+              ? status(
+                  409,
+                  "Something of the same name was made while it waited, and that one stays."
+                )
+              : status(
+                  404,
+                  "It can no longer be brought back: its undo has run out."
+                );
+          }
+          return { kind: back.kind, row: await returned(back.kind, back.key) };
+        }
+      )
       /**
        * What a rule has actually been doing, per session: fires, and whether
        * each session is still pending on it. A session never sees the rule's
@@ -23100,10 +23177,16 @@ export const createServer = (
         { body: t.Object({ source: t.String({ minLength: 1 }) }) },
         ({ body }): MarketplaceLink => linkMarketplace(body.source.trim())
       )
-      .delete("/api/fleet/marketplaces/:name", ({ params }) => {
-        db.deleteMarketplace(params.name);
+      .delete("/api/fleet/marketplaces/:name", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "marketplace", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet links no marketplace ${params.name}`);
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       .put(
         "/api/fleet/plugins/:id",
@@ -23159,10 +23242,16 @@ export const createServer = (
         );
         return pluginRow(row);
       })
-      .delete("/api/fleet/plugins/:id", ({ params }) => {
-        db.deletePlugin(params.id);
+      .delete("/api/fleet/plugins/:id", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "plugin", key: params.id },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet installs no plugin ${params.id}`);
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // A plain skill is resolved here, once for the whole fleet: the hub
       // downloads it, and the machines are handed the files (NEW.md §11). The
@@ -23347,11 +23436,19 @@ export const createServer = (
         detach(fetchSkill(stored.name, stored.source), "skill refresh");
         return skillRow(stored);
       })
-      .delete("/api/fleet/skills/:name", ({ params }) => {
-        db.deleteSkill(params.name);
+      // Its files kept in its history, then into the trash, off every machine.
+      .delete("/api/fleet/skills/:name", ({ params, status }) => {
+        db.keepSkillVersion(params.name);
+        const trashed = db.trash.put(
+          { kind: "skill", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no skill ${params.name}`);
+        }
         skillChoices.delete(params.name);
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // What one skill used to be, newest first, without its files.
       .get(
@@ -23493,9 +23590,15 @@ export const createServer = (
       // read and write and no delete, so every machine keeps the file until Phase
       // B's daemon-side sync can take it away. Discovery then shows the leftover
       // as unmanaged, which is the truth rather than a comforting silence.
-      .delete("/api/fleet/agents/:name", ({ params }) => {
-        db.deleteFleetAgent(params.name);
-        return { ok: true };
+      .delete("/api/fleet/agents/:name", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "agent", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no subagent ${params.name}`);
+        }
+        return undoable(trashed);
       })
       // The click for a machine that was asleep when a definition was written, and
       // for one whose home the hub could only work out later. Awaited, so the
@@ -23543,17 +23646,30 @@ export const createServer = (
       // it — a linked document with no main file to link it is not a memory, and
       // the machines would keep converging on documents nothing points at.
       // A scoped document is loaded on its own, linked by nothing, so it stays.
-      .delete("/api/fleet/memory", () => {
-        for (const doc of db.listFleetMemoryDocs()) {
-          if (doc.scope) {
-            continue;
-          }
-          keepRemovedDoc(doc);
-          db.deleteFleetMemoryDoc(doc.path);
+      // Each is kept in the history, and the set goes into the trash together.
+      .delete("/api/fleet/memory", ({ status }) => {
+        const main = db.getFleetMemory();
+        if (!main) {
+          return status(404, "the fleet keeps no memory");
         }
-        db.clearFleetMemory();
+        const linked = db.listFleetMemoryDocs().filter((doc) => !doc.scope);
+        keepRemovedMemory(main);
+        for (const doc of linked) {
+          keepRemovedMemory(doc);
+        }
+        const trashed = db.trash.put(
+          {
+            kind: "memory",
+            key: MEMORY_ID,
+            docs: linked.map((doc) => doc.path),
+          },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, "the fleet keeps no memory");
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // One document. Same save as the main file's, keyed by its path —
       // `models/claude-opus-5.md` is the same string on every machine, which
@@ -23637,10 +23753,16 @@ export const createServer = (
             return status(404, `the fleet keeps no ${body.path}`);
           }
 
-          keepRemovedDoc(current);
-          db.deleteFleetMemoryDoc(body.path);
+          keepRemovedMemory(current);
+          const trashed = db.trash.put(
+            { kind: "memoryDoc", key: body.path },
+            Date.now()
+          );
+          if (trashed === undefined) {
+            return status(404, `the fleet keeps no ${body.path}`);
+          }
           fanOutFleet();
-          return { ok: true };
+          return undoable(trashed);
         }
       )
       // What one machine really has, without touching anything: the read behind
@@ -23729,7 +23851,7 @@ export const createServer = (
               if (theirs.has(doc.path) || doc.scope) {
                 continue;
               }
-              keepRemovedDoc(doc);
+              keepRemovedMemory(doc);
               db.deleteFleetMemoryDoc(doc.path);
             }
           }
@@ -23949,9 +24071,15 @@ export const createServer = (
         }
 
         keepHookVersion(current);
-        db.deleteFleetHook(params.id);
+        const trashed = db.trash.put(
+          { kind: "hook", key: params.id },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no hook ${params.id}`);
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // What one hook used to be, newest first, without the material. `?hookId=`
       // narrows to that hook's own history; nothing named lists every hook's,

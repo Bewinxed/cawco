@@ -19,6 +19,7 @@ import {
 } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
+import { undoable } from "./db/trash";
 
 interface DelegateTypeRow {
   /** The account its sessions prefer; NULL: the provider's strategy chooses. */
@@ -56,7 +57,6 @@ export interface DelegateTypesShape {
   get: (name: string) => DelegateType | undefined;
   list: () => DelegateType[];
   put: (draft: DelegateType) => DelegateType;
-  remove: (name: string) => void;
 }
 
 /**
@@ -205,10 +205,6 @@ export const makeDelegateTypes = (
     return draft;
   };
 
-  const remove = (name: string): void => {
-    sqlite.query("DELETE FROM delegate_types WHERE name = ?").run(name);
-  };
-
   if (!seeded()) {
     for (const type of DEFAULT_DELEGATE_TYPES) {
       put(type);
@@ -220,15 +216,19 @@ export const makeDelegateTypes = (
       .run("seeded", String(Date.now()));
   }
 
-  return { list, get, put, remove };
+  return { list, get, put };
 };
 
 /**
  * The three routes: `GET /api/delegate-types`, `PUT /api/delegate-types/:name`,
  * `DELETE /api/delegate-types/:name`. A standalone Elysia app so `server.ts`
- * mounts it with one `.use()` rather than growing its own route list.
+ * mounts it with one `.use()` rather than growing its own route list. A
+ * delete goes into the hub's trash (`trash`, db/trash.ts) for its Undo.
  */
-export const delegateTypesRoutes = (store: DelegateTypesShape) =>
+export const delegateTypesRoutes = (
+  store: DelegateTypesShape,
+  trash: (name: string) => number | undefined
+) =>
   new Elysia()
     .get("/api/delegate-types", () => ({ types: store.list() }))
     .put(
@@ -269,9 +269,9 @@ export const delegateTypesRoutes = (store: DelegateTypesShape) =>
       }
     )
     .delete("/api/delegate-types/:name", ({ params, status }) => {
-      if (!store.get(params.name)) {
+      const restore = trash(params.name);
+      if (restore === undefined) {
         return status(404, `the fleet keeps no delegate type ${params.name}`);
       }
-      store.remove(params.name);
-      return { ok: true };
+      return undoable(restore);
     });
