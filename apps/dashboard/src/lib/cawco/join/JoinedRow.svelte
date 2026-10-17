@@ -90,15 +90,22 @@
   role="status"
   variant="default"
 >
-  <div class="said">
+  <div class="grid min-w-0">
     {#key said}
-      <div class="line" transition:fade={{ duration: dur("--dur-fade") }}>
+      <!-- literal: 10px -->
+      <div
+        class="col-start-1 row-start-1 grid min-w-0 grid-cols-(--columns) gap-x-(--gap)"
+        style:--columns="auto minmax(0, 1fr)"
+        style:--gap="10px"
+        transition:fade={{ duration: dur("--dur-fade") }}
+      >
         <span
           data-slot="glyph"
           data-joined-row-done={line.hue === "done" || undefined}
-          class="glyph"
-          class:attn={line.hue === "attn"}
-          class:done={line.hue === "done"}
+          data-done={line.hue === "done" || undefined}
+          data-attn={line.hue === "attn" || undefined}
+          class="flex h-(--glyph-h) items-center text-ink-strong data-attn:text-status-attn-ink data-done:text-status-done-ink"
+          style:--glyph-h="calc(var(--text-body) * 1.45)"
         >
           {#if Glyph}
             <Glyph aria-hidden="true" class="duo size-icon-md" />
@@ -110,20 +117,29 @@
             />
           {/if}
         </span>
-        <div data-slot="words" class="words">
-          <p data-slot="sentence" class="sentence" {@attach fitLabel}>
+        <div data-slot="words" class="flex min-w-0 flex-col gap-space-row">
+          <p
+            data-slot="sentence"
+            class="type-body text-pretty text-ink-strong"
+            {@attach fitLabel}
+          >
             {#if label === name}
-              <span data-slot="who" class="who">{name}</span>
+              <span data-slot="who" class="whitespace-nowrap">{name}</span>
             {:else}
               <span class="sr-only">{name}</span>
-              <span data-slot="who" aria-hidden="true" class="who" title={name}
-                >{label}</span
+              <span
+                data-slot="who"
+                aria-hidden="true"
+                class="whitespace-nowrap"
+                title={name}>{label}</span
               >
             {/if}
             {line.rest}
           </p>
           {#if line.instruction}
-            <p class="how">{line.instruction}</p>
+            <p class="type-meta text-pretty text-ink-muted">
+              {line.instruction}
+            </p>
           {/if}
         </div>
       </div>
@@ -132,55 +148,8 @@
 </Alert.Root>
 
 <style>
-  /* Two copies share one cell while they cross-fade; the surface tweens to the new height. */
-  .said {
-    display: grid;
-    min-width: 0;
-  }
-  .line {
-    grid-area: 1 / 1;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: 10px;
-    min-width: 0;
-  }
-  /* The glyph is the row's status signal, a mark on a disc: its disc (the
-     duotone's second layer, at the status-glyph opacity) holds 3:1 on the
-     recess, and its strokes hold 3:1 on the disc, in both themes. The two
-     need the ink at about 9:1 on the recess, which the hue glyph inks miss by
-     day, so a hue takes its status ink (the spinner keeps its own track). */
-  .glyph {
-    display: flex;
-    align-items: center;
-    height: calc(var(--text-body) * 1.45);
-    color: var(--ink-strong);
-  }
-  .glyph :global(svg.duo [opacity]) {
+  /* residual: foreign-dom — the glyph component's duotone layers */
+  [data-slot="glyph"] :global(svg.duo [opacity]) {
     opacity: var(--glyph-duo-status-opacity);
-  }
-  .glyph.done {
-    color: var(--status-done-ink);
-  }
-  .glyph.attn {
-    color: var(--status-attn-ink);
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .sentence {
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-wrap: pretty;
-  }
-  .who {
-    white-space: nowrap;
-  }
-  .how {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-wrap: pretty;
   }
 </style>

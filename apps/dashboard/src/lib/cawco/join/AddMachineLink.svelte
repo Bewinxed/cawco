@@ -9,37 +9,20 @@
   let { children }: { children: Snippet } = $props();
 </script>
 
+<!-- literal: 3px -->
 <button
   aria-haspopup="dialog"
-  class="add-link"
+  class="inline cursor-pointer rounded-xs border-none border-current bg-transparent p-0 text-link-ink underline decoration-transparent underline-offset-(--offset) transition-[text-decoration-color] dur-control ease-out hover:decoration-current focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-2"
   onclick={() => addMachine.show()}
+  style:--offset="3px"
   type="button"
 >
   {@render children()}
 </button>
 
 <style>
-  .add-link {
-    display: inline;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--link-ink);
+  /* residual: unmapped */
+  button {
     font: inherit;
-    text-decoration: underline;
-    text-decoration-color: transparent;
-    text-underline-offset: 3px;
-    cursor: pointer;
-    transition: text-decoration-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .add-link:hover {
-      text-decoration-color: currentColor;
-    }
-  }
-  .add-link:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: 2px;
   }
 </style>

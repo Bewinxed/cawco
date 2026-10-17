@@ -23,66 +23,37 @@
   });
 </script>
 
-<div class="box">
+<!-- literal: 8px -->
+<!-- literal: 5px -->
+<!-- literal: 10px -->
+<div
+  class="flex h-c-btn-h min-w-0 items-center gap-(--gap) rounded-md border border-border-control bg-surface-hover pr-(--pad-end) pl-(--pad-start)"
+  style:--gap="8px"
+  style:--pad-end="5px"
+  style:--pad-start="10px"
+>
   <span class="sr-only">{label}:</span>
-  <code title={text}>{text}</code>
+  <!-- literal: 1.4 -->
+  <code
+    class="min-w-0 flex-1 truncate text-size-meta leading-(--lh) text-ink-strong"
+    style:--lh="1.4"
+    title={text}>{text}</code
+  >
+  <!-- literal: 5px -->
+  <!-- literal: 26px -->
+  <!-- literal: 8px -->
+  <!-- literal: 13px -->
   <button
-    class="copy pressable touch-hit"
+    class="pressable touch-hit inline-flex h-(--h) flex-none cursor-pointer items-center gap-(--gap) rounded-sm border border-border-control bg-surface-raised px-(--pad) type-label whitespace-nowrap text-ink-strong transition-control hover:bg-surface-hover"
     onclick={() => clipboard.copy(text)}
+    style:--gap="5px"
+    style:--glyph="13px"
+    style:--h="26px"
+    style:--hit-edge="1px"
+    style:--pad="8px"
     type="button"
   >
-    <Documents aria-hidden="true" />
+    <Documents aria-hidden="true" class="size-(--glyph) text-ink-muted" />
     <span aria-live="polite">{said}</span>
   </button>
 </div>
-
-<style>
-  .box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    height: 36px;
-    padding: 0 5px 0 10px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-  }
-  code {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    font-size: var(--text-meta);
-    line-height: 1.4;
-    color: var(--ink-strong);
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .copy {
-    --hit-edge: 1px;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 5px;
-    height: 26px;
-    padding: 0 8px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .copy :global(svg) {
-    width: 13px;
-    height: 13px;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .copy:hover {
-      background: var(--surface-hover);
-    }
-  }
-</style>
