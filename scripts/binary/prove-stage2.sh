@@ -964,11 +964,14 @@ install_hub() {
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
   # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
   # machine has it (the socket names it there alone). `/` answers 307 to /session, the page with the app's markup.
-  as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
-    || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
-  if has_ipv6_loopback "$hubc"; then
-    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
-      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  # $LEGACY is a build from before the loopback port, so it has none to serve.
+  if [[ "$version" != "$LEGACY" ]]; then
+    as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
+    if has_ipv6_loopback "$hubc"; then
+      as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
+        || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+    fi
   fi
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$version" ]]
