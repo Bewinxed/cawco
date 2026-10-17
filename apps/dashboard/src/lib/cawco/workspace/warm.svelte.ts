@@ -6,13 +6,12 @@
  * shows it styles and lays out every row it holds in that one task, 50-75ms
  * of CPU for a long transcript. So a tab the reader reaches for — the
  * pointer comes onto it or presses it, the keyboard focuses it — warms its
- * pane: laid out and not painted (PaneLeaf `.pane-settling`), so that work
- * lands in the frame after the reach and the switch only paints. Swipe
- * groups need none of this: they keep both neighbours drawn (PaneLeaf
- * `shown`).
+ * pane: styled and laid out where it stands, still skipped (PaneLeaf
+ * `layOutSkipped`), so that work lands in the frame after the reach and the
+ * switch only paints. Swipe groups need none of this: they keep both
+ * neighbours drawn (PaneLeaf `shown`).
  *
- * One pane a group at most, and only while the reach lasts: a warm pane is
- * laid out again as its session streams, the cost a pane put away is spared.
+ * One pane a group at most, and only while the reach lasts.
  */
 import { SvelteMap } from "svelte/reactivity";
 

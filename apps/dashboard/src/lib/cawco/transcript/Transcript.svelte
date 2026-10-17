@@ -1459,11 +1459,11 @@
    * NOT SEEN, ONLY WHAT THE VIEW SHOWS IS MOUNTED.
    *
    * A transcript off screen (put away, or laid out while the reader reaches
-   * for its tab: PaneLeaf `.pane-settling`, hidden by `visibility`) keeps
-   * virtua to the rows in its view, no screen either side. The switch that
-   * shows a warm pane restyles every element it holds, the inherited
-   * `visibility` coming back on each (2,366 elements, 26.7ms, for a view and
-   * a screen above and below it); it holds the view's rows alone now. The
+   * for its tab: PaneLeaf `layOutSkipped`) keeps virtua to the rows in its
+   * view, no screen either side. A switch that showed a pane hidden by
+   * `visibility` restyled every element it held, the inherited value coming
+   * back on each (2,366 elements, 26.7ms, for a view and a screen above and
+   * below it); it holds the view's rows alone. The
    * screens either side mount a step a task once the shown pane's first
    * frame has painted (`buffer`), and are let go a step a task once it is
    * put away, so none of it lands in a switch's frame (web.dev, "Optimize long

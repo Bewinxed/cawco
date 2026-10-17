@@ -352,6 +352,25 @@
       }
     });
   });
+
+  /**
+   * A pane put away whose tab the reader is reaching for (warm.svelte.ts),
+   * laid out where it stands, still skipped: in the frame after the reach, a
+   * read of a box inside it has the engine style and lay out the skipped
+   * subtree ("Layout is forced for this lock", Blink DisplayLockContext) and
+   * keep it, so the switch that shows it lifts `content-visibility` alone,
+   * which no element under it inherits. Hidden by `visibility` instead, the
+   * switch handed every one of them a new inherited value and restyled each
+   * whole: the engine's shortcut for an inherited change skips any element
+   * whose style reads or sets a custom property (Blink
+   * `Element::PropagateInheritedProperties`), which is nearly every one.
+   */
+  const layOutSkipped = (pane: HTMLElement) => {
+    const frame = requestAnimationFrame(() => {
+      pane.firstElementChild?.getBoundingClientRect();
+    });
+    return () => cancelAnimationFrame(frame);
+  };
 </script>
 
 <!-- The whole group answers to a click by taking focus, so typing goes where
@@ -424,7 +443,7 @@
           ((Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId)) ||
             paneId === swipe.leaving))}
       {@const ctx = contextOf(paneId)}
-      {@const laidOut = settling.has(paneId) || warm.holds(leaf.id, paneId)}
+      {@const laidOut = settling.has(paneId)}
       <!-- Inert only where it is drawn and not the one being worked in: a
            swipe's neighbours. A pane put away is out of reach already —
            skipped content "must not be accessible to user-agent features,
@@ -444,6 +463,9 @@
         class:pane-hidden={!(shown || laidOut)}
         class:pane-settling={!shown && laidOut}
         use:slot={{ id: paneId, shown }}
+        {@attach !(shown || laidOut) &&
+          warm.holds(leaf.id, paneId) &&
+          layOutSkipped}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",
         })}
@@ -635,16 +657,18 @@
   /* A pane off screen keeps its DOM, its scroll and its rows — it is still
      streaming — but the browser skips its style, layout and paint entirely.
      `visibility: hidden` left every hidden transcript in each restyle and
-     reflow of the group, which is what a tab switch paid for. */
+     reflow of the group, which is what a tab switch paid for. Its own box
+     still takes the pointer, so it stands under the drawn pane, said by
+     `z-index`, which nothing inherits: `pointer-events` is inherited, and
+     lifted at the switch it restyled every element of the pane shown. */
   .pane-hidden {
     content-visibility: hidden;
-    pointer-events: none;
+    z-index: -1;
   }
   /* A pane off screen that has not drawn its first picture yet (dock.svelte.ts
      `settling`) is laid out but not painted, so its transcript measures its
      rows and draws before its tab is chosen; once drawn it is skipped as
-     above. So is the pane whose tab the reader is reaching for (warm.svelte.ts),
-     so the switch that shows it only paints. Only the hidden state is declared, as on the surfaces (see
+     above. Only the hidden state is declared, as on the surfaces (see
      `.groups.hidden-surface` in SessionSurface). Hidden, it takes no
      pointer, so nothing else is said: every property the switch changes on
      this box is one more its elements are restyled for. */
