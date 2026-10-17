@@ -718,14 +718,17 @@ const timeSets = (page: Page): Promise<void> =>
  */
 const LAYOUT_PARTS = [
   ["nothing changed", ""],
-  ["the tab strip taken out", ".session-tabs { display: none !important; }"],
+  [
+    "the tab strip taken out",
+    "[data-session-tabs] { display: none !important; }",
+  ],
   [
     "the strip's layout its own (contain: layout)",
-    ".session-tabs { contain: layout !important; }",
+    "[data-session-tabs] { contain: layout !important; }",
   ],
   [
     "the track's layout its own (contain: layout)",
-    ".session-tabs .ff-tabs-list { contain: layout !important; }",
+    "[data-session-tabs] .ff-tabs-list { contain: layout !important; }",
   ],
   [
     "the panes' stack's layout its own (contain: layout)",
@@ -733,7 +736,7 @@ const LAYOUT_PARTS = [
   ],
   [
     "every tab's contents taken out, its box kept",
-    '.session-tabs [data-slot="ff-tab"] > * { display: none !important; }',
+    '[data-session-tabs] [data-slot="ff-tab"] > * { display: none !important; }',
   ],
 ] as const;
 async function switchLayoutParts(

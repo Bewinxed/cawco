@@ -179,6 +179,17 @@ The same build-then-format split, and nothing compared the committed file with w
 - config-undo: `ALL PASS`, 44 checks: every config page and editor deletes at once with Undo in the toast, connections included;
 - delegate-work-control: `ALL PASS`, 4 checks, the label `x 543`, in the move switch's font and ink;
 - video-captions: `ALL PASS`, 7 checks: a sidecar `.vtt` captions its video, a lone one is a file row, a removed one says "Captions file not available".
+- upstream-guard: its UI half passes on this tree (10 checks: Needs you's three peers on desk and phone, one width, height and fill, keep off first; the answer reaching the hub; the menu's four radio items). It had failed on `nothing drawn at … [data-kind="choice"] .peers button:first-of-type`: the spec read NeedsCard's `.peers`, which set 5 made `data-slot="peers"` (the spec read it so at T too, inside a template string 1a's sweep did not reach). Its part (b) delegates, and stops here with `/api/work-items: 502 … cannot run a delegate on this machine: the boundary exited … this machine's CawCo runs inside another bwrap sandbox`: the kit's README, "A spec that delegates runs on the host".
+
+### Every probe selector against the converted tree
+
+That miss made a sweep worth doing: every string literal and template text in `scripts/probe-kit/**/*.ts`, read with the TypeScript parser, its class selectors set against the classes the dashboard wrote at T (a `class` attribute, a `class:` directive, a `<style>` or `.css` selector) and writes now. 21 names were classes at T and are not now; read one by one, four were the cutover's, and are retargeted to the hook the converted tree writes:
+- upstream-guard: `.peers` → `[data-slot="peers"]`;
+- two-pane-perf's layout parts: `.session-tabs` (four rules) → `[data-session-tabs]` (on PaneTabs at M too);
+- keychain-unlock: `li[data-machine] .row` → `li[data-machine] [data-slot="row"]` (MachinesList's own script reads the row so);
+- (with folder-ride, home-counts and config-undo above).
+
+The other 17 are not the dashboard's: file names and paths (`.md`, `.txt`, `.log`, `.config`, `.post.json`), property paths (`permission.answer`, `color.ink`, `tool.use`, `import.meta`), the fixture pages' own `<style>` (comments.ts' `.card`, `.band`, ink.ts' `article.card`), the comment overlay's shadow root (`cawco-overlay` `.layer`, `.label`), the canvas host's own rail (`packages/agent/src/canvas-host`, `.rail-item`), and `kit-edge-fade-block`, which every scroller still carries (in `cn` arrays). The canvas specs' other classes (`.rail-box`, `.canvas-host`, `.canvas-empty`, `.canvas-refusal` …) and ink.ts' `.ink-menu`/`.ink-word` are the canvas host's and the preview overlay's (`packages/agent/src/canvas-host`, `preview-overlay/radial.ts`), which the cutover does not touch.
 
 ### Gates on the merged tree
 

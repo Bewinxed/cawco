@@ -351,7 +351,9 @@ const stepState = (page: Page, machineId: string) =>
  * menu or the unlock step. Empty when no such menu opened. The menu stays open.
  */
 async function machineMenu(page: Page): Promise<string[]> {
-  const row = page.locator(`li[data-machine="${MACHINE}"] .row`).first();
+  const row = page
+    .locator(`li[data-machine="${MACHINE}"] [data-slot="row"]`)
+    .first();
   await row.waitFor();
   await row.click({ button: "right" });
   const menu = page

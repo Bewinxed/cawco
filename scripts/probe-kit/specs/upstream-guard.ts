@@ -558,7 +558,11 @@ const run = async (kit: Kit) => {
       })
     );
   }
-  await press(pages.phone, "phone", `${NEEDS_ROW} .peers button:first-of-type`);
+  await press(
+    pages.phone,
+    "phone",
+    `${NEEDS_ROW} [data-slot="peers"] button:first-of-type`
+  );
   const answered = await until(
     "a: the fleet's answer at the hub",
     fleetAnswer,
