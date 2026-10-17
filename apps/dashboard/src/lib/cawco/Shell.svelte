@@ -1039,7 +1039,7 @@
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:desk:pl-space-7 max-desk:pl-(--top-inset-start) max-desk:pr-(--top-inset-end) max-desk:data-floating:absolute max-desk:data-floating:inset-x-0 max-desk:data-floating:top-0 max-desk:data-floating:bottom-auto max-desk:data-floating:z-20 max-desk:data-floating:pointer-events-none"
+        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:absolute max-[900px]:data-floating:inset-x-0 max-[900px]:data-floating:top-0 max-[900px]:data-floating:bottom-auto max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
@@ -1055,7 +1055,7 @@
         <button
           data-slot="burger"
           aria-label="Open navigation"
-          class="min-[900px]:hidden size-(--burger) -ml-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong cursor-pointer transition-[background] dur-control ease-in-out hover:bg-surface-hover motion-safe:active:transform-(--burger-press) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="min-[900px]:hidden size-(--burger) -ml-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong cursor-pointer transition-[background] dur-control ease-in-out hover:bg-surface-hover motion-safe:active:transform-(--burger-press) max-[900px]:self-start max-[900px]:ms-(--burger-start) max-[900px]:mt-(--burger-top) max-[900px]:text-ink-muted max-[900px]:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
@@ -1067,7 +1067,7 @@
           type="button"
           bind:this={burger}
         >
-          <IconSidebar class="size-icon-lg max-desk:size-(--glyph)" />
+          <IconSidebar class="size-icon-lg max-[900px]:size-(--glyph)" />
         </button>
         <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
@@ -1079,7 +1079,7 @@
            control: the bar's gap and the slot's own end inset (7 + 11). -->
         <div
           data-slot="slot"
-          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible"
+          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-[900px]:pe-space-3 coarse:portrait:pe-space-3 max-[900px]:group-data-floating/top:invisible"
         >
           {#if barLeaves.length > 0}
             <!-- Nothing inside reaches the strip's own size or what is
@@ -1089,7 +1089,7 @@
                  but gives up the row; gone, it is not drawn. -->
             <div
               data-slot="slot-tabs"
-              class="contain-layout contain-size relative grow shrink basis-0 self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:group-data-hosting/top:hidden coarse:portrait:group-data-hosting/top:hidden"
+              class="contain-layout contain-size relative grow shrink basis-0 self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-[900px]:group-data-hosting/top:hidden coarse:portrait:group-data-hosting/top:hidden"
               {@attach barTabs(() => hosting)}
               {@attach followPanes}
             >
@@ -1132,7 +1132,7 @@
                strip is the slot's row. -->
             <div
               data-slot="slot-strip"
-              class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:hidden coarse:portrait:hidden"
+              class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-[900px]:hidden coarse:portrait:hidden"
               {@attach barTabs(() => stripHosted)}
             >
               {#if stripHosted}
@@ -1168,7 +1168,7 @@
                  is clipped to, past the 16px a name needs from a control. -->
             <span
               data-slot="crumb"
-              class="min-w-0 truncate ps-space-7 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
+              class="min-w-0 truncate ps-space-7 me-space-3 max-[900px]:ps-0 coarse:portrait:ps-0"
               in:riseIn
               out:crossOut
             >
@@ -1182,7 +1182,7 @@
              Jump and the machines in its sidebar, so its group holds Caw
              alone. Hosting the tabs, it keeps its own room. -->
         <div
-          class="relative ml-auto flex items-center min-w-0 group-data-hosting/top:flex-none group-data-hosting/top:pl-space-3 max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:pl-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:pl-0 max-desk:self-stretch max-desk:group-data-floating/top:pointer-events-auto"
+          class="relative ml-auto flex items-center min-w-0 group-data-hosting/top:flex-none group-data-hosting/top:pl-space-3 max-[900px]:group-data-hosting/top:flex-initial max-[900px]:group-data-hosting/top:pl-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:pl-0 max-[900px]:self-stretch max-[900px]:group-data-floating/top:pointer-events-auto"
         >
           <!-- The one group: one container of the panel's glass, a capsule on
                the bar's control height (`--c-btn-h`) whose items sit
@@ -1200,7 +1200,7 @@
           <!-- literal: 16px (the gap under a finger) -->
           <div
             data-slot="tools"
-            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill coarse:gap-(--tools-coarse-gap) max-desk:self-start max-desk:h-c-bar-caw-glass-phone max-desk:mt-(--tools-top) max-desk:p-0 max-desk:rounded-l-(--tools-round) max-desk:rounded-r-none"
+            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill coarse:gap-(--tools-coarse-gap) max-[900px]:self-start max-[900px]:h-c-bar-caw-glass-phone max-[900px]:mt-(--tools-top) max-[900px]:p-0 max-[900px]:rounded-l-(--tools-round) max-[900px]:rounded-r-none"
             data-bar-group
             data-instant={barGlass.instant ? "" : undefined}
             data-joined={barGlass.joined ? "" : undefined}
@@ -1230,7 +1230,7 @@
             <span
               data-slot="join"
               aria-hidden="true"
-              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out group-data-joined/tools:opacity-100 group-data-joined/tools:dur-pop max-desk:bottom-(--join-foot)"
+              class="absolute top-0 -bottom-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control transition-[opacity] dur-exit ease-out group-data-joined/tools:opacity-100 group-data-joined/tools:dur-pop max-[900px]:bottom-(--join-foot)"
               style:--f="var(--flare)"
               style:--h="calc(100% - 1px)"
               style:--join-foot="calc(-1 * var(--caw-neck))"
@@ -1362,7 +1362,7 @@
       <main
         data-slot="shell-content"
         data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom)"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom)"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"

@@ -69,9 +69,9 @@
    * leading side (app.css `.glass-card` squares the trailing one).
    */
   const FRAMES: Record<Frame, string> = {
-    caw: "w-(--frame-w) max-desk:w-(--frame-w-narrow) gap-0 p-space-2",
+    caw: "w-(--frame-w) max-[900px]:w-(--frame-w-narrow) gap-0 p-space-2",
     machines: "w-(--frame-w) gap-0",
-    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-desk:h-(--frame-h) max-desk:w-(--frame-w-narrow)",
+    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-[900px]:h-(--frame-h) max-[900px]:w-(--frame-w-narrow)",
   };
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
   const FRAME_SIZES: Record<Frame, { w: string; narrow?: string; h?: string }> =

@@ -528,7 +528,7 @@
             data-session-row-peek
             {...tip}
             aria-label="Peek {title}"
-            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:group-not-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-desk:hidden"
+            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:group-not-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-[900px]:hidden"
             onclick={() => openPeek({ viewId: live.id, href, title })}
             type="button"
           >

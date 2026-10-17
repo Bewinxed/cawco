@@ -158,7 +158,7 @@
      fills it: the field stays at its foot over the keyboard and the best
      match nearest it however many rows the words leave. -->
 <Finder
-  class="max-desk:flex-1"
+  class="max-[900px]:flex-1"
   {finder}
   {onclose}
   onmachine={machine}

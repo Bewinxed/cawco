@@ -351,7 +351,7 @@
 <!-- literal: 18rem, 3px, 24px, 12px -->
 <header
   data-slot="project-head"
-  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-3 pt-space-6 pr-space-6 pb-space-4 pl-space-7 max-desk:pt-space-5 max-desk:pr-space-5 max-desk:pb-space-3 max-desk:pl-space-5"
+  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-3 pt-space-6 pr-space-6 pb-space-4 pl-space-7 max-[900px]:pt-space-5 max-[900px]:pr-space-5 max-[900px]:pb-space-3 max-[900px]:pl-space-5"
 >
   <div
     data-slot="who"
@@ -479,7 +479,7 @@
   </div>
   <div
     data-slot="acts"
-    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 max-desk:shrink max-desk:grow max-desk:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
+    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 max-[900px]:shrink max-[900px]:grow max-[900px]:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
   >
     {#if !primary}
       <!-- No checkout yet: a session needs a machine and folder, which the
@@ -578,7 +578,7 @@
           <Button
             {...props}
             aria-label="More for {project.name}"
-            class="max-desk:ms-auto max-desk:me-(--more-bleed)"
+            class="max-[900px]:ms-auto max-[900px]:me-(--more-bleed)"
             size="icon"
             style="--more-bleed: calc((var(--c-btn-h) - var(--icon-md)) / -2)"
             variant="ghost"
@@ -703,7 +703,7 @@
     <Popover.Content
       align="end"
       aria-label="Caw, lead of {project.name}"
-      class="w-(--settings-w) p-space-2 max-desk:w-(--settings-w-narrow)"
+      class="w-(--settings-w) p-space-2 max-[900px]:w-(--settings-w-narrow)"
       style="--settings-w: min(var(--c-panel-w), calc(100vw - 24px)); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))"
       collisionPadding={12}
       customAnchor={more}

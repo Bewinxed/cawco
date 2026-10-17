@@ -249,7 +249,7 @@
 <!-- literal: 32rem, 6.5rem, 10rem, 30px, 14px -->
 <section
   aria-label="Project details"
-  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pr-space-6 pb-space-3 pl-space-7 max-desk:max-w-none max-desk:pr-space-5 max-desk:pl-space-5"
+  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pr-space-6 pb-space-3 pl-space-7 max-[900px]:max-w-none max-[900px]:pr-space-5 max-[900px]:pl-space-5"
   data-project-details={project.id}
   style:--details-max="calc(32rem + var(--space-7) + var(--space-6))"
   transition:unfold

@@ -593,7 +593,7 @@
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
-    <g class="max-desk:hidden">
+    <g class="max-[900px]:hidden">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
           class="fill-none stroke-status-attn-glyph"
@@ -620,7 +620,7 @@
         />
       {/if}
     </g>
-    <g data-slot="standing" class="hidden max-desk:inline">
+    <g data-slot="standing" class="hidden max-[900px]:inline">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
           class="fill-none stroke-status-attn-glyph"

@@ -322,7 +322,7 @@
        the pane's width under 900. -->
   <form
     data-slot="dock"
-    class="absolute inset-x-0 bottom-(--dock-bottom) z-20 mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-desk:w-full"
+    class="absolute inset-x-0 bottom-(--dock-bottom) z-20 mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-[900px]:w-full"
     style:--dock-bottom="calc(var(--space-4) + var(--safe-bottom))"
     onsubmit={(event) => {
       event.preventDefault();
