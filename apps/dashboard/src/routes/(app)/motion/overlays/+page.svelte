@@ -224,7 +224,7 @@
        the overlay stood. The whole screen under the openers, so a press where
        an overlay stood lands on it once the overlay has gone. -->
   <button
-    class="fixed inset-0 z-0 grid items-end justify-items-center border-0 bg-transparent p-space-5 text-ink-muted"
+    class="fixed inset-0 z-0 grid items-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
     data-page
     onclick={() => {
       counts.page += 1;

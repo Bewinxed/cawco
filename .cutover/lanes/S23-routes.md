@@ -78,3 +78,6 @@ None (no data-open/closed/checked/unchecked/disabled/active/horizontal/vertical 
 - cross-file hook: (app)/motion/delegate-tray/+page.svelte:251 .leaf → [data-slot="leaf"] (the element already had it; the class is deleted); selected by apps/dashboard/src/lib/cawco/transcript/Composer.svelte:1547 and apps/dashboard/src/lib/cawco/side/SideSheet.svelte:226
 - cross-file hook: (app)/motion/caw-notices/+page.svelte:364 .caw-pop → [data-slot="caw-pop"]; selected by apps/dashboard/src/lib/cawco/home/CawPanel.svelte:289 and :294 (`:global(.kit-pop.caw-pop)`)
 - needs colour token: none (no colour literal in any of the 13 files)
+
+## Delta R lines
+R2 fixed: apps/dashboard/src/routes/(app)/motion/overlays/+page.svelte:227 (`border: 0` → `border-none border-current`)
