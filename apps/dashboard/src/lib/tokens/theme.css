@@ -398,6 +398,8 @@
   /* Switches with its context: no literal maps to it. */
   --spacing-c-tray-chip: var(--c-tray-chip);
   /* Switches with its context: no literal maps to it. */
+  --spacing-c-peek-glyph: var(--c-peek-glyph);
+  /* Switches with its context: no literal maps to it. */
   --spacing-c-tray-gap: var(--c-tray-gap);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-tray-row: var(--c-tray-row);

@@ -68,7 +68,25 @@ const twMergeConfig = {
       gap: ["gap-inherit"],
       "color-scheme": ["scheme-inherit"],
       "pointer-events": ["pointer-events-all"],
-      "font-shorthand": ["font-inherit"],
+      "max-h": ["max-h-inherit"],
+      "align-items": ["items-box-start", "items-box-end", "items-unsafe-end"],
+      "justify-content": ["justify-box-end"],
+      "justify-self": ["justify-self-box-start"],
+      "align-content": ["content-unsafe-end"],
+      "border-color": ["border-suggest-tint"],
+      "bg-color": ["bg-suggest-tint", "bg-suggest-tint-hover"],
+      "font-shorthand": ["font-inherit", "font-mono-meta"],
+      "line-clamp-undo": ["line-clamp-undo"],
+      "translate-raw": [{ "translate-raw": arbitrary }],
+      "clip-margin": [{ "clip-margin": [validators.isAny] }],
+      "anim-delay": [{ "anim-delay": arbitrary }],
+      "overflow-anchor": ["anchor-none"],
+      "scroll-timeline": ["scroll-timeline-transcript-head"],
+      // Recipes: each sets its own custom properties.
+      "pane-tab-pads": ["pane-tab-pads"],
+      "pane-tab-rims": ["pane-tab-rims"],
+      "divider-chevron": ["divider-chevron"],
+      "turn-pad": ["turn-pad"],
       // tailwind-merge's `break` group holds `break-words`, which Tailwind 4
       // writes as overflow-wrap: word-break's value is a group of its own.
       "word-break-word": ["break-word"],
@@ -108,6 +126,16 @@ const twMerge = extendTailwindMerge<
   | "border-none-s"
   | "border-style-t"
   | "font-shorthand"
+  | "line-clamp-undo"
+  | "translate-raw"
+  | "clip-margin"
+  | "anim-delay"
+  | "overflow-anchor"
+  | "scroll-timeline"
+  | "pane-tab-pads"
+  | "pane-tab-rims"
+  | "divider-chevron"
+  | "turn-pad"
   | "word-break-word"
   | "animation-play-state"
   | "inks-strong"

@@ -837,6 +837,8 @@
     --c-block-drop-dot: 6px;
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
+    /* A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger. */
+    --c-peek-glyph: var(--icon-md);
     --c-tray-gap: var(--space-2);
     --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
     /* A working tray chip's narrowest: the floor under its measured width. */
@@ -1157,6 +1159,7 @@
   @media (pointer: coarse) {
     :root {
       --c-tray-chip: 34px;
+      --c-peek-glyph: var(--icon-lg);
       --c-tray-gap: var(--space-3);
     }
   }

@@ -665,6 +665,10 @@ public enum Size {
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).
     public static let cTrayChipCoarse: Double = 34
+    /// A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger.
+    public static let cPeekGlyph: Double = 16
+    /// `cPeekGlyph` under a coarse pointer (touch).
+    public static let cPeekGlyphCoarse: Double = 20
     public static let cTrayGap: Double = 7
     /// `cTrayGap` under a coarse pointer (touch).
     public static let cTrayGapCoarse: Double = 11

@@ -4554,6 +4554,11 @@
       },
       "$description": "The delegate tray's row: a chip, and the step down to the pill."
     },
+    "c-peek-glyph": {
+      "$type": "dimension",
+      "$value": "{size.icon-md}",
+      "$description": "A needs card's peek glyph (NeedsCard): the icon's medium size, its large one under a finger."
+    },
     "c-tray-gap": {
       "$type": "dimension",
       "$value": "{space.space-2}"

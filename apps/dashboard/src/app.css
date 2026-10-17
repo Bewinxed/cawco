@@ -2411,6 +2411,158 @@
 @utility pointer-events-all {
   pointer-events: all;
 }
+@utility max-h-inherit {
+  max-height: inherit;
+}
+/* A clamp taken off as the source wrote it: Tailwind's `line-clamp-none`
+   also sets overflow, display and orientation. */
+@utility line-clamp-undo {
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+}
+/* The meta size in the mono face as the `font` shorthand sets it: line
+   height normal, every other font subproperty reset. */
+@utility font-mono-meta {
+  font: var(--text-meta) var(--font-mono);
+}
+/* The box keywords Tailwind does not write (its `items-start` is
+   `flex-start`), and the unsafe alignments. */
+@utility items-box-start {
+  align-items: start;
+}
+@utility items-box-end {
+  align-items: end;
+}
+@utility items-unsafe-end {
+  align-items: unsafe end;
+}
+@utility justify-box-end {
+  justify-content: end;
+}
+@utility justify-self-box-start {
+  justify-self: start;
+}
+@utility content-unsafe-end {
+  align-content: unsafe end;
+}
+/* `translate` from a custom property as it is, so an unset one computes
+   `none` (Tailwind's `translate-*` composes two axes). */
+@utility translate-raw-* {
+  translate: --value([*]);
+}
+@utility clip-margin-* {
+  overflow-clip-margin: --value(--spacing-*, [*]);
+}
+@utility anim-delay-* {
+  animation-delay: --value([*]);
+}
+@utility anchor-none {
+  overflow-anchor: none;
+}
+/* The transcript's scroll as the timeline its head blur reads (HeadFade),
+   the pair of `timeline-scope-transcript-head`. */
+@utility scroll-timeline-transcript-head {
+  scroll-timeline: --transcript-head block;
+}
+/* A suggestion chip's tint, a mix per chip (`--tint`): the border takes the
+   fill's share at 1.5×, mixed in sRGB so the accent reads as if laid over
+   the surface. */
+@utility border-suggest-tint {
+  border-color: color-mix(
+    in srgb,
+    var(--action-solid) calc(var(--tint) * 1.5),
+    var(--surface-raised)
+  );
+}
+@utility bg-suggest-tint {
+  background: color-mix(
+    in srgb,
+    var(--action-solid) var(--tint),
+    var(--surface-raised)
+  );
+}
+@utility bg-suggest-tint-hover {
+  background: color-mix(
+    in srgb,
+    var(--action-solid) calc(var(--tint) + 6%),
+    var(--surface-raised)
+  );
+}
+
+/* ---- Recipes: custom properties a component's states rewrite, each as its
+   source wrote them. */
+
+/* A pane tab's end pads (PaneTabs), set on the tab so `--px` and
+   `--overlap` resolve there: a pixel short of the kit's at the end, and on
+   the phone's row a title's room at each end that clears the overlap. */
+@utility pane-tab-pads {
+  --px-end: calc(var(--px) - 1px);
+
+  @media (width < 900px) {
+    --px-start: calc(var(--overlap) + var(--c-tab-lead));
+    --px-end: calc(var(--overlap) + var(--radius-lg) - 1px);
+  }
+}
+/* The strengths a pane tab's rim takes (PaneTabs `RIM`), solid under
+   Increase Contrast and reduced transparency. Read on the tab, so an
+   ancestor's `--tab-rim-mix-*` (the folder proof page) still reaches it. */
+@utility pane-tab-rims {
+  --rim-subtle: var(--tab-rim-mix-subtle);
+  --rim-chosen: var(--tab-rim-mix-chosen);
+  --rim-idle: var(--tab-rim-mix-idle);
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    --rim-subtle: 1;
+    --rim-chosen: 1;
+    --rim-idle: 1;
+  }
+}
+/* The compaction divider's chevron clock and line ink (CompactionDivider),
+   which every part of the row reads. How far in the chevron is: 0 away, 1
+   beside the word. It leaves a little quicker than it arrives; a state that
+   shows it names the arrival's clock. */
+@utility divider-chevron {
+  --line: var(--brand-solid);
+  --chev: 0;
+  --chev-dur: var(--dur-control);
+  --chev-ease: var(--ease-out);
+
+  /* In for keyboard focus and while the brief is open. */
+  &:is(:focus-visible, [aria-expanded="true"]) {
+    --chev: 1;
+    --chev-dur: var(--dur-toggle);
+    --chev-ease: var(--ease-arrive);
+  }
+  /* Under the pointer the line and word step to the stronger vermillion and
+     the chevron comes in. */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      --line: var(--brand-ink-strong);
+      --chev: 1;
+      --chev-dur: var(--dur-toggle);
+      --chev-ease: var(--ease-arrive);
+    }
+  }
+  /* A finger has no hover: what opens always shows that it does. */
+  @media (pointer: coarse) {
+    &:not(:disabled) {
+      --chev: 1;
+    }
+  }
+  /* Settling, nothing offers the brief yet. */
+  &[data-settling] {
+    --chev: 0;
+  }
+}
+/* A turn's pad (the transcript skeleton's reader well), a step down at the
+   narrow breakpoint. */
+@utility turn-pad {
+  --pad: var(--space-3);
+
+  @media (width <= 900px) {
+    --pad: var(--space-2);
+  }
+}
 /* A clip path, from a custom property on the element
    (`clip-path-(--fold-clip)`). */
 @utility clip-path-* {
