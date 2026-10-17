@@ -104,7 +104,7 @@
           data-joined-row-done={line.hue === "done" || undefined}
           data-done={line.hue === "done" || undefined}
           data-attn={line.hue === "attn" || undefined}
-          class="flex h-(--glyph-h) items-center text-ink-strong not-data-done:data-attn:text-status-attn-ink data-done:text-status-done-ink"
+          class="flex h-(--glyph-h) items-center text-ink-strong data-attn:text-status-attn-ink not-data-attn:data-done:text-status-done-ink"
           style:--glyph-h="calc(var(--text-body) * 1.45)"
         >
           {#if Glyph}
