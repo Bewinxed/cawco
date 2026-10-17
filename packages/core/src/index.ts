@@ -1456,6 +1456,7 @@ export type FramePayload =
   | import("./frames").SendFrame
   | import("./frames").RejectedFrame
   | import("./frames").HeldSendFrame
+  | import("./frames").TakenSendFrame
   | import("./frames").InstancesFrame
   | import("./frames").InstancesDeltaFrame
   | import("./frames").PermissionRequestFrame

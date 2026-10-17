@@ -29893,6 +29893,9 @@
             "$ref": "#/components/schemas/HeldSendFrame"
           },
           {
+            "$ref": "#/components/schemas/TakenSendFrame"
+          },
+          {
             "$ref": "#/components/schemas/InstancesFrame"
           },
           {
@@ -30009,6 +30012,7 @@
             "send": "#/components/schemas/SendFrame",
             "rejected": "#/components/schemas/RejectedFrame",
             "held_send": "#/components/schemas/HeldSendFrame",
+            "taken_send": "#/components/schemas/TakenSendFrame",
             "instances": "#/components/schemas/InstancesFrame",
             "instances_delta": "#/components/schemas/InstancesDeltaFrame",
             "permission_request": "#/components/schemas/PermissionRequestFrame",
@@ -49710,6 +49714,29 @@
               "kind"
             ]
           }
+        ]
+      },
+      "TakenSendFrame": {
+        "description": "Daemon-originated: a send handed over again that its session has taken\nalready (agent taken-sends.ts). No turn started on it; its record is read,\nand no turn follows that read.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "taken_send"
+            ]
+          },
+          "uuid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "uuid"
         ]
       },
       "InstancesFrame": {

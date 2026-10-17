@@ -5277,6 +5277,22 @@ export const createServer = (
   };
 
   /**
+   * A send handed over again that its machine says the session took already
+   * (agent taken-sends.ts): no turn started on it, so it is read with none to
+   * follow. One settled meanwhile stands.
+   */
+  const takeTaken = (instanceId: string, uuid: string): void => {
+    const row = db.sendRecord(uuid);
+    if (row?.instanceId !== instanceId || row.state !== "pending") {
+      return;
+    }
+    console.log(
+      `[hub] send ${uuid} to ${instanceId} read: its session took it already`
+    );
+    readSend(row, false);
+  };
+
+  /**
    * A send its harness refused, failed after what the session last said —
    * which, when the hub has heard nothing of the session since it started,
    * a transcript read tells first ({@link storedIn}).
@@ -26594,6 +26610,15 @@ export const createServer = (
                   kind: "held_send";
                 };
                 takeBack(message.machineId, message.instanceId, send);
+                break;
+              }
+              // A send handed over again that the session took already: read,
+              // and no turn follows ({@link takeTaken}).
+              if (kind === "taken_send" && message.instanceId) {
+                const { uuid } = message.payload as FramePayload & {
+                  kind: "taken_send";
+                };
+                takeTaken(message.instanceId, uuid);
                 break;
               }
               if (kind === "stopped" && message.instanceId) {

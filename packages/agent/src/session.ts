@@ -75,6 +75,7 @@ import {
   LIMIT_REACHED,
   type LimitHolder,
   limitSentence,
+  MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
   MOVE_STEPS,
@@ -145,6 +146,7 @@ import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { stopStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
+import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
 import { installTool, probeTools } from "./tools";
 import { folderTurn, runWorkflowCommand } from "./workflow-command";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
@@ -3784,11 +3786,12 @@ export class SessionSupervisor {
   }
 
   /**
-   * The sends a harness says it read are no longer any hand-back's
-   * ({@link #handBack}). A read names each send by its uuid, or by the id the
-   * harness said it stores it under (opencode's message id, said in
-   * {@link MESSAGES_STORED} as the send is admitted), as the hub's own read
-   * of the same frame does.
+   * The sends a harness says it read are taken ({@link noteTaken}), kept
+   * before the frame that says so goes on to the hub, and no longer any
+   * hand-back's ({@link #handBack}). A read names each send by its uuid, or
+   * by the id the harness said it stores it under (opencode's message id,
+   * said in {@link MESSAGES_STORED} as the send is admitted), as the hub's
+   * own read of the same frame does.
    */
   #noteRead(instanceId: string, message: NeutralMessage): void {
     if (
@@ -3797,10 +3800,7 @@ export class SessionSupervisor {
     ) {
       return;
     }
-    const handed = this.#handed.get(instanceId);
-    if (!handed) {
-      return;
-    }
+    const handed = this.#handed.get(instanceId) ?? new Map();
     for (const [uuid, storedAs] of Object.entries(message.storedAs ?? {})) {
       const send = handed.get(uuid);
       if (send) {
@@ -3810,16 +3810,82 @@ export class SessionSupervisor {
     if (message.subtype !== MESSAGES_READ) {
       return;
     }
+    const taken: string[] = [];
     for (const id of message.read ?? []) {
-      if (handed.delete(id)) {
-        continue;
+      const uuids = handed.has(id)
+        ? [id]
+        : [...handed]
+            .filter(([, send]) => send.storedAs === id)
+            .map(([uuid]) => uuid);
+      for (const uuid of uuids) {
+        handed.delete(uuid);
       }
-      for (const [uuid, send] of handed) {
-        if (send.storedAs === id) {
-          handed.delete(uuid);
-        }
+      taken.push(...(uuids.length > 0 ? uuids : [id]));
+    }
+    try {
+      noteTaken(instanceId, taken);
+    } catch (error) {
+      // Its sends are refused while the record is damaged ({@link #send}).
+      warn(
+        `${instanceId}: the sends it read could not be kept as taken: ${errorText(error)}`
+      );
+      if (isDamagedRecord(error)) {
+        reportDamaged(error).catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * A send its session has had already, handed over again (a hub that never
+   * heard the read, or owed it again on a read it could not make): no turn
+   * starts on it. Taken ({@link hasTaken}): the hub hears it was read, and
+   * reads it so with no turn to follow. Still held by the process it was
+   * handed to ({@link #handed}): the hub hears that process holds it, and it
+   * goes back under this hand-off if the process goes before reading it.
+   * True when it was settled so. With the record damaged the send is
+   * refused, with the file and why: whether its session had it is not known.
+   */
+  #handedBefore(payload: SendPayload): boolean {
+    const { instanceId, message } = payload;
+    let taken: boolean;
+    try {
+      taken = hasTaken(instanceId, message.uuid);
+    } catch (error) {
+      if (!isDamagedRecord(error)) {
+        throw error;
+      }
+      reportDamaged(error).catch(() => undefined);
+      this.sink({
+        kind: "rejected",
+        instanceId,
+        uuid: message.uuid,
+        error: error.message,
+      });
+      return true;
+    }
+    if (taken) {
+      console.info(
+        `[session] ${instanceId}: send ${message.uuid} handed over again, taken already: no turn`
+      );
+      this.#sayGone({ kind: "taken_send", instanceId, uuid: message.uuid });
+      return true;
+    }
+    const held = this.#handed.get(instanceId)?.get(message.uuid);
+    const session = this.#sessions.get(instanceId);
+    if (!(held && session)) {
+      return false;
+    }
+    console.info(
+      `[session] ${instanceId}: send ${message.uuid} handed over again, its process holds it: no turn`
+    );
+    held.payload = payload;
+    this.#outbox.frame({
+      kind: "frame",
+      instanceId,
+      harness: session.harness,
+      message: { type: "system", subtype: MESSAGES_HELD, held: [message.uuid] },
+    });
+    return true;
   }
 
   /**
@@ -3893,7 +3959,7 @@ export class SessionSupervisor {
     this.#handBack(instanceId);
   }
 
-  /** One word of a process gone or a send handed back, in order, now or on the next connection. */
+  /** One word of a process gone or a send handed back or taken already, in order, now or on the next connection. */
   #sayGone(frame: Parameters<FrameSink>[0]): void {
     if (this.#unsentGone.length > 0 || !this.sink(frame)) {
       this.#unsentGone.push(frame);
@@ -4012,7 +4078,8 @@ export class SessionSupervisor {
     const keepAlive =
       payload.message.origin.kind === "system" &&
       payload.message.origin.name === "keepalive";
-    if (this.#noProcessFor(payload, keepAlive)) {
+    // Ahead of everything: a send its session took already wakes nothing.
+    if (this.#handedBefore(payload) || this.#noProcessFor(payload, keepAlive)) {
       return;
     }
     // Files go onto this machine before any harness sees the turn, which
@@ -4236,6 +4303,7 @@ export class SessionSupervisor {
       }
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
+      forgetTaken(instanceId);
       if (discard && !sharedConversation) {
         if (scratchWorktree) {
           this.#worktrees.set(instanceId, scratchWorktree);

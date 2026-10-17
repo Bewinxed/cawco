@@ -251,6 +251,17 @@ export interface HeldSendFrame {
   send: import("./index").SendPayload;
 }
 
+/**
+ * Daemon-originated: a send handed over again that its session has taken
+ * already (agent taken-sends.ts). No turn started on it; its record is read,
+ * and no turn follows that read.
+ */
+export interface TakenSendFrame {
+  instanceId: string;
+  kind: "taken_send";
+  uuid: string;
+}
+
 export interface RejectedFrame {
   error: string;
   instanceId: string;

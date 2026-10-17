@@ -459,6 +459,13 @@ export const sessionWakeupsDir = (): string =>
   join(cawcoDataDir(), "session-wakeups");
 
 /**
+ * The sends each session has taken, one file per session named by its
+ * instance id, kept until the session is stopped (agent `taken-sends.ts`).
+ */
+export const sessionTakenDir = (): string =>
+  join(cawcoDataDir(), "session-taken");
+
+/**
  * This machine's Claude Code version as its last `claude --version` answered,
  * with the binary it was read from (agent `claude-version.ts`), so an agent's
  * restart, which every update is, starts knowing it.

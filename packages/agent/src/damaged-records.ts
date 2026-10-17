@@ -6,10 +6,12 @@
  *
  * A record is one workspace's when it is in that workspace's state dir
  * (`~/.cawco/workspaces/<id>/`), one session's when it is that session's
- * wake-ups (`session-wakeups/<instance>`), and the machine's otherwise.
- * Whatever reads it skips it and the rest proceed: the workspace does not
- * start a boundary, a session reads its wake-ups as not known until its next
- * turn ends, and nothing guesses what the record held.
+ * wake-ups (`session-wakeups/<instance>`) or the sends it has taken
+ * (`session-taken/<instance>`), and the machine's otherwise. Whatever reads
+ * it skips it and the rest proceed: the workspace does not start a boundary,
+ * a session reads its wake-ups as not known until its next turn ends, or is
+ * refused what it is sent until it is ended, and nothing guesses what the
+ * record held.
  *
  * An entry stays until its file is gone (the workspace archived, the session
  * ended) or written again (a turn's end keeps its wake-ups afresh, whole,
@@ -24,6 +26,7 @@ import { join, relative, sep } from "node:path";
 import type { DamagedRecordReport } from "@cawco/core";
 import {
   accountsRoot,
+  sessionTakenDir,
   sessionWakeupsDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -57,9 +60,11 @@ const ownerOf = (
   if (workspace && workspace.length >= 2 && workspace[0]) {
     return { workspaceId: workspace[0] };
   }
-  const session = inside(sessionWakeupsDir(), file);
-  if (session?.length === 1 && session[0]) {
-    return { instanceId: session[0] };
+  for (const dir of [sessionWakeupsDir(), sessionTakenDir()]) {
+    const session = inside(dir, file);
+    if (session?.length === 1 && session[0]) {
+      return { instanceId: session[0] };
+    }
   }
   return {};
 };
@@ -88,16 +93,20 @@ export const reportDamaged = async (damage: DamagedRecord): Promise<void> => {
     ...owner,
   });
   console.warn(
-    `[records] ${damage.file} is damaged (${damage.reason}): ${consequence(owner)}`
+    `[records] ${damage.file} is damaged (${damage.reason}): ${consequence(owner, damage.file)}`
   );
 };
 
-/** What a damaged record of `owner`'s stops, in the log's words. */
+/** What a damaged record of `owner`'s, `file`, stops, in the log's words. */
 const consequence = (
-  owner: Pick<DamagedRecordReport, "workspaceId" | "instanceId">
+  owner: Pick<DamagedRecordReport, "workspaceId" | "instanceId">,
+  file: string
 ): string => {
   if (owner.workspaceId) {
     return `workspace ${owner.workspaceId} does not run until it is archived`;
+  }
+  if (owner.instanceId && inside(sessionTakenDir(), file)) {
+    return `session ${owner.instanceId} is refused what it is sent until it is ended`;
   }
   if (owner.instanceId) {
     return `session ${owner.instanceId}'s wake-ups are not known until its next turn ends or it is ended`;
@@ -170,7 +179,7 @@ const WORKSPACE_TEXT = /^gate$/;
 /**
  * Reads every record this agent keeps once, as it starts, and reports each
  * damaged one ({@link reportDamaged}): each workspace's, each session's
- * wake-ups, each account's credential and login marker.
+ * wake-ups and taken sends, each account's credential and login marker.
  */
 export const sweepRecords = async (): Promise<void> => {
   const checks: Promise<void>[] = [];
@@ -184,8 +193,10 @@ export const sweepRecords = async (): Promise<void> => {
       }
     }
   }
-  for (const name of await withoutTemporaries(sessionWakeupsDir())) {
-    checks.push(check(join(sessionWakeupsDir(), name), readRecord));
+  for (const dir of [sessionWakeupsDir(), sessionTakenDir()]) {
+    for (const name of await withoutTemporaries(dir)) {
+      checks.push(check(join(dir, name), readRecord));
+    }
   }
   for (const account of await namesIn(accountsRoot())) {
     const dir = join(accountsRoot(), account);
