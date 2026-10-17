@@ -17,7 +17,7 @@
 <!-- literal: 26px, -9px (the header's least height; how far the touch target reaches past it) -->
 <Collapsible.Trigger
   {...rest}
-  class="thinking-header group/header mark-line press-tint m-0 flex min-h-(--header-min) max-w-full cursor-pointer items-center gap-space-2 rounded-xs border-0 bg-transparent p-0 text-start text-inherit hover:enabled:text-ink-strong disabled:cursor-default coarse:enabled:relative {className}"
+  class="group/header mark-line press-tint m-0 flex min-h-(--header-min) max-w-full cursor-pointer items-center gap-space-2 rounded-xs border-0 bg-transparent p-0 text-start text-inherit hover:enabled:text-ink-strong disabled:cursor-default coarse:enabled:relative {className}"
   data-slot="thinking-steps-header"
   style="--header-min: 26px; --hit-reach: -9px"
 >

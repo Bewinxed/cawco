@@ -133,12 +133,10 @@
      enters from the right and leaves on the left once a breath. */
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="sheen"] {
-      /* Alpha only: the band's middle is the sheen's own (opaque) ink, which
-         stands in for the opaque black the mask was written with. */
       mask-image: linear-gradient(
         90deg,
         transparent 35%,
-        currentcolor 50%,
+        var(--mask-opaque) 50%,
         transparent 65%
       );
     }
