@@ -120,6 +120,10 @@
     (node.nextSibling === null ||
       (isTail(node.nextSibling) && node.nextSibling.nextSibling === null));
 
+  /** A `<br>` that is no character: the tail, or a browser's trailing one. */
+  const isDrawnOnly = (node: Node): boolean =>
+    isTail(node) || isTrailingBreak(node);
+
   /** The message as sent: text as typed, each chip as its serialised form. */
   function serialise(node: Node): string {
     let out = "";
@@ -129,7 +133,7 @@
       } else if (child instanceof HTMLElement) {
         if (child.dataset.mention) {
           out += child.dataset.mention;
-        } else if (isTail(child) || isTrailingBreak(child)) {
+        } else if (isDrawnOnly(child)) {
           // The line a trailing newline opens, drawn: no character of its own.
         } else if (child.tagName === "BR") {
           out += "\n";
@@ -152,17 +156,18 @@
       return;
     }
     const last = editor.lastChild;
-    const has = isTail(last);
     const needs = (written ?? "").endsWith("\n");
-    if (needs && !has && last instanceof HTMLElement && last.tagName === "BR") {
+    if (last instanceof HTMLElement && isTail(last)) {
+      if (!needs) {
+        last.remove();
+      }
+    } else if (needs && last instanceof HTMLElement && last.tagName === "BR") {
       // A browser's own trailing `<br>` already draws the line: it is the tail.
       last.dataset.tail = "";
-    } else if (needs && !has) {
+    } else if (needs) {
       const br = document.createElement("br");
       br.dataset.tail = "";
       editor.append(br);
-    } else if (!needs && has) {
-      last.remove();
     }
   }
 
@@ -280,10 +285,7 @@
     if (child.nodeType === Node.TEXT_NODE) {
       return (child as Text).data.length;
     }
-    if (!(child instanceof HTMLElement) || isTail(child)) {
-      return 0;
-    }
-    if (isTrailingBreak(child)) {
+    if (!(child instanceof HTMLElement) || isDrawnOnly(child)) {
       return 0;
     }
     if (child.dataset.mention) {
