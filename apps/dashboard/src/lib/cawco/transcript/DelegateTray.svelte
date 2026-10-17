@@ -1169,7 +1169,7 @@
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="group/chip kit-tray-chip touch-hit flex-initial min-w-(--floor) max-w-(--chip-max) data-end:ms-auto status-failed:text-status-fail-ink"
+    class="group/chip kit-tray-chip touch-hit flex-initial data-end:ms-auto status-failed:text-status-fail-ink"
     data-delegate-tray-tone={tone}
     data-finished={(tone === "done" && (item.endedAt ?? 0) > mountedAt) ||
       undefined}
@@ -1843,5 +1843,13 @@
      beat; animation-delay has no utility. */
   [data-slot="dot"] {
     animation-delay: var(--dot-delay);
+  }
+  /* A working chip's floor and cap. fly() clones the chip and rewrites the
+     copy's inline style, so the copy keeps only what the stylesheet gives
+     it: the size tokens (120px, 224px; integration adds them). The live
+     chip reads its measured floor and its cap from its own style first. */
+  button[data-key][data-status] {
+    min-inline-size: var(--floor, var(--tray-chip-min));
+    max-inline-size: var(--tray-chip-max, var(--chip-max));
   }
 </style>
