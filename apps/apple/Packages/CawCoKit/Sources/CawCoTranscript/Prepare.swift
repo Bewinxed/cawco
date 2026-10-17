@@ -52,6 +52,8 @@ actor TranscriptPrep {
         let queued: [Components.Schemas.TranscriptBlock]
         /// This device's sends the hub has not taken, drawn after `queued`.
         let local: [LocalSend]
+        /// The failed sends this device is sending again, by id (`SessionTranscript.retries`).
+        var retries: [String: SendRetry] = [:]
         /// What each running subagent is streaming, by its spawning call's id.
         let streams: [String: String]
         let agentName: String
@@ -139,14 +141,14 @@ actor TranscriptPrep {
                 return block
             }
         }
-        let blocks = take(input.blocks)
+        let blocks = take(input.blocks).map { $0.retried(input.retries[$0.id]) }
         var branches: [String: Branch] = [:]
         for page in input.branches {
             let inner = take(page.value2.blocks)
             let streaming = input.streams[page.value1.toolUseId] ?? ""
             if let branch = Branch(page, blocks: inner, streaming: streaming) { branches[branch.toolUseId] = branch }
         }
-        let queued = take(input.queued) + input.local.map(Block.init)
+        let queued = take(input.queued).map { $0.retried(input.retries[$0.id]) } + input.local.map(Block.init)
         read = kept
 
         // The rows the reader sees: settled first (rows.ts `drawnOf` — an

@@ -16,6 +16,10 @@ public final class SessionTranscript {
     /// Nothing the hub sends replaces this list, so a send stays on screen
     /// from the composer until the hub's own row for it is there.
     public internal(set) var local: [LocalSend] = []
+    /// Each failed send this device is sending again, by the failed one's
+    /// id: on its way, or refused by the hub with its words. Drawn on the
+    /// failed send's row until the hub retires that row as it takes the retry.
+    public internal(set) var retries: [String: SendRetry] = [:]
     public internal(set) var branches: [Components.Schemas.TranscriptPageBranch] = []
     public internal(set) var tail: Components.Schemas.TranscriptTail?
     public internal(set) var facts: Components.Schemas.TranscriptFacts?
@@ -98,6 +102,14 @@ public struct LocalSend: Sendable, Equatable {
     public internal(set) var state: State = .sending
     /// The hub's words, while `refused`.
     public internal(set) var reason: String?
+}
+
+/// A failed send going again from this device (`SessionTranscript.retries`).
+public enum SendRetry: Sendable, Equatable {
+    /// On its way, or waiting for the hub (`SendOutbox`).
+    case sending
+    /// The hub refused the retry too, in these words.
+    case refused(String)
 }
 
 /// A pasted or attached text a send carried.
@@ -843,13 +855,28 @@ public final class SessionsStore {
         // never has to write or attach it again: it is the outbox's from here.
         let entry = SendOutbox.Entry(
             uuid: uuid, hub: hub.address?.absoluteString ?? "", sessionId: sessionId, machineId: machineId, at: .now,
-            timestamp: ISO8601DateFormatter().string(from: .now), drawn: replaces == nil, text: text,
+            timestamp: ISO8601DateFormatter().string(from: .now), drawn: replaces == nil, replaces: replaces, text: text,
             texts: texts.map { .init(name: $0.name, content: $0.content) },
             files: files.map { .init(name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref) }, payload: payload)
+        if let replaces { retrying(replaces, in: sessionId) }
         SendOutbox.shared.keep(entry)
         draw(entry)
         deliver(entry)
         return uuid
+    }
+
+    /// A failed send of this session is sent again: its row says so
+    /// (`SessionTranscript.retries`), and a retry of it the hub refused
+    /// before is no longer this device's to send. A queued send replaced by
+    /// an edit is no failure, and its row says nothing of it.
+    private func retrying(_ failed: String, in sessionId: String) {
+        for earlier in SendOutbox.shared.entries where earlier.replaces == failed && earlier.refusal != nil {
+            SendOutbox.shared.remove(earlier.uuid)
+        }
+        guard let transcript = transcripts[sessionId],
+              (transcript.blocks + transcript.queued).contains(where: { $0.id == failed && $0.state == .failed }) else { return }
+        transcript.retries[failed] = .sending
+        transcript.blockRevision += 1
     }
 
     /// The sends kept for this connection that are on the socket now, by uuid:
@@ -923,6 +950,11 @@ public final class SessionsStore {
             log.notice("outbox: \(uuid.prefix(8), privacy: .public) refused by the hub: \(words, privacy: .public)")
             SendOutbox.shared.refuse(uuid, words)
             mark(uuid, in: entry.sessionId, .refused, words)
+            // A retry draws no row of its own: the failed row it went for says it was refused.
+            if let failed = entry.replaces, let transcript = transcripts[entry.sessionId], transcript.retries[failed] != nil {
+                transcript.retries[failed] = .refused(words)
+                transcript.blockRevision += 1
+            }
             return
         }
         log.notice("outbox: \(uuid.prefix(8), privacy: .public) unanswered (\(reason ?? "no word", privacy: .public)): waiting for the hub")

@@ -69,6 +69,29 @@ nonisolated struct Block: @unchecked Sendable {
         self.init(raw, signature: signature)
     }
 
+    /// This failed send with its retry from this device, when there is one
+    /// (`SessionTranscript.retries`): `retry` in its metadata, `sending` or
+    /// `refused` with the hub's words in `retryRefused`, and in its print,
+    /// so its row is drawn again as the retry moves.
+    func retried(_ retry: SendRetry?) -> Block {
+        guard let retry else { return self }
+        var meta = self.meta
+        switch retry {
+        case .sending:
+            meta["retry"] = "sending"
+        case let .refused(reason):
+            meta["retry"] = "refused"
+            meta["retryRefused"] = reason
+        }
+        var raw: [String: Any] = ["id": id, "type": type, "content": content, "queued": queued, "metadata": meta]
+        raw["timestamp"] = timestamp
+        raw["state"] = state
+        raw["toolCallId"] = toolCallId
+        raw["sdkUuid"] = sdkUuid
+        raw["parentToolUseId"] = parentToolUseId
+        return Block(raw, signature: signature + Data("|retry \(retry)".utf8))
+    }
+
     func string(_ key: String) -> String? {
         meta[key] as? String
     }

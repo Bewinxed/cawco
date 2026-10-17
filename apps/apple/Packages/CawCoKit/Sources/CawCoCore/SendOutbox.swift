@@ -33,6 +33,8 @@ final class SendOutbox {
         let timestamp: String
         /// It draws a row of its own (a send in place of another draws none).
         let drawn: Bool
+        /// The send it goes in place of, when it does.
+        var replaces: String?
         let text: String
         let texts: [Text]
         let files: [File]

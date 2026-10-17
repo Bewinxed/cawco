@@ -817,6 +817,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         var input = TranscriptPrep.Input(revision: transcript.blockRevision, history: transcript.historyRevision,
                                          blocks: transcript.blocks, branches: transcript.branches, queued: transcript.queued,
                                          local: transcript.local, streams: streams, agentName: env.agentName, keys: keys)
+        input.retries = transcript.retries
         input.voiced = voice != nil
         input.extras = voice?.extras ?? [:]
         input.voiceRevision = voice?.revision ?? 0

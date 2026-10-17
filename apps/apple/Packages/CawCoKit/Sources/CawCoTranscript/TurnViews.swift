@@ -310,7 +310,6 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
     private let reason = WrapLabel(wrap: .pretty) // MessageRow `p.reason`
     private let retry = UIButton(type: .system)
     private var block: Block?
-    private var retried: String?
     /// The room above the words in the well: a hair less under a seam.
     private var wellTop = Space.space2 + 1
     /// The width the row stands at in the list (ProseView `fitWidth`); its
@@ -433,7 +432,6 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         guard case let .user(turn) = item.kind else { return }
         let block = turn.block
         if self.block?.id != block.id {
-            retried = nil
             retrying?.cancel()
             retrying = nil
         }
@@ -446,9 +444,10 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         let refused = block.state == "refused"
         let failed = block.state == "failed" || refused
         // A failed send going again says so, not the failure (MessageRow.svelte),
-        // until the hub refuses the retry too: then its words are the row's.
-        let retry = retried.flatMap { env.hub?.ledger.commands[$0] }
-        let sending = retrying != nil || (retried != nil && retry?.refusedByHub != true)
+        // until the hub refuses the retry too: then its words are the row's
+        // (`Block.retried`, from `SessionTranscript.retries`).
+        let again = block.string("retry")
+        let sending = retrying != nil || again == "sending"
         let waiting = block.state == "pending" || block.queued
         taken = waiting && env.isTaken(block.id)
         // On a touch screen, a queued message that can be edited says how.
@@ -482,7 +481,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         if sending {
             showSendingAgain()
         } else {
-            let reasonText = retry?.refusedByHub == true ? retry?.reason : block.string("sendFailed")
+            let reasonText = again == "refused" ? block.string("retryRefused") : block.string("sendFailed")
             reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                                   color: Palette.statusFailInk, lineBreak: .byWordWrapping)
         }
@@ -496,7 +495,6 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
     func recycle() {
         retrying?.cancel()
         retrying = nil
-        retried = nil
         block = nil
     }
 
@@ -625,7 +623,8 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
             }
             guard let self, self.block?.id == block.id else { return }
             retrying = nil
-            retried = hub.sessions.steer(row, text: block.content, images: images, texts: extras.texts, files: extras.files, replaces: block.id)
+            // The row says the retry from here, as the transcript holds it (`SessionTranscript.retries`).
+            _ = hub.sessions.steer(row, text: block.content, images: images, texts: extras.texts, files: extras.files, replaces: block.id)
         }
     }
 
