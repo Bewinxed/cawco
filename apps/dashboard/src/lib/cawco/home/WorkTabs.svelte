@@ -91,6 +91,7 @@
     clock,
     home,
     instanceTitle,
+    isDelegate,
     lastAt,
     type MachineGroup,
     machineName,
@@ -378,8 +379,15 @@
   const more = $derived(moreOf(shown, workTab.shownWhole(shown)));
   /** The key of a machine's "N more" line. */
   const moreKey = (machineId: string): string => `more:${machineId}`;
-  /** Whether anything listed as finished failed: its numeral says so. */
-  const finishedFailed = $derived(rowsOf("finished").some(isFailed));
+  /**
+   * A tab's count: its top-level sessions, never their delegates, whatever
+   * the Delegates switch shows (owner: "the working count shouldn't count
+   * delegates").
+   */
+  const topOf = (tab: WorkTab): InstanceRow[] =>
+    allOf(tab).filter((row) => !isDelegate(row));
+  /** Whether a top-level session listed as finished failed: its numeral says so. */
+  const finishedFailed = $derived(topOf("finished").some(isFailed));
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -735,7 +743,7 @@
       >
         <TabsList aria-label="Sessions">
           {#each TABS as tab (tab.id)}
-            {@const count = rowsOf(tab.id).length}
+            {@const count = topOf(tab.id).length}
             <TabItem label={tab.label} value={tab.id}>
               {#snippet trail()}
                 <!-- No count until it is read: a 0 here would be a claim. -->
@@ -1049,6 +1057,12 @@
     --ink: var(--status-fail-ink);
     --wash: var(--count-wash-fail);
     color: var(--ink);
+  }
+  /* By day a press fills an unchosen tab in surface-fill-strong (TabItem
+     `--press`), where the muted numeral held 3.92:1: it goes strong with
+     its tab's label, as TabItem's own press rule takes the label. */
+  :global(:root:not(.dark) .ff-tab:has(.hit:active)) .count:not([data-failed]) {
+    color: var(--ink-strong);
   }
   /* The corner actions' icon button (Sidebar .head-action), at one size
      whatever it shows. Pressed, its glyph turns solid in strong ink: no

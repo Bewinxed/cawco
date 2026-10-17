@@ -772,6 +772,12 @@ public final class HomeModel {
         return rows.filter { kept.contains($0.id) || $0.isFailed }
     }
 
+    /// Work another session started: its parent is a row the fleet holds
+    /// (tree.ts `hasParent`). What the tabs' counts leave out.
+    public func isDelegate(_ row: InstanceRow) -> Bool {
+        row.parentInstanceId.map { fleet.byId[$0] != nil } ?? false
+    }
+
     public func lines(_ tab: Tab) -> [TreeLine<InstanceRow>] {
         lines(tab, rows: rows(tab))
     }
@@ -787,6 +793,9 @@ public final class HomeModel {
         /// Each tab's own rows (`rows(_:)`).
         public let working: [InstanceRow]
         public let finished: [InstanceRow]
+        /// Each tab's count: its top-level sessions, never their delegates,
+        /// whatever the switch shows; and whether one of Finished's failed.
+        public let counts: (working: Int, finished: Int, finishedFailed: Bool)
         /// The chosen tab's lines by machine, each session followed by its delegates.
         public let groups: [MachineGroup]
         public let recent: [RecentItem]
@@ -797,9 +806,11 @@ public final class HomeModel {
         let finished = finished
         let workingRows = rows(of: working)
         let finishedRows = rows(of: finished)
+        let finishedTops = finished.filter { !isDelegate($0) }
         return Board(
             working: workingRows,
             finished: finishedRows,
+            counts: (working.filter { !isDelegate($0) }.count, finishedTops.count, finishedTops.contains(where: \.isFailed)),
             groups: groups(tab, lines: lines(tab, rows: tab == .working ? workingRows : finishedRows)),
             recent: recent(working: working, finished: finished)
         )
