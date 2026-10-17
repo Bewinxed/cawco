@@ -78,9 +78,9 @@
   }
 </script>
 
-<div class="made rail-hang" data-routine-made={routine.routineId}>
+<div class="rail-hang flex flex-wrap items-center gap-space-2 mt-space-2" data-routine-made={routine.routineId}>
   {#if now}
-    <span data-slot="lasts" class="lasts">{lasts}</span>
+    <span data-slot="lasts" class="text-size-meta font-normal text-ink-muted">{lasts}</span>
     {#if now.enabled && !now.keep && routine.expiresAt !== null}
       <Button
         label="Keep"
@@ -106,28 +106,6 @@
     {/if}
   {/if}
   {#if problem}
-    <p class="problem">{problem}</p>
+    <p class="basis-full m-0 text-size-meta font-normal text-status-fail-ink">{problem}</p>
   {/if}
 </div>
-
-<style>
-  .made {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .lasts {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .problem {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-  }
-</style>
