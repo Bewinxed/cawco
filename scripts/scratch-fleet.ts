@@ -76,6 +76,12 @@ for (const name of GIT_REPOSITORY_ENV) {
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 
+/** A launch's stderr file, whose stdout is the same name in `.log`. */
+const ERR_SUFFIX = /\.err$/;
+/** An agent's line on its sign-in reads and its reports (accounts.ts, daemon.ts `readPart`, auth.ts). */
+const SIGNIN_LINE =
+  /\[accounts\]|\[keychain\]|harness's report|sign-ins|Claude account|could not be read|was not read/;
+
 /**
  * How Claude Code opens the words a person sent while a turn ran, which it
  * delivers mid-turn one of two ways: in a `<system-reminder>` block of the
@@ -1751,40 +1757,116 @@ async function standUp(
     );
     socket = undefined;
   };
+  /** What {@link agentOnline} reads of the hub's row for a machine. */
+  interface AgentRow {
+    auth?: string;
+    custody?: { state: string };
+    harnesses?: { auth?: string; harness: string }[];
+    machineCapabilities?: unknown;
+    machineId: string;
+    status: string;
+  }
   /**
    * The hub's row for `machineId` says its agent is online, with custody, and
    * the reports that follow its register are in: every harness's, and its
    * capabilities. Until a harness has reported, the hub starts nothing on it
    * (hub placement.ts `unreportedHarnessRefusal`).
    */
-  const online = async (machineId: string) =>
-    (
-      await api<
-        {
-          custody?: { state: string };
-          harnesses?: { harness: string }[];
-          machineCapabilities?: unknown;
-          machineId: string;
-          status: string;
-        }[]
-      >("/api/agents")
-    ).some(
-      (row) =>
-        row.machineId === machineId &&
-        row.status === "online" &&
-        row.custody?.state === "available" &&
-        row.machineCapabilities !== undefined &&
-        HARNESSES.every((harness) =>
-          row.harnesses?.some((report) => report.harness === harness)
-        )
+  const online = (row: AgentRow): boolean =>
+    row.status === "online" &&
+    row.custody?.state === "available" &&
+    row.machineCapabilities !== undefined &&
+    HARNESSES.every((harness) =>
+      row.harnesses?.some((report) => report.harness === harness)
     );
+  /**
+   * Why the agent was not {@link online} at the deadline: each condition with
+   * the value the hub's last row had, the machine's word on Claude (what the
+   * agent's `claudeAuth` answered, once a report carrying one was filed), the
+   * agent's lines on its sign-in reads and reports, and the end of its log.
+   */
+  const notOnline = async (
+    machineId: string,
+    row: AgentRow | undefined,
+    err: string | undefined
+  ): Promise<string> => {
+    const rowWords = row
+      ? [
+          `the hub's last row for ${machineId}:`,
+          `  status: ${row.status} (wants online)`,
+          `  custody.state: ${row.custody?.state ?? "(none)"} (wants available)`,
+          `  machineCapabilities: ${row.machineCapabilities === undefined ? "not set" : "set"}`,
+          ...HARNESSES.map((harness) => {
+            const report = row.harnesses?.find(
+              (one) => one.harness === harness
+            );
+            return `  ${harness}: ${report ? `report filed, auth ${report.auth ?? "(none)"}` : "no report filed"}`;
+          }),
+          `  the machine's word on Claude (claudeAuth's answer, kept from the last report that carried one): ${row.auth ?? "(none)"}`,
+        ]
+      : [`the hub had no row for ${machineId}`];
+    const read = (path: string) =>
+      Bun.file(path)
+        .text()
+        .catch(() => "");
+    const log = err?.replace(ERR_SUFFIX, ".log");
+    const [stdout, stderr] = await Promise.all([
+      log ? read(log) : "",
+      err ? read(err) : "",
+    ]);
+    const signins = `${stdout}\n${stderr}`
+      .split("\n")
+      .filter((line) => SIGNIN_LINE.test(line))
+      .slice(-30);
+    return [
+      ...rowWords,
+      `the agent's lines on its sign-ins and reports (${signins.length}):`,
+      ...(signins.length > 0 ? signins : ["(none)"]),
+      `the agent's log (${log ?? "none"}), its last lines:`,
+      stdout.trimEnd().split("\n").slice(-30).join("\n") || "(empty)",
+    ].join("\n");
+  };
+  /**
+   * {@link waitingOn} the hub holding `machineId` {@link online}, 120 s; a
+   * wait that runs out says why ({@link notOnline}).
+   */
+  const agentOnline = async (
+    name: string,
+    child: ReturnType<typeof Bun.spawn> | undefined,
+    err: string | undefined,
+    label: string,
+    machineId: string
+  ): Promise<void> => {
+    let last: AgentRow | undefined;
+    try {
+      await waitingOn(
+        name,
+        child,
+        err,
+        label,
+        async () => {
+          last = (await api<AgentRow[]>("/api/agents")).find(
+            (row) => row.machineId === machineId
+          );
+          return last !== undefined && online(last);
+        },
+        Boolean,
+        120_000
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${await notOnline(machineId, last, err)}`,
+        { cause: error }
+      );
+    }
+  };
   const agentUp = async () => {
-    await answering(
+    await agentOnline(
       "agent",
+      procs.agent,
+      errs.agent,
       "the agent online with custody and its reports",
-      () => online(MACHINE),
-      Boolean,
-      120_000
+      MACHINE
     );
   };
   /**
@@ -1796,12 +1878,12 @@ async function standUp(
   const rejoinAs = async (machineId: string) => {
     await stop("agent");
     launch("agent", [], { CAWCO_MACHINE_ID: machineId });
-    await answering(
+    await agentOnline(
       "agent",
+      procs.agent,
+      errs.agent,
       `the agent online with custody and its reports as ${machineId}`,
-      () => online(machineId),
-      Boolean,
-      120_000
+      machineId
     );
   };
 
@@ -1860,14 +1942,12 @@ async function standUp(
     const agent = start("agent");
     // Stopped before its sessiond, as the first machine's is.
     machineProcs.unshift(agent.child);
-    await waitingOn(
+    await agentOnline(
       `${machineId}'s agent`,
       agent.child,
       agent.err,
       `${machineId}'s agent online with custody and its reports`,
-      () => online(machineId),
-      Boolean,
-      120_000
+      machineId
     );
     return {
       machineId,
