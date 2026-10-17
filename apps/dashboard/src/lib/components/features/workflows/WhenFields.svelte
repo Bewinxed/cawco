@@ -28,7 +28,13 @@
 >
 {#if value}
   <!-- The condition's fields open and fold as one: the rows below slide. -->
-  <div data-slot="when" class="flex flex-col min-w-0" in:unfold out:unfold>
+  <!-- One item of the column it sits in, spacing its own fields the same. -->
+  <div
+    data-slot="when"
+    class="flex flex-col min-w-0 gap-inherit"
+    in:unfold
+    out:unfold
+  >
     <label
       >Path<input
         oninput={(event) =>
@@ -51,7 +57,12 @@
       </select></label
     >
     {#if value.op !== "truthy" && value.op !== "falsy"}
-      <div data-slot="when" class="flex flex-col min-w-0" in:unfold out:unfold>
+      <div
+        data-slot="when"
+        class="flex flex-col min-w-0 gap-inherit"
+        in:unfold
+        out:unfold
+      >
         <JsonField
           label="Compare with (JSON)"
           onchange={(next) => value && onchange({ ...value, value: next })}
@@ -61,10 +72,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  /* residual: unmapped — one item of the column it sits in, spacing its own fields the same */
-  [data-slot="when"] {
-    gap: inherit;
-  }
-</style>

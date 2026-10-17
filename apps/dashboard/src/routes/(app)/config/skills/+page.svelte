@@ -530,7 +530,7 @@
                     role="status"
                   >
                     {#each [0, 1] as line (line)}
-                      <Skeleton class="h-10 w-full" />
+                      <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else}
@@ -627,7 +627,7 @@
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
-                      <Skeleton class="h-10 w-full" />
+                      <Skeleton class="w-full" height="item" />
                     {/each}
                   </div>
                 {:else if unread[row.name]}
@@ -657,7 +657,7 @@
                         <!-- literal: 240px -->
                         <span
                           data-slot="text"
-                          class="flex min-w-0 flex-col gap-space-row"
+                          class="flex min-w-0 shrink grow basis-(--text-basis) flex-col gap-space-row"
                           style:--text-basis="240px"
                         >
                           <span
@@ -805,10 +805,3 @@
     taken={skills.map((row) => row.name)}
   />
 </SectionFrame>
-
-<style>
-  /* residual: unmapped */
-  [data-slot="text"] {
-    flex: 1 1 var(--text-basis);
-  }
-</style>

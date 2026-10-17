@@ -263,7 +263,7 @@
       {@const shown = leaf.active === id}
       <div
         data-slot="slot"
-        class="absolute inset-0 flex data-hidden:pointer-events-none"
+        class="absolute inset-0 flex data-hidden:pointer-events-none data-hidden:content-visibility-hidden"
         data-hidden={!shown || undefined}
         data-pane={id}
       >
@@ -287,9 +287,5 @@
      the body and stands over the bench. */
   :global(body:has([data-head-tint]) [data-bits-floating-content-wrapper]) {
     z-index: 2147483001 !important;
-  }
-  /* residual: unmapped */
-  [data-slot="slot"][data-hidden] {
-    content-visibility: hidden;
   }
 </style>

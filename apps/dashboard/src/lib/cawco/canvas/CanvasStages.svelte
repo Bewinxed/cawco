@@ -123,11 +123,13 @@
 
 {#each [...stages.values()] as stage (stage.id)}
   <Portal>
+    <!-- The phone's panel is the sheet (z 40): the canvas stands in it
+         (stage.svelte.ts sets data-over-sheet). -->
     <div
       data-standing={stage.at === "composer" || undefined}
       data-canvas-stages-docked={stage.at === "panel" || undefined}
       data-slot="canvas-stage"
-      class="fixed z-15 overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-standing:border-b data-standing:border-b-border-hairline"
+      class="fixed z-15 overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-over-sheet:z-41 data-standing:border-b data-standing:border-b-border-hairline"
       data-artifact={stage.id}
       hidden
       bind:this={stage.el}
@@ -139,7 +141,7 @@
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
         <iframe
           allow="clipboard-write"
-          class="block size-full border-none border-current"
+          class="block size-full border-none border-current scheme-inherit"
           onload={(event) =>
             loaded(stage, event.currentTarget as HTMLIFrameElement)}
           src={stage.src}
@@ -176,7 +178,7 @@
       ? stage.grabValue.corner.text
       : undefined}
     class={[
-      "group/grab absolute flex touch-none outline-none",
+      "group/grab absolute flex touch-none outline-none outline-current",
       handle === "top" &&
         "start-(--grab-x) top-0 h-c-btn-h-lg w-(--grab-w) translate-x-(--grab-shift) cursor-ns-resize justify-center pt-space-1",
       handle === "top-left" &&
@@ -215,16 +217,3 @@
     ></span>
   </div>
 {/snippet}
-
-<style>
-  /* The phone's panel is the sheet (z 40): the canvas stands in it. stage.svelte.ts
-     toggles the class. */
-  /* residual: unmapped */
-  [data-slot="canvas-stage"]:global(.over-sheet) {
-    z-index: 41;
-  }
-  /* residual: unmapped */
-  iframe {
-    color-scheme: inherit;
-  }
-</style>

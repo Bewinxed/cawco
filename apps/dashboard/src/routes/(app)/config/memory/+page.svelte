@@ -133,7 +133,7 @@
   {#snippet toolbar()}
     <Input
       aria-label="Filter memory files"
-      class="max-w-64"
+      measure="cap-sm"
       placeholder="Filter files…"
       bind:value={filter}
     />

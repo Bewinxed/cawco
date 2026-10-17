@@ -193,9 +193,8 @@
         value={chosen}
         bind:open={open.select}
       >
-        <Select.Trigger
-          class="rounded-sm border border-border-control px-space-3 py-space-2"
-          data-open="select">{chosen || "Select"}</Select.Trigger
+        <Select.Trigger data-open="select" look="field"
+          >{chosen || "Select"}</Select.Trigger
         >
         <Select.Content>
           <Select.Item data-inside="select" label="Press" value="press" />

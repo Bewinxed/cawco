@@ -77,9 +77,11 @@
 <Dialog.Root onOpenChangeComplete={(isOpen) => !isOpen && onClose()} bind:open>
   <Dialog.Content
     aria-label={`Diff: ${filePath}`}
-    bodyClass="flex h-full flex-col gap-0 overflow-hidden p-0"
-    class="h-(--modal-h) w-(--modal-w) phone:max-w-320"
+    bodyClass="flex h-full flex-col overflow-hidden"
+    bodyPad="flush"
+    class="h-(--modal-h) w-(--modal-w)"
     style="--modal-h: 90vh; --modal-w: 95vw"
+    width="document"
   >
     <!-- literal: gap 8px 12px, padding 12px 52px 12px 16px -->
     <header
@@ -93,11 +95,9 @@
     >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
-          <Dialog.Title class="truncate font-mono text-label"
-            >{filePath}</Dialog.Title
-          >
+          <Dialog.Title look="path">{filePath}</Dialog.Title>
           <CopyButton
-            class="h-6 w-6"
+            fit="square-24"
             size="icon-sm"
             text={filePath}
             variant="ghost"

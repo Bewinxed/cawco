@@ -171,6 +171,7 @@
       >
         <Select.Trigger
           aria-label="Project"
+          chosen="selected"
           data-on={filtered ? "" : undefined}
           size="sm"
         >
@@ -247,14 +248,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* residual: unmapped */
-  /* The filter chip, chosen: the selected pair while a project is picked
-     (needs variant: data-on). */
-  [data-slot="top"] :global([data-slot="select-trigger"][data-on]) {
-    border-color: transparent;
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-  }
-</style>

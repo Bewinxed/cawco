@@ -230,7 +230,8 @@
             {:else}
               {#each dirs as dir (dir.name)}
                 <Button
-                  class="w-full justify-start font-mono text-label font-normal"
+                  class="w-full justify-start"
+                  face="path"
                   onclick={() => go(join(path, dir.name), 1)}
                   press="tint"
                   size="sm"

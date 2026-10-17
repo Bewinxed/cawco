@@ -242,7 +242,7 @@
               onplace={place}
             />
           {:else}
-            <Skeleton class="h-64 w-full rounded-lg" />
+            <Skeleton class="w-full" height="board" radius="card" />
           {/if}
         {:else if decisions.problem && !list}
           <!-- literal: 72ch -->
@@ -322,7 +322,7 @@
                (motion/rows); the tiles it moves slide to their places. -->
           <div
             data-slot="grid"
-            class="grid grid-cols-1 gap-space-3 @decisions-520px/decisions:grid-cols-2 @decisions-900px/decisions:grid-cols-4"
+            class="grid grid-cols-1 gap-space-3 @decisions-520px/decisions:@max-decisions-900px/decisions:grid-cols-2 @decisions-900px/decisions:grid-cols-4"
             {@attach reflow()}
           >
             {#if list}
@@ -340,7 +340,8 @@
               {#each [0, 1, 2, 3] as slot (slot)}
                 <!-- literal: 90px -->
                 <Skeleton
-                  class="h-(--skeleton-h) w-full rounded-lg"
+                  class="h-(--skeleton-h) w-full"
+                  radius="card"
                   style="--skeleton-h: 90px"
                 />
               {/each}

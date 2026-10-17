@@ -411,7 +411,7 @@
         />
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-auto min-w-44">
+    <DropdownMenu.Content align="end" class="w-auto" min="regular">
       {#each SERVICES as service (service.service)}
         <DropdownMenu.Item onSelect={() => startAdding(service)}>
           <ProviderLogo provider={service.service} />
@@ -530,10 +530,16 @@
         Each service asks you, not Caw, to let the hub in, so signing in is
         yours. The projects you allow then read from it and act through it.
       </p>
+      <!-- The starter cards' recipe (StarterCards.svelte): raised, the tile
+           shadow, every card one height, one column when narrow. -->
+      <!-- literal: minmax(0, 1fr), 1fr; auto-fill tracks of min(100%, the starter's width) -->
       <ul
         data-slot="cards"
         aria-label="Services"
-        class="m-0 grid list-none gap-space-2 p-0"
+        class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-(--cards-cols) gap-space-2 p-0 @details:grid-cols-(--cards-cols-wide)"
+        style:--cards-cols="minmax(0, 1fr)"
+        style:--cards-cols-wide={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
+        style:--cards-rows="1fr"
       >
         {#each SERVICES as service (service.service)}
           <li>
@@ -723,7 +729,7 @@
     }
   }
 >
-  <Popover.Content align="end" class="w-64" customAnchor={chooseAnchor}>
+  <Popover.Content align="end" customAnchor={chooseAnchor} width="narrow">
     {#if choosing}
       {@const row = choosing}
       <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">
@@ -758,21 +764,5 @@
     flex: 1 1 var(--key-basis);
     min-inline-size: 0;
     max-inline-size: var(--key-max);
-  }
-  /* The starter cards' recipe (StarterCards.svelte): raised, the tile
-     shadow, every card one height, one column when narrow. */
-  /* residual: unmapped */
-  [data-slot="cards"] {
-    grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: 1fr;
-  }
-  @container (min-width: 30rem) {
-    /* residual: unmapped */
-    [data-slot="cards"] {
-      grid-template-columns: repeat(
-        auto-fill,
-        minmax(min(100%, var(--c-starter-w)), 1fr)
-      );
-    }
   }
 </style>

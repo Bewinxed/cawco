@@ -494,9 +494,11 @@
                   out:unfold
                 >
                   {#key file.file}
+                    <!-- The large file in flight: its path cut from the start
+                         (rtl), read from the left like every line above it. -->
                     <span
                       data-slot="path"
-                      class="row-start-1 col-start-1 truncate text-left type-code text-ink-muted"
+                      class="row-start-1 col-start-1 truncate text-left type-code text-ink-muted dir-rtl"
                       title={file.file}
                       in:crossIn
                       out:crossOut><bdi>{file.file}</bdi></span
@@ -675,12 +677,5 @@
   /* The step's label wraps, never truncates. */
   [data-slot="row"] :global([data-slot="thinking-step-label"]) {
     overflow-wrap: anywhere;
-  }
-
-  /* residual: unmapped */
-  /* The large file in flight: its path cut from the start (rtl), read from
-     the left like every line above it. */
-  [data-slot="path"] {
-    direction: rtl;
   }
 </style>

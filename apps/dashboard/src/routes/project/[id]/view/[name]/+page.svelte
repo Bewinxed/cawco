@@ -92,6 +92,6 @@
   {:else if view}
     <ViewOpenUi {hrefOf} onopen={open} {projectId} {view} />
   {:else}
-    <Skeleton class="h-64 w-full rounded-lg" />
+    <Skeleton class="w-full" height="board" radius="card" />
   {/if}
 </main>

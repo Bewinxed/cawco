@@ -82,12 +82,13 @@
         </button>
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align={inEmptyState ? "start" : "end"} class="w-64">
+    <DropdownMenu.Content align={inEmptyState ? "start" : "end"} width="wide">
       <!-- The title (the pending content: slot and label) on one line, what it
            makes on the next. The 44px is the top bar's own height. -->
       <DropdownMenu.PendingItem
-        class="min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong"
+        class="min-h-c-top-bar-h flex-wrap"
         label="New graph"
+        look="titled"
         pendingLabel="Creating…"
         run={() => create(GRAPH)}
       >
@@ -97,8 +98,9 @@
         >
       </DropdownMenu.PendingItem>
       <DropdownMenu.PendingItem
-        class="min-h-c-top-bar-h flex-wrap gap-y-space-1 text-size-label font-medium text-ink-strong"
+        class="min-h-c-top-bar-h flex-wrap"
         label="New program"
+        look="titled"
         pendingLabel="Creating…"
         run={() => create(PROGRAM)}
       >
@@ -170,17 +172,17 @@
             <td
               data-slot="name"
               class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
-              ><Skeleton class="h-icon-md w-40" /></td
+              ><Skeleton class="h-icon-md" width="title" /></td
             >
-            <td><Skeleton class="h-icon-lg w-16" /></td>
+            <td><Skeleton class="h-icon-lg" width="short" /></td>
             <td data-slot="age" class="workflow-cards:col-1"
-              ><Skeleton class="h-icon-md w-20" /></td
+              ><Skeleton class="h-icon-md" width="label" /></td
             >
             <td data-slot="count" class="num workflow-cards:hidden"
-              ><Skeleton class="h-icon-md w-6" /></td
+              ><Skeleton class="h-icon-md" width="glyph" /></td
             >
             <td class="workflow-cards:col-2 workflow-cards:row-2"
-              ><Skeleton class="h-space-8 w-14" /></td
+              ><Skeleton class="h-space-8" width="word" /></td
             >
           </tr>
         {/each}
