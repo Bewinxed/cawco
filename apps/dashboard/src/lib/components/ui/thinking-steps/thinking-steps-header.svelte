@@ -14,79 +14,42 @@
   } = $props();
 </script>
 
+<!-- literal: 26px, -9px (the header's least height; how far the touch target reaches past it) -->
 <Collapsible.Trigger
   {...rest}
-  class="thinking-header mark-line press-tint {className}"
+  class="thinking-header group/header mark-line press-tint m-0 flex min-h-(--header-min) max-w-full cursor-pointer items-center gap-space-2 rounded-xs border-0 bg-transparent p-0 text-start text-inherit hover:enabled:text-ink-strong disabled:cursor-default coarse:enabled:relative {className}"
   data-slot="thinking-steps-header"
+  style="--header-min: 26px; --hit-reach: -9px"
 >
   {#if children}
     {@render children()}
   {:else}
     <span>Thinking</span>
   {/if}
-  <span aria-hidden="true" class="chevron" data-box><IconChevronRight /></span>
+  <span
+    aria-hidden="true"
+    class="grid flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/header:rotate-90 group-disabled/header:invisible"
+    data-box><IconChevronRight class="size-icon-sm" /></span
+  >
   {@render after?.()}
 </Collapsible.Trigger>
 
 <style>
-  /* css-scope .thinking-header: the kit header's own root, on bits-ui's element; Thinking tunes it under its own root */
-  :global(.thinking-header) {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 26px;
-    max-inline-size: 100%;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
+  /* residual: unmapped */
+  [data-slot="thinking-steps-header"] {
     font: inherit;
-    color: inherit;
-    text-align: start;
-    cursor: pointer;
-
-    &:disabled {
-      cursor: default;
-    }
-    &:hover:not(:disabled) {
-      color: var(--ink-strong);
-    }
-
-    /* A 44px target for a finger, without the header growing to it: the
-       live header turns enabled as its first words land, and a header that
-       grew then dropped its re-centred label 9px under the reader. The
-       target reaches past the header instead of the header being taller. */
-    @media (pointer: coarse) {
-      &:not(:disabled) {
-        position: relative;
-
-        &::before {
-          content: "";
-          position: absolute;
-          inset-block: -9px;
-          inset-inline: 0;
-        }
-      }
-    }
   }
-  .chevron {
-    display: grid;
-    flex: 0 0 auto;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
+  /* A 44px target for a finger, without the header growing to it: the
+     live header turns enabled as its first words land, and a header that
+     grew then dropped its re-centred label 9px under the reader. The
+     target reaches past the header instead of the header being taller. */
+  /* residual: pseudo */
+  @media (pointer: coarse) {
+    [data-slot="thinking-steps-header"]:not(:disabled)::before {
+      content: "";
+      position: absolute;
+      inset-block: var(--hit-reach);
+      inset-inline: 0;
     }
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  :global(.thinking-header[data-state="open"]) .chevron {
-    transform: rotate(90deg);
-  }
-  :global(.thinking-header:disabled) .chevron {
-    visibility: hidden;
   }
 </style>
