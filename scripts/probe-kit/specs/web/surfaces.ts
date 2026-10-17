@@ -11,16 +11,27 @@
  * An entry is `<surface>-<state>-<width>-<theme>`. The fleet is the style
  * snapshot's hub tape, its clock held at the recording's moment
  * (hub-tape.ts): the same pictures on every run, in any workspace.
+ *
+ * A capture that differs from its baseline is written beside it with the
+ * whole document as it was taken (`<entry>.dump.json`, surfaces/dump.ts):
+ * a picture the style snapshot reads no difference in is one of two the
+ * page paints, and the dump says which element differs. `--dump` writes
+ * one for every capture, the picture that matched as well.
  */
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { diff } from "../../diff";
 import { player, readTape } from "../../hub-tape";
 import { entrySlug, type Spec } from "../../kit";
 import { chosen } from "../../surfaces/catalogue";
+import { pageDump } from "../../surfaces/dump";
 import { PASSES, Servers, TAPE, walk } from "../../surfaces/walk";
 
 const surfacesArg = process.argv
   .find((arg) => arg.startsWith("--surfaces="))
   ?.slice("--surfaces=".length);
+/** Every capture's dump, not only a differing one's. */
+const dumpAll = process.argv.includes("--dump");
 
 const spec: Spec = {
   name: "surfaces",
@@ -66,7 +77,15 @@ const spec: Spec = {
                 };
               })()
             : undefined;
-          await diff(kit, page, entry, { clip });
+          // Read before the capture's comparison, as the picture was taken.
+          const dump = await page.evaluate(pageDump);
+          const differs = await diff(kit, page, entry, { clip });
+          if (differs || dumpAll) {
+            await writeFile(
+              join(kit.out, `${entry}.dump.json`),
+              JSON.stringify(dump)
+            );
+          }
         },
         (what, why) => kit.check(`${what}: opens`, false, why)
       );
