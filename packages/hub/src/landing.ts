@@ -250,6 +250,13 @@ export function landingQueue(): LandingQueue {
 /** Git that talks to the remote may wait on the network. */
 const NETWORK_MS = 300_000;
 const LOCAL_MS = 60_000;
+/**
+ * A command the workspace's boundary cut off: its sandbox stopped while it
+ * ran (agent boundary.ts, the executor's "cut off" line). A push cut off
+ * there says nothing of where it got: the host's side of the git door runs
+ * on, and the remote may take it after the hub has looked.
+ */
+const CUT_OFF = 137;
 /** Pushes that lost a race, as git words them. */
 const LOST_RACE = /non-fast-forward|\[rejected\]|fetch first|stale info/;
 /**
@@ -376,18 +383,22 @@ export async function land<F>(
     return start;
   }
   const key = `${deps.repo ?? start.remote}#${base}`;
+  const cut: CutOff = {};
   for (;;) {
     if (deps.stopped?.()) {
       return { kind: "stopped" };
     }
     // biome-ignore lint/performance/noAwaitInLoops: an item that stepped out of its turn gates again before it queues again
     const gated = await onBase(base, deps, false);
+    if (gated.kind === "nothing" && cut.push) {
+      return { kind: "landed", ...cut.push };
+    }
     if (gated.kind !== "on-base") {
       return gated;
     }
     const turn = await deps.queue(
       key,
-      () => attempt(base, deps, 1).catch(steppedOut),
+      () => attempt(base, deps, 1, cut).catch(steppedOut),
       deps.turn
     );
     if (turn.kind !== "busy") {
@@ -427,7 +438,9 @@ async function onBase<F>(
   const target = quote(`origin/${base}`);
   const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
   if (fetched.exitCode !== 0) {
-    return refusal("fetch", fetched);
+    return (await landedBefore(run, base))
+      ? { kind: "nothing" }
+      : refusal("fetch", fetched);
   }
   const ahead = await run(`git rev-list --count ${target}..HEAD`, LOCAL_MS);
   if (ahead.exitCode !== 0) {
@@ -462,6 +475,24 @@ async function onBase<F>(
 }
 
 /**
+ * Whether every commit of HEAD is on `base` as the clone last fetched it: a
+ * workspace whose work is on the branch already has nothing to land, whether
+ * or not the fetch that would say so again goes through (2026-10-17: an item
+ * whose one commit was on main failed on "remote helper 'cawco' aborted
+ * session"). The branch only moves on, so what it held then it holds now.
+ */
+async function landedBefore(
+  run: LandingDeps<unknown>["run"],
+  base: string
+): Promise<boolean> {
+  const held = await run(
+    `git merge-base --is-ancestor HEAD ${quote(`refs/remotes/origin/${base}`)}`,
+    LOCAL_MS
+  );
+  return held.exitCode === 0;
+}
+
+/**
  * Whether origin's `ref` is at `sha` now. A push that did not answer 0 may
  * still have landed (its command cut off after the remote took it), and a
  * ref at the commit pushed is landed whatever the command said.
@@ -476,14 +507,26 @@ async function holds(
 }
 
 /**
+ * A landing's push its boundary cut off ({@link CUT_OFF}): the commit it
+ * sent, and whether the turn had rebased. The landing goes on as after a
+ * lost race; a later read that finds the branch already holding every commit
+ * is that push landed, not nothing to land.
+ */
+interface CutOff {
+  push?: { rebased: boolean; sha: string };
+}
+
+/**
  * The turn: fetch, rebase, the commands whose inputs that moved, push; once
- * more if the push lost a race. Nothing in it waits: a command that would
- * throws {@link WouldWait}, which steps the item out ({@link land}).
+ * more if the push lost a race or was cut off ({@link CutOff}). Nothing in it
+ * waits: a command that would throws {@link WouldWait}, which steps the item
+ * out ({@link land}).
  */
 async function attempt<F>(
   base: string,
   deps: LandingDeps<F>,
-  n: number
+  n: number,
+  cut: CutOff
 ): Promise<LandingOutcome<F>> {
   const run = (cmd: string, timeoutMs: number) =>
     deps.run(cmd, timeoutMs, true);
@@ -491,6 +534,9 @@ async function attempt<F>(
     return { kind: "stopped" };
   }
   const gated = await onBase(base, deps, true);
+  if (gated.kind === "nothing" && cut.push) {
+    return { kind: "landed", ...cut.push };
+  }
   if (gated.kind !== "on-base") {
     return gated;
   }
@@ -508,12 +554,18 @@ async function attempt<F>(
   ) {
     return { kind: "landed", sha: after, rebased };
   }
+  if (pushed.exitCode === CUT_OFF) {
+    cut.push = { sha: after, rebased: rebased || (cut.push?.rebased ?? false) };
+    return n < ATTEMPTS
+      ? await attempt(base, deps, n + 1, cut)
+      : refusal("push", pushed);
+  }
   const said = `${pushed.stderr}\n${pushed.stdout}`;
   if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
     return refusal("push", pushed);
   }
   return n < ATTEMPTS
-    ? await attempt(base, deps, n + 1)
+    ? await attempt(base, deps, n + 1, cut)
     : {
         kind: "refused",
         step: "push",
@@ -582,7 +634,9 @@ export async function pushBranch(
       }
       const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
       if (fetched.exitCode !== 0) {
-        return refusal("fetch", fetched);
+        return (await landedBefore(run, base))
+          ? { kind: "nothing" }
+          : refusal("fetch", fetched);
       }
       const ahead = await run(
         `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
@@ -631,6 +685,12 @@ async function leasedPush(
   );
   if (pushed.exitCode === 0) {
     return;
+  }
+  if (pushed.exitCode === CUT_OFF) {
+    // From a fresh read: one the cut-off push landed on is HEAD already.
+    return n < ATTEMPTS
+      ? await leasedPush(run, ref, n + 1)
+      : refusal("push", pushed);
   }
   const said = `${pushed.stderr}\n${pushed.stdout}`;
   if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {

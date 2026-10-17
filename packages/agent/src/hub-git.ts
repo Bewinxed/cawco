@@ -408,9 +408,26 @@ const isGithubHttps = (url: string): boolean => {
 };
 
 /**
+ * What git-lfs would otherwise learn from a server and write into the
+ * clone's `.git/config` (`git config --replace-all`, a lock and a rename),
+ * given env-only to every git the door runs: whether to ask the server about
+ * locks before a push (`lfs.locksverify`, git-lfs lockverifier.go
+ * `disableFor`), for whatever endpoint the repository names, through the
+ * URL-less key git-lfs falls back to (config/url_config.go `Get`). The
+ * rename drops the read-only bind the workspace's sandbox holds on that
+ * file, so the sandbox is stopped with everything in it (boundary-host.ts
+ * `guard`): on 2026-10-17 a landing's push to a guarded GitHub origin set
+ * this off (a 401 on `locks/verify`, then `lfs.<url>.access` written), and
+ * cut off every command the workspace was running.
+ */
+const DOOR_LFS: [string, string][] = [["lfs.locksverify", "false"]];
+
+/**
  * git's environment for a guarded workspace's GitHub origin, on the host:
  * the host's own gh as GitHub's only credential helper (`helper =` clears
- * what came before, git-config(1) `credential.helper`), env-only as
+ * what came before, git-config(1) `credential.helper`), and GitHub's LFS
+ * access as that credential makes it (`basic`: sent up front, so no 401 has
+ * git-lfs write it into the clone's config, {@link DOOR_LFS}), env-only as
  * {@link hubGitEnv} is.
  */
 export const hostGithubGitEnv = async (): Promise<Record<string, string>> => {
@@ -422,14 +439,22 @@ export const hostGithubGitEnv = async (): Promise<Record<string, string>> => {
   }
   const first = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   const key = "credential.https://github.com.helper";
+  const pairs: [string, string][] = [
+    [key, ""],
+    [key, `!${shellWord(gh)} auth git-credential`],
+    ["lfs.https://github.com/.access", "basic"],
+    ...DOOR_LFS,
+  ];
   return {
     ...(hostEnvironment() as Record<string, string>),
     GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: String(first + 2),
-    [`GIT_CONFIG_KEY_${first}`]: key,
-    [`GIT_CONFIG_VALUE_${first}`]: "",
-    [`GIT_CONFIG_KEY_${first + 1}`]: key,
-    [`GIT_CONFIG_VALUE_${first + 1}`]: `!${shellWord(gh)} auth git-credential`,
+    GIT_CONFIG_COUNT: String(first + pairs.length),
+    ...Object.fromEntries(
+      pairs.flatMap(([name, value], index) => [
+        [`GIT_CONFIG_KEY_${first + index}`, name],
+        [`GIT_CONFIG_VALUE_${first + index}`, value],
+      ])
+    ),
   };
 };
 
@@ -504,7 +529,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     }
     const { asked, github, held } = doorTarget(ref, url);
     const env =
-      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv();
+      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv(DOOR_LFS);
     const scheme = new URL(url).protocol === "https:" ? "https" : "http";
     const child = spawn(
       "git",
