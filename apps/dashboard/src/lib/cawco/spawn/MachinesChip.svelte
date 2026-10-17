@@ -79,21 +79,24 @@
     : "color:var(--status-fail-ink);border-color:var(--status-fail-ink)"}
 >
   {#snippet trigger()}
-    <Server style="color:var(--hue-cyan-500)" />
+    <Server class="text-hue-cyan-500" />
     <span data-slot="chip-label" class="chip-label">{label}</span>
     <Down class="chevron" />
   {/snippet}
   {#if pairing}
-    <div class="ns-panel pair">
-      <p class="pair-line">
+    <!-- literal: 10px gap -->
+    <div class="ns-panel grid gap-(--gap) p-space-1" style:--gap="10px">
+      <p class="type-meta text-ink-muted">
         Run this on the machine. It appears here as soon as the agent checks in.
       </p>
       {#if pairUrl}
         <CopyBox label="Install command" text={installCommand(pairUrl)} />
       {:else if joinInfo.error}
-        <p class="pair-error" role="alert">{joinInfo.error}</p>
+        <p class="type-meta text-status-fail-ink" role="alert">
+          {joinInfo.error}
+        </p>
       {:else}
-        <p class="pair-line">Reading this hub's addresses…</p>
+        <p class="type-meta text-ink-muted">Reading this hub's addresses…</p>
       {/if}
       <CheckInStatus>
         {#snippet trail()}
@@ -112,16 +115,21 @@
   {:else}
     {#each machines as row, index (row.id)}
       {@const on = selected.includes(row.id)}
+      <!-- literal: 10px gap, 44px height, 6px 8px padding -->
       <button
         data-slot="row"
         aria-pressed={on}
-        class="row ns-in press-tint"
+        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-(--r) border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-surface-fill disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
         data-fh="1"
         disabled={!row.online}
         onclick={() => ontoggle(row.id)}
-        style={`--delay:${80 + index * 45}ms;border-radius:${radius(index, on)}`}
+        style={`--delay:${80 + index * 45}ms`}
+        style:--gap="10px"
+        style:--h="44px"
+        style:--pad-x="8px"
+        style:--pad-y="6px"
+        style:--r={radius(index, on)}
         type="button"
-        class:on
       >
         <MachineRow
           hue={row.hue}
@@ -132,116 +140,47 @@
           presence={presenceOf(row)}
         />
         <Check
-          class="check"
-          style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
+          class="size-icon-md flex-none transform-(--t) text-ink-strong opacity-(--o) transition-[opacity] dur-toggle ease-out motion-safe:transition-[opacity,transform]"
+          style={`--o:${on ? 1 : 0};--t:scale(${on ? 1 : 0.94})`}
         />
       </button>
     {/each}
     {#if machines.length === 0}
-      <div class="none ns-in">No machines have checked in.</div>
+      <!-- literal: 8px inline padding -->
+      <div
+        class="ns-in px-(--pad-x) py-space-4 text-center type-meta text-ink-subtle"
+        style:--pad-x="8px"
+      >
+        No machines have checked in.
+      </div>
     {/if}
-    <div data-slot="divider" class="divider"></div>
+    <!-- literal: 1px rule -->
+    <div
+      data-slot="divider"
+      class="mx-space-row my-space-1 h-(--h) bg-border-hairline"
+      style:--h="1px"
+    ></div>
+    <!-- literal: 10px gap, 40px height, 6px 8px padding, 26px tile, 14px icon -->
     <button
       data-slot="row"
       data-add
-      class="row add ns-in press-tint"
+      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-0 bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color,border-radius] dur-toggle ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"
+      style:--gap="10px"
+      style:--h="40px"
+      style:--pad-x="8px"
+      style:--pad-y="6px"
       type="button"
     >
-      <span data-slot="tile" class="ns-tile tile dashed"><Add /></span>
-      <span class="add-label">Connect a machine…</span>
+      <span
+        data-slot="tile"
+        class="ns-tile dashed size-(--tile)"
+        style:--icon="14px"
+        style:--tile="26px"><Add class="size-(--icon)" /></span
+      >
+      <span class="type-label">Connect a machine…</span>
     </button>
   {/if}
 </NsPopover>
-
-<style>
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    height: 44px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-    text-align: left;
-    color: var(--ink-strong);
-    transition:
-      background-color var(--dur-toggle) var(--ease-out),
-      border-radius var(--dur-toggle) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-toggle) var(--ease-out),
-        border-radius var(--dur-toggle) var(--ease-out),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-  }
-  .row.on {
-    background: var(--surface-fill);
-  }
-  .row:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  .row :global(svg.check) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-strong);
-    transition: opacity var(--dur-toggle) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity var(--dur-toggle) var(--ease-out),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-  }
-  .divider {
-    height: 1px;
-    margin: 4px 2px;
-    background: var(--border-hairline);
-  }
-  .add {
-    height: 40px;
-    border-radius: var(--radius-sm);
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .add:hover {
-      color: var(--ink-strong);
-    }
-  }
-  .tile {
-    width: 26px;
-    height: 26px;
-  }
-  .tile :global(svg) {
-    width: 14px;
-    height: 14px;
-  }
-  .add-label {
-    font: var(--type-label);
-  }
-  .pair {
-    display: grid;
-    gap: 10px;
-    padding: 4px;
-  }
-  .pair-line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .pair-error {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .none {
-    padding: 14px 8px;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-    text-align: center;
-  }
-</style>
