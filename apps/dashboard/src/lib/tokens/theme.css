@@ -506,69 +506,49 @@
 }
 
 @utility type-meta {
-  font-family: var(--font-body);
-  font-size: var(--text-meta);
-  font-weight: 400;
-  line-height: 1.35;
+  --tw-sort: vertical-align;
+  font: var(--type-meta);
 }
 
 @utility type-label {
-  font-family: var(--font-body);
-  font-size: var(--text-label);
-  font-weight: 500;
-  line-height: 1.3;
+  --tw-sort: vertical-align;
+  font: var(--type-label);
 }
 
 @utility type-body {
-  font-family: var(--font-body);
-  font-size: var(--text-body);
-  font-weight: 400;
-  line-height: 1.45;
+  --tw-sort: vertical-align;
+  font: var(--type-body);
 }
 
 @utility type-prose {
-  font-family: var(--font-body);
-  font-size: var(--text-body);
-  font-weight: 400;
-  line-height: 1.55;
+  --tw-sort: vertical-align;
+  font: var(--type-prose);
 }
 
 @utility type-button {
-  font-family: var(--font-body);
-  font-size: var(--text-body);
-  font-weight: 500;
-  line-height: 1;
+  --tw-sort: vertical-align;
+  font: var(--type-button);
 }
 
 @utility type-title {
-  font-family: var(--font-body);
-  font-size: var(--text-title);
-  font-weight: 500;
-  line-height: 1.25;
-  letter-spacing: var(--track-title);
+  --tw-sort: vertical-align;
+  font: var(--type-title);
 }
 
 @utility type-kpi {
-  font-family: var(--font-body);
-  font-size: var(--text-kpi);
-  font-weight: 500;
-  line-height: 1;
+  --tw-sort: vertical-align;
+  font: var(--type-kpi);
   font-variant-numeric: tabular-nums;
 }
 
 @utility type-code {
-  font-family: var(--font-mono);
-  font-size: var(--text-code);
-  font-weight: 400;
-  line-height: 1.6;
-  font-variant-ligatures: none;
+  --tw-sort: vertical-align;
+  font: var(--type-code);
 }
 
 @utility type-caps {
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
+  --tw-sort: vertical-align;
+  font: var(--type-caps);
 }
 
 @utility text-size-meta {

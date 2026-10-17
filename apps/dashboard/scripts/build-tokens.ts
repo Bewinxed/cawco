@@ -181,11 +181,12 @@ const theme = tailwindThemeCss(built.view, {
   // writes `type-<role>` (for `font:`) or `text-size-<role>` (for
   // `font-size:`), never these.
   markupRoles: ["meta", "label", "body", "title", "kpi"],
-  // A kpi figure is always tabular (`num`); code sets with ligatures off
-  // (app.css base `code, pre, .font-mono`).
+  // What every use of a role sets beside its shorthand: a kpi figure is
+  // always tabular (`num`). Title's tracking and code's ligatures off are
+  // set by only some of their uses, which carry `tracking-title` and
+  // `liga-none` themselves.
   roleExtras: {
     "type-kpi": { "font-variant-numeric": "tabular-nums" },
-    "type-code": { "font-variant-ligatures": "none" },
   },
   defaults: {
     // Preflight's faces for html and code: the roles' stacks.

@@ -577,28 +577,6 @@ function radiusKeys(tokens: ViewToken[]): Map<string, string> {
   );
 }
 
-/** A type role's longhands, from its DTCG composite: never the `font` shorthand, which resets font-variant. */
-function roleLonghands(token: ViewToken, names: Set<string>): string[] {
-  const value = (token.original.original as Json).$value as Json;
-  const css = (type: string, v: unknown) =>
-    cssValue(toCss(type, v) ?? "", names, token.name);
-  const lines = [
-    `font-family: ${css("fontFamily", value.fontFamily)};`,
-    `font-size: ${css("dimension", value.fontSize)};`,
-    `font-weight: ${css("fontWeight", value.fontWeight)};`,
-    `line-height: ${css("number", value.lineHeight)};`,
-  ];
-  const tracking = value.letterSpacing;
-  const zero =
-    tracking &&
-    typeof tracking === "object" &&
-    (tracking as { value: number }).value === 0;
-  if (tracking !== undefined && !zero) {
-    lines.push(`letter-spacing: ${css("dimension", tracking)};`);
-  }
-  return lines;
-}
-
 /**
  * A type role as markup names it (`text-meta`): its size, and its leading,
  * weight and tracking as fallbacks a utility beside it overrides. Each
@@ -747,9 +725,19 @@ function themeUtilities(
       `bg-${t.name}`,
       [`background-image: var(--${t.name});`],
     ]),
+    // The role as the `font` shorthand, as a component's `font: var(--type-*)`
+    // set it: it resets every font longhand it doesn't name (font-style,
+    // font-variant-*, font-kerning, font-feature-settings …), so nothing an
+    // ancestor sets there reaches the element. Its letter-spacing isn't in
+    // the shorthand; a role whose every use sets one carries it as an extra.
+    // `font` is in no slot of Tailwind's property order, which would sort the
+    // role after `font-medium`, `leading-*`, `num` … and let it reset them.
+    // `--tw-sort` (Tailwind's own, never emitted) files it under the slot just
+    // before font-family, so every font utility beside it wins, as a
+    // declaration after the shorthand did in a component's rule.
     ...roles.map((t): ThemeUtility => [
       `type-${strip(t.name, "type-")}`,
-      [...roleLonghands(t, names), ...extras(t)],
+      ["--tw-sort: vertical-align;", `font: var(--${t.name});`, ...extras(t)],
     ]),
     ...of("type/dimension")
       .filter((t) => t.name.startsWith("text-"))
