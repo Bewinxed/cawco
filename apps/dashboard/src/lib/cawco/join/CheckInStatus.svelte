@@ -9,36 +9,27 @@
   let { trail }: { trail?: Snippet } = $props();
 </script>
 
-<div class="status">
-  <span aria-live="polite" class="said mark-line">
-    <span data-slot="dot" class="dot" data-box></span>
+<!-- literal: 8px -->
+<div
+  class="flex min-h-c-btn-h-sm items-center justify-between gap-(--gap)"
+  style:--gap="8px"
+>
+  <!-- literal: 8px -->
+  <span
+    aria-live="polite"
+    class="mark-line flex items-center gap-(--gap) type-meta text-ink-muted"
+    style:--gap="8px"
+  >
+    <!-- literal: 6px -->
+    <span
+      data-slot="dot"
+      class="size-(--dot) flex-none rounded-pill bg-hue-orange-500"
+      data-box
+      style:--dot="6px"
+    ></span>
     <span>Waiting for check-in…</span>
   </span>
   {#if trail}
     {@render trail()}
   {/if}
 </div>
-
-<style>
-  .status {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-height: 30px;
-  }
-  .said {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .dot {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--hue-orange-500);
-  }
-</style>
