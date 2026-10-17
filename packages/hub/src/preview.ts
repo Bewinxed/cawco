@@ -111,19 +111,47 @@ noteParent(readEnv(CAWCO_ENV.dashboardUrl));
 export const previewParents = (): string[] => [...parents];
 
 /**
- * `answer` as the browser may frame it: from the dashboards alone. A
- * response a hop made with headers it holds fixed goes on as a copy.
+ * What every answer on a preview origin carries: who may frame it, and its
+ * ask for a process of its own. A preview's port is the dashboard's site (a
+ * site is a scheme and a host, its port left out), so Chromium runs the
+ * frame in the dashboard's renderer, on its main thread, and a heavy page
+ * stalls the dashboard's own input. `Origin-Agent-Cluster: ?1` asks for an
+ * origin-keyed agent cluster, which Chromium backs with an origin-locked
+ * process ("The Origin-Agent-Cluster HTTP response header can be used by web
+ * developers to hint to the browser that an origin locked process can be
+ * used", chromium.googlesource.com/chromium/src/+/HEAD/docs/
+ * process_model_and_site_isolation.md). It is sent on every answer, as the
+ * header must be ("send this header on all responses from your origin",
+ * web.dev/articles/origin-agent-cluster). It holds only in a secure context
+ * (https, or localhost): over plain http to an address the page stays in the
+ * dashboard's process, and WebKit runs no frame in a process of its own.
  */
-const framedBy = (answer: Response): Response => {
+const PREVIEW_HEADERS = (): [string, string][] => [
   // `'self'` too: every ancestor is checked, and a page's own frames (an
   // app's inner frame) have the preview's origin among theirs.
-  const policy = `frame-ancestors 'self' ${previewParents().join(" ")}`.trim();
+  [
+    "content-security-policy",
+    `frame-ancestors 'self' ${previewParents().join(" ")}`.trim(),
+  ],
+  ["origin-agent-cluster", "?1"],
+];
+
+/**
+ * `answer` with {@link PREVIEW_HEADERS}. A response a hop made with headers
+ * it holds fixed goes on as a copy.
+ */
+const framedBy = (answer: Response): Response => {
+  const headers = PREVIEW_HEADERS();
   try {
-    answer.headers.set("content-security-policy", policy);
+    for (const [name, value] of headers) {
+      answer.headers.set(name, value);
+    }
     return answer;
   } catch {
     const copy = new Response(answer.body, answer);
-    copy.headers.set("content-security-policy", policy);
+    for (const [name, value] of headers) {
+      copy.headers.set(name, value);
+    }
     return copy;
   }
 };

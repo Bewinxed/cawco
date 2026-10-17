@@ -29,6 +29,113 @@ export interface Box {
 const PICTURE_AREA = 1_200_000;
 /** Parts drawn whole in one picture at most; past it, the rest are their boxes alone. Our call. */
 const PARTS_MAX = 60;
+/**
+ * The styles a thumbnail's parts are drawn with: what lays a box out and
+ * paints it at a glance. Copying every computed property (about 400 in
+ * WebKit, each read and compared) of every element was 6 ms an element on
+ * WebKit, on the dashboard's thread; modern-screenshot's own bound for it is
+ * `includeStyleProperties` ("This can be useful for performance-critical
+ * scenarios"). Our list.
+ */
+const THUMBNAIL_STYLES = [
+  "display",
+  "position",
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "z-index",
+  "float",
+  "box-sizing",
+  "width",
+  "height",
+  "min-width",
+  "min-height",
+  "max-width",
+  "max-height",
+  "margin-top",
+  "margin-right",
+  "margin-bottom",
+  "margin-left",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "flex-direction",
+  "flex-wrap",
+  "flex-grow",
+  "flex-shrink",
+  "flex-basis",
+  "order",
+  "align-items",
+  "align-self",
+  "align-content",
+  "justify-content",
+  "justify-items",
+  "justify-self",
+  "row-gap",
+  "column-gap",
+  "grid-template-columns",
+  "grid-template-rows",
+  "grid-template-areas",
+  "grid-auto-flow",
+  "grid-auto-columns",
+  "grid-auto-rows",
+  "grid-column-start",
+  "grid-column-end",
+  "grid-row-start",
+  "grid-row-end",
+  "overflow-x",
+  "overflow-y",
+  "visibility",
+  "opacity",
+  "transform",
+  "transform-origin",
+  "aspect-ratio",
+  "object-fit",
+  "color",
+  "background-color",
+  "background-image",
+  "background-size",
+  "background-position-x",
+  "background-position-y",
+  "background-repeat",
+  "border-top-width",
+  "border-right-width",
+  "border-bottom-width",
+  "border-left-width",
+  "border-top-style",
+  "border-right-style",
+  "border-bottom-style",
+  "border-left-style",
+  "border-top-color",
+  "border-right-color",
+  "border-bottom-color",
+  "border-left-color",
+  "border-top-left-radius",
+  "border-top-right-radius",
+  "border-bottom-right-radius",
+  "border-bottom-left-radius",
+  "box-shadow",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "line-height",
+  "letter-spacing",
+  "text-align",
+  "text-transform",
+  "text-decoration-line",
+  "text-overflow",
+  "white-space",
+  "overflow-wrap",
+  "word-break",
+  "vertical-align",
+  "list-style-type",
+  "fill",
+  "stroke",
+  "stroke-width",
+];
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 const SKIPPED =
@@ -187,17 +294,28 @@ const onPage = (box: Box): Box => {
 
 /**
  * The page cropped to `box` (the page's px) with the person's ink, as a
- * base64 PNG; null when nothing could be drawn, `failed` hearing why.
+ * base64 PNG of at most `area` pixels; null when nothing could be drawn,
+ * `failed` hearing why. A `thumbnail` is drawn for a glance: its parts
+ * carry {@link THUMBNAIL_STYLES} alone, no scrollbar styles, and the
+ * system's faces for the page's web fonts (each part's SVG stays small, and
+ * decoding it runs on the page's thread: "the last step, decoding the
+ * svg+xml into an image, can't be done in a Web Worker… the bigger it is,
+ * the longer the decode", modern-screenshot's maintainer,
+ * github.com/qq15725/modern-screenshot/issues/18).
  */
 export async function cropPicture(
   wanted: Box,
-  failed: (message: string) => void
+  failed: (message: string) => void,
+  { area, thumbnail }: { area: number; thumbnail: boolean } = {
+    area: PICTURE_AREA,
+    thumbnail: false,
+  }
 ): Promise<string | null> {
   const box = onPage(wanted);
   const scale = Math.min(
     2,
     devicePixelRatio || 1,
-    Math.sqrt(PICTURE_AREA / (box.w * box.h))
+    Math.sqrt(area / (box.w * box.h))
   );
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(box.w * scale));
@@ -216,6 +334,13 @@ export async function cropPicture(
     ? await createContext(first.el, {
         scale,
         filter: (node) => !(node instanceof Element && node.matches(SKIPPED)),
+        ...(thumbnail
+          ? {
+              font: false as const,
+              features: { copyScrollbar: false },
+              includeStyleProperties: THUMBNAIL_STYLES,
+            }
+          : {}),
       })
     : null;
   try {
