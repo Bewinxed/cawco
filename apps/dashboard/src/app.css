@@ -9,6 +9,9 @@
 /* The Tailwind theme over them (`bun run tokens`): a utility exists only
    where a token does. */
 @import "./lib/tokens/theme.css";
+/* The browser's selection in its tint (`bun run tokens`), the value written
+   out so no element restyles its selection with it. */
+@import "./lib/tokens/selection.css";
 /* The house's variants and one per attribute state (`bun run variants`). */
 @import "./lib/tokens/variants.css";
 @plugin "@tailwindcss/typography";
@@ -311,11 +314,8 @@
     text-wrap-style: pretty;
   }
 
-  /* Browser surfaces carry the design too. */
-  ::selection {
-    background: var(--selection);
-  }
-
+  /* Browser surfaces carry the design too (the selection's tint:
+     lib/tokens/selection.css). */
   input,
   textarea {
     caret-color: var(--brand-solid);
