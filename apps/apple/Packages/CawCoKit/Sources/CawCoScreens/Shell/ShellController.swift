@@ -591,6 +591,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         applyLanding()
         sayCatalogLeftOut()
         #if DEBUG
+        listenForProbeReload()
         openProbeForm()
         runMacProbe()
         #if !targetEnvironment(macCatalyst)
@@ -1581,6 +1582,26 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     #if DEBUG
     func probeReopenRail() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.showRailSheet() }
+    }
+
+    /// `-rail-recent-probe`: each machine's Reload sessions, as its menu item
+    /// runs it, when the probe posts `dev.cawco.probe.reload` (`notifyutil -p`).
+    private var probeMenus: [MachineMenu] = []
+    private var listensForReload = false
+
+    private func listenForProbeReload() {
+        guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe"), !listensForReload else { return }
+        listensForReload = true
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(), { _, observer, _, _, _ in
+            guard let observer else { return }
+            let shell = Unmanaged<ShellController>.fromOpaque(observer).takeUnretainedValue()
+            Task { @MainActor in shell.probeReload() }
+        }, "dev.cawco.probe.reload" as CFString, nil, .deliverImmediately)
+    }
+
+    private func probeReload() {
+        probeMenus = hub.fleet.machines.map { MachineMenu(machineId: $0.machineId, host: self) }
+        for menu in probeMenus { menu.probeReload() }
     }
     #endif
 
