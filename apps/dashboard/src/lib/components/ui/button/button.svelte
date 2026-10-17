@@ -122,6 +122,10 @@
       },
       /** Its figures in tabular widths. */
       figures: { tabular: "tabular-nums" },
+      /** Standing where a section head's count goes (app.css
+          `.kit-section-head > .count`): pushed to the end, and the meta face,
+          tabular figures and subtle ink under the button's own. */
+      head: { count: "count" },
       /** While its page is open (`aria-current="page"`), the selected tint
           (filling under the edge) and ink over every state, as its caller's
           own rule held them, crossing over --dur-control; its press scales
@@ -207,6 +211,7 @@
     face,
     toggle,
     figures,
+    head,
     current,
     ref = $bindable(null),
     href,
@@ -244,6 +249,7 @@
         face,
         toggle,
         figures,
+        head,
         current,
       }),
       className

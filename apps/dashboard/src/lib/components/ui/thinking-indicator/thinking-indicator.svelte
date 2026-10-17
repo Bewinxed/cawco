@@ -117,7 +117,7 @@
              slides back the same distance on the same curve, so the letters
              stand still and only the light moves, all of it on the
              compositor. -->
-        <span class="motion-safe:relative motion-safe:inline-block"
+        <span class="shimmer motion-safe:relative motion-safe:inline-block"
           >{word}
           {#if motion.current}
             <!-- literal: 300% (three words wide). The band is the old

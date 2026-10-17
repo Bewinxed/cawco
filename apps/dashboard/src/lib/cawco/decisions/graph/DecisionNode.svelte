@@ -39,7 +39,7 @@
   <!-- literal: 12px, 1.5px, 50% -->
   <span
     aria-hidden="true"
-    class="size-icon-sm flex-none rounded-(--ring-r) border-(length:--ring-border) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
+    class="ring size-icon-sm flex-none rounded-(--ring-r) border-(length:--ring-border) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
     style:--ring-border="1.5px"
     style:--ring-r="50%"
   ></span>

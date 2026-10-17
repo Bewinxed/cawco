@@ -2,16 +2,12 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks, each as they drew it: the mono face (the class, or
-      the family alone, which leaves ligatures on), a text size, a tall
-      editor's least height, the page's fill, and a note written straight
-      into a composer (no field of its own). */
+  /** Its callers' looks, each as they drew it: the mono face, a text size, a
+      tall editor's least height, the page's fill, and a note written
+      straight into a composer (no field of its own). */
   export const textareaVariants = tv({
     variants: {
-      face: {
-        mono: "font-mono",
-        "mono-family": "font-(family-name:--font-mono)",
-      },
+      face: { mono: "font-mono" },
       text: {
         label: "text-label",
         "pin-field": "group-data-sheet/pin:text-(length:--field-fs)",

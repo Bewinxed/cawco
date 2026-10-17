@@ -90,7 +90,7 @@
             this fleet.
           </p>
           <div
-            class="mt-space-4 w-full"
+            class="icon-cards mt-space-4 w-full"
             {@attach highlight({
               rows: ".icon-card",
               selected: ".icon-card[data-open]",

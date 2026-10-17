@@ -1153,7 +1153,7 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"
+      class="ring pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"
       style:--box-at="translate({focusRect.left}px,{focusRect.top}px)"
       style:--box-w="{focusRect.width}px"
       style:--box-h="{focusRect.height}px"

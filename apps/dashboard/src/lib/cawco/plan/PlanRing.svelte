@@ -33,7 +33,7 @@
   {#if total > 0}
     <TaskRing {done} size="md" {total} />
     <span>Plan</span>
-    <span data-slot="num" class="tabular-nums">{done}/{total}</span>
+    <span data-slot="num" class="num">{done}/{total}</span>
   {:else}
     <IconToolTodo aria-hidden="true" />
     <span>Plan</span>

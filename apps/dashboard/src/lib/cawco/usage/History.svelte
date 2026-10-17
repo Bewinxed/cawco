@@ -303,7 +303,7 @@
               >{chart.title}</span
             >
             {#if ready && !chart.missing}
-              <span data-slot="num" class="type-label text-ink-strong"
+              <span data-slot="num" class="type-label num text-ink-strong"
                 >{chart.approx}{money(chart.total)}</span
               >
             {/if}
@@ -419,7 +419,7 @@
         >
         <th
           data-slot="num"
-          class="type-label border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted"
+          class="type-label num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted"
           scope="col"
         >
           {chart.harness === "claude" ? "API price" : "Spend"}
@@ -435,7 +435,7 @@
           >
           <td
             data-slot="num"
-            class="border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong"
+            class="num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong"
             >{chart.approx}{money(point.cost)}</td
           >
         </tr>

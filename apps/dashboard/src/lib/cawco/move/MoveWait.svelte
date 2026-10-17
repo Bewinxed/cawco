@@ -477,7 +477,7 @@
                   <span
                     data-num
                     data-slot="meta"
-                    class="type-meta text-ink-muted tabular-nums"
+                    class="type-meta text-ink-muted num"
                     >{share(progress.bytes, progress.total)}% ·
                     {partWords(progress.bytes, progress.total)}{left
                       ? ` · ${left}`
@@ -511,7 +511,7 @@
                   <span
                     data-num
                     data-slot="meta"
-                    class="type-meta text-ink-muted tabular-nums"
+                    class="type-meta text-ink-muted num"
                     >{partWords(file.bytes, file.total)}</span
                   >
                 </div>

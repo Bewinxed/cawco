@@ -187,11 +187,7 @@
               <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
                 <ProviderLogo model={trimmed} />
                 <span class="flex flex-col" data-box>
-                  <span
-                    >Use <span class="font-(family-name:--font-mono)"
-                      >{trimmed}</span
-                    ></span
-                  >
+                  <span>Use <span class="font-mono">{trimmed}</span></span>
                   <span class="text-meta text-ink-muted">
                     Sent to the selected harness exactly as typed
                   </span>
@@ -216,7 +212,7 @@
               >
                 <ProviderLogo model={id} />
                 <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono) text-meta"
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono text-meta"
                   >{id}</span
                 >
               </Command.Item>

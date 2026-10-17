@@ -138,7 +138,10 @@
       {#if label}
         <span
           data-slot="thinking-step-label"
-          class="font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-clip-text"
+          class={[
+            "font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-repeat motion-safe:data-shimmer:bg-clip-text",
+            status === "active" && "shimmer",
+          ]}
           data-shimmer={status === "active" || undefined}
           data-status={status}
           style:--step-shimmer={SHIMMER}
@@ -155,7 +158,10 @@
         </div>
       {:else if description}
         <span
-          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-clip-text"
+          class={[
+            "wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-repeat motion-safe:data-shimmer:bg-clip-text",
+            !label && status === "active" && "shimmer",
+          ]}
           data-shimmer={(!label && status === "active") || undefined}
           style:--step-shimmer={SHIMMER}
           style:--step-shimmer-size="300% 100%">{description}</span

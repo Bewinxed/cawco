@@ -110,7 +110,7 @@
     <span class="flex items-center gap-space-1">
       <Badge class="h-auto" size="cell" tone="success" variant="ghost">
         <IconCheck class="size-icon-md shrink-0" />
-        <span data-slot="num" class="num font-(family-name:--font-mono)"
+        <span data-slot="num" class="num font-mono"
           >{toolStatus?.version ?? "—"}</span
         >
       </Badge>
@@ -180,8 +180,7 @@
               did not install</span
             >
             {#if toolStatus?.method}
-              <span
-                class="ml-auto shrink-0 font-(family-name:--font-mono) text-label text-ink-muted"
+              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
@@ -234,7 +233,7 @@
         {/snippet}
       </Popover.Trigger>
       <Popover.Content align="start" frame="panel-high" width="wide">
-        <p class="font-(family-name:--font-mono) text-label">
+        <p class="font-mono text-label">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
       </Popover.Content>
