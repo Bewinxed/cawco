@@ -55,7 +55,7 @@
 <!-- literal: 10px, 12px -->
 <div
   data-slot="well"
-  class="bg-(color:--code-syntax-background) rounded-sm py-(--pad-y) px-(--pad-x) overflow-x-auto font-mono text-size-label leading-body text-(color:--code-syntax-foreground)"
+  class="bg-(color:--code-syntax-background) rounded-sm py-(--pad-y) px-(--pad-x) overflow-x-auto font-(family-name:--font-mono) text-size-label leading-body text-(color:--code-syntax-foreground)"
   style:--pad-y="10px"
   style:--pad-x="12px"
 >

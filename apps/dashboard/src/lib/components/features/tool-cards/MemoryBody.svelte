@@ -219,7 +219,7 @@
     {#if footer}
       <span
         data-slot="foot"
-        class="font-mono text-size-meta font-normal text-ink-muted num"
+        class="font-(family-name:--font-mono) text-size-meta font-normal text-ink-muted num"
         >{footer}</span
       >
     {/if}
@@ -228,7 +228,7 @@
     {#if footer}
       <span
         data-slot="foot"
-        class="font-mono text-size-meta font-normal text-ink-muted num"
+        class="font-(family-name:--font-mono) text-size-meta font-normal text-ink-muted num"
         >{footer}</span
       >
     {/if}
@@ -243,11 +243,11 @@
         <Collapsible.Root>
           <Collapsible.Trigger
             data-doc
-            class="group mark-line w-full min-h-(--doc-h) flex items-center gap-space-2 p-0 border-0 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--doc-hit)"
+            class="group mark-line w-full min-h-(--doc-h) flex items-center gap-space-2 p-0 border-none border-current bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--doc-hit)"
           >
             <span
               data-slot="path"
-              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono"
+              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
               >{doc.path}</span>
             {#if doc.updatedAt}
               <span
