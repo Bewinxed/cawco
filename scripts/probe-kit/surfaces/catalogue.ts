@@ -14,12 +14,7 @@
  */
 import type { Page, WebSocketRoute } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
-import {
-  DELEGATE_TITLE,
-  type Scene,
-  STUDIO_HOST,
-  type Variant,
-} from "./scene";
+import { DELEGATE_TITLE, type Scene, STUDIO_HOST, type Variant } from "./scene";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -238,16 +233,15 @@ const openKeychain = async (page: Page) => {
  * names: those the hub never hears, so the page stands waiting on their
  * answer, as it does while a machine takes its time.
  */
-const withholding =
-  (withheld: (frame: string) => boolean) => (page: Page) =>
-    page.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
-      const hub = ws.connectToServer();
-      ws.onMessage((frame) => {
-        if (!(typeof frame === "string" && withheld(frame))) {
-          hub.send(frame);
-        }
-      });
+const withholding = (withheld: (frame: string) => boolean) => (page: Page) =>
+  page.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
+    const hub = ws.connectToServer();
+    ws.onMessage((frame) => {
+      if (!(typeof frame === "string" && withheld(frame))) {
+        hub.send(frame);
+      }
     });
+  });
 
 /**
  * A transcript's row pressed, scrolled to as a person scrolls to it: the
@@ -316,7 +310,9 @@ const toOtherMachine = async (page: Page) => {
   const current = pressed.findIndex((row) => row.on);
   const other = pressed.findIndex((row, i) => i !== current && row.online);
   if (current === -1 || other === -1) {
-    throw new Error(`no second online machine to start on (${JSON.stringify(pressed)})`);
+    throw new Error(
+      `no second online machine to start on (${JSON.stringify(pressed)})`
+    );
   }
   await rows.nth(other).click();
   await rows.nth(current).click();
@@ -457,12 +453,24 @@ const EDITORS: Record<string, State[]> = {
         },
         // The scene's own: the hook saved twice (its previous version), the MCP server.
         ...(section === "hooks"
-          ? [{ name: "hook", route: (s: Scene) => `/config/hooks/${s.hook}`, root: "body" }]
+          ? [
+              {
+                name: "hook",
+                route: (s: Scene) => `/config/hooks/${s.hook}`,
+                root: "body",
+              },
+            ]
           : []),
         // A sign-in's return to the dashboard with a code the hub never
         // asked for: its refusal, on the page the provider sends you back to.
         ...(section === "mcp"
-          ? [{ name: "oauth-return", route: () => "/oauth/mcp?code=probe-code&state=probe-state", root: "body" }]
+          ? [
+              {
+                name: "oauth-return",
+                route: () => "/oauth/mcp?code=probe-code&state=probe-state",
+                root: "body",
+              },
+            ]
           : []),
       ],
     ])
@@ -475,9 +483,7 @@ const EDITORS: Record<string, State[]> = {
       name: "remove-ask",
       act: async (page) => {
         await press(MORE_FOR_SKILL)(page);
-        await page
-          .getByRole("menuitem", { name: "Remove everywhere" })
-          .click();
+        await page.getByRole("menuitem", { name: "Remove everywhere" }).click();
       },
       root: "body",
     },
@@ -586,7 +592,9 @@ const EDITORS: Record<string, State[]> = {
       route: () => "/config/accounts/new",
       act: async (page) => {
         await toKeyStep(page);
-        await page.getByRole("textbox", { name: "API key" }).fill("probe-302-key");
+        await page
+          .getByRole("textbox", { name: "API key" })
+          .fill("probe-302-key");
         await press("Send key")(page);
         await page.getByText("Key sent").first().waitFor();
       },
@@ -931,7 +939,11 @@ export const SURFACES: Surface[] = [
       {
         name: "caw-file",
         act: inCawThread((page) =>
-          page.locator("[data-folder-chip]").filter({ visible: true }).first().click()
+          page
+            .locator("[data-folder-chip]")
+            .filter({ visible: true })
+            .first()
+            .click()
         ),
         root: "body",
       },
@@ -1027,13 +1039,11 @@ export const SURFACES: Surface[] = [
       "made",
       "canvas",
     ]
-      .map(
-        (view): State => ({
-          name: view.replace("view:", ""),
-          route: (s) => `/project/${s.project}?view=${view}`,
-          root: MAIN,
-        })
-      )
+      .map((view): State => ({
+        name: view.replace("view:", ""),
+        route: (s) => `/project/${s.project}?view=${view}`,
+        root: MAIN,
+      }))
       .concat(
         {
           // The made view on its own page, as a link to it opens it (a bare route).
@@ -1166,7 +1176,11 @@ export const SURFACES: Surface[] = [
         act: async (page) => {
           await openJump(page);
           await page.keyboard.type("chip");
-          await page.locator("[role=option]").filter({ visible: true }).first().waitFor();
+          await page
+            .locator("[role=option]")
+            .filter({ visible: true })
+            .first()
+            .waitFor();
           await page.keyboard.press("ArrowDown");
           await page.keyboard.press("ArrowRight");
           await page.locator(FIND_PEEK).first().waitFor();
@@ -1193,7 +1207,11 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
         act: async (page) => {
           await page.click("[data-needs-caw]");
-          await page.locator(ASK_PEEK).filter({ visible: true }).first().click();
+          await page
+            .locator(ASK_PEEK)
+            .filter({ visible: true })
+            .first()
+            .click();
         },
         root: "body",
       },
@@ -1294,7 +1312,9 @@ export const SURFACES: Surface[] = [
           await page.locator(COMPOSER_FIELD).first().click();
           // The task the skill is made for, in words that do not name it (a
           // chip already named in the draft is left off: SuggestionChips `shown`).
-          await page.keyboard.type("Check the tray's chip row at a phone's width");
+          await page.keyboard.type(
+            "Check the tray's chip row at a phone's width"
+          );
           await page
             .locator("[data-slot=suggest] fieldset button")
             .first()

@@ -134,7 +134,15 @@ async function walkTape(
     const servers = new Servers(kit, played);
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one hub at a time, each its own dashboard
-      const took = await walk(kit, servers, tape, reading, passes, visit, failed);
+      const took = await walk(
+        kit,
+        servers,
+        tape,
+        reading,
+        passes,
+        visit,
+        failed
+      );
       for (const [name, s] of took) {
         seconds.set(name, (seconds.get(name) ?? 0) + s);
       }

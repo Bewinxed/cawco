@@ -162,7 +162,9 @@ export async function signIn(base: string, name: string): Promise<void> {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!response.ok) {
-      throw new Error(`POST ${path}: ${response.status} ${await response.text()}`);
+      throw new Error(
+        `POST ${path}: ${response.status} ${await response.text()}`
+      );
     }
     return response.json() as Promise<{ authorizationUrl?: string }>;
   };
@@ -173,7 +175,12 @@ export async function signIn(base: string, name: string): Promise<void> {
     ? new URL(authorizationUrl).searchParams.get("state")
     : null;
   if (!state) {
-    throw new Error(`the hub's sign-in for ${name} named no state: ${authorizationUrl}`);
+    throw new Error(
+      `the hub's sign-in for ${name} named no state: ${authorizationUrl}`
+    );
   }
-  await post("/api/fleet/mcp/oauth/complete", { code: "tray-docs-code", state });
+  await post("/api/fleet/mcp/oauth/complete", {
+    code: "tray-docs-code",
+    state,
+  });
 }

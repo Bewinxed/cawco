@@ -145,7 +145,9 @@ function yjsKind(bytes: Uint8Array): { step: number; type: number } | null {
 }
 
 const kindOf = (frame: TapeFrame) =>
-  frame.binary ? yjsKind(new Uint8Array(Buffer.from(frame.data, "base64"))) : null;
+  frame.binary
+    ? yjsKind(new Uint8Array(Buffer.from(frame.data, "base64")))
+    : null;
 
 /** A hub's update to an artifact's doc: what it relays from the artifact's other sockets. */
 const isRelay = (frame: TapeFrame): boolean => {
@@ -309,7 +311,11 @@ function previewExchange(
   method: string,
   body: string,
   parent: string,
-  response: { bytes: Uint8Array; headers: Record<string, string>; status: number }
+  response: {
+    bytes: Uint8Array;
+    headers: Record<string, string>;
+    status: number;
+  }
 ): TapePreview {
   const kept: Record<string, string> = {};
   for (const [key, value] of Object.entries(response.headers)) {
@@ -337,8 +343,12 @@ function previewExchange(
   };
 }
 
-const PREVIEW_KEY = (port: string, method: string, path: string, body: string) =>
-  `${port} ${HTTP_KEY(method, path, body)}`;
+const PREVIEW_KEY = (
+  port: string,
+  method: string,
+  path: string,
+  body: string
+) => `${port} ${HTTP_KEY(method, path, body)}`;
 
 /**
  * A proxy to `target` (a hub's `http://host:port`) that records every
@@ -625,10 +635,7 @@ export function player(tape: TapeHub) {
    * time the tape saw it answered (a connection the page left before its
    * answer came holds it unanswered).
    */
-  const answers = new Map<
-    string,
-    { frame: TapeFrame; replies: TapeFrame[] }
-  >();
+  const answers = new Map<string, { frame: TapeFrame; replies: TapeFrame[] }>();
   for (const [key, sockets] of scripts) {
     for (const socket of sockets) {
       for (const [frame, replies] of answered(socket)) {
@@ -705,7 +712,10 @@ export function player(tape: TapeHub) {
         misses.add(
           `preview :${url.port} ${method} ${path}${body ? ` ${body.slice(0, 200)}` : ""}`
         );
-        return route.fulfill({ status: 404, json: { error: "not on the tape" } });
+        return route.fulfill({
+          status: 404,
+          json: { error: "not on the tape" },
+        });
       }
       const parent = parentOrigin(route);
       return route.fulfill({
@@ -723,7 +733,8 @@ export function player(tape: TapeHub) {
     });
     await context.routeWebSocket(isPreview, (ws) => {
       const connection = connect(new URL(ws.url()).pathname, {
-        send: (data) => ws.send(typeof data === "string" ? data : Buffer.from(data)),
+        send: (data) =>
+          ws.send(typeof data === "string" ? data : Buffer.from(data)),
       });
       ws.onMessage((message) => connection?.message(wire(message)));
       ws.onClose(() => connection?.close());

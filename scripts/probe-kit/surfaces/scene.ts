@@ -208,7 +208,11 @@ const GRAPH = {
       from: { node: "branch-1", port: "overflows" },
       to: { node: "end-1" },
     },
-    { id: "e4", from: { node: "branch-1", port: "else" }, to: { node: "end-1" } },
+    {
+      id: "e4",
+      from: { node: "branch-1", port: "else" },
+      to: { node: "end-1" },
+    },
   ],
 };
 /** A workflow that sets one slot and runs one step (its session hands in `overflows`), then returns. */
@@ -392,17 +396,20 @@ const plans = (repo: string): Record<string, Step[]> => ({
   // to-dos off for it: hub plans.ts), one task each, the first done and the
   // second under way.
   plan: [
-    ...PLAN_STEPS.map(
-      (subject): Step => ({
-        tool: {
-          name: "TaskCreate",
-          input: { subject, description: subject, activeForm: subject },
-        },
-      })
-    ),
-    { tool: { name: "TaskUpdate", input: { taskId: "1", status: "completed" } } },
+    ...PLAN_STEPS.map((subject): Step => ({
+      tool: {
+        name: "TaskCreate",
+        input: { subject, description: subject, activeForm: subject },
+      },
+    })),
     {
-      tool: { name: "TaskUpdate", input: { taskId: "2", status: "in_progress" } },
+      tool: { name: "TaskUpdate", input: { taskId: "1", status: "completed" } },
+    },
+    {
+      tool: {
+        name: "TaskUpdate",
+        input: { taskId: "2", status: "in_progress" },
+      },
     },
     { words: "The plan is set: the label first, then the badge." },
   ],
@@ -1016,11 +1023,19 @@ export async function seedScene(
   const skillDir = join(fleet.home, CLAUDE_DIR_NAME, "skills", SKILL_NAME);
   await mkdir(skillDir, { recursive: true });
   await writeFile(join(skillDir, "SKILL.md"), SKILL);
-  const skillRun = await fleet.spawn("claude", "Run the tray check", fleet.repo);
+  const skillRun = await fleet.spawn(
+    "claude",
+    "Run the tray check",
+    fleet.repo
+  );
   await fleet.send(skillRun, "Run the tray check skill. PROBE-STEP:skill");
   // A session that thought before it answered (its thinking row), and one
   // compacted once its turn rests (its compaction's divider).
-  const think = await fleet.spawn("claude", "Weigh the chip's wrap", fleet.repo);
+  const think = await fleet.spawn(
+    "claude",
+    "Weigh the chip's wrap",
+    fleet.repo
+  );
   await fleet.send(think, "Which gives way, label or badge? PROBE-STEP:think");
   const compact = await fleet.spawn(
     "claude",
@@ -1347,7 +1362,9 @@ export async function seedScene(
       words.summary ?? null,
       words.headline ?? null,
       words.error ?? null,
-      JSON.stringify(task.id === review.id ? ["push.post.json", "audit.md"] : []),
+      JSON.stringify(
+        task.id === review.id ? ["push.post.json", "audit.md"] : []
+      ),
       result === null ? null : JSON.stringify(result),
       started,
       started + (state === "done" ? 65_000 : 3 * MINUTE)
@@ -1371,10 +1388,7 @@ export async function seedScene(
     {
       at: now - 10 * MINUTE + 65_000,
       summary: REVIEW_REPORT,
-      check: [
-        "The post reads in under a minute.",
-        "Each miss names its run.",
-      ],
+      check: ["The post reads in under a minute.", "Each miss names its run."],
       artifacts: [
         {
           kind: "artifact",
@@ -1623,7 +1637,11 @@ export async function seedScene(
   // A session that plans in its harness's task list (the plan's ring, its
   // panel), started on the second account now the first is at its limit,
   // so no carry moves it, and its list, between accounts' dirs.
-  const planned = await fleet.spawn("claude", "Plan the chip's fix", fleet.repo);
+  const planned = await fleet.spawn(
+    "claude",
+    "Plan the chip's fix",
+    fleet.repo
+  );
   await fleet.send(planned, "Plan the chip's fix. PROBE-STEP:plan");
   await until(
     "the planning session's turn done",
@@ -1784,7 +1802,10 @@ export async function seedScene(
     "Read the fleet memory",
     fleet.repo
   );
-  await fleet.send(memoryRead, "What does the fleet memory ask? PROBE-STEP:memory");
+  await fleet.send(
+    memoryRead,
+    "What does the fleet memory ask? PROBE-STEP:memory"
+  );
   await until(
     "the memory session's turn done",
     () => fleet.instance(memoryRead),
@@ -1884,7 +1905,10 @@ export async function seedScene(
     "Think through the chip row",
     fleet.repo
   );
-  await fleet.send(liveThink, "Think the chip row through. PROBE-STEP:live-think");
+  await fleet.send(
+    liveThink,
+    "Think the chip row through. PROBE-STEP:live-think"
+  );
   await until(
     "the rule waiting on the TODO session's answer, its reply in the transcript",
     async () => {
