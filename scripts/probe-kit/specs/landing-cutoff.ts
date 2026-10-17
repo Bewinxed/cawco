@@ -73,9 +73,13 @@ type Tag = "A" | "B" | "C" | "D" | "E";
 const SLEEP = ["sleep", "7311"];
 /** The agent's words for a sandbox the host stopped (boundary-host.ts). */
 const RESTARTED = "was changed on the host";
-/** The agent's words for a boundary it closed (boundary.ts `closeBoundary` and the quiet close). */
+/**
+ * The agent's words for a boundary it ended on purpose: closed for a folder
+ * gone or quiet (boundary.ts), an older one closed, or the workspace
+ * archived or kept with its boundary closed (workspace.ts).
+ */
 const CLOSED =
-  /, so its boundary [\d, ]+ (is|and its \d+ judge\(s\) are) closed/;
+  /, so its boundary [\d, ]+ (is|and its \d+ judge\(s\) are) closed|: its older boundary .* closed|: archived[;,]|its boundary is closed/;
 /** How long the first mock LFS server holds an answer it gives. */
 const SLOW_MS = 4000;
 /** A process's entry in `/proc`. */
@@ -484,14 +488,33 @@ const run = async (kit: Kit) => {
             (line) =>
               line.includes(workspace.slice(0, 8)) && line.includes(RESTARTED)
           );
-      /** The agent's lines that close this workspace's boundary (boundary.ts `closeBoundary`, the quiet close). */
-      const closes = async () =>
+      /** Every line the agent said of this workspace. */
+      const told = async () =>
         (await fleet.logs("agent"))
           .split("\n")
-          .filter(
-            (line) =>
-              line.includes(`[workspace] ${workspace}:`) && CLOSED.test(line)
-          );
+          .filter((line) => line.includes(`[workspace] ${workspace}:`));
+      /** The hub's own record of the workspace: `held` or `archived` once it closed it on its machine. */
+      const stateOf = () =>
+        fleet.query<{ state: string }>(
+          "SELECT state FROM workspaces WHERE id = ?",
+          workspace
+        )[0]?.state ?? "gone";
+      /**
+       * Once no sandbox runs: whether its boundary was closed on purpose, the
+       * hub's record settled (`held`, `archived`) or the agent saying it
+       * closed it ({@link CLOSED}), within a minute of the item's end: the
+       * hub settles a workspace whose item ended and that nothing holds.
+       */
+      const closedOnPurpose = () =>
+        until(
+          `${tag}'s workspace settled or its boundary said closed`,
+          async () =>
+            ["held", "archived"].includes(stateOf()) ||
+            (await told()).some((line) => CLOSED.test(line)) ||
+            undefined,
+          Boolean,
+          60_000
+        ).catch(() => false);
       const before = {
         inode: (await stat(config)).ino,
         text: await readFile(config, "utf8"),
@@ -512,16 +535,24 @@ const run = async (kit: Kit) => {
         (one) => ["done", "failed", "cancelled"].includes(one.state),
         600_000
       );
+      const ended = {
+        inode: (await stat(config).catch(() => undefined))?.ino,
+        text: await readFile(config, "utf8").catch(() => "(gone)"),
+        inner: await inners(),
+      };
+      const closed = ended.inner.length === 0 ? await closedOnPurpose() : false;
       return {
         clone,
         row,
         result: row.result ?? "",
         said: `${row.state} ${row.error ?? ""}\n${(row.result ?? "").slice(0, 1500)}`,
-        inode: { before: before.inode, after: (await stat(config)).ino },
-        text: { before: before.text, after: await readFile(config, "utf8") },
-        inner: { before: before.inner, after: await inners() },
+        inode: { before: before.inode, after: ended.inode },
+        text: { before: before.text, after: ended.text },
+        inner: { before: before.inner, after: ended.inner },
         restarted: (await restarts()).slice(before.restarts),
-        closed: await closes(),
+        closed,
+        state: stateOf(),
+        told: await told(),
         sleepAlive: sleeping === undefined ? undefined : alive(sleeping),
         sleeping,
       };
@@ -539,16 +570,15 @@ const run = async (kit: Kit) => {
     };
     /**
      * No restart said, and the sandbox the item started with still runs, or
-     * none runs and the agent says it closed the workspace's boundary: the
-     * hub settles a workspace whose item ended and that nothing holds.
+     * none runs and its boundary was closed on purpose ({@link closedOnPurpose}).
      */
     const sameSandbox = (one: Awaited<ReturnType<typeof delegate>>) =>
       Boolean(one.inner.before) &&
       one.restarted.length === 0 &&
       (one.inner.after.includes(one.inner.before ?? "") ||
-        (one.inner.after.length === 0 && one.closed.length > 0));
+        (one.inner.after.length === 0 && one.closed));
     const sandboxSaid = (one: Awaited<ReturnType<typeof delegate>>) =>
-      `inner ${one.inner.before} -> ${one.inner.after.join(", ") || "none"}\n${[...one.restarted, ...one.closed].join("\n")}`;
+      `inner ${one.inner.before} -> ${one.inner.after.join(", ") || "none"}; the hub's record: ${one.state}\nthe agent on this workspace:\n${one.told.join("\n") || "(nothing)"}`;
 
     // A
     const a = await delegate("A");
