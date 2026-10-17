@@ -111,7 +111,7 @@
     <span class="flex items-center gap-space-1">
       <Badge class="{CHIP} text-success-9" variant="ghost">
         <IconCheck class="size-icon-md shrink-0" />
-        <span data-slot="num" class="num font-mono"
+        <span data-slot="num" class="num font-(family-name:--font-mono)"
           >{toolStatus?.version ?? "—"}</span
         >
       </Badge>
@@ -178,7 +178,7 @@
               did not install</span
             >
             {#if toolStatus?.method}
-              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
+              <span class="ml-auto shrink-0 font-(family-name:--font-mono) text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
@@ -234,7 +234,7 @@
         align="start"
         class="w-80 rounded-lg shadow-xl"
       >
-        <p class="font-mono text-label">
+        <p class="font-(family-name:--font-mono) text-label">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
       </Popover.Content>

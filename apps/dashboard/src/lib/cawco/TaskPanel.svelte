@@ -97,7 +97,7 @@
     >
   {/if}
   <span
-    class="shrink-0 font-mono text-meta text-ink-muted tabular-nums {blocker
+    class="shrink-0 font-(family-name:--font-mono) text-meta text-ink-muted tabular-nums {blocker
       ? ''
       : 'ml-auto'}"
     data-tabular>#{task.id}</span

@@ -123,7 +123,7 @@
             >
               <span
                 data-slot="path"
-                class="font-mono text-size-meta wrap-anywhere text-ink-strong"
+                class="font-(family-name:--font-mono) text-size-meta wrap-anywhere text-ink-strong"
               >{row.where}</span>
               {#if row.harness}
                 <!-- literal: 72ch -->

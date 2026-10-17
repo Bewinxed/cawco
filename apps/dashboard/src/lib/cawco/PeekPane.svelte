@@ -295,7 +295,7 @@
                    leaf is what tells two checkouts apart. -->
               <span
                 data-slot="cwd"
-                class="min-w-0 truncate font-mono"
+                class="min-w-0 truncate font-(family-name:--font-mono)"
                 title={cwd}
               >
                 <bdi>{cwd}</bdi>
@@ -365,7 +365,7 @@
         <span class="shrink-0">{tool.name}</span>
         <span class="shrink-0">·</span>
         <span
-          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono"
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
           >{tool.glance}</span
         >
       </span>
@@ -515,7 +515,7 @@
               >
               {#if glanceOf(message)}
                 <span class="shrink-0">·</span>
-                <span class="truncate font-mono">{glanceOf(message)}</span>
+                <span class="truncate font-(family-name:--font-mono)">{glanceOf(message)}</span>
               {/if}
             </p>
           {:else if message.type === "user"}

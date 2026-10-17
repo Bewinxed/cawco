@@ -71,7 +71,7 @@
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices, or in Telegram.
           </p>
-          <p data-num data-slot="code" class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 font-mono text-size-kpi leading-none font-medium text-ink-stat select-all">
+          <p data-num data-slot="code" class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 font-(family-name:--font-mono) text-size-kpi leading-none font-medium text-ink-stat select-all">
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
           <p data-num data-slot="meta" class="num m-0 type-meta text-center text-ink-muted">

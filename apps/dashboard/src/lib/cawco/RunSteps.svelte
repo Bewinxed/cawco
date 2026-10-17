@@ -195,7 +195,7 @@
             <!-- literal: 26px, 44px -->
             <button
               aria-expanded={opened.has(step.id)}
-              class="press-tint focus-inset cursor-pointer group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-0 bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
+              class="press-tint focus-inset cursor-pointer group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
               data-err={step.status === "failed" || undefined}
               onclick={() => toggle(step.id)}
               type="button"
@@ -208,7 +208,7 @@
           {:else}
             <!-- literal: 26px, 44px -->
             <div
-              class="group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-0 bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
+              class="group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
               data-err={step.status === "failed" || undefined}
               style:--step-h="26px"
               style:--step-h-coarse="44px"
