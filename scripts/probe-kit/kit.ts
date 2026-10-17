@@ -70,6 +70,12 @@ export const COMPOSER = `form[data-slot="cin"] ${COMPOSER_FIELD}`;
 export type Engine = "chromium" | "webkit" | "firefox";
 
 export interface PageOptions {
+  /**
+   * A browser of its own, by name, for a page traced while another page is:
+   * DevTools tracing runs one at a time per browser ("Tracing has already
+   * been started (possibly in another tab)"). Unset, the run's shared one.
+   */
+  browser?: string;
   /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
   engine?: Engine;
   /** Scripts installed before the page's own, in order. */
@@ -370,8 +376,8 @@ export class Run {
     return serve(how, hub);
   }
 
-  browser(engine: Engine, revision?: string): Promise<Browser> {
-    const key = revision ? `${engine}-${revision}` : engine;
+  browser(engine: Engine, revision?: string, own?: string): Promise<Browser> {
+    const key = [engine, revision, own].filter(Boolean).join("-");
     const known = this.browsers.get(key);
     if (known) {
       return known;
@@ -513,7 +519,8 @@ export class Run {
         const v = VIEWS[view];
         const browser = await this.browser(
           options.engine ?? "chromium",
-          options.engine === "webkit" ? options.webkit : undefined
+          options.engine === "webkit" ? options.webkit : undefined,
+          options.browser
         );
         const context = await browser.newContext({
           viewport: { width: v.width, height: v.height },

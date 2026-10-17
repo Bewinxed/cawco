@@ -468,8 +468,8 @@ export interface MainTask {
   invalidated: [string, number][];
   layoutMs: number;
   /**
-   * Each style recalculation and layout in it, in order (`restyles` only):
-   * what it was, the elements it restyled, its ms, and the script frame
+   * Each style recalculation and layout in it, in order (`passes` or
+   * `restyles`): what it was, the elements it restyled, its ms, and the script frame
    * that forced it (`url:line:column`), or "the frame" when the frame's own
    * rendering ran it.
    */
@@ -494,15 +494,15 @@ export interface MainTask {
    */
   relaidOut: [string, number][];
   /**
-   * The frame's other work in it, by phase, ms, the most first (`restyles`
-   * only): what a sampled profile counts as "(program)", script not being
+   * The frame's other work in it, by phase, ms, the most first (`passes` or
+   * `restyles`): what a sampled profile counts as "(program)", script not being
    * on the stack.
    */
   rendering: [string, number][];
   /**
    * How many elements its style recalculations restyled, all of them
    * together (`UpdateLayoutTree`'s `elementCount`); read only when asked
-   * for (`traceMain`'s `restyles`), 0 otherwise.
+   * for (`traceMain`'s `passes` or `restyles`), 0 otherwise.
    */
   restyled: number;
   /**
@@ -512,7 +512,7 @@ export interface MainTask {
    * style rule" on those elements).
    */
   scheduled: [string, number][];
-  /** Its style recalculations' and layouts' wall time, ms; 0 unless `restyles`. */
+  /** Its style recalculations' and layouts' wall time, ms; 0 unless `passes` or `restyles`. */
   styleMs: number;
   /** The trace clock (`dur`), ms: wall time, other processes' turns included. */
   wall: number;
@@ -673,18 +673,23 @@ function samplesOf(
  * and its thread time (`tdur`, the thread clock: the CPU the task took),
  * and every user-timing mark. The main thread is the one the marks are made
  * on, so `act` makes at least one (`performance.mark`) in the page.
- * `restyles`: each task also says how many elements it restyled, from the
- * timeline's own category, which the trace then carries whole. `profile`:
- * V8 samples the main thread's script as well (`selfTime`).
+ * `passes`: each task also says its style recalculations and layouts, how
+ * many elements each restyled and the script that forced it, from the
+ * timeline's own category. `restyles`: that, and why: every invalidation
+ * that asked for them, which the engine does more work to record while it
+ * is traced (a timed reading takes `passes` at most). `profile`: V8
+ * samples the main thread's script as well (`selfTime`).
  */
 export async function traceMain(
   page: Page,
   act: () => Promise<unknown>,
   {
+    passes = false,
     profile = false,
     restyles = false,
-  }: { profile?: boolean; restyles?: boolean } = {}
+  }: { passes?: boolean; profile?: boolean; restyles?: boolean } = {}
 ): Promise<MainThread> {
+  const withPasses = passes || restyles;
   const cdp = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
   cdp.on("Tracing.dataCollected", ({ value }) => {
@@ -699,12 +704,11 @@ export async function traceMain(
       includedCategories: [
         "blink.user_timing",
         "disabled-by-default-devtools.timeline",
+        ...(withPasses
+          ? ["devtools.timeline", "disabled-by-default-devtools.timeline.stack"]
+          : []),
         ...(restyles
-          ? [
-              "devtools.timeline",
-              "disabled-by-default-devtools.timeline.stack",
-              "disabled-by-default-devtools.timeline.invalidationTracking",
-            ]
+          ? ["disabled-by-default-devtools.timeline.invalidationTracking"]
           : []),
         ...(profile ? ["disabled-by-default-v8.cpu_profiler"] : []),
       ],
@@ -918,8 +922,10 @@ export async function traceMain(
     return opening ? opening.name : "the frame's rendering";
   };
   /** Why a task restyled and laid out (`restyles`), or nothing said. */
+  // Its invalidations are traced only with `restyles`: with `passes` alone
+  // they come back empty.
   const whyIn = (from: number, to: number) =>
-    restyles
+    withPasses
       ? {
           rendering: renderingIn(from, to),
           passes: passesIn(from, to),
