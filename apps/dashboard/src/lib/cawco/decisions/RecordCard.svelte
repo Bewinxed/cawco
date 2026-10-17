@@ -57,57 +57,93 @@
   };
 </script>
 
-<article data-slot="record" class="record" id={card.id}>
+<!-- literal: 16 / 10 (the still's ratio) -->
+<article
+  data-slot="record"
+  class="flex min-w-0 scroll-mt-space-4 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  id={card.id}
+>
   {#if card.still}
-    <img alt={chosen[0]?.label ?? ""} class="still" src={card.still} />
+    <img
+      alt={chosen[0]?.label ?? ""}
+      class="block aspect-(--still-ratio) w-full bg-surface-recess object-cover"
+      src={card.still}
+      style:--still-ratio="16 / 10"
+    />
   {/if}
   <!-- A task filed onto the card arrives as rows do (motion/rows): its row
        is uncovered, each chip pops in, as the hub files it. -->
-  <div data-slot="body" class="body" {@attach reflow()}>
-    <h3 data-slot="question" class="question">{card.question}</h3>
+  <div
+    data-slot="body"
+    class="flex min-w-0 flex-col items-start gap-space-3 p-space-5"
+    {@attach reflow()}
+  >
+    <h3
+      data-slot="question"
+      class="type-label max-w-full text-pretty text-ink-strong"
+    >
+      {card.question}
+    </h3>
     {#if chosen.length > 0}
       {#each chosen as option (option.id)}
-        <p data-slot="chosen" class="chosen">
-          <span data-slot="sel" class="kit-chip sel picked">
+        <p
+          data-slot="chosen"
+          class="flex max-w-full min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+        >
+          <span data-slot="sel" class="kit-chip sel cursor-default">
             <span class="kit-keycap">{option.keycap}</span><span
-              data-slot="record-card-label"
-              class="label">{option.label}</span
+              data-slot="record-card-label">{option.label}</span
             >
           </span>
           {#if option.line}
-            <span class="line">{option.line}</span>
+            <span class="type-meta min-w-0 text-ink-muted">{option.line}</span>
           {/if}
         </p>
       {/each}
     {:else}
-      <p data-slot="open-card" class="open-card">Left open</p>
+      <p data-slot="open-card" class="type-label max-w-full text-ink-subtle">
+        Left open
+      </p>
     {/if}
     {#if card.dials.length > 0}
-      <p class="dials">
+      <p class="type-meta max-w-full text-ink-muted">
         {#each card.dials as [name, value], index (name)}
-          <span class="dial"
-            >{index > 0 ? " · " : ""}{name}{" "}<span class="figure"
-              >{value}</span
+          <span
+            >{index > 0 ? " · " : ""}{name}{" "}<span
+              class="num text-ink-strong">{value}</span
             ></span
           >
         {/each}
       </p>
     {/if}
     {#if card.note}
-      <p data-slot="note" class="note mark-line">
+      <p
+        data-slot="note"
+        class="mark-line type-body flex max-w-full items-start gap-space-2 text-ink-strong"
+      >
         <span aria-hidden="true" class="mark-cell"
-          ><span data-slot="mark" class="mark" data-box><IconUser /></span
+          ><span
+            data-slot="mark"
+            class="flex size-(--row-mark) flex-none items-center justify-center rounded-row-mark bg-action-surface leading-0 text-on-action"
+            data-box><IconUser class="size-(--row-mark-glyph)" /></span
           ></span
         >
-        <span data-slot="words" class="words">{card.note}</span>
+        <span
+          data-slot="words"
+          class="min-w-0 wrap-anywhere whitespace-pre-wrap">{card.note}</span
+        >
       </p>
     {/if}
     {#if card.tasks.length > 0}
-      <p data-slot="tasks" class="tasks" data-flip>
+      <p
+        data-slot="tasks"
+        class="flex max-w-full min-w-0 flex-wrap gap-space-2"
+        data-flip
+      >
         {#each card.tasks as id (id)}
           {@const task = taskOf(id)}
           <Badge
-            class="task"
+            class="max-w-full"
             data-flip="pop"
             href={hrefOf(id)}
             onclick={(event: MouseEvent) => {
@@ -119,21 +155,32 @@
             }}
             variant={variantOf(task?.kind)}
           >
-            <span data-slot="id" class="id">{id}</span>
+            <span
+              data-slot="id"
+              class="num font-mono text-size-meta text-ink-muted">{id}</span
+            >
             {#if task}
-              <span data-slot="title" class="title">{task.title}</span>
+              <span
+                data-slot="title"
+                class="min-w-0 overflow-clip text-ellipsis">{task.title}</span
+              >
             {/if}
           </Badge>
         {/each}
       </p>
     {/if}
     {#if others.length > 0 && card.options.length > 1}
-      <div data-slot="fold-row" class="fold-row">
+      <!-- literal: calc(-1 * (1px + var(--space-2))), the toggle's hang into the card's inset -->
+      <div
+        data-slot="fold-row"
+        class="my-(--fold-row-my) ms-(--fold-row-ms) max-w-full"
+        style:--fold-row-my="calc(-1 * var(--space-1))"
+        style:--fold-row-ms="calc(-1 * (1px + var(--space-2)))"
+      >
         <Button
           data-toggle
           aria-controls="{fid}-others"
           aria-expanded={open}
-          class="toggle"
           onclick={() => {
             open = !open;
           }}
@@ -144,36 +191,52 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="chev"
+            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-none"
             data-icon="inline-end"
+            style="--chev-flip: scaleY(-1)"
           />
         </Button>
       </div>
+      <!-- literal: 0fr, 1fr (the fold's track) -->
       <div
         data-slot="fold"
-        class="fold"
+        class="group/fold mt-(--fold-pull) grid max-w-full grid-rows-(--rows-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--rows-open) data-open:dur-panel motion-reduce:transition-none motion-reduce:data-open:dur-panel"
         data-open={open || undefined}
         id="{fid}-others"
         inert={!open}
+        style:--fold-pull="calc(-1 * var(--space-3))"
+        style:--rows-open="1fr"
+        style:--rows-shut="0fr"
       >
-        <div data-slot="fold-inner" class="fold-inner">
-          <div class="fold-body">
+        <div
+          data-slot="fold-inner"
+          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-[opacity,filter] dur-exit ease-out group-data-open/fold:opacity-100 group-data-open/fold:filter-none group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+        >
+          <div class="flex flex-col gap-space-2 pt-space-3">
             {#if card.why}
-              <p data-slot="why" class="why">{card.why}</p>
+              <p data-slot="why" class="type-meta text-ink-muted">{card.why}</p>
             {/if}
             {#each others as option (option.id)}
-              <p data-slot="other" class="other">
-                <span class="kit-chip turned">
+              <p
+                data-slot="other"
+                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+              >
+                <span class="kit-chip opacity-50">
                   <span class="kit-keycap">{option.keycap}</span><span
-                    data-slot="record-card-label"
-                    class="label">{option.label}</span
+                    data-slot="record-card-label">{option.label}</span
                   >
                 </span>
                 {#if option.recommended}
-                  <span data-slot="tag" class="tag">Recommended</span>
+                  <span
+                    data-slot="tag"
+                    class="type-meta rounded-xs border border-border-hairline px-space-1 text-ink-muted"
+                    >Recommended</span
+                  >
                 {/if}
                 {#if option.line}
-                  <span class="line">{option.line}</span>
+                  <span class="type-meta min-w-0 text-ink-muted"
+                    >{option.line}</span
+                  >
                 {/if}
               </p>
             {/each}
@@ -185,200 +248,13 @@
 </article>
 
 <style>
-  /* Kit Card: 12px, raised, the tile shadow, 18px rhythm, no border. */
-  .record {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    scroll-margin-block-start: var(--space-4);
-  }
-  /* The still bleeds to the card's top and sides at its corners, 16:10. */
-  .still {
-    display: block;
-    inline-size: 100%;
-    aspect-ratio: 16 / 10;
-    object-fit: cover;
-    background: var(--surface-recess);
-  }
-  .body {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-    min-inline-size: 0;
-    padding: var(--space-5);
-  }
-  .body > * {
-    margin: 0;
-    max-inline-size: 100%;
-  }
-  .question {
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    text-wrap: pretty;
-  }
-  .chosen,
-  .other {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-    min-inline-size: 0;
-  }
-  /* The kit's picked chip, inert: no hover, no press, no ring. */
-  .picked {
-    cursor: default;
-  }
-  .line {
-    min-inline-size: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .open-card {
-    font: var(--type-label);
-    color: var(--ink-subtle);
-  }
-  .dials {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* A dial's value in the reading face, as the tiles' figures are: mono
-     spread "3 days" wide. */
-  .figure {
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-strong);
-  }
-  /* The person's words, led by their own mark (the transcript's reader mark). */
-  .note {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .mark {
-    display: flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    inline-size: var(--row-mark);
-    block-size: var(--row-mark);
-    border-radius: var(--row-mark-r);
-    background: var(--action-surface);
-    color: var(--on-action);
-    line-height: 0;
-  }
-  .mark :global(svg) {
-    inline-size: var(--row-mark-glyph);
-    block-size: var(--row-mark-glyph);
-  }
-  .words {
-    min-inline-size: 0;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .tasks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .tasks :global(.task) {
-    max-inline-size: 100%;
-  }
-  .id {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .title {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  /* The fold's toggle hangs into the card's leading inset, as the notice's
-     Configure… does: its words line up with the card's text. */
-  .fold-row {
-    margin-inline-start: calc(-1 * (1px + var(--space-2)));
-    margin-block: calc(-1 * var(--space-1));
-  }
-  .fold-row :global(.chev) {
-    transition: transform var(--dur-panel) var(--ease-out);
-  }
-  .fold-row :global(.chev path) {
+  /* residual: foreign-dom */
+  [data-slot="fold-row"] :global([data-chev] path) {
     vector-effect: non-scaling-stroke;
   }
-  .fold-row :global(.toggle[aria-expanded="true"] .chev) {
-    transform: scaleY(-1);
-  }
-  .fold-row :global(.toggle[aria-expanded="true"]:not(:hover)) {
+  /* residual: unmapped */
+  [data-slot="fold-row"]
+    :global([data-toggle][aria-expanded="true"]:not(:hover)) {
     background-color: transparent;
-  }
-  /* The update notice's fold: the grid row is the track, 0fr shut and 1fr
-     open; it opens over --dur-panel and shuts over --dur-exit. */
-  .fold {
-    display: grid;
-    grid-template-rows: 0fr;
-    margin-block-start: calc(-1 * var(--space-3));
-    transition: grid-template-rows var(--dur-exit) var(--ease-out);
-  }
-  .fold[data-open] {
-    grid-template-rows: 1fr;
-    transition-duration: var(--dur-panel);
-  }
-  .fold-inner {
-    min-block-size: 0;
-    overflow: hidden;
-    opacity: 0;
-    filter: blur(var(--fold-blur));
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      filter var(--dur-exit) var(--ease-out);
-  }
-  .fold[data-open] > .fold-inner {
-    opacity: 1;
-    filter: none;
-    transition-duration: var(--dur-panel);
-  }
-  .fold-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block-start: var(--space-3);
-  }
-  .fold-body > * {
-    margin: 0;
-  }
-  .why {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* An option turned down: the kit's chip at the disabled 50%. */
-  .turned {
-    opacity: 0.5;
-  }
-  /* The kit's own Recommended mark (page.css `.dp-tag`). */
-  .tag {
-    padding: 0 var(--space-1);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-xs);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .fold,
-    .fold-row :global(.chev) {
-      transition: none;
-    }
-    .fold-inner {
-      filter: none;
-      transition: opacity var(--dur-fade) var(--ease-out);
-    }
   }
 </style>

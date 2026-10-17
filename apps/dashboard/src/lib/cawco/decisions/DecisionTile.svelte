@@ -45,7 +45,7 @@
 
 <a
   data-slot="tile"
-  class="tile press-tint"
+  class="press-tint flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-5 text-ink-strong no-underline shadow-tile"
   data-page={page.name}
   {href}
   onclick={(event) => {
@@ -61,10 +61,15 @@
     onopen(page.name, event.currentTarget);
   }}
 >
-  <span data-slot="head" class="line head">
+  <!-- literal: 24px (the pill's height; every tile's title row stands at it) -->
+  <span
+    data-slot="head"
+    class="flex min-h-(--head-min-h) min-w-0 items-center justify-between gap-space-3"
+    style:--head-min-h="24px"
+  >
     <span
       data-slot="title"
-      class="title"
+      class="type-label min-w-0 truncate text-ink-strong"
       data-share="dpage:{page.name}:title"
       {@attach land(() => `dpage:${page.name}:title`)}>{page.title}</span
     >
@@ -77,9 +82,9 @@
       />
     {/if}
   </span>
-  <span class="line">
+  <span class="flex min-w-0 items-center gap-space-2">
     <span
-      class="progress mark-line"
+      class="mark-line inline-flex items-center gap-space-2 text-ink-strong"
       data-share="dpage:{page.name}:progress"
       {@attach land(() => `dpage:${page.name}:progress`)}
     >
@@ -87,88 +92,40 @@
         done={decided ? 1 : page.picked}
         total={decided ? 1 : page.cards}
       />
-      <span data-slot="num" class="num">{progressWords(page)}</span>
+      <span data-slot="num" class="type-meta num text-ink-muted"
+        >{progressWords(page)}</span
+      >
     </span>
     {#if notes}
-      <span data-slot="more" class="more">{notes}</span>
+      <span
+        data-slot="more"
+        class="type-meta num ms-(--dot-lead) text-ink-muted"
+        style:--dot-lead="calc(0.25em - var(--space-2))">{notes}</span
+      >
     {/if}
   </span>
   {#if page.writer}
-    <span data-slot="meta" class="line meta mark-line">
+    <span
+      data-slot="meta"
+      class="mark-line type-meta num flex min-w-0 items-center gap-space-2 text-ink-muted"
+    >
       <SessionMark
         id={page.writer.instanceId}
         place={row?.cwd || row?.machineId || page.writer.instanceId}
         status={sessionStatus(row)}
       />
-      <span data-slot="who" class="who">{page.writer.title}</span>
+      <span
+        data-slot="who"
+        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{page.writer.title}</span
+      >
       {#if page.updatedAt > 0}
-        <span class="age">· {formatAgeShort(page.updatedAt, now)}</span>
+        <span
+          class="ms-(--dot-lead) flex-none"
+          style:--dot-lead="calc(0.25em - var(--space-2))"
+          >· {formatAgeShort(page.updatedAt, now)}</span
+        >
       {/if}
     </span>
   {/if}
 </a>
-
-<style>
-  .tile {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    padding: var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    text-decoration: none;
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  /* Every tile's rows stand at the same heights, a pill or none: the title's
-     row is the pill's height. */
-  .head {
-    justify-content: space-between;
-    gap: var(--space-3);
-    min-block-size: 24px;
-  }
-  .title {
-    min-inline-size: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .progress {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--ink-strong);
-  }
-  .num,
-  .more,
-  .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .who {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .age {
-    flex: none;
-  }
-  /* `· 1 note` and `· now` go on the run before them: their dot stands a
-     word space from it, as from the words after, not the row's gap. */
-  .more,
-  .age {
-    margin-inline-start: calc(0.25em - var(--space-2));
-  }
-</style>

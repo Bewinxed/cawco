@@ -191,42 +191,24 @@
 </script>
 
 {#if problem}
-  <p class="problem" role="alert">{problem}</p>
+  <p class="type-body m-0 py-space-5 text-ink-muted" role="alert">{problem}</p>
 {:else if src}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <iframe
-    class="kit-page"
+    class="block min-h-0 w-full flex-auto border-0 bg-transparent"
     onload={hello}
     {src}
     title="Decision page: {title}"
     bind:this={frame}
   ></iframe>
 {:else}
-  <div aria-hidden="true" class="opening">
+  <div aria-hidden="true" class="flex-auto p-space-5">
+    <!-- literal: 11px, 42% -->
     <span
       data-slot="block"
-      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+      class="kit-skeleton block h-(--skeleton-h) w-(--skeleton-w) rounded-xs"
+      style:--skeleton-h="11px"
+      style:--skeleton-w="42%"
     ></span>
   </div>
 {/if}
-
-<style>
-  .kit-page {
-    display: block;
-    flex: 1 1 auto;
-    inline-size: 100%;
-    min-block-size: 0;
-    border: 0;
-    background: transparent;
-  }
-  .opening {
-    flex: 1 1 auto;
-    padding: var(--space-5);
-  }
-  .problem {
-    margin: 0;
-    padding: var(--space-5) 0;
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-</style>
