@@ -38,7 +38,14 @@
   );
 </script>
 
-<div class="task-node" data-kind={node.task.kind ?? undefined}>
+<!-- The board's column width, so a card reads the same on both: 15rem. Waiting
+     on you, the `you` column's wash stands as a margin round the card. -->
+<div
+  data-slot="task-node"
+  class="w-(--node-w) rounded-md kind-you:bg-brand-wash kind-you:p-space-1"
+  data-kind={node.task.kind ?? undefined}
+  style:--node-w="15rem"
+>
   <Handle id="flow-in" isConnectable={false} position={ends.in} type="target" />
   <Handle
     id="side-in"
@@ -68,17 +75,9 @@
 </div>
 
 <style>
-  /* The board's column width, so a card reads the same on both. */
-  .task-node {
-    inline-size: 15rem;
-    border-radius: var(--radius-md);
-  }
-  /* Waiting on you: the `you` column's wash, as a margin round the card. */
-  .task-node[data-kind="you"] {
-    padding: var(--space-1);
-    background: var(--brand-wash);
-  }
-  .task-node :global(.svelte-flow__handle) {
+  /* residual: foreign-dom — Svelte Flow's handle takes its own unlayered rules,
+     which a utility class would lose to */
+  [data-slot="task-node"] :global(.svelte-flow__handle) {
     inline-size: 1px;
     block-size: 1px;
     min-inline-size: 0;

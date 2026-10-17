@@ -33,12 +33,26 @@
   );
 </script>
 
-<ul aria-label="Made" class="made">
+<!-- literal: repeat(auto-fill, minmax(18rem, 1fr)) -->
+<ul
+  aria-label="Made"
+  class="m-0 grid list-none grid-cols-(--made-cols) items-start gap-space-3 p-0"
+  style:--made-cols="repeat(auto-fill, minmax(18rem, 1fr))"
+>
   {#each made as task (task.id)}
-    <li data-slot="tile" class="tile" data-open={task.id === open || undefined}>
+    <!-- literal: inset 0 0 0 1px var(--border-hairline); inset 0 0 0 1px var(--border-control) -->
+    <li
+      data-slot="tile"
+      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--tile-ring) data-open:shadow-(--tile-ring-open)"
+      data-open={task.id === open || undefined}
+      style:--tile-ring="inset 0 0 0 1px var(--border-hairline)"
+      style:--tile-ring-open="inset 0 0 0 1px var(--border-control)"
+    >
+      <!-- literal: auto minmax(0, 1fr) auto -->
       <a
         data-slot="head"
-        class="head press-tint focus-inset"
+        class="press-tint focus-inset grid min-h-c-btn-h-sm grid-cols-(--head-cols) items-center gap-space-2 rounded-sm px-space-2 text-inherit no-underline hover:bg-surface-hover"
+        style:--head-cols="auto minmax(0, 1fr) auto"
         href={hrefOf(task.id)}
         onclick={(event) => {
           if (
@@ -53,21 +67,29 @@
           onopen(task.id);
         }}
       >
-        <span data-slot="id" class="id">{task.id}</span>
-        <span data-slot="title" class="title">{task.title}</span>
+        <span
+          data-slot="id"
+          class="text-meta font-mono liga-none text-ink-muted">{task.id}</span
+        >
+        <span data-slot="title" class="type-label truncate text-ink-strong"
+          >{task.title}</span
+        >
         <span
           data-you={task.kind === "you" || undefined}
+          data-is-you={task.kind === "you" || undefined}
           data-slot="stage"
-          class="stage mark-line"
-          class:you={task.kind === "you"}
+          class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-muted data-is-you:text-status-attn-ink"
         >
           {#if task.kind === "you"}
-            <IconNeedsYou data-view-made-glyph class="glyph" />
+            <IconNeedsYou
+              data-view-made-glyph
+              class="size-icon-sm text-status-attn-glyph"
+            />
           {/if}
           <span>{stageLabel(task.stage)}</span>
         </span>
       </a>
-      <div class="outputs">
+      <div class="flex flex-col gap-space-2">
         {#each task.outputs as path (path)}
           <TaskOutput
             compact
@@ -81,77 +103,3 @@
     </li>
   {/each}
 </ul>
-
-<style>
-  .made {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-    align-items: start;
-    gap: var(--space-3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .tile {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    padding: var(--space-2);
-    border-radius: var(--radius-lg);
-    background: var(--surface-band);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .tile[data-open] {
-    box-shadow: inset 0 0 0 1px var(--border-control);
-  }
-  .head {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-sm);
-    color: inherit;
-    text-decoration: none;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .head:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .id {
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-    color: var(--ink-muted);
-  }
-  .title {
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .stage {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .stage.you {
-    color: var(--status-attn-ink);
-  }
-  .stage :global(.glyph) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    color: var(--status-attn-glyph);
-  }
-  .outputs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-</style>

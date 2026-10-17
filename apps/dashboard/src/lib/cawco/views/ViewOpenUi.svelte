@@ -54,7 +54,7 @@
   const dropped = $derived(view.dropped.join(", "));
 </script>
 
-<div data-slot="view-frame" class="view-frame">
+<div data-slot="view-frame" class="flex min-w-0 flex-col gap-space-3">
   {#if view.dropped.length > 0}
     <Alert data-view-dropped={dropped} variant="warning">
       <AlertDescription
@@ -78,7 +78,7 @@
     <!-- Until each Query has answered once, the view stands as its skeleton:
          its defaults (a count of 0) are never shown as the project's data. -->
     <OpenUiRenderer
-      class="view-root"
+      class="min-w-0"
       library={VIEW_LIBRARY}
       onError={reported}
       response={view.source}
@@ -86,7 +86,7 @@
     >
       {#snippet pending()}
         <Skeleton
-          class="h-40 w-full rounded-[var(--radius-lg)]"
+          class="h-40 w-full rounded-lg"
           data-view-pending
         />
       {/snippet}
@@ -103,15 +103,3 @@
     {/snippet}
   </svelte:boundary>
 </div>
-
-<style>
-  .view-frame {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .view-frame :global(.view-root) {
-    min-inline-size: 0;
-  }
-</style>

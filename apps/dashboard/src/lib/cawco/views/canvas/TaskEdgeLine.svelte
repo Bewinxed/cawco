@@ -38,24 +38,37 @@
       borderRadius: 8,
     })
   );
-  const STYLE: Record<TaskEdgeKind, string> = {
-    after: "stroke: var(--ink-muted); stroke-width: 1.5px",
-    parent: "stroke: var(--nest-ink); stroke-width: var(--nest-line, 1px)",
-    related:
-      "stroke: var(--ink-muted); stroke-width: 2px; stroke-dasharray: 0 6; stroke-linecap: round",
-    found_in:
-      "stroke: var(--ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4",
+  /* Svelte Flow's edge path reads `--xy-edge-stroke` and
+     `--xy-edge-stroke-width`; the dashes and the cap are the residual below. */
+  const DASHES: Partial<Record<TaskEdgeKind, string>> = {
+    related: "edge-related",
+    found_in: "edge-found-in",
   };
-  const style = $derived(
-    edge.kind === "after" && edge.landed
-      ? "stroke: var(--border-control); stroke-width: 1.5px"
-      : STYLE[edge.kind]
-  );
 </script>
 
 <BaseEdge
   {id}
+  class={DASHES[edge.kind]}
   markerEnd={edge.kind === "after" ? `url(#${edge.marker})` : undefined}
   path={route[0]}
-  {style}
+  style={edge.kind === "after" && edge.landed
+    ? "--xy-edge-stroke: var(--border-control); --xy-edge-stroke-width: 1.5px"
+    : edge.kind === "parent"
+      ? "--xy-edge-stroke: var(--nest-ink); --xy-edge-stroke-width: var(--nest-line, 1px)"
+      : edge.kind === "related"
+        ? "--xy-edge-stroke: var(--ink-muted); --xy-edge-stroke-width: 2px"
+        : edge.kind === "found_in"
+          ? "--xy-edge-stroke: var(--ink-subtle); --xy-edge-stroke-width: 1px"
+          : "--xy-edge-stroke: var(--ink-muted); --xy-edge-stroke-width: 1.5px"}
 />
+
+<style>
+  /* residual: svg-paint */
+  :global(.edge-related) {
+    stroke-dasharray: 0 6;
+    stroke-linecap: round;
+  }
+  :global(.edge-found-in) {
+    stroke-dasharray: 6 4;
+  }
+</style>

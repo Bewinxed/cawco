@@ -22,7 +22,7 @@
 </script>
 
 {#if task}
-  <div class="view-card">
+  <div class="flex flex-col gap-space-1">
     <TaskCard
       href={view.hrefOf(task.id)}
       kindOf={() => undefined}
@@ -30,20 +30,7 @@
       {task}
     />
     {#if extra.length > 0}
-      <p class="fields">{extra.join(" · ")}</p>
+      <p class="type-meta px-space-3 text-ink-muted">{extra.join(" · ")}</p>
     {/if}
   </div>
 {/if}
-
-<style>
-  .view-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .fields {
-    padding-inline: var(--space-3);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>
