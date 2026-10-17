@@ -221,11 +221,82 @@ function forcedProp(props: string[], code: string): string {
 
 const RECT = ["rect.x", "rect.y", "rect.width", "rect.height"];
 
+/** How often the compare's one equality rule held two unlike strings equal. */
+export interface Tally {
+  /** box-shadow values equal once their transparent zero layers are set aside. */
+  shadowLayers: number;
+}
+
+/**
+ * A box-shadow layer that cannot draw: transparent, no offset, no blur, no
+ * spread. Tailwind's `shadow-*` writes four of them before the token's own
+ * shadow (its ring and inset-ring slots), so a converted element reads
+ * them where its `<style>` rule read the token's shadow alone.
+ */
+const BLANK_LAYER = /^rgba\(0, 0, 0, 0\) 0px 0px 0px 0px( inset)?$/;
+
+/** A box-shadow's layers, split at its top-level commas. */
+function shadowLayers(value: string): string[] {
+  const layers: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    const c = value[i];
+    if (c === "(") {
+      depth += 1;
+    } else if (c === ")") {
+      depth -= 1;
+    } else if (c === "," && depth === 0) {
+      layers.push(value.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  layers.push(value.slice(start).trim());
+  return layers;
+}
+
+/** A box-shadow with its blank layers set aside: `none` when nothing is left. */
+function drawnShadow(value: string): string {
+  const kept = shadowLayers(value).filter((layer) => !BLANK_LAYER.test(layer));
+  return kept.length > 0 ? kept.join(", ") : "none";
+}
+
+/**
+ * Whether two values of `property` read the same. Strings are equal only as
+ * written, but for one rule: two box-shadows whose layers match once the
+ * blank ones are set aside, each such hold counted in `tally`.
+ */
+function same(
+  property: string,
+  x: string | number | undefined,
+  y: string | number | undefined,
+  tally: Tally
+): boolean {
+  if (x === y) {
+    return true;
+  }
+  if (
+    typeof x === "string" &&
+    typeof y === "string" &&
+    property.endsWith("box-shadow") &&
+    drawnShadow(x) === drawnShadow(y)
+  ) {
+    tally.shadowLayers += 1;
+    return true;
+  }
+  return false;
+}
+
 /**
  * Every difference between `before` and `after` for one surface, one line
  * each: `<read> · <element key> [<data-slot>] · <property> · <before> → <after>`.
+ * `tally` counts what the one equality rule (`same`) held equal.
  */
-export function differences(before: Snapshot, after: Snapshot): string[] {
+export function differences(
+  before: Snapshot,
+  after: Snapshot,
+  tally: Tally = { shadowLayers: 0 }
+): string[] {
   if (before.props.join() !== after.props.join()) {
     return [
       "(snapshot) · props · the baseline reads another property list → recapture it (--approve)",
@@ -253,7 +324,8 @@ export function differences(before: Snapshot, after: Snapshot): string[] {
       name,
       after.props,
       rowsOf(before, was),
-      rowsOf(after, now)
+      rowsOf(after, now),
+      tally
     );
   });
 }
@@ -265,14 +337,15 @@ function readDifferences(
   name: string,
   props: string[],
   a: Map<string, Row>,
-  b: Map<string, Row>
+  b: Map<string, Row>,
+  tally: Tally
 ): string[] {
   const lines: string[] = [];
   for (const [key, row] of a) {
     const other = b.get(key);
     const at = `${name} · ${labelOf(row)}`;
     if (other) {
-      lines.push(...elementDifferences(at, props, row, other));
+      lines.push(...elementDifferences(at, props, row, other, tally));
     } else {
       lines.push(`${at} · (element) · present → absent`);
     }
@@ -290,10 +363,13 @@ const unlike = (
   at: string,
   names: readonly string[],
   x: readonly (string | number)[],
-  y: readonly (string | number)[]
+  y: readonly (string | number)[],
+  tally: Tally
 ): string[] =>
   x.flatMap((v, p) =>
-    v === y[p] ? [] : [`${at} · ${names[p]} · ${v} → ${y[p]}`]
+    same(names[p] ?? "", v, y[p], tally)
+      ? []
+      : [`${at} · ${names[p]} · ${v} → ${y[p]}`]
   );
 
 /** One element's differences: its look, its box, its overflow, its pseudo-elements and its forced states. */
@@ -301,11 +377,12 @@ function elementDifferences(
   at: string,
   props: string[],
   row: Row,
-  other: Row
+  other: Row,
+  tally: Tally
 ): string[] {
   const lines = [
-    ...unlike(at, props, row.values, other.values),
-    ...unlike(at, RECT, row.rect, other.rect),
+    ...unlike(at, props, row.values, other.values, tally),
+    ...unlike(at, RECT, row.rect, other.rect, tally),
   ];
   if (row.flags !== other.flags) {
     lines.push(
@@ -314,12 +391,20 @@ function elementDifferences(
   }
   for (const which of ["before", "after"] as const) {
     lines.push(
-      ...pseudoDifferences(at, props, which, row[which], other[which])
+      ...pseudoDifferences(at, props, which, row[which], other[which], tally)
     );
   }
   for (const state of ["hover", "focus"] as const) {
     lines.push(
-      ...forcedDifferences(at, props, row.key, state, row[state], other[state])
+      ...forcedDifferences(
+        at,
+        props,
+        row.key,
+        state,
+        row[state],
+        other[state],
+        tally
+      )
     );
   }
   return lines;
@@ -330,7 +415,8 @@ function pseudoDifferences(
   props: string[],
   which: "before" | "after",
   x: string[] | null,
-  y: string[] | null
+  y: string[] | null,
+  tally: Tally
 ): string[] {
   if (!(x || y)) {
     return [];
@@ -344,7 +430,8 @@ function pseudoDifferences(
     at,
     props.map((p) => `::${which} ${p}`),
     x,
-    y
+    y,
+    tally
   );
 }
 
@@ -355,7 +442,8 @@ function forcedDifferences(
   key: string,
   state: "hover" | "focus",
   was: Row["hover"],
-  now: Row["hover"]
+  now: Row["hover"],
+  tally: Tally
 ): string[] {
   const x = was ?? {};
   const y = now ?? {};
@@ -366,7 +454,7 @@ function forcedDifferences(
     const cy = y[on] ?? {};
     const where = on === key ? "" : ` on ${on.slice(key.length + 3) || on}`;
     for (const code of new Set([...Object.keys(cx), ...Object.keys(cy)])) {
-      if (cx[code] !== cy[code]) {
+      if (!same(forcedProp(props, code), cx[code], cy[code], tally)) {
         lines.push(
           `${at} · ${named}${where} ${forcedProp(props, code)} · ${cx[code] ?? "(as at rest)"} → ${cy[code] ?? "(as at rest)"}`
         );
