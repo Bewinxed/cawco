@@ -243,42 +243,55 @@
   }
 </script>
 
+<!-- Under the head, from where its words start, as the forget tray stands
+     (`.head-forget`): the head's own leading padding, as wide as the
+     dialog it replaces. A phone's head pads by --space-5. -->
+<!-- literal: 32rem, 6.5rem, 10rem, 30px, 14px -->
 <section
   aria-label="Project details"
-  class="details"
+  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pr-space-6 pb-space-3 pl-space-7 max-desk:max-w-none max-desk:pr-space-5 max-desk:pl-space-5"
   data-project-details={project.id}
+  style:--details-max="calc(32rem + var(--space-7) + var(--space-6))"
   transition:unfold
   {@attach escapes}
 >
-  <div data-slot="tile" class="tile">
+  <div
+    data-slot="tile"
+    class="grid gap-space-4 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-raised"
+    style:--row-cols="6.5rem minmax(0, 1fr)"
+  >
     <!-- Place: where it lives, its places, and adding one. -->
-    <div data-slot="row" class="row" data-detail="place" bind:this={placesRow}>
-      <p data-slot="project-details-label" class="label">Place</p>
-      <div data-slot="value" class="value">
+    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="place" bind:this={placesRow}>
+      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Place</p>
+      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
         <!-- mark-line: the machine's mark heads its whole folder, which wraps (the head's line cuts it short): it stands in a mark cell, one line tall, on the first line -->
-        <p class="fact place-fact">
+        <p class="type-label flex min-w-0 items-start gap-space-2 wrap-anywhere text-ink-strong">
           {#if machine}
-            <span class="mark-cell"><OsMark class="os" os={machine.os} /></span>
+            <span class="mark-cell"><OsMark class="size-icon-sm flex-none" os={machine.os} /></span>
           {/if}
-          <span class="fact-words" data-place-words>{place}</span>
+          <span class="min-w-0" data-place-words>{place}</span>
         </p>
-        <p data-slot="note" class="note">
+        <p data-slot="note" class="type-meta text-ink-muted">
           Its folder stays where it is; CawCo can't move it.
         </p>
-        <div class="places-head">
+        <div class="flex flex-wrap items-center justify-between gap-space-2 pt-space-1">
           <button
             aria-expanded={listOpen}
-            class="disclose press-tint mark-line"
+            class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-0 bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+            style:--chev="14px"
             data-places-toggle
             onclick={() => {
               listOpen = !listOpen;
             }}
             type="button"
           >
-            <span data-slot="num" class="num"
+            <span data-slot="num"
               >{checkouts} {checkouts === 1 ? "place" : "places"}</span
             >
-            <IconChevronDown data-chev class="chev" />
+            <IconChevronDown
+              data-chev
+              class="size-(--chev) text-ink-muted transition-[rotate] dur-control ease-out group-aria-expanded:rotate-180"
+            />
           </button>
           {#if !adding}
             <Button
@@ -292,17 +305,23 @@
           {/if}
         </div>
         {#if listOpen}
-          <ul class="place-list" transition:unfold>
+          <ul
+            class="m-0 flex list-none flex-col gap-space-2 px-0 pt-space-1 pb-0"
+            transition:unfold
+          >
             {#each project.places as each (each.id)}
-              <li data-place={each.id}>
-                <div class="place-row">
-                  <div class="place-words">
-                    <span data-slot="host" class="host"
+              <li data-place={each.id} class="flex min-w-0 flex-col gap-space-row">
+                <div class="flex min-w-0 items-center gap-space-2">
+                  <div class="flex min-w-0 flex-auto flex-col gap-space-row">
+                    <span data-slot="host" class="type-label text-ink-strong"
                       >{each.kind === "hub"
                         ? "The hub"
                         : hostWords(each.machineId)}</span
                     >
-                    <span data-slot="path" class="path" title={each.path}
+                    <span
+                      data-slot="path"
+                      class="type-meta truncate text-start text-ink-muted"
+                      title={each.path}
                       ><bdi>{each.path}</bdi></span
                     >
                   </div>
@@ -320,20 +339,20 @@
                   {/if}
                 </div>
                 {#if each.isPrimary}
-                  <span class="kept" data-place-kept
+                  <span class="type-meta text-ink-subtle" data-place-kept
                     >Its primary checkout: it can't be removed, and goes when
                     the project does.</span
                   >
                 {:else if each.kind === "hub"}
-                  <span class="kept" data-place-kept
+                  <span class="type-meta text-ink-subtle" data-place-kept
                     >Its folder on the hub: it can't be removed, and goes when
                     the project does.</span
                   >
                 {/if}
                 {#if each.held}
                   {@const held = each.held}
-                  <span class="holds">Held: {held.holds} · {held.size}</span>
-                  <span class="held-acts">
+                  <span class="type-meta text-ink-strong">Held: {held.holds} · {held.size}</span>
+                  <span class="flex gap-space-2 pt-space-1">
                     {#if held.instanceId}
                       <Button
                         href={conversationHref(
@@ -367,8 +386,10 @@
         {#if adding}
           <form
             data-slot="add"
-            class="add"
+            class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-add-place-form
+            style:--add-cols="minmax(0, 10rem) minmax(0, 1fr)"
+            style:--field-h="30px"
             onsubmit={(event) => {
               event.preventDefault();
               add();
@@ -377,7 +398,7 @@
           >
             <NativeSelect.Root
               aria-label="Machine"
-              class="add-machine"
+              class="w-full"
               size="sm"
               bind:value={addMachine}
             >
@@ -390,12 +411,12 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="add-path h-[30px] text-label"
+              class="h-(--field-h) text-label"
               placeholder="/absolute/path on that machine"
               spellcheck="false"
               bind:value={addPath}
             />
-            <div class="add-acts">
+            <div class="col-span-full flex justify-end gap-space-2">
               <Button
                 label="Cancel"
                 onclick={stopAdd}
@@ -419,14 +440,14 @@
     </div>
 
     <!-- Repository: a fact, with where it comes from. -->
-    <div data-slot="row" class="row" data-detail="repository">
-      <p data-slot="project-details-label" class="label">Repository</p>
-      <div data-slot="value" class="value">
+    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="repository">
+      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Repository</p>
+      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
         {#if project.remote}
-          <p class="fact"><bdi>{project.remote}</bdi></p>
-          <p data-slot="note" class="note">From the folder's remote.</p>
+          <p class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"><bdi>{project.remote}</bdi></p>
+          <p data-slot="note" class="type-meta text-ink-muted">From the folder's remote.</p>
         {:else}
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             No remote on the folder yet. Add one in the folder and it shows
             here.
           </p>
@@ -435,14 +456,14 @@
     </div>
 
     <!-- Work lands: the segment asked breathes until the hub answers. -->
-    <div data-slot="row" class="row" data-detail="lands">
-      <p data-slot="project-details-label" class="label" id="{uid}-lands">
+    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="lands">
+      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted" id="{uid}-lands">
         Work lands
       </p>
-      <div data-slot="value" class="value">
+      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
         <ToggleGroup.Root
           aria-labelledby="{uid}-lands"
-          class="lands"
+          class="max-w-full flex-wrap self-start"
           data-pending={landsAsked === null ? undefined : ""}
           type="single"
           bind:value={
@@ -459,7 +480,7 @@
             >
           {/each}
         </ToggleGroup.Root>
-        <p data-slot="note" class="note" data-lands-says>{LANDS[lands].says}</p>
+        <p data-slot="note" class="type-meta text-ink-muted" data-lands-says>{LANDS[lands].says}</p>
         <RowFault
           again={() => (landsTried ? setLands(landsTried) : undefined)}
           data-lands-fault
@@ -469,9 +490,9 @@
     </div>
 
     <!-- Caw: his own switch, its ways off with it. -->
-    <div data-slot="row" class="row" data-detail="caw">
-      <p data-slot="project-details-label" class="label">Caw</p>
-      <div data-slot="value" class="value">
+    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="caw">
+      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Caw</p>
+      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
         <CawLeadSwitch
           label="Leads this project"
           {lead}
@@ -482,11 +503,11 @@
     </div>
 
     <!-- Review before done. -->
-    <div data-slot="row" class="row" data-detail="review">
-      <p data-slot="project-details-label" class="label">Review</p>
-      <div data-slot="value" class="value">
+    <div data-slot="row" class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1" data-detail="review">
+      <p data-slot="project-details-label" class="type-label pt-space-1 text-ink-muted">Review</p>
+      <div data-slot="value" class="flex min-w-0 flex-col gap-space-1 pt-space-1">
         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-        <label class="switch-line">
+        <label class="type-label flex cursor-pointer items-center gap-space-2 text-ink-strong">
           <Switch
             data-review-switch
             disabled={reviewAsked !== null}
@@ -496,7 +517,7 @@
           />
           <span>Review before done</span>
         </label>
-        <p data-slot="note" class="note">
+        <p data-slot="note" class="type-meta text-ink-muted">
           Only you move a task to done; landed work waits in review.
         </p>
         <RowFault
@@ -507,7 +528,7 @@
       </div>
     </div>
 
-    <div data-slot="foot" class="foot">
+    <div data-slot="foot" class="flex justify-end">
       <!-- Each row commits on its own: Done only folds the tray, so it
            stays quiet beside the head's New session. -->
       <Button
@@ -522,218 +543,24 @@
 </section>
 
 <style>
-  /* Under the head, from where its words start, as the forget tray stands
-     (`.head-forget`): the head's own leading padding, as wide as the
-     dialog it replaces. A phone's head pads by --space-5. */
-  .details {
-    container: details / inline-size;
-    max-inline-size: calc(32rem + var(--space-7) + var(--space-6));
-    min-inline-size: 0;
-    padding-block: var(--space-1) var(--space-3);
-    padding-inline: var(--space-7) var(--space-6);
-  }
-  @media (max-width: 899px) {
-    .details {
-      max-inline-size: none;
-      padding-inline: var(--space-5);
-    }
-  }
-  .tile {
-    display: grid;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-raised);
-  }
-  /* Label beside its value; on a narrow tray, over it. */
-  .row {
-    display: grid;
-    grid-template-columns: 6.5rem minmax(0, 1fr);
-    gap: var(--space-1) var(--space-3);
-    align-items: start;
-  }
-  @container details (width < 30rem) {
-    .row {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .label {
-    padding-block-start: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .value {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    padding-block-start: var(--space-1);
-  }
-  .fact {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .fact :global(.os) {
-    flex: none;
-    inline-size: var(--icon-sm, 14px);
-    block-size: var(--icon-sm, 14px);
-  }
-  /* The whole folder, wrapping where it must: the head's line above cuts it
-     short, so here it says what the line can't. */
-  .place-fact {
-    align-items: flex-start;
-  }
-  .fact-words {
-    min-inline-size: 0;
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .places-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-  }
-  .disclose {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin-inline: calc(var(--space-1) * -1);
-    padding: 2px var(--space-1);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    .disclose:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .disclose :global(.chev) {
-    inline-size: 14px;
-    block-size: 14px;
-    color: var(--ink-muted);
-    transition: rotate var(--dur-control) var(--ease-out);
-  }
-  .disclose[aria-expanded="true"] :global(.chev) {
-    rotate: 180deg;
-  }
-  .place-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-1) 0 0;
-    list-style: none;
-  }
-  .place-list li {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .place-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .place-words {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 2px;
-    min-inline-size: 0;
-  }
-  .host {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .path {
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* residual: unmapped */
+  /* The path reads from its end: the folder's tail stays when it is cut. */
+  [data-slot="path"] {
     direction: rtl;
-    text-align: start;
   }
-  .kept {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .holds {
-    font: var(--type-meta);
+  /* residual: foreign-dom */
+  [data-slot="value"] :global([data-slot="lead-switch"]) {
+    font: var(--type-label);
     color: var(--ink-strong);
   }
-  .held-acts {
-    display: flex;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-  }
-  .add {
-    display: grid;
-    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
-    gap: var(--space-2);
-    padding-block-start: var(--space-2);
-  }
-  .add :global(.add-machine) {
-    inline-size: 100%;
-  }
-  .add-acts {
-    display: flex;
-    grid-column: 1 / -1;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  @container details (width < 30rem) {
-    .add {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .value :global(.kit-segmented.lands) {
-    flex-wrap: wrap;
-    align-self: flex-start;
-    max-inline-size: 100%;
-  }
+  /* residual: keyframes */
   /* Asked, not yet answered: the thumb breathes on the live-work loop. */
-  .value :global(.kit-segmented.lands[data-pending] .kit-thumb) {
+  [data-slot="value"] :global(.kit-segmented[data-pending] .kit-thumb) {
     animation: details-breath var(--breath) var(--ease-in-out) infinite;
   }
   @keyframes -global-details-breath {
     50% {
       opacity: 0.45;
     }
-  }
-  .switch-line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-  }
-  .value :global(.lead-switch) {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .foot {
-    display: flex;
-    justify-content: flex-end;
   }
 </style>

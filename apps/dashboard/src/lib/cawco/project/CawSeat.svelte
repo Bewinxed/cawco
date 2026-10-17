@@ -46,7 +46,7 @@
   aria-expanded={lead.open}
   aria-haspopup="dialog"
   aria-label="Caw, lead of {projectName}. {lead.sentence}"
-  class="press-tint grid size-(--seat) flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0"
+  class="caw-seat press-tint grid size-(--seat) flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0"
   data-share="caw:{projectId}"
   onclick={() => {
     lead.open = !lead.open;

@@ -105,7 +105,10 @@
 </script>
 
 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-<label class="flex cursor-pointer flex-wrap items-center gap-space-2">
+<label
+  data-slot="lead-switch"
+  class="flex cursor-pointer flex-wrap items-center gap-space-2"
+>
   <Switch
     data-caw-lead-switch
     disabled={lead.moving || !lead.view || cutting}
