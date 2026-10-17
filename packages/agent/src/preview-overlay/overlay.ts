@@ -19,13 +19,20 @@
  * starts in the microtask after this script, before the parser goes on.
  */
 import { here, mark, parentMark, parentParsing, watchHistory } from "./boot";
+import { hold, installHold } from "./hold";
 
+// First, before any script of the page's asks for a frame or a timer.
+installHold();
 here.tag = document.currentScript as HTMLScriptElement | null;
 watchHistory();
 
 function decide() {
   const above = parentMark();
   if (above) {
+    // A frame loaded inside a held page is held with it.
+    if (above.held()) {
+      hold(true);
+    }
     here.navigated = () => above.frameChanged();
     mark.frameChanged = () => above.frameChanged();
     return;

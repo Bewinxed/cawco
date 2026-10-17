@@ -520,6 +520,12 @@ export interface MainTask {
 
 /** What a trace says of the page's main thread: its top-level tasks, and the marks made on it. */
 export interface MainThread {
+  /**
+   * Each classic script's evaluation (`EvaluateScript`: its compile and its
+   * top-level run), with its address, its span on the trace clock (µs) and
+   * its thread time (`tdur`), ms (`scripts` only; empty otherwise).
+   */
+  evaluated: { at: number; cpu: number; end: number; url: string }[];
   /** Each `performance.mark` made while tracing: its name and when, the trace clock, µs. */
   marks: { at: number; name: string }[];
   /**
@@ -571,6 +577,8 @@ interface TraceEvent {
       stackTrace?: StackFrame[];
       /** An EventDispatch's: the event's type. */
       type?: string;
+      /** An EvaluateScript's: the script's address. */
+      url?: string;
     };
     elementCount?: number;
     /** A Layout's: the box it was laid out from, as four corners (x, y pairs). */
@@ -675,7 +683,8 @@ function samplesOf(
  * on, so `act` makes at least one (`performance.mark`) in the page.
  * `restyles`: each task also says how many elements it restyled, from the
  * timeline's own category, which the trace then carries whole. `profile`:
- * V8 samples the main thread's script as well (`selfTime`).
+ * V8 samples the main thread's script as well (`selfTime`). `scripts`: each
+ * classic script's evaluation, from the same category (`evaluated`).
  */
 export async function traceMain(
   page: Page,
@@ -683,7 +692,8 @@ export async function traceMain(
   {
     profile = false,
     restyles = false,
-  }: { profile?: boolean; restyles?: boolean } = {}
+    scripts = false,
+  }: { profile?: boolean; restyles?: boolean; scripts?: boolean } = {}
 ): Promise<MainThread> {
   const cdp = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -699,6 +709,7 @@ export async function traceMain(
       includedCategories: [
         "blink.user_timing",
         "disabled-by-default-devtools.timeline",
+        ...(scripts && !restyles ? ["devtools.timeline"] : []),
         ...(restyles
           ? [
               "devtools.timeline",
@@ -940,6 +951,14 @@ export async function traceMain(
           scheduled: [],
         };
   return {
+    evaluated: main
+      .filter((event) => event.name === "EvaluateScript")
+      .map((event) => ({
+        at: event.ts,
+        end: event.ts + (event.dur ?? 0),
+        cpu: (event.tdur ?? event.dur ?? 0) / 1000,
+        url: event.args?.data?.url ?? "",
+      })),
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
     selfTime,
     tasks: main

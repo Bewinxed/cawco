@@ -851,6 +851,10 @@ const state = $state({
       title?: string;
       path?: string;
       thumbnail?: string;
+      /** The revision the thumbnail was taken of. */
+      thumbnailRevision?: string;
+      /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
+      thumbnailWanted?: boolean;
     }
   >,
   previewRequests: {} as Record<string, number>,

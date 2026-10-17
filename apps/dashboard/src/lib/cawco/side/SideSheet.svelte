@@ -321,9 +321,12 @@
     {snapPoints}
     bind:activeSnapPoint={snap}
   >
+    <!-- Kept mounted while closed (bits-ui's `forceMount`), so the page in
+         it stays loaded while its conversation's tab is off screen. -->
     <Drawer.Content
       data-preview-sheet
       class="preview-sheet"
+      forceMount
       hosted
       modal={false}
       onCloseAutoFocus={(event) => event.preventDefault()}
@@ -406,6 +409,10 @@
     margin: 0;
     padding: 0;
     outline: none;
+  }
+  /* Closed, the sheet of a tab off screen: kept, never drawn or pressed. */
+  :global(.preview-sheet[data-state="closed"]) {
+    visibility: hidden;
   }
   /* Whole selectors inside :global(): nested under it, the `div` is scoped
      to this component and never matches the kit's own bar. */

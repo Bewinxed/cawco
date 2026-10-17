@@ -14,8 +14,12 @@ import type { FolderReader } from "#lib/components/features/DirectoryPicker.svel
 export type PanePreview = PreviewFrame & {
   /** The page's own title, as its overlay said. */
   title?: string;
-  /** The page's first capture, base64 PNG. */
+  /** The page's capture, base64 PNG. */
   thumbnail?: string;
+  /** The revision the thumbnail was taken of. */
+  thumbnailRevision?: string;
+  /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
+  thumbnailWanted?: boolean;
 };
 
 /** The session that made the artifact: what names it, where it runs, its project. */

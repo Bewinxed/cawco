@@ -1,36 +1,43 @@
 /**
  * Opening a preview, however heavy its page, never stalls the dashboard
  * (owner, 2026-10-17: "whenever the preview tool opens it slows down and
- * eventually hangs my browser and even crashes the ios app").
+ * eventually hangs my browser and even crashes the ios app"), and a
+ * preview kept off screen is there as it was when its tab is back, up to
+ * the owner's bound of hidden pages ("2 on desktop, 1 on phone").
  *
  *   PROBE_HEAVY_PREVIEW=<folder> bun scripts/probe-kit/run.ts preview-bound
  *
  * `PROBE_HEAVY_PREVIEW` is a page's folder as `artifact_create(kind:
  * "preview", dir)` takes it: the design preview he had open (a 23 MB build
- * of 360 files, its Rive wasm and .riv files). A one-line page beside it
- * says what the tool costs alone.
+ * of 360 files, its Rive wasm and .riv files), with its sheets under
+ * `assets/`. One-line pages beside it say what the tool costs alone and
+ * take the bound's places.
  *
  * A scratch fleet, the built dashboard at the desk at 2x (a Mac's screen),
- * two sessions, each showing one preview. Read from the dashboard's own
- * document: its long tasks (PerformanceObserver), the gaps in a 16 ms timer
- * on its thread (WebKit reports no long tasks), and the overlay's messages
- * as the pane hears them; the frame's process from DevTools' targets.
+ * a session per preview. Read from the dashboard's own document: its long
+ * tasks (PerformanceObserver), the gaps in a 16 ms timer on its thread
+ * (WebKit reports no long tasks), and the overlay's messages as the pane
+ * hears them; the frame's process from DevTools' targets.
  *
- * 1. Heavy page, Chromium: from the page's `cawco:ready` (where the pane
- *    asks for its thumbnail) to the thumbnail's arrival plus `AFTER_MS`, the
- *    dashboard's longest task is under `TASK_MS`, and the thumbnail is at
- *    most `THUMB_BYTES` of base64.
+ * 1. Heavy page, Chromium: from the page's `cawco:ready` for `LOAD_MS`, the
+ *    dashboard's longest task is under `TASK_MS`, and no thumbnail is taken
+ *    (no transcript card shows this page); the thumbnail asked alone holds
+ *    the dashboard under `TASK_MS` and is at most `THUMB_BYTES` of base64.
  * 2. The preview's origin asks for a process of its own on every answer
  *    (`Origin-Agent-Cluster: ?1`); where Chromium runs the frame (an
  *    out-of-process iframe target or not) is noted. Playwright's Chromium
  *    keys a secure origin's process by itself, so 1 reads the thumbnail's
  *    own cost on the dashboard's thread only where 7 does: WebKit, which
  *    runs every frame there, as Chromium does over plain http.
- * 3. The light page: the same window, noted beside 1, the tool's own cost.
- * 4. A conversation's tab put off screen: its preview's frame stands for
- *    `PARK_MS`, is gone after it, and loads again (the page says ready)
- *    when its tab is back.
- * 5. Back from parked, the frame's document fetches none of the page's
+ * 3. The light page: its thumbnail asked alone, noted beside 1, the tool's
+ *    own cost.
+ * 4. A conversation's tab put off screen for `KEPT_MS`, within the bound:
+ *    its preview's frame stands, held, and is the same document when its
+ *    tab is back (no new `cawco:ready`).
+ * 4b. Past the bound: two more preview tabs shown in turn, then another, so
+ *    the heavy page is the third hidden and the one hidden longest: its
+ *    frame is gone, and it loads again (the page says ready) with its tab.
+ * 5. Back past the bound, the frame's document fetches none of the page's
  *    files again (Resource Timing, `transferSize` 0): each stands at its
  *    folder's key (core `versionAssets`) and comes from the cache, and so
  *    does the overlay, at its own key (core `keyOverlay`).
@@ -40,20 +47,40 @@
  * 8. A dashboard opened at another origin (`localhost`) adds a parent to
  *    the overlay's text: after a reload the overlay stands at a new key and
  *    is fetched over the network.
+ * 9. A session page loaded with a conversation's tab behind another: that
+ *    tab's preview has no frame for `RESTORED_MS`, and loads once its tab
+ *    is shown.
+ * 10. A page the session made with `artifact_create`: its card in the
+ *    transcript on screen, the pane open, the thumbnail is taken once and
+ *    the card shows it.
+ * 12. A page artifact of a real size (`FULL_SECTIONS` sections, each with a
+ *    choice and a kept field) opening on a Chromium that keeps every frame in the
+ *    dashboard's process: the overlay's own script, read off a DevTools
+ *    trace as its evaluation's thread time (its compile and top-level run)
+ *    and, outside that, V8's sampled self time of its functions (and the
+ *    natives they called), up to `OPENED_MS` after the frame is ready, is
+ *    under `OVERLAY_CPU_MS`; its bytes, decoded and over the wire, are noted.
  * 7. Heavy page, WebKit at a phone (the owner's Brave on iOS), which runs
- *    every frame on the dashboard's thread: its load to its thumbnail is
- *    noted (the page's own work is in it); the page settled, the thumbnail
- *    asked again alone holds the dashboard's thread under `TASK_MS` at a
- *    time (the longest gap in a 16 ms timer).
+ *    every frame on the dashboard's thread: its load is noted (the page's
+ *    own work is in it); the page settled, the thumbnail asked alone holds
+ *    the dashboard's thread under `TASK_MS` at a time (the longest gap in a
+ *    16 ms timer).
+ * 11. WebKit at a phone, the bound of 1: three conversations each with a
+ *    page in its sheet. Back to the first from the second, its frame is
+ *    the same element and the same document; past the bound (the second,
+ *    then the third shown), the first's frame is gone, and it loads again
+ *    with its tab.
  *
  * Every reading is written to `numbers.json` in the spec's out folder.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person opens them
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { existsSync } from "node:fs";
 import { appendFile, cp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Browser, Frame, Page } from "playwright-core";
-import { type Reply, until } from "../../scratch-fleet";
+import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { traceMain } from "../frames";
 import { type Kit, open, type Spec } from "../kit";
 
 /** The dashboard's longest task a preview's load and thumbnail may cost it. Our call: two frames at 60 Hz plus slack, not the 1.8 s a whole-page capture took. */
@@ -62,9 +89,31 @@ const TASK_MS = 200;
 const AFTER_MS = 500;
 /** A thumbnail's base64 at most: the overlay's 200,000 px bound as a PNG. Our call. */
 const THUMB_BYTES = 400_000;
-/** PreviewPane's `PARK_MS`. */
-const PARK_MS = 30_000;
-const LIGHT = `<!doctype html><html><head><meta charset="utf-8"><title>Light</title></head><body><p>One line.</p></body></html>`;
+/** The window after a load's `cawco:ready` that 1 reads: the pane once asked for a thumbnail inside it. Our call. */
+const LOAD_MS = 3000;
+/** How long a tab stays off screen within the bound (4): past the 30 s the pane once unloaded at. */
+const KEPT_MS = 33_000;
+/** How long a restored tab behind another is watched for a frame (9). */
+const RESTORED_MS = 5000;
+/** How long after a page artifact's frame is ready its overlay's work is counted (12): its hello, its doc's join, what the pane asks of it then. */
+const OPENED_MS = 3000;
+/** The overlay's own script time as a page artifact opens, at most (12). The owner's design: under 30 ms. */
+const OVERLAY_CPU_MS = 30;
+/** A sampled function of the overlay's own script (`name@overlay.js?k=…:line:column`, or a native it called). */
+const OVERLAY_FRAME = /@overlay\.js/;
+/** The overlay's own address (core `OVERLAY_PATH`), at its key or not. */
+const OVERLAY_URL = /\/__cawco\/overlay\.js(?:\?|$)/;
+/** Sections of the page artifact 12 opens: a long landing page's worth, each with a choice and a field. Our call. */
+const FULL_SECTIONS = 300;
+/** A page artifact the size of a real one (12): headings, copy, a choice and a kept field in every section. */
+const fullPage = () =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Full</title></head><body>${Array.from(
+    { length: FULL_SECTIONS },
+    (_, i) =>
+      `<section><h2>Part ${i}</h2><p>${"A sentence of copy on this part of the page. ".repeat(6)}</p><div data-cawco-choice="pick-${i}"><button data-option="a">A</button><button data-option="b">B</button></div><input name="note-${i}" placeholder="Note"></section>`
+  ).join("")}</body></html>`;
+const pageOf = (heading: string) =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;
 
 /** What the dashboard's own document records, from before its scripts. */
 interface Cost {
@@ -116,34 +165,44 @@ function watchDashboard(): void {
 const costOf = (page: Page) =>
   page.evaluate(() => (window as unknown as { __cost: Cost }).__cost);
 
+/** Forgets what the dashboard heard so far: the next read starts here. */
+const forget = (page: Page) =>
+  page.evaluate(() => {
+    (window as unknown as { __cost: Cost }).__cost.heard.length = 0;
+  });
+
+/** Whether `type` was heard since the last {@link forget}. */
+const heard = async (page: Page, type: string) =>
+  (await costOf(page)).heard.some(([, one]) => one === type);
+
 interface Span {
   /** The thumbnail's length, base64; 0 when none came. */
   bytes: number;
   /** The longest task (or timer gap) in the window, ms. */
   longest: number;
-  /** When the page said ready and when its thumbnail came, the dashboard's clock. */
+  /** When the window opened and when its thumbnail came (0 when none), the dashboard's clock. */
   ready: number;
   thumb: number;
   /** Every long task in the window, ms. */
   total: number;
 }
 
-/** From the page's first `cawco:ready` to its thumbnail plus `AFTER_MS`: what the dashboard's thread held. */
-async function captureWindow(page: Page, by: "tasks" | "gaps"): Promise<Span> {
+/** From the page's first `cawco:ready` for `LOAD_MS`: what the dashboard's thread held, and any thumbnail asked meanwhile. */
+async function loadWindow(page: Page, by: "tasks" | "gaps"): Promise<Span> {
   await until(
-    "the page's thumbnail heard by the pane",
+    "the page's ready heard by the pane",
     () => costOf(page),
-    (heard) => heard.heard.some(([, type]) => type === "cawco:capture"),
+    (so) => so.heard.some(([, type]) => type === "cawco:ready"),
     120_000
   );
-  await page.waitForTimeout(AFTER_MS + 100);
+  await page.waitForTimeout(LOAD_MS);
   const read = await costOf(page);
   const ready = read.heard.find(([, type]) => type === "cawco:ready")?.[0] ?? 0;
   const [thumb, , bytes] = read.heard.find(
     ([, type]) => type === "cawco:capture"
   ) ?? [0, "", 0];
   const inside = (by === "tasks" ? read.tasks : read.gaps).filter(
-    ([at, ms]) => at + ms >= ready && at <= thumb + AFTER_MS
+    ([at, ms]) => at + ms >= ready && at <= ready + LOAD_MS
   );
   return {
     ready,
@@ -159,17 +218,19 @@ const SETTLE_MS = 5000;
 
 /**
  * The thumbnail alone, the page settled: the dashboard asks the frame
- * again (`cawco:capture`, as the pane does on a load) and reads its thread
- * from the ask to the answer plus `AFTER_MS`.
+ * (`cawco:capture`, as the pane does for a card on screen) and reads its
+ * thread from the ask to the answer plus `AFTER_MS`.
  */
 async function captureAlone(page: Page, by: "tasks" | "gaps"): Promise<Span> {
   await page.waitForTimeout(SETTLE_MS);
   const asked = await page.evaluate(() => {
     const cost = (window as unknown as { __cost: Cost }).__cost;
     cost.heard.length = 0;
-    const frame = document.querySelector<HTMLIFrameElement>(
-      'iframe[title="Preview"][data-ready]'
-    );
+    const frame = [
+      ...document.querySelectorAll<HTMLIFrameElement>(
+        'iframe[title="Preview"][data-ready]'
+      ),
+    ].find((one) => one.checkVisibility());
     frame?.contentWindow?.postMessage(
       { type: "cawco:capture" },
       new URL(frame.src).origin
@@ -179,7 +240,7 @@ async function captureAlone(page: Page, by: "tasks" | "gaps"): Promise<Span> {
   await until(
     "the thumbnail asked alone",
     () => costOf(page),
-    (heard) => heard.heard.some(([, type]) => type === "cawco:capture"),
+    (so) => so.heard.some(([, type]) => type === "cawco:capture"),
     60_000
   );
   await page.waitForTimeout(AFTER_MS + 100);
@@ -200,7 +261,7 @@ async function captureAlone(page: Page, by: "tasks" | "gaps"): Promise<Span> {
 }
 
 const said = (w: Span) =>
-  `ready at ${w.ready.toFixed(0)} ms, thumbnail at ${w.thumb.toFixed(0)} ms (${w.bytes} bytes); longest ${w.longest.toFixed(0)} ms, ${w.total.toFixed(0)} ms of long tasks in all`;
+  `from ${w.ready.toFixed(0)} ms, thumbnail ${w.thumb ? `at ${w.thumb.toFixed(0)} ms (${w.bytes} bytes)` : "none"}; longest ${w.longest.toFixed(0)} ms, ${w.total.toFixed(0)} ms of long tasks in all`;
 
 /** The browser's out-of-process frames on `origin`: DevTools' `iframe` targets. */
 async function ownProcessFrames(
@@ -227,6 +288,12 @@ const previewFrameOf = (page: Page, origin: string): Frame | undefined =>
     .find(
       (frame) => frame !== page.mainFrame() && frame.url().startsWith(origin)
     );
+
+/** The document a preview's frame holds now, by its start (`performance.timeOrigin`); null when none stands. */
+const bornOf = (page: Page, origin: string): Promise<number | null> =>
+  previewFrameOf(page, origin)
+    ?.evaluate(() => performance.timeOrigin)
+    .catch(() => null) ?? Promise.resolve(null);
 
 /** What the frame's document loaded of its origin's files, by Resource Timing: at a key or not, from the cache (`transferSize` 0) or the network. */
 interface Fetched {
@@ -311,7 +378,67 @@ function sheetOf(page: Page, origin: string, name: string) {
   }, name);
 }
 
-const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+const CREATE = "mcp__cawco__artifact_create";
+const COMMAND = /PROBE-CALL:(\d+)/g;
+/** The calls the mock model makes, by the marker the message asking for each carries (artifact-reopen's). */
+const asks = new Map<string, { input: object; name: string }>();
+const issued = new Set<string>();
+const answered = new Map<string, string>();
+
+const respond = (request: Seen): Reply => {
+  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+  if (!request.tools) {
+    return text("ok");
+  }
+  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
+  const ask = marker ? asks.get(marker) : undefined;
+  if (!(marker && ask)) {
+    return text("ok");
+  }
+  if (issued.has(marker)) {
+    if (!answered.has(marker)) {
+      answered.set(marker, request.last);
+    }
+    return text("done");
+  }
+  if (request.toolNames.includes(ask.name)) {
+    issued.add(marker);
+    return { everyMs: 5, words: [], tool: ask };
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "ToolSearch",
+          input: { query: `select:${ask.name}`, max_results: 1 },
+        },
+      }
+    : text(`${ask.name} is not offered`);
+};
+
+/** The desk's workspace: one group of `tabs`, `active` in front. */
+const tabsAt = (page: Page, tabs: string[], active: string) =>
+  page.addInitScript(
+    ([ids, shown]) => {
+      localStorage.setItem(
+        "cawco-workspace",
+        JSON.stringify({
+          v: 1,
+          root: { t: "l", id: "pone", tabs: ids, active: shown, opened: null },
+          focusedLeaf: "pone",
+        })
+      );
+    },
+    [tabs, active] as const
+  );
+
+/** Tab `id` chosen, by its own click. */
+const choose = (page: Page, id: string) =>
+  page
+    .locator(`[data-session-tab="${id}"]`)
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
 
 const run = async (kit: Kit) => {
   const heavy = process.env.PROBE_HEAVY_PREVIEW;
@@ -337,46 +464,72 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const heavyOne = await fleet.spawn("claude", "Heavy preview", fleet.repo);
-  const lightOne = await fleet.spawn("claude", "Light preview", fleet.repo);
   await fleet.api(`/api/instances/${heavyOne}/artifacts`, {
     kind: "preview",
     name: "heavy",
     dir: folder,
   });
-  await fleet.api(`/api/instances/${lightOne}/artifacts`, {
+  /** Sessions showing a one-line page each: the light page (3) and the bound's places (4b, 11). */
+  const lightOf = async (name: string) => {
+    const id = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
+    await fleet.api(`/api/instances/${id}/artifacts`, {
+      kind: "page",
+      name,
+      html: pageOf(name),
+    });
+    return id;
+  };
+  const [lightOne, lightTwo, lightThree] = [
+    await lightOf("light"),
+    await lightOf("light-2"),
+    await lightOf("light-3"),
+  ];
+  // A page artifact the size of a real one, its choices and fields kept (12).
+  const fullOne = await fleet.spawn("claude", "Full page", fleet.repo);
+  await fleet.api(`/api/instances/${fullOne}/artifacts`, {
     kind: "page",
-    name: "light",
-    html: LIGHT,
+    name: "full",
+    html: fullPage(),
   });
   const base = await fleet.dashboard();
+  const paneFrame = (page: Page, pane: string) =>
+    page.locator(
+      `[data-slot="pane"][data-pane="${pane}"] iframe[title="Preview"]`
+    );
+  const readyIn = (page: Page, pane: string) => () =>
+    page
+      .locator(
+        `[data-slot="pane"][data-pane="${pane}"] iframe[title="Preview"][data-ready]`
+      )
+      .count()
+      .then((n) => n > 0);
 
   // 1, 2. The heavy page at the desk, on Chromium.
   const desk = await kit.page("desk", { init: [watchDashboard] });
-  await desk.addInitScript(
-    (ids) => {
-      localStorage.setItem(
-        "cawco-workspace",
-        JSON.stringify({
-          v: 1,
-          root: { t: "l", id: "pone", tabs: ids, active: ids[0], opened: null },
-          focusedLeaf: "pone",
-        })
-      );
-    },
-    [heavyOne, lightOne]
-  );
+  await tabsAt(desk, [heavyOne, lightOne, lightTwo, lightThree], heavyOne);
   await open(desk, `${base}/session/${heavyOne}`, 'iframe[title="Preview"]');
-  const heavyDesk = await captureWindow(desk, "tasks");
+  const heavyDesk = await loadWindow(desk, "tasks");
   numbers.heavyDesk = heavyDesk;
   kit.check(
-    `1: heavy page, Chromium at 2x: the dashboard's longest task from ready to the thumbnail is under ${TASK_MS} ms, and the thumbnail at most ${THUMB_BYTES} bytes`,
-    heavyDesk.longest < TASK_MS && heavyDesk.bytes <= THUMB_BYTES,
+    `1: heavy page, Chromium at 2x: the dashboard's longest task in the ${LOAD_MS / 1000} s after its ready is under ${TASK_MS} ms`,
+    heavyDesk.longest < TASK_MS,
     said(heavyDesk)
   );
-  const frameSrc = await desk
-    .locator('iframe[title="Preview"]')
-    .first()
-    .getAttribute("src");
+  kit.check(
+    "1: no thumbnail is taken of a page no transcript card shows",
+    heavyDesk.thumb === 0,
+    said(heavyDesk)
+  );
+  const heavyAlone = await captureAlone(desk, "tasks");
+  numbers.heavyAlone = heavyAlone;
+  kit.check(
+    `1: heavy page, Chromium at 2x, the thumbnail asked alone: the dashboard's longest task under ${TASK_MS} ms, the thumbnail at most ${THUMB_BYTES} bytes`,
+    heavyAlone.longest < TASK_MS &&
+      heavyAlone.bytes > 0 &&
+      heavyAlone.bytes <= THUMB_BYTES,
+    said(heavyAlone)
+  );
+  const frameSrc = await paneFrame(desk, heavyOne).first().getAttribute("src");
   const previewOrigin = frameSrc ? new URL(frameSrc).origin : "";
   const headers = await fetch(`${previewOrigin}/__cawco/ping`).then(
     (answer) => answer.headers.get("origin-agent-cluster") ?? "none"
@@ -397,23 +550,43 @@ const run = async (kit: Kit) => {
     `2: the preview's frame in Chromium: ${isolated.length > 0 ? "out of process" : "in the dashboard's process"} (${isolated.length} out-of-process frames)`
   );
 
-  // 3. The heavy page's tab put off screen (its neighbour's shown): its
-  // frame stands, then goes, and loads again with its tab.
-  const heavyFrames = () =>
-    desk
-      .locator(
-        `[data-slot="pane"][data-pane="${heavyOne}"] iframe[title="Preview"]`
-      )
-      .count();
-  await desk.locator(`[data-session-tab="${lightOne}"]`).click();
-  await desk.waitForTimeout(1000);
-  const before = await heavyFrames();
-  await desk.waitForTimeout(PARK_MS + 2000);
-  const after = await heavyFrames();
-  await desk.evaluate(() => {
-    (window as unknown as { __cost: Cost }).__cost.heard.length = 0;
-  });
-  await desk.locator(`[data-session-tab="${heavyOne}"]`).click();
+  // 4. The heavy page's tab off screen (its neighbour's shown) within the
+  // bound: its frame stands, held, the same document when its tab is back.
+  const heavyFrames = () => paneFrame(desk, heavyOne).count();
+  const bornBefore = await bornOf(desk, previewOrigin);
+  await choose(desk, lightOne);
+  await until(
+    "the light page loaded",
+    readyIn(desk, lightOne),
+    Boolean,
+    60_000
+  );
+  await desk.waitForTimeout(KEPT_MS);
+  const keptFrames = await heavyFrames();
+  await forget(desk);
+  await choose(desk, heavyOne);
+  await desk.waitForTimeout(2000);
+  const bornAfter = await bornOf(desk, previewOrigin);
+  const reloaded = await heard(desk, "cawco:ready");
+  numbers.kept = { keptFrames, bornBefore, bornAfter, reloaded };
+  kit.check(
+    `4: a tab off screen ${KEPT_MS / 1000} s within the bound: its preview's frame stands, and is the same page when its tab is back (no new ready)`,
+    keptFrames === 1 &&
+      bornBefore !== null &&
+      bornAfter === bornBefore &&
+      !reloaded,
+    `frames ${KEPT_MS / 1000} s off screen ${keptFrames}; document ${bornBefore} → ${bornAfter}; a new ready ${reloaded}`
+  );
+
+  // 4b. Past the bound: the heavy page the third hidden, hidden longest.
+  for (const light of [lightOne, lightTwo, lightThree]) {
+    await choose(desk, light);
+    await until("a light page loaded", readyIn(desk, light), Boolean, 60_000);
+    await desk.waitForTimeout(1000);
+  }
+  const pastFrames = await heavyFrames();
+  await forget(desk);
+  await choose(desk, heavyOne);
   const back = await until(
     "the heavy page ready again",
     () => costOf(desk),
@@ -423,19 +596,19 @@ const run = async (kit: Kit) => {
     () => true,
     () => false
   );
-  numbers.parked = { before, after, back };
+  numbers.past = { pastFrames, back };
   kit.check(
-    `4: a tab off screen: its preview's frame stands, is gone ${PARK_MS / 1000} s on, and loads again with its tab`,
-    before === 1 && after === 0 && back,
-    `frames 1 s off screen ${before}, ${(PARK_MS + 3000) / 1000} s off screen ${after}, ready again ${back}`
+    "4b: past the bound (2 at the desk), the tab hidden longest lets its page go, and loads it again with its tab",
+    pastFrames === 0 && back,
+    `the heavy page's frames with three tabs hidden after it: ${pastFrames}; ready again ${back}`
   );
 
-  // 5. Back from parked, the revision already loaded comes from the cache.
+  // 5. Back past the bound, the revision already loaded comes from the cache.
   await desk.waitForTimeout(LAZY_MS);
   const returned = await fetchedFiles(desk, previewOrigin);
   numbers.returned = returned;
   kit.check(
-    "5: back from parked, none of the page's files nor the overlay is fetched again: each comes from the cache at its key",
+    "5: back past the bound, none of the page's files nor the overlay is fetched again: each comes from the cache at its key",
     returned.versioned > 0 &&
       returned.fetched.length === 0 &&
       !!returned.overlayKey &&
@@ -451,9 +624,7 @@ const run = async (kit: Kit) => {
   if (sheet) {
     await appendFile(join(folder, "assets", sheet), `\n${marker}\n`);
   }
-  await desk.evaluate(() => {
-    (window as unknown as { __cost: Cost }).__cost.heard.length = 0;
-  });
+  await forget(desk);
   await desk
     .locator(
       `[data-slot="pane"][data-pane="${heavyOne}"] button[aria-label="Reload"]`
@@ -487,9 +658,7 @@ const run = async (kit: Kit) => {
     'iframe[title="Preview"]'
   );
   await elsewhere.close();
-  await desk.evaluate(() => {
-    (window as unknown as { __cost: Cost }).__cost.heard.length = 0;
-  });
+  await forget(desk);
   await desk
     .locator(
       `[data-slot="pane"][data-pane="${heavyOne}"] button[aria-label="Reload"]`
@@ -516,47 +685,271 @@ const run = async (kit: Kit) => {
     `the overlay's key ${keyBefore || "none"} → ${changed.overlayKey || "none"}, ${changed.overlayBytes} bytes over the network`
   );
 
-  // The light page alone, the tool's own cost.
-  const lightDesk = await kit.page("desk", { init: [watchDashboard] });
-  await lightDesk.addInitScript((id) => {
-    localStorage.setItem(
-      "cawco-workspace",
-      JSON.stringify({
-        v: 1,
-        root: { t: "l", id: "pone", tabs: [id], active: id, opened: null },
-        focusedLeaf: "pone",
-      })
+  // 9. The session page loaded with the heavy page's tab behind another.
+  const restored = await kit.page("desk", { init: [watchDashboard] });
+  await tabsAt(restored, [lightOne, heavyOne], lightOne);
+  await open(
+    restored,
+    `${base}/session/${lightOne}`,
+    `[data-slot="pane"][data-pane="${lightOne}"] iframe[title="Preview"]`
+  );
+  let restoredFrames = 0;
+  for (let at = 0; at < RESTORED_MS; at += 250) {
+    restoredFrames = Math.max(
+      restoredFrames,
+      await paneFrame(restored, heavyOne).count()
     );
-  }, lightOne);
+    await restored.waitForTimeout(250);
+  }
+  await choose(restored, heavyOne);
+  const shownLoads = await until(
+    "the restored tab's page loaded once shown",
+    readyIn(restored, heavyOne),
+    Boolean,
+    120_000
+  ).then(
+    () => true,
+    () => false
+  );
+  numbers.restored = { restoredFrames, shownLoads };
+  kit.check(
+    `9: a session page loaded with a conversation's tab behind another: no frame for that tab's preview in ${RESTORED_MS / 1000} s, and it loads once the tab is shown`,
+    restoredFrames === 0 && shownLoads,
+    `frames behind ${restoredFrames}; loaded once shown ${shownLoads}`
+  );
+  await restored.close();
+
+  // 10. A page the session made: its card on screen, one thumbnail.
+  const made = await fleet.spawn("claude", "Made page", fleet.repo);
+  const madeDesk = await kit.page("desk", { init: [watchDashboard] });
+  await tabsAt(madeDesk, [made], made);
+  await open(madeDesk, `${base}/session/${made}`, '[data-slot="pane"]');
+  asks.set("1", {
+    name: CREATE,
+    input: { kind: "page", name: "made", html: pageOf("Made") },
+  });
+  await fleet.send(made, "PROBE-CALL:1");
+  await until("the page made", () => answered.get("1"), Boolean, 180_000);
+  const card = madeDesk.locator(".preview-tool .artifact-thumb img");
+  const thumbed = await until(
+    "the card's thumbnail",
+    () => card.count(),
+    (n) => n > 0,
+    60_000
+  ).then(
+    () => true,
+    () => false
+  );
+  await madeDesk.waitForTimeout(3000);
+  const captures = (await costOf(madeDesk)).heard.filter(
+    ([, type]) => type === "cawco:capture"
+  ).length;
+  numbers.made = { thumbed, captures };
+  kit.check(
+    "10: a page the session made, its card on screen and its pane open: the thumbnail is taken once, and the card shows it",
+    thumbed && captures === 1,
+    `the card shows a thumbnail ${thumbed}; captures heard ${captures}`
+  );
+  await madeDesk.close();
+
+  // 12. The overlay's own work as a page artifact opens, the frame in the
+  // dashboard's process (as every WebKit and Chromium over plain http).
+  const traced = await kit.page("desk", { oneProcess: true });
+  await tabsAt(traced, [fullOne], fullOne);
+  const opened = await traceMain(
+    traced,
+    async () => {
+      await open(
+        traced,
+        `${base}/session/${fullOne}`,
+        'iframe[title="Preview"][data-ready]'
+      );
+      await traced.waitForTimeout(OPENED_MS);
+      await traced.evaluate(() => performance.mark("preview-bound:opened"));
+    },
+    { profile: true, restyles: true, scripts: true }
+  );
+  // The page's style and layout the overlay's own script forced, each pass.
+  const forced = opened.tasks
+    .flatMap((task) => task.passes)
+    .filter((pass) => OVERLAY_FRAME.test(pass.at));
+  const forcedMs = forced.reduce((sum, pass) => sum + pass.ms, 0);
+  // Its script's evaluation (compile and top-level run), then what its
+  // functions ran outside it, sampled: none of it counted twice.
+  const evaluations = opened.evaluated.filter((one) =>
+    OVERLAY_URL.test(one.url)
+  );
+  const evaluatedMs = evaluations.reduce((sum, one) => sum + one.cpu, 0);
+  const outside: [number, number][] = [
+    [0, evaluations[0]?.at ?? Number.POSITIVE_INFINITY],
+    ...evaluations.map((one, i): [number, number] => [
+      one.end,
+      evaluations[i + 1]?.at ?? Number.POSITIVE_INFINITY,
+    ]),
+  ];
+  const overlaySamples = outside
+    .flatMap(([from, to]) => opened.selfTime(from, to))
+    .filter(([fn]) => OVERLAY_FRAME.test(fn))
+    .sort((a, b) => b[1] - a[1]);
+  const sampledMs = overlaySamples.reduce((sum, [, ms]) => sum + ms, 0);
+  const overlayMs = evaluatedMs + sampledMs;
+  const fullFrame = await paneFrame(traced, fullOne)
+    .first()
+    .getAttribute("src");
+  const overlayBytes = fullFrame
+    ? await previewFrameOf(traced, new URL(fullFrame).origin)?.evaluate(() => {
+        const entry = (
+          performance.getEntriesByType(
+            "resource"
+          ) as PerformanceResourceTiming[]
+        ).find((one) => new URL(one.name).pathname === "/__cawco/overlay.js");
+        return entry
+          ? { decoded: entry.decodedBodySize, encoded: entry.encodedBodySize }
+          : null;
+      })
+    : null;
+  numbers.overlayOpened = {
+    overlayMs,
+    evaluatedMs,
+    sampledMs,
+    overlayBytes,
+    top: overlaySamples.slice(0, 8),
+    forced,
+  };
+  kit.note(
+    `12: the page's style and layout the overlay forced as it opened: ${forced.length} passes, ${forcedMs.toFixed(1)} ms; ${
+      forced
+        .slice(0, 8)
+        .map(
+          (pass) =>
+            `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements} ${pass.ms.toFixed(1)}ms by ${pass.at}`
+        )
+        .join("; ") || "none"
+    }`
+  );
+  kit.check(
+    `12: a page artifact opening, its frame in the dashboard's process: the overlay's own script takes under ${OVERLAY_CPU_MS} ms of the thread in the ${OPENED_MS / 1000} s after its frame is ready`,
+    evaluations.length > 0 && overlayMs < OVERLAY_CPU_MS,
+    `${overlayMs.toFixed(1)} ms: its evaluation ${evaluatedMs.toFixed(1)} ms (${evaluations.length} of it, compile and top-level run, thread time), its functions after it ${sampledMs.toFixed(1)} ms (sampled self time); the overlay ${overlayBytes ? `${overlayBytes.decoded} bytes, ${overlayBytes.encoded} over the wire` : "not read"}; most: ${
+      overlaySamples
+        .slice(0, 5)
+        .map(([fn, ms]) => `${fn} ${ms.toFixed(1)}ms`)
+        .join(", ") || "none"
+    }`
+  );
+  await traced.close();
+
+  // 3. The light page alone, the tool's own cost.
+  const lightDesk = await kit.page("desk", { init: [watchDashboard] });
+  await tabsAt(lightDesk, [lightOne], lightOne);
   await open(
     lightDesk,
     `${base}/session/${lightOne}`,
     'iframe[title="Preview"]'
   );
-  const light = await captureWindow(lightDesk, "tasks");
+  await loadWindow(lightDesk, "tasks");
+  const light = await captureAlone(lightDesk, "tasks");
   numbers.lightDesk = light;
-  kit.note(`3: light page, Chromium at 2x: ${said(light)}`);
+  kit.note(
+    `3: light page, Chromium at 2x, the thumbnail asked alone: ${said(light)}`
+  );
+  await lightDesk.close();
 
-  // 5. The heavy page on WebKit at a phone.
+  // 7. The heavy page on WebKit at a phone.
   const phone = await kit.page("iphone15Pro", {
     engine: "webkit",
     scale: 3,
     init: [watchDashboard],
   });
   await open(phone, `${base}/session/${heavyOne}`, 'iframe[title="Preview"]');
-  const heavyPhone = await captureWindow(phone, "gaps");
+  const heavyPhone = await loadWindow(phone, "gaps");
   numbers.heavyPhone = heavyPhone;
   // WebKit runs every frame on the dashboard's thread: the page's own work
   // after its load (its bundle, its Rive) shares the window above.
   kit.note(
-    `7: heavy page, WebKit at a phone (3x), its load to its thumbnail: ${said(heavyPhone)}`
+    `7: heavy page, WebKit at a phone (3x), its load: ${said(heavyPhone)}`
   );
   const alonePhone = await captureAlone(phone, "gaps");
   numbers.alonePhone = alonePhone;
   kit.check(
     `7: heavy page, WebKit at a phone (3x), the page settled: the thumbnail alone holds the dashboard's thread under ${TASK_MS} ms at a time`,
-    alonePhone.longest < TASK_MS && alonePhone.bytes <= THUMB_BYTES,
+    alonePhone.longest < TASK_MS &&
+      alonePhone.bytes > 0 &&
+      alonePhone.bytes <= THUMB_BYTES,
     said(alonePhone)
+  );
+  await phone.close();
+
+  // 11. The phone's bound of 1: three conversations, a page each in its sheet.
+  const deck = await kit.page("iphone15Pro", {
+    engine: "webkit",
+    scale: 3,
+    init: [watchDashboard],
+  });
+  const sheets = [lightOne, lightTwo, lightThree];
+  await tabsAt(deck, sheets, lightOne);
+  const OPEN_SHEET_FRAME =
+    '[data-preview-sheet][data-state="open"] iframe[title="Preview"][data-ready]';
+  await open(deck, `${base}/session/${lightOne}`, OPEN_SHEET_FRAME);
+  const firstSrc = await deck.locator(OPEN_SHEET_FRAME).getAttribute("src");
+  const firstOrigin = firstSrc ? new URL(firstSrc).origin : "";
+  const firstFrame = `iframe[title="Preview"][src^="${firstOrigin}"]`;
+  // The first's frame element, marked where only that element carries it.
+  await deck.locator(firstFrame).evaluate((el) => {
+    (el as unknown as { __probeKept: boolean }).__probeKept = true;
+  });
+  const firstBorn = await bornOf(deck, firstOrigin);
+  const sheetShown = async (id: string) => {
+    await choose(deck, id);
+    await deck.waitForTimeout(500);
+    await until(
+      "the shown conversation's sheet loaded",
+      () => deck.locator(OPEN_SHEET_FRAME).count(),
+      (n) => n > 0,
+      60_000
+    );
+    await deck.waitForTimeout(1000);
+  };
+  await sheetShown(lightTwo);
+  await forget(deck);
+  await choose(deck, lightOne);
+  await deck.waitForTimeout(2000);
+  const sameElement = await deck
+    .locator(firstFrame)
+    .evaluate(
+      (el) => (el as unknown as { __probeKept?: boolean }).__probeKept === true
+    )
+    .catch(() => false);
+  const keptBorn = await bornOf(deck, firstOrigin);
+  const phoneReloaded = await heard(deck, "cawco:ready");
+  numbers.phoneKept = { sameElement, firstBorn, keptBorn, phoneReloaded };
+  kit.check(
+    "11: a phone, back to a conversation within the bound (1): its sheet's frame is the same element and the same page (no new ready)",
+    sameElement &&
+      firstBorn !== null &&
+      keptBorn === firstBorn &&
+      !phoneReloaded,
+    `same element ${sameElement}; document ${firstBorn} → ${keptBorn}; a new ready ${phoneReloaded}`
+  );
+  await sheetShown(lightTwo);
+  await sheetShown(lightThree);
+  const phonePastFrames = await deck.locator(firstFrame).count();
+  await forget(deck);
+  await choose(deck, lightOne);
+  const phoneBack = await until(
+    "the first conversation's page ready again",
+    () => costOf(deck),
+    (read) => read.heard.some(([, type]) => type === "cawco:ready"),
+    60_000
+  ).then(
+    () => true,
+    () => false
+  );
+  numbers.phonePast = { phonePastFrames, phoneBack };
+  kit.check(
+    "11: a phone, past the bound (1): the conversation hidden longest lets its page go, and loads it again with its tab",
+    phonePastFrames === 0 && phoneBack,
+    `the first's frames with two hidden after it: ${phonePastFrames}; ready again ${phoneBack}`
   );
   await writeFile(
     join(kit.out, "numbers.json"),

@@ -25,7 +25,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
-import { here, mark } from "./boot";
+import { here, mark, markOf } from "./boot";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -33,10 +33,12 @@ import {
   frameLoading,
   frameOrigin,
   framesOf,
+  frameWindows,
   isFrame,
   rectOf,
   watchFrames,
 } from "./frames";
+import { hold } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
@@ -1700,7 +1702,19 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),
     "cawco:capture": async () => post("cawco:capture", await thumbnail()),
+    // Its conversation's tab off screen, and back (hold.ts): this document
+    // and every same-origin frame in it, which the pane hears as `cawco:held`.
+    "cawco:hold": () => holdPage(true),
+    "cawco:release": () => holdPage(false),
   };
+
+function holdPage(on: boolean) {
+  hold(on);
+  for (const view of frameWindows(document)) {
+    markOf(view)?.hold(on);
+  }
+  post("cawco:held", { held: on });
+}
 
 window.addEventListener("message", async (event) => {
   if (!heardFromHost(event)) {
