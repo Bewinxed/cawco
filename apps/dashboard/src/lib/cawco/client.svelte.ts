@@ -1503,6 +1503,33 @@ function applyTail(target: SessionState, tail: Partial<TranscriptTail>): void {
 }
 
 /**
+ * An `init` drops the asks parked before it: those whose call the transcript
+ * drew before this `init` (or that name no call). The ask of a call not drawn
+ * yet came after it, from the process it opened: the hub sends an ask on its
+ * own path, ahead of a stream backlog that replays the turn's `init` and then
+ * the call, and that ask stands.
+ */
+function dropAsksBefore(target: SessionState): void {
+  if (target.pending.length === 0) {
+    return;
+  }
+  const drawn = new Set<string>();
+  for (const message of [
+    ...target.blocks,
+    ...Object.values(target.subagents).flatMap((branch) => branch.messages),
+  ]) {
+    if (message.toolCallId) {
+      drawn.add(message.toolCallId);
+    }
+  }
+  const after = (p: PendingPermission): boolean =>
+    p.toolUseId !== undefined && !drawn.has(p.toolUseId);
+  if (!target.pending.every(after)) {
+    target.pending = target.pending.filter(after);
+  }
+}
+
+/**
  * What the session has said about itself. `live` is a change as it happened:
  * an `init` then also clears what belonged to the process before it, and a
  * turn ending or a compaction landing asks for a fresh context reading. A
@@ -1558,12 +1585,10 @@ function applyFacts(
     target.mcp = null;
     // The process behind a relaunch is up: this is the frame it opens with.
     target.relaunching = false;
-    // Anything still parked belongs to a process that is gone: a permission
-    // blocks the turn that asked it, so an `init` on top of pending questions
-    // means the process holding their resolvers died.
-    if (target.pending.length > 0) {
-      target.pending = [];
-    }
+    // What was parked before it belongs to a process that is gone: a
+    // permission blocks the turn that asked it, so an `init` on top of an ask
+    // means the process holding its resolver died.
+    dropAsksBefore(target);
   }
   // The turn or the compaction just changed how full the window is; ask
   // rather than guess.
