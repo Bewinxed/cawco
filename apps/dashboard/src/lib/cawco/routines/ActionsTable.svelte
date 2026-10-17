@@ -77,6 +77,7 @@
 
 <!-- literal: 6rem -->
 <div
+  data-slot="actions-ledger"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
   style:--when-w="6rem"
 >
@@ -99,11 +100,13 @@
         >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
+          data-slot="actions-table-col-status"
           class="h-c-toolbar-ctl w-c-routine-time-w px-space-3 type-label tracking-caps text-ink-muted uppercase"
           scope="col">Status</Table.Head
         >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
+          data-slot="actions-table-col-when"
           class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase"
           scope="col">When</Table.Head
         >
@@ -172,7 +175,7 @@
 
 <style>
   /* residual: unmapped */
-  [data-actions] {
+  [data-slot="actions-ledger"] :global([data-actions]) {
     border-spacing: 0;
   }
 </style>

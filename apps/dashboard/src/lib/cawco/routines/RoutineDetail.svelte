@@ -165,6 +165,7 @@
       <!-- literal: 8rem -->
       <!-- literal: 5rem -->
       <div
+        data-slot="runs-ledger"
         class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
         style:--outcome-w="11rem"
         style:--outcome-w-narrow="8rem"
@@ -181,6 +182,7 @@
             <Table.Row class="border-0 bg-surface-band">
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
+                data-slot="routine-detail-col-when"
                 class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
                 scope="col">When</Table.Head
               >
@@ -288,10 +290,10 @@
   }
 
   /* residual: unmapped */
-  [data-runs] {
+  [data-slot="runs-ledger"] :global([data-runs]) {
     border-spacing: 0;
   }
   [data-slot="instruction"][data-clamped] {
-    mask-image: linear-gradient(to bottom, canvas var(--fade-from), transparent);
+    mask-image: linear-gradient(to bottom, var(--mask-opaque) var(--fade-from), transparent);
   }
 </style>
