@@ -7,7 +7,9 @@
  *
  * 1. A harness that didn't list its sessions: two machines whose OpenCode
  *    is a stand-in, one that exits at once (its listing throws: `failed`)
- *    and one that never answers (`unanswered` after the agent's 10 s). The
+ *    and one that answers each call only after 12 s, then fails
+ *    (`unanswered`: past the agent's 10 s listing bound, yet inside the
+ *    90 s its harness reports are read in, so the machine comes up). The
  *    app says each in one warning toast per machine, in core's words
  *    (`catalogWords`), as the web's `catalog-unread-<machine>` toast does.
  * 2. Approved actions on a task: a project session proposes two calls of a
@@ -59,8 +61,6 @@ const PROPOSE = "mcp__cawco__action_propose";
 const CONNECTION = "x-probe";
 const FAILING = "gaps-failing";
 const SILENT = "gaps-silent";
-/** The stand-in that never answers sleeps this long: its own mark, for the sweep at the end. */
-const SILENT_SLEEP = 607;
 const COMMAND = /PROBE-CALL:(\d+)/g;
 /** The compact log's head, up to the `[subsystem:category] ` tag. */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
@@ -193,7 +193,7 @@ async function run(kit: Kit): Promise<void> {
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
-  // ── 1: two machines whose OpenCode fails or never answers its listing ──
+  // ── 1: two machines whose OpenCode fails, or answers past the listing's bound ──
   const bin = async (name: string, body: string) => {
     const dir = join(fleet.sandbox, `bin-${name}`);
     await mkdir(dir, { recursive: true });
@@ -205,7 +205,7 @@ async function run(kit: Kit): Promise<void> {
   const path = fleet.env.PATH ?? process.env.PATH ?? "";
   fleet.env.PATH = `${await bin(FAILING, 'echo "this OpenCode stand-in does not start" >&2; exit 1')}:${path}`;
   await fleet.launchMachine(FAILING);
-  fleet.env.PATH = `${await bin(SILENT, `exec sleep ${SILENT_SLEEP}`)}:${path}`;
+  fleet.env.PATH = `${await bin(SILENT, 'sleep 12; echo "this OpenCode stand-in answers late" >&2; exit 1')}:${path}`;
   await fleet.launchMachine(SILENT);
   fleet.env.PATH = path;
 
@@ -565,7 +565,6 @@ async function run(kit: Kit): Promise<void> {
       await sim?.release();
     }
   }
-  await sh(`pkill -f "sleep ${SILENT_SLEEP}" || true`);
   await server.stop(true);
   await cp(kit.out, join(keep, "kit-out"), { recursive: true }).catch(() => undefined);
   kit.note(`captures: ${keep}`);
