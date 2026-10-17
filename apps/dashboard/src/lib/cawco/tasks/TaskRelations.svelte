@@ -129,7 +129,12 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <Popover.Content align="end" class="w-80">
+      <!-- literal: 20rem -->
+      <Popover.Content
+        align="end"
+        class="w-(--popover-w)"
+        style="--popover-w: 20rem"
+      >
         <div data-slot="pick" class="flex flex-col gap-space-2">
           <Choice
             label="Edge"
