@@ -37,7 +37,7 @@
   data-grouped={grouped || undefined}
   data-lifted={lifted || undefined}
   class={[
-    "relative isolate flow-root ms-(--well-x) py-(--well-pad-block) px-(--pad) motion-safe:transition-[padding-block] motion-safe:dur-panel motion-safe:ease-drawer data-grouped:pbs-space-2 data-lifted:py-0 data-lifted:pbs-0",
+    "relative isolate flow-root ms-(--well-x) py-(--well-pad-block) px-(--pad) motion-safe:transition-[padding-block] motion-safe:dur-panel motion-safe:ease-drawer not-data-lifted:data-grouped:pbs-space-2 data-lifted:py-0 data-lifted:pbs-0",
     extra,
   ]}
   style:--well-pad-block="calc(var(--space-2) + 1px)"
