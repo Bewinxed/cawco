@@ -96,6 +96,7 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
+import { HEAVY_RUN_HELD_ENV } from "@cawco/core/heavy-run";
 import {
   currentEndpoint,
   currentKeeper,
@@ -161,6 +162,7 @@ import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
+import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
@@ -801,6 +803,13 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  *   workspace's build runs them inside the boundary. It runs with a home of its own
  *   ({@link writeXcodeHome}), so what Foundation puts under `~/Library/Caches`
  *   (SwiftPM's manifest cache among it) lands in the workspaces' cache.
+ * - A compile through either (`swift build`, `test` or `run`; an xcodebuild
+ *   `build`, `build-for-testing`, `test`, `archive`, `analyze` or `install`)
+ *   is one of the machine's heavy runs: it runs under the agent's own
+ *   `cawco heavy-run` (core heavy-run.ts), which starts it once a slot is
+ *   free and the machine has room, unless a run it is under already holds
+ *   one (`CAWCO_HEAVY_RUN_HELD`). `test-without-building` compiles nothing:
+ *   Maestro's runner, on a simulator whose slot holds the run.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -885,6 +894,10 @@ const writeShims = async (id: string, runtime: string): Promise<void> => {
   const { port, token } = logRelay();
   const cache = workspaceCacheDir();
   const swiftpm = shellQuote(join(cache, "swiftpm"));
+  // A compile is one of the machine's heavy runs (core heavy-run.ts), held by
+  // this agent's `cawco heavy-run` until it ends; one under a run already held
+  // (build-both.sh, mac-slot.sh, a probe kit run) takes none.
+  const heavyRunLine = `[ -n "\${${HEAVY_RUN_HELD_ENV}:-}" ] || exec ${cawcoCommand("heavy-run").map(shellQuote).join(" ")} "$(printf '%q ' "\${run[@]}")"`;
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
@@ -901,7 +914,9 @@ case "\${1:-}" in
       *" --scratch-path"* | *" --build-path"*) ;;
       *) scratch=(--scratch-path ${swiftpm}/build/"$(/sbin/md5 -q -s "$PWD")") ;;
     esac
-    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@"
+    run=("$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@")
+    ${heavyRunLine}
+    exec "\${run[@]}"
     ;;
 esac
 exec "$swift" "$@"
@@ -916,6 +931,7 @@ exec "$swift" "$@"
 xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
 flags=
 builds=
+compiles=
 packages=
 args=()
 for arg in "$@"; do
@@ -924,7 +940,12 @@ for arg in "$@"; do
       args+=("$arg -disable-sandbox")
       flags=1
       ;;
-    build | build-for-testing | test | test-without-building | archive | analyze | clean | install | installsrc | -resolvePackageDependencies)
+    build | build-for-testing | test | archive | analyze | install)
+      args+=("$arg")
+      builds=1
+      compiles=1
+      ;;
+    test-without-building | clean | installsrc | -resolvePackageDependencies)
       args+=("$arg")
       builds=1
       ;;
@@ -941,7 +962,9 @@ done
 # A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
 mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
 export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
-exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData"))} "\${args[@]}"
+run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData"))} "\${args[@]}")
+[ -z "$compiles" ] || ${heavyRunLine}
+exec "\${run[@]}"
 `,
       0o755
     ),

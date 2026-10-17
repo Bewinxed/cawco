@@ -26,8 +26,8 @@
  * took alone would wait on this process's own simulator.
  *
  * Over SSH the slot script is build-both.sh's copy of apps/apple on the Mac
- * (~/build/cawco-apple/<build>/apps/apple), so a probe compiles first; that
- * copy runs behind the Mac's slots alone (mac-slot.sh).
+ * (~/build/cawco-apple/<build>/apps/apple), so a probe compiles first; there
+ * mac-slot.sh holds the Mac's own heavy run, and this machine's is not taken.
  */
 import { basename, join, resolve } from "node:path";
 import { type HeavySlot, heavySlot } from "./heavy-run";

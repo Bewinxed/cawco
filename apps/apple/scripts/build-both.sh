@@ -133,8 +133,8 @@ if [[ -n ${CAWCO_WORKSPACE:-} && $PLATFORM != ios ]]; then
   exit 2
 fi
 # Built on this Mac, the build is a heavy run here: one of this machine's slots
-# (scripts/lib/heavy-run.ts) for this shell's life. Over SSH the build is the
-# Mac's, behind its build slot.
+# (scripts/lib/heavy-run.ts) for this shell's life. Over SSH it is the Mac's:
+# the Mac side runs under the installed `cawco heavy-run` there (below).
 if [[ $(uname -s) == Darwin ]]; then
   # shellcheck source=../../../scripts/lib/heavy-run.sh
   source scripts/lib/heavy-run.sh
@@ -450,6 +450,11 @@ DISK_ROOM=$(<scripts/lib/disk-room.sh)
 printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
   "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
+# Over SSH the Mac side is one of the Mac's heavy runs, held by its installed
+# `cawco heavy-run` until the Mac side ends; its queue lines come back here.
+if [[ -z $APPLE_ROOT ]]; then
+  printf -v COMMAND '"$HOME"/.local/bin/cawco heavy-run %q' "$COMMAND"
+fi
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
 # descriptors. Each FIFO is opened once and its name removed at once.
