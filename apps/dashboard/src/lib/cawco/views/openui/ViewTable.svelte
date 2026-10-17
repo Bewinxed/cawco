@@ -53,14 +53,19 @@
   }
 </script>
 
-<div data-slot="ledger" class="ledger">
+<div
+  data-slot="ledger"
+  class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+>
   <Table.Root ghostRows="tbody tr" scrollClass="kit-edge-fade">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
-        <Table.Row class="band border-0">
+        <Table.Row class="border-0 bg-surface-band">
           {#each group.headers as header (header.id)}
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head scope="col">{header.column.columnDef.header}</Table.Head
+            <Table.Head
+              class="h-c-toolbar-ctl px-space-3 tracking-caps text-ink-muted uppercase"
+              scope="col">{header.column.columnDef.header}</Table.Head
             >
           {/each}
         </Table.Row>
@@ -68,12 +73,20 @@
     </Table.Header>
     <Table.Body>
       {#each table.getRowModel().rows as row (row.id)}
-        <Table.Row data-view-table-row class="row">
+        <Table.Row data-view-table-row class="relative">
           {#each row.getAllCells() as cell, i (cell.id)}
-            <Table.Cell>
+            <!-- literal: 9rem -->
+            <Table.Cell
+              class="h-c-btn-h-lg border-b border-border-hairline px-space-3 type-label text-ink-muted {i ===
+              0
+                ? 'min-w-(--first-min) py-space-2 whitespace-normal'
+                : ''}"
+              style="--first-min: 9rem"
+            >
               {#if i === 0}
                 <a
-                  class="cell-link"
+                  data-slot="cell-link"
+                  class="type-label text-ink-row no-underline"
                   href={view.hrefOf(row.original.id)}
                   onclick={(event) => open(event, row.original.id)}
                   >{String(cell.getValue())}</a
@@ -90,52 +103,8 @@
 </div>
 
 <style>
-  .ledger {
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  /* The task's title wraps, so the ledger fits a phone; every other column
-     keeps its words on one line. A table still wider than its place scrolls
-     sideways in its container (Table.Root), its far edge fading while there
-     is more to see (.kit-edge-fade). */
-  .ledger :global(th),
-  .ledger :global(td) {
-    white-space: nowrap;
-  }
-  .ledger :global(tr.row td:first-child) {
-    white-space: normal;
-    min-inline-size: 9rem;
-    padding-block: var(--space-2);
-  }
-  .ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row td) {
-    block-size: var(--c-btn-h-lg);
-    padding-inline: var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row) {
-    position: relative;
-  }
-  .cell-link {
-    font: var(--type-label);
-    color: var(--ink-row);
-    text-decoration: none;
-  }
-  .cell-link::after {
+  /* residual: pseudo */
+  [data-slot="cell-link"]::after {
     position: absolute;
     inset: 0;
     content: "";

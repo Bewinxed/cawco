@@ -40,34 +40,70 @@
 {#snippet row(stage: Pick<Stage, "kind" | "name">)}
   {@const count = counts.get(stage.name) ?? 0}
   <li>
-    <div data-slot="row" class="row" data-kind={stage.kind}>
-      <span data-slot="name" class="name mark-line">
+    <!-- literal: minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem; 1fr auto -->
+    <div
+      data-slot="row"
+      class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted kind-you:bg-brand-wash max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2"
+      data-kind={stage.kind}
+      style:--row-cols="minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem"
+      style:--row-cols-narrow="1fr auto"
+    >
+      <span
+        data-slot="name"
+        class="mark-line flex min-w-0 items-center gap-space-1 type-label group-kind-dropped:text-ink-muted group-kind-you:text-brand-ink"
+      >
         {#if stage.kind === "you"}
-          <IconNeedsYou aria-hidden="true" />
+          <IconNeedsYou
+            aria-hidden="true"
+            class="size-icon-sm flex-none text-status-attn-glyph"
+          />
         {/if}
-        <span data-slot="view-pipeline-label" class="label"
+        <span
+          data-slot="view-pipeline-label"
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{stageLabel(stage.name)}</span
         >
       </span>
-      <span data-slot="kind" class="kind">{KIND_LABEL[stage.kind]}</span>
-      <span aria-hidden="true" class="track">
-        <span class="bar" style:inline-size="{(count / most) * 100}%"></span>
+      <!-- A stage's kind is a word of stages.md, set as code. -->
+      <span
+        data-slot="kind"
+        class="type-code text-ink-subtle max-phone:hidden">{KIND_LABEL[stage.kind]}</span
+      >
+      <!-- literal: 8px -->
+      <span
+        data-slot="track"
+        aria-hidden="true"
+        class="block h-(--track-h) rounded-pill"
+        style:--track-h="8px"
+      >
+        <!-- literal: 2px; 260ms -->
+        <span
+          class="block h-full w-(--bar-w) min-w-(--bar-min) rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:duration-(--bar-dur) motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-dropped:bg-transparent group-kind-dropped:outline-1 group-kind-dropped:outline-dashed group-kind-dropped:outline-border-control group-kind-dropped:-outline-offset-1 group-kind-you:bg-brand-solid"
+          style:--bar-w="{(count / most) * 100}%"
+          style:--bar-min="2px"
+          style:--bar-dur="260ms"
+        ></span>
       </span>
-      <span data-num data-slot="count" class="count num"
+      <span
+        data-num
+        data-slot="count"
+        class="num type-label text-end text-ink-muted"
         ><MorphText text={String(count)} /></span
       >
     </div>
   </li>
 {/snippet}
 
-<div class="pipeline">
-  <ol class="rows">
+<div class="flex flex-col gap-space-3">
+  <ol class="m-0 flex list-none flex-col gap-space-1 p-0">
     {#each open as stage (stage.name)}
       {@render row(stage)}
     {/each}
   </ol>
   {#if dropped.length > 0}
-    <ol class="rows apart">
+    <ol
+      class="m-0 flex list-none flex-col gap-space-1 border-t border-dashed border-border-hairline p-0 pt-space-3"
+    >
       {#each dropped as stage (stage.name)}
         {@render row(stage)}
       {/each}
@@ -76,124 +112,19 @@
 </div>
 
 <style>
-  .pipeline {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .apart {
-    padding-block-start: var(--space-3);
-    border-block-start: 1px dashed var(--border-hairline);
-  }
-  .row {
-    display: grid;
-    grid-template-columns: minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem;
-    align-items: center;
-    gap: var(--space-3);
-    inline-size: 100%;
-    min-block-size: var(--c-btn-h-lg);
-    padding-inline: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    text-align: start;
-  }
-  .name {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    font: var(--type-label);
-  }
-  .label {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* Waiting on you: the needs-you glyph, as the Table and the board say it. */
-  .name :global(svg) {
-    flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    color: var(--status-attn-glyph);
-  }
-  /* A stage's kind is a word of stages.md, set as code. */
-  .kind {
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  .track {
-    display: block;
-    block-size: 8px;
-    border-radius: var(--radius-pill);
-  }
-  .bar {
-    display: block;
-    block-size: 100%;
-    min-inline-size: 2px;
-    border-radius: inherit;
-    background: var(--border-control);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .bar {
-      transition: inline-size 260ms var(--ease-out);
-    }
-  }
-  .count {
-    font: var(--type-label);
-    color: var(--ink-muted);
-    text-align: end;
-  }
-  .row[data-kind="you"] {
-    background: var(--brand-wash);
-  }
-  .row[data-kind="you"] .name {
-    color: var(--brand-ink);
-  }
-  .row[data-kind="you"] .bar {
-    background: var(--brand-solid);
-  }
-  .row[data-kind="done"] .bar {
-    background: var(--status-done-bg);
-  }
-  .row[data-kind="dropped"] {
-    color: var(--ink-muted);
-  }
-  .row[data-kind="dropped"] .name {
-    color: var(--ink-muted);
-  }
-  .row[data-kind="dropped"] .bar {
-    background: transparent;
-    outline: 1px dashed var(--border-control);
-    outline-offset: -1px;
-  }
+  /* residual: unmapped */
+  /* A narrow row: its name and count over the bar's own line. */
   @media (max-width: 639px) {
-    .row {
-      grid-template-columns: 1fr auto;
+    [data-slot="row"] {
       grid-template-areas: "name count" "track track";
-      row-gap: var(--space-1);
-      padding-block: var(--space-2);
     }
-    .name {
+    [data-slot="name"] {
       grid-area: name;
     }
-    .kind {
-      display: none;
-    }
-    .track {
+    [data-slot="track"] {
       grid-area: track;
     }
-    .count {
+    [data-slot="count"] {
       grid-area: count;
     }
   }

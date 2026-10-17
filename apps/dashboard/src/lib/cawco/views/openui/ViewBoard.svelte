@@ -8,37 +8,18 @@
   }: OpenUIRenderProps<{ children: unknown[]; title?: string }> = $props();
 </script>
 
-<div class="view-board">
+<div class="flex min-w-0 flex-col gap-space-2">
   {#if props.title}
-    <h3 data-slot="title" class="title">{String(props.title)}</h3>
+    <h3 data-slot="title" class="type-title text-ink-strong">
+      {String(props.title)}
+    </h3>
   {/if}
-  <div class="columns">{@render renderNode(props.children)}</div>
+  <!-- literal: minmax(15rem, 22rem) -->
+  <div
+    class="grid auto-cols-(--board-cols) grid-flow-col gap-space-3 overflow-x-auto overscroll-x-contain pb-space-3 max-phone:auto-cols-(--board-cols-narrow) max-phone:snap-x max-phone:snap-mandatory"
+    style:--board-cols="minmax(15rem, 22rem)"
+    style:--board-cols-narrow="calc(100% - var(--space-8))"
+  >
+    {@render renderNode(props.children)}
+  </div>
 </div>
-
-<style>
-  .view-board {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .title {
-    font: var(--type-title);
-    color: var(--ink-strong);
-  }
-  .columns {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(15rem, 22rem);
-    gap: var(--space-3);
-    overflow-x: auto;
-    padding-block-end: var(--space-3);
-    overscroll-behavior-x: contain;
-  }
-  @media (max-width: 639px) {
-    .columns {
-      grid-auto-columns: calc(100% - var(--space-8));
-      scroll-snap-type: x mandatory;
-    }
-  }
-</style>
