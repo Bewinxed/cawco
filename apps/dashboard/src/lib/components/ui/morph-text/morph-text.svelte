@@ -173,7 +173,7 @@
   });
 </script>
 
-<!-- literal: -100vw (how far a rolling digit's clip reaches past its slot) -->
+<!-- literal: -100vw (how far a rolling digit's clip reaches past its slot), inset(50%) (the words said once, clipped away) -->
 <span class="data-wrap:block" data-wrap={wrap || undefined} bind:this={host}
   >{#if morphing}<span
       class="relative inline-block overflow-x-clip whitespace-nowrap"
@@ -182,8 +182,9 @@
       style:--roll-bleed="-100vw"
       {@attach letters}
     ></span><span
-      class="absolute -m-px size-px overflow-hidden whitespace-pre select-none"
-      data-slot="said">{text}</span
+      class="absolute -m-px size-px overflow-hidden whitespace-pre select-none clip-path-(--said-clip)"
+      data-slot="said"
+      style:--said-clip="inset(50%)">{text}</span
     >{:else}{text}{/if}</span
 >
 
@@ -205,13 +206,5 @@
     > :global([data-roll] > span) {
       display: inline-block;
     }
-  }
-  /* The words once as plain text for screen readers; the letters are
-     aria-hidden. Clipped rather than display: none, which would take it out
-     of the accessibility tree too; not selectable, or a copy pastes it
-     twice. */
-  /* residual: unmapped */
-  [data-slot="said"] {
-    clip-path: inset(50%);
   }
 </style>

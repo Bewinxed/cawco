@@ -559,6 +559,10 @@
       "$type": "color",
       "$value": "{color.neutral-7}"
     },
+    "press-fill": {
+      "$type": "color",
+      "$value": "{color.surface-fill}"
+    },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-4}"
@@ -1592,6 +1596,30 @@
       "$extensions": {
         "dev.cawco": {
           "css": "oklch(from {color.surface-recess} l c h / 0)"
+        }
+      }
+    },
+    "needs-ground": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.3029, 0.000029, 0.034582]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.status-attn-bg} 45%, {color.surface-raised})"
+        }
+      }
+    },
+    "strategy-card-picked": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.2894, 0.026983, 0.024795]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.selected-bg} 45%, {color.surface-raised})"
         }
       }
     }
