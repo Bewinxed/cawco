@@ -15,6 +15,7 @@
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import {
+    commentId,
     stageLabel,
     type TaskComment,
     type TaskHistoryEvent,
@@ -50,7 +51,8 @@
      */
     reaches: { kind: "live"; session: string } | { kind: "resumes" } | null;
     /** Writes the comment; throws the hub's refusal. */
-    oncomment: (text: string) => Promise<void>;
+    /** A comment's words and its id, which this box chooses (`sendComment`). */
+    oncomment: (text: string, id: string) => Promise<void>;
   } = $props();
 
   let only = $state<"all" | "comments">("all");
@@ -64,12 +66,16 @@
   /** What the Composer stands over its foot: its box holds that much room. */
   let commentFoot = $state(0);
   /** The comment goes; a refusal puts the words back with the hub's reason over them. */
+  /** The words a comment that did not go through carried, and its id: the same words again are the same comment. */
+  let unsent: { text: string; id: string } | null = null;
   async function sendComment(text: string) {
     commenting = true;
     commentRefused = "";
     commentAgain = false;
+    unsent = commentId(unsent, text);
     try {
-      await oncomment(text);
+      await oncomment(text, unsent.id);
+      unsent = null;
     } catch (error) {
       commentDraft.restore(text);
       commentAgain = unreachable(error);

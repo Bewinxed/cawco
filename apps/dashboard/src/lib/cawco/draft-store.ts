@@ -12,7 +12,9 @@
  * drafts edited longest ago are dropped until it fits, never the one being
  * written.
  */
+
 import { newId } from "./id";
+import { database, done, result, DRAFTS as STORE } from "./idb";
 import type {
   DraftCanvas,
   PendingFile,
@@ -24,10 +26,6 @@ import type {
 type StoredFile = Pick<PendingFile, "name" | "mediaType" | "size" | "ref"> & {
   blob?: Blob;
 };
-
-const DB_NAME = "cawco";
-const DB_VERSION = 1;
-const STORE = "drafts";
 
 /** The most the stored drafts may weigh together, in bytes. */
 export const CAP_BYTES = 50 * 1024 * 1024;
@@ -45,39 +43,6 @@ interface DraftRecord {
   texts: PendingText[];
   /** When it was last written, for eviction. */
   updatedAt: number;
-}
-
-let opening: Promise<IDBDatabase> | null = null;
-
-function database(): Promise<IDBDatabase> {
-  opening ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE, { keyPath: "sessionId" });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-  // A browser that refuses the database (private mode) keeps no drafts; said once here.
-  opening.catch((error: unknown) => {
-    console.warn("[drafts] IndexedDB refused to open; drafts are off", error);
-  });
-  return opening;
-}
-
-function done(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error);
-    transaction.onerror = () => reject(transaction.error);
-  });
-}
-
-function result<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
 }
 
 /** base64 (the wire shape) to a Blob, once per image: the same image is re-stored on every save. */

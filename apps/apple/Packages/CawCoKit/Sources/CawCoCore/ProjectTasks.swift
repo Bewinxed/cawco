@@ -154,8 +154,10 @@ public struct ProjectTasks: Sendable {
     }
 
     /// Your comment on the task (`addComment`): it goes where the hub sends it.
-    public func comment(_ taskId: String, text: String) async throws -> TaskView {
-        let output = try await client.postApiProjectsByIdTasksByTaskIdComments(path: .init(id: projectId, taskId: taskId), body: .json(.init(text: text)))
+    /// `id` is the comment's: the hub writes it once however often it is sent.
+    public func comment(_ taskId: String, text: String, id: String) async throws -> TaskView {
+        let output = try await client.postApiProjectsByIdTasksByTaskIdComments(path: .init(id: projectId, taskId: taskId),
+                                                                               body: .json(.init(text: text, id: id)))
         if case let .ok(ok) = output { return try ok.body.json }
         throw await TaskRefusal.reading(output)
     }

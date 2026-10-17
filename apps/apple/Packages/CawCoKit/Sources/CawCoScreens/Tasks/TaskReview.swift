@@ -434,17 +434,24 @@ final class TaskReviewView: UIView, UITextViewDelegate {
         DispatchQueue.main.async { [weak self] in self?.noteField.becomeFirstResponder() }
     }
 
+    /// The note a Send back that did not go through carried, and its comment's
+    /// id: the same note again goes under it, so the hub writes it once.
+    private var noteSent: (text: String, id: String)?
+
     /// Your note goes on the task as your comment, then the task goes back.
     private func sendBack() {
         guard let task, let backTo, let text = note?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty, !sending else { return }
         sending = true
         problem = nil
         redraw()
+        let id = noteSent.flatMap { $0.text == text ? $0.id : nil } ?? UUID().uuidString.lowercased()
+        noteSent = (text, id)
         Task {
             do {
                 let api = try ProjectTasks(hub: context.hub, projectId: context.projectId)
-                context.changed(try await api.comment(task.id, text: text))
+                context.changed(try await api.comment(task.id, text: text, id: id))
                 _ = try await context.move(backTo.name)
+                noteSent = nil
                 note = nil
                 noteField.resignFirstResponder()
             } catch { problem = error.localizedDescription }

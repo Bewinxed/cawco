@@ -6,7 +6,7 @@
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) with one session whose first turn ended, and the built app on
  * an iPhone simulator of its own (a mac-slot.sh slot, deleted at the end).
- * The app reaches the hub through a relay in this spec, which passes every
+ * The app reaches the hub through the kit's relay (relay.ts), which passes every
  * request and socket message through and, once, adds stand-ins to the hub's
  * own answer to the app's `stream.subscribe` for the session:
  *
@@ -28,10 +28,10 @@ import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
+import { type Pipe, relay } from "../relay";
 
 const TITLE = "Unreadable event probe";
 const LOG_HEAD = /^.*\] /;
-const HTTP = /^http/;
 /** A seq as the Ledger logs it: a Double, `13.000000`. */
 const seq = (n: number): string => `seq ${n.toFixed(6)}`;
 /** What a hole, a replay asked for or a history read again logs: none may follow the stand-ins. */
@@ -59,14 +59,6 @@ async function sh(script: string): Promise<string> {
     throw new Error(`exited ${code}: ${err.trim() || text.trim()}`);
   }
   return text;
-}
-
-interface Relayed {
-  /** The app's messages (text, as every one it sends) before the hub's socket opened. */
-  held: string[];
-  /** The hub's socket, once open; what the app sent before is held. */
-  hub?: WebSocket;
-  search: string;
 }
 
 /** Where the stand-ins went: the seqs the app should have reached. */
@@ -105,84 +97,27 @@ async function run(kit: Kit): Promise<void> {
     120_000
   );
 
-  // The relay: the hub's routes and socket, with the stand-ins added once.
+  // The kit's relay: the hub's routes and socket, with the stand-ins added once.
   let afterSeq: number | undefined;
   let armed = false;
   let injected: Injected | undefined;
-  const hubSocket = fleet.base.replace(HTTP, "ws");
-  const relay = Bun.serve<Relayed>({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request, server) {
-      const url = new URL(request.url);
+  const hubRelay = relay(fleet.base, {
+    toApp: (text, _send, app) => stand(text, app),
+    toHub: (text) => {
       if (
-        url.pathname === "/ws/dashboard" &&
-        server.upgrade(request, { data: { held: [], search: url.search } })
+        !injected &&
+        text.includes('"stream.subscribe"') &&
+        text.includes(session)
       ) {
-        return;
+        const { afterSeq: from } = JSON.parse(text) as { afterSeq?: number };
+        afterSeq = from;
+        armed = true;
       }
-      const headers = new Headers(request.headers);
-      headers.delete("host");
-      const answer = await fetch(`${fleet.base}${url.pathname}${url.search}`, {
-        method: request.method,
-        headers,
-        body:
-          request.method === "GET" || request.method === "HEAD"
-            ? undefined
-            : await request.arrayBuffer(),
-        redirect: "manual",
-      });
-      // fetch hands the body on decoded: its encoding and length no longer hold.
-      const out = new Headers(answer.headers);
-      out.delete("content-encoding");
-      out.delete("content-length");
-      return new Response(answer.body, { status: answer.status, headers: out });
-    },
-    websocket: {
-      open(app: ServerWebSocket<Relayed>) {
-        const hub = new WebSocket(
-          `${hubSocket}/ws/dashboard${app.data.search}`
-        );
-        hub.onopen = () => {
-          app.data.hub = hub;
-          for (const message of app.data.held.splice(0)) {
-            hub.send(message);
-          }
-        };
-        hub.onmessage = (event) => {
-          const text =
-            typeof event.data === "string"
-              ? event.data
-              : new TextDecoder().decode(event.data as ArrayBuffer);
-          app.send(stand(text, app));
-        };
-        hub.onclose = () => app.close();
-      },
-      message(app, message) {
-        const text = typeof message === "string" ? message : message.toString();
-        if (
-          !injected &&
-          text.includes('"stream.subscribe"') &&
-          text.includes(session)
-        ) {
-          const { afterSeq: from } = JSON.parse(text) as { afterSeq?: number };
-          afterSeq = from;
-          armed = true;
-        }
-        if (app.data.hub) {
-          app.data.hub.send(text);
-        } else {
-          app.data.held.push(text);
-        }
-      },
-      close(app) {
-        app.data.hub?.close();
-      },
     },
   });
 
   /** The hub's answer to the subscribe, with the stand-ins after its own events. */
-  const stand = (text: string, app: ServerWebSocket<Relayed>): string => {
+  const stand = (text: string, app: ServerWebSocket<Pipe>): string => {
     if (
       !armed ||
       injected ||
@@ -244,7 +179,7 @@ async function run(kit: Kit): Promise<void> {
   try {
     sim = await macSim();
     const { udid } = sim;
-    console.log(`  simulator ${udid}, relay ${relay.port} → ${fleet.base}`);
+    console.log(`  simulator ${udid}, relay ${hubRelay.port} → ${fleet.base}`);
     await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
     await sh(`xcrun simctl install ${udid} "${bundle}"`);
     const child = Bun.spawn(
@@ -278,7 +213,7 @@ async function run(kit: Kit): Promise<void> {
     })().catch(() => undefined);
     await Bun.sleep(1500);
     await sh(
-      `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${relay.port} -open-session ${session} >/dev/null`
+      `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hubRelay.url} -open-session ${session} >/dev/null`
     );
     const logged = (text: string) => heard.find((h) => h.line.includes(text));
 
@@ -353,7 +288,7 @@ async function run(kit: Kit): Promise<void> {
     );
     stream?.kill();
     await sim?.release();
-    relay.stop(true);
+    hubRelay.stop();
   }
 }
 

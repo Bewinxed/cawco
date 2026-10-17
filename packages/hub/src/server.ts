@@ -17886,6 +17886,8 @@ export const createServer = (
       fanOutFleet();
     },
     attempts: db.projectAttempts,
+    commentSaid: db.taskCommentSaid,
+    noteComment: db.noteTaskComment,
     saveResult: (workItemId, taskResult) => {
       db.updateWorkItem(workItemId, { taskResult });
     },

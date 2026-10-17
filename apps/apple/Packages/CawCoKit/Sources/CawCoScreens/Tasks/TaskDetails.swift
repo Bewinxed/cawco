@@ -18,7 +18,8 @@ final class TaskActivityPart: UIView, UITextViewDelegate {
     enum Reaches: Equatable { case live(String), resumes }
 
     /// Writes the comment; throws the hub's refusal.
-    var onComment: (String) async throws -> Void = { _ in }
+    /// A comment's words and its id, which this box chooses (`send`).
+    var onComment: (String, String) async throws -> Void = { _, _ in }
     /// Reads the history again.
     var onReread: () -> Void = {}
     var onResize: () -> Void = {}
@@ -327,19 +328,27 @@ final class TaskActivityPart: UIView, UITextViewDelegate {
 
     // MARK: The comment box
 
+    /// The words a comment that did not go through was sent with, and its id:
+    /// the hub may have written it, so the same words sent again go under the
+    /// same id, which the hub answers with the comment it has.
+    private var unsent: (text: String, id: String)?
+
     private func send() {
         let text = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !sending else { return }
         sending = true
         sendButton.isEnabled = false
         refused.isHidden = true
+        let id = unsent.flatMap { $0.text == text ? $0.id : nil } ?? UUID().uuidString.lowercased()
         Task {
             do {
-                try await onComment(text)
+                try await onComment(text, id)
+                unsent = nil
                 field.text = ""
                 placeholder.isHidden = false
             } catch {
                 // The words stay in the field with the hub's reason over them.
+                unsent = (text, id)
                 refused.text = error.localizedDescription
                 refused.isHidden = false
             }

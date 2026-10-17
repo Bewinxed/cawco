@@ -3032,6 +3032,9 @@
                 "properties": {
                   "text": {
                     "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
                   }
                 },
                 "required": [

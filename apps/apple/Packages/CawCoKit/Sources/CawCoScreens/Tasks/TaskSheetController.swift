@@ -352,9 +352,9 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             guard let self else { return }
             took(try await api().update(taskId, fields: change))
         }
-        activityPart.onComment = { [weak self] text in
+        activityPart.onComment = { [weak self] text, id in
             guard let self else { return }
-            took(try await api().comment(taskId, text: text))
+            took(try await api().comment(taskId, text: text, id: id))
         }
         activityPart.onReread = { [weak self] in
             guard let self else { return }

@@ -361,6 +361,13 @@ export interface TaskStore {
     | "taskId"
     | "taskResult"
   >[];
+  /**
+   * The task a comment went on, written under `id`, the id its device chose
+   * for it (db `task_comment_ids`): the same comment again adds nothing.
+   */
+  readonly commentSaid: (
+    id: string
+  ) => { projectId: string; taskId: string } | undefined;
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
   /**
@@ -374,6 +381,12 @@ export interface TaskStore {
   ) => string | undefined;
   /** Every machine the hub has seen: what a `runs_on` may name (runs-on.ts). */
   readonly machines: () => MachineFacts[];
+  /** A comment written under the id its device chose, once it is committed. */
+  readonly noteComment: (said: {
+    id: string;
+    projectId: string;
+    taskId: string;
+  }) => void;
   readonly project: (id: string) =>
     | {
         id: string;
@@ -2898,6 +2911,73 @@ export const createTasks = (store: TaskStore) => {
     return false;
   };
 
+  /**
+   * Each comment being written now, by the id its device chose: the same
+   * comment again meanwhile (a device sending it again after its answer was
+   * lost) is answered by the first one's commit, never written twice.
+   */
+  const commenting = new Map<string, Promise<TaskView>>();
+
+  /** One task, its file read and parsed; the index catches up if the file moved. */
+  const readTask = async (
+    projectId: string,
+    ref: string
+  ): Promise<TaskView> => {
+    known(projectId);
+    // The index caught up first, as a list does: the other tasks this one's
+    // edges name read as their files are now.
+    const { rows } = await sync(projectId);
+    const { path, number } = await locate(projectId, ref);
+    const { content } = await readFolderFile(projectId, path);
+    const fix = await fixFor(projectId, path, content, rows);
+    if (fix) {
+      // Shown as it will be settled; the file gets it back in its turn.
+      queueSettle(projectId, path, number);
+    }
+    return view(
+      projectId,
+      path,
+      number,
+      fix ? settledView(path, content, fix) : content,
+      await currentStages(projectId)
+    );
+  };
+
+  /** A comment's entry, its commit, and who hears of it ({@link comment}). */
+  const writeComment = (
+    projectId: string,
+    ref: string,
+    text: string,
+    actor: TaskActor
+  ): Promise<TaskView> => {
+    const written = commentText(text);
+    return change(projectId, ref, actor, (doc) => {
+      doc.addComment(
+        {
+          name: actor.author.name,
+          mover: actor.mover,
+          id: actor.instanceId ?? actor.actionId ?? actor.routineId ?? null,
+        },
+        new Date(),
+        written
+      );
+      return {
+        what: `comment “${commentGist(written)}”`,
+        change: COMMENT_CHANGE,
+      };
+    }).then((task) =>
+      told(
+        {
+          kind: "changed",
+          projectId,
+          id: task.id,
+          comment: { actor, text: written },
+        },
+        task
+      )
+    );
+  };
+
   return {
     /** The project's tasks from the index, caught up with the files first. */
     async list(projectId: string, filter: TaskFilter = {}): Promise<TaskList> {
@@ -2939,26 +3019,7 @@ export const createTasks = (store: TaskStore) => {
     },
 
     /** One task, its file read and parsed; the index catches up if the file moved. */
-    async get(projectId: string, ref: string): Promise<TaskView> {
-      known(projectId);
-      // The index caught up first, as a list does: the other tasks this one's
-      // edges name read as their files are now.
-      const { rows } = await sync(projectId);
-      const { path, number } = await locate(projectId, ref);
-      const { content } = await readFolderFile(projectId, path);
-      const fix = await fixFor(projectId, path, content, rows);
-      if (fix) {
-        // Shown as it will be settled; the file gets it back in its turn.
-        queueSettle(projectId, path, number);
-      }
-      return view(
-        projectId,
-        path,
-        number,
-        fix ? settledView(path, content, fix) : content,
-        await currentStages(projectId)
-      );
-    },
+    get: readTask,
 
     create(
       projectId: string,
@@ -3222,40 +3283,43 @@ export const createTasks = (store: TaskStore) => {
      * Adds a comment to a task: one entry at the end of its `## Comments`,
      * headed with who wrote it and when, as one commit (its history shows it
      * as `commented`). Entries are only ever added. Listeners hear it with
-     * its words: yours reach the task's live attempt (server.ts).
+     * its words: yours reach the task's live attempt (server.ts). `id`, the
+     * one its device chose, makes it one comment however often it is sent:
+     * one already written is answered with the task as it stands, nothing
+     * added and nobody told again.
      */
     comment(
       projectId: string,
       ref: string,
       text: string,
-      actor: TaskActor
+      actor: TaskActor,
+      id?: string
     ): Promise<TaskView> {
-      const written = commentText(text);
-      return change(projectId, ref, actor, (doc) => {
-        doc.addComment(
-          {
-            name: actor.author.name,
-            mover: actor.mover,
-            id: actor.instanceId ?? actor.actionId ?? actor.routineId ?? null,
-          },
-          new Date(),
-          written
-        );
-        return {
-          what: `comment “${commentGist(written)}”`,
-          change: COMMENT_CHANGE,
-        };
-      }).then((task) =>
-        told(
-          {
-            kind: "changed",
-            projectId,
-            id: task.id,
-            comment: { actor, text: written },
-          },
-          task
-        )
-      );
+      if (!id) {
+        return writeComment(projectId, ref, text, actor);
+      }
+      const first = commenting.get(id);
+      if (first !== undefined) {
+        return first;
+      }
+      const said = store.commentSaid(id);
+      if (said) {
+        if (
+          said.projectId !== projectId ||
+          said.taskId !== taskRef("task", ref)
+        ) {
+          refuse(409, "That comment is already on another task.");
+        }
+        return readTask(projectId, ref);
+      }
+      const writing = writeComment(projectId, ref, text, actor).then((task) => {
+        store.noteComment({ id, projectId, taskId: task.id });
+        return task;
+      });
+      commenting.set(id, writing);
+      const done = () => commenting.delete(id);
+      writing.then(done, done);
+      return writing;
     },
 
     /**
@@ -3736,14 +3800,21 @@ export const taskRoutes = (tasks: Tasks) =>
     })
     .post(
       "/api/projects/:id/tasks/:taskId/comments",
-      { body: t.Object({ text: t.String() }) },
+      {
+        body: t.Object({
+          text: t.String(),
+          /** The comment's id, chosen by its device: the same id again is the same comment. */
+          id: t.Optional(t.String()),
+        }),
+      },
       async ({ params, body }) => {
         try {
           return await tasks.comment(
             params.id,
             params.taskId,
             body.text,
-            YOU_ACTOR
+            YOU_ACTOR,
+            body.id
           );
         } catch (error) {
           return refused(error);
