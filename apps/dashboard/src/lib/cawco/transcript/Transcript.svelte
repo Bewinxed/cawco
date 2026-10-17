@@ -1716,37 +1716,52 @@
   /** The room under the list that clears the composer (the markup). */
   let foot = $state<HTMLElement>();
   /**
+   * The list's own height. virtua's `getScrollSize` is its store's, exact,
+   * where the height it writes to its container's style reads back in
+   * Chromium cut to six significant digits (2129.05 for 2129.046875), but it
+   * is never less than the viewport (virtua 0.53.4: `getScrollSize` is
+   * `max($getTotalSize(), $getViewportSize())`). A list shorter than its
+   * view read as tall as the view, so it never fitted: the spare was the
+   * rooms' part of a pixel (0.96875px under a 144.03125px foot), put on or
+   * not by whether a resize came while the view was pinned. A list shorter
+   * than its view is the height virtua wrote on its container
+   * (`height: totalSize + "px"`), whose six digits are exact to a
+   * thousandth at that size.
+   */
+  function listHeight(): number {
+    const size = list?.getScrollSize() ?? 0;
+    if (size > (list?.getViewportSize() ?? 0)) {
+      return size;
+    }
+    const inner = listing?.firstElementChild as HTMLElement | null | undefined;
+    return Number.parseFloat(inner?.style.height ?? "");
+  }
+  /**
    * Puts `spare` on the scroll range as it stands, and the padding on the
    * page; says whether it moved. The pin calls it before it reads the height,
    * so a list that grew is whole in the frame it grew.
    *
    * The range is the content less the box: virtua's viewport (the box's
    * content height, `getViewportSize`) against what stands in it: the strip
-   * before the list, the list as virtua sizes it (`getScrollSize`: from its
-   * store, exact, where the height it writes to its container's style reads
-   * back in Chromium cut to six significant digits, 2129.05 for 2129.046875),
-   * the parked room and the foot. None of them is read off the layout: this
-   * runs in whatever task virtua's write landed in. The two rooms are the
-   * sizes their observer last delivered (`rooms`): read here as their
-   * computed styles, the foot's resolved block size laid the page out in the
+   * before the list, the list (`listHeight`), the parked room, the shelf's
+   * room and the foot. None of them is read off the layout: this runs in
+   * whatever task virtua's write landed in. The two rooms are the sizes
+   * their observer last delivered (`rooms`): read here as their computed
+   * styles, the foot's resolved block size laid the page out in the
    * microtask behind every height virtua wrote, a whole layout per row a
    * streamed reply grew.
+   *
+   * A list that fits its view has no range to make whole, and no spare.
    */
   function keepWhole(): boolean {
-    const height = list?.getScrollSize() ?? 0;
+    const height = listHeight();
     const viewport = list?.getViewportSize() ?? 0;
-    if (!(viewport > 0 && rooms.measured)) {
+    if (!(viewport > 0 && rooms.measured && Number.isFinite(height))) {
       return false;
     }
     const { foot: clear, parked, shelf } = rooms;
-    // A list that fits its view has no scroll range to make whole, and no
-    // spare: one taken while the view was shorter (a panel still opening)
-    // is let go, not kept as a stray part of a pixel over the first row.
-    const over =
-      height + clear <= viewport
-        ? 0
-        : (((viewport - olderRoom - height - parked - shelf - clear) % 1) + 1) %
-          1;
+    const range = olderRoom + height + parked + shelf + clear - viewport;
+    const over = range <= 0 ? 0 : ((-range % 1) + 1) % 1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - spare) <= 0.001) {
       return false;
