@@ -38,6 +38,13 @@ export interface JoinInfo {
 export interface SshJoinRequest {
   /** One of {@link JoinInfo.addresses}' urls; nothing typed reaches the remote shell. */
   hubUrl: string;
+  /**
+   * The target's password, for a machine that does not trust the hub's key
+   * yet: this one connection signs in with it and adds the key to the
+   * machine's `~/.ssh/authorized_keys`, so every later one uses the key. The
+   * hub holds it only while it hands it to `ssh`, and never stores it.
+   */
+  password?: string;
   port?: number;
   /** `user@host`, or a `Host` from the hub user's `~/.ssh/config`. */
   target: string;
@@ -59,7 +66,24 @@ export type SshJoinProblem =
   /** A step of the install script or `cawco join` failed. */
   | { kind: "step"; step: string }
   /** Everything ran, but the hub never saw the machine come online. */
-  | { kind: "unregistered" };
+  | { kind: "unregistered" }
+  /**
+   * Held back from the wire: an app that reads `problem` closed (TestFlight
+   * 20261015) cannot read it, so the hub sends it as
+   * {@link SshJoinJob.passwordProblem} beside a null `problem` (hub join.ts
+   * `settle`; the bridge in hub scripts/wire-compat.ts) until no installable
+   * app needs that. Declared here so the apps built from now on read it.
+   */
+  | { kind: "password"; asked: boolean };
+
+/** SshJoinProblem's `password` as the wire carries it, beside a null `problem`. */
+export interface SshPasswordProblem {
+  /**
+   * Whether the machine asked for a password at all: true, it refused this
+   * one; false, it takes none over SSH, only a key.
+   */
+  asked: boolean;
+}
 
 /** `GET /api/machines/ssh/:id`: one SSH add, as the hub holds it in memory. */
 export interface SshJoinJob {
@@ -70,6 +94,12 @@ export interface SshJoinJob {
   lines: string[];
   /** From the `joined as` line, once it has been printed. */
   machineId: string | null;
+  /**
+   * The password add's refusal, with `problem` null: the SshJoinProblem kind
+   * `password`, held back while an installable app reads `problem` closed (a
+   * bridge, hub scripts/wire-compat.ts BRIDGES).
+   */
+  passwordProblem?: SshPasswordProblem;
   port: number | null;
   problem: SshJoinProblem | null;
   /** `done` means the script exited 0 and the hub has the machine online. */

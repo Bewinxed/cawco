@@ -14751,6 +14751,9 @@
                   },
                   "hubUrl": {
                     "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -38503,6 +38506,10 @@
               "string"
             ]
           },
+          "passwordProblem": {
+            "$ref": "#/components/schemas/SshPasswordProblem",
+            "description": "The password add's refusal, with `problem` null: the SshJoinProblem kind\n`password`, held back while an installable app reads `problem` closed (a\nbridge, hub scripts/wire-compat.ts BRIDGES)."
+          },
           "port": {
             "type": [
               "null",
@@ -38602,6 +38609,24 @@
                 "required": [
                   "kind"
                 ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "password"
+                    ]
+                  },
+                  "asked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "asked",
+                  "kind"
+                ]
               }
             ]
           },
@@ -38622,6 +38647,19 @@
           "port",
           "state",
           "target"
+        ]
+      },
+      "SshPasswordProblem": {
+        "description": "SshJoinProblem's `password` as the wire carries it, beside a null `problem`.",
+        "type": "object",
+        "properties": {
+          "asked": {
+            "description": "Whether the machine asked for a password at all: true, it refused this\none; false, it takes none over SSH, only a key.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "asked"
         ]
       },
       "BinaryUpdatePolicy": {

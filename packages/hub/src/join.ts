@@ -8,13 +8,25 @@
  * channel and ends in `cawco binary-install agent`; an SSH add is the same script started over `ssh` from here.
  * The hub API has no auth in front of it (anyone who reaches it can already
  * spawn a session), so this adds no trust boundary — but nothing the operator
- * types reaches a shell: the target is one argv entry for `ssh`, and the hub
- * address in the remote command is one this hub listed itself.
+ * types reaches a shell: the target is one argv entry for `ssh`, the hub
+ * address in the remote command is one this hub listed itself, and a
+ * password goes only to `ssh`'s askpass, on its stdin.
+ *
+ * A machine that does not trust the hub's key yet is added with its
+ * password: that one connection signs in with it, appends the hub's key to
+ * `~/.ssh/authorized_keys` as `ssh-copy-id` does, and runs the same install.
+ * The password is never in an argv, a file, a job's lines or the database.
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, hostname, networkInterfaces } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   INSTALL_JOINED,
   INSTALL_STEP_PREFIX,
@@ -31,7 +43,7 @@ import { generateInstallScript } from "@cawco/core/install-script";
 import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { Elysia, t } from "elysia";
-import { HUB_PORT } from "./config";
+import { DB_PATH, HUB_PORT } from "./config";
 import type { HubLifetimeShape } from "./lifetime";
 
 /** How long a short command gets to answer. Our choice. */
@@ -168,6 +180,73 @@ const TARGET = /^[^-\s][^\s]*$/;
 /** A remote shell's line ending, which a pty-less SSH session can still send. */
 const CARRIAGE_RETURN = /\r$/;
 
+/** A password `ssh` could not be handed on askpass's one line. */
+const LINE_BREAK = /[\r\n]/;
+
+/**
+ * The askpass program a password add runs `ssh` with. `ssh` runs it once
+ * per prompt and reads its stdout as the answer (ssh(1), SSH_ASKPASS); it
+ * shares `ssh`'s stdin, a pipe that holds the password's one line, so the
+ * first prompt is answered and a second one finds the pipe empty and gives
+ * up. `read -r` takes the line as it is and `printf '%s'` prints it as data,
+ * so no character of it is ever read as shell.
+ */
+const ASKPASS = `#!/bin/sh
+IFS= read -r password || exit 1
+printf '%s\\n' "$password"
+`;
+
+/** Where {@link ASKPASS} is written, beside the hub's database. */
+const ASKPASS_PATH = join(dirname(DB_PATH), "ssh-askpass");
+
+/** {@link ASKPASS} on disk, executable by this user alone, written only when it is not already as it should be. */
+const askpass = (): string => {
+  if (
+    !existsSync(ASKPASS_PATH) ||
+    readFileSync(ASKPASS_PATH, "utf8") !== ASKPASS
+  ) {
+    writeFileSync(ASKPASS_PATH, ASKPASS, { mode: 0o700 });
+  }
+  chmodSync(ASKPASS_PATH, 0o700);
+  return ASKPASS_PATH;
+};
+
+/**
+ * A public key line, and a comment that can stand inside the trust step's
+ * quotes: no quote, `$`, backtick, backslash or `!` for any login shell
+ * (sh, bash, zsh, fish, csh) to read.
+ */
+const PUBLIC_KEY = /^(\S+ [A-Za-z0-9+/]+=*)(?: (.*))?$/;
+const PLAIN_COMMENT = /^[\w@.:,+=/ -]*$/;
+
+/** The step the trust command names when it fails, as the install script names its own. */
+const TRUST_STEP = "Adding this hub's SSH key";
+
+/**
+ * What `ssh-copy-id` does on the machine, run ahead of the install by a
+ * password add: `~/.ssh` made 700 and `authorized_keys` 600 when they are
+ * missing (and left as they are when they exist), a final newline added to
+ * the file when it lacks one, and the key appended only when the file does
+ * not hold it already. It runs under `sh -c` whatever the account's login
+ * shell is, quoted so that every login shell hands it over as it is: one
+ * single-quoted word holding no quote or backslash (fish reads `\\` and
+ * `\'` inside single quotes). Its apostrophe is printf's `\047`, which no
+ * shell's single quotes touch. A key whose comment could not stand in that
+ * word is added without the comment; a comment is a label, never part of
+ * the key.
+ */
+const trustCommand = (key: string): string | null => {
+  const [, blob, comment] = PUBLIC_KEY.exec(key) ?? [];
+  if (!blob) {
+    return null;
+  }
+  const line =
+    comment && PLAIN_COMMENT.test(comment) ? `${blob} ${comment}` : blob;
+  const file = '"$HOME/.ssh/authorized_keys"';
+  const step = `${INSTALL_STEP_PREFIX}${TRUST_STEP}`.replace("'", "\\047");
+  return `sh -c 'umask 077 && mkdir -p "$HOME/.ssh" && touch ${file} && { [ -z "$(tail -c 1 ${file})" ] || echo >> ${file}; } && { grep -qF "${blob}" ${file} || echo "${line}" >> ${file}; } || { printf "${step}\\n" >&2; exit 1; }'`;
+};
+
 /** Everything the output says went wrong, most specific first. */
 const UNREACHABLE = [
   "Connection refused",
@@ -178,13 +257,36 @@ const UNREACHABLE = [
   "Network is unreachable",
 ];
 
+/**
+ * `ssh`'s last word when no way of signing in worked, with the ways the
+ * machine had left to offer: `user@host: Permission denied (publickey,password).`
+ */
+const DENIED = /Permission denied \(([^)]*)\)/;
+
+/** The ways of signing in a password answers. */
+const BY_PASSWORD = new Set(["password", "keyboard-interactive"]);
+
 const problemOf = (
   lines: readonly string[],
   exitCode: number,
-  machineId: string | null
+  machineId: string | null,
+  byPassword: boolean
 ): SshJoinProblem => {
   const text = lines.join("\n");
-  if (text.includes("Permission denied (publickey")) {
+  const steps = lines.filter((line) => line.startsWith(INSTALL_STEP_PREFIX));
+  // ssh's own 255 with nothing from the script: the session never started.
+  const unstarted = exitCode === 255 && steps.length === 0;
+  const denied = unstarted ? DENIED.exec(text) : null;
+  if (denied && byPassword) {
+    const offered = (denied[1] ?? "").split(",").filter(Boolean);
+    // A machine that offered ways and none of them a password never asked for it.
+    return {
+      kind: "password",
+      asked:
+        offered.length === 0 || offered.some((way) => BY_PASSWORD.has(way)),
+    };
+  }
+  if (denied?.[1]?.startsWith("publickey")) {
     return { kind: "key" };
   }
   if (
@@ -193,10 +295,8 @@ const problemOf = (
   ) {
     return { kind: "host-key" };
   }
-  const steps = lines.filter((line) => line.startsWith(INSTALL_STEP_PREFIX));
   const unreachable = UNREACHABLE.find((said) => text.includes(said));
-  // ssh's own 255 with nothing from the script: the session never started.
-  if (unreachable && exitCode === 255 && steps.length === 0) {
+  if (unreachable && unstarted) {
     return {
       kind: "unreachable",
       detail:
@@ -225,7 +325,10 @@ interface JoinDeps {
 export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
   const jobs = new Map<string, SshJoinJob>();
 
-  const settle = async (job: SshJoinJob): Promise<void> => {
+  const settle = async (
+    job: SshJoinJob,
+    byPassword: boolean
+  ): Promise<void> => {
     const { machineId, exitCode } = job;
     if (exitCode === 0 && machineId) {
       const deadline = Date.now() + REGISTER_GRACE_MS;
@@ -238,7 +341,16 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
         return;
       }
     }
-    job.problem = problemOf(job.lines, exitCode ?? -1, machineId);
+    const problem = problemOf(job.lines, exitCode ?? -1, machineId, byPassword);
+    // The `password` kind rides beside a null `problem` while an installable
+    // app reads `problem` closed: the bridge's one place (scripts/
+    // wire-compat.ts BRIDGES). Once the guard says no shipped reader needs
+    // it, this and `passwordProblem` go.
+    if (problem.kind === "password") {
+      job.passwordProblem = { asked: problem.asked };
+    } else {
+      job.problem = problem;
+    }
     job.state = "failed";
   };
 
@@ -272,7 +384,20 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
     }
   };
 
-  const start = (target: string, port: number | null, hubUrl: string) => {
+  /**
+   * One SSH add. With `trust` (the password, and the trust step for the
+   * hub's key) the connection signs in by password alone, through
+   * {@link ASKPASS} on `ssh`'s stdin, and adds the key before the install;
+   * without it, by key with no prompt at all (BatchMode). `-n` keeps that
+   * stdin from the remote command: `ssh` hands the session /dev/null.
+   */
+  const start = (
+    target: string,
+    port: number | null,
+    hubUrl: string,
+    trust: { password: string; command: string } | null
+  ) => {
+    const install = `curl -fsSL ${hubUrl}/install.sh | sh`;
     const job: SshJoinJob = {
       id: crypto.randomUUID(),
       target,
@@ -288,8 +413,17 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
     const child = Bun.spawn(
       [
         "ssh",
-        "-o",
-        "BatchMode=yes",
+        "-n",
+        ...(trust
+          ? [
+              "-o",
+              "PreferredAuthentications=password,keyboard-interactive",
+              "-o",
+              "PubkeyAuthentication=no",
+              "-o",
+              "NumberOfPasswordPrompts=1",
+            ]
+          : ["-o", "BatchMode=yes"]),
         "-o",
         "StrictHostKeyChecking=accept-new",
         "-o",
@@ -297,9 +431,22 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
         ...(port === null ? [] : ["-p", String(port)]),
         "--",
         target,
-        `curl -fsSL ${hubUrl}/install.sh | sh`,
+        trust ? `${trust.command} && ${install}` : install,
       ],
-      { stdin: "ignore", stdout: "pipe", stderr: "pipe" }
+      {
+        stdin: trust
+          ? new TextEncoder().encode(`${trust.password}\n`)
+          : "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: trust
+          ? {
+              ...process.env,
+              SSH_ASKPASS: askpass(),
+              SSH_ASKPASS_REQUIRE: "force",
+            }
+          : process.env,
+      }
     );
     detach(
       Promise.all([
@@ -309,7 +456,7 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
       ])
         .then(([, , code]) => {
           job.exitCode = code;
-          return settle(job);
+          return settle(job, trust !== null);
         })
         .finally(() => {
           lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
@@ -347,6 +494,7 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
           target: t.String(),
           port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
           hubUrl: t.String(),
+          password: t.Optional(t.String()),
         }),
       },
       async ({ body, status }) => {
@@ -357,6 +505,27 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
             "Enter the SSH target as user@host or a Host from ~/.ssh/config, with no spaces and no leading dash."
           );
         }
+        const password = body.password ?? "";
+        if (LINE_BREAK.test(password)) {
+          return status(
+            422,
+            "That password has a line break, which SSH cannot be handed. Check it, or add this hub's key to the machine yourself, then try again."
+          );
+        }
+        const key = password === "" ? null : sshPublicKey();
+        if (password !== "" && !key) {
+          return status(
+            422,
+            `This hub has no SSH key to add to the machine yet. Create one on ${hostname()} with ssh-keygen -t ed25519, then try again.`
+          );
+        }
+        const command = key === null ? null : trustCommand(key);
+        if (key !== null && command === null) {
+          return status(
+            422,
+            "This hub's SSH public key is not a key line ssh-copy-id would add. Check ~/.ssh on the hub's machine, then try again."
+          );
+        }
         const listed = await joinAddresses();
         if (!listed.some((address) => address.url === body.hubUrl)) {
           return status(
@@ -364,7 +533,12 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
             "That hub address is not one this hub listed. Pick one from the list."
           );
         }
-        return start(target, body.port ?? null, body.hubUrl);
+        return start(
+          target,
+          body.port ?? null,
+          body.hubUrl,
+          command === null ? null : { password, command }
+        );
       }
     )
     .get("/api/machines/ssh/:id", ({ params, status }) => {

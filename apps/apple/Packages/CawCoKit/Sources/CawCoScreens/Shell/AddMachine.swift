@@ -45,10 +45,11 @@ final class JoinState {
         }
     }
 
-    func start(_ hub: HubConnection, target: String, port: Int?, hubUrl: String) async {
+    /// Sent once and kept nowhere: `password`, when given, signs this one connection in to add the hub's key.
+    func start(_ hub: HubConnection, target: String, port: Int?, hubUrl: String, password: String?) async {
         refused = nil
         do {
-            let response = try await hub.api.machines.connectSSH(.init(body: .json(.init(target: target, port: port, hubUrl: hubUrl))))
+            let response = try await hub.api.machines.connectSSH(.init(body: .json(.init(target: target, port: port, hubUrl: hubUrl, password: password))))
             switch response {
             case let .ok(ok):
                 job = try ok.body.json
@@ -121,6 +122,8 @@ final class AddMachineController: KitDialogController {
     // The SSH form, kept across redraws so what was typed stays.
     private let target = KitField(placeholder: "user@host or SSH alias")
     private let port = KitField(placeholder: "22")
+    /// Sent with the one add it is typed for, then cleared.
+    private let password = KitField(placeholder: "")
     private var keyOpen = false
     private var starting = false
 
@@ -153,6 +156,11 @@ final class AddMachineController: KitDialogController {
         port.keyboardType = .numberPad
         port.accessibilityLabel = "Port"
         port.addAction(UIAction { [weak self] _ in self?.paintFooter() }, for: .editingChanged)
+        password.isSecureTextEntry = true
+        password.textContentType = .password
+        password.autocapitalizationType = .none
+        password.autocorrectionType = .no
+        password.accessibilityLabel = "Password (optional)"
         Task { @MainActor [weak self] in
             guard let self else { return }
             await join.refresh(hub)
@@ -181,7 +189,7 @@ final class AddMachineController: KitDialogController {
         _ = hub.fleet.machines
         infoAlert.label.text = join.infoError
         infoAlert.isHidden = join.infoError == nil
-        if join.job?.problem?.value1 != nil { keyOpen = true }
+        if join.job?.problem?.value1 != nil || join.job?.passwordProblem?.asked == false { keyOpen = true }
         render()
         // Once a second while the install is still going.
         if join.job?.state == .running, poller == nil {
@@ -279,7 +287,12 @@ final class AddMachineController: KitDialogController {
         portColumn.widthAnchor.constraint(equalToConstant: 96).isActive = true
         let first = UIStackView(arrangedSubviews: [field("SSH target", target), portColumn])
         first.spacing = Space.space3
-        let form = UIStackView(arrangedSubviews: [first, addressField()])
+        let passwordColumn = field("Password (optional)", password)
+        let passwordHint = KitLabel(TypeScale.typeMeta, ink: Palette.inkSubtle, lines: 0)
+        passwordHint.text = "Used once to add this hub's key to the machine, and not kept. Leave it empty if the machine already accepts the key."
+        passwordHint.wrap = .pretty
+        passwordColumn.addArrangedSubview(passwordHint)
+        let form = UIStackView(arrangedSubviews: [first, passwordColumn, addressField()])
         form.axis = .vertical
         form.spacing = Space.space4
         if let failure = failure() {
@@ -408,6 +421,15 @@ final class AddMachineController: KitDialogController {
         guard let job = join.job, job.state == .failed else { return nil }
         let host = job.target.split(separator: "@").last.map(String.init) ?? job.target
         let tail = Array(job.lines.suffix(20))
+        // The `password` kind, sent beside a null `problem` while a shipped
+        // app reads `problem` closed (core join.ts; hub scripts/wire-compat.ts).
+        if let refused = job.passwordProblem {
+            guard refused.asked else {
+                return ("\(job.target) does not take a password over SSH, only a key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry with the password left empty.", [])
+            }
+            let user = job.target.contains("@") ? job.target.split(separator: "@").dropLast().joined(separator: "@") : nil
+            return ("\(host) refused that password\(user.map { " for \($0)" } ?? ""). Nothing was installed. Check the password, then Retry.", [])
+        }
         guard let problem = job.problem else { return join.refused.map { ($0, []) } }
         if problem.value1 != nil {
             return ("\(job.target) refused this hub's SSH key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry.", [])
@@ -501,12 +523,14 @@ final class AddMachineController: KitDialogController {
         guard let port = portNumber, !starting else { return }
         let target = (self.target.text ?? "").trimmingCharacters(in: .whitespaces)
         guard !target.isEmpty, !hubUrl.isEmpty else { return }
+        let typed = password.text ?? ""
+        password.text = ""
         starting = true
         paintFooter()
         view.endEditing(true)
         Task { @MainActor [weak self, hub, hubUrl] in
             guard let self else { return }
-            await join.start(hub, target: target, port: port, hubUrl: hubUrl)
+            await join.start(hub, target: target, port: port, hubUrl: hubUrl, password: typed.isEmpty ? nil : typed)
             starting = false
             paintFooter()
         }

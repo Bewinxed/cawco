@@ -10,7 +10,7 @@
    * and ends in `cawco binary-install agent`, and the fleet is what says it worked.
    * Both end on the same view: the title, the joined row and Close.
    */
-  import type { SshJoinJob } from "@cawco/core";
+  import type { SshJoinJob, SshJoinProblem } from "@cawco/core";
   import { INSTALL_STEP_PREFIX, machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -55,6 +55,8 @@
   const tab = $derived(addMachine.way);
   let target = $state("");
   let port = $state("");
+  /** Sent with the one add it is typed for, then cleared: nothing here keeps it. */
+  let password = $state("");
   let hubUrl = $state("");
   let keyOpen = $state(false);
   let checkIn = $state<CheckIn | null>(null);
@@ -147,11 +149,14 @@
       return;
     }
     starting = true;
+    const typed = password;
+    password = "";
     try {
       await sshJoin.start({
         target: target.trim(),
         hubUrl,
         ...(portNumber === undefined ? {} : { port: portNumber }),
+        ...(typed === "" ? {} : { password: typed }),
       });
     } finally {
       starting = false;
@@ -193,6 +198,21 @@
   const hostOf = (value: string): string => value.split("@").at(-1) ?? value;
 
   /**
+   * What went wrong, with the `password` kind read from where the hub sends
+   * it while a shipped app reads `problem` closed: `passwordProblem`, beside
+   * a null `problem` (core join.ts; the bridge in hub scripts/wire-compat.ts).
+   */
+  const problemOf = (run: SshJoinJob): SshJoinProblem | null =>
+    run.problem ??
+    (run.passwordProblem
+      ? { kind: "password", asked: run.passwordProblem.asked }
+      : null);
+
+  /** Who the run signed in as, when its target names one: `bewinxed` in `bewinxed@box`. */
+  const userOf = (value: string): string | null =>
+    value.includes("@") ? value.slice(0, value.lastIndexOf("@")) : null;
+
+  /**
    * A failed run, said with the error formula: what happened, why, how to fix
    * it, what next. The key and the output ride along where they are the fix.
    */
@@ -201,7 +221,7 @@
       return null;
     }
     const where = job.target;
-    const { problem } = job;
+    const problem = problemOf(job);
     if (!problem) {
       return { text: sshJoin.refused ?? "", tail: [] as string[] };
     }
@@ -236,13 +256,29 @@
           text: `CawCo installed on ${where}, but the machine never came online on this hub. Its last output is below. Check that it can reach ${job.hubUrl}, then Retry.`,
           tail: job.lines.slice(-20),
         };
+      case "password": {
+        const user = userOf(where);
+        return problem.asked
+          ? {
+              text: `${hostOf(where)} refused that password${user ? ` for ${user}` : ""}. Nothing was installed. Check the password, then Retry.`,
+              tail: [],
+            }
+          : {
+              text: `${where} does not take a password over SSH, only a key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry with the password left empty.`,
+              tail: [],
+            };
+      }
       default:
         return null;
     }
   });
 
   $effect.pre(() => {
-    if (job?.problem?.kind === "key") {
+    const problem = job ? problemOf(job) : null;
+    if (
+      problem?.kind === "key" ||
+      (problem?.kind === "password" && !problem.asked)
+    ) {
       keyOpen = true;
     }
   });
@@ -402,6 +438,23 @@
                 placeholder="22"
                 bind:value={port}
               />
+            </div>
+            <div
+              data-slot="add-machine-dialog-field"
+              class="field col-span-full"
+            >
+              <Label for="join-password">Password (optional)</Label>
+              <Input
+                aria-describedby="join-password-hint"
+                autocomplete="current-password"
+                id="join-password"
+                type="password"
+                bind:value={password}
+              />
+              <span id="join-password-hint" class="hint">
+                Used once to add this hub's key to the machine, and not kept.
+                Leave it empty if the machine already accepts the key.
+              </span>
             </div>
           </div>
           {@render addressField("join-address-ssh")}

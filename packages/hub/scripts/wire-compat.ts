@@ -131,6 +131,13 @@ export const BRIDGES: Bridge[] = [
     until:
       "the `design-offer` ThreadEvent kind (core threads.ts), sent as `designOffer` beside a null `event` (hub caw.ts `wireEvent`, dashboard thread-tabs.ts `designOfferOf`) because shipped apps read `event` closed and would drop the note's thread read; it goes once no installable app does",
   },
+  {
+    property: "passwordProblem",
+    beside: "problem",
+    holds: "password",
+    until:
+      "the `password` SshJoinProblem kind (core join.ts), sent as `passwordProblem` beside a null `problem` (hub join.ts `settle`, dashboard AddMachineDialog.svelte and app AddMachine.swift read it) because shipped apps read `problem` closed and would lose the SSH add's poll; it goes once no installable app does",
+  },
 ];
 
 /**

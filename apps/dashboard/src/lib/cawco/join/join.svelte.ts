@@ -133,9 +133,8 @@ export const addMachine = {
 
 const ssh = $state<{
   job: SshJoinJob | null;
-  request: SshJoinRequest | null;
   refused: string | null;
-}>({ job: null, request: null, refused: null });
+}>({ job: null, refused: null });
 
 /**
  * The SSH add in flight, or the last one. Held here rather than in the dialog
@@ -146,15 +145,12 @@ export const sshJoin = {
   get job(): SshJoinJob | null {
     return ssh.job;
   },
-  get request(): SshJoinRequest | null {
-    return ssh.request;
-  },
   /** Why the hub refused to start one (a bad target, an unlisted address). */
   get refused(): string | null {
     return ssh.refused;
   },
+  /** Sent once and kept nowhere: the request carries the password, if one was typed. */
   async start(request: SshJoinRequest): Promise<void> {
-    ssh.request = request;
     ssh.refused = null;
     const response = await fetch("/api/machines/ssh", {
       method: "POST",
