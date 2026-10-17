@@ -264,7 +264,7 @@
 {:else}
   <div
     data-slot="block-page"
-    class="block-page"
+    class="flex min-w-0 flex-col gap-space-group"
     data-columns={columns}
     data-page={page}
   >
@@ -272,9 +272,10 @@
       data-slot="blocks"
       bind:this={grid}
       bind:clientWidth={gridWidth}
-      class="blocks"
+      class="grid grid-flow-row grid-cols-(--block-cols) items-start gap-space-group min-w-0"
       style:--block-fill={fill === null ? undefined : `${fill}px`}
       style:--columns={columns}
+      style:--block-cols="repeat(var(--columns), minmax(0, 1fr))"
       {@attach reflow()}
       {@attach watchDrops(
         () => ({ order: places.map((place) => place.block), page }),
@@ -304,9 +305,20 @@
       {/each}
     </div>
     {#if hidden.length > 0 || refused}
-      <div class="page-end">
+      <div
+        class="flex flex-wrap items-center justify-end gap-x-space-3 gap-y-space-2"
+      >
         {#if refused}
-          <p data-slot="refused" class="refused" role="status">{refused}</p>
+          <!-- literal: 1 1 18rem, 72ch -->
+          <p
+            data-slot="refused"
+            class="type-meta m-0 max-w-(--measure) flex-(--refused-flex) text-pretty text-status-fail-ink"
+            role="status"
+            style:--measure="72ch"
+            style:--refused-flex="1 1 18rem"
+          >
+            {refused}
+          </p>
         {/if}
         {#if hidden.length > 0}
           <DropdownMenu.Root>
@@ -341,43 +353,7 @@
 {/if}
 
 {#snippet newer()}
-  <p class="newer">Update CawCo to see this block.</p>
+  <p class="type-meta m-0 p-space-3 text-ink-muted">
+    Update CawCo to see this block.
+  </p>
 {/snippet}
-
-<style>
-  .block-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-group);
-    min-inline-size: 0;
-  }
-  .blocks {
-    display: grid;
-    grid-auto-flow: row;
-    grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
-    align-items: start;
-    gap: var(--space-group);
-    min-inline-size: 0;
-  }
-  .page-end {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-2) var(--space-3);
-  }
-  .refused {
-    flex: 1 1 18rem;
-    max-inline-size: 72ch;
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    text-wrap: pretty;
-  }
-  .newer {
-    margin: 0;
-    padding: var(--space-3);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>
