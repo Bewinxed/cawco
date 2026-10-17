@@ -108,8 +108,14 @@ const SKETCHES = [
   "Time the tray's open",
   "Read the chip row's issues",
 ];
+/** What the second account's fake login carries (its credentials' token), which the first's does not. */
+const SECOND_TOKEN = "fake-scratch-second";
+/** When the first account's limit resets, from its refusal: well past the walk. */
+const LIMIT_RESETS_IN = 5 * 60 * 60 * 1000;
 /** The words the scene's rule watches for, which only the "todo" session says. */
 const TODO_PHRASE = "TODO:";
+/** What the rule says back, which the TODO session then answers at length. */
+const RULE_REPLY = "Finish the TODO before you stop.";
 /** The fleet's memory, saved twice: the second keeps the first as a version. */
 const MEMORY_V1 = "# Fleet\n\nSay what changed and how it was proven.\n";
 const MEMORY_V2 =
@@ -227,10 +233,21 @@ type Step =
   | { tool: { input: object; name: string } }
   | {
       /**
+       * What the session says once a rule's reply (`reply`) is its newest
+       * message: the turn answering the rule.
+       */
+      answer?: { reply: string; slow?: number; words: string };
+      /**
        * Streamed a piece every `slow` ms (each word its own piece, as each
        * piece of `thinking` is): a turn still going while the walk reads it.
        */
       slow?: number;
+      /**
+       * Refused at its account's limit (scratch-fleet.ts `Reply.refuse`)
+       * unless the request's credential carries this: a session whose
+       * first account has run out and whose second has not.
+       */
+      refusedUnless?: string;
       /** Thought before the words, in pieces (scratch-fleet.ts `Reply.thinking`). */
       thinking?: string[];
       words: string;
@@ -244,7 +261,7 @@ const pieces = (words: string): string[] =>
 /** A slow reply's pace: a piece every 15 s, so a page shown it stands still between pieces (walk.ts `stand`). */
 const SLOW_MS = 15_000;
 /** What the live sessions say and think, long enough at {@link SLOW_MS} a piece to outlast the walk. */
-const LONG_NOTE = `${TODO_PHRASE} measure the tray's chip row at every width the dashboard is read at. At 390px the third chip is cut, and its count badge with it. The label takes its whole width because nothing lets it shrink, so a long branch name pushes everything after it out of the row. Letting the label shrink, clipping it with an ellipsis and keeping the badge whole fixes the phone. The tablet and the desk keep their widths. The next step is to measure the row again with a forty character branch name, then with two chips that both carry long names, and to say where each one clips and whether the badge stays readable at every width. After that the same check runs on the board's cards, which reuse the chip, and on the rail's rows, which show a smaller one. Each measurement is written down with its width, the branch name used and the pixel where the label clipped, so the next change to the chip can be checked against them.`;
+const LONG_NOTE = `The tray's chip row is measured at every width the dashboard is read at. At 390px the third chip is cut, and its count badge with it. The label takes its whole width because nothing lets it shrink, so a long branch name pushes everything after it out of the row. Letting the label shrink, clipping it with an ellipsis and keeping the badge whole fixes the phone. The tablet and the desk keep their widths. The next step is to measure the row again with a forty character branch name, then with two chips that both carry long names, and to say where each one clips and whether the badge stays readable at every width. After that the same check runs on the board's cards, which reuse the chip, and on the rail's rows, which show a smaller one. Each measurement is written down with its width, the branch name used and the pixel where the label clipped, so the next change to the chip can be checked against them.`;
 const LONG_THOUGHT = `The row is a flex row with no wrap. Each chip holds a label and a badge. The label has no minimum width of zero, so it never shrinks below its content. The badge comes after the label in source order. When the row is narrower than its chips, the last chip overflows the row. Clipping happens at the row's edge, so the last chip loses its badge first. The fix belongs on the label: let it shrink, clip it with an ellipsis, and leave the badge alone. Before writing it, the cards and the rail rows that reuse the chip need checking, because a change to the label's shrinking changes them too. The board's cards are wider, so they rarely clip. The rail's rows are narrower, and their chips already truncate, which suggests the rail styles the label differently. That difference is worth reading before the fix, so the fix is one rule and not two.`;
 
 /** The markdown a reply draws: one of each block the transcript renders. */
@@ -348,6 +365,8 @@ const plans = (repo: string): Record<string, Step[]> => ({
   todo: [
     {
       words: `The chip's label shrinks now. ${TODO_PHRASE} measure it on a phone.`,
+      // The rule's reply answered at length, still going while the walk reads it.
+      answer: { reply: RULE_REPLY, words: LONG_NOTE, slow: SLOW_MS },
     },
   ],
   think: [
@@ -359,7 +378,6 @@ const plans = (repo: string): Record<string, Step[]> => ({
       words: "The label gives way and the badge stays whole.",
     },
   ],
-  live: [{ words: LONG_NOTE, slow: SLOW_MS }],
   "live-think": [
     {
       thinking: pieces(LONG_THOUGHT),
@@ -368,6 +386,12 @@ const plans = (repo: string): Record<string, Step[]> => ({
     },
   ],
   compact: [{ words: "The chip notes are in order." }],
+  limit: [
+    {
+      words: "The badge fits; the count stays whole.",
+      refusedUnless: SECOND_TOKEN,
+    },
+  ],
   memory: [
     {
       tool: {
@@ -659,15 +683,32 @@ export const scriptedReply =
     const at = request.body.lastIndexOf(`PROBE-STEP:${marker[1]}`);
     const taken = (request.body.slice(at).match(/"tool_result"/g) ?? []).length;
     const step = plan[Math.min(taken, plan.length - 1)] as Step;
-    if ("words" in step) {
-      return {
-        everyMs: step.slow ?? 2,
-        words: step.slow ? pieces(step.words) : [step.words],
-        ...(step.thinking ? { thinking: step.thinking } : {}),
-      };
-    }
-    return { everyMs: 2, words: [], tool: step.tool };
+    return "words" in step
+      ? wordsReply(step, request)
+      : { everyMs: 2, words: [], tool: step.tool };
   };
+
+/** A words step as the mock says it: refused at the limit where it is, slow, or thinking first, as the step asks. */
+function wordsReply(
+  step: Extract<Step, { words: string }>,
+  request: Seen
+): Reply {
+  if (step.refusedUnless && !request.auth.includes(step.refusedUnless)) {
+    return {
+      everyMs: 2,
+      words: [],
+      refuse: { resetsAt: request.at + LIMIT_RESETS_IN },
+    };
+  }
+  if (step.answer && request.last.includes(step.answer.reply)) {
+    return wordsReply(step.answer, request);
+  }
+  return {
+    everyMs: step.slow ?? 2,
+    words: step.slow ? pieces(step.words) : [step.words],
+    ...(step.thinking ? { thinking: step.thinking } : {}),
+  };
+}
 
 /** A permission the hub holds, as `/api/pending` lists it. */
 interface PendingAsk {
@@ -881,12 +922,10 @@ export async function seedScene(
     answered,
     "Ask me what the hang card's states are called. PROBE-STEP:named"
   );
-  // A rule sent the moment its phrase streams, once per session, and a
-  // session that says it: its reply is the session's next message (a rule's
-  // row). The live session says it too, still talking as the walk reads it,
-  // so the rule waits on its answer there (the rules page's count: a fired
-  // rule waits until the session's next turn ends). Its phrase is in no
-  // other session's words.
+  // A rule that answers every turn ending on its phrase, and waits on the
+  // session's answer (only a repeating rule waits: hub db `noteRuleFire`).
+  // Its phrase is in no session's words but the TODO session's (started
+  // last of all, below).
   const rule = await send("/api/rules", "POST", {
     name: "Finish the TODO",
     enabled: true,
@@ -894,14 +933,12 @@ export async function seedScene(
     pattern: TODO_PHRASE,
     caseSensitive: true,
     wholeWord: false,
-    repeat: false,
-    reply: "Finish the TODO before you stop.",
+    repeat: true,
+    reply: RULE_REPLY,
     scope: {},
-    timing: "immediate",
+    timing: "turn",
     watch: "text",
   });
-  const todo = await fleet.spawn("claude", "Leave the TODO", fleet.repo);
-  await fleet.send(todo, "Say what is left on the chip. PROBE-STEP:todo");
   // A session that reads the fleet's memory through CawCo's tool, and one
   // that runs a skill on the machine: each tool's own card.
   const memoryRead = await fleet.spawn(
@@ -1165,28 +1202,6 @@ export async function seedScene(
       180_000
     );
   }
-  // The TODO session's rule fired, its reply read as the session's next
-  // message, and the turn that answered it at rest (the rule armed again:
-  // hub rules.ts `rearmRules`, a pending rule lasts until the session's next
-  // turn ends).
-  await until(
-    "the TODO session's answer to its rule's reply, at rest",
-    async () => {
-      const { blocks } = await fleet.api<{ blocks: { type: string }[] }>(
-        `/api/instances/${todo}/transcript`
-      );
-      const reply = blocks.findIndex((block) => block.type === "user.rule");
-      const row = await fleet.instance(todo);
-      return (
-        reply !== -1 &&
-        blocks.slice(reply + 1).some((block) => block.type === "assistant") &&
-        row?.status === "running" &&
-        row.turn_open_at === null
-      );
-    },
-    Boolean,
-    180_000
-  );
   // Compacted, as a person's /compact compacts it: Claude Code summarises the
   // conversation and the transcript keeps the boundary.
   await fleet.send(compact, "/compact");
@@ -1455,6 +1470,22 @@ export async function seedScene(
     cwd: launchPlace,
   });
 
+  // The first account's limit reached, last of its work: a session refused
+  // there (hub at-limit.ts), held with nowhere else to go until the second
+  // account signs in and takes it (rebalance.ts: what adding an account set
+  // moving, the Caw panel's notice; its transcript's line).
+  const limited = await fleet.spawn("claude", "Fit the badge", fleet.repo);
+  await fleet.send(limited, "Make the badge fit. PROBE-STEP:limit");
+  await until(
+    "the limited session held at its account's limit",
+    () =>
+      fleet.query<{ instance_id: string }>(
+        "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
+        limited
+      )[0],
+    Boolean,
+    120_000
+  );
   // A second Claude account, signed in on the machine with a fake login of
   // its own (scratch-fleet.ts `furnish`'s shape), filed after every session
   // has started so each runs on the first: two signed in is what the spawn
@@ -1471,7 +1502,7 @@ export async function seedScene(
     join(secondDir, ".credentials.json"),
     JSON.stringify({
       claudeAiOauth: {
-        accessToken: "sk-ant-oat01-fake-scratch-second",
+        accessToken: `sk-ant-oat01-${SECOND_TOKEN}`,
         refreshToken: "sk-ant-ort01-fake-scratch-second",
         expiresAt: now + 365 * DAY,
         scopes: ["user:inference", "user:profile"],
@@ -1506,27 +1537,52 @@ export async function seedScene(
     (state) => state === "signed-in",
     180_000
   );
-
-  // The TODO session moved by hand onto the second account, as its row's
-  // account menu moves it: the hub's line in its transcript, and its row's
-  // account dot (two Claude accounts, it on the second).
-  await send(`/api/instances/${todo}/account`, "POST", {
-    accountId: SECOND_ACCOUNT,
-  });
+  // The held session carried to the second account and answered there, and
+  // the notice its carry wrote.
   await until(
-    "the TODO session on the second account",
+    "the limited session on the second account, at rest",
     () =>
-      fleet.query<{ account_id: string | null }>(
-        "SELECT account_id FROM instances WHERE id = ?",
-        todo
-      )[0]?.account_id,
-    (account) => account === SECOND_ACCOUNT,
+      fleet.query<{ account_id: string | null; turn_open_at: number | null }>(
+        "SELECT account_id, turn_open_at FROM instances WHERE id = ?",
+        limited
+      )[0],
+    (row) => row?.account_id === SECOND_ACCOUNT && row.turn_open_at === null,
     180_000
   );
   await until(
-    "the moved TODO session at rest",
-    () => fleet.instance(todo),
-    (row) => row?.status === "running" && row.turn_open_at === null,
+    "the second account's rebalance noticed",
+    () => fleet.api<{ rebalances?: unknown[] }>("/api/accounts"),
+    (view) => (view.rebalances?.length ?? 0) > 0,
+    60_000
+  );
+  // Two accounts made in Configure and signed in nowhere yet: a spare
+  // Claude login (its sign-in on a machine pastes a code) and a GitHub
+  // Copilot one (its sign-in shows a device code), each a machine's Sign in.
+  const spare = await send("/api/accounts", "POST", {
+    provider: "anthropic",
+    kind: "subscription",
+    label: "Spare",
+  });
+  const copilot = await send("/api/accounts", "POST", {
+    provider: "github-copilot",
+    kind: "oauth",
+    label: "Copilot",
+  });
+
+  // The thinking session moved by hand onto the second account, as its
+  // row's account menu moves it: the hub's line in its transcript, and its
+  // row's account dot (two Claude accounts, it on the second).
+  await send(`/api/instances/${think}/account`, "POST", {
+    accountId: SECOND_ACCOUNT,
+  });
+  await until(
+    "the thinking session on the second account, at rest",
+    () =>
+      fleet.query<{ account_id: string | null; turn_open_at: number | null }>(
+        "SELECT account_id, turn_open_at FROM instances WHERE id = ?",
+        think
+      )[0],
+    (row) => row?.account_id === SECOND_ACCOUNT && row.turn_open_at === null,
     180_000
   );
   // The delegate done and its report heard: the parent's turns at rest.
@@ -1673,40 +1729,46 @@ export async function seedScene(
   if (unoffered.length > 0) {
     throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
   }
-  // Last of all, two turns still going while the walk reads them: one
-  // writing its reply (the live row), one still thinking (the thinking
-  // row, live), a piece every SLOW_MS for longer than the walk lasts.
-  const live = await fleet.spawn("claude", "Write the tray note", fleet.repo);
-  await fleet.send(live, "Write the tray's note. PROBE-STEP:live");
+  // Last of all, two turns still going while the walk reads them, a piece
+  // every SLOW_MS for longer than the walk lasts. The TODO session's turn
+  // ends on the rule's phrase, so the rule answers it, and its answer to
+  // that is the long one: the rule's row, the live row, and the rule
+  // waiting on the answer (a fired rule waits until the session's next turn
+  // ends: hub rules.ts `rearmRules`). The other is still thinking (the
+  // thinking row, live).
+  const todo = await fleet.spawn("claude", "Leave the TODO", fleet.repo);
+  await fleet.send(todo, "Say what is left on the chip. PROBE-STEP:todo");
   const liveThink = await fleet.spawn(
     "claude",
     "Think through the chip row",
     fleet.repo
   );
   await fleet.send(liveThink, "Think the chip row through. PROBE-STEP:live-think");
-  for (const [what, id] of [
-    ["the live session's turn open", live],
-    ["the thinking live session's turn open", liveThink],
-  ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one session at a time
-    await until(
-      what,
-      () => fleet.instance(id),
-      (row) => row?.status === "running" && row.turn_open_at !== null,
-      120_000
-    );
-  }
-  // Its note's first words carry the rule's phrase: the rule fired on it,
-  // waiting for a turn that will not end while the walk reads it.
   await until(
-    "the rule waiting on the live session's answer",
-    () =>
-      fleet.query<{ status: string }>(
+    "the rule waiting on the TODO session's answer, its reply in the transcript",
+    async () => {
+      const [state] = fleet.query<{ status: string }>(
         "SELECT status FROM rule_state WHERE rule_id = ? AND instance_id = ?",
         rule.id,
-        live
-      )[0]?.status,
-    (status) => status === "pending",
+        todo
+      );
+      const { blocks } = await fleet.api<{ blocks: { type: string }[] }>(
+        `/api/instances/${todo}/transcript`
+      );
+      const row = await fleet.instance(todo);
+      return (
+        state?.status === "pending" &&
+        blocks.some((block) => block.type === "user.rule") &&
+        row?.turn_open_at !== null
+      );
+    },
+    Boolean,
+    120_000
+  );
+  await until(
+    "the thinking live session's turn open",
+    () => fleet.instance(liveThink),
+    (row) => row?.status === "running" && row.turn_open_at !== null,
     120_000
   );
   kit.note(
@@ -1734,11 +1796,13 @@ export async function seedScene(
     account: ACCOUNT,
     second: SECOND_ACCOUNT,
     rule: rule.id,
+    limited,
+    spare: spare.id,
+    copilot: copilot.id,
     todo,
     memoryRead,
     think,
     compact,
-    live,
     liveThink,
     skillRun,
     hook: HOOK_ID,

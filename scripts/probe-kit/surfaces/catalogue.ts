@@ -196,6 +196,8 @@ const REASONING = /^Reasoning/;
 const PLAN_RING = /^Plan, /;
 /** An API-key provider the scratch machine's OpenCode runs (the providers list's). */
 const KEY_PROVIDER = "302.AI";
+/** An account's Sign in on a machine (AccountMachines' "Sign in <account> on <machine>"). */
+const SIGN_IN_ON = /^Sign in .+ on /;
 /** A new account's setup, its API-key provider chosen, on to signing in (AccountSetup). */
 const toKeyStep = async (page: Page) => {
   await page.getByRole("textbox", { name: "Search providers" }).fill(KEY_PROVIDER);
@@ -453,6 +455,22 @@ const EDITORS: Record<string, State[]> = {
       root: "body",
     },
     {
+      // A Claude account signed in nowhere: its Sign in on the machine, the
+      // link to open and the code to paste.
+      name: "sign-in",
+      route: (s) => `/config/accounts/${s.spare}`,
+      act: press(SIGN_IN_ON),
+      root: "body",
+    },
+    {
+      // A GitHub Copilot account signed in nowhere: its Sign in on the
+      // machine, the device code's start.
+      name: "device-sign-in",
+      route: (s) => `/config/accounts/${s.copilot}`,
+      act: press(SIGN_IN_ON),
+      root: "body",
+    },
+    {
       name: "routing",
       route: () => "/config/accounts/anthropic/routing",
       root: "body",
@@ -612,8 +630,8 @@ export const SURFACES: Surface[] = [
     states: [
       { name: "rest", root: "body" },
       // Turns still going as the walk reads them (scene.ts `SLOW_MS`), read
-      // early: one writing its reply, one still thinking.
-      { name: "live", route: (s) => `/session/${s.live}`, root: MAIN },
+      // early: one answering a rule's reply (its row above), one still thinking.
+      { name: "live", route: (s) => `/session/${s.todo}`, root: MAIN },
       {
         name: "live-thinking",
         route: (s) => `/session/${s.liveThink}`,
@@ -727,12 +745,6 @@ export const SURFACES: Surface[] = [
         act: press(DELEGATE_CARD),
         root: MAIN,
         hostOnly: true,
-      },
-      {
-        // A rule's reply in the transcript (the rule fired on its TODO).
-        name: "rule",
-        route: (s) => `/session/${s.todo}`,
-        root: MAIN,
       },
       {
         // CawCo's fleet-memory read, its card opened: the memory it read.
