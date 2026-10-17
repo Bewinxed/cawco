@@ -103,7 +103,7 @@
       >
         <div
           data-slot="clip"
-          class="flex min-h-0 min-w-0 flex-auto overflow-hidden"
+          class="flex min-h-0 min-w-0 flex-auto overflow-hidden rounded-inherit"
         >
           <PaneLeaf {leaf} swipeable={focused} />
         </div>
@@ -171,10 +171,5 @@
     [data-lifted] [data-slot="lift"]::before {
       transition: none;
     }
-  }
-  /* residual: unmapped — the clip takes the lift's tweening radius:
-     no utility says border-radius: inherit. */
-  [data-slot="clip"] {
-    border-radius: inherit;
   }
 </style>

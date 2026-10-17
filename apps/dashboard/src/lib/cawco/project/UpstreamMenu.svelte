@@ -48,7 +48,7 @@
     <IconShield />
     <span>{UPSTREAM_WORDS.title}</span>
   </DropdownMenu.SubTrigger>
-  <DropdownMenu.SubContent class="w-72">
+  <DropdownMenu.SubContent width="wide">
     <DropdownMenu.RadioGroup onValueChange={choose} {value}>
       <!-- The fleet's answer under it, in meta ink: the row reads as
            "Same as the fleet", never as a second copy of the one below. -->

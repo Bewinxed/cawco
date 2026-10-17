@@ -365,7 +365,8 @@
     <Resizable.Handle
       data-side-divider={open || !open || undefined}
       data-hidden={!open || undefined}
-      class="z-2 bg-border-hairline transition-[background-color] dur-control ease-out group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:after:w-(--divider-hit) group-data-split-expanded/split:after:transform-none hover:bg-border-control data-active:bg-ink-muted data-hidden:hidden"
+      class="z-2 group-data-split-expanded/split:not-direction-vertical:after:left-space-1 group-data-split-expanded/split:not-direction-vertical:after:w-(--divider-hit) group-data-split-expanded/split:after:transform-none data-hidden:hidden"
+      look="split"
       onDraggingChange={(dragging) => {
         resizing = dragging;
         if (dragging) {

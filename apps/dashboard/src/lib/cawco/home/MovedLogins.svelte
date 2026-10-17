@@ -116,7 +116,8 @@
           data-toggle
           aria-controls="moved-done"
           aria-expanded={open}
-          class="me-(--hang) aria-expanded:bg-transparent hover:aria-expanded:bg-surface-hover"
+          class="me-(--hang)"
+          expanded="unfilled"
           onclick={() => {
             open = !open;
           }}
@@ -154,7 +155,7 @@
         <!-- literal: 0 -->
         <div
           data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 group-data-open:blur-(--fold-clear) group-data-open:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:dur-panel"
+          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:dur-panel"
           style:--fold-clear="0"
         >
           <ul data-slot="list" class="m-0 flex list-none flex-col p-0">

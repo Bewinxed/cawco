@@ -232,7 +232,7 @@
           class="mark-line flex items-center gap-(--busy-gap) text-ink-strong"
           style:--busy-gap="6px"
         >
-          <Spinner class="size-space-4 shrink-0 text-ink-muted" />
+          <Spinner class="size-space-4 shrink-0" tone="muted" />
           <span>{line.text}</span>
         </div>
       {:else}
@@ -326,7 +326,7 @@
                panel. It interpolates with the shut blur as blur(0) would. -->
           <div
             data-slot="fold-inner"
-            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
           >
             <div
               class="flex flex-col gap-space-1 pt-(--fold-air)"
@@ -371,7 +371,7 @@
             <Button
               data-settings
               class={[
-                "min-w-0 shrink",
+                "shrink",
                 notes !== null && "ms-(--settings-hang) me-auto",
                 notes === null && "last:me-(--settings-hang)",
               ]}
@@ -380,6 +380,7 @@
               size="sm"
               style="--settings-hang: calc(-1 * (1px + 11px));"
               variant="link"
+              width="shrink"
             />
           {/if}
           {#if notes}
@@ -399,7 +400,9 @@
               aria-expanded={open}
               onclick={toggle}
               class="last:-me-space-3"
+              expanded="unfilled-at-rest"
               size="sm"
+              toggle="last"
               style="--end: calc(var(--space-3) - 1px - 16px * 4.25 / 24); --toggle-start: calc(11px + 8px - var(--end));"
               variant="ghost"
             >
@@ -416,8 +419,8 @@
           {#if notice.action}
             {@const action = notice.action}
             <Button
-              class="-me-px"
               label={ACTS[action]}
+              margin="hairline-overlap"
               onclick={() => act(action)}
               size="sm"
             />
@@ -449,21 +452,5 @@
      (its paths are the icon's). */
   [data-slot="actions"] :global([data-chev] path) {
     vector-effect: non-scaling-stroke;
-  }
-  /* residual: unmapped — two rules over the kit Button's own recipe, which
-     a utility passed in `class` cannot outrank: its sm padding is
-     `px-[11px]` with `has-data-[icon=inline-end]:pr-2` (a later variant),
-     and its ghost fill is `aria-expanded:bg-…`. Show changes, when last,
-     moves its end padding to its start (--toggle-start, --end); open, it
-     says so in its words and its flipped chevron, not in the ghost's
-     expanded fill (a fill standing while the notes are open would be its
-     ink, its edge hung past the trailing edge); under the pointer it takes
-     the hover fill as ever. */
-  [data-slot="actions"] > :global([data-toggle]:last-child) {
-    padding-inline: var(--toggle-start) var(--end);
-  }
-  [data-slot="actions"]
-    > :global([data-toggle][aria-expanded="true"]:not(:hover)) {
-    background-color: transparent;
   }
 </style>

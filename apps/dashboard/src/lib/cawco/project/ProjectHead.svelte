@@ -376,7 +376,7 @@
             aria-label="Project name"
             autocomplete="off"
             autofocus
-            class="focus-inset -mx-space-1 block w-full max-w-full cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out read-only:text-ink-muted"
+            class="focus-inset -mx-space-1 block w-full max-w-full cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-[background-color] dur-control ease-out read-only:text-ink-muted"
             onblur={() => {
               // Left after a refusal, it stays as typed, the reason under
               // it; Enter or Try again sends it.
@@ -402,7 +402,7 @@
         {:else}
           <button
             data-slot="name"
-            class="press-tint -mx-space-1 block max-w-full cursor-text rounded-xs border border-transparent bg-transparent px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+            class="press-tint -mx-space-1 block max-w-full cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename"
             type="button"
@@ -442,7 +442,7 @@
                unfold under the head. -->
           <button
             aria-expanded={details !== null}
-            class="mark-line -mx-space-1 flex min-w-0 cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
+            class="mark-line -mx-space-1 flex min-w-0 cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
             data-box
             data-place-line
             onclick={() => {
@@ -465,7 +465,7 @@
           </button>
           {#if checkouts > 1}
             <button
-              class="flex-none cursor-pointer rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+              class="flex-none cursor-pointer rounded-xs border-none border-current bg-transparent p-0 font-inherit text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button
@@ -479,7 +479,7 @@
   </div>
   <div
     data-slot="acts"
-    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 max-[900px]:shrink max-[900px]:grow max-[900px]:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
+    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 phone:max-[900px]:shrink phone:max-[900px]:grow phone:max-[900px]:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
   >
     {#if !primary}
       <!-- No checkout yet: a session needs a machine and folder, which the
@@ -507,8 +507,8 @@
              the views bar's "+" it opens upward from the foot. -->
         <Popover.Content
           align="end"
-          class="w-80"
           collisionPadding={8}
+          width="wide"
           customAnchor={spawnAnchor}
           side={spawnAnchor ? "top" : "bottom"}
           sideOffset={spawnAnchor ? 8 : 4}
@@ -525,8 +525,8 @@
               First prompt (optional)
               <Input
                 autocomplete="off"
-                class="text-label"
                 placeholder="What should this session do?"
+                text="label"
                 spellcheck="false"
                 bind:value={spawnPrompt}
               />
@@ -592,7 +592,7 @@
            doesn't hand it back to `⋯` as it closes. -->
       <DropdownMenu.Content
         align="end"
-        class="w-52"
+        width="regular"
         onCloseAutoFocus={(event) => {
           if (forgetHost.at === forgetAt) {
             event.preventDefault();
@@ -693,7 +693,7 @@
 <!-- Caw's settings, off `⋯`: the project's own, beside its other settings. -->
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
-    <Drawer.Content class="pb-(--safe-bottom)">
+    <Drawer.Content pad="safe-bottom">
       <Drawer.Title class="sr-only">Caw, lead of {project.name}</Drawer.Title>
       <CawPanel {lead} projectId={project.id} projectName={project.name} />
     </Drawer.Content>
@@ -703,7 +703,8 @@
     <Popover.Content
       align="end"
       aria-label="Caw, lead of {project.name}"
-      class="w-(--settings-w) p-space-2 max-[900px]:w-(--settings-w-narrow)"
+      class="w-(--settings-w) max-[900px]:w-(--settings-w-narrow)"
+      pad="inset"
       style="--settings-w: min(var(--c-panel-w), calc(100vw - 24px)); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))"
       collisionPadding={12}
       customAnchor={more}
@@ -736,12 +737,5 @@
   :global(.head-forget) {
     --ask-indent: var(--space-7);
     --fault-indent: var(--space-7);
-  }
-  /* residual: unmapped */
-  /* The name, the place and the places line take the type they stand in. */
-  [data-slot="name"],
-  [data-place-line],
-  [data-places-line] {
-    font: inherit;
   }
 </style>

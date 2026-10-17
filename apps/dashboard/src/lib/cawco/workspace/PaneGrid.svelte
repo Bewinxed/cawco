@@ -201,9 +201,7 @@
         <!-- The divider is a hairline that thickens only under a pointer that
              is actually going to grab it — structure at rest, an affordance
              on approach. -->
-        <Resizable.Handle
-          class="bg-border-hairline hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:dur-control motion-safe:ease-out motion-reduce:transition-none"
-        />
+        <Resizable.Handle look="grid" />
       {/if}
       <!-- paneforge sizes a pane with flex-basis and leaves its INSIDE to the
            consumer, so without this the group inside collapses to the height

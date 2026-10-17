@@ -465,7 +465,11 @@
            A pane off screen that has not drawn its first picture yet
            (dock.svelte.ts `settling`) is laid out but not painted, so its
            transcript measures its rows and draws before its tab is chosen;
-           once drawn it is skipped (`content-visibility`, below). So is the
+           once drawn it is skipped (`content-visibility: hidden`: it keeps
+           its DOM, its scroll and its rows, still streaming, but the
+           browser skips its style, layout and paint; `visibility: hidden`
+           left every hidden transcript in each restyle and reflow of the
+           group, which is what a tab switch paid for). So is the
            pane whose tab the reader is reaching for (warm.svelte.ts), so the
            switch that shows it only paints. Only the hidden state is
            declared, as on the surfaces (see `.groups.hidden-surface` in
@@ -476,7 +480,7 @@
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
         data-slot="pane"
-        class="absolute inset-0 flex group-data-swipe/stack:not-data-pane-hidden:not-data-pane-settling:will-change-transform group-data-swipe/stack:delta--1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-settling:invisible"
+        class="absolute inset-0 flex group-data-swipe/stack:not-data-pane-hidden:not-data-pane-settling:will-change-transform group-data-swipe/stack:delta--1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-hidden:content-visibility-hidden data-pane-settling:invisible"
         data-delta={delta}
         data-pane={paneId}
         inert={shown && !isActive}
@@ -560,14 +564,3 @@
     </div>
   {/if}
 </section>
-
-<style>
-  /* residual: unmapped — no utility says content-visibility. A pane off
-     screen keeps its DOM, its scroll and its rows — it is still streaming —
-     but the browser skips its style, layout and paint entirely.
-     `visibility: hidden` left every hidden transcript in each restyle and
-     reflow of the group, which is what a tab switch paid for. */
-  [data-pane-hidden] {
-    content-visibility: hidden;
-  }
-</style>

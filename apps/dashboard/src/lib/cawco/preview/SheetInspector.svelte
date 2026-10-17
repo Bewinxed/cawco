@@ -241,8 +241,9 @@
       <div class="flex items-center gap-space-2">
         <label class="sr-only" for={`${id}-story`}>Story</label>
         <NativeSelect
-          class="flex-1 min-w-0"
+          class="flex-1"
           id={`${id}-story`}
+          measure="shrink"
           onchange={(event) =>
             inspector.choose((event.currentTarget as HTMLSelectElement).value)}
           size="sm"

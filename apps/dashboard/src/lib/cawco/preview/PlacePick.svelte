@@ -84,8 +84,9 @@
     <Select.Root type="single" bind:value={machineId}>
       <Select.Trigger
         aria-labelledby="place-machine-label"
-        class="w-full text-ink-strong"
+        class="w-full"
         size="sm"
+        tone="strong"
       >
         {machine ? `${machine.hostname} · ${machine.os}` : "No machines online"}
       </Select.Trigger>
@@ -107,7 +108,7 @@
     <label class="text-label text-ink-muted" for="place-folder">Folder</label>
     <Input
       autocomplete="off"
-      class="font-mono"
+      face="mono"
       id="place-folder"
       oninput={() => {
         problem = null;

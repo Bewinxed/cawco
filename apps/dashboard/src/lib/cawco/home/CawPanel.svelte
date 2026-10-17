@@ -241,9 +241,10 @@
             data-clear
             aria-label="Clear all {noticeCount} notices"
             data-box
-            class="ms-auto me-(--clear-hang) my-(--clear-pull) self-center text-ink-muted hover:text-ink-strong"
+            class="ms-auto me-(--clear-hang) my-(--clear-pull) self-center"
             onclick={clearAll}
             size="xs"
+            tone="quiet"
             style="--clear-pull: -4px; --clear-hang: calc(-1 * (1px + 8px + 0.07em));"
             variant="ghost">Clear all</Button
           >

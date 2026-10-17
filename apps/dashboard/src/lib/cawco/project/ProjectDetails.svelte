@@ -340,9 +340,11 @@
                         ? "The hub"
                         : hostWords(each.machineId)}</span
                     >
+                    <!-- The path reads from its end: the folder's tail
+                         stays when it is cut. -->
                     <span
                       data-slot="path"
-                      class="type-meta truncate text-start text-ink-muted"
+                      class="dir-rtl type-meta truncate text-start text-ink-muted"
                       title={each.path}><bdi>{each.path}</bdi></span
                     >
                   </div>
@@ -434,9 +436,10 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="h-(--field-h) text-label"
+              class="h-(--field-h)"
               placeholder="/absolute/path on that machine"
               spellcheck="false"
+              text="label"
               bind:value={addPath}
             />
             <div class="col-span-full flex justify-end gap-space-2">
@@ -623,11 +626,6 @@
 </section>
 
 <style>
-  /* residual: unmapped */
-  /* The path reads from its end: the folder's tail stays when it is cut. */
-  [data-slot="path"] {
-    direction: rtl;
-  }
   /* residual: foreign-dom */
   [data-slot="value"] :global([data-slot="lead-switch"]) {
     font: var(--type-label);

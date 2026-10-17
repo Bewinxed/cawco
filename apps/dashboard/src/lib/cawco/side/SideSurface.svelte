@@ -122,8 +122,9 @@
         >
       {/if}
       {#if subtitle}
-        <span data-slot="subtitle" class="truncate text-ink-muted"
-          >{subtitle}</span
+        <span
+          data-slot="subtitle"
+          class="truncate font-mono-meta text-ink-muted">{subtitle}</span
         >
       {/if}
     </div>
@@ -164,7 +165,7 @@
          edge at night). -->
     <div
       data-slot="side-well"
-      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 in-[.preview-pane]:transition-[outline-color] in-[.preview-pane]:dur-control in-[.preview-pane]:ease-in-out motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
+      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
       bind:this={well}
     >
       {@render children()}
@@ -222,10 +223,5 @@
     [data-slot="side-head"] :global(:is(button, a):not([role="tab"]):hover) {
       background: var(--surface-hover);
     }
-  }
-  /* residual: unmapped — the font shorthand also sets line-height: normal
-     and weight normal; no utility says line-height: normal. */
-  [data-slot="subtitle"] {
-    font: var(--text-meta) var(--font-mono);
   }
 </style>

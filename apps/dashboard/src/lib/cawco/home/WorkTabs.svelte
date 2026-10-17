@@ -777,7 +777,7 @@
         data-work-tabs
         boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
           .foldBoxes}
-        class="bg-transparent p-0"
+        fill="none"
         onValueChange={(id: string) => choose(id as WorkTab)}
         value={workTab.current}
         values={TAB_IDS}
@@ -871,7 +871,7 @@
         out:crossOut
       >
         {#each WAITING_ROWS as row (row)}
-          <Skeleton class="h-11 w-full" />
+          <Skeleton class="w-full" height="tabs" />
         {/each}
       </div>
     {:else}

@@ -373,6 +373,7 @@
   data-peek={peeks || undefined}
   data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
   data-stale={held || undefined}
+  style:--peek-glyph="var(--c-peek-glyph)"
   style:--peek-ink={"calc((24px - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
   style:--peek-room="calc(24px - var(--peek-ink) + var(--space-2))"
   style:--row-cols="auto minmax(0, 1fr) auto"
@@ -386,7 +387,7 @@
     <a
       data-slot="cover"
       aria-label="Open {item.title}"
-      class="press-tint focus-inset absolute inset-0"
+      class="press-tint focus-inset absolute inset-0 rounded-inherit"
       {href}
       onclick={onchoose}
       {onkeydown}><span class="sr-only">Open {item.title}</span></a
@@ -495,7 +496,7 @@
   {/if}
   <span
     data-slot="want"
-    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block"
+    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo"
     >{want}</span
   >
   {#if item.kind === "ask" && item.request.presentation.command}
@@ -710,7 +711,7 @@
       <Button
         data-deny
         aria-label="Deny {item.ask} on {item.title}"
-        class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+        answer="deny"
         disabled={held || (answering && pressed !== "deny")}
         failed={answerRefused !== null && pressed === "deny"}
         icon={IconClose}
@@ -725,7 +726,7 @@
       <Button
         data-approve
         aria-label="Approve {item.ask} on {item.title}"
-        class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+        answer="approve"
         disabled={held || (answering && pressed !== "allow")}
         failed={answerRefused !== null && pressed === "allow"}
         icon={IconTick}
@@ -755,7 +756,7 @@
         />
       {/if}
       <Button
-        class="border-transparent"
+        edge="none"
         disabled={stale || choosing === true}
         failed={choiceRefusal !== null}
         label={UPSTREAM_WORDS.keepOff}
@@ -766,7 +767,7 @@
         variant="secondary"
       />
       <Button
-        class="border-transparent"
+        edge="none"
         disabled={stale || choosing === false}
         label={UPSTREAM_WORDS.allow}
         onclick={() => choose(true)}
@@ -791,7 +792,7 @@
       <Button
         data-deny
         aria-label="Deny {who}"
-        class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+        answer="deny"
         disabled={held || admitting === true}
         icon={IconClose}
         label="Deny"
@@ -804,7 +805,7 @@
       <Button
         data-approve
         aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
-        class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+        answer="approve"
         disabled={held || admitting === false}
         icon={IconTick}
         label={item.kind === "pairing" ? "Approve" : "Admit"}
@@ -827,7 +828,7 @@
         <Button
           data-deny
           aria-label="Deny {item.action.tool} on {item.action.connection}"
-          class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+          answer="deny"
           disabled={held || deciding}
           onclick={() => decide("deny")}
           {onkeydown}
@@ -840,7 +841,7 @@
         <Button
           data-approve
           aria-label="Approve {item.action.tool} on {item.action.connection}"
-          class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+          answer="approve"
           disabled={held || deciding}
           onclick={() => decide("approve")}
           {onkeydown}
@@ -878,28 +879,5 @@
       inset-inline-start: var(--peek-hit-start);
       inset-inline-end: var(--peek-hit-end);
     }
-  }
-  /* residual: unmapped — the peek's glyph is a custom property that
-     switches under a finger (the house's touch size, `icon-lg`), and
-     --peek-ink and --peek-room follow it; the cover takes the row's radius
-     (`inherit`); and the clamp's standard property, which a choice's risk
-     drops: read whole, never cut. */
-  [data-slot="row"] {
-    --peek-glyph: var(--icon-md);
-  }
-  @media (pointer: coarse) {
-    [data-slot="row"] {
-      --peek-glyph: var(--icon-lg);
-    }
-  }
-  [data-slot="cover"] {
-    border-radius: inherit;
-  }
-  [data-slot="want"] {
-    line-clamp: 2;
-  }
-  [data-slot="row"][data-kind="choice"] > [data-slot="want"] {
-    -webkit-line-clamp: unset;
-    line-clamp: none;
   }
 </style>

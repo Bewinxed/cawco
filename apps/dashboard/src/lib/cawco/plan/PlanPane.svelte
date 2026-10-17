@@ -252,7 +252,8 @@
       {#if projectId}
         <Button
           data-more
-          class="self-start px-(--more-px)"
+          class="self-start"
+          pad="more"
           href="/project/{encodeURIComponent(
             projectId
           )}?view=canvas&task={encodeURIComponent(plan.taskId)}"

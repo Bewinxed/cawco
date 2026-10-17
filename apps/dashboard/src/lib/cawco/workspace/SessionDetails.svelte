@@ -579,7 +579,7 @@
 
 <div
   data-slot="session-details"
-  class="ns-theme flex min-h-0 w-full min-w-0 flex-col text-size-body font-normal text-ink-strong"
+  class="ns-theme flex max-h-inherit min-h-0 w-full min-w-0 flex-col text-size-body font-normal text-ink-strong"
   bind:this={rootEl}
   style:--dir={dir}
 >
@@ -889,11 +889,6 @@
 </div>
 
 <style>
-  /* residual: unmapped — no utility says max-height: inherit (the card's
-     cap, from the popover it stands in). */
-  [data-slot="session-details"] {
-    max-height: inherit;
-  }
   /* residual: foreign-dom — svg the icon components draw; the settings'
      chips, which NsPopover's trigger (the model chip, by its
      `triggerClass`), ToolChips and AccountSwitch render: the card's width
