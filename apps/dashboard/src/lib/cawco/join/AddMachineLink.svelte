@@ -12,7 +12,7 @@
 <!-- literal: 3px -->
 <button
   aria-haspopup="dialog"
-  class="inline cursor-pointer rounded-xs border-0 bg-transparent p-0 text-link-ink underline decoration-transparent underline-offset-(--offset) transition-[text-decoration-color] dur-control ease-out hover:decoration-current focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+  class="inline cursor-pointer rounded-xs border-none border-current bg-transparent p-0 text-link-ink underline decoration-transparent underline-offset-(--offset) transition-[text-decoration-color] dur-control ease-out hover:decoration-current focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-2"
   onclick={() => addMachine.show()}
   style:--offset="3px"
   type="button"

@@ -72,6 +72,14 @@ contract: apps/dashboard/src/lib/cawco/motion/Rail.svelte:218 shadcn/no-inline-s
 - routines/RunStatus.svelte: the glyph colour per status is `group-status-*/time:` on the Glyph and Spinner.
 - ViewRoutines.svelte's `.ledger th.col-when` also reached RoutineDetail's heads (inside `.ledger`); the hook above preserves that for integration to retarget.
 
+## Delta R
+
+R2 fixed: apps/dashboard/src/lib/cawco/join/AddMachineLink.svelte:15
+R2 fixed: apps/dashboard/src/lib/cawco/motion/Rail.svelte:207
+R3: no site (the two `font-mono` uses are on `<code>`: updates/ChannelCards.svelte:127, updates/UpdateTable.svelte:113; Lightbox's `.path` mono family sits in the foreign-dom PhotoSwipe residual)
+R1: no site (every box-shadow here is one static utility; no state mixes a residual with a utility)
+The `border-0` on the band rows (routines/ActionsTable.svelte:90, routines/RoutineDetail.svelte:182) is the source's own `border-0` class on `Table.Row`, a width alone, so it stays.
+
 ## shadcn/no-restyle hits (file:line component class)
 
 apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:90 TableRow border-0
