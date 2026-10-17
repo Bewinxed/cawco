@@ -49,7 +49,8 @@ const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",
 };
-const LOG_HEAD = /^.*\] /;
+/** A compact `log stream` line's head, up to the app's own `[dev.cawco.app:<category>]`: never past it, a message may hold "] " too. */
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** A pairing code (RFC 8628 §6.1's base-20 alphabet). */
 const CODE = /[B-Z]{3}-[B-Z]{3}/;
 const WAITING = /pairing stage waiting ([B-Z]{3}-[B-Z]{3})/;
@@ -439,20 +440,46 @@ async function run(kit: Kit): Promise<void> {
       registered?.[1]?.trim() === "ok" && pushDevice !== undefined,
       `${registered?.[0] ?? "no register line"}; ${pushDevice ? "device kept" : "no push device"}`
     );
+    // A device of the probe's own beside the app's, its key known here: the
+    // hub keeps every device's key sealed at rest (db seal-at-rest.ts), so
+    // only a key the probe made opens what the hub sealed.
+    const probeKey = crypto.getRandomValues(new Uint8Array(32));
+    const probeDevice = crypto.randomUUID();
+    const probeRegistered = await ask(
+      "/api/push/register",
+      json(
+        {
+          pairingId: probeDevice,
+          secret: Buffer.from(
+            crypto.getRandomValues(new Uint8Array(32))
+          ).toString("base64url"),
+          key: Buffer.from(probeKey).toString("base64"),
+          name: "Probe phone",
+          platform: "ios",
+        },
+        owner
+      )
+    );
     const pushed = await startPairing("cli", "probe push");
     const pushId = `pairing-${pushed.userCode}`;
-    const sent = await until(
-      "the pairing push",
-      () => captured.find((one) => one.collapseId === pushId),
-      Boolean,
-      30_000
-    ).catch(() => undefined);
-    const sealed = sent?.payload.e
+    const pushTo = (pairingId: string | undefined) =>
+      until(
+        "the pairing push",
+        () =>
+          captured.find(
+            (one) => one.collapseId === pushId && one.pairingId === pairingId
+          ),
+        Boolean,
+        30_000
+      ).catch(() => undefined);
+    const sent = await pushTo(pushDevice?.pairing_id);
+    const probeSent = await pushTo(probeDevice);
+    const sealed = probeSent?.payload.e
       ? await (async () => {
-          const raw = Buffer.from(sent.payload.e ?? "", "base64");
+          const raw = Buffer.from(probeSent.payload.e ?? "", "base64");
           const key = await crypto.subtle.importKey(
             "raw",
-            Buffer.from(pushDevice?.key ?? "", "base64"),
+            probeKey,
             "AES-GCM",
             false,
             ["decrypt"]
@@ -470,8 +497,10 @@ async function run(kit: Kit): Promise<void> {
       : undefined;
     const words = pairingWords.asks(pushed.userCode);
     check(
-      "(g) the hub pushes a waiting pairing: CAWCO_PAIRING, collapse id pairing-<code>, the card's sentence shown and sealed",
-      sent?.payload.aps.category === "CAWCO_PAIRING" &&
+      "(g) the hub pushes a waiting pairing to every device: CAWCO_PAIRING, collapse id pairing-<code>, the card's sentence shown and sealed",
+      probeRegistered.status === 200 &&
+        probeSent !== undefined &&
+        sent?.payload.aps.category === "CAWCO_PAIRING" &&
         sent.payload.cawco.kind === "pairing" &&
         sent.payload.cawco.userCode === pushed.userCode &&
         sent.payload.aps.alert?.title === "probe push" &&
@@ -539,7 +568,8 @@ xcrun simctl push ${udid} ${BUNDLE} "${file}" >/dev/null`);
       check(
         "(h) the push's Approve, run through the delegate's handling of a response, approves that pairing",
         shown !== null &&
-          shown[2] === "APPROVE|DENY" &&
+          // The category's actions by their titles, as PushProbe lists them.
+          shown[2] === "Approve|Deny" &&
           actedOn !== null &&
           polled.status === "approved",
         `${shown?.[0] ?? "not delivered"}; ${actedOn?.[0] ?? "no answer"}; its client polls ${polled.status}`
