@@ -173,24 +173,26 @@
   });
 </script>
 
-<span class={["morph-text", wrap && "wrap"]} bind:this={host}
-  >{#if morphing}<span class="letters" aria-hidden="true" {@attach letters}
-    ></span><span class="said">{text}</span>{:else}{text}{/if}</span
+<!-- literal: -100vw (how far a rolling digit's clip reaches past its slot) -->
+<span class="data-wrap:block" data-wrap={wrap || undefined} bind:this={host}
+  >{#if morphing}<span
+      class="relative inline-block overflow-x-clip whitespace-nowrap"
+      aria-hidden="true"
+      data-slot="letters"
+      style:--roll-bleed="-100vw"
+      {@attach letters}></span
+    ><span
+      class="absolute -m-px size-px overflow-hidden whitespace-pre select-none"
+      data-slot="said">{text}</span
+    >{:else}{text}{/if}</span
 >
 
 <style>
-  .wrap {
-    display: block;
-  }
   /* The letters' box: one line broken only at "\n", the morph holding its
      size. Nothing it draws reaches past the box on the inline axis; clip
      (unlike hidden) keeps its text baseline. */
-  .letters {
-    display: inline-block;
-    position: relative;
-    overflow-x: clip;
-    white-space: nowrap;
-
+  /* residual: foreign-dom */
+  [data-slot="letters"] {
     > :global(:not(br)) {
       display: inline-block;
       white-space: pre;
@@ -198,7 +200,7 @@
     /* A digit rolls in a slot that clips it on the block axis only, so a
        glyph's overhang is not shaved. */
     > :global([data-roll]) {
-      clip-path: inset(0 -100vw);
+      clip-path: inset(0 var(--roll-bleed));
     }
     > :global([data-roll] > span) {
       display: inline-block;
@@ -208,14 +210,8 @@
      aria-hidden. Clipped rather than display: none, which would take it out
      of the accessibility tree too; not selectable, or a copy pastes it
      twice. */
-  .said {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    overflow: hidden;
+  /* residual: unmapped */
+  [data-slot="said"] {
     clip-path: inset(50%);
-    white-space: pre;
-    user-select: none;
   }
 </style>

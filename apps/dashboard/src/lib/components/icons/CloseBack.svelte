@@ -15,56 +15,55 @@
   }: { back?: boolean } & SVGAttributes<SVGSVGElement> = $props();
 </script>
 
+<!-- literal: 12px, 15px, 9px (the stroke's centre on the 24px grid, and its slide for the chevron) -->
 <svg
   aria-hidden="true"
-  class="close-back"
   data-back={back}
   fill="none"
   height="1.2em"
+  style:--mid="12px"
+  style:--down="15px"
+  style:--up="9px"
   viewBox="0 0 24 24"
   width="1.2em"
   xmlns="http://www.w3.org/2000/svg"
   {...rest}
 >
   <!-- Each stroke runs ±8.485 (the X's half diagonal, 6√2) along its own axis. -->
-  <line data-slot="a" class="a" x1="-8.485" x2="8.485" y1="0" y2="0" />
-  <line class="b" x1="-8.485" x2="8.485" y1="0" y2="0" />
+  <line
+    data-slot="a"
+    class="stroke-current origin-top-left translate-x-(--mid) translate-y-(--mid) rotate-45 back-true:translate-y-(--down) motion-safe:transition-[translate,stroke-dasharray,stroke-dashoffset] motion-safe:dur-morph motion-safe:ease-drawer"
+    data-back={back}
+    x1="-8.485"
+    x2="8.485"
+    y1="0"
+    y2="0"
+  />
+  <line
+    class="stroke-current origin-top-left translate-x-(--mid) translate-y-(--mid) rotate-135 back-true:translate-y-(--up) motion-safe:transition-[translate,stroke-dasharray,stroke-dashoffset] motion-safe:dur-morph motion-safe:ease-drawer"
+    data-back={back}
+    x1="-8.485"
+    x2="8.485"
+    y1="0"
+    y2="0"
+  />
 </svg>
 
 <style>
+  /* residual: svg-paint */
   line {
-    stroke: currentColor;
     stroke-width: 1.5;
     stroke-linecap: round;
     stroke-dasharray: 16.97 40;
     stroke-dashoffset: 0;
-    transform-box: view-box;
-    transform-origin: 0 0;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    line {
-      transition:
-        transform var(--dur-morph) var(--ease-drawer),
-        stroke-dasharray var(--dur-morph) var(--ease-drawer),
-        stroke-dashoffset var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  /* X: (6,6)–(18,18) and (18,6)–(6,18). */
-  .a {
-    transform: translate(12px, 12px) rotate(45deg);
-  }
-  .b {
-    transform: translate(12px, 12px) rotate(135deg);
   }
   /* ‹: (9,12)–(15,18) and (15,6)–(9,12), the middle half of each stroke. */
-  [data-back="true"] line {
+  line[data-back="true"] {
     stroke-dasharray: 8.485 40;
     stroke-dashoffset: -4.243;
   }
-  [data-back="true"] .a {
-    transform: translate(12px, 15px) rotate(45deg);
-  }
-  [data-back="true"] .b {
-    transform: translate(12px, 9px) rotate(135deg);
+  /* residual: unmapped */
+  line {
+    transform-box: view-box;
   }
 </style>

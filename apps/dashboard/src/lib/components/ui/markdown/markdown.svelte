@@ -246,7 +246,7 @@
      animation is switched off below, so mounting with spans replays nothing;
      the chunk fade above is the only motion text has. A message that mounts
      settled renders static: plain text nodes, the same layout. -->
-<div data-slot="md" class="md" bind:this={host}>
+<div data-slot="md" class="contents" bind:this={host}>
   <Streamdown
     animation={{
       enabled: tokens,
@@ -292,9 +292,8 @@
 </div>
 
 <style>
-  .md {
-    display: contents;
-
+  /* residual: foreign-dom */
+  [data-slot="md"] {
     /* Streamdown writes its token and block animation inline; the chunk fade
        in the script is the only motion streamed text has. */
     & :global([style*="sd-"]) {

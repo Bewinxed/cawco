@@ -81,40 +81,59 @@
 </script>
 
 {#if status !== "pending"}
+  <!-- literal: 15px (the icon column), 16px (the icon box) -->
   <div
-    class="step {className}"
+    class="flex min-w-0 gap-space-2 text-size-body font-normal leading-body size-compact:text-size-meta {className}"
     data-size={size?.() ?? "default"}
     data-slot="thinking-step"
     data-status={status}
     {@attach restOffscreen}
   >
-    <div aria-hidden="true" class="icon-column">
-      <span class="icon"
+    <div
+      aria-hidden="true"
+      class="flex shrink-0 grow-0 basis-(--icon-col) flex-col items-center"
+      style:--icon-col="15px"
+    >
+      <span
+        class="grid h-lh min-h-(--icon-box) w-icon-md place-items-center status-ahead:text-ink-subtle"
+        data-status={status}
+        style:--icon-box="16px"
         >{#key glyph}
-          <span data-slot="glyph" class="glyph" in:glyphFade out:glyphFade
+          <span
+            data-slot="glyph"
+            class="col-start-1 row-start-1 grid place-items-center"
+            in:glyphFade
+            out:glyphFade
             >{#if glyph}
               {@const Glyph = glyph}
-              <Glyph />
+              <Glyph class="size-icon-md" />
             {:else}
-              <span data-slot="dot" class="dot"></span>
+              <span
+                data-slot="dot"
+                class="size-space-1 bg-current"
+              ></span>
             {/if}</span
           >
         {/key}</span
       >
       {#if !isLast}
-        <span class="connector" in:draw></span>
+        <span class="w-px flex-1 bg-border-hairline" in:draw></span>
       {/if}
     </div>
-    <div class="copy" class:enters={entering}>
+    <div
+      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2"
+      data-enters={entering || undefined}
+    >
       {#if label}
         <span
           data-slot="thinking-step-label"
-          class="label"
-          class:shimmer={status === "active"}>{label}</span
+          class="font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:data-shimmer:text-transparent"
+          data-shimmer={status === "active" || undefined}
+          data-status={status}>{label}</span
         >
       {/if}
       {#if description && markdown}
-        <div data-slot="md" class="description md">
+        <div data-slot="md" class="wrap-anywhere whitespace-normal">
           <Markdown
             {fades}
             source={description}
@@ -122,7 +141,9 @@
           />
         </div>
       {:else if description}
-        <span class="description" class:shimmer={!label && status === "active"}
+        <span
+          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent"
+          data-shimmer={(!label && status === "active") || undefined}
           >{description}</span
         >
       {/if}
@@ -132,126 +153,12 @@
 {/if}
 
 <style>
-  .step {
-    display: flex;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-
-    &[data-size="compact"] {
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-    }
-  }
-  .icon-column {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex: 0 0 15px;
-  }
-  .icon {
-    display: grid;
-    place-items: center;
-    inline-size: 16px;
-    block-size: 1lh;
-    min-block-size: 16px;
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-  }
-  /* One cell, so an outgoing glyph and its replacement overlap. */
-  .glyph {
-    grid-area: 1 / 1;
-    display: grid;
-    place-items: center;
-  }
-  .dot {
-    inline-size: var(--space-1);
-    block-size: var(--space-1);
+  /* residual: unmapped */
+  [data-slot="dot"] {
     border-radius: 50%;
-    background: currentColor;
-  }
-  .connector {
-    inline-size: 1px;
-    flex: 1;
-    background: var(--border-hairline);
-  }
-  .copy {
-    min-inline-size: 0;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-block-end: var(--space-2);
-  }
-  .label {
-    color: var(--ink-strong);
-    font-weight: var(--weight-body);
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  /* A step still to come: its dot and words in the muted ink. */
-  .step[data-status="ahead"] .label {
-    color: var(--ink-muted);
-  }
-  .step[data-status="ahead"] .icon {
-    color: var(--ink-subtle);
-  }
-  .description {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-
-    /* Markdown keeps the plain description's type: prose-sm restates its own
-       size and colour on streamdown's root, so they are handed back here, and
-       block margins collapse so a step is exactly as tall as its text. */
-    &.md {
-      white-space: normal;
-
-      & :global(.prose) {
-        font-size: inherit;
-        line-height: inherit;
-        color: inherit;
-      }
-      & :global(p),
-      & :global(ul),
-      & :global(ol) {
-        margin-block: 0;
-      }
-      /* Every block takes the gap above it and the first gives it back:
-         `* + *` restyled the whole step per block streamed in. */
-      & :global(.prose > *) {
-        margin-block: var(--space-1) 0;
-      }
-      & :global(.prose > :first-child) {
-        margin-block-start: 0;
-      }
-      & :global(ul),
-      & :global(ol) {
-        padding-inline-start: var(--space-5);
-      }
-      & :global(strong) {
-        color: var(--ink-strong);
-      }
-      /* prose wraps inline code in literal backticks; the code face already
-         marks it. */
-      & :global(code::before),
-      & :global(code::after) {
-        content: none;
-      }
-      & :global(code) {
-        font-family: var(--font-mono);
-      }
-    }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .copy.enters {
-      animation: step-in var(--dur-menu) var(--ease-out) backwards;
-    }
-    .shimmer {
-      color: transparent;
+    [data-shimmer] {
       background: linear-gradient(
         90deg,
         var(--ink-muted) 0% 35%,
@@ -260,6 +167,54 @@
       );
       background-size: 300% 100%;
       background-clip: text;
+    }
+  }
+  /* residual: foreign-dom */
+  /* Markdown keeps the plain description's type: prose-sm restates its own
+     size and colour on streamdown's root, so they are handed back here, and
+     block margins collapse so a step is exactly as tall as its text. */
+  [data-slot="md"] {
+    & :global(.prose) {
+      font-size: inherit;
+      line-height: inherit;
+      color: inherit;
+    }
+    & :global(p),
+    & :global(ul),
+    & :global(ol) {
+      margin-block: 0;
+    }
+    /* Every block takes the gap above it and the first gives it back:
+       `* + *` restyled the whole step per block streamed in. */
+    & :global(.prose > *) {
+      margin-block: var(--space-1) 0;
+    }
+    & :global(.prose > :first-child) {
+      margin-block-start: 0;
+    }
+    & :global(ul),
+    & :global(ol) {
+      padding-inline-start: var(--space-5);
+    }
+    & :global(strong) {
+      color: var(--ink-strong);
+    }
+    /* prose wraps inline code in literal backticks; the code face already
+       marks it. */
+    & :global(code::before),
+    & :global(code::after) {
+      content: none;
+    }
+    & :global(code) {
+      font-family: var(--font-mono);
+    }
+  }
+  /* residual: keyframes */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-enters] {
+      animation: step-in var(--dur-menu) var(--ease-out) backwards;
+    }
+    [data-shimmer] {
       animation: shimmer var(--breath) var(--ease-in-out) infinite;
     }
   }
