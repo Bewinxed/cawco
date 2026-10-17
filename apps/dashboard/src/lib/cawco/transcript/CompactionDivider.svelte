@@ -200,10 +200,13 @@
        and the chevron's 12px mark a --space-1 gap after it. The chevron
        takes no room in the layout, in or out: as it comes in the centre
        makes room by moving, never by resizing; pressed, the centre gives
-       and the line holds. -->
+       and the line holds; it moves on two clocks, the chevron's and the
+       press's. -->
   <span
     style:--mid-x="calc(var(--chev) * var(--room) * -1)"
-    class="mid whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
+    style:--mid-durs="var(--chev-dur), var(--dur-toggle)"
+    style:--mid-eases="var(--chev-ease), var(--ease-out)"
+    class="whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:transition-[translate,scale] motion-safe:duration-(--mid-durs) motion-safe:ease-(--mid-eases) motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
     ><!-- Caw's slot: his still's box, its middle on the word's x-height; as
           wide as Caw at work while it runs, closing to his mark's box as it
           ends, on the line's clock. --><span
@@ -254,15 +257,20 @@
     ><!-- A zero-width box on the word's line, `middle` setting its mark on
           the word's x-height; the mark hangs out of it after the gap,
           sliding out from the word's edge as it comes in, and points down
-          while the brief is open. --><!-- literal: 4px --><span
+          while the brief is open. The mark sharpens as it comes in, and
+          turns on the spot (on-screen movement, not an entrance): the
+          chevron's clock, and the turn's. --><!-- literal: 4px --><span
       data-slot="chev"
       style:--chev-x="calc(var(--chev) * var(--space-1))"
       style:--chev-scale="calc(0.25 + 0.75 * var(--chev))"
       style:--chev-blur="calc((1 - var(--chev)) * 4px)"
+      style:--chev-filter="blur(var(--chev-blur))"
+      style:--chev-durs={"var(--chev-dur), var(--chev-dur), var(--chev-dur), var(--dur-toggle)"}
+      style:--chev-eases={"var(--chev-ease), var(--chev-ease), var(--chev-ease), var(--ease-in-out)"}
       class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
         aria-hidden="true"
-        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) group-aria-expanded/divider:rotate-90"
+        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) filter-(--chev-filter) group-aria-expanded/divider:rotate-90 motion-safe:transition-[translate,scale,filter,rotate] motion-safe:duration-(--chev-durs) motion-safe:ease-(--chev-eases)"
       /></span
     ></span
   >
@@ -282,10 +290,14 @@
   {#if failed}
     <!-- The transcript's failure line, on the rail: what happened on the
          line, why and the way on hung at the text column (SystemLine). No
-         line, no Caw — he is never in an error — and nothing centred. -->
+         line, no Caw — he is never in an error — and nothing centred. Its
+         rail is a 2px band of the failure ink down its start edge. -->
+    <!-- literal: 2px 100% -->
     <span
       style:--fail-pad="calc(var(--x-glyph) - var(--x-rail))"
-      class="fail block ms-(--x-rail) ps-(--fail-pad) text-size-label font-medium leading-body"
+      style:--fail-rail={"linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"}
+      style:--fail-rail-size="2px 100%"
+      class="block ms-(--x-rail) ps-(--fail-pad) text-size-label font-medium leading-body bg-(image:--fail-rail) bg-left-top bg-size-(--fail-rail-size) bg-no-repeat"
       in:fade={{ duration: dur("--dur-fade") }}
     >
       <span class="rail-line"
@@ -364,7 +376,8 @@
   /* While the word turns from "Compacting…" to "Compacted" its box takes the
      new word's width at once and the letters leaving fade past its end.
      Clipped across, never up or down, the word is its box throughout. Each
-     arm draws back from the centre as the chevron comes in. */
+     arm draws back from the centre as the chevron comes in. clip-path has
+     no utility. */
   [data-settling] .word {
     clip-path: var(--word-clip);
   }
@@ -373,31 +386,6 @@
 
     &.start {
       clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
-    }
-  }
-  /* The failure line's rail. */
-  .fail {
-    background: linear-gradient(var(--status-fail-ink), var(--status-fail-ink))
-      left top / 2px 100% no-repeat;
-  }
-  /* The chevron's mark sharpens as it comes in. */
-  [data-slot="chev"] :global(svg) {
-    filter: blur(var(--chev-blur));
-  }
-  /* Two clocks per element: the chevron's, and the press's or the turn's. */
-  @media (prefers-reduced-motion: no-preference) {
-    .mid {
-      transition:
-        translate var(--chev-dur) var(--chev-ease),
-        scale var(--dur-toggle) var(--ease-out);
-    }
-    /* The mark turns on the spot: on-screen movement, not an entrance. */
-    [data-slot="chev"] :global(svg) {
-      transition:
-        translate var(--chev-dur) var(--chev-ease),
-        scale var(--chev-dur) var(--chev-ease),
-        filter var(--chev-dur) var(--chev-ease),
-        rotate var(--dur-toggle) var(--ease-in-out);
     }
   }
   /* residual: svg-paint: how much of the path the arm shows, along the

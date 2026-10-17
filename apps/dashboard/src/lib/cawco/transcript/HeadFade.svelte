@@ -37,34 +37,31 @@
   <!-- Each layer clear while nothing is under it: at rest, and whenever the
        transcript does not scroll (its timeline is inactive). -->
   {#each PROGRESSIVE_BLUR as layer, k (k)}
+    <!-- The layer's blur and its slice (progressive-blur.ts). -->
     <div
       data-slot="layer"
-      class="absolute inset-0 opacity-0"
+      class="absolute inset-0 opacity-0 backdrop-filter-(--layer-blur) mask-(--layer-mask)"
       style:--layer-blur={layerBlur(layer)}
       style:--layer-mask={layerMask(layer)}
     ></div>
   {/each}
-  <!-- The chosen tab's sheet, over the blur, on the ramp. -->
+  <!-- The chosen tab's sheet, over the blur, on the ramp. It sets no blur,
+       so it draws none. -->
   <div
     data-slot="layer"
-    class="absolute inset-0 opacity-0 bg-tab-sheet"
+    class="absolute inset-0 opacity-0 bg-tab-sheet backdrop-filter-(--layer-blur) mask-(--layer-mask)"
     style:--layer-mask="var(--head-tint-ramp)"
   ></div>
 </div>
 
 <style>
+  /* residual: keyframes — the animation, then its scroll timeline and range
+     (animation longhands of the same animation), after the shorthand that
+     resets them, in the same rule */
   [data-slot="layer"] {
-    /* residual: keyframes */
     animation: head-fade linear both;
-    /* residual: unmapped — the scroll timeline and its range, after the
-       shorthand that resets them, in the same rule */
     animation-timeline: --transcript-head;
     animation-range: 0 var(--c-head-fade);
-    /* The layer's blur and its slice (progressive-blur.ts); the tint's ramp.
-       The tint sets no blur, so it draws none. */
-    -webkit-backdrop-filter: var(--layer-blur);
-    backdrop-filter: var(--layer-blur);
-    mask-image: var(--layer-mask);
   }
   /* residual: keyframes */
   @keyframes head-fade {

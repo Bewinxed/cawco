@@ -3388,7 +3388,7 @@
 <p
   aria-atomic="true"
   aria-live="polite"
-  class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
+  class="sr-only border-none border-current"
   role="status"
 >
   {announcement}
@@ -3396,7 +3396,7 @@
 <p
   aria-atomic="true"
   aria-live="assertive"
-  class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
+  class="sr-only border-none border-current"
 >
   {blockedNote || trayAlert}
 </p>
@@ -3746,10 +3746,6 @@
   [data-slot="tr"] {
     overflow-anchor: none;
     scroll-timeline: --transcript-head block;
-  }
-  /* The live region is read, never seen: clipped to nothing. */
-  .spoken {
-    clip-path: inset(50%);
   }
   /* `end`, which the theme's justify-end / items-end write as flex-end. */
   [data-slot="dock"] {

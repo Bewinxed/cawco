@@ -688,11 +688,17 @@
      waiting when there are several ("2 of 3"): they come one at a time.
      The title, the body and the foot come up with the shape one after the
      other, by opacity and translate alone, and sink back together as it
-     folds (`.part`; its transition stays in the style block). -->
+     folds, each a stagger after the one before (`--part`); the delay
+     outranks the shorthand, which resets it. No filter: a blur
+     transitioning on a part hung WebKit's web process for good as the card
+     came up (Playwright WebKit 2359 at an iPhone's size, the owner's iPhone
+     Safari: "stop responding and it didn't even show"; with the blur
+     snapped instead of transitioned, or none, it never hung). -->
 {#snippet title(text: string)}
   <h2
-    class="part mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+    class="mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
     style:--part="0"
+    style:--part-delay="calc(var(--part) * var(--dur-stagger))"
   >
     <!-- What asks, in the title's ink. Solar draws the question-circle's
          disc at 20/24 of its box, so the box is --icon-lg for the disc
@@ -766,9 +772,10 @@
          past the card. -->
     <div
       data-slot="body"
-      class="group/body part kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
       style:--part="1"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <!-- The live question's rail, on its lede's inline edge. -->
       {#if rail}
@@ -935,8 +942,9 @@
          fine, 44 coarse. -->
     <div
       data-slot="foot"
-      class="part flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       style:--part="2"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <div class="flex gap-space-2">
         <!-- literal: 12px, 2.75rem -->
@@ -974,8 +982,9 @@
          iOS and Telegram; secrets in the fields are already hidden. -->
     <div
       data-slot="body"
-      class="part relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       style:--part="1"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <!-- What will happen, in the title's weight: the line the grant is
            made on. -->
@@ -1076,8 +1085,9 @@
     </div>
     <div
       data-slot="foot"
-      class="part flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
       style:--part="2"
+      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
       <!-- JOURNEY §Triage: the full row width sits between grant and
            refusal. At --space-2 the two sat 7px apart, close enough that a
@@ -1169,27 +1179,9 @@
 </section>
 
 <style>
-  /* residual: unmapped */
-  /* The title, the body and the foot come up with the shape one after the
-     other, by opacity and translate alone, and sink back together as it
-     folds. No filter: a blur transitioning on a part hung WebKit's web
-     process for good as the card came up (Playwright WebKit 2359 at an
-     iPhone's size, the owner's iPhone Safari: "stop responding and it didn't
-     even show"; with the blur snapped instead of transitioned, or none, it
-     never hung). Two durations and two curves in one transition: no
-     utility carries them. */
-  @media (prefers-reduced-motion: no-preference) {
-    .part {
-      transition:
-        opacity var(--dur-fade) var(--ease-out),
-        translate var(--dur-panel) var(--ease-drawer);
-    }
-  }
-  /* The stagger: it must outrank the shorthand above, which resets the
-     delay, so it stands beside it rather than as a utility under it. */
-  [data-shown] .part {
-    transition-delay: calc(var(--part) * var(--dur-stagger));
-  }
+  /* residual: unmapped — word-break: break-word, which no utility writes
+     (break-words is overflow-wrap); align-items: start (items-start writes
+     flex-start) */
   [data-slot="prompt-field"] > dd {
     word-break: break-word;
   }

@@ -402,13 +402,17 @@
               style:--card-min="80px"
             >
               <!-- literal: 44px -->
+              <!-- The button draws no ring of its own (the card takes it):
+                   the outline shorthand's none, which also puts the ring's
+                   width and colour back to their initial values. -->
               <button
                 aria-busy={busy || undefined}
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--hit-min)"
+                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--hit-min) focus-visible:outline-none focus-visible:outline-current focus-visible:outline-(length:--ring-off)"
                 style:--hit-min="44px"
+                style:--ring-off="medium"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -422,16 +426,22 @@
                 type="button"
               >
                 <!-- literal: 17px -->
+                <!-- Two background layers, the overlay over the hue, as the
+                     shorthand wrote them: the overlay and an empty layer,
+                     the hue under both. -->
                 <span
                   data-slot="mark"
-                  class="size-(--mark-size) shrink-0 grid place-items-center rounded-xs text-mark-glyph"
+                  class="size-(--mark-size) shrink-0 grid place-items-center rounded-xs text-mark-glyph bg-(image:--mark-layers) bg-mark-6"
                   style:--mark-size="17px"
+                  style:--mark-layers="var(--mark-overlay), none"
                   ><IconWindow class="size-icon-sm" /></span
                 >
                 <!-- The name wraps, whole, and breaks inside a word only
                      when the word alone is wider than the row; the place
                      stays one line, cut at its end, and contained, so
-                     however long it is it takes the width it is given. -->
+                     however long it is it takes the width it is given. The
+                     place's face is the font shorthand's: meta size, mono,
+                     its weight and line height reset. -->
                 <span class="flex flex-col min-w-0"
                   ><!-- literal: 12px -->
                   <span
@@ -446,7 +456,8 @@
                     /></span
                   ><span
                     data-slot="artifact-path"
-                    class="truncate text-ink-muted"
+                    class="truncate text-ink-muted contain-inline-size text-size-meta font-(family-name:--font-mono) font-normal leading-(--path-leading)"
+                    style:--path-leading="normal"
                     >{preview?.source
                       ? previewPlace(preview.source)
                       : (called?.kind ?? "")}</span
@@ -735,24 +746,8 @@
     border-radius: var(--radius-md);
   }
 
-  /* residual: unmapped */
-  /* The button draws no ring of its own (the card takes it). The shorthand
-     also resets the ring's width and colour, which outline-none leaves. */
-  [data-slot="artifact-open"]:focus-visible {
-    outline: none;
-  }
-  /* The place: contained, so however long it is it takes the width it is
-     given; its face by the font shorthand, which resets weight and line
-     height as no set of utilities does. */
-  [data-slot="artifact-path"] {
-    contain: inline-size;
-    font: var(--text-meta) var(--font-mono);
-  }
-  /* Two background layers, the overlay over the hue: the shorthand's layer
-     list is not what bg-mark-overlay plus a colour computes to. */
-  [data-slot="mark"] {
-    background: var(--mark-overlay), var(--mark-6);
-  }
+  /* residual: unmapped — word-break: break-word, which no utility writes
+     (break-words is overflow-wrap) */
   [data-slot="tool-group-field"] > pre {
     word-break: break-word;
   }

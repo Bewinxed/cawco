@@ -32,10 +32,7 @@
 >
   <!-- Read, never seen: off-screen rather than `display: none`, which
        assistive tech skips entirely. -->
-  <span
-    class="spoken absolute w-px h-px -m-px p-0 border-none border-current overflow-hidden whitespace-nowrap"
-    >Reading transcript…</span
-  >
+  <span class="sr-only border-none border-current">Reading transcript…</span>
 
   <!-- The reader's turn: its mark on the pane, one short line in the well,
        exactly as MessageRow draws a run of one: under the header, its start
@@ -170,16 +167,12 @@
 <style>
   /* residual: unmapped: the reader's well pads by the turn's --pad, which
      steps down at the narrow breakpoint (a custom property under a media
-     query has no utility); the spoken line is clipped to nothing (no
-     clip-path utility). */
+     query has no utility). */
   [data-you] {
     --pad: var(--space-3);
 
     @media (width <= 900px) {
       --pad: var(--space-2);
     }
-  }
-  .spoken {
-    clip-path: inset(50%);
   }
 </style>

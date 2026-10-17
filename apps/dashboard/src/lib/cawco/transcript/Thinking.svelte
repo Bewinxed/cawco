@@ -195,9 +195,14 @@
     <ThinkingStepsHeader class="w-full" disabled={!text.trim()}>
       {#snippet after()}
         {#if !expanded && tail}
+          <!-- One line past the chevron, pinned to its end so the newest
+               words show; the start fades out rather than cutting. Quieter
+               than a tool row's text, so the fold reads as an aside and not
+               as the next step. -->
           <span
             data-slot="tail"
-            class="flex justify-end flex-auto min-w-0 overflow-hidden text-ink-muted text-size-meta font-normal whitespace-nowrap"
+            style:--tail-fade={"linear-gradient(to right, transparent, var(--mask-opaque) 30%)"}
+            class="flex justify-end flex-auto min-w-0 overflow-hidden text-ink-muted text-size-meta font-normal whitespace-nowrap mask-(--tail-fade)"
             in:tailIn
             out:tailOut><span class="flex-none">{tail}</span></span
           >
@@ -245,13 +250,3 @@
     </ThinkingStepsContent>
   </ThinkingSteps>
 </div>
-
-<style>
-  /* residual: unmapped */
-  /* One line past the chevron, pinned to its end so the newest words show;
-     the start fades out rather than cutting. Quieter than a tool row's text,
-     so the fold reads as an aside and not as the next step. */
-  [data-slot="tail"] {
-    mask-image: linear-gradient(to right, transparent, var(--mask-opaque) 30%);
-  }
-</style>
