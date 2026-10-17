@@ -57,19 +57,21 @@
         quiet: "text-ink-muted hover:text-ink-strong",
       },
       /** An answer to an ask: filled in the status tint, edged on the recess,
-          or edged with its strong ink held (a prompt's answers). */
+          or edged with its strong ink held (a prompt's answers). Its hover
+          holds over an open or invalid state, as the callers' own rules
+          did: the halves keep the states apart for the variant sort. */
       answer: {
-        deny: "border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink",
+        deny: "border-transparent bg-status-fail-bg text-status-fail-ink not-aria-expanded:hover:bg-status-fail-bg hover:text-status-fail-ink aria-expanded:hover:bg-status-fail-bg",
         approve:
-          "border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink",
+          "border-transparent bg-status-done-bg text-status-done-ink not-aria-expanded:hover:bg-status-done-bg hover:text-status-done-ink aria-expanded:hover:bg-status-done-bg",
         "deny-edge":
-          "border-status-fail-ink bg-surface-recess text-ink-strong hover:border-status-fail-ink hover:bg-surface-recess hover:text-ink-strong",
+          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-fail-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:hover:border-status-fail-ink",
         "approve-edge":
-          "border-status-done-ink bg-surface-recess text-ink-strong hover:border-status-done-ink hover:bg-surface-recess hover:text-ink-strong",
+          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:hover:border-status-done-ink",
         "deny-strong":
-          "border-status-fail-ink bg-surface-recess text-ink-strong! hover:bg-surface-recess",
+          "border-status-fail-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess",
         "approve-strong":
-          "border-status-done-ink bg-surface-recess text-ink-strong! hover:bg-surface-recess",
+          "border-status-done-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess",
       },
       /** No edge of its own. */
       edge: { none: "border-transparent" },
@@ -96,26 +98,24 @@
       gap: { loose: "gap-2" },
       /** Its inline padding: none (a link reading as text), or the caller's `--more-px`. */
       pad: { none: "px-0", more: "px-(--more-px)" },
-      /** Shown only when its row is in reach: under the pointer, focused, or under a finger. */
+      /** Shown only when its row is in reach: under the pointer, focused, or
+          under a finger. Disabled too, as the callers' own rules drew it
+          over the kit's dimming: the halves keep the states apart. */
       reveal: {
         "value-hover":
-          "coarse:opacity-100 opacity-0 focus-visible:opacity-100 group-hover/value:opacity-100",
+          "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-hover/value:not-disabled:opacity-100 group-hover/value:disabled:opacity-100",
         "row-hover":
-          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:focus-visible:opacity-100 can-hover:group-hover:opacity-100",
+          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
       },
-      /** Open, it draws no fill: under the pointer it takes the hover
-          fill, or at rest only (its words and chevron say it is open). */
-      expanded: {
-        unfilled:
-          "aria-expanded:bg-transparent hover:aria-expanded:bg-surface-hover",
-        "unfilled-at-rest": "aria-expanded:unhovered:bg-transparent",
-      },
+      /** Open, it draws no fill while the pointer is off it (its words and
+          chevron say it is open). */
+      expanded: { unfilled: "aria-expanded:unhovered:bg-transparent" },
       /** A path, in the mono face at the label size. */
       face: { path: "font-mono font-normal text-label" },
       /** The last of a row of actions: its end padding moved to its start
           (`--toggle-start`, `--end`), over the size's icon-side pads. */
       toggle: {
-        last: "last:ps-(--toggle-start) last:pe-(--end) last:has-data-[icon=inline-start]:ps-(--toggle-start) last:has-data-[icon=inline-end]:pe-(--end)",
+        last: "last:not-has-data-[icon=inline-start]:ps-(--toggle-start) last:not-has-data-[icon=inline-end]:pe-(--end) last:has-data-[icon=inline-start]:ps-(--toggle-start) last:has-data-[icon=inline-end]:pe-(--end)",
       },
     },
     defaultVariants: {

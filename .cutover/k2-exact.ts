@@ -346,6 +346,132 @@ const SET_ADDS: Record<string, string[]> = {
     "group-not-glyph-busy:animation-paused",
   ],
 };
+/**
+ * Variant order (V.md): where a look's class and the part's own class set
+ * one property under states that can hold together, the source of record
+ * (main at T, ac7b79de8) names the winner, and the classes say it with
+ * exclusive states instead of Tailwind's sort. The consumer's classes from
+ * 1a are rewritten to that form before they are compared; each rewrite
+ * names its source. A rewrite applies to an element whose classes hold all
+ * of `from`.
+ */
+const REWRITES: Record<
+  string,
+  { from: string[]; source: string; to: string[] }[]
+> = {
+  Button: [
+    ...["fail", "done"].map((s) => ({
+      from: [`hover:bg-status-${s}-bg`],
+      to: [
+        `not-aria-expanded:hover:bg-status-${s}-bg`,
+        `aria-expanded:hover:bg-status-${s}-bg`,
+      ],
+      source:
+        "NeedsCard/TaskNeeds' unlayered .deny/.approve rules outrank the kit's aria-expanded fill",
+    })),
+    ...["fail", "done"].map((s) => ({
+      from: [`hover:border-status-${s}-ink`],
+      to: [
+        `not-aria-invalid:hover:border-status-${s}-ink`,
+        `aria-invalid:hover:border-status-${s}-ink`,
+      ],
+      source:
+        "PeekPane's unlayered .deny/.approve:hover border outranks the kit's aria-invalid edge",
+    })),
+    {
+      from: ["hover:bg-surface-recess"],
+      to: [
+        "not-aria-expanded:hover:bg-surface-recess",
+        "aria-expanded:hover:bg-surface-recess",
+      ],
+      source:
+        "PeekPane's/Prompt's unlayered :hover fill outranks the kit's aria-expanded fill",
+    },
+    {
+      from: [
+        "aria-expanded:bg-transparent",
+        "hover:aria-expanded:bg-surface-hover",
+      ],
+      to: ["aria-expanded:unhovered:bg-transparent"],
+      source:
+        'MovedLogins.svelte:190 `.toggle[aria-expanded="true"]:not(:hover)`',
+    },
+    {
+      from: [
+        "opacity-0",
+        "focus-visible:opacity-100",
+        "group-hover/value:opacity-100",
+        "coarse:opacity-100",
+      ],
+      to: [
+        "opacity-0",
+        "disabled:opacity-0",
+        "not-disabled:focus-visible:opacity-100",
+        "disabled:focus-visible:opacity-100",
+        "group-hover/value:not-disabled:opacity-100",
+        "group-hover/value:disabled:opacity-100",
+        "coarse:opacity-100",
+        "coarse:disabled:opacity-100",
+      ],
+      source:
+        "TaskFields.svelte's unlayered .drop rules outrank the kit's disabled dimming",
+    },
+    {
+      from: [
+        "can-hover:opacity-0",
+        "can-hover:focus-visible:opacity-100",
+        "can-hover:group-hover:opacity-100",
+      ],
+      to: [
+        "can-hover:opacity-0",
+        "can-hover:disabled:opacity-0",
+        "can-hover:not-disabled:focus-visible:opacity-100",
+        "can-hover:disabled:focus-visible:opacity-100",
+        "can-hover:group-hover:not-disabled:opacity-100",
+        "can-hover:group-hover:disabled:opacity-100",
+      ],
+      source:
+        "TodoList.svelte's unlayered .under rules outrank the kit's disabled dimming",
+    },
+  ],
+  ResizableHandle: [
+    {
+      from: ["hover:bg-border-control", "active-keyboard:bg-ink-muted"],
+      to: [
+        "not-active-keyboard:not-active-pointer:hover:bg-border-control",
+        "active-keyboard:bg-ink-muted",
+      ],
+      source:
+        "PaneGrid.svelte:236, the active rule after the :hover one at equal weight",
+    },
+  ],
+};
+
+/** The consumer's classes in their variant-order form, and the rewrites applied. */
+function rewritten(
+  part: string,
+  classes: string[],
+  flagged: Set<string>
+): { applied: string[]; classes: string[] } {
+  let out = [...classes];
+  const applied: string[] = [];
+  for (const r of REWRITES[part] ?? []) {
+    if (!r.from.every((c) => out.includes(c))) {
+      continue;
+    }
+    const at = out.indexOf(r.from[0] ?? "");
+    out = out.filter((c) => !r.from.includes(c));
+    out.splice(at, 0, ...r.to);
+    if (r.from.some((c) => flagged.has(c))) {
+      for (const c of r.to) {
+        flagged.add(c);
+      }
+    }
+    applied.push(r.source);
+  }
+  return { applied, classes: out };
+}
+
 /** The real alternatives where the evaluator's would be impossible combinations. */
 const ALTS: Record<string, string[]> = {
   // HookTester.svelte:50: `kind` is one value, so exactly one of the three `&&` holds.
@@ -487,6 +613,8 @@ interface Row {
   part: string;
   props: string;
   rest: string;
+  /** The variant-order rewrites the consumer's classes went through, by source. */
+  rewrites: string[];
   set: string;
   site: string;
   today: string;
@@ -536,7 +664,7 @@ for (const site of sites) {
         props[k] = value;
       }
     }
-    const flagged = flaggedOn.get(elementKey) ?? new Set<string>();
+    const flagged = new Set(flaggedOn.get(elementKey) ?? []);
     const alts = ALTS[`${site.file}:${i.line}`] ?? i.alts;
     const adds = SET_ADDS[`${site.file}:${i.line}`] ?? [];
     for (const alt of alts) {
@@ -547,7 +675,11 @@ for (const site of sites) {
         ...adds,
       ];
       const hooks = consumer.filter((c) => c in HOOKS);
-      const classes = consumer.filter((c) => !(c in HOOKS));
+      const { applied, classes } = rewritten(
+        forward?.part ?? site.part,
+        consumer.filter((c) => !(c in HOOKS)),
+        flagged
+      );
       const recipe = part.file ? recipeOf(part.file, part.recipe) : null;
       if (!recipe) {
         // A part whose every hit is a hook.
@@ -560,6 +692,7 @@ for (const site of sites) {
           rest: classes.join(" "),
           dropped: [],
           hooks,
+          rewrites: applied,
           ok: classes.every((c) => !flagged.has(c)),
           today: "",
           next: "",
@@ -622,6 +755,7 @@ for (const site of sites) {
         rest: rest.join(" "),
         dropped,
         hooks,
+        rewrites: applied,
         ok: need.length === 0 && sameSet(today, next),
         today,
         next,

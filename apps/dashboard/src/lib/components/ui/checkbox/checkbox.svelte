@@ -43,7 +43,7 @@
     "aria-invalid:border-error-9",
     "aria-invalid:aria-checked:border-action-solid",
     "data-checked:border-action-solid data-checked:bg-action-solid",
-    "data-checked:text-on-action dark:bg-input/30",
+    "data-checked:text-on-action dark:not-data-checked:bg-input/30",
     "dark:data-checked:bg-action-solid",
     "dark:aria-invalid:border-error-9/50",
     checkboxVariants({ reveal }),
