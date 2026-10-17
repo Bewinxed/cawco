@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks: standing in a pane, a pane's own side pads. */
+  export const emptyStateVariants = tv({
+    variants: { pad: { pane: "px-space-6" } },
+  });
+
+  export type EmptyStateLooks = VariantProps<typeof emptyStateVariants>;
+</script>
+
 <script lang="ts">
   /**
    * The one empty state: a Solar duotone mark, a title in the title role,
@@ -19,21 +31,28 @@
     line,
     action,
     inline = false,
+    pad,
     class: className,
     ...restProps
-  }: Omit<HTMLAttributes<HTMLDivElement>, "title"> & {
-    icon?: Component;
-    mark?: Snippet;
-    title: string;
-    /** Why there is nothing; absent where the title and the action say it all. */
-    line?: string | Snippet;
-    action?: Snippet;
-    inline?: boolean;
-  } = $props();
+  }: Omit<HTMLAttributes<HTMLDivElement>, "title"> &
+    EmptyStateLooks & {
+      icon?: Component;
+      mark?: Snippet;
+      title: string;
+      /** Why there is nothing; absent where the title and the action say it all. */
+      line?: string | Snippet;
+      action?: Snippet;
+      inline?: boolean;
+    } = $props();
 </script>
 
 <div
-  class={cn("kit-empty", inline && "kit-empty-inline mark-line", className)}
+  class={cn(
+    "kit-empty",
+    inline && "kit-empty-inline mark-line",
+    emptyStateVariants({ pad }),
+    className
+  )}
   data-slot="empty"
   {...restProps}
 >

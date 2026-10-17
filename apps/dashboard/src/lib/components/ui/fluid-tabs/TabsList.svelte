@@ -1139,7 +1139,7 @@
     <div
       data-slot="segment"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-1 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden can-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
+      class="pointer-events-none absolute start-0 top-0 z-1 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
       style:--box-at="translate({at.left}px,{at.top}px)"
       style:--box-w="{at.width}px"
       style:--box-h="{at.height}px"

@@ -132,9 +132,21 @@
    press on a trailing control leaves it be. */
 @custom-variant hit-pressed (&:has([data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])));
 
+/* A primary input that can hover, whatever its pointer: (hover: hover)
+   alone, the pair of hover-none (can-hover also asks for a fine pointer). */
+@custom-variant hover-hover {
+  @media (hover: hover) {
+    @slot;
+  }
+}
+
 /* A fluid track's segment while another tab stands under the hover ghost
    (TabsList): the ghost reads as the thing about to take over. */
 @custom-variant beside-ghost (:where([data-slot="ff-tabs-list"]:has([data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected]))) > &);
+
+/* Not under the pointer, whatever the pointer (Tailwind's `not-hover:`
+   also matches wherever its hover cannot happen). */
+@custom-variant unhovered (&:not(:hover));
 
 /* A row whose link is held down (config SectionRow). */
 @custom-variant has-link-active (&:has([data-link]:active));

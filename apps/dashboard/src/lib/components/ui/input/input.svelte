@@ -1,3 +1,28 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks, each as they drew it: the mono face for what is
+      typed exactly (a path, a command, a key), a text size, tight pads for
+      a short figure, and how wide it may run. */
+  export const inputVariants = tv({
+    variants: {
+      face: { mono: "font-mono" },
+      text: { meta: "text-meta", label: "text-label", title: "text-title" },
+      pad: { tight: "px-space-2" },
+      measure: {
+        shrink: "min-w-0",
+        "cap-sm": "max-w-64",
+        "cap-md": "max-w-96",
+      },
+      /** Its share of a row of code cells (`--code-flex`). */
+      flex: { code: "flex-(--code-flex)" },
+    },
+  });
+
+  export type InputLooks = VariantProps<typeof inputVariants>;
+</script>
+
 <script lang="ts">
   import type {
     HTMLInputAttributes,
@@ -9,6 +34,7 @@
 
   type Props = WithElementRef<
     Omit<HTMLInputAttributes, "type"> &
+      InputLooks &
       (
         | { type: "file"; files?: FileList }
         | { type?: InputType; files?: undefined }
@@ -21,9 +47,15 @@
     type,
     files = $bindable(),
     class: className,
+    face,
+    text,
+    pad,
+    measure,
+    flex,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
+  const looks = $derived(inputVariants({ face, text, pad, measure, flex }));
 </script>
 
 {#if type === "file"}
@@ -39,6 +71,7 @@
       "disabled:pointer-events-none disabled:cursor-not-allowed",
       "disabled:opacity-50 aria-invalid:border-error-9",
       "dark:aria-invalid:border-error-9/50",
+      looks,
       className
     )}
     data-slot={dataSlot}
@@ -61,6 +94,7 @@
       "disabled:pointer-events-none disabled:cursor-not-allowed",
       "disabled:opacity-50 aria-invalid:border-error-9",
       "dark:aria-invalid:border-error-9/50",
+      looks,
       className
     )}
     data-slot={dataSlot}

@@ -1,3 +1,32 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /** Its callers' looks, each as they drew it. */
+  export const selectTriggerVariants = tv({
+    variants: {
+      /** Sharing a row equally with its siblings, however long its words. */
+      measure: { share: "min-w-0 basis-0" },
+      tone: { strong: "text-ink-strong" },
+      look: {
+        /** In a view's bar: it shrinks, and takes the bar's control corner. */
+        "in-bar":
+          "group-data-bar:min-w-0 group-data-bar:rounded-(--bar-control-radius)",
+        /** A plain field: the small corner, the control's edge, field pads. */
+        field: "rounded-sm border border-border-control px-space-3 py-space-2",
+      },
+      /** A filter chip that is on (`data-on`): the selected pair, no edge,
+          its ink held over the placeholder's. */
+      chosen: {
+        selected:
+          "data-on:data-placeholder:text-selected-ink data-on:border-transparent data-on:bg-selected-bg data-on:text-selected-ink",
+      },
+    },
+  });
+
+  export type SelectTriggerLooks = VariantProps<typeof selectTriggerVariants>;
+</script>
+
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
   import { IconChevronDown, IconUnfold } from "#lib/icons.js";
@@ -10,16 +39,21 @@
     size = "default",
     press = "scale",
     mark = "unfold",
+    measure,
+    tone,
+    look,
+    chosen,
     ...restProps
-  }: WithoutChild<SelectPrimitive.TriggerProps> & {
-    size?: "sm" | "default";
-    /** A trigger stretched wider than a control tints on press instead of
+  }: WithoutChild<SelectPrimitive.TriggerProps> &
+    SelectTriggerLooks & {
+      size?: "sm" | "default";
+      /** A trigger stretched wider than a control tints on press instead of
         scaling (app.css, press feedback). */
-    press?: "scale" | "tint";
-    /** Its trailing mark: the unfold mark, or a chevron that turns over
+      press?: "scale" | "tint";
+      /** Its trailing mark: the unfold mark, or a chevron that turns over
         --dur-control while the list is open (a list that opens one way). */
-    mark?: "unfold" | "chevron";
-  } = $props();
+      mark?: "unfold" | "chevron";
+    } = $props();
 </script>
 
 <SelectPrimitive.Trigger
@@ -42,6 +76,7 @@
     "dark:aria-invalid:border-error-9/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+    selectTriggerVariants({ measure, tone, look, chosen }),
     className
   )}
   data-size={size}
