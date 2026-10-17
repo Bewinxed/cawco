@@ -108,9 +108,25 @@ const SPEND_ROW_ADDED = [
  * Today's side takes them too, so these are the only classes K1 adds; each is
  * proven against the source by .cutover/k1-modifiers.ts.
  */
+/**
+ * A consumer class a variant draws as the source drew it instead (R4: the
+ * source's `border-block-end: 1px solid X` colours one side; 1a's
+ * whole-border colour recoloured all four). Today's side takes the source's
+ * class in its place; proven against the source by .cutover/k1-modifiers.ts.
+ */
+const AS_SOURCE: Partial<Record<Part, Record<string, [string, string]>>> = {
+  "<TableCell>": {
+    view: ["border-border-hairline", "border-b-border-hairline"],
+    "view-lead": ["border-border-hairline", "border-b-border-hairline"],
+  },
+  // ViewRoutines' hook `band` stands for its own rule `tr.band { background:
+  // var(--surface-band) }`, which `band` draws as `bg-surface-band`; the
+  // rule goes with the hook (set 4), the heads taking `caps`.
+  "<TableRow>": { band: ["band", "bg-surface-band"] },
+};
+
 const CARRY: Partial<Record<Part, Record<string, string>>> = {
   "<TableCell>": {
-    "ledger-picks": "[&:has([role=checkbox])]:pr-space-3",
     "ledger-picks-stacks":
       "[&:has([role=checkbox])]:pr-space-3 max-phone:[&:has([role=checkbox])]:pr-0",
   },
@@ -167,6 +183,8 @@ interface Element {
   added?: string[];
   /** The attribute the classes sit in (Table's scroller: `scrollClass`). */
   attr?: string;
+  /** The source's values this site gets from its variant beyond its classes (on today's side only). */
+  carry?: string[];
   cases: Case[];
   /** Appendix rows that are fragments of this element's classes (a `{@const}`, a conditional's branch). */
   fragments?: string[];
@@ -208,7 +226,22 @@ const elements: Record<Part, Element[]> = {
     ...at(R, [132, 148, 154], { variant: "list", rule: "between" }),
     ...at(RD, [215, 226, 232, 238], { variant: "ledger", rule: "top" }),
     ...at(TT, [313, 315, 321, 323], { variant: "ledger-picks-stacks" }),
-    ...at(TT, [317, 319], { variant: "ledger-picks" }),
+    // Labels and created hide on a phone, but at T the ledger's phone `td`
+    // rule (a block of auto size, min-inline-size 0, no padding or border)
+    // reached them too; the other branches pass it as classes already.
+    ...[317, 319].map((line) => ({
+      site: `${TT}:${line}`,
+      carry: [
+        "max-phone:block",
+        "max-phone:h-auto",
+        "max-phone:w-auto",
+        "max-phone:min-w-0",
+        "max-phone:border-current",
+        "max-phone:border-none",
+        "max-phone:p-0",
+      ],
+      cases: [{ props: { variant: "ledger-picks-stacks" } }],
+    })),
     ...at(TM, [380], { variant: "matrix" }),
     ...at(UT, [107], { variant: "matrix-stacks" }),
     ...at(UT, [121], { variant: "matrix-stacks-under" }),
@@ -257,6 +290,7 @@ const elements: Record<Part, Element[]> = {
     ...at(PS, [474, 562], { variant: "band" }),
     ...at(VT, [63], { variant: "band" }),
     ...at(VR, [724, 990, 1038], { variant: "unruled" }),
+    ...at(VR, [922, 974], { variant: "band" }),
     ...[500, 534, 588, 632, 658].map((line) => ({
       site: `${PS}:${line}`,
       added: SPEND_ROW_ADDED,
@@ -326,8 +360,14 @@ function render(
     "<TableRow>": tableRowVariants,
   }[part];
   const carry = CARRY[part]?.[String(props.variant)];
+  const swap = AS_SOURCE[part]?.[String(props.variant)];
+  const source = swap
+    ? tokens(consumer)
+        .map((t) => (t === swap[0] ? swap[1] : t))
+        .join(" ")
+    : consumer;
   return {
-    today: cn(BASE[part], consumer, carry),
+    today: cn(BASE[part], source, carry),
     k1: cn(recipe(props), rest || undefined),
   };
 }
@@ -387,7 +427,8 @@ for (const [part, list] of Object.entries(elements) as [Part, Element[]][]) {
       const { today, k1 } = render(
         part,
         element.attr ?? "class",
-        consumer,
+        // A site's carry is its variant's look: before the consumer's own classes.
+        [...(element.carry ?? []), consumer].join(" "),
         rest,
         c.props
       );
@@ -410,16 +451,9 @@ for (const [part, list] of Object.entries(elements) as [Part, Element[]][]) {
   }
 }
 
-/**
- * Rows the kit draws no variant for: `band` is ViewRoutines' own stylesheet
- * hook (`[data-slot="ledger"] :global(tr.band)`), not a class the kit may
- * carry (shadcn/no-unknown-classes). Set 4's ruling; .cutover/clearance/K1.md.
- */
-const NO_VARIANT = [`${VR}:922`, `${VR}:974`];
-
 const tableRows = [...appendix.keys()];
 for (const site of tableRows) {
-  if (!(covered.has(site) || NO_VARIANT.includes(site))) {
+  if (!covered.has(site)) {
     mismatches.push(`${site}: appendix row not checked`);
   }
 }
@@ -428,6 +462,6 @@ for (const m of mismatches) {
   console.log(m);
 }
 console.log(
-  `${tableRows.length} appendix rows: ${covered.size} sites checked (${sites} elements, ${cases} cases), ${mismatches.length} mismatches; ${NO_VARIANT.length} with no kit variant (${NO_VARIANT.join(", ")})`
+  `${tableRows.length} appendix rows: ${covered.size} sites checked (${sites} elements, ${cases} cases), ${mismatches.length} mismatches`
 );
 process.exit(mismatches.length ? 1 : 0);
