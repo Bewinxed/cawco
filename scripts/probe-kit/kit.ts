@@ -52,6 +52,26 @@ export const VIEWS = {
   ipad: { width: 1032, height: 1376, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;
+
+/** Below this, a touch view is a phone (DESIGN.md's 640px breakpoint). */
+const PHONE_MAX_WIDTH = 640;
+/**
+ * What a phone's browser says it is, by engine: the dashboard's server
+ * draws a first visit's first paint for a phone from it (`narrowOf`, the
+ * `(app)` layout: the cookie, then `sec-ch-ua-mobile`, then the agent).
+ * Playwright's WebKit and Firefox send a desktop agent and no hint, so a
+ * phone page was drawn wide and flipped to the phone's bar once its script
+ * ran: J9 found the wide bar's Jump and lost it to the flip (WebKit phone,
+ * "waiting for getByRole('button', { name: /^Jump to session$/ })").
+ * Chromium's mobile emulation sends the hint, and keeps its own agent.
+ */
+const PHONE_AGENT: Record<Engine, string | undefined> = {
+  chromium: undefined,
+  webkit:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+  firefox:
+    "Mozilla/5.0 (Android 15; Mobile; rv:144.0) Gecko/144.0 Firefox/144.0",
+};
 export const THEMES = ["light", "dark"] as const;
 export type Theme = (typeof THEMES)[number];
 /** Device pixels per css px, everywhere. */
@@ -516,6 +536,7 @@ export class Run {
           options.engine ?? "chromium",
           options.engine === "webkit" ? options.webkit : undefined
         );
+        const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({
           viewport: { width: v.width, height: v.height },
           deviceScaleFactor: options.scale ?? SCALE,
@@ -524,6 +545,9 @@ export class Run {
           // not supported in Firefox"): a touch screen at the size alone.
           isMobile: v.touch && options.engine !== "firefox",
           colorScheme: options.theme ?? "light",
+          ...(v.touch && v.width < PHONE_MAX_WIDTH && phoneAgent
+            ? { userAgent: phoneAgent }
+            : {}),
         });
         contexts.push(context);
         await context.addInitScript((t) => {
