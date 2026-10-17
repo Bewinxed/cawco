@@ -252,6 +252,12 @@ interface PageReader {
     nodes: Record<number, Record<number, string>>;
   };
   done: () => void;
+  /**
+   * While an act runs (on), every animation held as it starts, each frame:
+   * what the act opens is at rest before anything under the pointer
+   * measures it (highlight.svelte.ts measures rows as a sheet slides in).
+   */
+  holding: (on: boolean) => void;
   read: (root: string) => {
     count: number;
     /** Each interactive element's index in `nodes`. */
@@ -315,6 +321,9 @@ export function installReader(props: readonly string[]): void {
     }
     return best;
   };
+
+  /** The frame `holding` holds animations on, while an act runs. */
+  let holdFrame = 0;
 
   /** Every animation of the document and its open shadow roots: finished, or an infinite one held at its start. */
   const still = (): number => {
@@ -450,6 +459,19 @@ export function installReader(props: readonly string[]): void {
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     },
     still,
+    holding: (on) => {
+      cancelAnimationFrame(holdFrame);
+      holdFrame = 0;
+      if (!on) {
+        return;
+      }
+      // The page's own frames (the walk's clock, flowing while an act runs).
+      const each = () => {
+        still();
+        holdFrame = requestAnimationFrame(each);
+      };
+      holdFrame = requestAnimationFrame(each);
+    },
     done: () => {
       elements = [];
       base = [];
