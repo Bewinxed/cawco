@@ -15,6 +15,7 @@
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { barGlass } from "./bar-glass.svelte";
   import { cawco, type Machine } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
@@ -55,6 +56,38 @@
     }
     return fault ? "away" : "online";
   }
+  /*
+   * Opened onto one machine (bar-glass `showMachine`): the list on screen
+   * brings its row into view and focuses it, and the ask is spent. Each
+   * list asks only after it has drawn; a hidden one (the sidebar while the
+   * card shows them) has nothing on screen and leaves it to the other.
+   */
+  $effect(() => {
+    const id = barGlass.machine;
+    // Read so a list that was hidden looks again when the card changes.
+    const card = barGlass.open;
+    if (!id || cawco.machines.length === 0 || card === undefined) {
+      return;
+    }
+    if (!cawco.machines.some((each) => each.machineId === id)) {
+      // Gone from the fleet: nothing to open onto, and no later opening of
+      // the machines should land on it.
+      barGlass.machine = null;
+      return;
+    }
+    const row = [
+      ...document.querySelectorAll<HTMLElement>(
+        `li[data-machine="${CSS.escape(id)}"] [data-slot="row"]`
+      ),
+    ].find((each) => each.checkVisibility());
+    if (!row) {
+      return;
+    }
+    barGlass.machine = null;
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: "nearest" });
+  });
+
   const faultOf = (machineId: string): string | undefined =>
     home.exceptions.find((entry) => entry.machineId === machineId)?.text;
 

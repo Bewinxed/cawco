@@ -7,14 +7,23 @@
  * moment it finds: the dashboard opens that session at `?at=<id>`, where
  * the id is the machine's own record of that line (the Claude transcript
  * record holding those words, read from the machine's disk), and the line
- * stands in view on the page.
+ * stands in view on the page. Then he finds the machine by name and opens
+ * it: the machines open onto it (the glass's card, or a phone's sidebar),
+ * its row in view with the focus.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
-import type { Seen } from "../../scratch-fleet";
+import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
-import { eventually, expect, type Journey, type Leg, shows } from "./suite";
+import {
+  eventually,
+  expect,
+  gone,
+  type Journey,
+  type Leg,
+  shows,
+} from "./suite";
 
 const SAID = "JOURNEY-SAID";
 const MORE = "JOURNEY-MORE";
@@ -102,6 +111,19 @@ async function walk(leg: Leg): Promise<void> {
   );
   const finder = page.getByRole("combobox", { name: FIND });
   const moment = page.getByRole("option", { name: new RegExp(nonce) });
+  const openJump = async () => {
+    // The bar's Jump on a wide screen; a phone keeps it in its sheet,
+    // as the sheet's search (Shell, Sidebar `onsearch`).
+    const bar = page
+      .getByRole("button", { name: JUMP })
+      .filter({ visible: true });
+    if ((await bar.count()) > 0) {
+      await bar.first().click();
+      return;
+    }
+    await page.getByRole("button", { name: OPEN_NAVIGATION }).click();
+    await page.getByRole("button", { name: SHEET_SEARCH }).click();
+  };
 
   await leg.step(
     "Open the dashboard",
@@ -115,23 +137,7 @@ async function walk(leg: Leg): Promise<void> {
       )
   );
 
-  await leg.step(
-    "Open Jump",
-    async () => {
-      // The bar's Jump on a wide screen; a phone keeps it in its sheet,
-      // as the sheet's search (Shell, Sidebar `onsearch`).
-      const bar = page
-        .getByRole("button", { name: JUMP })
-        .filter({ visible: true });
-      if ((await bar.count()) > 0) {
-        await bar.first().click();
-        return;
-      }
-      await page.getByRole("button", { name: OPEN_NAVIGATION }).click();
-      await page.getByRole("button", { name: SHEET_SEARCH }).click();
-    },
-    () => shows(finder, "the Jump field")
-  );
+  await leg.step("Open Jump", openJump, () => shows(finder, "the Jump field"));
 
   await leg.step(
     "Type a word of what was said",
@@ -167,6 +173,52 @@ async function walk(leg: Leg): Promise<void> {
       await eventually(
         "the line that was said stands in view",
         () => inView(page, said),
+        (outside) => outside === null
+      );
+    }
+  );
+
+  // A machine found by name opens the machines onto it, where the
+  // dashboard keeps them: the glass's card, or the phone's sidebar.
+  const machine = page.locator(
+    `[data-key="machine:${MACHINE}"] [role="option"]`
+  );
+  await leg.step(
+    "Find the machine in Jump",
+    async () => {
+      await openJump();
+      await finder.click();
+      await finder.fill(MACHINE);
+    },
+    () => shows(machine, `the machine ${MACHINE} found by name`)
+  );
+
+  await leg.step(
+    "Open the machine",
+    () => machine.filter({ visible: true }).first().click(),
+    async () => {
+      await gone(finder, "the Jump field");
+      const row = page
+        .locator(`li[data-machine="${MACHINE}"] [data-slot="row"]`)
+        .filter({ visible: true })
+        .first();
+      await shows(row, `${MACHINE}'s row among the machines`);
+      await eventually(
+        `${MACHINE}'s row has the focus`,
+        () =>
+          row.evaluate((node) => ({
+            focused: node === document.activeElement,
+            at:
+              document.activeElement
+                ?.closest("[data-slot]")
+                ?.getAttribute("data-slot") ?? document.activeElement?.tagName,
+          })),
+        (read) => read.focused,
+        10_000
+      );
+      await eventually(
+        `${MACHINE}'s row stands in view`,
+        () => inView(page, row),
         (outside) => outside === null
       );
     }

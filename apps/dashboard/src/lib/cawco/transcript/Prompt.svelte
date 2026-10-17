@@ -488,11 +488,14 @@
    * The keys the card already advertises: a digit picks the option wearing that
    * keycap on the `current` question, Enter sends once every question has an
    * answer. Tab, Shift+Tab, the arrows and Space are the option groups' own
-   * (bits-ui's roving focus); these are the rest. They are heard only
-   * from inside the card's own pane (its workspace group, `[data-leaf]`, or
+   * (bits-ui's roving focus); these are the rest. While the card is on screen
+   * they reach it from its own pane (its workspace group, `[data-leaf]`, or
    * Caw's panel floating over a project's page, `[data-caw-panel]`, which no
-   * workspace group holds): a key pressed with focus elsewhere, or on
-   * nothing at all, is not meant for it.
+   * workspace group holds), from nothing at all (focus fallen to the body,
+   * as it does when an answered card's button leaves), and from any part of
+   * the shell that is no one else's. Another pane, another card, a dialog or
+   * a menu keeps its own keys, and while a modal stands nothing focused is
+   * its, not the card's.
    * Escape is never one of them: it closes menus, dialogs and peeks all over
    * the page, and a question is put down only by its own Dismiss button. A
    * test script's Escape on a page with nothing focused once dismissed the
@@ -505,13 +508,32 @@
    * answering: an answer cannot be keyed in twice, or into a dead socket.
    */
   let card = $state<HTMLElement | null>(null);
-  const inPane = (target: EventTarget | null): boolean => {
-    const pane = card?.closest("[data-leaf], [data-caw-panel]");
-    return !!pane && target instanceof Node && pane.contains(target);
+  /** Surfaces that hold keys of their own: another pane, card, dialog or menu. */
+  const OWNERS =
+    "[data-leaf], [data-caw-panel], [data-slot='hitl'], dialog, [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox']";
+  /** A modal standing over the page: what nothing focused belongs to while it does. */
+  const MODAL = "[aria-modal='true'], dialog[open]";
+  const heard = (target: EventTarget | null): boolean => {
+    if (!card || card.closest("[inert]") || !card.checkVisibility()) {
+      return false;
+    }
+    const pane = card.closest("[data-leaf], [data-caw-panel]") ?? card;
+    if (target instanceof Node && pane.contains(target)) {
+      return true;
+    }
+    if (
+      !(target instanceof Element) ||
+      target === document.body ||
+      target === document.documentElement
+    ) {
+      const modal = document.querySelector(MODAL);
+      return !modal || modal.contains(card);
+    }
+    return !target.closest(OWNERS);
   };
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (!(ownsKeys && answerable && inPane(event.target))) {
+    if (!(ownsKeys && answerable && heard(event.target))) {
       return;
     }
     if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) {

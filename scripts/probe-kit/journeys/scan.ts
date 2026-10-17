@@ -218,8 +218,21 @@ export function scan(): string[] {
 
   // The page never scrolls sideways.
   if (root.scrollWidth > width + TOLERANCE) {
+    // What reaches past the screen's edge, deepest first: the boxes whose
+    // own children all stay inside, so the one to mend is named.
+    const past = (el: Element) =>
+      el.getBoundingClientRect().right > width + TOLERANCE;
+    const spills = [...document.body.querySelectorAll("*")]
+      .filter((el) => past(el) && ![...el.children].some(past))
+      .slice(0, 3)
+      .map((el) => {
+        const slot = el.getAttribute("data-slot");
+        const cls = [...el.classList].slice(0, 2).join(".");
+        const right = Math.round(el.getBoundingClientRect().right);
+        return `${el.tagName.toLowerCase()}${slot ? `[data-slot=${slot}]` : ""}${cls ? `.${cls}` : ""} to ${right}px`;
+      });
     say(
-      `the page scrolls sideways: ${root.scrollWidth}px of content in a ${width}px screen`
+      `the page scrolls sideways: ${root.scrollWidth}px of content in a ${width}px screen${spills.length ? ` (past the edge: ${spills.join(", ")})` : ""}`
     );
   }
 

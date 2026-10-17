@@ -561,10 +561,11 @@ export class FinderState {
     } else {
       this.names = { state: "asking", for: key, since: Date.now() };
     }
-    const read = await findNames(words, { limit: 20, signal: abort.signal });
-    if (read === null || n !== this.#namesAsk) {
+    const asked = await findNames(words, { limit: 20, signal: abort.signal });
+    if (asked.kind === "superseded" || n !== this.#namesAsk) {
       return;
     }
+    const { read } = asked;
     this.#pendingNames = null;
     this.names = this.#land(read, key);
     if (read.ok) {
@@ -585,16 +586,16 @@ export class FinderState {
     } else {
       this.everywhere = { state: "asking", for: key, since: Date.now() };
     }
-    const read = await findEverywhere(words, {
+    const asked = await findEverywhere(words, {
       limit: 20,
       by: this.by,
       signal: abort.signal,
     });
-    if (read === null || n !== this.#everyAsk) {
+    if (asked.kind === "superseded" || n !== this.#everyAsk) {
       return;
     }
     this.#pendingEvery = null;
-    this.everywhere = this.#land(read, key);
+    this.everywhere = this.#land(asked.read, key);
   }
 
   #land<T>(read: Read<T>, key: string): Answer<T> {
@@ -608,11 +609,11 @@ export class FinderState {
   }
 
   async loadWaiting() {
-    const read = await findWaiting();
-    if (read === null) {
+    const asked = await findWaiting();
+    if (asked.kind === "superseded") {
       return;
     }
-    this.waiting = this.#land(read, "");
+    this.waiting = this.#land(asked.read, "");
   }
 
   /** Opened: the doorway's answers, and a clock that keeps ages true. */
