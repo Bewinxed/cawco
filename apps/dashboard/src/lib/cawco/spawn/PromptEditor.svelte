@@ -309,13 +309,20 @@
   });
 </script>
 
-<div class="editor-wrap" data-keeps-draft>
+<!-- literal: 1rem on a phone or a coarse pointer -->
+<div
+  data-slot="editor-wrap"
+  class="relative"
+  data-keeps-draft
+  style:--prompt-fs-touch="1rem"
+  style:--prompt-lh="calc(var(--prompt-fs) * 1.55)"
+>
   <!-- biome-ignore lint/a11y/useSemanticElements: a contenteditable is the only element that can hold inline chips; textarea cannot -->
   <div
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="editor fai-scroll"
+    class="fai-scroll h-(--prompt-height) max-phone:h-(--prompt-height-phone) w-full overflow-auto rounded-t-lg bg-transparent px-(--pad-x) pt-(--pad-t) pb-(--pad-b) font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap text-ink-strong outline-none max-phone:overscroll-contain max-phone:transition-none motion-safe:transition-[height] motion-safe:duration-(--ns-prompt-ms) motion-safe:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {
@@ -331,14 +338,26 @@
     onkeyup={caret}
     onpaste={paste}
     role="textbox"
-    style={`--prompt-height:${promptH}px`}
+    style:--chip-gap="5px"
+    style:--chip-pad-start="5px"
+    style:--pad-b="6px"
+    style:--pad-t="12px"
+    style:--pad-x="16px"
+    style:--prompt-height={`${promptH}px`}
+    style:--prompt-height-phone="120px"
     tabindex="0"
     bind:this={element}
   ></div>
   {#if promptEmpty}
-    <span aria-hidden="true" class="placeholder"
+    <!-- literal: 16px inline inset, 12px top inset -->
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute top-(--top) right-(--x) left-(--x) truncate font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
+      style:--top="12px"
+      style:--x="16px"
       >What should the agent do first?
-      <span class="hint">@ machine or project · / skills and plugins</span
+      <span class="text-ink-subtle max-phone:hidden"
+        >@ machine or project · / skills and plugins</span
       ></span
     >
   {/if}
@@ -358,46 +377,19 @@
 </div>
 
 <style>
-  .editor-wrap {
-    position: relative;
-    /* The prompt's type, defined once: the text, the placeholder and the chips
-       (which size themselves to the line) all read the same two values. */
+  /* residual: unmapped */
+  /* The prompt's type, defined once: the text, the placeholder and the chips
+     (which size themselves to the line) all read the same two values. */
+  [data-slot="editor-wrap"] {
     --prompt-fs: var(--text-body);
-    --prompt-lh: calc(var(--prompt-fs) * 1.55);
-  }
-  .editor {
-    width: 100%;
-    height: var(--prompt-height);
-    padding: 12px 16px 6px;
-    overflow: auto;
-    outline: none;
-    background: transparent;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    font: var(--weight-body) var(--prompt-fs) / var(--prompt-lh)
-      var(--font-body);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    word-break: break-word;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: height var(--ns-prompt-ms) var(--ease-in-out);
+    @media (max-width: 640px), (pointer: coarse) {
+      --prompt-fs: var(--prompt-fs-touch);
     }
   }
-  .placeholder {
-    position: absolute;
-    left: 16px;
-    top: 12px;
-    right: 16px;
-    font: var(--weight-body) var(--prompt-fs) / var(--prompt-lh)
-      var(--font-body);
-    color: var(--ink-subtle);
-    pointer-events: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  [data-slot="editor"] {
+    word-break: break-word;
   }
-  .hint {
-    color: var(--ink-subtle);
-  }
+  /* residual: foreign-dom */
   /* A chip is centred on its line by construction, not tuned to a baseline.
      It is the line minus 1px of margin above and below, pinned to the line's
      top: the margin box is exactly one line tall, so the chip never grows the
@@ -407,14 +399,14 @@
      desktop 14px, the mobile 16px and any font the token stack resolves to.
      (Flex alignment inside the chip centres the icon and the label together;
      a flex chip's own baseline is never consulted because it is top-aligned.) */
-  .editor :global(.ns-chip) {
+  [data-slot="editor"] :global(.ns-chip) {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--chip-gap);
     vertical-align: top;
     block-size: calc(var(--prompt-lh) - 2px);
     margin: 1px;
-    padding-inline: 5px 7px;
+    padding-inline: var(--chip-pad-start) var(--space-2);
     border-radius: var(--radius-sm);
     background: var(--surface-fill);
     border: 1px solid var(--border-control);
@@ -423,32 +415,12 @@
     white-space: nowrap;
     user-select: all;
   }
-  .editor :global(.ns-chip-icon) {
+  [data-slot="editor"] :global(.ns-chip-icon) {
     display: inline-flex;
   }
   /* The harness logo sizes itself (16px); every other icon is a bare svg. */
-  .editor :global(.ns-chip-icon > svg) {
-    inline-size: 12px;
-    block-size: 12px;
-  }
-  /* iOS Safari zooms into a field whose text is under 16px and stays zoomed
-     after the keyboard goes; app.css holds every input, textarea and select
-     to that floor under this same condition, and the prompt is the one
-     field that is none of those. */
-  @media (max-width: 640px), (pointer: coarse) {
-    .editor-wrap {
-      --prompt-fs: 1rem;
-    }
-  }
-  @media (max-width: 640px) {
-    .editor {
-      height: 120px;
-      overscroll-behavior: contain;
-      transition: none;
-    }
-    /* The hint would only ellipsise at this width; the question survives whole. */
-    .hint {
-      display: none;
-    }
+  [data-slot="editor"] :global(.ns-chip-icon > svg) {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
   }
 </style>
