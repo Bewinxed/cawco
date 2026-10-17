@@ -8,7 +8,9 @@
  *
  * On a scratch fleet, a Claude Code session spawned in the fleet's repo,
  * which holds a Vite + Svelte project (`Card.svelte` and its story file;
- * its node_modules the dashboard's), against the mock model:
+ * its node_modules a link to the dashboard's, which the place's boundary
+ * holds read-only, so Vite's config load and caches must write elsewhere),
+ * against the mock model:
  *
  * 1. `components_list` answers the repo's components, `src/Card.svelte`
  *    with its story file, never "this session runs in no workspace".
@@ -46,9 +48,9 @@ const PROJECT: Record<string, string> = {
       vite: "*",
     },
   }),
-  // The linked node_modules are the dashboard's: Vite's cache stays in this folder.
+  // The linked node_modules are the dashboard's, outside the place and read-only in its boundary: the stage writes nothing there.
   "vite.config.mjs": `import { svelte } from "@sveltejs/vite-plugin-svelte";
-export default { cacheDir: ".vite-cache", plugins: [svelte()], server: { fs: { strict: false } } };
+export default { plugins: [svelte()], server: { fs: { strict: false } } };
 `,
   "index.html": "<!doctype html><html><head></head><body></body></html>\n",
   "src/Card.svelte": `<script>

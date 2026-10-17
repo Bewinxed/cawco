@@ -174,6 +174,18 @@ const port = Number(process.env.CAWCO_STAGE_PORT);
 const framework = process.env.CAWCO_STAGE_FRAMEWORK as Framework;
 const kit = process.env.CAWCO_STAGE_KIT === "1";
 const toolchain = process.env.CAWCO_STAGE_TOOLCHAIN as StageToolchain;
+/**
+ * The toolchain's caches, beside this file in the stage's own git-excluded
+ * dir, never in `node_modules`: a place's `node_modules` (a symlink, a
+ * workspace's hoisted to a folder above the place) can be read-only in its
+ * boundary (EROFS). Vite's `cacheDir` "Default: `node_modules/.vite` … an
+ * absolute file system path or a path relative to project root"
+ * (vite.dev/config/shared-options); Astro's own "Default:
+ * `./node_modules/.astro`" (docs.astro.build/en/reference/
+ * configuration-reference/); Nuxt keeps "Explicit `vite.cacheDir` values"
+ * (github.com/nuxt/nuxt/pull/35626). Vite's watcher ignores its `cacheDir`.
+ */
+const CACHE_DIR = resolve(root, ".cawco/stage/cache");
 /** Nuxt's global CSS (`css` in its config) and source dir, once it has loaded. */
 let nuxtOptions: Nuxt["options"] | undefined;
 
@@ -1442,7 +1454,18 @@ const onPort = (got: number | undefined, name: string): number => {
   return got;
 };
 
-/** The project's Vite, from its own config file (vite.dev/guide/api-javascript `createServer`). */
+/**
+ * The project's Vite, from its own config file (vite.dev/guide/api-javascript
+ * `createServer`), loaded by the stage's own runtime: `native` "executes the
+ * original config file directly … It requires a runtime that supports the
+ * syntax used by your config file, such as Node.js 22.18+ for TypeScript
+ * files" (vite.dev/config), and is Vite 9's planned default (vitejs/vite
+ * #21546). The default `bundle` "writes the bundled config to
+ * `node_modules/.vite-temp`" and fails on a read-only one (Vite 8.3.2
+ * `loadConfigFromBundledFile` falls back beside the config only on EACCES);
+ * `runner` can't read SvelteKit 3's `"extends": "$app/tsconfig"`
+ * (`TSCONFIG_ERROR … Tsconfig not found`, measured on the dashboard).
+ */
 async function startVite(): Promise<Started> {
   const vite = (await import(projectPackage("vite").href)) as Vite;
   const configFile = CONFIGS.map((name) => resolve(root, name)).find(
@@ -1451,6 +1474,8 @@ async function startVite(): Promise<Started> {
   const started = await vite.createServer({
     root,
     configFile: configFile ?? false,
+    configLoader: "native",
+    cacheDir: CACHE_DIR,
     clearScreen: false,
     logLevel: "warn",
     plugins: plugins(),
@@ -1483,9 +1508,11 @@ async function startAstro(): Promise<Started> {
   const astro = (await import(href)) as Astro;
   const started = await astro.dev({
     root,
+    cacheDir: CACHE_DIR,
     logLevel: "warn",
     server: { host: HOST, port },
     vite: {
+      cacheDir: join(CACHE_DIR, "vite"),
       clearScreen: false,
       plugins: plugins(),
       server: { strictPort: true, hmr: { overlay: false } },
@@ -1538,6 +1565,7 @@ async function startNuxt(): Promise<Started> {
     dev: true,
     overrides: {
       modules: [cawcoNuxtModule],
+      vite: { cacheDir: CACHE_DIR },
       // A stage reports nothing anywhere: no telemetry from a boundary.
       telemetry: false,
     },
