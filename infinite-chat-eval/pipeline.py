@@ -672,13 +672,16 @@ class IncBuild:
     def __init__(self, design, caller=live_caller, write=True):
         self.d, self.call, self.write = design, caller, write
         self.root = INC[design]
-        self.st = TreeStore(write=write, root=self.root if write else os.path.join(self.root, "__dry_run__"))
+        # write=False (the plan's dry run): the same saved state and nodes, read only (TreeStore(write=False) opens no
+        # file and save_state/finish write nothing), so a part-built design is priced from where it stopped
+        self.st = TreeStore(write=write, root=self.root)
         self.state_path = os.path.join(self.root, "state.json")
-        self.s = (load(self.state_path) if write else None) or {
+        self.s = load(self.state_path) or {
             "turn": 0, "view": [], "carry": [], "over": [], "events": [], "snapshot": None, "snap_len": 0,
             "session": None, "session_chars": 0, "sessions": 0,
             "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         self.view = [tuple(k) for k in self.s["view"]]
+        self.turn_of = [t for t, (a, b) in enumerate(chat_turns(self.st.msgs)) for _ in range(a, b)]
         self.s["session"] = None  # never continue a session a stopped run may have left mid-turn
         self.lock = threading.Lock()
 
@@ -699,6 +702,17 @@ class IncBuild:
 
     def ts(self, j):
         return MSG_TS.get(self.st.msgs[j]["i"])
+
+    def span(self, first, last):
+        """What of the chat a request carries: messages first..last (tree message indices; a merge or shorten key's
+        numbers are node indices at its level), their chat turns and chat time. In the ledger, and in the STOPPED line
+        when the call fails, so a span the model refuses can be found."""
+        last = min(last, len(self.st.msgs) - 1)
+        return (f"messages {first}-{last}, chat turns {self.turn_of[first]}-{self.turn_of[last]}, "
+                f"chat {self.ts(first)} to {self.ts(last)}")
+
+    def node_span(self, nodes):
+        return self.span(min(i * 2 ** l for l, i in nodes), max((i + 1) * 2 ** l - 1 for l, i in nodes))
 
     def block(self, js):
         out = []
@@ -764,7 +778,7 @@ class IncBuild:
     def file(self, t, js, need):
         labels = [f"{j}+1" for j in need]
         key = f"build/inc-{self.d}/file/t{t}"
-        meta = {"turn": t, "chat_ts": self.ts(js[-1]), "msgs": len(js), "lines": len(need),
+        meta = {"turn": t, "chat_ts": self.ts(js[-1]), "span": self.span(js[0], js[-1]), "msgs": len(js), "lines": len(need),
                 "block_chars": sum(len(self.st.src(j)) for j in js)}
         got = self.ask(key, "file", self.block(js) + ids_rule(labels), labels, meta)
         miss = [j for j in need if not got.get(f"{j}+1")]
@@ -786,7 +800,7 @@ class IncBuild:
             labs = [lab for lab, _ in items]
             key = f"build/inc-{self.d}/shorten/{tag}/{labs[0]}"
             user = SHORTEN_TASK.replace("{RULER}", RULER) + "\n\n" + inputs_body(items) + ids_rule(labs)
-            got = self.ask(key, "shorten", user, labs, {"turn": t, "lines": len(g)})
+            got = self.ask(key, "shorten", user, labs, {"turn": t, "span": self.node_span(g), "lines": len(g)})
             for k, (lab, text) in zip(g, items):
                 v = got.get(lab)
                 if v and TR.b(v) < TR.b(text):
@@ -849,7 +863,7 @@ class IncBuild:
             items = [(label(p), self.line((l - 1, 2 * p[1])) + "\n" + self.line((l - 1, 2 * p[1] + 1))) for p in g]
             labs = [lab for lab, _ in items]
             key = f"build/inc-{self.d}/merge/t{t}/L{l}/{g[0][1]}-{g[-1][1]}"
-            meta = {"turn": t, "chat_ts": self.ts(T - 1), "lines": len(g)}
+            meta = {"turn": t, "chat_ts": self.ts(T - 1), "span": self.node_span(g), "lines": len(g)}
             got = self.ask(key, "merge", "The view has passed 128,000 bytes. Merge each input below.\n\n" +
                            inputs_body(items) + ids_rule(labs), labs, meta)
             miss = [(lab, txt) for lab, txt in items if not got.get(lab)]
@@ -951,8 +965,8 @@ def run_inc(d):
 
 
 def inc_estimate(tpc, designs):
-    """Dry run of each design not built yet, on the real chat, with the batch tree's lines standing in for replies
-    (a design part-built is estimated whole: an upper bound)."""
+    """Dry run of each design not built yet, on the real chat, with the batch tree's lines standing in for replies.
+    A part-built design starts from its saved turn, view and nodes (read only), so only the turns left are priced."""
     batch = TreeStore(write=False).nodes
     sim = SimCaller(tpc, batch)
     out = {}
