@@ -1,5 +1,5 @@
 {
-  "count": 516,
+  "count": 518,
   "files": {
     "src/lib/cawco/AddMachineDialog.svelte": 1,
     "src/lib/cawco/ContextMeter.svelte": 23,
@@ -131,7 +131,7 @@
     "src/lib/components/ui/spinner/spinner.svelte": 1,
     "src/lib/components/ui/table/table-caption.svelte": 1,
     "src/lib/components/ui/table/table-cell.svelte": 1,
-    "src/lib/components/ui/table/table-head.svelte": 2,
+    "src/lib/components/ui/table/table-head.svelte": 4,
     "src/lib/components/ui/tabs/tabs.svelte": 1,
     "src/lib/components/ui/textarea/textarea.svelte": 4,
     "src/lib/components/ui/toggle/toggle.svelte": 19,
