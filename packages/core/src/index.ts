@@ -1835,6 +1835,7 @@ export * from "./words/configure";
 export * from "./words/helpers";
 export * from "./words/offers";
 export * from "./words/pairing";
+export * from "./words/place";
 export * from "./words/plan";
 export * from "./words/preview";
 export * from "./words/sheet";

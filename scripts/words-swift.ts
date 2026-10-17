@@ -93,6 +93,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/offers.ts", export: "offerWords", as: "" }],
   },
   {
+    // A page's cawco.pickPlace(): the machine select and folder browser over the preview's well.
+    swift: "PlacePick",
+    members: [{ file: "words/place.ts", export: "placePickWords", as: "" }],
+  },
+  {
     // A session's plan: its ring and its panel.
     swift: "Plan",
     members: [{ file: "words/plan.ts", export: "planWords", as: "" }],

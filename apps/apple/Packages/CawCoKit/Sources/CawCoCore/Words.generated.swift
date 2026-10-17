@@ -805,6 +805,34 @@ public enum Words {
         public static let open = "Open"
     }
 
+    public enum PlacePick {
+        // packages/core/src/words/place.ts `placePickWords`
+        public static let title = "Pick a machine and folder"
+
+        public static let machine = "Machine"
+
+        /// A machine as the select lists it: its label, then its OS.
+        public static func machineOption(label: String, os: String) -> String {
+            "\(label) · \(os)"
+        }
+
+        public static let noMachines = "No machines online"
+
+        public static let folder = "Folder"
+
+        public static let folderPlaceholder = "/home/you/project"
+
+        public static let use = "Use this place"
+
+        public static let saving = "Saving…"
+
+        public static let cancel = "Cancel"
+
+        public static let needsMachine = "Choose a machine that is online."
+
+        public static let needsPath = "A folder is its full path, starting with /."
+    }
+
     public enum Plan {
         // packages/core/src/words/plan.ts `planWords`
         /// The ring's word, and the panel's title over steps or a spec.

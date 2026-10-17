@@ -888,6 +888,12 @@ enum PreviewProbe {
     }()
     /// `-open-plan`: the session's plan opens in its sheet the first time its ring shows (scripts/probe-kit/specs/ios-plan.ts).
     static let openPlanAtLaunch = ProcessInfo.processInfo.arguments.contains("-open-plan")
+    /// `-place-pick <path>`: a page's `cawco.pickPlace()` picker takes the folder `path` and Use this place, as the person's would.
+    static let placePick: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-place-pick"), arguments.indices.contains(flag + 1) else { return nil }
+        return arguments[flag + 1]
+    }()
     /// `-menu-remove <name>`: once the page is ready, the title menu opens and its row `name` is removed.
     static let menuRemove: String? = {
         let arguments = ProcessInfo.processInfo.arguments

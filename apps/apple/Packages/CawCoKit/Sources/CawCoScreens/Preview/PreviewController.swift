@@ -34,6 +34,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var inspectKey: String { "cawco-preview-inspect:\(instanceId)" }
     /// The web view's trailing edge: in from the well's by the inspector's width while it stands as a panel.
     private var webTrailing: NSLayoutConstraint!
+    /// A page's `cawco.pickPlace()` waiting on the person: the request it answers (PreviewPane.svelte `picking`).
+    fileprivate var picking: PickAsk?
+    /// Its picker: over the well in a pane, or the house sheet in the phone's drawer.
+    fileprivate var placePick: PlacePickView?
+    fileprivate weak var placePickSheet: UIViewController?
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
     private var sendButton: UIButton!
@@ -706,6 +711,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// in the card goes first, then the card closes, then Comment or Draw
     /// goes back to Interact. False when none was there.
     func escape() -> Bool {
+        // The picker over the page goes first: Escape answers nothing (PlacePick.svelte).
+        if picking != nil {
+            cancelPick()
+            return true
+        }
         if openPin != nil, card.escape() {
             #if DEBUG
             PreviewProbe.say("preview escape ask")
@@ -849,6 +859,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview document")
         PreviewProbe.documents += 1
         #endif
+        // A pick the old page asked for has no page left to answer.
+        dropPick()
     }
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
@@ -941,6 +953,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let said = message.body as? NSString, said.length <= Self.messageMost else { return }
         guard let data = (said as String).data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if let ask = Self.pickPlaceAsk(body) {
+            // A second ask replaces one still open: the page asked again.
+            cancelPick()
+            openPick(ask)
+            return
+        }
         switch body["type"] as? String {
         case "cawco:loaded":
             hello()
@@ -2042,7 +2060,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // page posts to its parent stays in the page, never crossing to
         // the app's main thread.
         postMessage(data) {
-          if (!data || typeof data.type !== "string" || !data.type.startsWith("cawco:")) return;
+          // The one request the page makes of its host (`cawco.pickPlace`, a JSON-RPC ask) goes too.
+          const asks = !!data && data.jsonrpc === "2.0" && data.method === "cawco/pick-place";
+          if (!asks && (!data || typeof data.type !== "string" || !data.type.startsWith("cawco:"))) return;
           window.webkit.messageHandlers.cawco.postMessage(JSON.stringify(data));
         },
       };
@@ -2070,6 +2090,111 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
       };
     })();
     """
+}
+
+/// A page's JSON-RPC id, as wire.ts `previewPickPlace` takes it: a safe integer, or a string of at most 100.
+enum PickAsk {
+    case number(Int)
+    case text(String)
+
+    var json: Any {
+        switch self {
+        case let .number(id): id
+        case let .text(id): id
+        }
+    }
+}
+
+// MARK: A page's cawco.pickPlace()
+
+extension PreviewController {
+    /// The page's `cawco/pick-place` ask (wire.ts `previewPickPlace`), or nil when the message is not one.
+    fileprivate static func pickPlaceAsk(_ body: [String: Any]) -> PickAsk? {
+        guard body["jsonrpc"] as? String == "2.0", body["method"] as? String == "cawco/pick-place" else { return nil }
+        if let number = body["id"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+            let value = number.doubleValue
+            guard value.rounded() == value, abs(value) <= 9_007_199_254_740_991 else { return nil }
+            return .number(Int(value))
+        }
+        if let text = body["id"] as? String, text.count <= 100 { return .text(text) }
+        return nil
+    }
+
+    /// The picker for the page's ask (PlacePick.svelte): over the whole of
+    /// the well in a pane, as the web draws it there, opaque, above the page
+    /// and the inspector; in the phone's drawer, the house sheet
+    /// (HouseSheetController), the drawer's own sheet idiom.
+    fileprivate func openPick(_ ask: PickAsk) {
+        picking = ask
+        let pick = PlacePickView(hub: hub, titled: !drawer)
+        pick.onPick = { [weak self] place in
+            self?.answerPick(["machineId": place.machineId, "label": place.label, "path": place.path])
+        }
+        pick.onCancel = { [weak self] in self?.cancelPick() }
+        placePick = pick
+        if drawer {
+            let content = PlacePickSheetController(pick)
+            content.onGone = { [weak self] in self?.cancelPick() }
+            let sheet = HouseSheetController(content, title: Words.PlacePick.title, scroller: pick.scroll)
+            placePickSheet = sheet
+            present(sheet, animated: true)
+        } else {
+            pick.alpha = 0
+            well.insertSubview(pick, belowSubview: card)
+            NSLayoutConstraint.activate([
+                pick.topAnchor.constraint(equalTo: well.topAnchor),
+                pick.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+                pick.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                pick.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+            ])
+            // `transition:appear`: its opacity over `--dur-fade`.
+            Motion.easeOut.animator(Motion.durFade) { pick.alpha = 1 }.startAnimation()
+            UIAccessibility.post(notification: .screenChanged, argument: pick)
+        }
+        #if DEBUG
+        PreviewProbe.say("place pick opened \(ask.json) as=\(drawer ? "sheet" : "well")")
+        if let path = PreviewProbe.placePick {
+            Task { @MainActor [weak pick] in
+                try? await Task.sleep(for: .seconds(1))
+                pick?.pickForProbe(path)
+            }
+        }
+        #endif
+    }
+
+    /// The person's answer to the page, as a JSON-RPC result: the place, or null.
+    private func answerPick(_ result: [String: Any]?) {
+        guard let ask = picking else { return }
+        dropPick()
+        deliver(["jsonrpc": "2.0", "id": ask.json, "result": result.map { $0 as Any } ?? NSNull()])
+        #if DEBUG
+        let said = result.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
+            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
+        PreviewProbe.say("place pick answered \(said)")
+        #endif
+    }
+
+    /// Cancel or Escape: the page hears null.
+    fileprivate func cancelPick() {
+        guard picking != nil else { return }
+        answerPick(nil)
+    }
+
+    /// The picker goes with no answer: a new document has no ask left to answer.
+    fileprivate func dropPick() {
+        picking = nil
+        if let sheet = placePickSheet {
+            placePickSheet = nil
+            sheet.dismiss(animated: true)
+        }
+        if let pick = placePick {
+            placePick = nil
+            guard pick.superview === well else { return }
+            let fade = Motion.easeOut.animator(Motion.durExit) { pick.alpha = 0 }
+            fade.addCompletion { _ in pick.removeFromSuperview() }
+            fade.startAnimation()
+        }
+    }
 }
 
 // MARK: A sheet's inspector, the artifacts' menu
