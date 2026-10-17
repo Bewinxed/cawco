@@ -13957,6 +13957,9 @@ export const createServer = (
   };
 
   hubAuth.setHooks({
+    // A pairing waiting on the person pushes to the app; settled, its push comes down.
+    asked: (request) => push.pairing(request),
+    settled: (userCode) => push.pairingSettled(userCode),
     changed: (frame) =>
       registry.broadcast({
         verb: "frames",
