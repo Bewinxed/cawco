@@ -70,7 +70,10 @@
     }
   }}
 />
-<div data-slot="tools" class="tools wf">
+<div
+  data-slot="tools"
+  class="wf flex items-center gap-space-1 rounded-lg bg-surface-raised p-space-1 shadow-tile"
+>
   {#if onpan}
     <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
       {pan ? "Pan" : "Select"}
@@ -88,7 +91,10 @@
         <IconMinus class="size-icon-md" />
       </button>
     {/snippet}
-  </Tip><span>{Math.round(zoom * 100)}%</span><Tip label="Zoom in">
+  </Tip><!-- literal: 40px --><span
+    class="min-w-(--zoom-min) text-center text-size-meta font-normal num"
+    style:--zoom-min="40px">{Math.round(zoom * 100)}%</span
+  ><Tip label="Zoom in">
     {#snippet children(tip)}
       <button
         {...tip}
@@ -144,22 +150,3 @@
     </Tip>
   {/if}
 </div>
-
-<style>
-  .tools {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1);
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-tile);
-  }
-  span {
-    min-width: 40px;
-    text-align: center;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-  }
-</style>
