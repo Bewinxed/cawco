@@ -306,12 +306,15 @@
   {/if}
 {/snippet}
 
-<!-- literal: auto minmax(0, 1fr) auto; minmax(0, 1fr) auto; var(--c-review-words) minmax(0, 1fr) -->
+<!-- literal: minmax(0, 1fr); auto minmax(0, 1fr) auto; minmax(0, 1fr) auto; var(--c-review-words) minmax(0, 1fr); the bands' areas -->
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
+  class="group flex-auto grid grid-cols-(--review-cols-one) grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
   data-compact={compact || undefined}
   data-words-staged={wordsStage || undefined}
+  style:--review-cols-one="minmax(0, 1fr)"
+  style:--review-areas={'"result" "stage" "decide"'}
+  style:--review-areas-wide={'"result stage" "decide decide"'}
   style:--review-rows="auto minmax(0, 1fr) auto"
   style:--review-rows-wide="minmax(0, 1fr) auto"
   style:--review-cols="var(--c-review-words) minmax(0, 1fr)"
@@ -319,7 +322,8 @@
   <!-- Band 1: the session, its words, what it attached -->
   <div
     data-slot="result"
-    class="flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
+    style:--area="result"
+    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 @task-frame/task-frame:not-data-compact:min-h-0 @task-frame/task-frame:not-data-compact:overflow-y-auto @task-frame/task-frame:not-data-compact:overscroll-contain @task-frame/task-frame:not-data-compact:border-e @task-frame/task-frame:not-data-compact:border-e-border-hairline"
     data-band="result"
     data-compact={compact || undefined}
   >
@@ -433,7 +437,8 @@
   {#if !compact}
     <div
       data-slot="stage"
-      class="flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
+      style:--area="stage"
+      class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) group-data-compact:px-space-4 border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
       data-band="stage"
       data-framed={!!presented || undefined}
       id="stage-{task.id}"
@@ -463,8 +468,9 @@
   {#if ended || (deciding && (approveTo || backTo))}
     <!-- literal: max(var(--space-3), env(safe-area-inset-bottom)) -->
     <div
-      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-4 group-data-compact:border-t group-data-compact:border-t-border-hairline col-span-full @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
+      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-4 group-data-compact:border-t group-data-compact:border-t-border-hairline row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
       data-band="decide"
+      style:--area="decide"
       style:--decide-end="max(var(--space-3), env(safe-area-inset-bottom))"
     >
       <RowFault reason={problem} />
