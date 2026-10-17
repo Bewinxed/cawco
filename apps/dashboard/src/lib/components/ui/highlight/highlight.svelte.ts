@@ -380,7 +380,8 @@ export function highlight(options: HighlightOptions) {
         .getAnimations()
         .filter(
           (run) =>
-            run instanceof CSSTransition && run.transitionProperty === "--hl-show"
+            run instanceof CSSTransition &&
+            run.transitionProperty === "--hl-show"
         );
       if (fades.length === 0) {
         drop();

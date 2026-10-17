@@ -160,10 +160,7 @@ function parsed(surface: string, line: string): Difference {
  * `differences-summary.txt` counted by surface, by surface and state at a
  * pass, and by property.
  */
-async function writeDifferences(
-  kit: Kit,
-  all: Difference[]
-): Promise<string> {
+async function writeDifferences(kit: Kit, all: Difference[]): Promise<string> {
   await mkdir(kit.out, { recursive: true });
   const tally = (key: (d: Difference) => string) => {
     const counted = new Map<string, number>();
@@ -211,7 +208,11 @@ async function report(
     if (!pair) {
       continue;
     }
-    const tally: Tally = { shadowLayers: 0, transitionLists: 0, zeroOffsets: 0 };
+    const tally: Tally = {
+      shadowLayers: 0,
+      transitionLists: 0,
+      zeroOffsets: 0,
+    };
     const lines = differences(pair[0], pair[1], tally);
     if (tally.shadowLayers > 0) {
       kit.note(

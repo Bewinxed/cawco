@@ -474,11 +474,7 @@ export async function walk(
     // A surface's passes side by side, each on its own page and context.
     await pool(passes, PARALLEL, async (pass) => {
       const states = surface.states.filter(
-        (s) =>
-          !(
-            hostOnly(s) ||
-            (s.widths && !s.widths.includes(pass.width))
-          )
+        (s) => !(hostOnly(s) || (s.widths && !s.widths.includes(pass.width)))
       );
       if (states.length === 0) {
         return;

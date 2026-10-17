@@ -911,7 +911,9 @@ export async function seedScene(
       words.summary ?? null,
       words.headline ?? null,
       words.error ?? null,
-      JSON.stringify(task.id === review.id ? ["push.post.json", "audit.md"] : []),
+      JSON.stringify(
+        task.id === review.id ? ["push.post.json", "audit.md"] : []
+      ),
       result === null ? null : JSON.stringify(result),
       started,
       started + (state === "done" ? 65_000 : 3 * MINUTE)
@@ -935,10 +937,7 @@ export async function seedScene(
     {
       at: now - 10 * MINUTE + 65_000,
       summary: REVIEW_REPORT,
-      check: [
-        "The post reads in under a minute.",
-        "Each miss names its run.",
-      ],
+      check: ["The post reads in under a minute.", "Each miss names its run."],
       artifacts: [
         {
           kind: "artifact",
