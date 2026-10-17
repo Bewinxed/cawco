@@ -326,7 +326,7 @@
       {#if source}
         <!-- Cut from its start, so the file's name and line stay. -->
         <span data-slot="source"
-          class="truncate text-left text-ink-muted font-mono text-size-meta font-normal leading-(--lh-normal)"><bdi>{source}</bdi></span>
+          class="truncate text-left text-ink-muted font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal)"><bdi>{source}</bdi></span>
       {/if}
     </span>
     {#if live}

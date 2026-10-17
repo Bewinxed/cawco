@@ -74,3 +74,16 @@ Its whole `<style>` is two global rules into DOM other files render. Neither can
 - PinCard: `.pin-card:not(.sheet)[style*="left"]` (right: auto) is `data-placed`; the inline `left`, `top`, `max-width` are `--card-left`, `--card-top`, `--card-maxw`. `var(--pop-rise, 8px)` in the keyframes is `var(--pop-rise)` (the root token is 8px).
 - PreviewPane: the iframe's inline `width` is `data-panel-inspector` + `--frame-w`; `class:ready` is the existing `data-ready`; the Comments popover's sizes are two more custom properties on its existing `style` string (`--pin-list-w`, `--pin-list-h`).
 - Specificity: Svelte-scoped rules in files outside this lane (Turn.svelte's `.turn`, SideSurface's head buttons) are unlayered and outrank these utilities until those lanes land: PinCard's `group-first/entry:mt-0` on Turn and PreviewPane's `data-dimmed:opacity-50` / `aria-*:bg-surface-fill` on head buttons are the places to look in the compare.
+
+## Delta R lines
+R2 fixed: apps/dashboard/src/lib/cawco/find/FindPeek.svelte:89, :122
+R2 fixed: apps/dashboard/src/lib/cawco/find/FindRow.svelte:61, :146
+R2 fixed: apps/dashboard/src/lib/cawco/find/Finder.svelte:464, :484, :520, :532, :621, :643, :670, :721, :740, :769, :810, :882
+R2 fixed: apps/dashboard/src/lib/cawco/find/MentionMenu.svelte:113
+R2 fixed: apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte:267
+R2 fixed: apps/dashboard/src/lib/cawco/preview/PinList.svelte:76, :165
+R2 fixed: apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte:1648
+R2 kept as border-0: apps/dashboard/src/lib/cawco/find/Finder.svelte:726 (the `<hr>`: `border: 0; border-block-start: 1px solid`; `border-none` would make `border-t`'s style none through `--tw-border-style`, so the top line would vanish)
+R3 fixed: apps/dashboard/src/lib/cawco/preview/PinCard.svelte:329 (the source span; the `<code>` at :427 keeps font-mono)
+R3 not mine: apps/dashboard/src/lib/cawco/preview/PlacePick.svelte:110 `font-mono` on the kit Input was already there before the cutover
+R1: no element of mine takes box-shadow from both a residual and a utility; no `shadow kept residual` lines

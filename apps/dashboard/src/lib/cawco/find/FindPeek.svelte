@@ -86,7 +86,7 @@
         {@const key = keyOf(i)}
         <button
           id={idOf(key)}
-          class="group/moment relative flex items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-0 rounded-xs bg-transparent text-start text-ink-row cursor-default active:bg-surface-fill group-data-phone/peek:min-h-(--peek-hit)"
+          class="group/moment relative flex items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-ink-row cursor-default active:bg-surface-fill group-data-phone/peek:min-h-(--peek-hit)"
           style:--moment-w="calc(100% + 2 * var(--space-1))"
           style:--moment-mx="calc(-1 * var(--space-1))"
           aria-selected={activeKey === key}
@@ -119,7 +119,7 @@
     <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
     <span data-slot="value" class="min-w-0 text-ink-muted"
       >{momentsState.machine} didn't answer<span class="px-(--sep-pad)">·</span><button
-        class="border-0 p-0 bg-transparent text-link-ink cursor-pointer"
+        class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer"
         onclick={onretry}
         type="button">Retry</button
       ></span

@@ -1645,7 +1645,7 @@
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        class="absolute inset-0 scheme-light bg-(color:--frame-bg) block size-full border-0 opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+        class="absolute inset-0 scheme-light bg-(color:--frame-bg) block size-full border-none border-current opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
         style:--frame-bg="Canvas"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
         allow="clipboard-write"

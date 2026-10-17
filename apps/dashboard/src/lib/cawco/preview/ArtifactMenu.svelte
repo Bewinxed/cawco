@@ -264,7 +264,7 @@
           {/if}
           <button
             aria-label="Remove {artifact.name}"
-            class="grid place-items-center me-(--remove-me) p-space-1 border-0 rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] dur-control ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
+            class="grid place-items-center me-(--remove-me) p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] dur-control ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
             data-box
             style:--remove-me="calc(-1 * var(--space-1))"
             disabled={removing.has(artifact.id)}

@@ -461,7 +461,7 @@
     />
     <input
       bind:this={field}
-      class="flex-1 min-w-0 h-full border-0 p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-none placeholder:text-ink-subtle placeholder:text-ellipsis group-data-phone/finder:text-(length:--field-fs-phone)"
+      class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-none placeholder:text-ink-subtle placeholder:text-ellipsis group-data-phone/finder:text-(length:--field-fs-phone)"
       aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
       aria-autocomplete="list"
       aria-controls={listId}
@@ -481,7 +481,7 @@
     {#if finder.text}
       <button
         data-slot="clear"
-        class="grid place-items-center flex-none size-(--clear-size) border-0 rounded-md bg-transparent text-ink-muted hover:bg-surface-hover active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
+        class="grid place-items-center flex-none size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted hover:bg-surface-hover active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
         aria-label="Clear the words"
         onclick={clear}
         type="button"
@@ -517,7 +517,7 @@
     {#each finder.projectChips as word (word)}
       <span class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)" data-flip="pop"
         ><span>{word}</span><button
-          class="grid place-items-center size-(--chipx) border-0 rounded-pill bg-transparent"
+          class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${word}`}
           data-box
           onclick={() => finder.removeWords([word])}
@@ -529,7 +529,7 @@
       {@const time = finder.parsed.time}
       <span class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)" data-flip="pop"
         ><span>{time}</span><button
-          class="grid place-items-center size-(--chipx) border-0 rounded-pill bg-transparent"
+          class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${time}`}
           data-box
           onclick={() => finder.removeWords(time.split(" "))}
@@ -618,7 +618,7 @@
         {@const k = `${row}#${act}`}
         <button
           id={idOf(k)}
-          class="mark-line flex items-center gap-space-2 w-full h-(--act-h) px-space-2 border-0 rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
+          class="mark-line flex items-center gap-space-2 w-full h-(--act-h) px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
           aria-selected={activeKey === k}
           data-active={activeKey === k ? "" : undefined}
           data-find-row
@@ -640,7 +640,7 @@
     <button
       data-slot="fold-row"
       id={idOf(item.key)}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--row1-h) px-space-3 border-0 rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--row1-h-phone) group-data-phone/finder:text-(length:--row1-fs-phone)"
+      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--row1-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--row1-h-phone) group-data-phone/finder:text-(length:--row1-fs-phone)"
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
       aria-selected={activeKey === item.key}
       data-active={activeKey === item.key ? "" : undefined}
@@ -667,7 +667,7 @@
   {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--row1-h) px-space-3 border-0 rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--row1-h-phone) group-data-phone/finder:text-(length:--row1-fs-phone)"
+      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--row1-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--row1-h-phone) group-data-phone/finder:text-(length:--row1-fs-phone)"
       aria-selected={activeKey === "waiting"}
       data-active={activeKey === "waiting" ? "" : undefined}
       data-find-row
@@ -718,7 +718,7 @@
           class="px-(--sep-pad)">·</span
         >
       {/if}
-      <button class="border-0 p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.retry()} type="button"
+      <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.retry()} type="button"
         >Retry</button
       >
     </div>
@@ -737,7 +737,7 @@
       <p data-slot="nothing-line" class="m-0 text-ink-strong">
         No sessions for “{finder.text.trim()}”
       </p>
-      <button class="border-0 p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={clear} type="button"
+      <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={clear} type="button"
         >Open today's sessions</button
       >
     </div>
@@ -766,7 +766,7 @@
     class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-1 pe-space-2 border-b border-border-hairline"
   >
     <button
-      class="grid place-items-center size-(--clear-size) border-0 rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
+      class="grid place-items-center size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
       aria-label="Back to find"
       onclick={() => finder.showFind()}
       type="button"><ChevronLeft class="size-icon-md" /></button
@@ -807,7 +807,7 @@
         <p data-slot="nothing-line" class="m-0 text-ink-strong">
           Nothing waits for you
         </p>
-        <button class="border-0 p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.showFind()} type="button"
+        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.showFind()} type="button"
           >Open today's sessions</button
         >
       </div>
@@ -879,7 +879,7 @@
         {:else}
           {finder.refused}.
         {/if}
-        <button class="border-0 p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.retry()} type="button"
+        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer active:opacity-72" onclick={() => finder.retry()} type="button"
           >Retry</button
         >
       </div>

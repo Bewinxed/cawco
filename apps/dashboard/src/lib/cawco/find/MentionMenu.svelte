@@ -110,7 +110,7 @@
     {#if mention.answer.state === "unreached"}
       <p class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)" data-flip>
         Can't reach the hub. Nothing can be named until it's back.
-        <button class="border-0 p-0 bg-transparent text-link-ink cursor-pointer" onclick={() => mention.retry()} type="button"
+        <button class="border-none border-current p-0 bg-transparent text-link-ink cursor-pointer" onclick={() => mention.retry()} type="button"
           >Retry</button
         >
       </p>

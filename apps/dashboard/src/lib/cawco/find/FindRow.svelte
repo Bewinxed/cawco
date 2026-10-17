@@ -58,7 +58,7 @@
   <button
     data-slot="row"
     {id}
-    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-(--row-min) px-space-3 py-(--row-pad) border-0 rounded-sm bg-transparent text-start box-border cursor-default outline-none select-none active:bg-surface-fill data-phone:min-h-(--row-min-phone) data-phone:py-(--row-pad-phone) data-peekable:pe-(--hit)"
+    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-(--row-min) px-space-3 py-(--row-pad) border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-none select-none active:bg-surface-fill data-phone:min-h-(--row-min-phone) data-phone:py-(--row-pad-phone) data-peekable:pe-(--hit)"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-selected={active}
@@ -143,7 +143,7 @@
   </button>
   {#if peekable}
     <button
-      class="group/disclose absolute inset-y-0 end-0 grid place-items-center w-(--hit) min-h-0 p-0 border-0 rounded-sm bg-transparent text-ink-muted active:bg-surface-fill"
+      class="group/disclose absolute inset-y-0 end-0 grid place-items-center w-(--hit) min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-fill"
       aria-controls={`${id}-peek`}
       aria-expanded={peeked}
       aria-label={peeked ? "Fold" : "Peek"}
