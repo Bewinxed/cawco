@@ -121,3 +121,21 @@ None; no `!important` in these files.
 - TaskColumn: the pick checkbox's visibility groups are named (`group/card` on the `li`, `group/col` on the section) so `focus-within` on one card does not show every tick.
 - PostCard: `calc(var(--space-4) + 11px)` is written `calc(var(--space-4) + var(--space-3))` (space-3 is 11px).
 - TaskBoard: the rail name's `[data-slot="rail-name"]` hook is new on the span (the class it had is deleted).
+
+## Contracts
+
+None declared. The no-restyle hits above are not blocking: the lane ESLint check reports `eslint-clean (0 declared contract, 0 shared-sheet)`.
+
+## Delta R
+
+R2 fixed: apps/dashboard/src/lib/cawco/tasks/TaskActivity.svelte:290
+R2 fixed: apps/dashboard/src/lib/cawco/tasks/TaskBoard.svelte:190
+R2 fixed: apps/dashboard/src/lib/cawco/tasks/TaskBoard.svelte:205
+R2 fixed: apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte:104
+R2 fixed: apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte:60
+R3 fixed: apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte:289
+R3 fixed: apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte:129
+R3 fixed: apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte:189
+R3 fixed: apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte:215
+
+R1: no element changes box-shadow between states with a mix of residual and utility (TaskColumn and TaskBoard rings are residual only; TaskCard's `shadow-tile` has no shadow state).
