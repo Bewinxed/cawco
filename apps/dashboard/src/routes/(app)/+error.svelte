@@ -18,7 +18,7 @@
   </title></svelte:head
 >
 
-<div class="page">
+<div class="min-w-0 flex-auto overflow-y-auto p-space-6">
   <EmptyState
     icon={missing ? IconMapPoint : IconWarningTriangle}
     line={missing
@@ -31,12 +31,3 @@
     {/snippet}
   </EmptyState>
 </div>
-
-<style>
-  .page {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-y: auto;
-    padding: var(--space-6);
-  }
-</style>

@@ -74,8 +74,15 @@
   ready={onCap !== null}
   title={section.label}
 >
-  <div data-slot="group" class="group">
-    <p data-slot="note" class="note">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--group-gap)"
+    style:--group-gap="8px"
+    style:--note-measure="72ch"
+  >
+    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
       Each project sets what it may spend in a day or a month on its Usage page,
       and follows this unless it chooses otherwise.
     </p>
@@ -101,16 +108,3 @@
     </Field>
   </div>
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

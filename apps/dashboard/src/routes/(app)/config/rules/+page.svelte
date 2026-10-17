@@ -206,7 +206,12 @@
         >
           {#snippet badge()}
             {#if row.stats.pending > 0}
-              <span data-slot="num" class="waiting num"
+              <!-- literal: 1px 6px -->
+              <span
+                data-slot="num"
+                class="num type-label flex-none rounded-xs bg-status-attn-bg px-(--waiting-pad-x) py-(--waiting-pad-y) text-status-attn-ink"
+                style:--waiting-pad-x="6px"
+                style:--waiting-pad-y="1px"
                 >{row.stats.pending} waiting</span
               >
             {/if}
@@ -223,14 +228,3 @@
     </RowList>
   {/if}
 </SectionFrame>
-
-<style>
-  .waiting {
-    flex: none;
-    padding: 1px 6px;
-    border-radius: var(--radius-xs);
-    background: var(--status-attn-bg);
-    font: var(--type-label);
-    color: var(--status-attn-ink);
-  }
-</style>
