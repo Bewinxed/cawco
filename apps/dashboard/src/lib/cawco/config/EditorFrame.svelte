@@ -25,7 +25,7 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore, IconTrash } from "#lib/icons.js";
@@ -134,27 +134,36 @@
 
 <form
   data-slot="editor"
-  class="editor"
+  class="flex flex-auto flex-col min-w-0 min-h-0 bg-surface-recess"
   onsubmit={(event) => {
     event.preventDefault();
     onsubmit();
   }}
 >
-  <div class="scroll" data-safe-bottom bind:this={scroller}>
+  <div
+    class="flex flex-auto flex-col min-h-0 overflow-y-auto pt-space-2 px-space-5 pb-space-5 max-phone:pb-(--scroll-pb)"
+    data-safe-bottom
+    style:--scroll-pb="calc(var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom))"
+    bind:this={scroller}
+  >
+    <!-- literal: 980px, 8px, 26px -->
     <div
       data-slot="body"
-      class="body"
+      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-(--body-max) py-space-6 px-space-7 rounded-lg bg-surface-raised min-h-(--card-h)"
       bind:this={body}
-      style:min-height={card === null ? undefined : `${card}px`}
+      style:--body-max="980px"
+      style:--head-gap="8px"
+      style:--tile="26px"
+      style:--card-h={card === null ? undefined : `${card}px`}
       {@attach cawco.hub === "connected" && !settling
         ? rememberCard(page.url.pathname)
         : undefined}
     >
-      <header data-slot="head" class="head">
+      <header data-slot="head" class="flex items-start gap-(--head-gap)">
         {#if tile}
           <span
             data-slot="tile"
-            class="tile"
+            class="inline-flex items-center justify-center flex-none size-(--tile) mt-space-row rounded-sm bg-surface-raised shadow-tile"
             data-share="icon:{page.url.pathname}"
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
@@ -163,23 +172,29 @@
         {:else if section}
           <span
             data-slot="tile"
-            class="tile"
+            class="inline-flex items-center justify-center flex-none size-(--tile) mt-space-row rounded-sm bg-surface-raised shadow-tile text-(--tile-ink)"
             data-share="icon:{page.url.pathname}"
-            style="color:{section.hue}"
+            style:--tile-ink={section.hue}
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
             <section.icon />
           </span>
         {/if}
-        <div data-slot="lead" class="lead">{@render header()}</div>
+        <div data-slot="lead" class="flex flex-auto flex-col gap-(--head-gap) min-w-0">{@render header()}</div>
         {#if ondelete && deleteLabel}
-          <span class="narrow-menu">
+          <span class="hidden max-phone:inline-flex">
             <DropdownMenu.Root>
-              <DropdownMenu.Trigger
-                aria-label={configureWords.more}
-                class={buttonVariants({ variant: "ghost", size: "icon" })}
-              >
-                <IconMore />
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    aria-label={configureWords.more}
+                    size="icon"
+                    variant="ghost"
+                  >
+                    <IconMore />
+                  </Button>
+                {/snippet}
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end" class="w-auto min-w-44">
                 <DropdownMenu.Item
@@ -198,17 +213,22 @@
       </header>
       <div
         data-fill={(veiled && card !== null) || undefined}
-        class="content"
-        class:fill={veiled && card !== null}
+        data-is-fill={(veiled && card !== null) || undefined}
+        class="grid min-w-0 data-is-fill:grow data-is-fill:shrink data-is-fill:basis-0 data-is-fill:min-h-0 data-is-fill:grid-rows-(--fill-rows)"
+        style:--fill-rows="minmax(0, 1fr)"
       >
-        <div data-slot="slot" class="slot" class:veiled>
+        <div
+          data-slot="slot"
+          class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 data-veiled:invisible data-veiled:opacity-0 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+          data-veiled={veiled || undefined}
+        >
           {@render children()}
         </div>
         {#if veiled}
           <div
             data-slot="slot"
             aria-hidden="true"
-            class="slot"
+            class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
             out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
           >
             <SkeletonRows fill={card !== null} />
@@ -234,109 +254,9 @@
 </form>
 
 <style>
-  .editor {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-recess);
-  }
-  /* The section's gutter, so the editor's card stands where the section's
-     did, level with the rail. */
-  .scroll {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    padding: var(--space-2) var(--space-5) var(--space-5);
-  }
-  /* On a phone the commit row stands over the page's foot (EditorFooter is
-     sticky there): the last section scrolls clear of it. */
-  @media (max-width: 640px) {
-    .scroll {
-      padding-block-end: calc(
-        var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom)
-      );
-    }
-  }
-  /* The section's card: an inset panel on the recess, filling the pane's
-     height above the commit row. */
-  .body {
-    display: flex;
-    flex: 1 0 auto;
-    flex-direction: column;
-    gap: var(--space-6);
-    max-width: 980px;
-    padding: var(--space-6) var(--space-7);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-  }
-  .head {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  /* The sections and the skeleton over them share one cell. While the parts
-     arrive the sections lay out unseen under it, and at the kept height the
-     cell takes the room the card has left, so they cannot push it. */
-  .content {
-    display: grid;
-    min-width: 0;
-
-    &.fill {
-      flex: 1 1 0;
-      min-height: 0;
-      grid-template-rows: minmax(0, 1fr);
-    }
-  }
-  .slot {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    min-width: 0;
-
-    &.veiled {
-      visibility: hidden;
-      opacity: 0;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  /* The section's tile, the one its row carries in the list: 26px, raised,
-     centred on the title's 29px line. */
-  .tile {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 26px;
-    height: 26px;
-    margin-top: 2px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .tile :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  .lead {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 0;
-  }
-  .narrow-menu {
-    display: none;
-  }
-  @media (max-width: 640px) {
-    .narrow-menu {
-      display: inline-flex;
-    }
+  /* residual: foreign-dom */
+  [data-slot="tile"] :global(svg) {
+    width: var(--icon-md);
+    height: var(--icon-md);
   }
 </style>

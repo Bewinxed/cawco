@@ -47,30 +47,35 @@
   <Popover.Trigger
     data-picker-chip
     aria-label="{label}: {chosen}"
-    class="picker-chip mark-line"
+    class="inline-flex items-center gap-(--chip-gap) max-w-full h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:scale-(--press-scale) mark-line"
+    style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px"
   >
-    <span class="k">{label}</span>
-    <span data-slot="num" class="v num"><MorphText text={chosen} /></span>
-    <IconChevronDown />
+    <span class="text-ink-muted">{label}</span>
+    <span data-slot="num" class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"><MorphText text={chosen} /></span>
+    <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
     <!-- The kit's ghost and pill: the pill is the choice, and a pick takes
          the ghost's place under the pointer while the popover closes. -->
+    <!-- literal: 8px, 10px -->
     <div
       aria-label={label}
       aria-multiselectable={picked ? true : undefined}
-      class="options"
+      class="flex flex-col"
       role="listbox"
-      {@attach highlight({ rows: ".item", selected: '[aria-selected="true"]' })}
+      style:--opt-gap="8px"
+      style:--opt-pad="10px"
+      style:--group-pt="8px"
+      {@attach highlight({ rows: '[data-slot="item"]', selected: '[aria-selected="true"]' })}
     >
       {#each options as option, index (option.value)}
         {#if option.group && option.group !== options[index - 1]?.group}
-          <span data-slot="group" class="group">{option.group}</span>
+          <span data-slot="group" class="pt-(--group-pt) px-(--opt-pad) pb-space-1 type-meta text-ink-muted">{option.group}</span>
         {/if}
         <button
           data-slot="item"
           aria-selected={isChosen(option.value)}
-          class="kit-item item focus-inset"
+          class="kit-item flex items-center gap-(--opt-gap) w-full px-(--opt-pad) text-left type-label text-ink-strong focus-inset"
           onclick={() => {
             onpick(option.value);
             // One of several stays open for the next.
@@ -79,10 +84,10 @@
           role="option"
           type="button"
         >
-          <span data-slot="picker-chip-label" class="label">{option.label}</span
+          <span data-slot="picker-chip-label" class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap">{option.label}</span
           >
           {#if isChosen(option.value)}
-            <IconCheck />
+            <IconCheck class="size-icon-md flex-none" />
           {/if}
         </button>
       {/each}
@@ -91,83 +96,12 @@
 </Popover.Root>
 
 <style>
-  /* The trigger is bits-ui's element, so its rules are global: under this
-     chip's own name. As the bare `.picker` they also drew the New session
-     dialog's model panel (ModelSection's `.picker`) once Config had loaded
-     them: 32px tall, its rail centred against the list, and the whole panel
-     pressed to --press-scale by any press inside it (`:active` holds on every
-     ancestor of the pressed element). */
-  :global(.picker-chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 100%;
-    height: 32px;
-    padding: 0 10px;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    transition: var(--transition-control);
-    @media (prefers-reduced-motion: no-preference) {
+  /* residual: unmapped */
+  @media (prefers-reduced-motion: no-preference) {
+    :global([data-picker-chip]) {
       transition:
         var(--transition-control),
         transform var(--dur-toggle) var(--ease-out);
     }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.picker-chip:active) {
-      transform: scale(var(--press-scale));
-    }
-  }
-  :global(.picker-chip:hover) {
-    background: var(--surface-hover);
-  }
-  :global(.picker-chip svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--ink-muted);
-  }
-  :global(.picker-chip) .k {
-    color: var(--ink-muted);
-  }
-  :global(.picker-chip) .v {
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .options {
-    display: flex;
-    flex-direction: column;
-  }
-  .item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 0 10px;
-    text-align: left;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .group {
-    padding: 8px 10px 4px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .label {
-    flex: 1;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .item :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
   }
 </style>

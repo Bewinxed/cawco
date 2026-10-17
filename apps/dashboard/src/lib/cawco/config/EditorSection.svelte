@@ -21,18 +21,13 @@
   } = $props();
 </script>
 
-<section data-slot="section" class="section">
+<!-- literal: 8px -->
+<section
+  data-slot="section"
+  class="flex flex-col gap-(--section-gap) min-w-0 pt-space-5 border-t border-border-hairline"
+  style:--section-gap="8px"
+>
   <SectionHeader {hue} {icon} {label} {right} wrap />
   {@render children()}
 </section>
 
-<style>
-  .section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 0;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-</style>

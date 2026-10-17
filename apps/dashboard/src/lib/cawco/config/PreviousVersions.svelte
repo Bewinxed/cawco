@@ -49,24 +49,33 @@
   );
 </script>
 
-<p data-slot="note" class="note">
+<!-- literal: 72ch, 8px, 10px -->
+<p
+  data-slot="note"
+  class="max-w-(--measure) type-meta text-ink-muted"
+  style:--measure="72ch"
+>
   Every save keeps what it replaced. Restoring writes an old version back as
   this one.
 </p>
 <!-- Rows that come and go (Show all, a restore's new version) go through
      reflow, what follows sliding. -->
-<div class="history" {@attach reflow()}>
+<div class="flex flex-col gap-(--hist-gap)" style:--hist-gap="8px" {@attach reflow()}>
   {#if failed}
-    <p class="caution" role="alert">{failed}</p>
+    <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if versions.length === 0}
-    <p data-slot="note" class="note">Nothing has been saved over yet.</p>
+    <p
+      data-slot="note"
+      class="max-w-(--measure) type-meta text-ink-muted"
+      style:--measure="72ch"
+    >Nothing has been saved over yet.</p>
   {:else}
-    <ul class="versions">
+    <ul class="flex flex-col gap-space-row m-0 p-0 list-none" style:--v-py="8px" style:--v-px="10px">
       {#each visibleVersions as version (version.id)}
-        <li class="version" data-flip>
-          <span class="vtext">
-            <span class="vname">{version.name}</span>
-            <span data-slot="note" class="note">
+        <li class="flex flex-wrap items-center justify-between gap-(--hist-gap) py-(--v-py) px-(--v-px) rounded-sm bg-surface-recess" data-flip>
+          <span class="flex flex-col gap-space-row">
+            <span class="type-label text-ink-strong">{version.name}</span>
+            <span data-slot="note" class="max-w-(--measure) type-meta text-ink-muted" style:--measure="72ch">
               {new Date(version.createdAt).toLocaleString()}
               · from {sourceLabel(version.source)}
               · <span class="font-mono">{version.hash.slice(0, 7)}</span>
@@ -83,7 +92,7 @@
             variant="outline"
           />
           <RowFault
-            class="restore-fault"
+            class="basis-full"
             reason={restoreFailed?.id === version.id
               ? restoreFailed.reason
               : null}
@@ -92,7 +101,7 @@
       {/each}
     </ul>
     {#if versions.length > LATEST}
-      <div data-slot="more" class="more" data-flip>
+      <div data-slot="more" class="self-start" data-flip>
         <Button
           onclick={() => {
             allVersions = !allVersions;
@@ -107,52 +116,3 @@
   {/if}
 </div>
 
-<style>
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .caution {
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
-  .history {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .more {
-    align-self: flex-start;
-  }
-  .versions {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .version > :global(.restore-fault) {
-    flex-basis: 100%;
-  }
-  .version {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .vtext {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .vname {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-</style>
