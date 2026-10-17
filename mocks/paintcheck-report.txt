@@ -1,101 +1,79 @@
 
-  v2-fleet.html @390 light  (27 candidates, 91 skipped)
-      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
-      SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
-      SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
-      SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
-      SKIP  nav-i "Rules14"                    rect -274,167 263x36  — occluded by unknown
-      SKIP  pill-n mint "14"                   rect -47,175 26x20  — occluded by unknown
-      SKIP  nav-i "Usage"                      rect -274,204 263x36  — occluded by unknown
-      SKIP  nav-i "Projects"                   rect -274,241 263x36  — occluded by unknown
-      SKIP  sec "Machines"                     rect -284,291 283x16  — occluded by unknown
-      SKIP  nav-i "nixbox"                     rect -274,313 263x36  — occluded by unknown
-      SKIP  nav-i "mba-m3"                     rect -274,350 263x36  — occluded by unknown
-      SKIP  nav-i "hetzner-01"                 rect -274,387 263x36  — occluded by unknown
-      SKIP  sec "Running now"                  rect -284,437 283x20  — occluded by unknown
-      SKIP  nm "wire delegate "                rect -238,470 195x18  — occluded by unknown
-      SKIP  nm "table system s"                rect -238,503 195x18  — occluded by unknown
-      SKIP  nm "flaky ws recon"                rect -238,536 195x18  — occluded by unknown
-      SKIP  nm "landing copy p"                rect -238,569 195x18  — occluded by unknown
+  v2-fleet.html @390 light  (24 candidates, 70 skipped)
+      SKIP  B "CawCo"                          rect -235,18 48x20  — occluded by unknown
+      SKIP  sec "Fleet"                        rect -284,73 283x14  — occluded by unknown
+      SKIP  nav-i on "Fleet6"                  rect -274,94 263x36  — occluded by unknown
+      SKIP  nav-i "Tools"                      rect -274,131 263x36  — occluded by unknown
+      SKIP  nav-i "Rules14"                    rect -274,168 263x36  — occluded by unknown
+      SKIP  pill-n mint "14"                   rect -47,177 26x20  — occluded by unknown
+      SKIP  nav-i "Usage"                      rect -274,205 263x36  — occluded by unknown
+      SKIP  nav-i "Projects"                   rect -274,242 263x36  — occluded by unknown
+      SKIP  sec "Machines"                     rect -284,294 283x14  — occluded by unknown
+      SKIP  nav-i "nixbox"                     rect -274,316 263x36  — occluded by unknown
+      SKIP  nav-i "mba-m3"                     rect -274,353 263x36  — occluded by unknown
+      SKIP  nav-i "hetzner-01"                 rect -274,390 263x36  — occluded by unknown
+      SKIP  sec "Running now"                  rect -284,442 283x20  — occluded by unknown
+      SKIP  nm "wire delegate "                rect -238,476 195x18  — occluded by unknown
+      SKIP  nm "table system s"                rect -238,509 195x18  — occluded by unknown
+      SKIP  nm "flaky ws recon"                rect -238,542 195x18  — occluded by unknown
+      SKIP  nm "landing copy p"                rect -238,575 195x18  — occluded by unknown
       SKIP  n "18.40 / 50.00"                  rect -260,858 235x20  — occluded by unknown
       SKIP  s "Spend today ac"                 rect -260,880 235x16  — occluded by unknown
       SKIP  BUTTON "View usage"                rect -260,906 235x31  — occluded by unknown
       SKIP  av "bw"                            rect -270,978 31x31  — occluded by unknown
-      SKIP  nm "bewinxed"                      rect -230,977 85x16  — occluded by unknown
-      SKIP  em "obelisk-of-lig"                rect -230,994 85x16  — occluded by unknown
-      SKIP  B "table system s"                 rect 68,1031 114x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1064 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,1096 308x32  — occluded by unknown
-      SKIP  num "14"                           rect 41,1128 308x32  — occluded by unknown
-      SKIP  num ok "38k"                       rect 41,1160 308x32  — occluded by unknown
-      SKIP  when "12 min ago"                  rect 267,1199 82x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,1229 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,1263 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,1263 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,1263 48x18  — occluded by unknown
-      SKIP  B "flaky ws recon"                 rect 68,1322 115x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1355 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1387 308x32  — occluded by unknown
-      SKIP  num "61"                           rect 41,1419 308x32  — occluded by unknown
-      SKIP  num bad "191k"                     rect 41,1451 308x32  — occluded by unknown
-      SKIP  when "26 min ago"                  rect 264,1490 85x18  — occluded by unknown
-      SKIP  chip-s s-fail "error"              rect 286,1520 63x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 214,1560 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 277,1560 42x18  — occluded by unknown
-      SKIP  B "landing copy p"                 rect 68,1625 111x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1658 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,1690 308x32  — occluded by unknown
-      SKIP  num ok "22k"                       rect 41,1754 308x32  — occluded by unknown
-      SKIP  when "1 hr ago"                    rect 284,1793 65x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,1823 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,1857 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,1857 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,1857 60x18  — occluded by unknown
-      SKIP  B "nix flake bump"                 rect 68,1916 90x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,1949 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1981 308x32  — occluded by unknown
-      SKIP  num ok "15k"                       rect 41,2045 308x32  — occluded by unknown
-      SKIP  when "4 min ago"                   rect 272,2084 77x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,2114 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2148 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2148 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2148 48x18  — occluded by unknown
-      SKIP  B "tmux keybinds"                  rect 68,2207 91x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,2240 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,2272 308x32  — occluded by unknown
-      SKIP  num "18"                           rect 41,2304 308x32  — occluded by unknown
-      SKIP  num warn "88k"                     rect 41,2336 308x32  — occluded by unknown
-      SKIP  when "1 min ago"                   rect 275,2375 74x18  — occluded by unknown
-      SKIP  chip-s s-attn "needs you"          rect 258,2405 91x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2439 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2439 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2439 48x18  — occluded by unknown
-      SKIP  B "drizzle schema"                 rect 68,2498 141x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2531 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,2563 308x32  — occluded by unknown
-      SKIP  num "33"                           rect 41,2595 308x32  — occluded by unknown
-      SKIP  num ok "51k"                       rect 41,2627 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2666 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "paused"             rect 294,2696 55x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,2730 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,2730 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,2730 60x18  — occluded by unknown
-      SKIP  B "telegram bridg"                 rect 68,2789 134x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2822 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,2854 308x32  — occluded by unknown
-      SKIP  num "12"                           rect 41,2886 308x32  — occluded by unknown
-      SKIP  num ok "30k"                       rect 41,2918 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2957 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,2987 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,3021 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,3021 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,3021 60x18  — occluded by unknown
-      SKIP  foot "Showing 8 of 2"              rect 27,3056 336x87  — occluded by unknown
+      SKIP  nm "bewinxed"                      rect -230,977 80x16  — occluded by unknown
+      SKIP  em "obelisk-of-lig"                rect -230,994 80x16  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1010 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,1042 308x32  — occluded by unknown
+      SKIP  num "14"                           rect 41,1074 308x32  — occluded by unknown
+      SKIP  num ok "38k"                       rect 41,1106 308x32  — occluded by unknown
+      SKIP  when "12 min ago"                  rect 266,1145 83x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,1175 77x22  — occluded by unknown
+      SKIP  B "flaky ws recon"                 rect 68,1268 115x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1301 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1333 308x32  — occluded by unknown
+      SKIP  num "61"                           rect 41,1365 308x32  — occluded by unknown
+      SKIP  num bad "191k"                     rect 41,1397 308x32  — occluded by unknown
+      SKIP  when "26 min ago"                  rect 263,1436 86x18  — occluded by unknown
+      SKIP  chip-s s-fail "error"              rect 289,1466 60x22  — occluded by unknown
+      SKIP  B "landing copy p"                 rect 68,1571 110x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1604 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,1636 308x32  — occluded by unknown
+      SKIP  num ok "22k"                       rect 41,1700 308x32  — occluded by unknown
+      SKIP  when "1 hr ago"                    rect 284,1739 65x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,1769 34x22  — occluded by unknown
+      SKIP  B "nix flake bump"                 rect 68,1862 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,1895 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1927 308x32  — occluded by unknown
+      SKIP  num ok "15k"                       rect 41,1991 308x32  — occluded by unknown
+      SKIP  when "4 min ago"                   rect 271,2030 78x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,2060 77x22  — occluded by unknown
+      SKIP  B "tmux keybinds"                  rect 68,2153 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,2186 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,2218 308x32  — occluded by unknown
+      SKIP  num "18"                           rect 41,2250 308x32  — occluded by unknown
+      SKIP  num warn "88k"                     rect 41,2282 308x32  — occluded by unknown
+      SKIP  when "1 min ago"                   rect 274,2321 75x18  — occluded by unknown
+      SKIP  chip-s s-attn "needs you"          rect 260,2351 89x22  — occluded by unknown
+      SKIP  B "drizzle schema"                 rect 68,2444 141x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2477 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,2509 308x32  — occluded by unknown
+      SKIP  num "33"                           rect 41,2541 308x32  — occluded by unknown
+      SKIP  num ok "51k"                       rect 41,2573 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2612 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "paused"             rect 295,2642 54x22  — occluded by unknown
+      SKIP  B "push relay aud"                 rect 68,2735 99x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2768 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,2800 308x32  — occluded by unknown
+      SKIP  num "12"                           rect 41,2832 308x32  — occluded by unknown
+      SKIP  num ok "30k"                       rect 41,2864 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2903 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,2933 34x22  — occluded by unknown
+      SKIP  foot "Showing 8 of 2"              rect 27,3002 336x87  — occluded by unknown
     PASS  8.73:1  crumb "Fleet"                      text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  10.51:1  ghost "Ask AI"                     text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  12.55:1  H1 "Fleet"                         text rgb(43,45,48) on fill rgb(243,244,246)
     PASS  5.47:1  P "Every agent ac"                 text rgb(96,99,106) on fill rgb(243,244,246)
-    PASS  10.51:1  ghost "18 Aug, 2026"               text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  8.08:1  lbl "Sessions"                     text rgb(71,74,79) on fill rgb(243,244,246)
     PASS  8.08:1  lbl "Needs you"                    text rgb(71,74,79) on fill rgb(243,244,246)
     PASS  8.08:1  lbl "Machines"                     text rgb(71,74,79) on fill rgb(243,244,246)
@@ -113,109 +91,85 @@
     PASS  13.36:1  num "28"                           text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  7.03:1  num warn "104k"                    text rgb(119,80,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "2 min ago"                   text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Pause"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
+    PASS  10.51:1  B "table system s"                 text rgb(60,62,66) on fill rgb(252,253,253)
       (1 regions span multiple fills — no single background to judge)
 
-  v2-fleet.html @390 dark   (27 candidates, 91 skipped)
-      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
-      SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
-      SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
-      SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
-      SKIP  nav-i "Rules14"                    rect -274,167 263x36  — occluded by unknown
-      SKIP  pill-n mint "14"                   rect -47,175 26x20  — occluded by unknown
-      SKIP  nav-i "Usage"                      rect -274,204 263x36  — occluded by unknown
-      SKIP  nav-i "Projects"                   rect -274,241 263x36  — occluded by unknown
-      SKIP  sec "Machines"                     rect -284,291 283x16  — occluded by unknown
-      SKIP  nav-i "nixbox"                     rect -274,313 263x36  — occluded by unknown
-      SKIP  nav-i "mba-m3"                     rect -274,350 263x36  — occluded by unknown
-      SKIP  nav-i "hetzner-01"                 rect -274,387 263x36  — occluded by unknown
-      SKIP  sec "Running now"                  rect -284,437 283x20  — occluded by unknown
-      SKIP  nm "wire delegate "                rect -238,470 195x18  — occluded by unknown
-      SKIP  nm "table system s"                rect -238,503 195x18  — occluded by unknown
-      SKIP  nm "flaky ws recon"                rect -238,536 195x18  — occluded by unknown
-      SKIP  nm "landing copy p"                rect -238,569 195x18  — occluded by unknown
+  v2-fleet.html @390 dark   (24 candidates, 70 skipped)
+      SKIP  B "CawCo"                          rect -235,18 48x20  — occluded by unknown
+      SKIP  sec "Fleet"                        rect -284,73 283x14  — occluded by unknown
+      SKIP  nav-i on "Fleet6"                  rect -274,94 263x36  — occluded by unknown
+      SKIP  nav-i "Tools"                      rect -274,131 263x36  — occluded by unknown
+      SKIP  nav-i "Rules14"                    rect -274,168 263x36  — occluded by unknown
+      SKIP  pill-n mint "14"                   rect -47,177 26x20  — occluded by unknown
+      SKIP  nav-i "Usage"                      rect -274,205 263x36  — occluded by unknown
+      SKIP  nav-i "Projects"                   rect -274,242 263x36  — occluded by unknown
+      SKIP  sec "Machines"                     rect -284,294 283x14  — occluded by unknown
+      SKIP  nav-i "nixbox"                     rect -274,316 263x36  — occluded by unknown
+      SKIP  nav-i "mba-m3"                     rect -274,353 263x36  — occluded by unknown
+      SKIP  nav-i "hetzner-01"                 rect -274,390 263x36  — occluded by unknown
+      SKIP  sec "Running now"                  rect -284,442 283x20  — occluded by unknown
+      SKIP  nm "wire delegate "                rect -238,476 195x18  — occluded by unknown
+      SKIP  nm "table system s"                rect -238,509 195x18  — occluded by unknown
+      SKIP  nm "flaky ws recon"                rect -238,542 195x18  — occluded by unknown
+      SKIP  nm "landing copy p"                rect -238,575 195x18  — occluded by unknown
       SKIP  n "18.40 / 50.00"                  rect -260,858 235x20  — occluded by unknown
       SKIP  s "Spend today ac"                 rect -260,880 235x16  — occluded by unknown
       SKIP  BUTTON "View usage"                rect -260,906 235x31  — occluded by unknown
       SKIP  av "bw"                            rect -270,978 31x31  — occluded by unknown
-      SKIP  nm "bewinxed"                      rect -230,977 85x16  — occluded by unknown
-      SKIP  em "obelisk-of-lig"                rect -230,994 85x16  — occluded by unknown
-      SKIP  B "table system s"                 rect 68,1031 114x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1064 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,1096 308x32  — occluded by unknown
-      SKIP  num "14"                           rect 41,1128 308x32  — occluded by unknown
-      SKIP  num ok "38k"                       rect 41,1160 308x32  — occluded by unknown
-      SKIP  when "12 min ago"                  rect 267,1199 82x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,1229 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,1263 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,1263 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,1263 48x18  — occluded by unknown
-      SKIP  B "flaky ws recon"                 rect 68,1322 115x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1355 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1387 308x32  — occluded by unknown
-      SKIP  num "61"                           rect 41,1419 308x32  — occluded by unknown
-      SKIP  num bad "191k"                     rect 41,1451 308x32  — occluded by unknown
-      SKIP  when "26 min ago"                  rect 264,1490 85x18  — occluded by unknown
-      SKIP  chip-s s-fail "error"              rect 286,1520 63x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 214,1560 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 277,1560 42x18  — occluded by unknown
-      SKIP  B "landing copy p"                 rect 68,1625 111x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1658 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,1690 308x32  — occluded by unknown
-      SKIP  num ok "22k"                       rect 41,1754 308x32  — occluded by unknown
-      SKIP  when "1 hr ago"                    rect 284,1793 65x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,1823 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,1857 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,1857 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,1857 60x18  — occluded by unknown
-      SKIP  B "nix flake bump"                 rect 68,1916 90x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,1949 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1981 308x32  — occluded by unknown
-      SKIP  num ok "15k"                       rect 41,2045 308x32  — occluded by unknown
-      SKIP  when "4 min ago"                   rect 272,2084 77x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,2114 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2148 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2148 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2148 48x18  — occluded by unknown
-      SKIP  B "tmux keybinds"                  rect 68,2207 91x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,2240 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,2272 308x32  — occluded by unknown
-      SKIP  num "18"                           rect 41,2304 308x32  — occluded by unknown
-      SKIP  num warn "88k"                     rect 41,2336 308x32  — occluded by unknown
-      SKIP  when "1 min ago"                   rect 275,2375 74x18  — occluded by unknown
-      SKIP  chip-s s-attn "needs you"          rect 258,2405 91x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2439 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2439 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2439 48x18  — occluded by unknown
-      SKIP  B "drizzle schema"                 rect 68,2498 141x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2531 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,2563 308x32  — occluded by unknown
-      SKIP  num "33"                           rect 41,2595 308x32  — occluded by unknown
-      SKIP  num ok "51k"                       rect 41,2627 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2666 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "paused"             rect 294,2696 55x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,2730 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,2730 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,2730 60x18  — occluded by unknown
-      SKIP  B "telegram bridg"                 rect 68,2789 134x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2822 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,2854 308x32  — occluded by unknown
-      SKIP  num "12"                           rect 41,2886 308x32  — occluded by unknown
-      SKIP  num ok "30k"                       rect 41,2918 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2957 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,2987 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,3021 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,3021 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,3021 60x18  — occluded by unknown
-      SKIP  foot "Showing 8 of 2"              rect 27,3056 336x87  — occluded by unknown
+      SKIP  nm "bewinxed"                      rect -230,977 80x16  — occluded by unknown
+      SKIP  em "obelisk-of-lig"                rect -230,994 80x16  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1010 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,1042 308x32  — occluded by unknown
+      SKIP  num "14"                           rect 41,1074 308x32  — occluded by unknown
+      SKIP  num ok "38k"                       rect 41,1106 308x32  — occluded by unknown
+      SKIP  when "12 min ago"                  rect 266,1145 83x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,1175 77x22  — occluded by unknown
+      SKIP  B "flaky ws recon"                 rect 68,1268 115x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1301 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1333 308x32  — occluded by unknown
+      SKIP  num "61"                           rect 41,1365 308x32  — occluded by unknown
+      SKIP  num bad "191k"                     rect 41,1397 308x32  — occluded by unknown
+      SKIP  when "26 min ago"                  rect 263,1436 86x18  — occluded by unknown
+      SKIP  chip-s s-fail "error"              rect 289,1466 60x22  — occluded by unknown
+      SKIP  B "landing copy p"                 rect 68,1571 110x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1604 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,1636 308x32  — occluded by unknown
+      SKIP  num ok "22k"                       rect 41,1700 308x32  — occluded by unknown
+      SKIP  when "1 hr ago"                    rect 284,1739 65x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,1769 34x22  — occluded by unknown
+      SKIP  B "nix flake bump"                 rect 68,1862 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,1895 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1927 308x32  — occluded by unknown
+      SKIP  num ok "15k"                       rect 41,1991 308x32  — occluded by unknown
+      SKIP  when "4 min ago"                   rect 271,2030 78x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,2060 77x22  — occluded by unknown
+      SKIP  B "tmux keybinds"                  rect 68,2153 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,2186 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,2218 308x32  — occluded by unknown
+      SKIP  num "18"                           rect 41,2250 308x32  — occluded by unknown
+      SKIP  num warn "88k"                     rect 41,2282 308x32  — occluded by unknown
+      SKIP  when "1 min ago"                   rect 274,2321 75x18  — occluded by unknown
+      SKIP  chip-s s-attn "needs you"          rect 260,2351 89x22  — occluded by unknown
+      SKIP  B "drizzle schema"                 rect 68,2444 141x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2477 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,2509 308x32  — occluded by unknown
+      SKIP  num "33"                           rect 41,2541 308x32  — occluded by unknown
+      SKIP  num ok "51k"                       rect 41,2573 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2612 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "paused"             rect 295,2642 54x22  — occluded by unknown
+      SKIP  B "push relay aud"                 rect 68,2735 99x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2768 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,2800 308x32  — occluded by unknown
+      SKIP  num "12"                           rect 41,2832 308x32  — occluded by unknown
+      SKIP  num ok "30k"                       rect 41,2864 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2903 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,2933 34x22  — occluded by unknown
+      SKIP  foot "Showing 8 of 2"              rect 27,3002 336x87  — occluded by unknown
     PASS  9.23:1  crumb "Fleet"                      text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  12.28:1  ghost "Ask AI"                     text rgb(224,226,230) on fill rgb(33,34,36)
-    PASS  14.32:1  H1 "Fleet"                         text rgb(230,232,236) on fill rgb(25,25,26)
+    PASS  14.19:1  H1 "Fleet"                         text rgb(229,231,235) on fill rgb(25,25,26)
     PASS  8.75:1  P "Every agent ac"                 text rgb(180,183,190) on fill rgb(25,25,26)
-    PASS  12.28:1  ghost "18 Aug, 2026"               text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  10.19:1  lbl "Sessions"                     text rgb(195,197,204) on fill rgb(25,25,26)
     PASS  10.19:1  lbl "Needs you"                    text rgb(195,197,204) on fill rgb(25,25,26)
     PASS  10.19:1  lbl "Machines"                     text rgb(195,197,204) on fill rgb(25,25,26)
@@ -231,18 +185,16 @@
     PASS  7.93:1  mut "nixbox"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "Claude Code"                  text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "28"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.48:1  num warn "104k"                    text rgb(228,183,80) on fill rgb(33,34,36)
+    PASS  8.50:1  num warn "104k"                    text rgb(226,184,80) on fill rgb(33,34,36)
     PASS  7.93:1  when "2 min ago"                   text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Pause"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
+    PASS  12.28:1  B "table system s"                 text rgb(224,226,230) on fill rgb(33,34,36)
       (1 regions span multiple fills — no single background to judge)
 
-  v2-fleet.html @1440 light  (123 candidates, 0 skipped)
-    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
+  v2-fleet.html @1440 light  (99 candidates, 0 skipped)
+    PASS  13.36:1  B "CawCo"                          text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  sec "Fleet"                        text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  11.95:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(239,240,243)
+    PASS  13.36:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  8.73:1  nav-i "Tools"                      text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  8.73:1  nav-i "Rules14"                    text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  5.28:1  pill-n mint "14"                   text rgb(96,99,106) on fill rgb(239,240,243)
@@ -267,7 +219,6 @@
     PASS  10.51:1  ghost "Ask AI"                     text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  12.37:1  H1 "Fleet"                         text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  P "Every agent ac"                 text rgb(96,99,106) on fill rgb(243,244,246)
-    PASS  10.51:1  ghost "18 Aug, 2026"               text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  8.08:1  lbl "Sessions"                     text rgb(71,74,79) on fill rgb(243,244,246)
     PASS  8.08:1  lbl "Needs you"                    text rgb(71,74,79) on fill rgb(243,244,246)
     PASS  8.08:1  lbl "Machines"                     text rgb(71,74,79) on fill rgb(243,244,246)
@@ -290,84 +241,61 @@
     PASS  13.36:1  num "28"                           text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  7.03:1  num warn "104k"                    text rgb(119,80,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "2 min ago"                   text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Pause"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  10.51:1  B "table system s"                 text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "nixbox"                       text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "OpenCode"                     text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  num "14"                           text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.65:1  num ok "38k"                       text rgb(29,105,38) on fill rgb(252,253,253)
+    PASS  6.76:1  num ok "38k"                       text rgb(75,98,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "12 min ago"                  text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  5.83:1  chip-s s-live "working"            text rgb(68,89,104) on fill rgb(216,232,244)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Pause"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  6.91:1  chip-s s-live "working"            text rgb(27,48,73) on fill rgb(158,190,217)
     PASS  10.51:1  B "flaky ws recon"                 text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "nixbox"                       text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "Claude Code"                  text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  num "61"                           text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  7.48:1  num bad "191k"                     text rgb(149,49,46) on fill rgb(252,253,253)
+    PASS  7.49:1  num bad "191k"                     text rgb(149,49,42) on fill rgb(252,253,253)
     PASS  5.90:1  when "26 min ago"                  text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  5.75:1  chip-s s-fail "error"              text rgb(112,74,72) on fill rgb(248,217,214)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  6.77:1  chip-s s-fail "error"              text rgb(76,34,31) on fill rgb(238,166,151)
     PASS  10.51:1  B "landing copy p"                 text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "nixbox"                       text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "pi"                           text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.65:1  num ok "22k"                       text rgb(29,105,38) on fill rgb(252,253,253)
+    PASS  6.76:1  num ok "22k"                       text rgb(75,98,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "1 hr ago"                    text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  chip-s s-idle "idle"               text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Resume"                    text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  10.51:1  B "nix flake bump"                 text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "mba-m3"                       text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "Claude Code"                  text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.65:1  num ok "15k"                       text rgb(29,105,38) on fill rgb(252,253,253)
+    PASS  6.76:1  num ok "15k"                       text rgb(75,98,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "4 min ago"                   text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  5.83:1  chip-s s-live "working"            text rgb(68,89,104) on fill rgb(216,232,244)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Pause"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  6.91:1  chip-s s-live "working"            text rgb(27,48,73) on fill rgb(158,190,217)
     PASS  10.51:1  B "tmux keybinds"                  text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "mba-m3"                       text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "OpenCode"                     text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  num "18"                           text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  7.03:1  num warn "88k"                     text rgb(119,80,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "1 min ago"                   text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Pause"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  10.51:1  B "drizzle schema"                 text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "hetzner-01"                   text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "Claude Code"                  text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  num "33"                           text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.65:1  num ok "51k"                       text rgb(29,105,38) on fill rgb(252,253,253)
+    PASS  6.76:1  num ok "51k"                       text rgb(75,98,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "3 hr ago"                    text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  chip-s s-idle "paused"             text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Resume"                    text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  10.51:1  B "telegram bridg"                 text rgb(60,62,66) on fill rgb(252,253,253)
+    PASS  10.51:1  B "push relay aud"                 text rgb(60,62,66) on fill rgb(252,253,253)
     PASS  5.90:1  mut "hetzner-01"                   text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  mut "pi"                           text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  num "12"                           text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.65:1  num ok "30k"                       text rgb(29,105,38) on fill rgb(252,253,253)
+    PASS  6.76:1  num ok "30k"                       text rgb(75,98,0) on fill rgb(252,253,253)
     PASS  5.90:1  when "3 hr ago"                    text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  chip-s s-idle "idle"               text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Open"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Peek"                      text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  BUTTON "Resume"                    text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  5.90:1  foot "Showing 8 of 2"              text rgb(96,99,106) on fill rgb(252,253,253)
       (1 regions span multiple fills — no single background to judge)
 
-  v2-fleet.html @1440 dark   (123 candidates, 0 skipped)
-    PASS  12.98:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(33,34,36)
+  v2-fleet.html @1440 dark   (99 candidates, 0 skipped)
+    PASS  12.98:1  B "CawCo"                          text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  sec "Fleet"                        text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  15.17:1  nav-i on "Fleet6"                  text rgb(230,232,236) on fill rgb(18,19,19)
+    PASS  12.98:1  nav-i on "Fleet6"                  text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  9.23:1  nav-i "Tools"                      text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.23:1  nav-i "Rules14"                    text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.27:1  pill-n mint "14"                   text rgb(180,183,190) on fill rgb(18,19,19)
@@ -392,7 +320,6 @@
     PASS  12.28:1  ghost "Ask AI"                     text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  14.32:1  H1 "Fleet"                         text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  P "Every agent ac"                 text rgb(180,183,190) on fill rgb(25,25,26)
-    PASS  12.28:1  ghost "18 Aug, 2026"               text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  10.19:1  lbl "Sessions"                     text rgb(195,197,204) on fill rgb(25,25,26)
     PASS  10.19:1  lbl "Needs you"                    text rgb(195,197,204) on fill rgb(25,25,26)
     PASS  10.19:1  lbl "Machines"                     text rgb(195,197,204) on fill rgb(25,25,26)
@@ -413,203 +340,156 @@
     PASS  7.93:1  mut "nixbox"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "Claude Code"                  text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "28"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.48:1  num warn "104k"                    text rgb(228,183,80) on fill rgb(33,34,36)
+    PASS  8.50:1  num warn "104k"                    text rgb(226,184,80) on fill rgb(33,34,36)
     PASS  7.93:1  when "2 min ago"                   text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Pause"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  12.28:1  B "table system s"                 text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "nixbox"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "OpenCode"                     text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "14"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.35:1  num ok "38k"                       text rgb(125,206,128) on fill rgb(33,34,36)
+    PASS  8.16:1  num ok "38k"                       text rgb(170,196,92) on fill rgb(33,34,36)
     PASS  7.93:1  when "12 min ago"                  text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.24:1  chip-s s-live "working"            text rgb(176,198,216) on fill rgb(39,52,61)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Pause"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  6.18:1  chip-s s-live "working"            text rgb(167,201,223) on fill rgb(26,63,103)
     PASS  12.28:1  B "flaky ws recon"                 text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "nixbox"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "Claude Code"                  text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "61"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.02:1  num bad "191k"                     text rgb(255,158,149) on fill rgb(33,34,36)
+    PASS  8.06:1  num bad "191k"                     text rgb(255,159,146) on fill rgb(33,34,36)
     PASS  7.93:1  when "26 min ago"                  text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.60:1  chip-s s-fail "error"              text rgb(226,183,179) on fill rgb(64,39,37)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  7.35:1  chip-s s-fail "error"              text rgb(250,210,199) on fill rgb(117,38,33)
     PASS  12.28:1  B "landing copy p"                 text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "nixbox"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "pi"                           text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  8.35:1  num ok "22k"                       text rgb(125,206,128) on fill rgb(33,34,36)
+    PASS  8.16:1  num ok "22k"                       text rgb(170,196,92) on fill rgb(33,34,36)
     PASS  7.93:1  when "1 hr ago"                    text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  chip-s s-idle "idle"               text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Resume"                    text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  12.28:1  B "nix flake bump"                 text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "mba-m3"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "Claude Code"                  text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  8.35:1  num ok "15k"                       text rgb(125,206,128) on fill rgb(33,34,36)
+    PASS  8.16:1  num ok "15k"                       text rgb(170,196,92) on fill rgb(33,34,36)
     PASS  7.93:1  when "4 min ago"                   text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.24:1  chip-s s-live "working"            text rgb(176,198,216) on fill rgb(39,52,61)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Pause"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  6.18:1  chip-s s-live "working"            text rgb(167,201,223) on fill rgb(26,63,103)
     PASS  12.28:1  B "tmux keybinds"                  text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "mba-m3"                       text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "OpenCode"                     text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "18"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.48:1  num warn "88k"                     text rgb(228,183,80) on fill rgb(33,34,36)
+    PASS  8.50:1  num warn "88k"                     text rgb(226,184,80) on fill rgb(33,34,36)
     PASS  7.93:1  when "1 min ago"                   text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Pause"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  12.28:1  B "drizzle schema"                 text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "hetzner-01"                   text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "Claude Code"                  text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "33"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.35:1  num ok "51k"                       text rgb(125,206,128) on fill rgb(33,34,36)
+    PASS  8.16:1  num ok "51k"                       text rgb(170,196,92) on fill rgb(33,34,36)
     PASS  7.93:1  when "3 hr ago"                    text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  chip-s s-idle "paused"             text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Resume"                    text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  12.28:1  B "telegram bridg"                 text rgb(224,226,230) on fill rgb(33,34,36)
+    PASS  12.28:1  B "push relay aud"                 text rgb(224,226,230) on fill rgb(33,34,36)
     PASS  7.93:1  mut "hetzner-01"                   text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  mut "pi"                           text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  num "12"                           text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  8.35:1  num ok "30k"                       text rgb(125,206,128) on fill rgb(33,34,36)
+    PASS  8.16:1  num ok "30k"                       text rgb(170,196,92) on fill rgb(33,34,36)
     PASS  7.93:1  when "3 hr ago"                    text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  chip-s s-idle "idle"               text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Open"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Peek"                      text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  BUTTON "Resume"                    text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  7.93:1  foot "Showing 8 of 2"              text rgb(180,183,190) on fill rgb(33,34,36)
       (1 regions span multiple fills — no single background to judge)
 
-  v3-assistant.html @390 light  (8 candidates, 118 skipped)
-      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
-      SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
-      SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
-      SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
-      SKIP  nav-i "Rules14"                    rect -274,167 263x36  — occluded by unknown
-      SKIP  pill-n mint "14"                   rect -47,175 26x20  — occluded by unknown
-      SKIP  nav-i "Usage"                      rect -274,204 263x36  — occluded by unknown
-      SKIP  nav-i "Projects"                   rect -274,241 263x36  — occluded by unknown
-      SKIP  sec "Machines"                     rect -284,291 283x16  — occluded by unknown
-      SKIP  nav-i "nixbox"                     rect -274,313 263x36  — occluded by unknown
-      SKIP  nav-i "mba-m3"                     rect -274,350 263x36  — occluded by unknown
-      SKIP  nav-i "hetzner-01"                 rect -274,387 263x36  — occluded by unknown
-      SKIP  sec "Running now"                  rect -284,437 283x20  — occluded by unknown
-      SKIP  nm "wire delegate "                rect -238,470 195x18  — occluded by unknown
-      SKIP  nm "table system s"                rect -238,503 195x18  — occluded by unknown
-      SKIP  nm "flaky ws recon"                rect -238,536 195x18  — occluded by unknown
-      SKIP  nm "landing copy p"                rect -238,569 195x18  — occluded by unknown
+  v3-assistant.html @390 light  (8 candidates, 94 skipped)
+      SKIP  B "CawCo"                          rect -235,18 48x20  — occluded by unknown
+      SKIP  sec "Fleet"                        rect -284,73 283x14  — occluded by unknown
+      SKIP  nav-i on "Fleet6"                  rect -274,94 263x36  — occluded by unknown
+      SKIP  nav-i "Tools"                      rect -274,131 263x36  — occluded by unknown
+      SKIP  nav-i "Rules14"                    rect -274,168 263x36  — occluded by unknown
+      SKIP  pill-n mint "14"                   rect -47,177 26x20  — occluded by unknown
+      SKIP  nav-i "Usage"                      rect -274,205 263x36  — occluded by unknown
+      SKIP  nav-i "Projects"                   rect -274,242 263x36  — occluded by unknown
+      SKIP  sec "Machines"                     rect -284,294 283x14  — occluded by unknown
+      SKIP  nav-i "nixbox"                     rect -274,316 263x36  — occluded by unknown
+      SKIP  nav-i "mba-m3"                     rect -274,353 263x36  — occluded by unknown
+      SKIP  nav-i "hetzner-01"                 rect -274,390 263x36  — occluded by unknown
+      SKIP  sec "Running now"                  rect -284,442 283x20  — occluded by unknown
+      SKIP  nm "wire delegate "                rect -238,476 195x18  — occluded by unknown
+      SKIP  nm "table system s"                rect -238,509 195x18  — occluded by unknown
+      SKIP  nm "flaky ws recon"                rect -238,542 195x18  — occluded by unknown
+      SKIP  nm "landing copy p"                rect -238,575 195x18  — occluded by unknown
       SKIP  n "18.40 / 50.00"                  rect -260,858 235x20  — occluded by unknown
       SKIP  s "Spend today ac"                 rect -260,880 235x16  — occluded by unknown
       SKIP  BUTTON "View usage"                rect -260,906 235x31  — occluded by unknown
       SKIP  av "bw"                            rect -270,978 31x31  — occluded by unknown
-      SKIP  nm "bewinxed"                      rect -230,977 85x16  — occluded by unknown
-      SKIP  em "obelisk-of-lig"                rect -230,994 85x16  — occluded by unknown
-      SKIP  crumb "Fleet"                      rect 59,18 83x20  — occluded by SECTION.asst
-      SKIP  ghost "Ask AI"                     rect 243,12 90x32  — occluded by SECTION.asst
+      SKIP  nm "bewinxed"                      rect -230,977 80x16  — occluded by unknown
+      SKIP  em "obelisk-of-lig"                rect -230,994 80x16  — occluded by unknown
+      SKIP  crumb "Fleet"                      rect 59,18 81x20  — occluded by SECTION.asst
+      SKIP  ghost "Ask AI"                     rect 245,12 88x32  — occluded by SECTION.asst
       SKIP  H1 "Fleet"                         rect 16,75 358x29  — occluded by DIV.a-grid
       SKIP  P "Every agent ac"                 rect 16,107 358x41  — occluded by DIV.a-grid
-      SKIP  ghost "18 Aug, 2026"               rect 16,162 358x44  — occluded by DIV.a-grid
-      SKIP  cta "Start session"                rect 16,216 358x48  — occluded by DIV.a-grid
-      SKIP  lbl "Sessions"                     rect 36,297 134x24  — occluded by DIV.a-grid
-      SKIP  lbl "Needs you"                    rect 220,297 134x24  — occluded by DIV.a-grid
-      SKIP  lbl "Machines"                     rect 36,389 134x24  — occluded by DIV.a-grid
-      SKIP  SMALL "of 3"                       rect 88,421 22x15  — occluded by DIV.a-grid
-      SKIP  lbl "Spend today"                  rect 220,389 134x24  — occluded by DIV.a-grid
-      SKIP  v "$18.40"                         rect 253,416 101x21  — occluded by DIV.a-grid
-      SKIP  INPUT [placeholder] "Search session" rect 73,513 266x21  — occluded by DIV.a-grid
-      SKIP  sel "All machines"                 rect 39,555 163x44  — occluded by DIV.a-grid
-      SKIP  sel "All states"                   rect 210,555 141x44  — occluded by DIV.a-grid
-      SKIP  sel "Last active"                  rect 39,607 312x44  — occluded by DIV.a-grid
-      SKIP  ghost exp "Export CSV"             rect 39,661 312x44  — occluded by SECTION.asst
-      SKIP  B "wire delegate "                 rect 68,740 171x18  — occluded by SECTION.asst
-      SKIP  mut "nixbox"                       rect 41,773 308x32  — occluded by BUTTON.
-      SKIP  mut "Claude Code"                  rect 41,805 308x32  — occluded by BUTTON.
-      SKIP  num "28"                           rect 41,837 308x32  — occluded by BUTTON.
-      SKIP  num warn "104k"                    rect 41,869 308x32  — occluded by BUTTON.
-      SKIP  when "2 min ago"                   rect 272,908 77x18  — occluded by SECTION.asst
-      SKIP  chip-s s-attn "needs you"          rect 258,938 91x22  — occluded by SECTION.asst
-      SKIP  BUTTON "Open"                      rect 178,972 45x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Peek"                      rect 241,972 42x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Pause"                     rect 301,972 48x18  — occluded by SECTION.asst
-      SKIP  B "table system s"                 rect 68,1031 114x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1064 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,1096 308x32  — occluded by unknown
-      SKIP  num "14"                           rect 41,1128 308x32  — occluded by unknown
-      SKIP  num ok "38k"                       rect 41,1160 308x32  — occluded by unknown
-      SKIP  when "12 min ago"                  rect 267,1199 82x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,1229 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,1263 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,1263 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,1263 48x18  — occluded by unknown
-      SKIP  B "flaky ws recon"                 rect 68,1322 115x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1355 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1387 308x32  — occluded by unknown
-      SKIP  num "61"                           rect 41,1419 308x32  — occluded by unknown
-      SKIP  num bad "191k"                     rect 41,1451 308x32  — occluded by unknown
-      SKIP  when "26 min ago"                  rect 264,1490 85x18  — occluded by unknown
-      SKIP  chip-s s-fail "error"              rect 286,1520 63x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 214,1560 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 277,1560 42x18  — occluded by unknown
-      SKIP  B "landing copy p"                 rect 68,1625 111x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1658 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,1690 308x32  — occluded by unknown
-      SKIP  num ok "22k"                       rect 41,1754 308x32  — occluded by unknown
-      SKIP  when "1 hr ago"                    rect 284,1793 65x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,1823 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,1857 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,1857 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,1857 60x18  — occluded by unknown
-      SKIP  B "nix flake bump"                 rect 68,1916 90x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,1949 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1981 308x32  — occluded by unknown
-      SKIP  num ok "15k"                       rect 41,2045 308x32  — occluded by unknown
-      SKIP  when "4 min ago"                   rect 272,2084 77x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,2114 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2148 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2148 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2148 48x18  — occluded by unknown
-      SKIP  B "tmux keybinds"                  rect 68,2207 91x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,2240 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,2272 308x32  — occluded by unknown
-      SKIP  num "18"                           rect 41,2304 308x32  — occluded by unknown
-      SKIP  num warn "88k"                     rect 41,2336 308x32  — occluded by unknown
-      SKIP  when "1 min ago"                   rect 275,2375 74x18  — occluded by unknown
-      SKIP  chip-s s-attn "needs you"          rect 258,2405 91x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2439 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2439 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2439 48x18  — occluded by unknown
-      SKIP  B "drizzle schema"                 rect 68,2498 141x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2531 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,2563 308x32  — occluded by unknown
-      SKIP  num "33"                           rect 41,2595 308x32  — occluded by unknown
-      SKIP  num ok "51k"                       rect 41,2627 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2666 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "paused"             rect 294,2696 55x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,2730 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,2730 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,2730 60x18  — occluded by unknown
-      SKIP  B "telegram bridg"                 rect 68,2789 134x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2822 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,2854 308x32  — occluded by unknown
-      SKIP  num "12"                           rect 41,2886 308x32  — occluded by unknown
-      SKIP  num ok "30k"                       rect 41,2918 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2957 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,2987 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,3021 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,3021 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,3021 60x18  — occluded by unknown
-      SKIP  foot "Showing 8 of 2"              rect 27,3056 336x87  — occluded by unknown
-    PASS  13.36:1  a-t "CawCo Assist"               text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
+      SKIP  cta "Start session"                rect 16,162 358x48  — occluded by DIV.a-grid
+      SKIP  lbl "Sessions"                     rect 36,243 134x24  — occluded by DIV.a-grid
+      SKIP  lbl "Needs you"                    rect 220,243 134x24  — occluded by DIV.a-grid
+      SKIP  lbl "Machines"                     rect 36,335 134x24  — occluded by DIV.a-grid
+      SKIP  SMALL "of 3"                       rect 88,367 21x15  — occluded by DIV.a-grid
+      SKIP  lbl "Spend today"                  rect 220,335 134x24  — occluded by DIV.a-grid
+      SKIP  v "$18.40"                         rect 253,362 101x21  — occluded by DIV.a-grid
+      SKIP  INPUT [placeholder] "Search session" rect 73,459 266x21  — occluded by DIV.a-grid
+      SKIP  sel "All machines"                 rect 39,501 164x44  — occluded by DIV.a-grid
+      SKIP  sel "All states"                   rect 211,501 140x44  — occluded by DIV.a-grid
+      SKIP  sel "Last active"                  rect 39,553 312x44  — occluded by DIV.a-grid
+      SKIP  ghost exp "Export CSV"             rect 39,607 312x44  — occluded by DIV.a-grid
+      SKIP  B "wire delegate "                 rect 68,686 172x18  — occluded by SECTION.asst
+      SKIP  mut "nixbox"                       rect 41,719 308x32  — occluded by SECTION.asst
+      SKIP  mut "Claude Code"                  rect 41,751 308x32  — occluded by BUTTON.
+      SKIP  num "28"                           rect 41,783 308x32  — occluded by SECTION.asst
+      SKIP  num warn "104k"                    rect 41,815 308x32  — occluded by BUTTON.
+      SKIP  when "2 min ago"                   rect 271,854 78x18  — occluded by BUTTON.
+      SKIP  chip-s s-attn "needs you"          rect 260,884 89x22  — occluded by SECTION.asst
+      SKIP  B "table system s"                 rect 68,977 114x18  — occluded by SECTION.asst
+      SKIP  mut "nixbox"                       rect 41,1010 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,1042 308x32  — occluded by unknown
+      SKIP  num "14"                           rect 41,1074 308x32  — occluded by unknown
+      SKIP  num ok "38k"                       rect 41,1106 308x32  — occluded by unknown
+      SKIP  when "12 min ago"                  rect 266,1145 83x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,1175 77x22  — occluded by unknown
+      SKIP  B "flaky ws recon"                 rect 68,1268 115x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1301 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1333 308x32  — occluded by unknown
+      SKIP  num "61"                           rect 41,1365 308x32  — occluded by unknown
+      SKIP  num bad "191k"                     rect 41,1397 308x32  — occluded by unknown
+      SKIP  when "26 min ago"                  rect 263,1436 86x18  — occluded by unknown
+      SKIP  chip-s s-fail "error"              rect 289,1466 60x22  — occluded by unknown
+      SKIP  B "landing copy p"                 rect 68,1571 110x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1604 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,1636 308x32  — occluded by unknown
+      SKIP  num ok "22k"                       rect 41,1700 308x32  — occluded by unknown
+      SKIP  when "1 hr ago"                    rect 284,1739 65x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,1769 34x22  — occluded by unknown
+      SKIP  B "nix flake bump"                 rect 68,1862 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,1895 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1927 308x32  — occluded by unknown
+      SKIP  num ok "15k"                       rect 41,1991 308x32  — occluded by unknown
+      SKIP  when "4 min ago"                   rect 271,2030 78x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,2060 77x22  — occluded by unknown
+      SKIP  B "tmux keybinds"                  rect 68,2153 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,2186 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,2218 308x32  — occluded by unknown
+      SKIP  num "18"                           rect 41,2250 308x32  — occluded by unknown
+      SKIP  num warn "88k"                     rect 41,2282 308x32  — occluded by unknown
+      SKIP  when "1 min ago"                   rect 274,2321 75x18  — occluded by unknown
+      SKIP  chip-s s-attn "needs you"          rect 260,2351 89x22  — occluded by unknown
+      SKIP  B "drizzle schema"                 rect 68,2444 141x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2477 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,2509 308x32  — occluded by unknown
+      SKIP  num "33"                           rect 41,2541 308x32  — occluded by unknown
+      SKIP  num ok "51k"                       rect 41,2573 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2612 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "paused"             rect 295,2642 54x22  — occluded by unknown
+      SKIP  B "push relay aud"                 rect 68,2735 99x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2768 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,2800 308x32  — occluded by unknown
+      SKIP  num "12"                           rect 41,2832 308x32  — occluded by unknown
+      SKIP  num ok "30k"                       rect 41,2864 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2903 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,2933 34x22  — occluded by unknown
+      SKIP  foot "Showing 8 of 2"              rect 27,3002 336x87  — occluded by unknown
+    PASS  13.36:1  a-t "CawCo Assistan"               text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                          text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  13.36:1  H3 "Hey there!"                    text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  P "Ask me anythin"                 text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  BUTTON "Start a sessio"            text rgb(44,46,49) on fill rgb(252,253,253)
@@ -617,127 +497,103 @@
     PASS  13.36:1  BUTTON "Why did spend "            text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  a-in "Ask anything a"              text rgb(96,99,106) on fill rgb(252,253,253)
 
-  v3-assistant.html @390 dark   (8 candidates, 118 skipped)
-      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
-      SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
-      SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
-      SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
-      SKIP  nav-i "Rules14"                    rect -274,167 263x36  — occluded by unknown
-      SKIP  pill-n mint "14"                   rect -47,175 26x20  — occluded by unknown
-      SKIP  nav-i "Usage"                      rect -274,204 263x36  — occluded by unknown
-      SKIP  nav-i "Projects"                   rect -274,241 263x36  — occluded by unknown
-      SKIP  sec "Machines"                     rect -284,291 283x16  — occluded by unknown
-      SKIP  nav-i "nixbox"                     rect -274,313 263x36  — occluded by unknown
-      SKIP  nav-i "mba-m3"                     rect -274,350 263x36  — occluded by unknown
-      SKIP  nav-i "hetzner-01"                 rect -274,387 263x36  — occluded by unknown
-      SKIP  sec "Running now"                  rect -284,437 283x20  — occluded by unknown
-      SKIP  nm "wire delegate "                rect -238,470 195x18  — occluded by unknown
-      SKIP  nm "table system s"                rect -238,503 195x18  — occluded by unknown
-      SKIP  nm "flaky ws recon"                rect -238,536 195x18  — occluded by unknown
-      SKIP  nm "landing copy p"                rect -238,569 195x18  — occluded by unknown
+  v3-assistant.html @390 dark   (8 candidates, 94 skipped)
+      SKIP  B "CawCo"                          rect -235,18 48x20  — occluded by unknown
+      SKIP  sec "Fleet"                        rect -284,73 283x14  — occluded by unknown
+      SKIP  nav-i on "Fleet6"                  rect -274,94 263x36  — occluded by unknown
+      SKIP  nav-i "Tools"                      rect -274,131 263x36  — occluded by unknown
+      SKIP  nav-i "Rules14"                    rect -274,168 263x36  — occluded by unknown
+      SKIP  pill-n mint "14"                   rect -47,177 26x20  — occluded by unknown
+      SKIP  nav-i "Usage"                      rect -274,205 263x36  — occluded by unknown
+      SKIP  nav-i "Projects"                   rect -274,242 263x36  — occluded by unknown
+      SKIP  sec "Machines"                     rect -284,294 283x14  — occluded by unknown
+      SKIP  nav-i "nixbox"                     rect -274,316 263x36  — occluded by unknown
+      SKIP  nav-i "mba-m3"                     rect -274,353 263x36  — occluded by unknown
+      SKIP  nav-i "hetzner-01"                 rect -274,390 263x36  — occluded by unknown
+      SKIP  sec "Running now"                  rect -284,442 283x20  — occluded by unknown
+      SKIP  nm "wire delegate "                rect -238,476 195x18  — occluded by unknown
+      SKIP  nm "table system s"                rect -238,509 195x18  — occluded by unknown
+      SKIP  nm "flaky ws recon"                rect -238,542 195x18  — occluded by unknown
+      SKIP  nm "landing copy p"                rect -238,575 195x18  — occluded by unknown
       SKIP  n "18.40 / 50.00"                  rect -260,858 235x20  — occluded by unknown
       SKIP  s "Spend today ac"                 rect -260,880 235x16  — occluded by unknown
       SKIP  BUTTON "View usage"                rect -260,906 235x31  — occluded by unknown
       SKIP  av "bw"                            rect -270,978 31x31  — occluded by unknown
-      SKIP  nm "bewinxed"                      rect -230,977 85x16  — occluded by unknown
-      SKIP  em "obelisk-of-lig"                rect -230,994 85x16  — occluded by unknown
-      SKIP  crumb "Fleet"                      rect 59,18 83x20  — occluded by SECTION.asst
-      SKIP  ghost "Ask AI"                     rect 243,12 90x32  — occluded by SECTION.asst
+      SKIP  nm "bewinxed"                      rect -230,977 80x16  — occluded by unknown
+      SKIP  em "obelisk-of-lig"                rect -230,994 80x16  — occluded by unknown
+      SKIP  crumb "Fleet"                      rect 59,18 81x20  — occluded by SECTION.asst
+      SKIP  ghost "Ask AI"                     rect 245,12 88x32  — occluded by SECTION.asst
       SKIP  H1 "Fleet"                         rect 16,75 358x29  — occluded by DIV.a-grid
       SKIP  P "Every agent ac"                 rect 16,107 358x41  — occluded by DIV.a-grid
-      SKIP  ghost "18 Aug, 2026"               rect 16,162 358x44  — occluded by DIV.a-grid
-      SKIP  cta "Start session"                rect 16,216 358x48  — occluded by DIV.a-grid
-      SKIP  lbl "Sessions"                     rect 36,297 134x24  — occluded by DIV.a-grid
-      SKIP  lbl "Needs you"                    rect 220,297 134x24  — occluded by DIV.a-grid
-      SKIP  lbl "Machines"                     rect 36,389 134x24  — occluded by DIV.a-grid
-      SKIP  SMALL "of 3"                       rect 88,421 22x15  — occluded by DIV.a-grid
-      SKIP  lbl "Spend today"                  rect 220,389 134x24  — occluded by DIV.a-grid
-      SKIP  v "$18.40"                         rect 253,416 101x21  — occluded by DIV.a-grid
-      SKIP  INPUT [placeholder] "Search session" rect 73,513 266x21  — occluded by DIV.a-grid
-      SKIP  sel "All machines"                 rect 39,555 163x44  — occluded by DIV.a-grid
-      SKIP  sel "All states"                   rect 210,555 141x44  — occluded by DIV.a-grid
-      SKIP  sel "Last active"                  rect 39,607 312x44  — occluded by DIV.a-grid
-      SKIP  ghost exp "Export CSV"             rect 39,661 312x44  — occluded by SECTION.asst
-      SKIP  B "wire delegate "                 rect 68,740 171x18  — occluded by SECTION.asst
-      SKIP  mut "nixbox"                       rect 41,773 308x32  — occluded by BUTTON.
-      SKIP  mut "Claude Code"                  rect 41,805 308x32  — occluded by BUTTON.
-      SKIP  num "28"                           rect 41,837 308x32  — occluded by BUTTON.
-      SKIP  num warn "104k"                    rect 41,869 308x32  — occluded by BUTTON.
-      SKIP  when "2 min ago"                   rect 272,908 77x18  — occluded by SECTION.asst
-      SKIP  chip-s s-attn "needs you"          rect 258,938 91x22  — occluded by SECTION.asst
-      SKIP  BUTTON "Open"                      rect 178,972 45x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Peek"                      rect 241,972 42x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Pause"                     rect 301,972 48x18  — occluded by SECTION.asst
-      SKIP  B "table system s"                 rect 68,1031 114x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1064 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,1096 308x32  — occluded by unknown
-      SKIP  num "14"                           rect 41,1128 308x32  — occluded by unknown
-      SKIP  num ok "38k"                       rect 41,1160 308x32  — occluded by unknown
-      SKIP  when "12 min ago"                  rect 267,1199 82x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,1229 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,1263 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,1263 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,1263 48x18  — occluded by unknown
-      SKIP  B "flaky ws recon"                 rect 68,1322 115x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1355 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1387 308x32  — occluded by unknown
-      SKIP  num "61"                           rect 41,1419 308x32  — occluded by unknown
-      SKIP  num bad "191k"                     rect 41,1451 308x32  — occluded by unknown
-      SKIP  when "26 min ago"                  rect 264,1490 85x18  — occluded by unknown
-      SKIP  chip-s s-fail "error"              rect 286,1520 63x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 214,1560 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 277,1560 42x18  — occluded by unknown
-      SKIP  B "landing copy p"                 rect 68,1625 111x18  — occluded by unknown
-      SKIP  mut "nixbox"                       rect 41,1658 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,1690 308x32  — occluded by unknown
-      SKIP  num ok "22k"                       rect 41,1754 308x32  — occluded by unknown
-      SKIP  when "1 hr ago"                    rect 284,1793 65x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,1823 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,1857 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,1857 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,1857 60x18  — occluded by unknown
-      SKIP  B "nix flake bump"                 rect 68,1916 90x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,1949 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,1981 308x32  — occluded by unknown
-      SKIP  num ok "15k"                       rect 41,2045 308x32  — occluded by unknown
-      SKIP  when "4 min ago"                   rect 272,2084 77x18  — occluded by unknown
-      SKIP  chip-s s-live "working"            rect 270,2114 79x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2148 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2148 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2148 48x18  — occluded by unknown
-      SKIP  B "tmux keybinds"                  rect 68,2207 91x18  — occluded by unknown
-      SKIP  mut "mba-m3"                       rect 41,2240 308x32  — occluded by unknown
-      SKIP  mut "OpenCode"                     rect 41,2272 308x32  — occluded by unknown
-      SKIP  num "18"                           rect 41,2304 308x32  — occluded by unknown
-      SKIP  num warn "88k"                     rect 41,2336 308x32  — occluded by unknown
-      SKIP  when "1 min ago"                   rect 275,2375 74x18  — occluded by unknown
-      SKIP  chip-s s-attn "needs you"          rect 258,2405 91x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 178,2439 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 241,2439 42x18  — occluded by unknown
-      SKIP  BUTTON "Pause"                     rect 301,2439 48x18  — occluded by unknown
-      SKIP  B "drizzle schema"                 rect 68,2498 141x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2531 308x32  — occluded by unknown
-      SKIP  mut "Claude Code"                  rect 41,2563 308x32  — occluded by unknown
-      SKIP  num "33"                           rect 41,2595 308x32  — occluded by unknown
-      SKIP  num ok "51k"                       rect 41,2627 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2666 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "paused"             rect 294,2696 55x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,2730 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,2730 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,2730 60x18  — occluded by unknown
-      SKIP  B "telegram bridg"                 rect 68,2789 134x18  — occluded by unknown
-      SKIP  mut "hetzner-01"                   rect 41,2822 308x32  — occluded by unknown
-      SKIP  mut "pi"                           rect 41,2854 308x32  — occluded by unknown
-      SKIP  num "12"                           rect 41,2886 308x32  — occluded by unknown
-      SKIP  num ok "30k"                       rect 41,2918 308x32  — occluded by unknown
-      SKIP  when "3 hr ago"                    rect 281,2957 68x18  — occluded by unknown
-      SKIP  chip-s s-idle "idle"               rect 315,2987 34x22  — occluded by unknown
-      SKIP  BUTTON "Open"                      rect 166,3021 45x18  — occluded by unknown
-      SKIP  BUTTON "Peek"                      rect 229,3021 42x18  — occluded by unknown
-      SKIP  BUTTON "Resume"                    rect 289,3021 60x18  — occluded by unknown
-      SKIP  foot "Showing 8 of 2"              rect 27,3056 336x87  — occluded by unknown
-    PASS  11.70:1  a-t "CawCo Assist"               text rgb(230,232,236) on fill rgb(41,42,45)
-    PASS  11.70:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(41,42,45)
+      SKIP  cta "Start session"                rect 16,162 358x48  — occluded by DIV.a-grid
+      SKIP  lbl "Sessions"                     rect 36,243 134x24  — occluded by DIV.a-grid
+      SKIP  lbl "Needs you"                    rect 220,243 134x24  — occluded by DIV.a-grid
+      SKIP  lbl "Machines"                     rect 36,335 134x24  — occluded by DIV.a-grid
+      SKIP  SMALL "of 3"                       rect 88,367 21x15  — occluded by DIV.a-grid
+      SKIP  lbl "Spend today"                  rect 220,335 134x24  — occluded by DIV.a-grid
+      SKIP  v "$18.40"                         rect 253,362 101x21  — occluded by DIV.a-grid
+      SKIP  INPUT [placeholder] "Search session" rect 73,459 266x21  — occluded by DIV.a-grid
+      SKIP  sel "All machines"                 rect 39,501 164x44  — occluded by DIV.a-grid
+      SKIP  sel "All states"                   rect 211,501 140x44  — occluded by DIV.a-grid
+      SKIP  sel "Last active"                  rect 39,553 312x44  — occluded by DIV.a-grid
+      SKIP  ghost exp "Export CSV"             rect 39,607 312x44  — occluded by DIV.a-grid
+      SKIP  B "wire delegate "                 rect 68,686 172x18  — occluded by SECTION.asst
+      SKIP  mut "nixbox"                       rect 41,719 308x32  — occluded by SECTION.asst
+      SKIP  mut "Claude Code"                  rect 41,751 308x32  — occluded by BUTTON.
+      SKIP  num "28"                           rect 41,783 308x32  — occluded by SECTION.asst
+      SKIP  num warn "104k"                    rect 41,815 308x32  — occluded by BUTTON.
+      SKIP  when "2 min ago"                   rect 271,854 78x18  — occluded by BUTTON.
+      SKIP  chip-s s-attn "needs you"          rect 260,884 89x22  — occluded by SECTION.asst
+      SKIP  B "table system s"                 rect 68,977 114x18  — occluded by SECTION.asst
+      SKIP  mut "nixbox"                       rect 41,1010 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,1042 308x32  — occluded by unknown
+      SKIP  num "14"                           rect 41,1074 308x32  — occluded by unknown
+      SKIP  num ok "38k"                       rect 41,1106 308x32  — occluded by unknown
+      SKIP  when "12 min ago"                  rect 266,1145 83x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,1175 77x22  — occluded by unknown
+      SKIP  B "flaky ws recon"                 rect 68,1268 115x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1301 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1333 308x32  — occluded by unknown
+      SKIP  num "61"                           rect 41,1365 308x32  — occluded by unknown
+      SKIP  num bad "191k"                     rect 41,1397 308x32  — occluded by unknown
+      SKIP  when "26 min ago"                  rect 263,1436 86x18  — occluded by unknown
+      SKIP  chip-s s-fail "error"              rect 289,1466 60x22  — occluded by unknown
+      SKIP  B "landing copy p"                 rect 68,1571 110x18  — occluded by unknown
+      SKIP  mut "nixbox"                       rect 41,1604 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,1636 308x32  — occluded by unknown
+      SKIP  num ok "22k"                       rect 41,1700 308x32  — occluded by unknown
+      SKIP  when "1 hr ago"                    rect 284,1739 65x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,1769 34x22  — occluded by unknown
+      SKIP  B "nix flake bump"                 rect 68,1862 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,1895 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,1927 308x32  — occluded by unknown
+      SKIP  num ok "15k"                       rect 41,1991 308x32  — occluded by unknown
+      SKIP  when "4 min ago"                   rect 271,2030 78x18  — occluded by unknown
+      SKIP  chip-s s-live "working"            rect 272,2060 77x22  — occluded by unknown
+      SKIP  B "tmux keybinds"                  rect 68,2153 90x18  — occluded by unknown
+      SKIP  mut "mba-m3"                       rect 41,2186 308x32  — occluded by unknown
+      SKIP  mut "OpenCode"                     rect 41,2218 308x32  — occluded by unknown
+      SKIP  num "18"                           rect 41,2250 308x32  — occluded by unknown
+      SKIP  num warn "88k"                     rect 41,2282 308x32  — occluded by unknown
+      SKIP  when "1 min ago"                   rect 274,2321 75x18  — occluded by unknown
+      SKIP  chip-s s-attn "needs you"          rect 260,2351 89x22  — occluded by unknown
+      SKIP  B "drizzle schema"                 rect 68,2444 141x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2477 308x32  — occluded by unknown
+      SKIP  mut "Claude Code"                  rect 41,2509 308x32  — occluded by unknown
+      SKIP  num "33"                           rect 41,2541 308x32  — occluded by unknown
+      SKIP  num ok "51k"                       rect 41,2573 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2612 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "paused"             rect 295,2642 54x22  — occluded by unknown
+      SKIP  B "push relay aud"                 rect 68,2735 99x18  — occluded by unknown
+      SKIP  mut "hetzner-01"                   rect 41,2768 308x32  — occluded by unknown
+      SKIP  mut "pi"                           rect 41,2800 308x32  — occluded by unknown
+      SKIP  num "12"                           rect 41,2832 308x32  — occluded by unknown
+      SKIP  num ok "30k"                       rect 41,2864 308x32  — occluded by unknown
+      SKIP  when "3 hr ago"                    rect 281,2903 68x18  — occluded by unknown
+      SKIP  chip-s s-idle "idle"               rect 315,2933 34x22  — occluded by unknown
+      SKIP  foot "Showing 8 of 2"              rect 27,3002 336x87  — occluded by unknown
+    PASS  11.70:1  a-t "CawCo Assistan"               text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  11.70:1  B "CawCo"                          text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  11.70:1  H3 "Hey there!"                    text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  7.15:1  P "Ask me anythin"                 text rgb(180,183,190) on fill rgb(41,42,45)
     PASS  12.98:1  BUTTON "Start a sessio"            text rgb(230,232,236) on fill rgb(33,34,36)
@@ -745,60 +601,36 @@
     PASS  12.98:1  BUTTON "Why did spend "            text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.15:1  a-in "Ask anything a"              text rgb(180,183,190) on fill rgb(41,42,45)
 
-  v3-assistant.html @1440 light  (81 candidates, 50 skipped)
-      SKIP  ghost "Ask AI"                     rect 1288,12 90x32  — occluded by SECTION.asst
-      SKIP  ghost "18 Aug, 2026"               rect 1090,80 130x32  — occluded by DIV.a-grid
+  v3-assistant.html @1440 light  (81 candidates, 26 skipped)
+      SKIP  ghost "Ask AI"                     rect 1290,12 88x32  — occluded by SECTION.asst
       SKIP  cta "Start session"                rect 1230,80 189x36  — occluded by DIV.a-grid
       SKIP  lbl "Machines"                     rect 866,165 235x24  — occluded by DIV.a-grid
       SKIP  lbl "Spend today"                  rect 1161,165 235x24  — occluded by DIV.a-grid
       SKIP  v "$18.40"                         rect 1194,190 202x24  — occluded by DIV.a-grid
       SKIP  ghost exp "Export CSV"             rect 1289,269 119x32  — occluded by DIV.a-grid
-      SKIP  TH "Last activity"                 rect 936,313 133x32  — occluded by DIV.a-grid
-      SKIP  TH "State"                         rect 1069,313 140x32  — occluded by DIV.a-grid
-      SKIP  TH "Action"                        rect 1209,313 199x32  — occluded by DIV.a-grid
-      SKIP  when "2 min ago"                   rect 948,358 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-attn "needs you"          rect 1081,356 91x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,358 45x18  — occluded by DIV.a-orb
-      SKIP  BUTTON "Peek"                      rect 1280,358 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,358 48x18  — occluded by DIV.a-grid
-      SKIP  when "12 min ago"                  rect 948,402 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-live "working"            rect 1081,400 79x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,402 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,402 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,402 48x18  — occluded by DIV.a-grid
-      SKIP  when "26 min ago"                  rect 948,446 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-fail "error"              rect 1081,444 63x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,446 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,446 42x18  — occluded by DIV.a-grid
-      SKIP  when "1 hr ago"                    rect 948,490 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-idle "idle"               rect 1081,488 34x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,490 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,490 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Resume"                    rect 1336,490 60x18  — occluded by DIV.a-grid
-      SKIP  when "4 min ago"                   rect 948,534 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-live "working"            rect 1081,532 79x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,534 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,534 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,534 48x18  — occluded by DIV.a-grid
-      SKIP  when "1 min ago"                   rect 948,578 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-attn "needs you"          rect 1081,576 91x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,578 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,578 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,578 48x18  — occluded by DIV.a-grid
-      SKIP  when "3 hr ago"                    rect 948,622 109x18  — occluded by SECTION.asst
-      SKIP  chip-s s-idle "paused"             rect 1081,620 55x22  — occluded by SECTION.asst
-      SKIP  BUTTON "Open"                      rect 1221,622 45x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Peek"                      rect 1280,622 42x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Resume"                    rect 1336,622 60x18  — occluded by SECTION.asst
-      SKIP  when "3 hr ago"                    rect 948,667 109x18  — occluded by SECTION.asst
-      SKIP  chip-s s-idle "idle"               rect 1081,665 34x22  — occluded by BUTTON.
-      SKIP  BUTTON "Open"                      rect 1221,667 45x18  — occluded by BUTTON.
-      SKIP  BUTTON "Peek"                      rect 1280,667 42x18  — occluded by BUTTON.
-      SKIP  BUTTON "Resume"                    rect 1336,667 60x18  — occluded by BUTTON.
+      SKIP  TH "Last activity"                 rect 973,313 145x32  — occluded by DIV.a-grid
+      SKIP  TH "State"                         rect 1118,313 150x32  — occluded by DIV.a-grid
+      SKIP  TH "Action"                        rect 1268,313 140x32  — occluded by DIV.a-grid
+      SKIP  when "2 min ago"                   rect 985,358 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-attn "needs you"          rect 1130,356 89x22  — occluded by DIV.a-grid
+      SKIP  when "12 min ago"                  rect 985,402 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-live "working"            rect 1130,400 77x22  — occluded by DIV.a-grid
+      SKIP  when "26 min ago"                  rect 985,446 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-fail "error"              rect 1130,444 60x22  — occluded by DIV.a-grid
+      SKIP  when "1 hr ago"                    rect 985,490 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-idle "idle"               rect 1130,488 34x22  — occluded by DIV.a-grid
+      SKIP  when "4 min ago"                   rect 985,534 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-live "working"            rect 1130,532 77x22  — occluded by DIV.a-grid
+      SKIP  when "1 min ago"                   rect 985,578 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-attn "needs you"          rect 1130,576 89x22  — occluded by DIV.a-grid
+      SKIP  when "3 hr ago"                    rect 985,622 121x18  — occluded by SECTION.asst
+      SKIP  chip-s s-idle "paused"             rect 1130,620 54x22  — occluded by SECTION.asst
+      SKIP  when "3 hr ago"                    rect 985,667 121x18  — occluded by SECTION.asst
+      SKIP  chip-s s-idle "idle"               rect 1130,665 34x22  — occluded by BUTTON.
       SKIP  foot "Showing 8 of 2"              rect 264,697 1144x55  — occluded by SECTION.asst
-    PASS  12.03:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(240,241,241)
+    PASS  12.03:1  B "CawCo"                          text rgb(44,46,49) on fill rgb(240,241,241)
     PASS  5.57:1  sec "Fleet"                        text rgb(93,96,102) on fill rgb(240,241,241)
-    PASS  10.71:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(227,228,231)
+    PASS  12.03:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(240,241,241)
     PASS  8.11:1  nav-i "Tools"                      text rgb(69,72,77) on fill rgb(240,241,241)
     PASS  8.11:1  nav-i "Rules14"                    text rgb(69,72,77) on fill rgb(240,241,241)
     PASS  4.96:1  pill-n mint "14"                   text rgb(93,96,102) on fill rgb(227,228,231)
@@ -840,20 +672,20 @@
     PASS  5.57:1  mut "nixbox"                       text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "OpenCode"                     text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  12.03:1  num "14"                           text rgb(44,46,49) on fill rgb(240,241,241)
-    PASS  6.30:1  num ok "38k"                       text rgb(30,101,38) on fill rgb(240,241,241)
+    PASS  6.35:1  num ok "38k"                       text rgb(73,95,3) on fill rgb(240,241,241)
     PASS  9.62:1  B "flaky ws recon"                 text rgb(59,61,65) on fill rgb(240,241,241)
     PASS  5.57:1  mut "nixbox"                       text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "Claude Code"                  text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  12.03:1  num "61"                           text rgb(44,46,49) on fill rgb(240,241,241)
-    PASS  7.01:1  num bad "191k"                     text rgb(143,49,46) on fill rgb(240,241,241)
+    PASS  7.03:1  num bad "191k"                     text rgb(143,49,42) on fill rgb(240,241,241)
     PASS  9.62:1  B "landing copy p"                 text rgb(59,61,65) on fill rgb(240,241,241)
     PASS  5.57:1  mut "nixbox"                       text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "pi"                           text rgb(93,96,102) on fill rgb(240,241,241)
-    PASS  6.30:1  num ok "22k"                       text rgb(30,101,38) on fill rgb(240,241,241)
+    PASS  6.35:1  num ok "22k"                       text rgb(73,95,3) on fill rgb(240,241,241)
     PASS  9.62:1  B "nix flake bump"                 text rgb(59,61,65) on fill rgb(240,241,241)
     PASS  5.57:1  mut "mba-m3"                       text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "Claude Code"                  text rgb(93,96,102) on fill rgb(240,241,241)
-    PASS  6.30:1  num ok "15k"                       text rgb(30,101,38) on fill rgb(240,241,241)
+    PASS  6.35:1  num ok "15k"                       text rgb(73,95,3) on fill rgb(240,241,241)
     PASS  9.62:1  B "tmux keybinds"                  text rgb(59,61,65) on fill rgb(240,241,241)
     PASS  5.57:1  mut "mba-m3"                       text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "OpenCode"                     text rgb(93,96,102) on fill rgb(240,241,241)
@@ -863,14 +695,14 @@
     PASS  5.57:1  mut "hetzner-01"                   text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "Claude Code"                  text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  12.03:1  num "33"                           text rgb(44,46,49) on fill rgb(240,241,241)
-    PASS  6.30:1  num ok "51k"                       text rgb(30,101,38) on fill rgb(240,241,241)
-    PASS  9.62:1  B "telegram bridg"                 text rgb(59,61,65) on fill rgb(240,241,241)
+    PASS  6.35:1  num ok "51k"                       text rgb(73,95,3) on fill rgb(240,241,241)
+    PASS  9.62:1  B "push relay aud"                 text rgb(59,61,65) on fill rgb(240,241,241)
     PASS  5.57:1  mut "hetzner-01"                   text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  5.57:1  mut "pi"                           text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  12.03:1  num "12"                           text rgb(44,46,49) on fill rgb(240,241,241)
-    PASS  6.30:1  num ok "30k"                       text rgb(30,101,38) on fill rgb(240,241,241)
-    PASS  13.36:1  a-t "CawCo Assist"               text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  6.35:1  num ok "30k"                       text rgb(73,95,3) on fill rgb(240,241,241)
+    PASS  13.36:1  a-t "CawCo Assistan"               text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                          text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  13.36:1  H3 "Hey there!"                    text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  P "Ask me anythin"                 text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  BUTTON "Start a sessio"            text rgb(44,46,49) on fill rgb(252,253,253)
@@ -878,60 +710,36 @@
     PASS  13.36:1  BUTTON "Why did spend "            text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  a-in "Ask anything a"              text rgb(96,99,106) on fill rgb(252,253,253)
 
-  v3-assistant.html @1440 dark   (81 candidates, 50 skipped)
-      SKIP  ghost "Ask AI"                     rect 1288,12 90x32  — occluded by SECTION.asst
-      SKIP  ghost "18 Aug, 2026"               rect 1090,80 130x32  — occluded by DIV.a-grid
+  v3-assistant.html @1440 dark   (81 candidates, 26 skipped)
+      SKIP  ghost "Ask AI"                     rect 1290,12 88x32  — occluded by SECTION.asst
       SKIP  cta "Start session"                rect 1230,80 189x36  — occluded by DIV.a-grid
       SKIP  lbl "Machines"                     rect 866,165 235x24  — occluded by DIV.a-grid
       SKIP  lbl "Spend today"                  rect 1161,165 235x24  — occluded by DIV.a-grid
       SKIP  v "$18.40"                         rect 1194,190 202x24  — occluded by DIV.a-grid
       SKIP  ghost exp "Export CSV"             rect 1289,269 119x32  — occluded by DIV.a-grid
-      SKIP  TH "Last activity"                 rect 936,313 133x32  — occluded by DIV.a-grid
-      SKIP  TH "State"                         rect 1069,313 140x32  — occluded by DIV.a-grid
-      SKIP  TH "Action"                        rect 1209,313 199x32  — occluded by DIV.a-grid
-      SKIP  when "2 min ago"                   rect 948,358 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-attn "needs you"          rect 1081,356 91x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,358 45x18  — occluded by DIV.a-orb
-      SKIP  BUTTON "Peek"                      rect 1280,358 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,358 48x18  — occluded by DIV.a-grid
-      SKIP  when "12 min ago"                  rect 948,402 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-live "working"            rect 1081,400 79x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,402 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,402 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,402 48x18  — occluded by DIV.a-grid
-      SKIP  when "26 min ago"                  rect 948,446 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-fail "error"              rect 1081,444 63x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,446 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,446 42x18  — occluded by DIV.a-grid
-      SKIP  when "1 hr ago"                    rect 948,490 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-idle "idle"               rect 1081,488 34x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,490 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,490 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Resume"                    rect 1336,490 60x18  — occluded by DIV.a-grid
-      SKIP  when "4 min ago"                   rect 948,534 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-live "working"            rect 1081,532 79x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,534 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,534 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,534 48x18  — occluded by DIV.a-grid
-      SKIP  when "1 min ago"                   rect 948,578 109x18  — occluded by DIV.a-grid
-      SKIP  chip-s s-attn "needs you"          rect 1081,576 91x22  — occluded by DIV.a-grid
-      SKIP  BUTTON "Open"                      rect 1221,578 45x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Peek"                      rect 1280,578 42x18  — occluded by DIV.a-grid
-      SKIP  BUTTON "Pause"                     rect 1336,578 48x18  — occluded by DIV.a-grid
-      SKIP  when "3 hr ago"                    rect 948,622 109x18  — occluded by SECTION.asst
-      SKIP  chip-s s-idle "paused"             rect 1081,620 55x22  — occluded by SECTION.asst
-      SKIP  BUTTON "Open"                      rect 1221,622 45x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Peek"                      rect 1280,622 42x18  — occluded by SECTION.asst
-      SKIP  BUTTON "Resume"                    rect 1336,622 60x18  — occluded by SECTION.asst
-      SKIP  when "3 hr ago"                    rect 948,667 109x18  — occluded by SECTION.asst
-      SKIP  chip-s s-idle "idle"               rect 1081,665 34x22  — occluded by BUTTON.
-      SKIP  BUTTON "Open"                      rect 1221,667 45x18  — occluded by BUTTON.
-      SKIP  BUTTON "Peek"                      rect 1280,667 42x18  — occluded by BUTTON.
-      SKIP  BUTTON "Resume"                    rect 1336,667 60x18  — occluded by BUTTON.
+      SKIP  TH "Last activity"                 rect 973,313 145x32  — occluded by DIV.a-grid
+      SKIP  TH "State"                         rect 1118,313 150x32  — occluded by DIV.a-grid
+      SKIP  TH "Action"                        rect 1268,313 140x32  — occluded by DIV.a-grid
+      SKIP  when "2 min ago"                   rect 985,358 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-attn "needs you"          rect 1130,356 89x22  — occluded by DIV.a-grid
+      SKIP  when "12 min ago"                  rect 985,402 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-live "working"            rect 1130,400 77x22  — occluded by DIV.a-grid
+      SKIP  when "26 min ago"                  rect 985,446 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-fail "error"              rect 1130,444 60x22  — occluded by DIV.a-grid
+      SKIP  when "1 hr ago"                    rect 985,490 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-idle "idle"               rect 1130,488 34x22  — occluded by DIV.a-grid
+      SKIP  when "4 min ago"                   rect 985,534 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-live "working"            rect 1130,532 77x22  — occluded by DIV.a-grid
+      SKIP  when "1 min ago"                   rect 985,578 121x18  — occluded by DIV.a-grid
+      SKIP  chip-s s-attn "needs you"          rect 1130,576 89x22  — occluded by DIV.a-grid
+      SKIP  when "3 hr ago"                    rect 985,622 121x18  — occluded by SECTION.asst
+      SKIP  chip-s s-idle "paused"             rect 1130,620 54x22  — occluded by SECTION.asst
+      SKIP  when "3 hr ago"                    rect 985,667 121x18  — occluded by SECTION.asst
+      SKIP  chip-s s-idle "idle"               rect 1130,665 34x22  — occluded by BUTTON.
       SKIP  foot "Showing 8 of 2"              rect 264,697 1144x55  — occluded by SECTION.asst
-    PASS  7.06:1  B "CawCo"                        text rgb(165,168,171) on fill rgb(28,29,31)
+    PASS  7.06:1  B "CawCo"                          text rgb(165,168,171) on fill rgb(28,29,31)
     PASS  4.56:1  sec "Fleet"                        text rgb(130,133,138) on fill rgb(28,29,31)
-    PASS  7.80:1  nav-i on "Fleet6"                  text rgb(165,168,171) on fill rgb(17,19,19)
+    PASS  7.06:1  nav-i on "Fleet6"                  text rgb(165,168,171) on fill rgb(28,29,31)
     PASS  5.21:1  nav-i "Tools"                      text rgb(141,143,148) on fill rgb(28,29,31)
     PASS  5.21:1  nav-i "Rules14"                    text rgb(141,143,148) on fill rgb(28,29,31)
     PASS  5.03:1  pill-n mint "14"                   text rgb(130,133,138) on fill rgb(17,19,19)
@@ -968,42 +776,42 @@
     PASS  4.56:1  mut "nixbox"                       text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "Claude Code"                  text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "28"                           text rgb(165,168,171) on fill rgb(28,29,31)
-    PASS  4.82:1  num warn "104k"                    text rgb(164,133,61) on fill rgb(28,29,31)
+    PASS  4.85:1  num warn "104k"                    text rgb(163,134,61) on fill rgb(28,29,31)
     PASS  6.73:1  B "table system s"                 text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "nixbox"                       text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "OpenCode"                     text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "14"                           text rgb(165,168,171) on fill rgb(28,29,31)
-    PASS  4.81:1  num ok "38k"                       text rgb(92,150,95) on fill rgb(28,29,31)
+    PASS  4.71:1  num ok "38k"                       text rgb(123,143,70) on fill rgb(28,29,31)
     PASS  6.73:1  B "flaky ws recon"                 text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "nixbox"                       text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "Claude Code"                  text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "61"                           text rgb(165,168,171) on fill rgb(28,29,31)
-    PASS  4.61:1  num bad "191k"                     text rgb(183,116,110) on fill rgb(28,29,31)
+    PASS  4.64:1  num bad "191k"                     text rgb(183,117,108) on fill rgb(28,29,31)
     PASS  6.73:1  B "landing copy p"                 text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "nixbox"                       text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "pi"                           text rgb(130,133,138) on fill rgb(28,29,31)
-    PASS  4.81:1  num ok "22k"                       text rgb(92,150,95) on fill rgb(28,29,31)
+    PASS  4.71:1  num ok "22k"                       text rgb(123,143,70) on fill rgb(28,29,31)
     PASS  6.73:1  B "nix flake bump"                 text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "mba-m3"                       text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "Claude Code"                  text rgb(130,133,138) on fill rgb(28,29,31)
-    PASS  4.81:1  num ok "15k"                       text rgb(92,150,95) on fill rgb(28,29,31)
+    PASS  4.71:1  num ok "15k"                       text rgb(123,143,70) on fill rgb(28,29,31)
     PASS  6.73:1  B "tmux keybinds"                  text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "mba-m3"                       text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "OpenCode"                     text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "18"                           text rgb(165,168,171) on fill rgb(28,29,31)
-    PASS  4.82:1  num warn "88k"                     text rgb(164,133,61) on fill rgb(28,29,31)
+    PASS  4.85:1  num warn "88k"                     text rgb(163,134,61) on fill rgb(28,29,31)
     PASS  6.73:1  B "drizzle schema"                 text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "hetzner-01"                   text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "Claude Code"                  text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "33"                           text rgb(165,168,171) on fill rgb(28,29,31)
-    PASS  4.81:1  num ok "51k"                       text rgb(92,150,95) on fill rgb(28,29,31)
-    PASS  6.73:1  B "telegram bridg"                 text rgb(161,164,166) on fill rgb(28,29,31)
+    PASS  4.71:1  num ok "51k"                       text rgb(123,143,70) on fill rgb(28,29,31)
+    PASS  6.73:1  B "push relay aud"                 text rgb(161,164,166) on fill rgb(28,29,31)
     PASS  4.56:1  mut "hetzner-01"                   text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  4.56:1  mut "pi"                           text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "12"                           text rgb(165,168,171) on fill rgb(28,29,31)
-    PASS  4.81:1  num ok "30k"                       text rgb(92,150,95) on fill rgb(28,29,31)
-    PASS  11.70:1  a-t "CawCo Assist"               text rgb(230,232,236) on fill rgb(41,42,45)
-    PASS  11.70:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  4.71:1  num ok "30k"                       text rgb(123,143,70) on fill rgb(28,29,31)
+    PASS  11.70:1  a-t "CawCo Assistan"               text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  11.70:1  B "CawCo"                          text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  11.70:1  H3 "Hey there!"                    text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  7.15:1  P "Ask me anythin"                 text rgb(180,183,190) on fill rgb(41,42,45)
     PASS  12.98:1  BUTTON "Start a sessio"            text rgb(230,232,236) on fill rgb(33,34,36)
@@ -1011,35 +819,54 @@
     PASS  12.98:1  BUTTON "Why did spend "            text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.15:1  a-in "Ask anything a"              text rgb(180,183,190) on fill rgb(41,42,45)
 
-  v4-transcript.html @390 light  (47 candidates, 25 skipped)
-      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
-      SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
-      SKIP  SPAN "Fleet"                       rect -254,101 35x20  — occluded by unknown
-      SKIP  SPAN "Tools"                       rect -254,138 35x20  — occluded by unknown
-      SKIP  SPAN "Rules"                       rect -254,175 38x20  — occluded by unknown
-      SKIP  SPAN "Usage"                       rect -254,212 43x20  — occluded by unknown
-      SKIP  sec "Running now"                  rect -284,254 283x16  — occluded by unknown
-      SKIP  nm "wire delegate "                rect -238,283 217x18  — occluded by unknown
-      SKIP  nm "table system s"                rect -238,316 217x18  — occluded by unknown
-      SKIP  nm "flaky ws recon"                rect -238,349 217x18  — occluded by unknown
-      SKIP  nm "landing copy p"                rect -238,382 217x18  — occluded by unknown
+  v4-transcript.html @390 light  (42 candidates, 43 skipped)
+      SKIP  B "CawCo"                          rect -235,18 48x20  — occluded by unknown
+      SKIP  sec "Fleet"                        rect -284,73 283x14  — occluded by unknown
+      SKIP  nav-i on "Fleet6"                  rect -274,94 263x36  — occluded by unknown
+      SKIP  nav-i "Tools"                      rect -274,131 263x36  — occluded by unknown
+      SKIP  nav-i "Rules14"                    rect -274,168 263x36  — occluded by unknown
+      SKIP  pill-n mint "14"                   rect -47,177 26x20  — occluded by unknown
+      SKIP  nav-i "Usage"                      rect -274,205 263x36  — occluded by unknown
+      SKIP  nav-i "Projects"                   rect -274,242 263x36  — occluded by unknown
+      SKIP  sec "Machines"                     rect -284,294 283x14  — occluded by unknown
+      SKIP  nav-i "nixbox"                     rect -274,316 263x36  — occluded by unknown
+      SKIP  nav-i "mba-m3"                     rect -274,353 263x36  — occluded by unknown
+      SKIP  nav-i "hetzner-01"                 rect -274,390 263x36  — occluded by unknown
+      SKIP  sec "Running now"                  rect -284,442 283x20  — occluded by unknown
+      SKIP  nm "wire delegate "                rect -238,476 208x18  — occluded by unknown
+      SKIP  nm "table system s"                rect -238,509 208x18  — occluded by unknown
+      SKIP  nm "flaky ws recon"                rect -238,542 208x18  — occluded by unknown
+      SKIP  nm "landing copy p"                rect -238,575 208x18  — occluded by unknown
+      SKIP  n "18.40 / 50.00"                  rect -260,858 235x20  — occluded by unknown
+      SKIP  s "Spend today ac"                 rect -260,880 235x16  — occluded by unknown
+      SKIP  BUTTON "View usage"                rect -260,906 235x31  — occluded by unknown
+      SKIP  av "bw"                            rect -270,978 31x31  — occluded by unknown
+      SKIP  nm "bewinxed"                      rect -230,977 80x16  — occluded by unknown
+      SKIP  em "obelisk-of-lig"                rect -230,994 80x16  — occluded by unknown
       SKIP  CODE "fleet-memory.t"              rect 16,219 316x34  — occluded by CODE.
-      SKIP  DT "Network"                       rect 31,967 328x16  — occluded by BUTTON.stop
-      SKIP  DD "No network acc"                rect 31,985 328x16  — occluded by BUTTON.stop
-      SKIP  DT "Undo"                          rect 31,1009 328x16  — occluded by unknown
-      SKIP  DD "Regenerated by"                rect 31,1026 328x32  — occluded by unknown
-      SKIP  mono "vite build"                  rect 164,1027 69x14  — occluded by unknown
-      SKIP  DT "Future"                        rect 31,1066 328x16  — occluded by unknown
-      SKIP  DD "Approving cove"                rect 31,1083 328x32  — occluded by unknown
-      SKIP  grant "Approve"                    rect 31,1126 132x32  — occluded by unknown
-      SKIP  refuse "Deny"                      rect 171,1126 132x32  — occluded by unknown
-      SKIP  BUTTON "Always allow r"            rect 31,1203 210x28  — occluded by unknown
-      SKIP  mono "rm -rf"                      rect 119,1210 42x14  — occluded by unknown
-      SKIP  P "Widens future "                 rect 31,1237 328x32  — occluded by unknown
+      SKIP  cmd "rm -rf apps/da"               rect 31,979 328x22  — occluded by BUTTON.stop
+      SKIP  DT "Machine"                       rect 31,1019 328x16  — occluded by unknown
+      SKIP  DD "nixbox
+       "                rect 31,1036 328x16  — occluded by unknown
+      SKIP  SPAN "— mba-m3 and h"              rect 68,1036 226x15  — occluded by unknown
+      SKIP  DT "Path"                          rect 31,1060 328x16  — occluded by unknown
+      SKIP  mono "/home/bewinxed"              rect 31,1077 328x16  — occluded by unknown
+      SKIP  DT "Network"                       rect 31,1101 328x16  — occluded by unknown
+      SKIP  DD "No network acc"                rect 31,1118 328x16  — occluded by unknown
+      SKIP  DT "Undo"                          rect 31,1142 328x16  — occluded by unknown
+      SKIP  DD "Regenerated by"                rect 31,1159 328x16  — occluded by unknown
+      SKIP  mono "vite build"                  rect 163,1160 69x14  — occluded by unknown
+      SKIP  DT "Future"                        rect 31,1183 328x16  — occluded by unknown
+      SKIP  DD "Approving cove"                rect 31,1200 328x32  — occluded by unknown
+      SKIP  grant "Approve"                    rect 31,1244 132x32  — occluded by unknown
+      SKIP  refuse "Deny"                      rect 171,1244 132x32  — occluded by unknown
+      SKIP  BUTTON "Always allow r"            rect 31,1321 200x28  — occluded by unknown
+      SKIP  mono "rm -rf"                      rect 116,1327 42x14  — occluded by unknown
+      SKIP  P "Widens future "                 rect 31,1355 328x32  — occluded by unknown
       SKIP  sr "Agent is waiti"                rect 0,0 1x1  — occluded by HEADER.shead
     PASS  13.36:1  H1 "wire delegate "                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  5.90:1  path "nixbox : ~/coc"              text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
+    PASS  5.90:1  path "nixbox : ~/caw"              text rgb(96,99,106) on fill rgb(252,253,253)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  5.47:1  who "yYou"                         text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  12.37:1  msg "The delegate r"               text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  who "Claude Code"                  text rgb(96,99,106) on fill rgb(243,244,246)
@@ -1054,66 +881,80 @@
     PASS  5.47:1  t "0.2s"                           text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  12.37:1  tk "Edit"                          text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  arg "DelegateRow.sv"               text rgb(96,99,106) on fill rgb(243,244,246)
-    PASS  6.15:1  d "+14 −6"                         text rgb(29,105,38) on fill rgb(243,244,246)
+    PASS  6.26:1  d "+14 −6"                         text rgb(75,98,0) on fill rgb(243,244,246)
     PASS  12.37:1  tk "Edit"                          text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  arg "lib/format/age"               text rgb(96,99,106) on fill rgb(243,244,246)
-    PASS  6.15:1  d "+9 −2"                          text rgb(29,105,38) on fill rgb(243,244,246)
-    PASS  5.47:1  tag "delegate"                     text rgb(96,99,106) on fill rgb(243,244,246)
+    PASS  6.26:1  d "+9 −2"                          text rgb(75,98,0) on fill rgb(243,244,246)
+    PASS  5.30:1  tag "subagent"                     text rgb(78,99,140) on fill rgb(233,241,255)
     PASS  12.37:1  tk "fixture-check"                 text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  12.37:1  arg "pi · 2 steps"                 text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  12.37:1  t "9s"                             text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  8.08:1  msg "Fixture assert"               text rgb(71,74,79) on fill rgb(243,244,246)
     PASS  13.36:1  H2 "needs youQuest"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  8.73:1  lede "Two delegate r"              text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  13.36:1  BUTTON "Start time"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  BUTTON "Session id"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  BUTTON "Machine, then "            text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Earliest start"              text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Order by sessi"              text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Group by machi"              text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Keep them equa"              text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  SPAN "Or answer in y"              text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  fake-in "Type an answer"           text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.47:1  who "Claude Code"                  text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  5.47:1  think "The token rena"             text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  13.36:1  H2 "needs youPermi"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  8.73:1  lede "This deletes t"              text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  CODE "apps/dashboard"              text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  13.36:1  cmd "rm -rf apps/da"               text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  5.90:1  DT "Machine"                       text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  8.73:1  DD "nixbox — mba-m"                text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  5.90:1  SPAN "— mba-m3 and h"              text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  5.90:1  DT "Path"                          text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.82:1  TEXTAREA [placeholder] "Message the ag" text rgb(96,99,106) on fill rgb(251,251,252)
       (1 regions span multiple fills — no single background to judge)
 
-  v4-transcript.html @390 dark   (47 candidates, 25 skipped)
-      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
-      SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
-      SKIP  SPAN "Fleet"                       rect -254,101 35x20  — occluded by unknown
-      SKIP  SPAN "Tools"                       rect -254,138 35x20  — occluded by unknown
-      SKIP  SPAN "Rules"                       rect -254,175 38x20  — occluded by unknown
-      SKIP  SPAN "Usage"                       rect -254,212 43x20  — occluded by unknown
-      SKIP  sec "Running now"                  rect -284,254 283x16  — occluded by unknown
-      SKIP  nm "wire delegate "                rect -238,283 217x18  — occluded by unknown
-      SKIP  nm "table system s"                rect -238,316 217x18  — occluded by unknown
-      SKIP  nm "flaky ws recon"                rect -238,349 217x18  — occluded by unknown
-      SKIP  nm "landing copy p"                rect -238,382 217x18  — occluded by unknown
+  v4-transcript.html @390 dark   (42 candidates, 43 skipped)
+      SKIP  B "CawCo"                          rect -235,18 48x20  — occluded by unknown
+      SKIP  sec "Fleet"                        rect -284,73 283x14  — occluded by unknown
+      SKIP  nav-i on "Fleet6"                  rect -274,94 263x36  — occluded by unknown
+      SKIP  nav-i "Tools"                      rect -274,131 263x36  — occluded by unknown
+      SKIP  nav-i "Rules14"                    rect -274,168 263x36  — occluded by unknown
+      SKIP  pill-n mint "14"                   rect -47,177 26x20  — occluded by unknown
+      SKIP  nav-i "Usage"                      rect -274,205 263x36  — occluded by unknown
+      SKIP  nav-i "Projects"                   rect -274,242 263x36  — occluded by unknown
+      SKIP  sec "Machines"                     rect -284,294 283x14  — occluded by unknown
+      SKIP  nav-i "nixbox"                     rect -274,316 263x36  — occluded by unknown
+      SKIP  nav-i "mba-m3"                     rect -274,353 263x36  — occluded by unknown
+      SKIP  nav-i "hetzner-01"                 rect -274,390 263x36  — occluded by unknown
+      SKIP  sec "Running now"                  rect -284,442 283x20  — occluded by unknown
+      SKIP  nm "wire delegate "                rect -238,476 208x18  — occluded by unknown
+      SKIP  nm "table system s"                rect -238,509 208x18  — occluded by unknown
+      SKIP  nm "flaky ws recon"                rect -238,542 208x18  — occluded by unknown
+      SKIP  nm "landing copy p"                rect -238,575 208x18  — occluded by unknown
+      SKIP  n "18.40 / 50.00"                  rect -260,858 235x20  — occluded by unknown
+      SKIP  s "Spend today ac"                 rect -260,880 235x16  — occluded by unknown
+      SKIP  BUTTON "View usage"                rect -260,906 235x31  — occluded by unknown
+      SKIP  av "bw"                            rect -270,978 31x31  — occluded by unknown
+      SKIP  nm "bewinxed"                      rect -230,977 80x16  — occluded by unknown
+      SKIP  em "obelisk-of-lig"                rect -230,994 80x16  — occluded by unknown
       SKIP  CODE "fleet-memory.t"              rect 16,219 316x34  — occluded by CODE.
-      SKIP  DT "Network"                       rect 31,967 328x16  — occluded by BUTTON.stop
-      SKIP  DD "No network acc"                rect 31,985 328x16  — occluded by BUTTON.stop
-      SKIP  DT "Undo"                          rect 31,1009 328x16  — occluded by unknown
-      SKIP  DD "Regenerated by"                rect 31,1026 328x32  — occluded by unknown
-      SKIP  mono "vite build"                  rect 164,1027 69x14  — occluded by unknown
-      SKIP  DT "Future"                        rect 31,1066 328x16  — occluded by unknown
-      SKIP  DD "Approving cove"                rect 31,1083 328x32  — occluded by unknown
-      SKIP  grant "Approve"                    rect 31,1126 132x32  — occluded by unknown
-      SKIP  refuse "Deny"                      rect 171,1126 132x32  — occluded by unknown
-      SKIP  BUTTON "Always allow r"            rect 31,1203 210x28  — occluded by unknown
-      SKIP  mono "rm -rf"                      rect 119,1210 42x14  — occluded by unknown
-      SKIP  P "Widens future "                 rect 31,1237 328x32  — occluded by unknown
+      SKIP  cmd "rm -rf apps/da"               rect 31,979 328x22  — occluded by BUTTON.stop
+      SKIP  DT "Machine"                       rect 31,1019 328x16  — occluded by unknown
+      SKIP  DD "nixbox
+       "                rect 31,1036 328x16  — occluded by unknown
+      SKIP  SPAN "— mba-m3 and h"              rect 68,1036 226x15  — occluded by unknown
+      SKIP  DT "Path"                          rect 31,1060 328x16  — occluded by unknown
+      SKIP  mono "/home/bewinxed"              rect 31,1077 328x16  — occluded by unknown
+      SKIP  DT "Network"                       rect 31,1101 328x16  — occluded by unknown
+      SKIP  DD "No network acc"                rect 31,1118 328x16  — occluded by unknown
+      SKIP  DT "Undo"                          rect 31,1142 328x16  — occluded by unknown
+      SKIP  DD "Regenerated by"                rect 31,1159 328x16  — occluded by unknown
+      SKIP  mono "vite build"                  rect 163,1160 69x14  — occluded by unknown
+      SKIP  DT "Future"                        rect 31,1183 328x16  — occluded by unknown
+      SKIP  DD "Approving cove"                rect 31,1200 328x32  — occluded by unknown
+      SKIP  grant "Approve"                    rect 31,1244 132x32  — occluded by unknown
+      SKIP  refuse "Deny"                      rect 171,1244 132x32  — occluded by unknown
+      SKIP  BUTTON "Always allow r"            rect 31,1321 200x28  — occluded by unknown
+      SKIP  mono "rm -rf"                      rect 116,1327 42x14  — occluded by unknown
+      SKIP  P "Widens future "                 rect 31,1355 328x32  — occluded by unknown
       SKIP  sr "Agent is waiti"                rect 0,0 1x1  — occluded by HEADER.shead
     PASS  12.98:1  H1 "wire delegate "                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.93:1  path "nixbox : ~/coc"              text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  7.93:1  path "nixbox : ~/caw"              text rgb(180,183,190) on fill rgb(33,34,36)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  8.75:1  who "yYou"                         text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  14.32:1  msg "The delegate r"               text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  who "Claude Code"                  text rgb(180,183,190) on fill rgb(25,25,26)
@@ -1128,53 +969,60 @@
     PASS  8.75:1  t "0.2s"                           text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  14.32:1  tk "Edit"                          text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  arg "DelegateRow.sv"               text rgb(180,183,190) on fill rgb(25,25,26)
-    PASS  9.21:1  d "+14 −6"                         text rgb(125,206,128) on fill rgb(25,25,26)
+    PASS  9.00:1  d "+14 −6"                         text rgb(170,196,92) on fill rgb(25,25,26)
     PASS  14.32:1  tk "Edit"                          text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  arg "lib/format/age"               text rgb(180,183,190) on fill rgb(25,25,26)
-    PASS  9.21:1  d "+9 −2"                          text rgb(125,206,128) on fill rgb(25,25,26)
-    PASS  8.75:1  tag "delegate"                     text rgb(180,183,190) on fill rgb(25,25,26)
+    PASS  9.00:1  d "+9 −2"                          text rgb(170,196,92) on fill rgb(25,25,26)
+    PASS  7.97:1  tag "subagent"                     text rgb(160,184,230) on fill rgb(27,34,47)
     PASS  14.32:1  tk "fixture-check"                 text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  14.32:1  arg "pi · 2 steps"                 text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  14.32:1  t "9s"                             text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  10.19:1  msg "Fixture assert"               text rgb(195,197,204) on fill rgb(25,25,26)
     PASS  12.98:1  H2 "needs youQuest"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  9.23:1  lede "Two delegate r"              text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  12.98:1  BUTTON "Start time"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  12.98:1  BUTTON "Session id"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  12.98:1  BUTTON "Machine, then "            text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Earliest start"              text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Order by sessi"              text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Group by machi"              text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Keep them equa"              text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  SPAN "Or answer in y"              text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  fake-in "Type an answer"           text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  8.75:1  who "Claude Code"                  text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  8.75:1  think "The token rena"             text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  12.98:1  H2 "needs youPermi"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  9.23:1  lede "This deletes t"              text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  CODE "apps/dashboard"              text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  12.98:1  cmd "rm -rf apps/da"               text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.93:1  DT "Machine"                       text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  9.23:1  DD "nixbox — mba-m"                text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  7.93:1  SPAN "— mba-m3 and h"              text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.93:1  DT "Path"                          text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  8.02:1  TEXTAREA [placeholder] "Message the ag" text rgb(180,183,190) on fill rgb(32,33,35)
+    PASS  8.11:1  TEXTAREA [placeholder] "Message the ag" text rgb(180,183,190) on fill rgb(31,32,35)
       (1 regions span multiple fills — no single background to judge)
 
-  v4-transcript.html @1440 light  (77 candidates, 1 skipped)
+  v4-transcript.html @1440 light  (90 candidates, 1 skipped)
       SKIP  sr "Agent is waiti"                rect 0,0 1x1  — occluded by ASIDE.
-    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                          text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  sec "Fleet"                        text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  8.73:1  SPAN "Fleet"                       text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  SPAN "Tools"                       text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  SPAN "Rules"                       text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  8.73:1  SPAN "Usage"                       text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  13.36:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  8.73:1  nav-i "Tools"                      text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  8.73:1  nav-i "Rules14"                    text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  5.28:1  pill-n mint "14"                   text rgb(96,99,106) on fill rgb(239,240,243)
+    PASS  8.73:1  nav-i "Usage"                      text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  8.73:1  nav-i "Projects"                   text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  5.90:1  sec "Machines"                     text rgb(96,99,106) on fill rgb(252,253,253)
+    PASS  8.73:1  nav-i "nixbox"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  8.73:1  nav-i "mba-m3"                     text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  8.73:1  nav-i "hetzner-01"                 text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  5.90:1  sec "Running now"                  text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  11.95:1  nm "wire delegate "                text rgb(44,46,49) on fill rgb(239,240,243)
+    PASS  8.73:1  nm "wire delegate "                text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  8.73:1  nm "table system s"                text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  8.73:1  nm "flaky ws recon"                text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  8.73:1  nm "landing copy p"                text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  13.36:1  n "18.40 / 50.00"                  text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  5.90:1  s "Spend today ac"                 text rgb(96,99,106) on fill rgb(252,253,253)
+    PASS  7.81:1  BUTTON "View usage"                text rgb(71,74,79) on fill rgb(239,240,243)
+    PASS  5.28:1  av "bw"                            text rgb(96,99,106) on fill rgb(239,240,243)
+    PASS  13.36:1  nm "bewinxed"                      text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  5.90:1  em "obelisk-of-lig"                text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  H1 "wire delegate "                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  5.90:1  path "nixbox : ~/coc"              text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
+    PASS  5.90:1  path "nixbox : ~/caw"              text rgb(96,99,106) on fill rgb(252,253,253)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  5.90:1  SPAN "Claude Code"                 text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  SPAN "28 turns"                    text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  8.73:1  B "28"                             text rgb(71,74,79) on fill rgb(252,253,253)
@@ -1187,7 +1035,7 @@
     PASS  12.37:1  msg "Three real cal"               text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  11.95:1  CODE "FleetBoard.sve"              text rgb(44,46,49) on fill rgb(239,240,243)
     PASS  11.95:1  CODE "SessionPane.sv"              text rgb(44,46,49) on fill rgb(239,240,243)
-    PASS  11.95:1  CODE "fleet-memory.t"              text rgb(44,46,49) on fill rgb(239,240,243)
+    PASS  12.37:1  CODE "fleet-memory.t"              text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  12.37:1  tk "Grep"                          text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  arg "outcomeLabel\("               text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  5.47:1  t "0.4s"                           text rgb(96,99,106) on fill rgb(243,244,246)
@@ -1196,32 +1044,34 @@
     PASS  5.47:1  t "0.2s"                           text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  12.37:1  tk "Edit"                          text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  arg "DelegateRow.sv"               text rgb(96,99,106) on fill rgb(243,244,246)
-    PASS  6.15:1  d "+14 −6"                         text rgb(29,105,38) on fill rgb(243,244,246)
+    PASS  6.26:1  d "+14 −6"                         text rgb(75,98,0) on fill rgb(243,244,246)
     PASS  12.37:1  tk "Edit"                          text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  5.47:1  arg "lib/format/age"               text rgb(96,99,106) on fill rgb(243,244,246)
-    PASS  6.15:1  d "+9 −2"                          text rgb(29,105,38) on fill rgb(243,244,246)
-    PASS  5.47:1  tag "delegate"                     text rgb(96,99,106) on fill rgb(243,244,246)
+    PASS  6.26:1  d "+9 −2"                          text rgb(75,98,0) on fill rgb(243,244,246)
+    PASS  5.30:1  tag "subagent"                     text rgb(78,99,140) on fill rgb(233,241,255)
     PASS  12.37:1  tk "fixture-check"                 text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  12.37:1  arg "pi · 2 steps"                 text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  12.37:1  t "9s"                             text rgb(44,46,49) on fill rgb(243,244,246)
     PASS  8.08:1  msg "Fixture assert"               text rgb(71,74,79) on fill rgb(243,244,246)
     PASS  13.36:1  H2 "needs youQuest"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  8.73:1  lede "Two delegate r"              text rgb(71,74,79) on fill rgb(252,253,253)
-    PASS  13.36:1  BUTTON "Start time"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  BUTTON "Session id"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  BUTTON "Machine, then "            text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Earliest start"              text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Order by sessi"              text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Group by machi"              text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  SPAN "Keep them equa"              text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  SPAN "Or answer in y"              text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  fake-in "Type an answer"           text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.47:1  who "Claude Code"                  text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  5.47:1  think "The token rena"             text rgb(96,99,106) on fill rgb(243,244,246)
     PASS  13.36:1  H2 "needs youPermi"                text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.11:1  chip-s s-attn "needs you"          text rgb(94,84,64) on fill rgb(240,232,214)
+    PASS  6.98:1  chip-s s-attn "needs you"          text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  8.73:1  lede "This deletes t"              text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  8.73:1  CODE "apps/dashboard"              text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  13.36:1  cmd "rm -rf apps/da"               text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  DT "Machine"                       text rgb(96,99,106) on fill rgb(252,253,253)
-    PASS  8.73:1  DD "nixbox — mba-m"                text rgb(71,74,79) on fill rgb(252,253,253)
+    PASS  8.73:1  DD "nixbox
+       "                text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  5.90:1  SPAN "— mba-m3 and h"              text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  5.90:1  DT "Path"                          text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  8.73:1  mono "/home/bewinxed"              text rgb(71,74,79) on fill rgb(252,253,253)
@@ -1233,28 +1083,39 @@
     PASS  5.90:1  DT "Future"                        text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  8.73:1  DD "Approving cove"                text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  13.36:1  refuse "Deny"                      text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  6.11:1  BUTTON "Always allow r"            text rgb(94,84,64) on fill rgb(240,232,214)
-    PASS  6.11:1  mono "rm -rf"                      text rgb(94,84,64) on fill rgb(240,232,214)
-    PASS  5.90:1  P "Widens future "                 text rgb(96,99,106) on fill rgb(252,253,253)
+    PASS  6.98:1  BUTTON "Always allow r"            text rgb(71,58,22) on fill rgb(228,203,129)
+    PASS  6.98:1  mono "rm -rf"                      text rgb(71,58,22) on fill rgb(228,203,129)
     PASS  5.82:1  TEXTAREA [placeholder] "Message the ag" text rgb(96,99,106) on fill rgb(251,251,252)
-      (1 regions span multiple fills — no single background to judge)
+      (2 regions span multiple fills — no single background to judge)
 
-  v4-transcript.html @1440 dark   (77 candidates, 1 skipped)
+  v4-transcript.html @1440 dark   (90 candidates, 1 skipped)
       SKIP  sr "Agent is waiti"                rect 0,0 1x1  — occluded by ASIDE.
-    PASS  12.98:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  B "CawCo"                          text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  sec "Fleet"                        text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  9.23:1  SPAN "Fleet"                       text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  SPAN "Tools"                       text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  SPAN "Rules"                       text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  9.23:1  SPAN "Usage"                       text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  12.98:1  nav-i on "Fleet6"                  text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  9.23:1  nav-i "Tools"                      text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  9.23:1  nav-i "Rules14"                    text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  9.27:1  pill-n mint "14"                   text rgb(180,183,190) on fill rgb(18,19,19)
+    PASS  9.23:1  nav-i "Usage"                      text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  9.23:1  nav-i "Projects"                   text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  7.93:1  sec "Machines"                     text rgb(180,183,190) on fill rgb(33,34,36)
+    PASS  9.23:1  nav-i "nixbox"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  9.23:1  nav-i "mba-m3"                     text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  9.23:1  nav-i "hetzner-01"                 text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  7.93:1  sec "Running now"                  text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  15.17:1  nm "wire delegate "                text rgb(230,232,236) on fill rgb(18,19,19)
+    PASS  9.23:1  nm "wire delegate "                text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.23:1  nm "table system s"                text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.23:1  nm "flaky ws recon"                text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.23:1  nm "landing copy p"                text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  12.98:1  n "18.40 / 50.00"                  text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  7.93:1  s "Spend today ac"                 text rgb(180,183,190) on fill rgb(33,34,36)
+    PASS  10.79:1  BUTTON "View usage"                text rgb(195,197,204) on fill rgb(18,19,19)
+    PASS  9.27:1  av "bw"                            text rgb(180,183,190) on fill rgb(18,19,19)
+    PASS  12.98:1  nm "bewinxed"                      text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  7.93:1  em "obelisk-of-lig"                text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  12.98:1  H1 "wire delegate "                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.93:1  path "nixbox : ~/coc"              text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  7.93:1  path "nixbox : ~/caw"              text rgb(180,183,190) on fill rgb(33,34,36)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  7.93:1  SPAN "Claude Code"                 text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  SPAN "28 turns"                    text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  9.23:1  B "28"                             text rgb(195,197,204) on fill rgb(33,34,36)
@@ -1267,7 +1128,7 @@
     PASS  14.32:1  msg "Three real cal"               text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  15.17:1  CODE "FleetBoard.sve"              text rgb(230,232,236) on fill rgb(18,19,19)
     PASS  15.17:1  CODE "SessionPane.sv"              text rgb(230,232,236) on fill rgb(18,19,19)
-    PASS  15.17:1  CODE "fleet-memory.t"              text rgb(230,232,236) on fill rgb(18,19,19)
+    PASS  14.32:1  CODE "fleet-memory.t"              text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  14.32:1  tk "Grep"                          text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  arg "outcomeLabel\("               text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  8.75:1  t "0.4s"                           text rgb(180,183,190) on fill rgb(25,25,26)
@@ -1276,32 +1137,34 @@
     PASS  8.75:1  t "0.2s"                           text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  14.32:1  tk "Edit"                          text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  arg "DelegateRow.sv"               text rgb(180,183,190) on fill rgb(25,25,26)
-    PASS  9.21:1  d "+14 −6"                         text rgb(125,206,128) on fill rgb(25,25,26)
+    PASS  9.00:1  d "+14 −6"                         text rgb(170,196,92) on fill rgb(25,25,26)
     PASS  14.32:1  tk "Edit"                          text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  8.75:1  arg "lib/format/age"               text rgb(180,183,190) on fill rgb(25,25,26)
-    PASS  9.21:1  d "+9 −2"                          text rgb(125,206,128) on fill rgb(25,25,26)
-    PASS  8.75:1  tag "delegate"                     text rgb(180,183,190) on fill rgb(25,25,26)
+    PASS  9.00:1  d "+9 −2"                          text rgb(170,196,92) on fill rgb(25,25,26)
+    PASS  7.97:1  tag "subagent"                     text rgb(160,184,230) on fill rgb(27,34,47)
     PASS  14.32:1  tk "fixture-check"                 text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  14.32:1  arg "pi · 2 steps"                 text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  14.32:1  t "9s"                             text rgb(230,232,236) on fill rgb(25,25,26)
     PASS  10.19:1  msg "Fixture assert"               text rgb(195,197,204) on fill rgb(25,25,26)
     PASS  12.98:1  H2 "needs youQuest"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  9.23:1  lede "Two delegate r"              text rgb(195,197,204) on fill rgb(33,34,36)
-    PASS  12.98:1  BUTTON "Start time"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  12.98:1  BUTTON "Session id"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  12.98:1  BUTTON "Machine, then "            text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Earliest start"              text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Order by sessi"              text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Group by machi"              text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  SPAN "Keep them equa"              text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  SPAN "Or answer in y"              text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  fake-in "Type an answer"           text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  8.75:1  who "Claude Code"                  text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  8.75:1  think "The token rena"             text rgb(180,183,190) on fill rgb(25,25,26)
     PASS  12.98:1  H2 "needs youPermi"                text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.00:1  chip-s s-attn "needs you"          text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  4.63:1  chip-s s-attn "needs you"          text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  9.23:1  lede "This deletes t"              text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.23:1  CODE "apps/dashboard"              text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  12.98:1  cmd "rm -rf apps/da"               text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  DT "Machine"                       text rgb(180,183,190) on fill rgb(33,34,36)
-    PASS  9.23:1  DD "nixbox — mba-m"                text rgb(195,197,204) on fill rgb(33,34,36)
+    PASS  9.23:1  DD "nixbox
+       "                text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  7.93:1  SPAN "— mba-m3 and h"              text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  7.93:1  DT "Path"                          text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  9.23:1  mono "/home/bewinxed"              text rgb(195,197,204) on fill rgb(33,34,36)
@@ -1313,8 +1176,8 @@
     PASS  7.93:1  DT "Future"                        text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  9.23:1  DD "Approving cove"                text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  12.98:1  refuse "Deny"                      text rgb(230,232,236) on fill rgb(33,34,36)
-    PASS  7.00:1  BUTTON "Always allow r"            text rgb(205,194,171) on fill rgb(58,52,38)
-    PASS  7.00:1  mono "rm -rf"                      text rgb(205,194,171) on fill rgb(58,52,38)
+    PASS  4.63:1  BUTTON "Always allow r"            text rgb(235,211,136) on fill rgb(113,87,4)
+    PASS  4.63:1  mono "rm -rf"                      text rgb(235,211,136) on fill rgb(113,87,4)
     PASS  8.12:1  TEXTAREA [placeholder] "Message the ag" text rgb(180,183,190) on fill rgb(31,32,34)
       (2 regions span multiple fills — no single background to judge)
 
