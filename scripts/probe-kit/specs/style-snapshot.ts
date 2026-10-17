@@ -211,7 +211,7 @@ async function report(
     if (!pair) {
       continue;
     }
-    const tally: Tally = { shadowLayers: 0, transitionLists: 0 };
+    const tally: Tally = { shadowLayers: 0, transitionLists: 0, zeroOffsets: 0 };
     const lines = differences(pair[0], pair[1], tally);
     if (tally.shadowLayers > 0) {
       kit.note(
@@ -221,6 +221,11 @@ async function report(
     if (tally.transitionLists > 0) {
       kit.note(
         `${surface.name}: ${tally.transitionLists} transition duration, timing-function, delay or behavior list(s) equal once each is repeated or cut to its transition-property's length (CSS Transitions Level 1 §2: "the user agent must calculate its used value by repeating the list of values until there are enough")`
+      );
+    }
+    if (tally.zeroOffsets > 0) {
+      kit.note(
+        `${surface.name}: ${tally.zeroOffsets} background-position value(s) equal once a zero offset in one unit meets a zero offset in another (0px and 0% place the image at the same corner: CSS Backgrounds 3 §2.6, "with a value pair of 0% 0%, the upper left corner of the image is aligned with the upper left corner of" the area)`
       );
     }
     all.push(...lines.map((line) => parsed(surface.name, line)));

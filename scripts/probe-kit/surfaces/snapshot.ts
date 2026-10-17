@@ -227,6 +227,8 @@ export interface Tally {
   shadowLayers: number;
   /** A transition's duration, timing function, delay or behavior equal once each side's list is laid against its own transition-property. */
   transitionLists: number;
+  /** background-position values equal once a zero offset in one unit meets a zero offset in another. */
+  zeroOffsets: number;
 }
 
 /** Each side's transition-property, where a value's element (or pseudo-element) has one. */
@@ -297,11 +299,70 @@ function laidAgainst(value: string, properties: string): string {
 }
 
 /**
+ * An offset of nothing, in any unit: `0px`, `0%`, `0`, or the keyword that
+ * computes to 0% (`left`, `top`). A background-position's offsets are "an
+ * offset of the top left corner of the background image from the top left
+ * corner of the background positioning area"; "A length value gives a
+ * fixed length as the offset", and "with a value pair of 0% 0%, the upper
+ * left corner of the image is aligned with the upper left corner of" the
+ * area (CSS Backgrounds 3, §2.6,
+ * https://drafts.csswg.org/css-backgrounds-3/#background-position). So a
+ * zero length and 0% place the image at the same corner. Lightning CSS
+ * minifies a `<style>` rule's `background: none` to `background:0 0`,
+ * which computes to `0px 0px`, where a utility leaves the initial `0% 0%`.
+ */
+const ZERO_OFFSET = /^(?:[+-]?0+(?:\.0+)?(?:%|[a-z]+)?|left|top)$/;
+
+/** A position list's layers, each split into its offsets at top-level spaces (a `calc()` stays whole). */
+function offsetsOf(value: string): string[][] {
+  return listItems(value).map((layer) => {
+    const offsets: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < layer.length; i += 1) {
+      const c = layer[i];
+      if (c === "(") {
+        depth += 1;
+      } else if (c === ")") {
+        depth -= 1;
+      } else if (c === " " && depth === 0) {
+        offsets.push(layer.slice(start, i));
+        start = i + 1;
+      }
+    }
+    offsets.push(layer.slice(start));
+    return offsets.filter((offset) => offset.length > 0);
+  });
+}
+
+/** Whether two background-positions place every layer at the same offsets, a zero in one unit meeting a zero in another. */
+function samePlaces(x: string, y: string): boolean {
+  const xs = offsetsOf(x);
+  const ys = offsetsOf(y);
+  return (
+    xs.length === ys.length &&
+    xs.every((layer, l) => {
+      const other = ys[l] ?? [];
+      return (
+        layer.length === other.length &&
+        layer.every(
+          (offset, a) =>
+            offset === other[a] ||
+            (ZERO_OFFSET.test(offset) && ZERO_OFFSET.test(other[a] ?? ""))
+        )
+      );
+    })
+  );
+}
+
+/**
  * Whether two values of `property` read the same. Strings are equal only as
- * written, but for two rules, each hold counted in `tally`: two box-shadows
- * whose layers match once the blank ones are set aside, and two transition
- * lists that match once each is laid against its own side's
- * transition-property (`spans`). Nothing else is normalised.
+ * written, but for three rules, each hold counted in `tally`: two
+ * box-shadows whose layers match once the blank ones are set aside, two
+ * transition lists that match once each is laid against its own side's
+ * transition-property (`spans`), and two background-positions whose
+ * offsets match once a zero in one unit meets a zero in another. Nothing
+ * else is normalised.
  */
 function same(
   property: string,
@@ -331,6 +392,10 @@ function same(
     tally.transitionLists += 1;
     return true;
   }
+  if (longhand === "background-position" && samePlaces(x, y)) {
+    tally.zeroOffsets += 1;
+    return true;
+  }
   return false;
 }
 
@@ -342,7 +407,7 @@ function same(
 export function differences(
   before: Snapshot,
   after: Snapshot,
-  tally: Tally = { shadowLayers: 0, transitionLists: 0 }
+  tally: Tally = { shadowLayers: 0, transitionLists: 0, zeroOffsets: 0 }
 ): string[] {
   if (before.props.join() !== after.props.join()) {
     return [
