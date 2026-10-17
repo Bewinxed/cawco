@@ -658,14 +658,16 @@
                 <!-- Over the well's top edge at its end; a grouped row's sit
                      inside the well, on its raised surface, and flip under
                      the edge when the well's top is off screen. -->
+                <!-- literal: translateY(-100%) -->
                 <div
                   data-message-row-shown={actionsShown || undefined}
                   data-slot="actions"
                   data-flipped={actionsFlipped || undefined}
                   data-pending={forkPending || retrying || undefined}
                   data-shown={actionsShown || undefined}
-                  style:--actions-lift="calc(var(--space-2) - 100%)"
-                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 -translate-y-full opacity-0 pointer-events-none transition-[opacity] dur-control ease-out group-data-grouped/turn:translate-y-(--actions-lift) group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:translate-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
+                  style:--actions-shift="translateY(-100%)"
+                  style:--actions-lift="translateY(calc(var(--space-2) - 100%))"
+                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 transform-(--actions-shift) opacity-0 pointer-events-none transition-[opacity] dur-control ease-out group-data-grouped/turn:transform-(--actions-lift) group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:transform-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
                   {@attach placeActions}
                 >
                   {#if canEdit || offered.edit === "queued"}

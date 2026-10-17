@@ -55,7 +55,7 @@
     style:--atts-max-h="180px"
     style:--atts-pad-coarse="calc(var(--space-1) + 8px)"
     style:--atts-m-coarse="-8px"
-    class="atts flex flex-wrap gap-space-2 max-h-(--atts-max-h) overflow-y-auto p-space-1 coarse:p-(--atts-pad-coarse) coarse:m-(--atts-m-coarse)"
+    class="flex flex-wrap gap-space-2 max-h-(--atts-max-h) overflow-y-auto p-space-1 coarse:p-(--atts-pad-coarse) coarse:m-(--atts-m-coarse)"
     transition:unfold
     {@attach reflow()}
   >
@@ -175,9 +175,8 @@
 {/if}
 
 <style>
-  /* residual: unmapped: the step-aside transition token has no utility;
-     the class also anchors Composer's `:global(.atts)` rules. */
-  .atts {
+  /* residual: unmapped: the step-aside transition token has no utility. */
+  [data-slot="atts"] {
     transition: var(--step-aside);
   }
   [data-slot="canvas-open"] {

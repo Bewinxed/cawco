@@ -177,14 +177,15 @@
   {@attach watched && morph()}
 >
   <!-- Each arm is the container its wave is measured against. -->
-  <!-- literal: -1 -->
+  <!-- Mirrored, so both arms run outward from the word.
+       literal: scaleX(-1) -->
   <span
     class="arm start @container group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg
       aria-hidden="true"
-      style:--wave-flip="-1"
-      class="wave block w-full h-(--tx-compact-wave) scale-x-(--wave-flip)"
+      style:--wave-flip="scaleX(-1)"
+      class="wave block w-full h-(--tx-compact-wave) transform-(--wave-flip)"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
