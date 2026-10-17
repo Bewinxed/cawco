@@ -66,63 +66,27 @@
   aria-valuemin={0}
   aria-valuenow={Math.round(shown)}
   aria-valuetext={said}
-  class="bar"
+  class="group/bar relative block h-(--h) overflow-hidden rounded-hair bg-meter-calm-track state-near:bg-meter-near-track state-over:bg-meter-over-track state-reached:bg-meter-over-track state-stale:bg-meter-stale-track"
   data-reads={reads}
   data-state={state}
   role="progressbar"
   style:--h="{size}px"
 >
-  <span data-slot="fill" class="fill" style:--share={shown / 100}></span>
+  <span
+    data-slot="fill"
+    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+    style:--fill-w="calc(var(--share) * 100%)"
+    style:--share={shown / 100}
+  ></span>
   {#if tick !== null}
-    <span aria-hidden="true" class="tick" style:--at={tick}></span>
+    <!-- literal: -1px -->
+    <span
+      aria-hidden="true"
+      class="absolute inset-y-0 start-(--tick-at) w-space-row translate-x-(--tick-nudge) bg-(color:--tick-paint)"
+      style:--at={tick}
+      style:--tick-at="calc(var(--at) * 100%)"
+      style:--tick-nudge="-1px"
+      style:--tick-paint="var(--row-paint, var(--surface-raised))"
+    ></span>
   {/if}
 </span>
-
-<style>
-  .bar {
-    --fill: var(--meter-calm);
-    --track: var(--meter-calm-track);
-    position: relative;
-    display: block;
-    block-size: var(--h);
-    border-radius: var(--radius-hair);
-    background: var(--track);
-    overflow: hidden;
-  }
-  .bar[data-state="near"] {
-    --fill: var(--meter-near);
-    --track: var(--meter-near-track);
-  }
-  .bar[data-state="over"],
-  .bar[data-state="reached"] {
-    --fill: var(--meter-over);
-    --track: var(--meter-over-track);
-  }
-  .bar[data-state="stale"] {
-    --fill: var(--meter-stale);
-    --track: var(--meter-stale-track);
-  }
-  .fill {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    inline-size: calc(var(--share) * 100%);
-    border-radius: var(--radius-hair);
-    background: var(--fill);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: inline-size var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  /* The gap shows whatever the row is painted in: the card, or the near and
-     over rows' wash over it. */
-  .tick {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: calc(var(--at) * 100%);
-    inline-size: 2px;
-    translate: -1px 0;
-    /* It follows the clock, so it never tweens: that would be motion at rest. */
-    background: var(--row-paint, var(--surface-raised));
-  }
-</style>

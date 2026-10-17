@@ -25,7 +25,13 @@
   {/each}
 {/snippet}
 
-<div class="key mark-line" style:--c={ring.color}>
+<!-- literal: 10px 52px 84px, 3px -->
+<div
+  class="mark-line type-meta num grid grid-cols-(--key-cols) items-center gap-x-space-2 gap-y-(--key-row-gap)"
+  style:--c={ring.color}
+  style:--key-cols="10px 52px 84px minmax(0, 1fr)"
+  style:--key-row-gap="3px"
+>
   {#each rows as row (row.id)}
     {#if row.glyph === "rim"}
       <!-- The week's own mark: the rim in small, filled to what is left. -->
@@ -34,61 +40,22 @@
       <svg
         data-slot="glyph"
         aria-hidden="true"
-        class={["glyph", row.glyph]}
+        class="block fill-(--c) data-limit:fill-border-control data-stale:opacity-40"
         height="10"
         viewBox="0 0 10 10"
         width="10"
-        class:limit={row.limit}
-        class:stale={ring.state === "stale"}
+        data-limit={row.limit || undefined}
+        data-stale={ring.state === "stale" || undefined}
       >
         <circle cx="5" cy="5" r={row.glyph === "disc" ? 4.5 : 4.25} />
       </svg>
     {:else}
       <span data-box></span>
     {/if}
-    <span data-slot="rings-key-label" class="label">{row.label}</span>
-    <span data-slot="value" class="value mark-text" data-key-value
+    <span data-slot="rings-key-label" class="font-medium text-ink-row">{row.label}</span>
+    <span data-slot="value" class="mark-text font-medium whitespace-nowrap text-ink-strong" data-key-value
       >{@render said(row.value)}</span
     >
-    <span class="reset mark-text">{@render said(row.reset)}</span>
+    <span class="mark-text min-w-0 justify-self-end text-end text-ink-muted">{@render said(row.reset)}</span>
   {/each}
 </div>
-
-<style>
-  .key {
-    display: grid;
-    grid-template-columns: 10px 52px 84px minmax(0, 1fr);
-    column-gap: var(--space-2);
-    row-gap: 3px;
-    align-items: center;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-  }
-  .glyph {
-    display: block;
-  }
-  .disc circle {
-    fill: var(--c);
-  }
-  .disc.limit circle {
-    fill: var(--border-control);
-  }
-  .stale {
-    opacity: 0.4;
-  }
-  .label {
-    font-weight: var(--weight-strong);
-    color: var(--ink-row);
-  }
-  .value {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    white-space: nowrap;
-  }
-  .reset {
-    min-inline-size: 0;
-    justify-self: end;
-    text-align: end;
-    color: var(--ink-muted);
-  }
-</style>

@@ -238,9 +238,9 @@
   }>();
 </script>
 
-<section data-slot="history-card" aria-labelledby="history-title" class="card">
-  <header data-slot="head" class="head">
-    <h2 data-slot="title" class="title" id="history-title">History</h2>
+<section data-slot="history-card" aria-labelledby="history-title" class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-tile max-phone:p-space-4">
+  <header data-slot="head" class="flex flex-wrap items-center justify-between gap-space-3">
+    <h2 data-slot="title" class="type-label text-ink-muted" id="history-title">History</h2>
     <Tabs
       onValueChange={(next) => {
         const to = next as "chart" | "table";
@@ -267,8 +267,8 @@
   </header>
 
   {#if failed && !ready}
-    <div data-slot="failed" class="failed" role="alert">
-      <p data-slot="note" class="note">
+    <div data-slot="failed" class="flex flex-wrap items-center gap-space-3" role="alert">
+      <p data-slot="note" class="type-meta text-ink-muted">
         Could not read the history from the hub.
       </p>
       <Button
@@ -282,32 +282,32 @@
       />
     </div>
   {:else}
-    <div class="pair">
+    <div class="grid grid-cols-2 gap-space-6 max-phone:grid-cols-1">
       {#each charts as chart (chart.harness)}
-        <figure class="chart">
-          <figcaption class="caption">
-            <span data-slot="name" class="name">{chart.title}</span>
+        <figure class="flex min-w-0 flex-col gap-space-2">
+          <figcaption class="flex items-baseline justify-between gap-space-2">
+            <span data-slot="name" class="type-label text-ink-strong">{chart.title}</span>
             {#if ready && !chart.missing}
-              <span data-slot="num" class="num total"
+              <span data-slot="num" class="type-label text-ink-strong"
                 >{chart.approx}{money(chart.total)}</span
               >
             {/if}
           </figcaption>
           {#if chart.missing}
-            <p data-slot="note" class="note">No 5-hour window is running.</p>
+            <p data-slot="note" class="type-meta text-ink-muted">No 5-hour window is running.</p>
           {:else if !ready}
             <Skeleton class="h-24 w-full" />
           {:else}
             {@const i = chart.harness === "claude" ? 0 : 1}
             <!-- One slot: the old view leaves over its top while the new one
                  waits for it, and the slot's height morphs to the new. -->
-            <div data-slot="body" class="body" {@attach morph()}>
+            <div data-slot="body" class="relative" {@attach morph()}>
               {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
                 <div
                   aria-hidden="true"
-                  class="leaving"
+                  class="pointer-events-none absolute inset-x-0 top-0 animate-(--swap-anim)"
                   inert
-                  style="animation:{bodySwap.leaveAnim(i)}"
+                  style:--swap-anim={bodySwap.leaveAnim(i)}
                 >
                   {#if gone.view === "chart"}
                     {@render plot(chart, false)}
@@ -318,7 +318,8 @@
               {/each}
               {#key bodySwap.gen}
                 <div
-                  style="animation:{bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}"
+                  class="animate-(--swap-anim)"
+                  style:--swap-anim={bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}
                 >
                   {#if view === "chart"}
                     {@render plot(chart, true)}
@@ -336,14 +337,16 @@
 </section>
 
 {#snippet plot(chart: Chart, live: boolean)}
-  <div class="plot">
-    <div class="bars">
+  <div class="flex flex-col gap-space-1">
+    <!-- literal: 96px -->
+    <div class="flex h-(--bars-h) items-end gap-space-row border-b border-border-hairline" style:--bars-h="96px">
       {#each chart.points as point (point.at)}
         {#if !live}
-          <span data-slot="slot" class="slot"
+          <span data-slot="slot" class="group flex min-w-0 flex-1 items-end h-full"
             ><span
-              class="bar"
+              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
+              style:--bar-h="calc(var(--h) * 100%)"
             ></span></span
           >
         {:else}
@@ -356,12 +359,13 @@
                   aria-label="{periodLabel(point.at)}: {chart.approx}{money(
                     point.cost
                   )}"
-                  class="slot"
+                  class="group flex min-w-0 flex-1 items-end h-full"
                   role="img"
                 >
                   <span
-                    class="bar"
+                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
                     style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
+              style:--bar-h="calc(var(--h) * 100%)"
                   ></span>
                 </span>
               {/snippet}
@@ -375,7 +379,7 @@
       {/each}
     </div>
     {#if chart.points.length > 0}
-      <div class="axis">
+      <div class="type-meta flex justify-between text-ink-muted">
         <span>{periodLabel(chart.points[0].at)}</span>
         <span>{periodLabel(chart.points.at(-1)?.at ?? 0)}</span>
       </div>
@@ -384,11 +388,11 @@
 {/snippet}
 
 {#snippet figures(chart: Chart)}
-  <table class="figures">
+  <table class="type-meta w-full border-collapse">
     <thead>
       <tr>
-        <th scope="col">{byHour ? "Hour" : "Day"}</th>
-        <th data-slot="num" class="num" scope="col">
+        <th class="type-label border-b border-border-hairline px-0 py-space-1 text-start text-ink-muted" scope="col">{byHour ? "Hour" : "Day"}</th>
+        <th data-slot="num" class="type-label border-b border-border-hairline px-0 py-space-1 text-end text-ink-muted" scope="col">
           {chart.harness === "claude" ? "API price" : "Spend"}
         </th>
       </tr>
@@ -396,148 +400,10 @@
     <tbody>
       {#each chart.points as point (point.at)}
         <tr>
-          <td>{periodLabel(point.at)}</td>
-          <td data-slot="num" class="num">{chart.approx}{money(point.cost)}</td>
+          <td class="border-b border-border-hairline px-0 py-space-1 text-ink-strong">{periodLabel(point.at)}</td>
+          <td data-slot="num" class="border-b border-border-hairline px-0 py-space-1 text-end text-ink-strong">{chart.approx}{money(point.cost)}</td>
         </tr>
       {/each}
     </tbody>
   </table>
 {/snippet}
-
-<style>
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .failed {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .pair {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-6);
-  }
-  .chart {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .caption {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-  .name {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .total {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .body {
-    position: relative;
-  }
-  /* The old view, over the slot's top while it leaves. */
-  .leaving {
-    position: absolute;
-    inset: 0 0 auto;
-    pointer-events: none;
-  }
-  .plot {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .axis {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .axis {
-    display: flex;
-    justify-content: space-between;
-  }
-  /* One bar per period on a shared baseline, a 2px gap between them. */
-  .bars {
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    block-size: 96px;
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .slot {
-    display: flex;
-    flex: 1 1 0;
-    align-items: flex-end;
-    min-inline-size: 0;
-    block-size: 100%;
-  }
-  .bar {
-    inline-size: 100%;
-    block-size: calc(var(--h) * 100%);
-    min-block-size: 1px;
-    border-radius: var(--radius-hair) var(--radius-hair) 0 0;
-    background: var(--meter-share);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: block-size var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  .slot:hover .bar {
-    background: var(--ink-strong);
-  }
-  .figures {
-    inline-size: 100%;
-    border-collapse: collapse;
-    font: var(--type-meta);
-  }
-  .figures th {
-    padding: var(--space-1) 0;
-    border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    text-align: start;
-  }
-  .figures td {
-    padding: var(--space-1) 0;
-    border-block-end: 1px solid var(--border-hairline);
-    color: var(--ink-strong);
-  }
-  .figures .num {
-    text-align: end;
-  }
-
-  @media (max-width: 639px) {
-    .card {
-      padding: var(--space-4);
-    }
-    .pair {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-</style>

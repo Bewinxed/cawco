@@ -211,20 +211,22 @@
   };
 </script>
 
-<section aria-label="{projectName}'s spend" class="project-spend">
+<section aria-label="{projectName}'s spend" class="flex flex-col gap-space-group">
   {#if refused && !spend}
-    <p data-slot="note" class="note" role="alert">
+    <p data-slot="note" class="type-meta text-ink-muted" role="alert">
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
-    <div class="tiles">
+    <!-- literal: 9.5rem -->
+    <div class="grid grid-cols-(--tiles) gap-space-3" style:--tiles="repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))">
       {#each [0, 1, 2, 3, 4] as i (i)}
-        <Skeleton class="h-[var(--c-stat-h)] rounded-[var(--radius-md)]" />
+        <Skeleton class="h-c-stat-h rounded-md" />
       {/each}
     </div>
-    <Skeleton class="h-48 rounded-[var(--radius-lg)]" />
+    <Skeleton class="h-48 rounded-lg" />
   {:else}
-    <div class="tiles" in:appear>
+    <!-- literal: 9.5rem -->
+    <div class="grid grid-cols-(--tiles) gap-space-3" style:--tiles="repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))" in:appear>
       <StatTile label="Today" value={usd(spend.todayUsd)} />
       <StatTile label="This month" value={usd(spend.monthUsd)} />
       <StatTile
@@ -242,7 +244,7 @@
       >
         {#snippet action()}
           {#if onCapLine}
-            <span class="on-cap">{onCapLine}</span>
+            <span class="type-meta shrink grow basis-full text-ink-muted">{onCapLine}</span>
           {/if}
           <Popover.Root bind:open={capOpen}>
             <Popover.Trigger>
@@ -259,21 +261,22 @@
             </Popover.Trigger>
             <Popover.Content
               align="start"
-              class="w-80 max-w-[calc(100vw-2*var(--space-5))]"
+              class="w-80 max-w-(--cap-max-w)"
+              style="--cap-max-w: calc(100vw - 2 * var(--space-5))"
             >
               <form
-                class="budget"
+                class="flex flex-col gap-space-3"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveCap();
                 }}
               >
-                <p data-slot="note" class="note">
+                <p data-slot="note" class="type-meta text-ink-muted">
                   What {projectName} may spend, its Caw and its attempts together.
                   Leave it empty for no limit.
                 </p>
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label data-slot="project-spend-field" class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Dollars
                   <Input
                     inputmode="decimal"
@@ -281,7 +284,7 @@
                     bind:value={capAmount}
                   /></label
                 >
-                <div data-slot="project-spend-field" class="field">
+                <div data-slot="project-spend-field" class="type-meta flex flex-col gap-space-1 text-ink-muted">
                   <span>Each</span>
                   <Tabs
                     onValueChange={(next) => {
@@ -297,7 +300,7 @@
                 </div>
                 <label
                   data-slot="project-spend-field"
-                  class="field"
+                  class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   for="cap-on"
                   >When it is reached
                   <NativeSelect
@@ -320,11 +323,11 @@
                   </NativeSelect>
                 </label>
                 {#if capRefused}
-                  <p data-slot="refused" class="refused" role="alert" in:appear>
+                  <p data-slot="refused" class="type-meta text-error-11" role="alert" in:appear>
                     {capRefused}
                   </p>
                 {/if}
-                <div class="form-acts">
+                <div class="flex justify-end gap-space-2">
                   {#if cap}
                     <Button
                       label="Remove"
@@ -364,18 +367,18 @@
             </Popover.Trigger>
             <Popover.Content align="start" class="w-72">
               <form
-                class="budget"
+                class="flex flex-col gap-space-3"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveBudget();
                 }}
               >
-                <p data-slot="note" class="note">
+                <p data-slot="note" class="type-meta text-ink-muted">
                   What one attempt at a task may spend before it stops. Leave a
                   field empty for no limit.
                 </p>
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label data-slot="project-spend-field" class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Dollars
                   <Input
                     inputmode="decimal"
@@ -384,7 +387,7 @@
                   /></label
                 >
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label data-slot="project-spend-field" class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Turns
                   <Input
                     inputmode="numeric"
@@ -393,7 +396,7 @@
                   /></label
                 >
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child -->
-                <label data-slot="project-spend-field" class="field"
+                <label data-slot="project-spend-field" class="type-meta flex flex-col gap-space-1 text-ink-muted"
                   >Minutes
                   <Input
                     inputmode="numeric"
@@ -402,7 +405,7 @@
                   /></label
                 >
                 {#if budgetRefused}
-                  <p data-slot="refused" class="refused" role="alert" in:appear>
+                  <p data-slot="refused" class="type-meta text-error-11" role="alert" in:appear>
                     {budgetRefused}
                   </p>
                 {/if}
@@ -425,135 +428,138 @@
       <!-- This month's ledger: Caw's threads (and his turns no thread
            woke), the attempts, every other session, and their total, which
            is the This month tile. -->
-      <div data-slot="ledger" class="ledger">
-        <Table.Root class="table-fixed">
+      <div data-slot="ledger" class="overflow-hidden rounded-lg bg-surface-raised shadow-tile">
+        <Table.Root
+          class="table-fixed border-separate border-spacing-(--none) max-phone:block"
+          style="--none: 0; --col-count: 8rem; --col-usd: 6rem; --col-last: 6rem; --row-cols: 1fr auto auto"
+        >
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
-            <Table.Header>
-              <Table.Row class="band border-0">
+            <Table.Header class="max-phone:block">
+              <Table.Row class="border-0 bg-surface-band max-phone:flex">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head class="col-name" scope="col">Caw</Table.Head>
-                <Table.Head class="col-count" scope="col">Wakes</Table.Head>
-                <Table.Head class="col-usd" scope="col">Spent</Table.Head>
-                <Table.Head data-col-last class="col-last" scope="col"
+                <Table.Head class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase" scope="col">Caw</Table.Head>
+                <Table.Head class="h-c-toolbar-ctl w-(--col-count) px-space-3 type-label tracking-caps text-ink-muted uppercase max-phone:hidden" scope="col">Wakes</Table.Head>
+                <Table.Head class="h-c-toolbar-ctl w-(--col-usd) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden" scope="col">Spent</Table.Head>
+                <Table.Head data-col-last class="h-c-toolbar-ctl w-(--col-last) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden" scope="col"
                   >Last</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
-            <Table.Body>
+            <Table.Body class="max-phone:block">
               {#each spend.threads as thread (thread.id)}
-                <Table.Row data-project-spend-row class="row">
-                  <Table.Cell class="col-name">
+                <Table.Row data-project-spend-row class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2">
+                  <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full">
                     <a
                       data-slot="name"
-                      class="name"
+                      class="type-label block truncate text-ink-row no-underline"
                       href="/session/thread:{thread.id}"
                       >Thread · {thread.title}</a
                     >
                   </Table.Cell>
-                  <Table.Cell data-num class="col-count num"
+                  <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-count)"
                     >{thread.wakes}
                     {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
                   >
-                  <Table.Cell data-num class="col-usd num"
+                  <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
                     >{usd(thread.usd)}</Table.Cell
                   >
-                  <Table.Cell data-num data-col-last class="col-last num"
+                  <Table.Cell data-num data-col-last class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-last) text-end max-phone:text-start"
                     >{formatAgeShort(thread.lastAt, now)}</Table.Cell
                   >
                 </Table.Row>
               {/each}
               {#if spend.caw.unthreadedMonthUsd > 0}
-                <Table.Row data-project-spend-row class="row">
-                  <Table.Cell class="col-name"
-                    ><span data-slot="name" class="name plain"
+                <Table.Row data-project-spend-row class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2">
+                  <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                    ><span data-slot="name" class="type-label block truncate text-ink-row no-underline"
                       >Not in a thread</span
                     ></Table.Cell
                   >
-                  <Table.Cell class="col-count"></Table.Cell>
-                  <Table.Cell data-num class="col-usd num"
+                  <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-count)"></Table.Cell>
+                  <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
                     >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
                   >
-                  <Table.Cell data-col-last class="col-last"></Table.Cell>
+                  <Table.Cell data-col-last class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"></Table.Cell>
                 </Table.Row>
               {/if}
             </Table.Body>
           {/if}
           {#if spend.attempts.length > 0}
-            <Table.Header>
-              <Table.Row class="band border-0">
+            <Table.Header class="max-phone:block">
+              <Table.Row class="border-0 bg-surface-band max-phone:flex">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head class="col-name" scope="col">Attempts</Table.Head>
-                <Table.Head class="col-count" scope="col">Tries</Table.Head>
-                <Table.Head class="col-usd" scope="col">Spent</Table.Head>
-                <Table.Head data-col-last class="col-last" scope="col"
+                <Table.Head class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase" scope="col">Attempts</Table.Head>
+                <Table.Head class="h-c-toolbar-ctl w-(--col-count) px-space-3 type-label tracking-caps text-ink-muted uppercase max-phone:hidden" scope="col">Tries</Table.Head>
+                <Table.Head class="h-c-toolbar-ctl w-(--col-usd) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden" scope="col">Spent</Table.Head>
+                <Table.Head data-col-last class="h-c-toolbar-ctl w-(--col-last) px-space-3 type-label tracking-caps text-end text-ink-muted uppercase max-phone:hidden" scope="col"
                   >Now</Table.Head
                 >
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
             </Table.Header>
-            <Table.Body>
+            <Table.Body class="max-phone:block">
               {#each spend.attempts as attempt (attempt.taskId)}
-                <Table.Row data-project-spend-row class="row">
-                  <Table.Cell class="col-name">
+                <Table.Row data-project-spend-row class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2">
+                  <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full">
                     <a
                       data-slot="name"
-                      class="name"
+                      class="type-label block truncate text-ink-row no-underline"
                       href="/project/{encodeURIComponent(
                         projectId
                       )}?task={attempt.taskId}"
-                      >{attempt.title}<span data-slot="id" class="id"
+                      >{attempt.title}<span data-slot="id" class="type-code ms-space-2 text-ink-subtle"
                         >{attempt.taskId}</span
                       ></a
                     >
                   </Table.Cell>
-                  <Table.Cell data-num class="col-count num"
+                  <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-count)"
                     >{attempt.attempts}
                     {attempt.attempts === 1
                       ? "attempt"
                       : "attempts"}</Table.Cell
                   >
-                  <Table.Cell data-num class="col-usd num"
+                  <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
                     >{usd(attempt.usd)}</Table.Cell
                   >
-                  <Table.Cell data-col-last class="col-last"
+                  <Table.Cell data-col-last class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"
                     >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
                   >
                 </Table.Row>
               {/each}
             </Table.Body>
           {/if}
-          <Table.Body>
+          <Table.Body class="max-phone:block">
             {#if spend.others.monthUsd > 0}
-              <Table.Row data-project-spend-row class="row">
-                <Table.Cell class="col-name"
-                  ><span data-slot="name" class="name plain"
+              <Table.Row data-project-spend-row class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2">
+                <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                  ><span data-slot="name" class="type-label block truncate text-ink-row no-underline"
                     >Other sessions</span
                   ></Table.Cell
                 >
-                <Table.Cell class="col-count"></Table.Cell>
-                <Table.Cell data-num class="col-usd num"
+                <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-count)"></Table.Cell>
+                <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
                   >{usd(spend.others.monthUsd)}</Table.Cell
                 >
-                <Table.Cell data-col-last class="col-last"></Table.Cell>
+                <Table.Cell data-col-last class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"></Table.Cell>
               </Table.Row>
             {/if}
-            <Table.Row data-project-spend-row class="row total">
-              <Table.Cell class="col-name"
-                ><span data-slot="name" class="name plain">This month</span
+            <Table.Row data-project-spend-row class="relative max-phone:grid max-phone:grid-cols-(--row-cols) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:px-space-3 max-phone:py-space-2">
+              <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 max-phone:col-span-full"
+                ><span data-slot="name" class="type-label block truncate text-ink-row no-underline">This month</span
                 ></Table.Cell
               >
-              <Table.Cell class="col-count"></Table.Cell>
-              <Table.Cell data-num class="col-usd num"
+              <Table.Cell class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-count)"></Table.Cell>
+              <Table.Cell data-num class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 num w-(--col-usd) text-end max-phone:text-start"
                 >{usd(spend.monthUsd)}</Table.Cell
               >
-              <Table.Cell data-col-last class="col-last"></Table.Cell>
+              <Table.Cell data-col-last class="h-c-btn-h-lg border-b border-border-hairline px-space-3 py-0 type-meta text-ink-muted max-phone:block max-phone:h-auto max-phone:w-auto max-phone:border-current max-phone:border-none max-phone:p-0 w-(--col-last) text-end max-phone:text-start"></Table.Cell>
             </Table.Row>
           </Table.Body>
         </Table.Root>
       </div>
     {:else}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta text-ink-muted">
         No spend on {projectName} yet. The first wake or attempt shows up here.
       </p>
     {/if}
@@ -561,151 +567,16 @@
 </section>
 
 <style>
-  .project-spend {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-group);
-  }
-  /* Two to a row on a phone, as many as fit on a desk; each tile's label
-     on one top line, whatever its figure or its control below. */
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
-    gap: var(--space-3);
-  }
-  .ledger :global(tr.total td) {
-    border-block-end: 0;
-    color: var(--ink-strong);
-    font-weight: var(--weight-strong);
-  }
-  .name.plain::after {
-    content: none;
-  }
-  .on-cap {
-    flex: 1 1 100%;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .form-acts {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  .budget {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .refused {
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-  .ledger {
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .ledger :global(table) {
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-  .ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  .ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .ledger :global(tr.row) {
-    position: relative;
-  }
-  .ledger :global(tr.row td) {
-    block-size: var(--c-btn-h-lg);
-    padding-block: 0;
-    padding-inline: var(--space-3);
-    border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .ledger :global(.col-count) {
-    inline-size: 8rem;
-  }
-  .ledger :global(.col-usd) {
-    inline-size: 6rem;
-    text-align: end;
-    color: var(--ink-strong);
-  }
-  .ledger :global(.col-last) {
-    inline-size: 6rem;
-    text-align: end;
-  }
-  .name {
-    display: block;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-row);
-    text-decoration: none;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name::after {
+  /* residual: pseudo */
+  a[data-slot="name"]::after {
     position: absolute;
     inset: 0;
     content: "";
   }
-  /* The task's id after its name, in the code role, muted. */
-  .id {
-    margin-inline-start: var(--space-2);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  /* Under 640px each ledger row is a two-line card: the name, then the rest. */
+  /* residual: unmapped */
   @media (max-width: 639px) {
-    .ledger :global(table),
-    .ledger :global(tbody),
-    .ledger :global(thead) {
-      display: block;
-    }
-    .ledger :global(tr.band) {
-      display: flex;
-    }
-    .ledger :global(tr.band th:not(.col-name)) {
-      display: none;
-    }
-    .ledger :global(tr.row) {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: var(--space-1) var(--space-3);
-      padding: var(--space-2) var(--space-3);
+    [data-slot="ledger"] :global(tr[data-project-spend-row]) {
       border-block-end: 1px solid var(--border-hairline);
-    }
-    .ledger :global(tr.row td) {
-      display: block;
-      inline-size: auto;
-      block-size: auto;
-      padding: 0;
-      border: 0;
-      text-align: start;
-    }
-    .ledger :global(tr.row td.col-name) {
-      grid-column: 1 / -1;
     }
   }
 </style>
