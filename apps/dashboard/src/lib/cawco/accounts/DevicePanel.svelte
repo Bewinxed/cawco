@@ -67,31 +67,43 @@
   }
 </script>
 
-<div class="device">
+<div class="flex min-w-0 flex-col gap-space-2">
   {#if flow.phase === "signed-in"}
-    <p class="got" role="status">
+    <p
+      class="type-meta flex items-center gap-space-2 text-ink-row"
+      role="status"
+    >
       <Check />
       <span
         >{accountsWords.signin.signedInAs}
-        <b>{flow.email ?? accountsWords.signin.theAccount}</b></span
+        <b class="font-medium text-ink-strong"
+          >{flow.email ?? accountsWords.signin.theAccount}</b
+        ></span
       >
     </p>
   {:else}
     {#if shown}
       <div
         data-slot="well"
-        class={["well", flow.phase === "expired" && "dim"]}
+        data-dim={flow.phase === "expired" || undefined}
+        class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] dur-fade ease-out data-dim:opacity-50"
         in:openPlace
       >
         <span class="sr-only">{words.said(flow.code ?? "")}</span>
-        <span data-slot="code" aria-hidden="true" class="code">
+        <!-- literal: 0.08em -->
+        <span
+          data-slot="code"
+          aria-hidden="true"
+          class="type-code flex select-all gap-space-3 tracking-(--code-track) text-ink-strong"
+          style:--code-track="0.08em"
+        >
           {#each groups as group, at (at)}
             <span>{group}</span>
           {/each}
         </span>
       </div>
     {/if}
-    <div data-slot="row" class="row">
+    <div data-slot="row" class="flex flex-wrap items-center gap-space-2">
       {#if flow.phase === "waiting"}
         <CopyButton size="sm" text={flow.code ?? ""} variant="outline"
           >{words.copy}</CopyButton
@@ -119,90 +131,28 @@
       {/if}
     </div>
     {#if flow.phase === "waiting"}
-      <p class="line">
+      <p class="type-meta text-ink-muted">
         {words.enterWithin}
         <span data-slot="num" class="num">{clock}</span>
       </p>
     {:else if flow.phase === "expired"}
-      <p class="line">{words.expired}</p>
+      <p class="type-meta text-ink-muted">{words.expired}</p>
     {:else if flow.phase === "mismatch"}
-      <p class="warn mark-line" role="alert">
-        <span class="mark-cell"><IconWarningTriangle aria-hidden="true" /></span
+      <p
+        class="mark-line type-meta flex items-start gap-space-1 text-status-attn-ink"
+        role="alert"
+      >
+        <span class="mark-cell"
+          ><IconWarningTriangle
+            aria-hidden="true"
+            class="size-icon-sm flex-none"
+          /></span
         >
         <span>{words.mismatch(machine, flow.email)}</span>
       </p>
     {/if}
     {#if flow.problem}
-      <p class="error" role="alert">{flow.problem}</p>
+      <p class="type-meta text-status-fail-ink" role="alert">{flow.problem}</p>
     {/if}
   {/if}
 </div>
-
-<style>
-  .device {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-  .well {
-    display: flex;
-    align-items: center;
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-sm);
-    background: var(--code-bg);
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  .well.dim {
-    opacity: 0.5;
-  }
-  .code {
-    display: flex;
-    gap: var(--space-3);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    letter-spacing: 0.08em;
-    color: var(--ink-strong);
-    user-select: all;
-  }
-  .row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .line,
-  .error,
-  .warn,
-  .got {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
-  }
-  .error {
-    color: var(--status-fail-ink);
-  }
-  .warn {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-1);
-    color: var(--status-attn-ink);
-  }
-  .warn :global(svg) {
-    flex: none;
-    width: 12px;
-    height: 12px;
-  }
-  .got {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--ink-row);
-  }
-  .got b {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-</style>

@@ -123,167 +123,184 @@
 <!-- Stands at its lanes' height from the first frame, with a caption's line
      only on a board that writes one; the build sets it again once its
      captions are measured, taller only where one wraps. -->
+<!-- literal: the figure's sizes the build (figure.ts) draws it at; none has a token -->
 <div
   data-slot="stage"
-  class="stage"
+  class="relative box-content h-(--stage-h) overflow-hidden rounded-md border border-border-well bg-surface-recess"
   bind:this={stage}
-  style:height="{figureHeight(
+  style:--stage-h="{figureHeight(
     board,
     lanes.length,
     captioned(board, limits) ? 1 : 0
   )}px"
+  style:--fig-lbl-gap="6px"
+  style:--fig-dot="7px"
+  style:--fig-clk-pad="5px"
+  style:--fig-bar-h="10px"
+  style:--fig-chip="10px"
+  style:--fig-chip-r="3px"
+  style:--fig-ring="1.5px"
+  style:--fig-doc-w="10px"
+  style:--fig-doc-h="13px"
+  style:--fig-doc-blur="8px"
+  style:--fig-doc-top="3px"
+  style:--fig-doc-line-h="5px"
+  style:--fig-doc-line-gap="2.5px"
+  style:--fig-tag-fs="11px"
+  style:--fig-cap-inset="12px"
+  style:--fig-cap-bottom="8px"
+  style:--fig-cap-lh="16px"
 ></div>
 
 <style>
-  .stage {
-    position: relative;
-    box-sizing: content-box;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-    border: 1px solid var(--border-well);
-    overflow: hidden;
+  /* residual: unmapped */
+  [data-slot="stage"] {
     contain: layout paint;
   }
-  .stage :global(.dg) {
+  /* residual: foreign-dom */
+  [data-slot="stage"] :global(.dg) {
     position: absolute;
     inset: 0;
   }
-  .stage :global(.e) {
+  [data-slot="stage"] :global(.e) {
     position: absolute;
     left: 0;
     top: 0;
   }
-  .stage :global(.ln-lbl) {
+  [data-slot="stage"] :global(.ln-lbl) {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 14px;
+    gap: var(--fig-lbl-gap);
+    height: var(--space-4);
     font: var(--type-meta);
     font-weight: var(--weight-strong);
-    line-height: 14px;
+    line-height: var(--space-4);
     color: var(--ink-row);
     white-space: nowrap;
   }
-  .stage :global(.ln-lbl .nm) {
+  [data-slot="stage"] :global(.ln-lbl .nm) {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .stage :global(.ln-lbl .dot) {
+  [data-slot="stage"] :global(.ln-lbl .dot) {
     flex: none;
-    width: 7px;
-    height: 7px;
+    width: var(--fig-dot);
+    height: var(--fig-dot);
     border-radius: 50%;
     background: var(--c);
   }
-  .stage :global(.ln-lbl svg) {
-    width: 12px;
-    height: 12px;
+  [data-slot="stage"] :global(.ln-lbl svg) {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
     color: var(--ink-muted);
   }
-  .stage :global(.clk) {
-    padding: 0 5px;
+  [data-slot="stage"] :global(.clk) {
+    padding: 0 var(--fig-clk-pad);
     border-radius: var(--radius-xs);
     font: var(--type-meta);
-    line-height: 14px;
+    line-height: var(--space-4);
     font-variant-numeric: tabular-nums;
     text-align: right;
     color: var(--ink-muted);
     white-space: nowrap;
   }
-  .stage :global(.clkw) {
+  [data-slot="stage"] :global(.clkw) {
     border-radius: var(--radius-xs);
     background: color-mix(in oklab, var(--c) 26%, transparent);
     opacity: 0;
   }
-  .stage :global(.blk) {
+  [data-slot="stage"] :global(.blk) {
     font: var(--type-meta);
     font-weight: var(--weight-strong);
-    line-height: 14px;
+    line-height: var(--space-4);
     text-align: right;
     color: var(--data-bad);
     white-space: nowrap;
     opacity: 0;
   }
-  .stage :global(.bar),
-  .stage :global(.hr),
-  .stage :global(.fl),
-  .stage :global(.gh),
-  .stage :global(.pu) {
-    height: 10px;
+  [data-slot="stage"] :global(.bar),
+  [data-slot="stage"] :global(.hr),
+  [data-slot="stage"] :global(.fl),
+  [data-slot="stage"] :global(.gh),
+  [data-slot="stage"] :global(.pu) {
+    height: var(--fig-bar-h);
     border-radius: var(--radius-hair);
   }
-  .stage :global(.bar) {
+  [data-slot="stage"] :global(.bar) {
     background: var(--surface-fill);
   }
-  .stage :global(.hr) {
+  [data-slot="stage"] :global(.hr) {
     background: color-mix(in oklab, var(--c) 42%, transparent);
     opacity: 0;
   }
-  .stage :global(.fl) {
+  [data-slot="stage"] :global(.fl) {
     background: var(--c);
     transform-origin: 0 50%;
   }
-  .stage :global(.gh) {
+  [data-slot="stage"] :global(.gh) {
     border: 1px dashed var(--c);
     background: color-mix(in oklab, var(--c) 22%, transparent);
     opacity: 0;
   }
-  .stage :global(.chip) {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
+  [data-slot="stage"] :global(.chip) {
+    width: var(--fig-chip);
+    height: var(--fig-chip);
+    border-radius: var(--fig-chip-r);
     background: var(--c);
-    box-shadow: 0 0 0 1.5px var(--surface-recess);
+    box-shadow: 0 0 0 var(--fig-ring) var(--surface-recess);
     offset-rotate: 0deg;
     offset-anchor: 50% 50%;
   }
   /* A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
-  .stage :global(.chip.child) {
+  [data-slot="stage"] :global(.chip.child) {
     background: var(--surface-recess);
     box-shadow:
-      inset 0 0 0 1.5px var(--c),
-      0 0 0 1.5px var(--surface-recess);
+      inset 0 0 0 var(--fig-ring) var(--c),
+      0 0 0 var(--fig-ring) var(--surface-recess);
   }
-  .stage :global(.doc) {
-    width: 10px;
-    height: 13px;
+  [data-slot="stage"] :global(.doc) {
+    width: var(--fig-doc-w);
+    height: var(--fig-doc-h);
     border-radius: var(--radius-hair);
     background: var(--warning-9);
-    box-shadow: 0 1px 8px color-mix(in oklab, var(--warning-9) 55%, transparent);
+    box-shadow: 0 1px var(--fig-doc-blur)
+      color-mix(in oklab, var(--warning-9) 55%, transparent);
   }
-  .stage :global(.doc::after) {
+  /* residual: pseudo */
+  [data-slot="stage"] :global(.doc::after) {
     content: "";
     position: absolute;
     left: 2px;
     right: 2px;
-    top: 3px;
-    height: 5px;
+    top: var(--fig-doc-top);
+    height: var(--fig-doc-line-h);
     background: repeating-linear-gradient(
       var(--surface-recess) 0 1px,
-      transparent 1px 2.5px
+      transparent 1px var(--fig-doc-line-gap)
     );
     opacity: 0.55;
   }
-  .stage :global(.tag) {
-    padding: 0 4px;
+  /* residual: foreign-dom */
+  [data-slot="stage"] :global(.tag) {
+    padding: 0 var(--space-1);
     border-radius: var(--radius-xs);
     background: var(--surface-fill);
     font: var(--type-caps);
-    font-size: 11px;
-    line-height: 14px;
+    font-size: var(--fig-tag-fs);
+    line-height: var(--space-4);
     font-variant-numeric: tabular-nums;
     color: var(--ink-row);
     white-space: nowrap;
   }
   /* A caption wraps where the stage is narrow; the stage grows to hold it. */
-  .stage :global(.cap) {
-    left: 12px;
-    right: 12px;
-    bottom: 8px;
+  [data-slot="stage"] :global(.cap) {
+    left: var(--fig-cap-inset);
+    right: var(--fig-cap-inset);
+    bottom: var(--fig-cap-bottom);
     top: auto;
     font: var(--type-meta);
-    line-height: 16px;
+    line-height: var(--fig-cap-lh);
     color: var(--ink-row);
     text-wrap: pretty;
   }

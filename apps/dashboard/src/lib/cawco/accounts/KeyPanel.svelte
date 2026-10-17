@@ -109,16 +109,16 @@
 {#snippet outcome(machineId: string)}
   {@const result = results.get(machineId)}
   {#if result?.ok}
-    <span class="ok mark-line"><Check /><span>{words.sent}</span></span>
+    <span class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"><Check /><span>{words.sent}</span></span>
   {:else if result}
-    <span class="bad mark-line"
-      ><IconWarningTriangle aria-hidden="true" /><span>{result.why}</span></span
+    <span class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
+      ><IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" /><span>{result.why}</span></span
     >
   {/if}
 {/snippet}
 
 <form
-  class="keys"
+  class="flex min-w-0 flex-col gap-space-3"
   onsubmit={(event) => {
     event.preventDefault();
     send();
@@ -153,11 +153,17 @@
   </InputGroup.Root>
 
   {#if !one}
-    <ul data-slot="machines" aria-label={words.machines} class="machines">
+    <ul data-slot="machines" aria-label={words.machines} class="m-0 flex list-none flex-col p-0">
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
-        <li class="mrow">
-          <span data-slot="pick" class="pick" class:off={!online}>
+        <li
+          class="flex min-h-c-btn-h flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-border-hairline"
+        >
+          <span
+            data-slot="pick"
+            data-off={!online || undefined}
+            class="group flex min-w-0 cursor-pointer items-center gap-space-3 data-off:cursor-default"
+          >
             <Checkbox
               disabled={!online}
               id="{id}-{machine.machineId}"
@@ -172,13 +178,15 @@
                 }
               }
             />
-            <label class="mname" for="{id}-{machine.machineId}"
+            <label
+              class="type-label truncate text-ink-strong group-data-off:text-ink-muted"
+              for="{id}-{machine.machineId}"
               >{machineName(machine)}</label
             >
           </span>
-          <span data-slot="result" class="result">
+          <span data-slot="result" class="type-meta inline-flex items-center gap-space-1 text-ink-muted">
             {#if !online}
-              <span class="muted">{words.offline}</span>
+              <span class="type-meta inline-flex items-center gap-space-1 text-ink-muted">{words.offline}</span>
             {:else}
               {@render outcome(machine.machineId)}
             {/if}
@@ -188,7 +196,7 @@
     </ul>
   {/if}
 
-  <div data-slot="send" class="send">
+  <div data-slot="send" class="flex flex-wrap items-center gap-space-3">
     <Button
       disabled={key.trim() === "" || targets.length === 0}
       label={words.send}
@@ -199,86 +207,12 @@
       variant={primary ? "default" : "outline"}
     />
     {#if one && machines[0]}
-      <span data-slot="result" class="result"
+      <span data-slot="result" class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
         >{@render outcome(machines[0].machineId)}</span
       >
     {/if}
   </div>
   {#if problem}
-    <p class="bad" role="alert">{problem}</p>
+    <p class="type-meta inline-flex items-center gap-space-1 text-status-fail-ink" role="alert">{problem}</p>
   {/if}
 </form>
-
-<style>
-  .keys {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-width: 0;
-  }
-  .machines {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .mrow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-1) var(--space-3);
-    min-height: var(--c-btn-h);
-  }
-  .mrow + .mrow {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .pick {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 0;
-    cursor: pointer;
-  }
-  .pick.off {
-    cursor: default;
-  }
-  .mname {
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .off .mname {
-    color: var(--ink-muted);
-  }
-  .send {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .result,
-  .ok,
-  .bad,
-  .muted {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .ok {
-    color: var(--ink-row);
-  }
-  .bad {
-    color: var(--status-fail-ink);
-  }
-  .bad :global(svg) {
-    flex: none;
-    width: 12px;
-    height: 12px;
-  }
-</style>
