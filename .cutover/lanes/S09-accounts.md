@@ -30,3 +30,15 @@ Notes for integration:
 - OrderList: li `style:transform` became `style:--carry` + `translate-y-(--carry)` (delta E); it now uses the `translate` property, not `transform`.
 - StrategyPicker: script selector strings `.card` and `.order` switched to `[data-slot="strategy-picker-card"]` and `[data-slot="order"]`; `data-slot="order"` added on the unfold wrapper (it had only the class `order`). OrderList's root lost its `order` class (no rules left; no other file referenced it).
 - Unused classes with no rules deleted (RoutingEditor `.pane`); DevicePanel `.well.dim` is `data-dim`; ProviderMark `.mono` is `data-mono`; OrderList `.held` is `data-held`; KeyPanel `.off` is `data-off`.
+
+## Contracts
+(none)
+
+## Delta lines
+R2 fixed: apps/dashboard/src/lib/cawco/accounts/OrderList.svelte:139
+R2 fixed: apps/dashboard/src/lib/cawco/accounts/Swatches.svelte:23
+R3 fixed: none (no mono family in my files)
+shadow kept residual: apps/dashboard/src/lib/cawco/accounts/Swatches.svelte:40 (the checked box-shadow; rest has none, no utility sets box-shadow there)
+important kept: none
+colour tokens needed: none
+cross-file hook: none left (StrategyPicker's `.order` selector is in-lane and retargeted to [data-slot="order"])
