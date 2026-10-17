@@ -318,12 +318,32 @@ const run = async (kit: Kit) => {
         tag === "A"
           ? await until("A's background sleep runs", sleepPid, Boolean, 300_000)
           : undefined;
+      /**
+       * The init of each sandbox workspace `id` runs now: the second word of
+       * each generation's `sandbox` file (agent boundary.ts `generationDir`,
+       * boundary-host.ts `placeFile`).
+       */
+      const innersOf = async (id: string): Promise<string[]> => {
+        const generations = join(
+          home,
+          ".cawco",
+          "workspaces",
+          id,
+          "boundaries"
+        );
+        const gens = await readdir(generations).catch(() => [] as string[]);
+        const read = await Promise.all(
+          gens.map((gen) =>
+            readFile(join(generations, gen, "sandbox"), "utf8").catch(() => "")
+          )
+        );
+        return read.flatMap((text) => text.split(" ")[1] ?? []);
+      };
       const workspace = await until(
         `${tag}'s workspace and its sandbox`,
         async () => {
           const id = itemOf()?.workspace_id;
-          const file = join(home, ".cawco", "workspaces", id ?? "", "sandbox");
-          return id && (await Bun.file(file).exists()) ? id : undefined;
+          return id && (await innersOf(id)).length > 0 ? id : undefined;
         },
         Boolean,
         300_000
@@ -333,15 +353,7 @@ const run = async (kit: Kit) => {
         workspace
       );
       const config = join(where?.path ?? "", ".git", "config");
-      const sandboxFile = join(
-        home,
-        ".cawco",
-        "workspaces",
-        workspace,
-        "sandbox"
-      );
-      const inner = async () =>
-        (await readFile(sandboxFile, "utf8").catch(() => "")).split(" ")[1];
+      const inners = () => innersOf(workspace);
       const restarts = async () =>
         (await fleet.logs("agent"))
           .split("\n")
@@ -351,7 +363,7 @@ const run = async (kit: Kit) => {
           );
       const before = {
         inode: (await stat(config)).ino,
-        inner: await inner(),
+        inner: (await inners())[0],
         restarts: (await restarts()).length,
       };
       if (tag === "B") {
@@ -373,7 +385,7 @@ const run = async (kit: Kit) => {
         result: row.result ?? "",
         said: `${row.state} ${row.error ?? ""}\n${(row.result ?? "").slice(0, 1500)}`,
         inode: { before: before.inode, after: (await stat(config)).ino },
-        inner: { before: before.inner, after: await inner() },
+        inner: { before: before.inner, after: await inners() },
         restarted: (await restarts()).slice(before.restarts),
         sleepAlive: sleeping === undefined ? undefined : alive(sleeping),
         sleeping,
@@ -412,9 +424,9 @@ const run = async (kit: Kit) => {
     check(
       "A: the workspace's sandbox is the one it was, and the agent says no restart",
       Boolean(a.inner.before) &&
-        a.inner.after === a.inner.before &&
+        a.inner.after.includes(a.inner.before ?? "") &&
         a.restarted.length === 0,
-      `inner ${a.inner.before} -> ${a.inner.after}\n${a.restarted.join("\n")}`
+      `inner ${a.inner.before} -> ${a.inner.after.join(", ") || "none"}\n${a.restarted.join("\n")}`
     );
     check(
       "A: the delegate's background command still runs",
