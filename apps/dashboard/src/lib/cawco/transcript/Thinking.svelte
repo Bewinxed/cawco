@@ -252,6 +252,6 @@
      the start fades out rather than cutting. Quieter than a tool row's text,
      so the fold reads as an aside and not as the next step. */
   [data-slot="tail"] {
-    mask-image: linear-gradient(to right, transparent, oklch(0% 0 0) 30%);
+    mask-image: linear-gradient(to right, transparent, var(--mask-opaque) 30%);
   }
 </style>

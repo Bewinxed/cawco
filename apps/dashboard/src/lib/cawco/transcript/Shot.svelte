@@ -210,7 +210,10 @@
   style:--thumb="48px"
 >
   {#if video && failed !== src}
-    <div class="relative flex items-center justify-start w-full h-(--cap) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)">
+    <div
+      data-slot="shot-box"
+      class="relative flex items-center justify-start w-full h-(--cap) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)"
+    >
       <!-- biome-ignore lint/a11y/useMediaCaption: an agent's screen recording carries no caption track -->
       <video
         aria-label={alt}
@@ -225,7 +228,10 @@
       ></video>
     </div>
   {:else if failed === src}
-    <div class="relative flex flex-col items-start justify-center w-full h-(--cap) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)">
+    <div
+      data-slot="shot-box"
+      class="relative flex flex-col items-start justify-center w-full h-(--cap) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)"
+    >
       <span>{video ? "Video" : "Image"} not available</span>
       {#if path}
         <span data-slot="path" class="font-mono wrap-anywhere">{path}</span>
@@ -233,6 +239,7 @@
     </div>
   {:else}
     <button
+      data-slot="shot-box"
       aria-label={`Open ${alt}`}
       class="relative flex items-center justify-start w-full h-(--cap) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb) cursor-pointer"
       onclick={open}

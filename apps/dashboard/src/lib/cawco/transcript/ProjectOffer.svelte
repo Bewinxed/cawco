@@ -85,15 +85,15 @@
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class="h-space-8 coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm)"
+        class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         href="/project/{encodeURIComponent(joined.project.id)}"
         variant="outline">Open {joined.project.name}</Button
       >
       <Button
         aria-label="Put this away"
-        class="h-space-8 coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm)"
+        class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         icon={IconClose}
         onclick={() => dismissProjectJoin(instanceId)}
         variant="ghost"
@@ -118,8 +118,8 @@
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class="h-space-8 coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm)"
+        class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
         label="Not now"
         onclick={() => answer("dismiss")}
@@ -127,8 +127,8 @@
         variant="ghost"
       />
       <Button
-        class="h-space-8 coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm)"
+        class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
         failed={!!refused}
         icon={IconFolder}
