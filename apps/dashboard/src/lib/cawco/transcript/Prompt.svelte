@@ -917,9 +917,9 @@
       style:--part="2"
     >
       <div class="flex gap-space-2">
-        <!-- literal: 12px -->
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 pointer-coarse:h-11 gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium"
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium"
           disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
           failed={failedOf("answer")}
           icon={IconCheck}
@@ -927,18 +927,18 @@
           onclick={submitQuestion}
           pending={pendingOf("answer")}
           pendingLabel="Answering…"
-          style="--btn-gap: var(--space-2); --btn-icon: 12px"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
         />
-        <!-- literal: 12px -->
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 pointer-coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
           label="Dismiss"
           onclick={dismissQuestion}
           pending={pendingOf("deny")}
           pendingLabel="Dismissing…"
-          style="--btn-gap: var(--space-2); --btn-icon: 12px"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
           variant="outline"
         />
       </div>
@@ -1070,9 +1070,9 @@
              (`ink-strong`), so neither leans. Neither changes under the
              pointer: the fill and the edge hold still, so the hand's last
              move never makes one the more inviting. -->
-        <!-- literal: 12px -->
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 pointer-coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess"
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess"
           data-prompt-grant={grant}
           disabled={disabledOf("allow")}
           failed={failedOf("allow")}
@@ -1081,12 +1081,12 @@
           onclick={() => answer("allow")}
           pending={pendingOf("allow")}
           pendingLabel="Approving…"
-          style="--btn-gap: var(--space-2); --btn-icon: 12px"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
           variant="secondary"
         />
-        <!-- literal: 12px -->
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 pointer-coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess"
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess"
           data-prompt-refuse={refuse}
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
@@ -1095,7 +1095,7 @@
           onclick={() => answer("deny")}
           pending={pendingOf("deny")}
           pendingLabel="Denying…"
-          style="--btn-gap: var(--space-2); --btn-icon: 12px"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
           variant="secondary"
         />
       </div>
@@ -1122,9 +1122,9 @@
           </p>
           <!-- A standing grant must read as consequential: the kit's grant
              (warning tint, warning ink, a real edge). -->
-          <!-- literal: 12px -->
+          <!-- literal: 12px, 2.75rem -->
           <Button
-            class="h-space-8 pointer-coarse:h-11 gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+            class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
             disabled={disabledOf("always")}
             failed={failedOf("always")}
             icon={IconShield}
@@ -1132,7 +1132,7 @@
             onclick={() => answer("always")}
             pending={pendingOf("always")}
             pendingLabel="Allowing…"
-            style="--btn-gap: var(--space-2); --btn-icon: 12px"
+            style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
             variant="grant"
           />
         </div>
