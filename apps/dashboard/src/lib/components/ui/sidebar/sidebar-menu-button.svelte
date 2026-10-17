@@ -15,6 +15,15 @@
         sm: "h-space-8 text-meta",
         lg: "h-14 px-3 text-label group-data-[collapsible=icon]:p-0!",
       },
+      /** The rail's own rows, each as it drew them: a destination in the
+          nav band (body type), a project in the list (its end pad the
+          sessions' so their counts stand in one column), and the avatar
+          button, which pads nothing. */
+      row: {
+        nav: "gap-2.5 px-2.5 text-body",
+        list: "gap-2.5 py-0 pr-2 pl-2.5",
+        avatar: "p-0",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -28,6 +37,9 @@
   export type SidebarMenuButtonSize = VariantProps<
     typeof sidebarMenuButtonVariants
   >["size"];
+  export type SidebarMenuButtonRow = VariantProps<
+    typeof sidebarMenuButtonVariants
+  >["row"];
 </script>
 
 <script lang="ts">
@@ -50,6 +62,7 @@
     child,
     variant = "default",
     size = "default",
+    row,
     isActive = false,
     tooltipContent,
     tooltipContentProps,
@@ -58,6 +71,7 @@
     isActive?: boolean;
     variant?: SidebarMenuButtonVariant;
     size?: SidebarMenuButtonSize;
+    row?: SidebarMenuButtonRow;
     tooltipContent?: Snippet | string;
     tooltipContentProps?: WithoutChildrenOrChild<
       ComponentProps<typeof Tooltip.Content>
@@ -68,7 +82,7 @@
   const sidebar = useSidebar();
 
   const buttonProps = $derived({
-    class: cn(sidebarMenuButtonVariants({ variant, size }), className),
+    class: cn(sidebarMenuButtonVariants({ variant, size, row }), className),
     "data-slot": "sidebar-menu-button",
     "data-sidebar": "menu-button",
     /* One selector for every row the rail's hover ghost lands on. */
