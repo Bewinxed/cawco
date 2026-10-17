@@ -244,9 +244,13 @@ async function acting(
   const clock = clockOf.get(page);
   const began = performance.now();
   await page.clock.resume();
+  await page.evaluate(() => window.__ssReader?.holding(true));
   try {
     await act(page);
   } finally {
+    await page
+      .evaluate(() => window.__ssReader?.holding(false))
+      .catch(() => undefined);
     if (clock) {
       // The act ran in real time, its page time flowing with it: the mark
       // stands ACT_MS on, past any act under it. One that ran longer stands
@@ -430,11 +434,22 @@ export async function walk(
   const seconds = new Map<string, number>();
   const scene = tape.scene as Scene;
   // A tape recorded without the delegate (`--record --without-delegate`)
-  // holds nothing for a state that stands on it: said once, then left out.
-  const absent = (state: State) => state.hostOnly === true && !scene.split;
+  // holds nothing for a state that stands on it; a state only a product
+  // change could still is no reading. Each is said once, then left out.
+  const hostOnly = (state: State) => state.hostOnly === true && !scene.split;
+  const unstill = (surface: Surface, state: State) =>
+    UNSTILL[`${surface.name}/${state.name}`];
+  const absent = (surface: Surface, state: State) =>
+    hostOnly(state) || unstill(surface, state) !== undefined;
   for (const surface of surfaces) {
-    for (const state of surface.states.filter(absent)) {
-      kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
+    for (const state of surface.states) {
+      if (hostOnly(state)) {
+        kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
+      }
+      const why = unstill(surface, state);
+      if (why) {
+        kit.note(`${surface.name}/${state.name}: left out, not still: ${why}`);
+      }
     }
   }
   for (const surface of surfaces) {
@@ -444,7 +459,8 @@ export async function walk(
     // A surface's passes side by side, each on its own page and context.
     await pool(passes, PARALLEL, async (pass) => {
       const states = surface.states.filter(
-        (s) => !(absent(s) || (s.widths && !s.widths.includes(pass.width)))
+        (s) =>
+          !(absent(surface, s) || (s.widths && !s.widths.includes(pass.width)))
       );
       if (states.length === 0) {
         return;
@@ -488,6 +504,18 @@ export async function walk(
   }
   return seconds;
 }
+
+/**
+ * States only a product change could make read the same on every run,
+ * each with its race, left out of every walk with a NOTE (the brief: never
+ * change the dashboard to still a capture).
+ */
+const UNSTILL: Record<string, string> = Object.fromEntries(
+  ["editor", "program", "launch"].map((state) => [
+    `workflows/${state}`,
+    "the program's CodeView decides its active line once, at mount, by whether it is editable then (CodeView.svelte:177-179; the `editing` reconfigure at 204-211 never adds or drops it), and the workflow that makes it editable and CodeMirror's chunk land in either order",
+  ])
+);
 
 /** Passes walked at once: `PROBE_PARALLEL`, or 4. Each holds still on its own page, so how many run never moves a reading. */
 const PARALLEL = Number(process.env.PROBE_PARALLEL) || 4;
