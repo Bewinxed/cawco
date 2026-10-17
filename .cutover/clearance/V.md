@@ -12,35 +12,45 @@ Invariant: on every element, when two of its utilities set the same CSS property
 - **Exclusive** means: one attribute at the same place with different values; `x` and `not-x` (including `group-not-`, `peer-not-`, `has-not-` and `not-hover`'s two rules); queries that cannot both match (`not (…)`, a discrete feature such as `hover`/`pointer`/`prefers-reduced-motion` with two values, disjoint width ranges, so `min-[900px]`/`max-[900px]`, `desk`/`max-desk`, `coarse`/`fine`, `hover`/`no-hover`/`hover-none`, `motion-safe`/`motion-reduce`); and variants.css's named complements `data-open`/`data-closed`, `data-checked`/`data-unchecked`, `dark`/`light`.
 - **Not seen:** class strings in a `.ts` file outside a helper call, a constant imported from another file, and a class prop passed to a component (the sweep below covers that).
 
+## The source of record
+
+T is main at **ac7b79de8**: `git show ac7b79de8:<path>`. Not 1bd709672, which is 1a's merge and already converted. Two cascade steps settle a winner there:
+- **Layer first.** A component's scoped `<style>` rules are unlayered, and Tailwind's utilities sat in `@layer utilities` (app.css at T: `@layer theme, base, components, utilities;`). "Any declaration not assigned to an explicit layer is added to an implicit final layer", and "for normal rules the declaration whose cascade layer is latest in the layer order wins" (https://drafts.csswg.org/css-cascade-5/#cascade-layering). So a converted `<style>` rule beat any utility at T, whatever their specificity.
+- **Within one `<style>` block: specificity, then order.** "The last declaration in document order wins" (https://drafts.csswg.org/css-cascade-5/#cascade-order).
+
 ## Pairs fixed
 
-Every flagged pair in files outside sets 1–9 and the kit: 7 pairs in 5 files. All their classes already stood in the markup at T (1bd709672), so the source winner is Tailwind's today. Each loser takes the winner's negation. No single state changes: the negation only removes the loser where the winner already won, and no other utility on these elements sets the same property between the loser's old and new specificity.
+Every flagged pair in files outside sets 1–9 and the kit: 7 pairs in 5 files. In all of them both classes come from one converted `<style>` block at T, and the two source rules have equal specificity, so the later rule wins. Each loser takes the winner's negation. No single state changes: the negation only removes the loser where the winner wins anyway, and no other utility on these elements sets the same property between the loser's old and new specificity.
 
-| file:line | A | B | source winner | fix |
-|---|---|---|---|---|
-| `apps/dashboard/src/lib/cawco/find/Finder.svelte:487` | `hover:bg-surface-hover` | `active:bg-surface-fill` | `active:` (markup at T; Tailwind's) | `not-active:hover:bg-surface-hover` |
-| `apps/dashboard/src/lib/cawco/preview/PinList.svelte:76` | `hover:bg-surface-hover` | `active:bg-surface-fill` | `active:` (markup at T) | `not-active:not-aria-current:hover:bg-surface-hover` |
-| `apps/dashboard/src/lib/cawco/preview/PinList.svelte:76` | `hover:bg-surface-hover` | `aria-current:bg-surface-fill` | `aria-current:` (markup at T) | (the same class) |
-| `apps/dashboard/src/lib/cawco/join/JoinedRow.svelte:107` | `data-attn:text-status-attn-ink` | `data-done:text-status-done-ink` | `data-done:` (markup at T) | `not-data-done:data-attn:text-status-attn-ink` |
-| `apps/dashboard/src/lib/cawco/turn/Well.svelte:40` | `data-grouped:pbs-space-2` | `data-lifted:py-0` | `data-lifted:` (markup at T) | `not-data-lifted:data-grouped:pbs-space-2` |
-| `apps/dashboard/src/lib/cawco/turn/Well.svelte:40` | `data-grouped:pbs-space-2` | `data-lifted:pbs-0` | `data-lifted:` (markup at T) | (the same class) |
-| `apps/dashboard/src/lib/cawco/turn/Who.svelte:108` | `data-u:text-on-action` | `data-a:text-on-brand` | `data-u:` (markup at T) | `not-data-u:data-a:text-on-brand` |
+| file:line | A | B | source winner, from the rules at ac7b79de8 | Tailwind's pick | fix |
+|---|---|---|---|---|---|
+| `apps/dashboard/src/lib/cawco/find/Finder.svelte:487` | `hover:bg-surface-hover` | `active:bg-surface-fill` | `active`: `.clear { @media (hover: hover) { &:hover } }` then `.clear { &:active }`, both (0,2,0); `:active` is later (Finder.svelte:941–948 at T) | the same | `not-active:hover:bg-surface-hover` |
+| `apps/dashboard/src/lib/cawco/preview/PinList.svelte:76` | `hover:bg-surface-hover` | `active:bg-surface-fill` | `active`: `.pin-row:hover` then `.pin-row:active, .pin-row[aria-current="true"]`, all (0,2,0) (PinList.svelte:243–249 at T) | the same | `not-active:not-aria-current:hover:bg-surface-hover` |
+| `apps/dashboard/src/lib/cawco/preview/PinList.svelte:76` | `hover:bg-surface-hover` | `aria-current:bg-surface-fill` | `aria-current`: the same two rules | the same | (the same class) |
+| `apps/dashboard/src/lib/cawco/join/JoinedRow.svelte:107` | `data-attn:text-status-attn-ink` | `data-done:text-status-done-ink` | **`attn`**: `.glyph.done` then `.glyph.attn`, both (0,2,0); `.attn` is later (JoinedRow.svelte:157–161 at T) | `data-done:`, reversed | `not-data-attn:data-done:text-status-done-ink` |
+| `apps/dashboard/src/lib/cawco/turn/Well.svelte:40` | `data-grouped:pbs-space-2` | `data-lifted:py-0` | `lifted`: `.well.grouped` then `.well.lifted`, both (0,2,0) (Well.svelte:117–137 at T) | the same | `not-data-lifted:data-grouped:pbs-space-2` |
+| `apps/dashboard/src/lib/cawco/turn/Well.svelte:40` | `data-grouped:pbs-space-2` | `data-lifted:pbs-0` | `lifted`: the same | the same | (the same class) |
+| `apps/dashboard/src/lib/cawco/turn/Who.svelte:108` | `data-u:text-on-action` | `data-a:text-on-brand` | **`a`**: `.dot { &.u }` then `.dot { &.a }`, both (0,2,0); `.a` is later (Who.svelte:162–178 at T) | `data-u:`, reversed | `not-data-a:data-u:text-on-action` |
+
+In JoinedRow and Who the two states come from one value (`line.hue`, and `you`/`!you`), so they never hold together at run time. The fix makes the order the source's anyway.
 
 ## Cross-file sweep: a class prop on a component root's state variants
 
-Every `<Component class=…>` whose classes carry a variant (184 site × root pairs) was joined with the classes on the root element that takes the component's `class` prop, then run through the rule. 14 cross pairs at 5 sites came back. Every consumer is in a set file and every root in the kit, so none is fixed here. In all of them, both sides' classes stood in markup at T, so the source winner is Tailwind's (named last). The fix goes on the loser, in whichever file its owner holds.
+Every `<Component class=…>` whose classes carry a variant (184 site × root pairs) was joined with the classes on the root element that takes the component's `class` prop, then run through the rule. 14 cross pairs at 5 sites came back. Every consumer is in a set file and every root in the kit, so none is fixed here; the fix goes on the loser, in whichever file its owner holds.
 
-| consumer site | root | consumer class | root class | property | winner |
-|---|---|---|---|---|---|
-| `src/lib/cawco/tasks/TaskColumn.svelte:150` (set 3) `<Checkbox>` | `ui/checkbox/checkbox.svelte:16` | `group-focus-within/card:opacity-100`, `group-data-picked/card:opacity-100`, `group-data-picking/col:opacity-100`, `group-hover/card:opacity-100` | `disabled:opacity-50`, `group-data-[disabled=true]/field:opacity-50` | opacity (8 pairs) | the root's two |
-| `src/lib/cawco/tasks/TaskTable.svelte:305` (set 3) `<Table.Row>` | `ui/table/table-row.svelte:14` | `data-picked:max-phone:bg-selected-bg` | `data-[state=selected]:bg-neutral-2` | background-color | `data-picked:max-phone:bg-selected-bg` |
-| `src/lib/cawco/side/Split.svelte:368` (set 5) `<Resizable.Handle>` | `ui/resizable/resizable-handle.svelte:16` | `group-data-split-expanded/split:after:left-space-1`, `…:after:w-(--divider-hit)` | `data-[direction=vertical]:after:left-0`, `…:after:w-full` | left, width | the root's two |
-| `src/lib/cawco/project/ViewBar.svelte:147` (set 5) `<Select.Trigger>` | `ui/select/select-trigger.svelte:26` | `group-data-bar:h-c-composer-field` | `data-[size=default]:h-9`, `data-[size=sm]:h-[30px]` | height | the root's two |
-| `src/lib/cawco/preview/ArtifactMenu.svelte:233` (set 5) `<DropdownMenu.Item>` | `ui/dropdown-menu/dropdown-menu-item.svelte:18` | `aria-current:text-ink-strong` | `data-[variant=destructive]:text-error-9` | color | `data-[variant=destructive]:text-error-9` |
+At ac7b79de8 every consumer class here came from the consumer's own scoped `<style>` (unlayered), and every root class was a utility in the kit's `cn(…)` (`@layer utilities`). By the layer step above, **the source winner in all 14 is the consumer's class**, whatever the specificity. Tailwind today picks the root's class in 13 of them.
+
+| consumer site | consumer's source rule at T | root (kit) | consumer class (source winner) | root class | property | Tailwind's pick |
+|---|---|---|---|---|---|---|
+| `src/lib/cawco/tasks/TaskColumn.svelte:150` (set 3) `<Checkbox>` | `li:focus-within > :global(.pick)`, `li[data-picked] …`, `.column[data-picking] li …`, `li:hover > …` → `opacity: 1` (TaskColumn.svelte:184–193) | `ui/checkbox/checkbox.svelte:16` | `group-focus-within/card:opacity-100`, `group-data-picked/card:opacity-100`, `group-data-picking/col:opacity-100`, `group-hover/card:opacity-100` | `disabled:opacity-50`, `group-data-[disabled=true]/field:opacity-50` | opacity (8 pairs) | the root's, reversed |
+| `src/lib/cawco/tasks/TaskTable.svelte:305` (set 3) `<Table.Row>` | `.ledger[data-pickable] :global(tr.row[data-picked]) { background: var(--selected-bg) }` (TaskTable.svelte:551) | `ui/table/table-row.svelte:14` (`data-[state=selected]:bg-muted` at T) | `data-picked:max-phone:bg-selected-bg` | `data-[state=selected]:bg-neutral-2` | background-color | the consumer's, as the source |
+| `src/lib/cawco/side/Split.svelte:368` (set 5) `<Resizable.Handle>` | `.expanded :global(.side-divider::after)` (Split.svelte:492) | `ui/resizable/resizable-handle.svelte:16` | `group-data-split-expanded/split:after:left-space-1`, `…:after:w-(--divider-hit)` | `data-[direction=vertical]:after:left-0`, `…:after:w-full` | left, width | the root's, reversed |
+| `src/lib/cawco/project/ViewBar.svelte:147` (set 5) `<Select.Trigger>` | `block-size: var(--c-composer-field)` in ViewBar's `<style>` (ViewBar.svelte:218–247) | `ui/select/select-trigger.svelte:26` | `group-data-bar:h-c-composer-field` | `data-[size=default]:h-9`, `data-[size=sm]:h-[30px]` | height | the root's, reversed |
+| `src/lib/cawco/preview/ArtifactMenu.svelte:233` (set 5) `<DropdownMenu.Item>` | `:global(.artifact-list .artifact-row[aria-current="true"]) { color: var(--ink-strong) }` (ArtifactMenu.svelte:306) | `ui/dropdown-menu/dropdown-menu-item.svelte:18` (`data-[variant=destructive]:text-destructive` at T) | `aria-current:text-ink-strong` | `data-[variant=destructive]:text-error-9` | color | the root's, reversed |
 
 ## Left in set and kit files
 
-48 flagged pairs remain, 33 in set files and 15 in the kit. The sets and K1/K2 fix their own when they merge this branch. Two kinds of kit flag hold by selector, though the states are never meant to meet:
+48 flagged pairs remain, 33 in set files and 15 in the kit. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step. Two kinds of kit flag hold by selector, though the states are never meant to meet:
 - `field-description`'s `nth-last-2:`/`last:` cannot both match. The rule does not treat structural pseudo-classes as exclusive.
 - `switch`'s `data-unchecked:` against `data-[state=checked]:` is not exclusive by selector, because `data-unchecked` also matches a bare `[data-unchecked]`.
 
@@ -129,3 +139,21 @@ Each pair (line, A, B, shared property, Tailwind's winner today):
 | `src/lib/components/ui/thinking-steps/thinking-step.svelte:128` | `status-ahead:text-ink-muted` | `motion-safe:data-shimmer:text-transparent` | color | `status-ahead:text-ink-muted` |
 | `src/lib/components/ui/toggle/toggle.svelte:6` | `hover:bg-[var(--surface-hover)]` | `aria-pressed:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` | background-color | `aria-pressed:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` |
 | `src/lib/components/ui/toggle/toggle.svelte:6` | `hover:bg-[var(--surface-hover)]` | `data-[state=on]:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` | background-color | `data-[state=on]:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` |
+
+## Pruned style rules: `svelte-unused-css`
+
+Invariant: no style rule the cutover keeps is pruned by Svelte without anyone knowing.
+
+**Upstream.** svelte 5.57.1 is installed, and `npm view svelte version` gives 5.57.2. 5.57.2's changelog (https://raw.githubusercontent.com/sveltejs/svelte/main/packages/svelte/CHANGELOG.md) has no CSS-pruning change: its entries are runtime, hydration, `migrate` and parser fixes, plus one a11y warning. A bump would not change this.
+- The parent's shape (a nested `.tab:global([data-lifted]) > & > :is(.s, .e)` inside `.shade`, with `data-lifted` set only from script) compiles in 5.57.1 with `dev: true` as follows. When an element with class `tab` holds the shade, directly, through a snippet, through `class={["tab", …]}` or through `<svelte:element>`, it is kept, scoped as `.tab:where(.svelte-…)[data-lifted] > & > …`, with no warning. When no element it can see carries `tab` (the tab is `data-slot="tab"`, or `class="tab"` goes to a child component), it is written as `/* (unused) … */` **and** `css_unused_selector` fires.
+- In every variant tried, the prune and the warning come together. Both read one flag in Svelte's source: `css-warn.js` warns on each `ComplexSelector` without `metadata.used`, and the transform comments out a rule when no selector of it has `metadata.used`.
+- svelte-check reports that warning too: the scratch file under `src/` gave `src/vo-scratch/Repro.svelte:22:5 warning: Unused CSS selector ".nope > &"`, and the count rose to 4 warnings. But `bun run typecheck` passes on warnings (its proof is `0 ERRORS`), so a prune passes as one more warning beside Shot's.
+- At main the rule is not pruned. b8b16770b keeps `class="tab"` on the tab ("The tab's own class keeps Svelte from pruning a selector on an attribute only tab-drag sets"), and the compiled stylesheet has it scoped with no warning.
+
+**The gate.** `apps/dashboard/scripts/svelte-unused-css.ts` compiles every `src/**/*.svelte` through the project's preprocess and compiler options as vite.config.ts gives them to `sveltekit()` (`vitePreprocess()`, `experimental.async`; the project has no svelte.config), with `dev: true` and `css: "external"`. It lists each `/* (unused) */` rule with file and line and exits 1 on any. It runs in root `lint` and `lint:changed`, after `lib-import-check`. In `lint:changed` it is part of the hub's gate; in `lint` it runs before `eslint src`, which still fails on 1a. On the scratch files it lists all five prunes and exits 1.
+
+**Inventory.**
+- ac7b79de8: `svelte-unused-css: 611 file(s), no style rule pruned`.
+- This branch (1a plus V): `svelte-unused-css: 610 file(s), no style rule pruned`.
+
+So no declaration the cutover kept is pruned on this branch, and nothing was already pruned at ac7b79de8. There is nothing to fix and nothing to list per owner. A set's merge that drops the class a kept rule names now fails `lint:changed`.
