@@ -216,11 +216,11 @@
   open={doc !== null}
 >
   <DialogPrimitive.Portal>
-    <DialogOverlay class={leaving ? "lightbox-leaving" : ""} />
+    <DialogOverlay data-lightbox-leaving={leaving || undefined} />
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
-      class="doc-view"
+      class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-space-4 outline-none data-pressable:pointer-events-auto"
       onEscapeKeydown={(event) => {
         event.preventDefault();
         dismiss();
@@ -232,7 +232,7 @@
       restoreScrollDelay={0}
     >
       {#snippet child({ props, open })}
-        <div {...props} style:pointer-events={pressable(open)}>
+        <div {...props} data-pressable={pressable(open) === "auto" || undefined}>
           {@render docView()}
         </div>
       {/snippet}
@@ -243,17 +243,25 @@
 {#snippet docView()}
   {#if doc}
     {@const extension = extensionOf(doc.name)}
+    <!-- literal: min(100%, 60rem) -->
+    <!-- literal: min(86dvh, 100%) -->
     <div
-      class="doc-sheet"
+      class="pointer-events-auto flex w-(--sheet-w) max-h-(--sheet-max) flex-col rounded-sm border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
       bind:this={sheet}
+      style:--sheet-max="min(86dvh, 100%)"
+      style:--sheet-w="min(100%, 60rem)"
       {@attach land(() => doc.share, {
         mode: "grow",
-        anchor: ".doc-head",
+        anchor: '[data-slot="doc-head"]',
         ms: dur("--dur-panel"),
       })}
     >
-      <header class="doc-head">
-        <DialogPrimitive.Title class="doc-name"
+      <header
+        data-slot="doc-head"
+        class="flex items-center gap-space-1 border-b border-border-hairline py-space-2 ps-space-4 pe-space-2"
+      >
+        <DialogPrimitive.Title
+          class="min-w-0 flex-1 truncate text-size-label font-medium"
           >{doc.name}</DialogPrimitive.Title
         >
         <CopyButton
@@ -277,7 +285,10 @@
           {/snippet}
         </Tip>
       </header>
-      <div data-slot="doc-body" class="doc-body">
+      <div
+        data-slot="doc-body"
+        class="min-h-0 overflow-auto overscroll-contain p-space-4"
+      >
         {#if extension === "md" || extension === "markdown"}
           <!-- The markdown loads when a document needs it: an artifact's own
                tab mounts the lightbox and seldom opens a document. -->
@@ -295,60 +306,12 @@
 {/snippet}
 
 <style>
-  /* ── The document sheet. Content is only the centring box; the sheet is
-     what travels, so the flight and the return move one surface. */
-  :global(.doc-view) {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-4);
-    pointer-events: none;
-    outline: none;
-  }
-  .doc-sheet {
-    display: flex;
-    flex-direction: column;
-    inline-size: min(100%, 60rem);
-    max-block-size: min(86dvh, 100%);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    pointer-events: auto;
-  }
-  .doc-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-4) var(--space-2);
-    border-block-end: 1px solid var(--border-hairline);
-
-    & :global(.doc-name) {
-      flex: 1;
-      min-inline-size: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-    }
-  }
-  .doc-body {
-    min-block-size: 0;
-    overflow: auto;
-    overscroll-behavior: contain;
-    padding: var(--space-4);
-  }
-  /* The scrim leaves with the sheet, not after it. */
-  :global(.kit-scrim.lightbox-leaving) {
+  /* residual: keyframes — the scrim leaves with the sheet, not after it. */
+  :global(.kit-scrim[data-lightbox-leaving]) {
     animation: kit-fade-out var(--dur-exit) var(--ease-out) both;
   }
 
+  /* residual: foreign-dom — PhotoSwipe's DOM */
   /* ── PhotoSwipe, in house tokens. Its root is appended to <body>, so these
      rules are global; `.cawco-pswp` is the `mainClass` it carries. */
   /* css-scope .cawco-pswp: ScreenEdges reads the open lightbox for the screen's edge colour */
@@ -371,8 +334,8 @@
     .cawco-pswp .pswp__button {
       display: grid;
       place-items: center;
-      inline-size: 44px;
-      block-size: 44px;
+      inline-size: var(--c-top-bar-h);
+      block-size: var(--c-top-bar-h);
       border: 1px solid var(--border-hairline);
       border-radius: var(--radius-sm);
       background: var(--surface-raised);
@@ -381,17 +344,17 @@
       overflow: visible;
 
       & svg {
-        inline-size: 20px;
-        block-size: 20px;
+        inline-size: var(--icon-lg);
+        block-size: var(--icon-lg);
       }
       &:hover {
         background: var(--surface-hover);
       }
     }
     .cawco-pswp .pswp__button--arrow {
-      inline-size: 44px;
-      block-size: 44px;
-      margin-block-start: -22px;
+      inline-size: var(--c-top-bar-h);
+      block-size: var(--c-top-bar-h);
+      margin-block-start: calc(var(--c-top-bar-h) / -2);
     }
     .cawco-pswp .pswp__button--arrow--prev {
       inset-inline-start: var(--space-3);
@@ -403,7 +366,7 @@
        surface inside a hairline, so the page under the scrim never reads
        through it. */
     .cawco-pswp .pswp__counter {
-      block-size: 44px;
+      block-size: var(--c-top-bar-h);
       margin: 0;
       padding-inline: var(--space-3);
       border: 1px solid var(--border-hairline);
@@ -412,7 +375,7 @@
       font-size: var(--text-meta);
       font-weight: var(--weight-body);
       font-variant-numeric: tabular-nums;
-      line-height: 42px;
+      line-height: calc(var(--c-top-bar-h) - 2px);
       color: var(--ink-strong);
       text-shadow: none;
       opacity: 1;
