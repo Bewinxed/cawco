@@ -213,23 +213,45 @@
   }
 </script>
 
-<div data-slot="suggest" class="suggest">
+<!-- Out of flow, standing on the composer's top edge, one line tall whatever
+     it holds: every transcript keeps this row clear at its foot (app.css
+     `--c-suggest-room`, the row and the step under it), so chips coming,
+     going or changing never move the transcript. Past its width the line
+     scrolls sideways. The row takes no pointer of its own; what is in it
+     does. -->
+<div
+  data-slot="suggest"
+  style:--chip-block="var(--c-suggest-chip)"
+  style:--suggest-bottom="calc(100% + var(--space-2))"
+  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none"
+>
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure. Its row is kept whether it is drawn or not
        (app.css `--c-suggest-room`), so coming and going moves nothing. -->
   {#if shown.length > 0 || slow || failure}
     <fieldset
-      class="track"
+      style:--hit-gap-x="var(--space-2)"
+      style:--hit-gap-y="var(--space-2)"
+      class="relative min-w-0 m-0 border-0 flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
       out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
-      <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
+      <legend class="sr-only flex-none pointer-events-auto"
+        >Suggested skills, tools and MCP servers</legend
+      >
       {#each shown as { candidate, noul }, i (candidate.id)}
+        <!-- Tinted by confidence: `--conf` runs 0 → 1 across the shown range
+             (noul 0.6 → 1), and the accent's share of the fill runs 8% → 32%
+             with it. -->
         <button
-          class="chip mark-line touch-hit"
+          data-slot="suggest-chip"
+          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 rounded-sm shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:active:transform-(--chip-press) mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
           style:--conf={confidence(noul)}
+          style:--hit-edge="1px"
+          style:--tint="calc(8% + var(--conf) * 24%)"
+          style:--chip-press="scale(var(--press-scale))"
           in:arrive={{ i }}
           out:leave
           animate:flip={{
@@ -241,24 +263,29 @@
             <IconToolSkill
               data-suggestion-chips-glyph
               aria-hidden="true"
-              class="glyph"
+              class="size-icon-md flex-none text-ink-muted"
             />
           {:else if candidate.kind === "tool"}
             <IconToolGeneric
               data-suggestion-chips-glyph
               aria-hidden="true"
-              class="glyph"
+              class="size-icon-md flex-none text-ink-muted"
             />
           {:else}
             <IconToolMcp
               data-suggestion-chips-glyph
               aria-hidden="true"
-              class="glyph"
+              class="size-icon-md flex-none text-ink-muted"
             />
           {/if}
-          <span data-slot="name" class="name">{candidate.name}</span>
+          <span data-slot="name" class="min-w-0 overflow-clip text-ellipsis"
+            >{candidate.name}</span
+          >
+          <!-- The keyboard's way in: Tab on the first chip, Shift+Tab for all
+               of them. A touch screen has no Tab key, so neither hint shows
+               there. -->
           {#if i === 0}
-            <Kbd aria-hidden="true" class="key" data-box>Tab</Kbd>
+            <Kbd aria-hidden="true" class="coarse:hidden" data-box>Tab</Kbd>
           {/if}
           <span class="sr-only"
             >— add “{suggestionLine(candidate)}” to the message</span
@@ -266,19 +293,29 @@
         </button>
       {/each}
       {#if shown.length > 1}
-        <span aria-hidden="true" class="all"><Kbd>⇧ Tab</Kbd> all</span>
-      {/if}
-      {#if slow && shown.length === 0}
         <span
           aria-hidden="true"
-          class="shimmer"
+          class="inline-flex items-center gap-space-1 text-ink-muted text-size-meta font-normal whitespace-nowrap flex-none pointer-events-auto coarse:hidden"
+          ><Kbd>⇧ Tab</Kbd> all</span
+        >
+      {/if}
+      {#if slow && shown.length === 0}
+        <!-- A chip's size, held by the kit skeleton only while an ask is
+             slow. literal: 9rem -->
+        <span
+          aria-hidden="true"
+          data-slot="suggest-shimmer"
+          style:--shimmer-w="9rem"
+          style:--shimmer-h="calc(var(--text-label) + var(--space-1) * 2 + 2px)"
+          class="shimmer block w-(--shimmer-w) h-(--shimmer-h) flex-none pointer-events-auto"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
           ><Skeleton class="size-full" /></span
         >
       {/if}
       {#if failure}
         <p
-          class="fail"
+          data-slot="suggest-fail"
+          class="m-0 text-ink-muted text-size-meta font-normal whitespace-nowrap flex-none pointer-events-auto"
           role="status"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
         >
@@ -291,101 +328,44 @@
 </div>
 
 <style>
-  /* Out of flow, standing on the composer's top edge, one line tall whatever
-     it holds: every transcript keeps this row clear at its foot (app.css
-     `--c-suggest-room`, the row and the step under it), so chips coming,
-     going or changing never move the transcript. Past its width the line
-     scrolls sideways. The row takes no pointer of its own; what is in it
-     does. */
-  .suggest {
-    --chip-block: var(--c-suggest-chip);
-    position: absolute;
-    inset-inline: 0;
-    bottom: calc(100% + var(--space-2));
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    block-size: var(--c-suggest-row);
-    padding-block-start: var(--space-4);
-    pointer-events: none;
-
-    /* The hint and a failure line are bare text over the transcript, so a row
-       with anything in it lifts off the page on the transcript's own field. */
-    &:has(.chip, .shimmer, .fail) {
-      background: linear-gradient(
-        to top,
-        var(--surface-recess) 55%,
-        oklch(from var(--surface-recess) l c h / 0)
-      );
-    }
+  /* residual: unmapped: the hint and a failure line are bare text over the
+     transcript, so a row with anything in it lifts off the page on the
+     transcript's own field; a gradient in sRGB, which the theme's gradient
+     utilities (oklab) would repaint. */
+  [data-slot="suggest"]:has(
+      [data-slot="suggest-chip"],
+      [data-slot="suggest-shimmer"],
+      [data-slot="suggest-fail"]
+    ) {
+    background: linear-gradient(
+      to top,
+      var(--surface-recess) 55%,
+      var(--surface-recess-clear)
+    );
   }
-
-  .track {
-    position: relative;
-    min-inline-size: 0;
-    margin: 0;
-    border: 0;
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: var(--space-2);
-    --hit-gap-x: var(--space-2);
-    --hit-gap-y: var(--space-2);
-    padding-block: var(--space-1);
-    padding-inline: var(--space-1);
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-
-    & > * {
-      flex: none;
-      pointer-events: auto;
-    }
-  }
-
-  /* Tinted by confidence: `--conf` runs 0 → 1 across the shown range (noul
-     0.6 → 1), and the accent's share of the fill runs 8% → 32% with it. The
-     border takes the same share at 1.5×. Mixed in sRGB: the accent reads as
-     if laid over the surface. */
-  .chip {
-    --hit-edge: 1px;
-    --tint: calc(8% + var(--conf) * 24%);
-    display: inline-flex;
-    align-items: center;
-    block-size: var(--chip-block);
-    gap: var(--space-2);
-    max-inline-size: 100%;
-    padding-block: var(--space-1);
-    padding-inline: var(--space-2) var(--space-3);
+  /* The chip's tint is a mix per chip: the border takes the fill's share at
+     1.5×, mixed in sRGB so the accent reads as if laid over the surface. A
+     colour in an inline custom property is refused, and no utility mixes.
+     A confidence that moves in place re-tints over --dur-panel. */
+  [data-slot="suggest-chip"] {
     border: 1px solid
       color-mix(
         in srgb,
         var(--action-solid) calc(var(--tint) * 1.5),
         var(--surface-raised)
       );
-    border-radius: var(--radius-sm);
     background: color-mix(
       in srgb,
       var(--action-solid) var(--tint),
       var(--surface-raised)
     );
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    white-space: nowrap;
-    cursor: pointer;
-    /* A confidence that moves in place re-tints over --dur-panel. */
+
     @media (prefers-reduced-motion: no-preference) {
       transition:
         transform var(--dur-toggle) var(--ease-out),
         background-color var(--dur-panel) var(--ease-out),
         border-color var(--dur-panel) var(--ease-out),
         color var(--dur-control) var(--ease-out);
-
-      &:active {
-        transform: scale(var(--press-scale));
-      }
     }
 
     &:hover {
@@ -396,52 +376,5 @@
       );
       color: var(--ink-strong);
     }
-
-    & :global(.glyph) {
-      inline-size: 16px;
-      block-size: 16px;
-      flex: none;
-      color: var(--ink-muted);
-    }
-  }
-
-  .name {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-
-  /* The keyboard's way in: Tab on the first chip, Shift+Tab for all of them.
-     A touch screen has no Tab key, so neither hint shows there. */
-  .all {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    white-space: nowrap;
-  }
-
-  @media (pointer: coarse) {
-    .chip :global(.key),
-    .all {
-      display: none;
-    }
-  }
-
-  /* A chip's size, held by the kit skeleton only while an ask is slow. */
-  .shimmer {
-    display: block;
-    inline-size: 9rem;
-    block-size: calc(var(--text-label) + var(--space-1) * 2 + 2px);
-  }
-
-  .fail {
-    margin: 0;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    white-space: nowrap;
   }
 </style>
