@@ -91,7 +91,7 @@
       <span
         data-slot="dot"
         aria-hidden="true"
-        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-none flex-none overflow-visible"
+        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none overflow-visible"
         data-face
         data-box>{@render voice.face(live)}</span
       >
@@ -105,7 +105,7 @@
         data-slot="dot"
         data-a={!you || undefined}
         aria-hidden="true"
-        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-none flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-row-mark data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-brand"
+        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-row-mark data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-brand"
         data-box
       >
         {#if you}
