@@ -3486,7 +3486,7 @@
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-0 bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-w-0 no-scrollbar opacity-(--roll-o) motion-safe:transition-[height] motion-safe:dur-control motion-safe:ease-out motion-safe:data-folding:dur-morph data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-w-0 no-scrollbar opacity-(--roll-o) motion-safe:transition-[height] motion-safe:dur-control motion-safe:ease-out motion-safe:data-folding:dur-morph data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden"
             data-cue-bottom={(cueBottom && !folded) || undefined}
             data-cue-top={(cueTop && !folded) || undefined}
             data-flying={flight !== null || !wordsLanded || undefined}
