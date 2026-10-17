@@ -171,12 +171,6 @@
     };
   }
 
-  /** shadcn Badge, dressed on the DESIGN.md scale rather than the stock ladder. */
-  const chipClass =
-    "h-auto rounded-[var(--radius-xs)] border-transparent bg-[var(--surface-recess)] " +
-    "px-[var(--space-2)] py-px text-[length:var(--text-meta)] font-[var(--weight-body)] " +
-    "!text-[color:var(--ink-muted)]";
-
   const asString = (value: unknown): string | undefined =>
     typeof value === "string" ? value : undefined;
 
@@ -261,7 +255,7 @@
   }
 </script>
 
-<div data-slot="tools" data-tool-group-rail-row class="tools rail-row">
+<div data-slot="tools" data-tool-group-rail-row class="rail-row">
   {#each messages as m (m.id ?? m.toolCallId)}
     {@const d = describe(m)}
     {@const Icon = d.icon}
@@ -285,70 +279,94 @@
       m.metadata?.toolDiff
     )}
     {#snippet line()}
-      <span data-slot="rail-cell" class="ic rail-cell">
+      <span data-slot="rail-cell" class="rail-cell">
         {#key m.metadata?.toolStatus}
+          <!-- The glyph sits in the one rail cell, so a status change can
+               cross-fade two of them on the same spot; a favicon and the
+               glyph it gives way to share the cell. A failed call carries
+               its state on the glyph — the completed row's done/failed cue,
+               next to the running row's breathing glyph in the live tool. -->
           <span
             data-slot="glyph"
-            class="glyph"
-            class:err={failed}
+            class="col-start-1 row-start-1 grid place-items-center text-ink-muted data-err:text-data-bad"
+            data-err={failed || undefined}
             in:glyphIn
             out:glyphOut
             >{#if d.favicon && !brokenIcons.has(d.favicon)}
               {@const src = d.favicon}
               <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
+              <!-- literal: 14px -->
               <img
                 alt=""
-                class="fav"
+                class="col-start-1 row-start-1 size-(--fav) block rounded-xs"
                 onerror={() => brokenIcons.add(src)}
                 {src}
+                style:--fav="14px"
                 in:iconSwap
                 out:iconSwap
               />
             {:else}
-              <span class="tool-glyph" in:iconSwap out:iconSwap><Icon /></span>
+              <span
+                class="col-start-1 row-start-1 grid place-items-center"
+                in:iconSwap
+                out:iconSwap><Icon class="size-icon-md block" /></span
+              >
             {/if}</span
           >
         {/key}
       </span>
+      <!-- The verb gives way before the row does: on a phone the argument,
+           the fact and the chevron stay inside the row. -->
       {#if d.label}
-        <span class="tk">{d.label}</span>
+        <span
+          class="font-medium text-ink-strong text-size-label flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >{d.label}</span
+        >
       {/if}
       <span
-        class="arg"
+        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-auto"
         title={[d.object, d.detail].filter(Boolean).join(" ") || undefined}
       >
         {#if d.object}
           {d.object}
         {/if}
         {#if d.detail}
-          <span class="tail">{` ${d.detail}`}</span>
+          <span class="text-ink-muted opacity-70">{` ${d.detail}`}</span>
         {/if}
       </span>
+      <!-- shadcn Badge, dressed on the DESIGN.md scale rather than the stock
+           ladder. -->
       {#if d.chip}
-        <Badge class={chipClass} variant="secondary"
-          ><span>{d.chip}</span></Badge
+        <Badge
+          class="h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted! flex-none"
+          variant="secondary"><span>{d.chip}</span></Badge
         >
       {/if}
       <!-- One chain, so a fact arriving with its result fades in (Svelte plays
-           a local intro only when a block that already ran switches). -->
+           a local intro only when a block that already ran switches). A fact
+           is a measurement, not a verdict: it reads in --ink-strong, the ink
+           that gives a number presence without passing judgement on it.
+           Green is reserved for the added side of a `diff` fact — the one
+           measurement that carries a direction — and every diff row agrees
+           on that reading, whether it came back as `+38 −2` or a lone `+38`. -->
       {#if d.fact && d.factTone === "diff"}
-        <span class="d" in:factIn
+        <span class="text-ink-strong num flex-none" in:factIn
           >{#each factParts(d.fact) as part, i (i)}
             <span
               data-add={part.add || undefined}
-              class:add={part.add}
-              class:del={part.del}>{part.text}</span
+              class="data-add:text-data-ok data-del:text-data-bad"
+              data-del={part.del || undefined}>{part.text}</span
             >
           {/each}</span
         >
       {:else if d.fact}
-        <span class="d" in:factIn>{d.fact}</span>
+        <span class="text-ink-strong num flex-none" in:factIn>{d.fact}</span>
       {/if}
     {/snippet}
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
-        <div data-slot="row" class="row" class:err={failed}>
+        <div data-slot="row" data-err={failed || undefined}>
           {#if d.expanded === "preview"}
             {@const called = calledArtifact(
               m.metadata?.toolInput ?? undefined,
@@ -365,19 +383,31 @@
                  (motion/share's click capture), and the panel or sheet
                  opens out of its box under `preview:<session>` — first open
                  or repeat, thumbnail or not. Closing, the pane shrinks back
-                 into this row (PreviewPane.svelte). -->
+                 into this row (PreviewPane.svelte). The button is the whole
+                 card (its ::after), so the card is what focus lights: the
+                 card's own border takes the ring, as a field frame's does
+                 (app.css field-shell), and the button draws nothing. Neither
+                 line sets the card's width, so the card fits any row it
+                 stands in. -->
+            <!-- literal: 440px -->
+            <!-- literal: 80px -->
             <div
-              class="preview-tool"
+              class="relative flex items-center gap-space-2 max-w-(--card-max) min-h-(--card-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile data-closed:opacity-50 not-has-[[data-slot=artifact-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
-              class:closed={!opened}
+              data-closed={!opened || undefined}
+              style:--card-max="440px"
+              style:--card-min="80px"
             >
+              <!-- literal: 44px -->
               <button
                 aria-busy={busy || undefined}
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
-                class="artifact-open"
+                data-slot="artifact-open"
+                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--hit-min)"
+                style:--hit-min="44px"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -390,16 +420,30 @@
                 )}
                 type="button"
               >
-                <span data-slot="mark" class="mark"><IconWindow /></span>
-                <span class="artifact-label"
-                  ><span class="artifact-title"
+                <!-- literal: 17px -->
+                <span
+                  data-slot="mark"
+                  class="size-(--mark-size) shrink-0 grid place-items-center rounded-xs text-mark-glyph"
+                  style:--mark-size="17px"
+                  ><IconWindow class="size-icon-sm" /></span
+                >
+                <!-- The name wraps, whole, and breaks inside a word only
+                     when the word alone is wider than the row; the place
+                     stays one line, cut at its end, and contained, so
+                     however long it is it takes the width it is given. -->
+                <span class="flex flex-col min-w-0"
+                  ><!-- literal: 12px -->
+                  <span
+                    class="flex items-center gap-(--btn-gap) wrap-anywhere"
+                    style:--btn-gap="var(--space-1)"
+                    style:--btn-icon="12px"
                     ><PendingContent
                       failed={openFailed.has(callId(m))}
                       label={preview?.title || name}
                       pending={busy}
                       pendingLabel="Opening…"
                     /></span
-                  ><span class="artifact-path"
+                  ><span data-slot="artifact-path" class="truncate text-ink-muted"
                     >{preview?.source
                       ? previewPlace(preview.source)
                       : (called?.kind ?? "")}</span
@@ -407,7 +451,16 @@
                 >
               </button>
               {#if preview?.thumbnail}
-                <div aria-hidden="true" class="artifact-thumb" inert>
+                <!-- literal: 90px -->
+                <!-- literal: 64px -->
+                <div
+                  aria-hidden="true"
+                  data-slot="artifact-thumb"
+                  class="w-(--thumb-w) h-(--thumb-h) shrink-0 overflow-hidden border border-border-hairline rounded-sm bg-surface-recess"
+                  inert
+                  style:--thumb-w="90px"
+                  style:--thumb-h="64px"
+                >
                   <Shot
                     alt="Preview"
                     size="thumb"
@@ -419,7 +472,12 @@
             {#if openFailed.has(callId(m))}
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
-              <p class="open-fault" role="alert">
+              <!-- literal: 440px -->
+              <p
+                class="max-w-(--card-max) -mt-space-1 mx-0 mb-space-2 text-data-bad text-size-meta font-normal"
+                role="alert"
+                style:--card-max="440px"
+              >
                 Couldn't open {name}: {openFailed.get(callId(m))} Press it to try
                 again.
               </p>
@@ -431,18 +489,32 @@
                  once the call is first opened: a scroll mounts calls by the
                  dozen, and a closed Collapsible with its trigger was most of
                  what one cost to mount. One button the whole time, so the
-                 chevron turns and focus stays where it was. -->
+                 chevron turns and focus stays where it was. The row's shape
+                 is shared by this button and the plain <div> below, with the
+                 button's chrome stripped back to the ledger's; its inline
+                 geometry is the rail line's (app.css `.rail-line`). -->
+            <!-- literal: 26px -->
+            <!-- literal: 44px -->
             <button
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
-              class="trow rail-line press-tint"
+              class="group/trow rail-line press-tint w-full min-h-(--trow-min) coarse:min-h-(--trow-min-coarse) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start cursor-pointer"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
+              style:--trow-min="26px"
+              style:--trow-min-coarse="44px"
               type="button"
             >
               {@render line()}
-              <span data-slot="chev" class="chev" data-box
-                ><IconChevronRight /></span
+              <!-- The affordance sits at the tail so the row's left anatomy
+                   is unchanged. -->
+              <!-- literal: rotate(90deg) -->
+              <span
+                data-slot="chev"
+                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/trow:transform-(--chev-turn)"
+                data-box
+                style:--chev-turn="rotate(90deg)"
+                ><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
             {#if disclosed.get() || opened.has(callId(m))}
@@ -460,10 +532,22 @@
                     {#if d.expanded === "diff"}
                       <!-- What the call changed, as the file's own diff: one per
                        replacement a multi-edit made. A failed call is the diff
-                       it attempted, under the harness's reason. -->
-                      <div class="diffs">
+                       it attempted, under the harness's reason. The file path
+                       in each header reads at the text column, the diff's
+                       frame reaching out past it by its 1px border and its
+                       header's 12px inset (DiffView's `px-3`). -->
+                      <!-- literal: 13px -->
+                      <div
+                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--diffs-start)"
+                        style:--diffs-start="calc(var(--x-hang) - 13px)"
+                      >
                         {#if refusal}
-                          <p data-slot="refusal" class="refusal">{refusal}</p>
+                          <!-- literal: 13px -->
+                          <p
+                            data-slot="refusal"
+                            class="my-0 me-0 ms-(--refusal-start) text-size-label text-data-bad wrap-anywhere"
+                            style:--refusal-start="13px"
+                          >{refusal}</p>
                         {/if}
                         {#each changes as change, i (i)}
                           <DiffView
@@ -481,30 +565,76 @@
                         result={m.metadata?.toolResult}
                       />
                     {:else if d.expanded === "memory" && result}
-                      <div class="fields">
-                        <div data-slot="tool-group-field" class="field">
-                          <span class="k">result</span>
-                          <pre class="v">{result.text}</pre>
+                      <!-- The disclosed payload — same anatomy as
+                           Prompt.svelte's permission fields. Its words hang
+                           at the row's text column; the well reaches out past
+                           them by its own padding. -->
+                      <div
+                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
+                        style:--fields-start="calc(var(--x-hang) - var(--space-3))"
+                      >
+                        <div
+                          data-slot="tool-group-field"
+                          class="flex flex-col gap-space-1 min-w-0"
+                        >
+                          <span
+                            class="text-size-label font-medium text-ink-muted"
+                            >result</span
+                          >
+                          <!-- literal: 300px -->
+                          <pre
+                            class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap"
+                            style:--value-max="300px">{result.text}</pre>
                         </div>
                       </div>
                     {:else if d.expanded === "prose" && !failed}
-                      <div class="skill-args">
+                      <!-- A skill's arguments are the agent's own words to
+                           it: prose at the text column, with no well around
+                           them. -->
+                      <!-- literal: 70ch -->
+                      <div
+                        class="mt-space-1 mb-space-3 ms-(--x-hang) max-w-(--measure)"
+                        style:--measure="70ch"
+                      >
                         <ToolProse source={proseOf(toolInput)} />
                       </div>
                     {:else}
-                      <div class="fields">
+                      <div
+                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
+                        style:--fields-start="calc(var(--x-hang) - var(--space-3))"
+                      >
                         {#each fields as f (f.key)}
-                          <div data-slot="tool-group-field" class="field">
-                            <span class="k">{f.key}</span>
-                            <pre class="v">{f.text}</pre>
+                          <div
+                            data-slot="tool-group-field"
+                            class="flex flex-col gap-space-1 min-w-0"
+                          >
+                            <span
+                              class="text-size-label font-medium text-ink-muted"
+                              >{f.key}</span
+                            >
+                            <!-- literal: 300px -->
+                            <pre
+                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap"
+                              style:--value-max="300px">{f.text}</pre>
                           </div>
                         {/each}
                         {#if result}
-                          <div data-slot="tool-group-field" class="field">
-                            <span class="k">result</span>
-                            <pre class="v">{result.text}</pre>
+                          <div
+                            data-slot="tool-group-field"
+                            class="flex flex-col gap-space-1 min-w-0"
+                          >
+                            <span
+                              class="text-size-label font-medium text-ink-muted"
+                              >result</span
+                            >
+                            <!-- literal: 300px -->
+                            <pre
+                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap"
+                              style:--value-max="300px">{result.text}</pre>
                             {#if result.more}
-                              <span data-slot="more" class="more"
+                              <span
+                                data-slot="more"
+                                class="text-size-meta font-normal text-ink-muted"
                                 >… {result.more.toLocaleString()} more chars</span
                               >
                             {/if}
@@ -517,14 +647,27 @@
               </Collapsible.Root>
             {/if}
           {:else}
-            <div class="trow rail-line flat">{@render line()}</div>
+            <!-- literal: 26px -->
+            <!-- literal: 44px -->
+            <div
+              class="rail-line w-full min-h-(--trow-min) coarse:min-h-(--trow-min-coarse) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              style:--trow-min="26px"
+              style:--trow-min-coarse="44px"
+            >
+              {@render line()}
+            </div>
           {/if}
           {#if d.expanded === "image" && machine && !failed}
             {@const input = m.metadata?.toolInput as {
               path: string;
               caption?: string;
             }}
-            <div class="shots">
+            <!-- literal: 240px -->
+            <div
+              data-slot="shots"
+              class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
+              style:--shot-basis="240px"
+            >
               <Shot
                 alt={input.caption ?? pathLeaf(input.path)}
                 caption={input.caption}
@@ -536,7 +679,13 @@
             </div>
           {/if}
           {#if machine && !failed && sentAttachments(m).length}
-            <div class="shots" data-gallery>
+            <!-- literal: 240px -->
+            <div
+              data-slot="shots"
+              class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
+              data-gallery
+              style:--shot-basis="240px"
+            >
               {#each sentAttachments(m) as path (path)}
                 <Shot
                   alt={pathLeaf(path)}
@@ -549,7 +698,13 @@
             </div>
           {/if}
           {#if m.metadata?.resultImages?.length}
-            <div class="shots" data-gallery>
+            <!-- literal: 240px -->
+            <div
+              data-slot="shots"
+              class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
+              data-gallery
+              style:--shot-basis="240px"
+            >
               {#each m.metadata.resultImages as image, i (i)}
                 <Shot
                   alt="Image {i + 1} from {m.metadata.toolName}"
@@ -566,338 +721,53 @@
 </div>
 
 <style>
-  .open-fault {
-    max-inline-size: 440px;
-    margin: calc(-1 * var(--space-1)) 0 var(--space-2);
-    color: var(--data-bad);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-  .preview-tool {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    max-inline-size: 440px;
-    min-block-size: 80px;
-    padding: var(--space-2);
-    margin-block: var(--space-2);
-    border: 1px solid var(--border-hairline);
+  /* residual: pseudo */
+  /* The button is the whole card: its ::after covers the card's box. */
+  [data-slot="artifact-open"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
     border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
+  }
 
-    &.closed {
-      opacity: 0.5;
-    }
-    &:not(:has(.artifact-thumb)) {
-      inline-size: fit-content;
-    }
-    @media (hover: hover) {
-      &:has(.artifact-open:hover) {
-        background: var(--surface-hover);
-      }
-    }
-    @media (pointer: coarse) {
-      & button {
-        min-block-size: 44px;
-      }
-    }
+  /* residual: unmapped */
+  /* The button draws no ring of its own (the card takes it). The shorthand
+     also resets the ring's width and colour, which outline-none leaves. */
+  [data-slot="artifact-open"]:focus-visible {
+    outline: none;
   }
-  .artifact-open {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex: 1;
-    min-inline-size: 0;
-    border: 0;
-    padding: var(--space-2);
-    background: transparent;
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    text-align: start;
-    cursor: pointer;
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: var(--radius-md);
-    }
-    /* The button is the whole card (its ::after), so the card is what
-       focus lights: the card's own border takes the ring, as a field
-       frame's does (app.css field-shell), and the button draws nothing. */
-    &:focus-visible {
-      outline: none;
-    }
-  }
-  .preview-tool:has(> .artifact-open:focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  /* Neither line sets the card's width, so the card fits any row it stands
-     in: the name wraps, whole, and breaks inside a word only when the word
-     alone is wider than the row; the place stays one line, cut at its end,
-     and contained, so however long it is it takes the width it is given. */
-  .artifact-label {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-  }
-  .artifact-title {
-    display: flex;
-    align-items: center;
-    gap: var(--btn-gap);
-    --btn-gap: var(--space-1);
-    --btn-icon: 12px;
-    overflow-wrap: anywhere;
-  }
-  .artifact-path {
+  /* The place: contained, so however long it is it takes the width it is
+     given; its face by the font shorthand, which resets weight and line
+     height as no set of utilities does. */
+  [data-slot="artifact-path"] {
     contain: inline-size;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--ink-muted);
     font: var(--text-meta) var(--font-mono);
   }
-  .mark {
-    inline-size: 17px;
-    block-size: 17px;
-    flex-shrink: 0;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-xs);
+  /* Two background layers, the overlay over the hue: the shorthand's layer
+     list is not what bg-mark-overlay plus a colour computes to. */
+  [data-slot="mark"] {
     background: var(--mark-overlay), var(--mark-6);
-    color: var(--mark-glyph);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
   }
-  .artifact-thumb {
-    inline-size: 90px;
-    block-size: 64px;
-    flex-shrink: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-
-    & :global(.box) {
-      block-size: 64px;
-      min-block-size: 0;
-    }
-    & :global(img) {
-      inline-size: 100%;
-      block-size: 64px;
-      object-fit: cover;
-      object-position: top;
-    }
+  [data-slot="tool-group-field"] > pre {
+    word-break: break-word;
   }
-  .shots {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-inline-start: var(--x-hang);
-    margin-block-start: var(--space-2);
 
-    & > :global(*) {
-      flex: 1 1 240px;
-      min-inline-size: 0;
-      max-inline-size: 100%;
-    }
+  /* residual: foreign-dom */
+  /* The thumbnail is Shot's own box and image, which take no class. */
+  [data-slot="artifact-thumb"] :global(.box) {
+    block-size: var(--thumb-h);
+    min-block-size: 0;
   }
-  /* The row's shape is shared by the plain <div> and the Collapsible trigger
-     (a <button>, so it needs its chrome stripped back to the ledger's). Its
-     inline geometry is the rail line's (app.css `.rail-line`). */
-  .trow,
-  .row :global(.trow) {
+  [data-slot="artifact-thumb"] :global(img) {
     inline-size: 100%;
-    min-block-size: 26px;
-    font-family: inherit;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    background: none;
-    border: 0;
-    border-radius: var(--radius-xs);
-    padding: 0;
-    margin: 0;
-    text-align: start;
-
-    @media (pointer: coarse) {
-      min-block-size: 44px;
-    }
+    block-size: var(--thumb-h);
+    object-fit: cover;
+    object-position: top;
   }
-  .row {
-    & :global(button.trow) {
-      cursor: pointer;
-    }
-    & :global([data-slot="badge"]) {
-      flex: 0 0 auto;
-    }
-    & :global(.trow[data-state="open"] .chev) {
-      transform: rotate(90deg);
-    }
-  }
-  /* The glyph sits in the one rail cell, so a status change can cross-fade
-     two of them on the same spot. */
-  .glyph {
-    grid-area: 1 / 1;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-
-    /* A favicon and the glyph it gives way to share the cell. */
-    & > * {
-      grid-area: 1 / 1;
-    }
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-      display: block;
-    }
-    /* A failed call carries its state on the glyph — the completed row's
-       done/failed cue, next to the running row's breathing glyph in the live
-       tool. */
-    &.err {
-      color: var(--data-bad);
-    }
-  }
-  .fav {
-    inline-size: 14px;
-    block-size: 14px;
-    display: block;
-    border-radius: var(--radius-xs);
-  }
-  .tool-glyph {
-    display: grid;
-    place-items: center;
-  }
-  /* The verb gives way before the row does: on a phone the argument, the
-     fact and the chevron stay inside the row. */
-  .tk {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    flex: 0 1 auto;
+  /* Each picture is a Shot, whose root takes no class. */
+  [data-slot="shots"] > :global(*) {
+    flex: 1 1 var(--shot-basis);
     min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .arg {
-    font-family: var(--font-mono);
-    color: var(--ink-muted);
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-inline-size: 0;
-    flex: 1 1 auto;
-  }
-  .tail {
-    color: var(--ink-muted);
-    opacity: 0.7;
-  }
-  /* A fact is a measurement, not a verdict: it reads in --ink-strong, the ink
-     that gives a number presence without passing judgement on it. Green is
-     reserved for the added side of a `diff` fact — the one measurement that
-     carries a direction — and every diff row agrees on that reading, whether
-     it came back as `+38 −2` or a lone `+38`. */
-  .d {
-    color: var(--ink-strong);
-    font-variant-numeric: tabular-nums;
-    flex: 0 0 auto;
-  }
-  .add {
-    color: var(--data-ok);
-  }
-  .del {
-    color: var(--data-bad);
-  }
-  /* The affordance sits at the tail so the row's left anatomy is unchanged. */
-  .chev {
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-      display: block;
-    }
-  }
-
-  /* The disclosed payload — same anatomy as Prompt.svelte's permission fields.
-     Its words hang at the row's text column; the well reaches out past them
-     by its own padding. */
-  .fields {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-block: var(--space-2) var(--space-3);
-    margin-inline-start: calc(var(--x-hang) - var(--space-3));
-    padding: var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  /* A skill's arguments are the agent's own words to it: prose at the text
-     column, with no well around them. */
-  .skill-args {
-    margin-block: var(--space-1) var(--space-3);
-    margin-inline-start: var(--x-hang);
-    max-inline-size: 70ch;
-  }
-  /* An edit's diffs: the file path in each header reads at the text column,
-     the diff's frame reaching out past it by its 1px border and its header's
-     12px inset (DiffView's `px-3`). */
-  .diffs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-block: var(--space-2) var(--space-3);
-    margin-inline-start: calc(var(--x-hang) - 13px);
-  }
-  .refusal {
-    margin: 0;
-    margin-inline-start: 13px;
-    font-size: var(--text-label);
-    color: var(--data-bad);
-    overflow-wrap: anywhere;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-
-    & .k {
-      font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-      color: var(--ink-muted);
-    }
-    & .v {
-      margin: 0;
-      max-block-size: 300px;
-      overflow: auto;
-      font-family: var(--font-mono);
-      font-size: var(--text-label);
-      line-height: var(--leading-body);
-      color: var(--ink-strong);
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    & .more {
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-      color: var(--ink-muted);
-    }
+    max-inline-size: 100%;
   }
 </style>

@@ -583,8 +583,6 @@
   const peer = `${btnBase} flex-1 min-w-0 !text-[var(--ink-strong)]`;
   const grant = `${peer} approve`;
   const refuse = `${peer} deny`;
-  const primary = `${btnBase} px-[var(--space-4)]`;
-  const dismiss = btnBase;
 
   /**
    * A swipe down on a question's card minimizes it, as its chevron does. It
@@ -604,7 +602,9 @@
       return;
     }
     const body =
-      event.target instanceof Element ? event.target.closest(".body") : null;
+      event.target instanceof Element
+        ? event.target.closest('[data-slot="body"]')
+        : null;
     if (body && body.scrollTop > 0) {
       return;
     }
@@ -635,40 +635,75 @@
      refusal is heard. -->
 {#snippet wait()}
   {#if refused}
-    <p data-wait data-slot="refused" class="wait refused" role="status">
+    <p
+      data-wait
+      data-slot="refused"
+      class="mt-space-2 text-size-meta font-normal text-status-fail-ink"
+      role="status"
+    >
       {refused}
     </p>
   {:else if pressed === null && offline}
-    <p data-slot="wait" class="wait" role="status">
+    <p
+      data-slot="wait"
+      class="mt-space-2 text-size-meta font-normal text-ink-muted"
+      role="status"
+    >
       Machine offline — can't answer yet.
     </p>
   {:else if pressed === null && !reachable}
-    <p data-slot="wait" class="wait" role="status">
+    <p
+      data-slot="wait"
+      class="mt-space-2 text-size-meta font-normal text-ink-muted"
+      role="status"
+    >
       Reconnecting — can't answer yet.
     </p>
   {/if}
 {/snippet}
 
 <!-- The title: what asks, and who, with where it stands among the asks
-     waiting when there are several ("2 of 3"): they come one at a time. -->
+     waiting when there are several ("2 of 3"): they come one at a time.
+     The title, the body and the foot come up with the shape one after the
+     other, by opacity and translate alone, and sink back together as it
+     folds (`.part`; its transition stays in <style>). -->
 {#snippet title(text: string)}
-  <h2 class="part mark-line" style:--part="0">
-    <span data-slot="glyph" aria-hidden="true" class="glyph" data-box>
+  <h2
+    class="part mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+    style:--part="0"
+  >
+    <!-- What asks, in the title's ink. Solar draws the question-circle's
+         disc at 20/24 of its box, so the box is --icon-lg for the disc
+         itself to stand at the title row's 16px icon size, its "?" large
+         enough to read over the duotone's half-ink layer. -->
+    <span
+      data-slot="glyph"
+      aria-hidden="true"
+      class="inline-grid place-items-center flex-none text-inherit"
+      data-box
+    >
       {#if questions}
-        <IconAsk />
+        <IconAsk class="size-icon-lg" />
       {:else}
-        <IconShield />
+        <IconShield class="size-icon-lg" />
       {/if}
     </span>
-    <span data-slot="title" class="title">{text}</span>
+    <span
+      data-slot="title"
+      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">{text}</span
+    >
     {#if place && place.of > 1}
-      <Kbd data-num class="place num" data-box>{place.at} of {place.of}</Kbd>
+      <Kbd data-num class="peer/place num ms-auto" data-box
+        >{place.at} of {place.of}</Kbd
+      >
     {/if}
     {#if questions && onminimize}
-      <!-- Folds the card to its bar over the composer; answers nothing. -->
+      <!-- Folds the card to its bar over the composer; answers nothing. It
+           ends the title row, in the title's muted ink, and keeps the row's
+           own height (its 24px box overhangs the label line). -->
       <Button
         aria-label="Minimize question"
-        class="minimize touch-hit"
+        class="touch-hit flex-none -my-space-1 ms-auto peer-data-num/place:ms-0 text-ink-muted"
         data-box
         onclick={onminimize}
         size="icon-xs"
@@ -681,68 +716,96 @@
   </h2>
 {/snippet}
 
+<!-- The grown shape is the surface (Composer draws it): the card is what
+     stands in it, its title on top, its foot on the pill's top edge, and a
+     long ask scrolls between the two. As tall as the room over the pill
+     allows (`--ask-max`, the composer's). -->
 <section
   data-prompt-shown={shown || undefined}
   data-slot="hitl"
   aria-label={questions
     ? `Question from ${asker}`
     : `Permission request from ${who}`}
-  class={["hitl", { shown }]}
+  class="group/hitl flex flex-col max-h-(--hitl-max) pt-space-3 px-space-3 pb-space-2"
+  data-shown={shown || undefined}
   ontouchcancel={() => {
     swipe = null;
   }}
   ontouchend={swipeEnd}
   ontouchstart={swipeStart}
+  style:--hitl-max="var(--ask-max, none)"
   bind:this={card}
 >
   {#if questions}
     {@render title(`Question from ${asker}`)}
+    <!-- Every box sizes to the card: the body, and what stands in it, may
+         shrink below its words' longest run, which then wraps
+         (`overflow-wrap` on the lede and the labels) rather than pushing
+         past the card. -->
     <div
       data-slot="body"
-      class="body part kit-edge-fade-block"
+      class="group/body part kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      data-railed={questions.length > 1 || undefined}
       style:--part="1"
-      class:railed={questions.length > 1}
     >
+      <!-- The live question's rail, on its lede's inline edge. -->
       {#if rail}
         <span
           data-slot="rail"
           aria-hidden="true"
-          class="rail"
-          style:block-size="{rail.height}px"
-          style:translate="0 {rail.top}px"
+          class="absolute top-0 start-0 w-px block-(--rail-h) translate-y-(--rail-y) bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:dur-control motion-safe:ease-drawer"
+          style:--rail-h="{rail.height}px"
+          style:--rail-y="{rail.top}px"
         ></span>
       {/if}
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
         {@const list = listed(q)}
+        <!-- Every lede of a several-question ask stands off the rail's edge
+             by the same step, railed or not, so nothing moves as the rail
+             does. -->
+        <!-- literal: 72ch -->
         <p
           data-slot="lede"
-          class="lede"
+          class="text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-(--measure) wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
           id="{claimId}-q{qi}"
+          style:--measure="72ch"
           bind:this={ledes[qi]}
         >
           {q.question}
         </p>
         <!-- An option's keycap and words: in a list, the keycap stands on
              the label's first line and the description runs under the
-             label; in a chip row, the label beside it. -->
+             label; in a chip row, the label beside it. An option's label
+             shrinks with its chip and wraps inside it. -->
         {#snippet face(digit: number, label: string, description?: string)}
           {#if list}
             <span class="mark-cell"
               ><span class="kit-keycap">{digit}</span></span
-            ><span class="opt-text"
-              ><span data-slot="opt-label" class="opt-label">{label}</span
-              >{#if description}<span data-slot="opt-desc" class="opt-desc"
+            ><span class="block min-w-0"
+              ><span
+                data-slot="opt-label"
+                class="block min-w-0 wrap-anywhere text-pretty">{label}</span
+              >{#if description}<span
+                  data-slot="opt-desc"
+                  class="block type-meta text-ink-muted wrap-anywhere text-pretty"
                   >{description}</span
                 >{/if}</span
             >
           {:else}
             <span class="kit-keycap">{digit}</span><span
               data-slot="opt-label"
-              class="opt-label">{label}</span
+              class="min-w-0 wrap-anywhere text-pretty">{label}</span
             >
           {/if}
         {/snippet}
+        <!-- The chips stand flush in a scroller that clips (the body), so the
+             kit's ring sits on each chip's own border box (The One Ring
+             Rule) rather than outside it, where the scroller's edge would
+             cut it. In the list form each row sizes its own two columns:
+             the keycap's cell at its own width, standing on the label's
+             first line (`.mark-cell`), and the words in the rest, which may
+             shrink to nothing and wrap. -->
         {#snippet chips()}
           {#each q.options as opt, i (opt.label)}
             {@const live = ownsKeys && qi === current && i < 9}
@@ -750,7 +813,9 @@
             <ToggleGroup.Item
               data-sel={sel || undefined}
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class="kit-chip touch-hit{sel ? ' sel' : ''}"
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:min-w-0{sel
+                ? ' sel'
+                : ''}"
               onkeydown={optionKey}
               type="button"
               value={opt.label}
@@ -764,7 +829,9 @@
             <ToggleGroup.Item
               data-sel={otherPicked(q) || otherAt === qi || undefined}
               aria-keyshortcuts={live ? String(own + 1) : undefined}
-              class="kit-chip touch-hit{otherPicked(q) || otherAt === qi
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:min-w-0{otherPicked(
+                q
+              ) || otherAt === qi
                 ? ' sel'
                 : ''}"
               onclick={(event: MouseEvent) => {
@@ -781,14 +848,21 @@
         {/snippet}
         <!-- One tab stop per question; focus in it makes it the one the
              digits answer, and the rail moves to it. -->
+        <!-- The chip row is the kit's option-chip recipe (.kit-chips /
+             .kit-chip in app.css); the card only sets where it sits. The list
+             form is the chip recipe grown to one full-width row per option:
+             one column the card's width (`minmax(0, 1fr)`). -->
         {#if q.multiSelect}
+          <!-- literal: minmax(0, 1fr) -->
+          <!-- literal: auto minmax(0, 1fr) -->
           <ToggleGroup.Root
             data-list={list || undefined}
             aria-labelledby="{claimId}-q{qi}"
-            class={["qopts kit-chips", { list }]}
+            class="group/qopts kit-chips mt-space-row mb-space-2 data-list:grid data-list:grid-cols-(--qopts-cols)"
             onfocusin={() => {
               current = qi;
             }}
+            style="--qopts-cols: minmax(0, 1fr); --opt-cols: auto minmax(0, 1fr)"
             type="multiple"
             bind:value={
               () => pressedOf(q, qi), (labels) => setMulti(qi, labels)
@@ -797,13 +871,16 @@
             {@render chips()}
           </ToggleGroup.Root>
         {:else}
+          <!-- literal: minmax(0, 1fr) -->
+          <!-- literal: auto minmax(0, 1fr) -->
           <ToggleGroup.Root
             data-list={list || undefined}
             aria-labelledby="{claimId}-q{qi}"
-            class={["qopts kit-chips", { list }]}
+            class="group/qopts kit-chips mt-space-row mb-space-2 data-list:grid data-list:grid-cols-(--qopts-cols)"
             onfocusin={() => {
               current = qi;
             }}
+            style="--qopts-cols: minmax(0, 1fr); --opt-cols: auto minmax(0, 1fr)"
             type="single"
             bind:value={
               () => pressedOf(q, qi)[0] ?? "", (label) => setSingle(qi, label)
@@ -814,11 +891,12 @@
         {/if}
         {#if otherAt === qi}
           <!-- The reader's own answer, a field under the choices it stands
-               in for, before the card's actions. -->
+               in for, before the card's actions: the kit's field, on the
+               step under the choices. -->
           <Input
             data-other
             aria-label={`Your answer to: ${q.question}`}
-            class="other"
+            class="mb-space-2"
             disabled={!answerable}
             oninput={(event) => writeOther(event.currentTarget.value)}
             onkeydown={otherKey}
@@ -829,10 +907,19 @@
         {/if}
       {/each}
     </div>
-    <div data-slot="foot" class="foot part" style:--part="2">
-      <div class="qact">
+    <!-- shadcn <Button>, dressed in DESIGN.md tokens so nothing reads as
+         stock shadcn (no 4/8/12 padding ladder, no pill radius, no shadcn
+         primary fill). Control height sits on the scale — --space-8 (32)
+         fine, 44 coarse. -->
+    <div
+      data-slot="foot"
+      class="part flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      style:--part="2"
+    >
+      <div class="flex gap-space-2">
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class={primary}
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium"
           disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
           failed={failedOf("answer")}
           icon={IconCheck}
@@ -840,15 +927,18 @@
           onclick={submitQuestion}
           pending={pendingOf("answer")}
           pendingLabel="Answering…"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
         />
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class={dismiss}
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
           label="Dismiss"
           onclick={dismissQuestion}
           pending={pendingOf("deny")}
           pendingLabel="Dismissing…"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
           variant="outline"
         />
       </div>
@@ -860,14 +950,39 @@
          grant is made on what runs, never on a sentence about it alone. The
          words are the hub's (core permission-presentation.ts), the same on
          iOS and Telegram; secrets in the fields are already hidden. -->
-    <div data-slot="body" class="body part" style:--part="1">
-      <p data-slot="lede" class="lede summary">{presentation.summary}</p>
+    <div
+      data-slot="body"
+      class="part relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      style:--part="1"
+    >
+      <!-- What will happen, in the title's weight: the line the grant is
+           made on. -->
+      <!-- literal: 72ch -->
+      <p
+        data-slot="lede"
+        class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-(--measure) wrap-anywhere text-pretty"
+        style:--measure="72ch"
+      >{presentation.summary}</p>
+      <!-- How much it changes and where, under it. -->
       {#if presentation.detail}
-        <p data-slot="detail" class="detail">{presentation.detail}</p>
+        <p
+          data-slot="detail"
+          class="text-size-label font-normal text-ink-muted mb-space-2"
+        >{presentation.detail}</p>
       {/if}
+      <!-- The command under the reason, in the transcript's command rule:
+           one line, cut with an ellipsis, until its chevron opens it whole. -->
       {#if command}
-        <div class="cmd" class:open={commandOpen}>
-          <code data-slot="cmd-text" class="cmd-text" bind:this={commandLine}
+        <!-- literal: 3px -->
+        <div
+          class="group/cmd flex items-start gap-space-2 border-s-2 border-s-border-hairline py-(--cmd-py) ps-space-3 pe-0 mb-space-2"
+          data-open={commandOpen || undefined}
+          style:--cmd-py="3px"
+        >
+          <code
+            data-slot="cmd-text"
+            class="flex-auto min-w-0 font-mono text-size-label text-ink-muted overflow-hidden text-ellipsis whitespace-pre group-data-open/cmd:text-ink-strong group-data-open/cmd:whitespace-pre-wrap group-data-open/cmd:wrap-anywhere"
+            bind:this={commandLine}
             >{commandOpen ? command : command.trim().split("\n")[0]}</code
           >
           {#if commandOpen || commandClipped}
@@ -877,7 +992,7 @@
               aria-label={commandOpen
                 ? "Show the command on one line"
                 : "Show the whole command"}
-              class="cmd-toggle touch-hit"
+              class="touch-hit flex-none -my-space-1 text-ink-muted"
               onclick={() => {
                 commandOpen = !commandOpen;
               }}
@@ -885,13 +1000,18 @@
               title={commandOpen ? "Show less" : "Show the whole command"}
               variant="ghost"
             >
-              <IconChevronDown />
+              <IconChevronDown
+                class="motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-drawer group-data-open/cmd:rotate-180"
+              />
             </Button>
           {/if}
         </div>
       {/if}
+      <!-- The change itself, open: each diff stands to the token's share of
+           the screen and scrolls inside it, so the answer row stays in
+           reach. -->
       {#if presentation.changes.length > 0}
-        <div class="changes">
+        <div class="flex flex-col gap-space-2 mb-space-2">
           {#each presentation.changes as change, i (i)}
             <DiffView
               cap="calc(var(--c-ask-diff-share) * 100dvh)"
@@ -902,21 +1022,57 @@
           {/each}
         </div>
       {/if}
+      <!-- The rest of the input, shown rather than disclosed: each field's
+           name over its value, values that run long scrolling in place. -->
       {#if presentation.fields.length > 0}
-        <dl class="fields">
+        <dl
+          class="flex flex-col gap-space-2 mt-0 mb-space-3 p-space-3 rounded-sm bg-surface-recess"
+        >
           {#each presentation.fields as field, i (`${i}:${field.key}`)}
-            <div data-slot="prompt-field" class="field">
-              <dt class="k">{field.key}</dt>
-              <dd class="v">{field.value}</dd>
+            <div
+              data-slot="prompt-field"
+              class="flex flex-col gap-space-1 min-w-0"
+            >
+              <dt class="text-size-label font-medium text-ink-muted"
+                >{field.key}</dt
+              >
+              <!-- literal: 200px -->
+              <dd
+                class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap"
+                style:--value-max="200px"
+              >{field.value}</dd>
             </div>
           {/each}
         </dl>
       {/if}
     </div>
-    <div data-slot="foot" class="foot part" style:--part="2">
-      <div data-slot="choice" class="choice">
+    <div
+      data-slot="foot"
+      class="part flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none"
+      style:--part="2"
+    >
+      <!-- JOURNEY §Triage: the full row width sits between grant and
+           refusal. At --space-2 the two sat 7px apart, close enough that a
+           hand aiming at Approve lands on Deny. The gap is unfillable on
+           purpose — no third control belongs between a grant and a refusal
+           — and --space-8 is the floor it never falls below when the row is
+           narrow. -->
+      <div
+        data-slot="choice"
+        class="flex justify-between gap-space-8 mt-space-2"
+      >
+        <!-- The permission gate is symmetric: Approve and Deny are recessed
+             peers at one fill, apart at the row's two ends, each outlined in
+             its tint (DESIGN.md, The Peer Rule, the transcript's form):
+             Approve in the done ink, Deny in the fail ink, 1px each, both
+             inks at one strength, over the one untinted recessed fill; a
+             tick grants, a cross refuses, both labels in the one ink
+             (`ink-strong`), so neither leans. Neither changes under the
+             pointer: the fill and the edge hold still, so the hand's last
+             move never makes one the more inviting. -->
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class={grant}
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess"
           data-prompt-grant={grant}
           disabled={disabledOf("allow")}
           failed={failedOf("allow")}
@@ -925,10 +1081,12 @@
           onclick={() => answer("allow")}
           pending={pendingOf("allow")}
           pendingLabel="Approving…"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
           variant="secondary"
         />
+        <!-- literal: 12px, 2.75rem -->
         <Button
-          class={refuse}
+          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess"
           data-prompt-refuse={refuse}
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
@@ -937,21 +1095,36 @@
           onclick={() => answer("deny")}
           pending={pendingOf("deny")}
           pendingLabel="Denying…"
+          style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
           variant="secondary"
         />
       </div>
       {@render wait()}
       {#if rule}
-        <div class="widen">
-          <p>
-            This would allow <span class="mono">{rule.full}</span> for
+        <!-- A clear break from the gate above, on the scale (--space-8 /
+             --space-5). The permission scope actually being granted is
+             consequential text — it reads at --text-label, never the
+             10.25px micro-label step. -->
+        <div
+          class="mt-space-8 pt-space-5 border-t border-t-border-hairline"
+        >
+          <!-- literal: 66ch -->
+          <p
+            class="text-size-body font-normal text-ink-muted mb-space-2 max-w-(--measure)"
+            style:--measure="66ch"
+          >
+            This would allow <span
+              class="font-(family-name:--font-mono) text-size-label"
+              >{rule.full}</span
+            > for
             {rule.scope}
             — a wider grant than the request above.
           </p>
           <!-- A standing grant must read as consequential: the kit's grant
              (warning tint, warning ink, a real edge). -->
+          <!-- literal: 12px, 2.75rem -->
           <Button
-            class={btnBase}
+            class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
             disabled={disabledOf("always")}
             failed={failedOf("always")}
             icon={IconShield}
@@ -959,6 +1132,7 @@
             onclick={() => answer("always")}
             pending={pendingOf("always")}
             pendingLabel="Allowing…"
+            style="--btn-gap: var(--space-2); --btn-icon: 12px; --btn-h-coarse: 2.75rem"
             variant="grant"
           />
         </div>
@@ -968,337 +1142,34 @@
 </section>
 
 <style>
-  /* The grown shape is the surface (Composer draws it): the card is what
-     stands in it, its title on top, its foot on the pill's top edge, and a
-     long ask scrolls between the two. As tall as the room over the pill
-     allows (`--ask-max`, the composer's). */
-  .hitl {
-    display: flex;
-    flex-direction: column;
-    max-block-size: var(--ask-max, none);
-    padding: var(--space-3) var(--space-3) var(--space-2);
-  }
-  /* Every box sizes to the card: the body, and what stands in it, may
-     shrink below its words' longest run, which then wraps (`overflow-wrap`
-     on the lede and the labels) rather than pushing past the card. */
-  .body {
-    position: relative;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    min-inline-size: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* The live question's rail, on its lede's inline edge (`.railed .lede`,
-     below). */
-  .rail {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    inline-size: 1px;
-    background: var(--brand-solid);
-    pointer-events: none;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        translate var(--dur-control) var(--ease-drawer),
-        block-size var(--dur-control) var(--ease-drawer);
-    }
-  }
-  .foot {
-    flex: none;
-    padding-block-start: var(--space-1);
-  }
+  /* residual: unmapped */
   /* The title, the body and the foot come up with the shape one after the
      other, by opacity and translate alone, and sink back together as it
      folds. No filter: a blur transitioning on a part hung WebKit's web
      process for good as the card came up (Playwright WebKit 2359 at an
      iPhone's size, the owner's iPhone Safari: "stop responding and it didn't
      even show"; with the blur snapped instead of transitioned, or none, it
-     never hung). */
-  .part {
-    opacity: 0;
-    transition: opacity var(--dur-fade) var(--ease-out);
-
-    @media (prefers-reduced-motion: no-preference) {
-      translate: 0 var(--pop-rise);
+     never hung). Two durations and two curves in one transition: no
+     utility carries them. */
+  @media (prefers-reduced-motion: no-preference) {
+    .part {
       transition:
         opacity var(--dur-fade) var(--ease-out),
         translate var(--dur-panel) var(--ease-drawer);
     }
   }
-  .shown .part {
-    opacity: 1;
-    translate: none;
+  /* The stagger: it must outrank the shorthand above, which resets the
+     delay, so it stands beside it rather than as a utility under it. */
+  [data-shown] .part {
     transition-delay: calc(var(--part) * var(--dur-stagger));
   }
-  h2 {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-end: var(--space-2);
-  }
-  /* What asks, in the title's ink. Solar draws the question-circle's disc
-     at 20/24 of its box, so the box is --icon-lg for the disc itself to
-     stand at the title row's 16px icon size, its "?" large enough to read
-     over the duotone's half-ink layer. */
-  .glyph {
-    display: inline-grid;
-    place-items: center;
-    flex: none;
-    color: inherit;
-
-    & :global(svg) {
-      inline-size: var(--icon-lg);
-      block-size: var(--icon-lg);
-    }
-  }
-  .title {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  h2 :global(.place) {
-    margin-inline-start: auto;
-  }
-  /* The minimize chevron ends the title row, in the title's muted ink; it
-     keeps the row's own height (its 24px box overhangs the label line). */
-  h2 :global(.minimize) {
-    flex: none;
-    margin-block: calc(var(--space-1) * -1);
-    margin-inline-start: auto;
-    color: var(--ink-muted);
-  }
-  h2 :global(.place + .minimize) {
-    margin-inline-start: 0;
-  }
-  /* The reader's own answer (the kit's field), on the step under the choices. */
-  .body :global(.other) {
-    margin-block-end: var(--space-2);
-  }
-  .wait {
-    margin-block-start: var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-
-    &.refused {
-      color: var(--status-fail-ink);
-    }
-  }
-  .lede {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    margin-block-end: var(--space-2);
-    max-inline-size: 72ch;
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  /* Every lede of a several-question ask stands off the rail's edge by the
-     same step, railed or not, so nothing moves as the rail does. */
-  .railed .lede {
-    padding-inline-start: var(--space-2);
-  }
-  /* The command under the reason, in the transcript's command rule: one
-     line, cut with an ellipsis, until its chevron opens it whole. */
-  .cmd {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    border-inline-start: 2px solid var(--border-hairline);
-    padding-block: 3px;
-    padding-inline: var(--space-3) 0;
-    margin-block-end: var(--space-2);
-  }
-  .cmd-text {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    color: var(--ink-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: pre;
-  }
-  .cmd.open .cmd-text {
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .cmd :global(.cmd-toggle) {
-    flex: none;
-    margin-block: calc(var(--space-1) * -1);
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      @media (prefers-reduced-motion: no-preference) {
-        transition: rotate var(--dur-control) var(--ease-drawer);
-      }
-    }
-  }
-  .cmd.open :global(.cmd-toggle svg) {
-    rotate: 180deg;
-  }
-
-  /* What will happen, in the title's weight: the line the grant is made on. */
-  .summary {
-    font-weight: var(--weight-strong);
-    margin-block-end: var(--space-1);
-    overflow-wrap: anywhere;
-  }
-  /* How much it changes and where, under it. */
-  .detail {
-    font-size: var(--text-label);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    margin-block-end: var(--space-2);
-  }
-  /* The change itself, open: each diff stands to the token's share of the
-     screen and scrolls inside it, so the answer row stays in reach. */
-  .changes {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-block-end: var(--space-2);
-  }
-  /* The rest of the input, shown rather than disclosed: each field's name
-     over its value, values that run long scrolling in place. */
-  .fields {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-block: 0 var(--space-3);
-    padding: var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .field .k {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  .field .v {
-    margin: 0;
-    max-block-size: 200px;
-    overflow: auto;
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
+  [data-slot="prompt-field"] > dd {
     word-break: break-word;
   }
-  /* JOURNEY §Triage: the full row width sits between grant and refusal. At
-     --space-2 the two sat 7px apart, close enough that a hand aiming at
-     Approve lands on Deny. The gap is unfillable on purpose — no third
-     control belongs between a grant and a refusal — and --space-8 is the
-     floor it never falls below when the row is narrow. */
-  .choice {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-8);
-    margin-block-start: var(--space-2);
-  }
-  .choice > :global(*) {
-    flex: 0 0 auto;
-  }
-  /* Each peer outlined in its tint (DESIGN.md, The Peer Rule, the
-     transcript's form): Approve in the done ink, Deny in the fail ink, 1px
-     each, both inks at one strength, over the one untinted recessed fill.
-     Neither changes under the pointer: the fill and the edge hold still, so
-     the hand's last move never makes one the more inviting. */
-  .choice > :global(.approve),
-  .choice > :global(.approve:hover) {
-    border-color: var(--status-done-ink);
-    background-color: var(--surface-recess);
-  }
-  .choice > :global(.deny),
-  .choice > :global(.deny:hover) {
-    border-color: var(--status-fail-ink);
-    background-color: var(--surface-recess);
-  }
-  .widen {
-    /* a clear break from the gate above, on the scale (--space-8 / --space-5) */
-    margin-block-start: var(--space-8);
-    padding-block-start: var(--space-5);
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .widen > p {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    margin-block-end: var(--space-2);
-    max-inline-size: 66ch;
-  }
-  /* The permission scope actually being granted is consequential text — it
-     reads at --text-label, never the 10.25px micro-label step. */
-  .mono {
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-  }
-  /* The chip row is the kit's option-chip recipe (.kit-chips / .kit-chip in
-     app.css); the card only sets where it sits. */
-  .body :global(.qopts) {
-    margin-block: 2px var(--space-2);
-  }
-  /* An option's label shrinks with its chip and wraps inside it. */
-  .body :global(.qopts .opt-label) {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-wrap: pretty;
-  }
-  /* The list form: the chip recipe grown to one full-width row per option.
-     The rows are one column the card's width (`minmax(0, 1fr)`), and each
-     row sizes its own two columns: the keycap's cell at its own width,
-     standing on the label's first line (`.mark-cell`), and the words in
-     the rest, which may shrink to nothing and wrap. The label keeps the
-     chip's label type and ink; the description runs under it in meta and
-     muted ink. A pick changes the edge, the fill and the keycap, never the
-     row's size. */
-  .body :global(.qopts.list) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-
-    & > :global(.kit-chip) {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: start;
-      min-inline-size: 0;
-    }
-    & :global(.opt-text) {
-      display: block;
-      min-inline-size: 0;
-    }
-    & :global(.opt-label) {
-      display: block;
-    }
-    & :global(.opt-desc) {
-      display: block;
-      font: var(--type-meta);
-      color: var(--ink-muted);
-      overflow-wrap: anywhere;
-      text-wrap: pretty;
-    }
-  }
-  /* The chips stand flush in a scroller that clips (`.body`), so the kit's
-     ring sits on each chip's own border box (The One Ring Rule) rather than
-     outside it, where the scroller's edge would cut it. */
-  .body :global(.qopts .kit-chip:focus-visible) {
-    outline-offset: var(--focus-ring-inset);
-  }
-  .qact {
-    display: flex;
-    gap: var(--space-2);
+  /* A list-form option row stands its keycap on the label's first line:
+     the cross axis starts at `start` (items-start writes `flex-start`). The
+     row is bits-ui's ToggleGroup item, reached through the body. */
+  [data-slot="body"] :global([data-list] > .kit-chip) {
+    align-items: start;
   }
 </style>

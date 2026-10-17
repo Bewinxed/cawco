@@ -407,38 +407,111 @@
   const Sprite = $derived(sessionSprite(seed));
 </script>
 
-<div data-slot="rail-row" class="branch delegate rail-row">
+<!-- The same rail row every branch block sits on (app.css `.rail-row`) — the
+     subagent fold's grammar, with a second row for the brief and a register
+     for the asks, all at the text column. Its transcript's well
+     (InlineTranscript) reaches out past that column by its padding. -->
+<div
+  data-slot="rail-row"
+  class="rail-row"
+  style:--well-at="calc(var(--x-hang) - var(--space-1))"
+>
   <Collapsible.Root onOpenChange={onToggle} {open}>
-    <div data-slot="head" class="head">
-      <Collapsible.Trigger data-bhead class="bhead rail-line press-tint">
+    <!-- The head row: the trigger takes the width, the jump link beside it
+         keeps its own 26px so a click on it never toggles. -->
+    <div
+      data-slot="head"
+      class="flex items-center gap-space-1"
+      style:--hit-gap-x="var(--space-1)"
+    >
+      <!-- literal: 26px -->
+      <!-- literal: 44px -->
+      <Collapsible.Trigger
+        data-bhead
+        class="group/bhead rail-line press-tint min-h-(--bhead-min) coarse:min-h-(--bhead-min-coarse) flex-auto min-w-0 text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out"
+        style="--bhead-min: 26px; --bhead-min-coarse: 44px"
+      >
         <!-- The mark the delegate tray's chip flies out of, the first time
-             this card leaves the view (tray.svelte.ts). -->
+             this card leaves the view (tray.svelte.ts): the delegate's
+             sprite on its hue, filling the glyph cell. -->
+        <!-- literal: 11px -->
         <span
           data-rail-cell
           data-slot="mark"
           aria-hidden="true"
-          class="mark rail-cell m{markHue(seed)}"
-          {@attach trayCard(() => (elsewhere ? null : id))}><Sprite /></span
+          class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
+          style:--mark-bg="var(--mark-{markHue(seed)})"
+          style:--sprite="11px"
+          {@attach trayCard(() => (elsewhere ? null : id))}
+          ><Sprite class="size-(--sprite) block text-mark-glyph" /></span
         >
-        <span class="tk">{label}</span>
-        <span data-slot="chev" aria-hidden="true" class="chev" data-box
-          ><IconChevronRight /></span
+        <span
+          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] dur-control ease-out"
+          >{label}</span
         >
+        <!-- literal: 13px -->
+        <!-- literal: rotate(90deg) -->
+        <span
+          data-slot="chev"
+          aria-hidden="true"
+          class="size-(--chev) flex-none grid place-items-center text-ink-muted motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:transform-(--chev-turn)"
+          data-box
+          style:--chev="13px"
+          style:--chev-turn="rotate(90deg)"
+          ><IconChevronRight class="size-icon-sm block" /></span
+        >
+        <!-- Its words on their x-height in the box (.mark-text): the trim's
+             room given back as padding, so the box keeps its 18px line. -->
         {#if started}
-          <span data-slot="kind" class="kind mark-text" data-box>session</span>
+          <!-- literal: 18px -->
+          <span
+            data-slot="kind"
+            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-(--kind-lh) whitespace-nowrap"
+            data-box
+            style:--kind-py="calc((1lh - 1ex) / 2)"
+            style:--kind-lh="18px">session</span
+          >
         {:else if type}
-          <span data-slot="kind" class="kind mark-text" data-box>{type}</span>
+          <!-- literal: 18px -->
+          <span
+            data-slot="kind"
+            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-(--kind-lh) whitespace-nowrap"
+            data-box
+            style:--kind-py="calc((1lh - 1ex) / 2)"
+            style:--kind-lh="18px">{type}</span
+          >
         {/if}
+        <!-- Narrow: the model and harness give way before the name does. -->
         {#if harness}
-          <span data-slot="meta" class="meta">{harness}</span>
+          <span
+            data-slot="meta"
+            class="text-ink-muted text-size-meta font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
+            >{harness}</span
+          >
         {/if}
         {#if model}
-          <span data-slot="meta" class="meta">{modelLabel(model)}</span>
+          <span
+            data-slot="meta"
+            class="text-ink-muted text-size-meta font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
+            >{modelLabel(model)}</span
+          >
         {/if}
         {#if mayDelegate}
-          <span class="may">may delegate</span>
+          <span
+            class="flex-none text-size-meta font-normal text-brand-ink whitespace-nowrap"
+            >may delegate</span
+          >
         {/if}
-        <span class="pill mark-text {tone}" data-delegate-tone={tone} data-box>
+        <!-- Its words on their x-height in the box (.mark-text): 2px past
+             the trim's room given back, so the box keeps its height. A phase
+             change carries its tone across with its words. -->
+        <span
+          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink whitespace-nowrap transition-[background-color,color] dur-control ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
+          data-tone={tone}
+          data-delegate-tone={tone}
+          data-box
+          style:--pill-py="calc(2px + (1lh - 1ex) / 2)"
+        >
           <MorphText text={pillWords} />
           {#if elapsed}
             {pillWords ? " · " : ""}
@@ -446,46 +519,77 @@
                  changes digits in place, never the pill's width, and nothing
                  animates on a tick. It is a timer (live off): in the
                  transcript's log the phase words are read when they change,
-                 not every second. -->
+                 not every second. A clock that ticks holds its width: every
+                 reading up to "59m 59s" or "23h 59m" fits seven
+                 digit-widths, so the pill, pushed to the end of the head,
+                 never steps sideways as the seconds change. -->
+            <!-- literal: 7ch -->
             <span
-              class="elapsed"
-              class:ticking={inFlight}
+              class="data-ticking:inline-block data-ticking:min-w-(--elapsed-min) data-ticking:text-end"
+              data-ticking={inFlight || undefined}
               role="timer"
+              style:--elapsed-min="7ch"
               {@attach clock.watch}>{elapsed}</span
             >
           {/if}
         </span>
       </Collapsible.Trigger>
+      <!-- The way out to the delegate's own view — a glyph beside the head,
+           in the muted ink until pointed at, so the head stays a disclosure
+           and this stays a link. -->
       {#if id}
+        <!-- literal: 26px -->
         <a
           aria-label="Open {label} in its own view"
-          class="jump touch-hit"
+          class="touch-hit flex-none size-(--jump) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
           href={conversationHref(id, cawco.instanceIndex)}
           title="Open {label} in its own view"
+          style:--jump="26px"
         >
-          <IconExternal />
+          <IconExternal class="size-icon-sm block" />
         </a>
       {/if}
     </div>
 
+    <!-- The brief: the first line of what it was asked, at the text column.
+         headline() bounds its length; the wrap is the layout's. -->
     {#if brief}
-      <p class="brief rail-hang">{headline(brief)}</p>
+      <!-- literal: 68ch -->
+      <p
+        class="rail-hang mt-space-1 mb-0 text-size-body font-normal text-ink-muted leading-body max-w-(--measure) wrap-anywhere"
+        style:--measure="68ch">{headline(brief)}</p>
     {/if}
 
     <!-- The lines under the head: their words at the text column, a live
-         beat or an ask's dot in the glyph column under the mark. -->
+         beat or an ask's dot in the glyph column under the mark. One cell: a
+         phase's line and the next one's cross-fade in place. A line's glyph
+         cell is one line tall, so its mark sits on the first line of a line
+         that wraps. -->
     {#if status}
-      <div class="status">
+      <div class="grid">
         {#key status.kind}
+          <!-- literal: 68ch -->
           <p
-            class="now rail-line"
-            class:err={status.err}
+            data-slot="now"
+            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 text-size-meta font-normal text-ink-strong data-err:text-status-fail-ink leading-body max-w-(--measure)"
+            data-err={status.err || undefined}
+            style:--measure="68ch"
             in:lineSwap
             out:lineSwap
           >
-            <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
+            <!-- Still: the live hue says it, nothing loops. -->
+            <!-- literal: 5px -->
+            <!-- literal: 50% -->
+            <span
+              data-slot="rail-cell"
+              aria-hidden="true"
+              class="rail-cell h-lh"
+              style:--beat="5px"
+              style:--beat-r="50%"
               >{#if status.beat}
-                <span class="beat"></span>
+                <span
+                  class="size-(--beat) flex-none rounded-(--beat-r) bg-status-live-glyph"
+                ></span>
               {/if}</span
             >
             <span>{status.text}</span>
@@ -494,14 +598,41 @@
       </div>
     {/if}
 
-    <ul class="asks" {@attach reflow()}>
+    <!-- The asks register: each ask still waiting on an answer, on its own
+         line with its state in words — the dot is the second cue, and the
+         card's only warm colour. The register is always there for an ask to
+         land in; it takes room only with one in it. -->
+    <!-- literal: 68ch -->
+    <ul
+      class="list-none m-0 p-0 flex flex-col gap-space-row max-w-(--measure)"
+      style:--measure="68ch"
+      {@attach reflow()}
+    >
       {#each waiting as ask (ask.key)}
-        <li data-slot="ask" class="ask rail-line" data-flip title={ask.detail}>
-          <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
-            ><span data-slot="dot" class="dot"></span></span
+        <li
+          data-slot="ask"
+          class="rail-line items-baseline text-size-body font-normal leading-body text-ink-strong min-w-0 first:mt-space-1"
+          data-flip
+          title={ask.detail}
+        >
+          <!-- literal: 5px -->
+          <!-- literal: 50% -->
+          <span
+            data-slot="rail-cell"
+            aria-hidden="true"
+            class="rail-cell h-lh"
+            style:--dot="5px"
+            style:--dot-r="50%"
+            ><span
+              data-slot="dot"
+              class="size-(--dot) rounded-(--dot-r) bg-status-attn-ink"
+            ></span></span
           >
-          <span class="astate">{ask.status}</span>
-          <span class="ashort">{ask.short}</span>
+          <span
+            class="flex-none text-size-meta font-normal text-status-attn-ink uppercase tracking-caps"
+            >{ask.status}</span
+          >
+          <span class="min-w-0 wrap-anywhere">{ask.short}</span>
         </li>
       {/each}
     </ul>
@@ -513,10 +644,12 @@
           {#if report}
             <section
               data-delegate-failed={report.failed || undefined}
-              class="report"
-              class:failed={report.failed}
+              class="group/report mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-tile"
+              data-failed={report.failed || undefined}
             >
-              <h4>
+              <h4
+                class="text-size-label font-medium tracking-caps uppercase text-ink-muted group-data-failed/report:text-status-fail-ink mb-space-2"
+              >
                 {report.failed ? "Report — failed" : "Report"}
                 {#if report.count > 1}
                   · latest of {report.count}
@@ -532,328 +665,21 @@
 </div>
 
 <style>
-  /* The same rail row every branch block sits on (app.css `.rail-row`) — the
-     subagent fold's grammar, with a second row for the brief and a register
-     for the asks, all at the text column. Its transcript's well
-     (InlineTranscript) reaches out past that column by its padding. */
-  .branch {
-    --well-at: calc(var(--x-hang) - var(--space-1));
-  }
-
-  /* The head row: the trigger takes the width, the jump link beside it keeps
-     its own 26px so a click on it never toggles. The trigger is a bits-ui
-     element, so it is addressed globally on purpose. */
-  .head {
-    --hit-gap-x: var(--space-1);
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .delegate :global(.bhead) {
-    min-block-size: 26px;
+  /* residual: foreign-dom */
+  /* This card's head rule reached every head under the card, so a subagent
+     or delegate card inside its transcript (InlineTranscript renders both)
+     took the trigger's flex and floor from it too. The subagent card's own
+     head sets neither, so they stay here for the nested heads; this card's
+     own head carries them as utilities. */
+  [data-slot="rail-row"] :global([data-slot="rail-row"] [data-bhead]) {
     flex: 1 1 auto;
     min-inline-size: 0;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    background: none;
-    border: 0;
-    border-radius: var(--radius-xs);
-    padding: 0;
-    color: inherit;
-    cursor: pointer;
-    text-align: start;
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    :global(.delegate .bhead:hover) .tk {
-      color: var(--brand-ink);
-    }
-  }
-  .chev {
-    inline-size: 13px;
-    block-size: 13px;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  :global(.delegate .bhead[data-state="open"]) .chev {
-    transform: rotate(90deg);
-  }
-  .chev :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
-    display: block;
   }
 
-  /* The delegate's identity: its sprite on its hue, filling the glyph cell. */
-  .mark {
-    border-radius: var(--radius-xs);
-    background-image: var(--mark-overlay);
-    background-color: var(--mark-1);
-  }
-  .mark :global(svg) {
-    inline-size: 11px;
-    block-size: 11px;
-    display: block;
-    color: var(--mark-glyph);
-  }
-  .mark.m2 {
-    background-color: var(--mark-2);
-  }
-  .mark.m3 {
-    background-color: var(--mark-3);
-  }
-  .mark.m4 {
-    background-color: var(--mark-4);
-  }
-  .mark.m5 {
-    background-color: var(--mark-5);
-  }
-  .mark.m6 {
-    background-color: var(--mark-6);
-  }
-  .mark.m7 {
-    background-color: var(--mark-7);
-  }
-  .mark.m8 {
-    background-color: var(--mark-8);
-  }
-
-  /* Cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
-  .tk {
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  .kind {
-    flex: 0 0 auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-strong);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-xs);
-    /* Its words on their x-height in the box (.mark-text): the trim's room
-       given back as padding, so the box keeps its 18px line. */
-    padding: calc((1lh - 1ex) / 2) var(--space-2);
-    line-height: 18px;
-    white-space: nowrap;
-  }
-  .meta {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .may {
-    flex: 0 0 auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--brand-ink);
-    white-space: nowrap;
-  }
-  .pill {
-    margin-inline-start: auto;
-    flex: 0 0 auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-    border-radius: var(--radius-xs);
-    /* Its words on their x-height in the box (.mark-text): 2px past the
-       trim's room given back, so the box keeps its height. */
-    padding: calc(2px + (1lh - 1ex) / 2) var(--space-2);
-    background: var(--status-idle-bg);
-    color: var(--status-idle-ink);
-    white-space: nowrap;
-    /* A phase change carries its tone across with its words. */
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-  .pill.live {
-    background: var(--status-live-bg);
-    color: var(--status-live-ink);
-  }
-  /* A clock that ticks holds its width: every reading up to "59m 59s" or
-     "23h 59m" fits seven digit-widths, so the pill, pushed to the end of the
-     head, never steps sideways as the seconds change. */
-  .elapsed.ticking {
-    display: inline-block;
-    min-inline-size: 7ch;
-    text-align: end;
-  }
-  .pill.attn {
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-  }
-  .pill.done {
-    background: var(--status-done-bg);
-    color: var(--status-done-ink);
-  }
-  .pill.fail {
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
-  }
-
-  /* The way out to the delegate's own view — a glyph beside the head, in the
-     muted ink until pointed at, so the head stays a disclosure and this stays
-     a link. */
-  .jump {
-    flex: 0 0 auto;
-    inline-size: 26px;
-    block-size: 26px;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-xs);
-    color: var(--ink-muted);
-    transition:
-      color var(--dur-control) var(--ease-out),
-      background var(--dur-control) var(--ease-out);
-  }
-  .jump :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
-    display: block;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .jump:hover {
-      color: var(--brand-ink);
-      background: var(--surface-hover);
-    }
-  }
-
-  /* The brief: the first line of what it was asked, at the text column.
-     headline() bounds its length; the wrap is the layout's. */
-  .brief {
-    margin-block: var(--space-1) 0;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    line-height: var(--leading-body);
-    max-inline-size: 68ch;
-    overflow-wrap: anywhere;
-  }
-
-  .now {
+  /* residual: unmapped */
+  /* The status line's words start the cross axis at `start`; items-start
+     writes `flex-start`, a different computed value. */
+  [data-slot="now"] {
     align-items: start;
-    margin-block: var(--space-1) 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-strong);
-    line-height: var(--leading-body);
-    max-inline-size: 68ch;
-  }
-  .now.err {
-    color: var(--status-fail-ink);
-  }
-  /* One cell: a phase's line and the next one's cross-fade in place. */
-  .status {
-    display: grid;
-
-    & > .now {
-      grid-area: 1 / 1;
-    }
-  }
-  /* A line's glyph cell is one line tall, so its mark sits on the first
-     line of a line that wraps. */
-  .now > .rail-cell,
-  .ask > .rail-cell {
-    block-size: 1lh;
-  }
-  .beat {
-    inline-size: 5px;
-    block-size: 5px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    /* Still: the live hue says it, nothing loops. */
-    background: var(--status-live-glyph);
-  }
-
-  /* The asks register: each ask still waiting on an answer, on its own line
-     with its state in words — the dot is the second cue, and the card's only
-     warm colour. */
-  .asks {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    max-inline-size: 68ch;
-  }
-  .ask {
-    align-items: baseline;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    min-inline-size: 0;
-
-    /* The register is always there for an ask to land in; it takes room
-       only with one in it. */
-    &:first-child {
-      margin-block-start: var(--space-1);
-    }
-  }
-  .dot {
-    inline-size: 5px;
-    block-size: 5px;
-    border-radius: 50%;
-    background: var(--status-attn-ink);
-  }
-  .astate {
-    flex: 0 0 auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-attn-ink);
-    text-transform: uppercase;
-    letter-spacing: var(--track-caps);
-  }
-  .ashort {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .report {
-    margin-block-start: var(--space-4);
-    padding: var(--space-3);
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .report h4 {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-block-end: var(--space-2);
-  }
-  .report.failed h4 {
-    color: var(--status-fail-ink);
-  }
-
-  @media (width <= 900px) {
-    /* Narrow: the model and harness give way before the name does. */
-    .meta {
-      display: none;
-    }
-  }
-  @media (pointer: coarse) {
-    .delegate :global(.bhead) {
-      min-block-size: 44px;
-    }
   }
 </style>
