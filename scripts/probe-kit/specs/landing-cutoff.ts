@@ -89,6 +89,11 @@ const LFS_JSON = { "content-type": "application/vnd.git-lfs+json" };
 const OBJECT_PATH = /^\/lfs\/objects\/([0-9a-f]{64})$/;
 /** D's large file: what E's checkout must hold. */
 const D_BYTES = 1_048_576;
+/** E's first command: the sha256 of the large file its checkout holds, as one line. */
+const READ_E =
+  "printf 'LARGE-D-SHA %s\\n' \"$(sha256sum large-d.bin | cut -d' ' -f1)\"";
+/** That line, as E's command printed it. */
+const SHA_SAID = /LARGE-D-SHA [0-9a-f]{64}/;
 
 /** The shell that commits a large file `name` of `bytes` copies of `char`, its object in the clone's store. */
 const largeFile = (name: string, bytes: number, char: string): string[] => [
@@ -153,10 +158,11 @@ const steps: Record<
     finished: false,
     searched: false,
   },
+  // E's first step reads its large file instead ({@link READ_E}).
   E: {
     armed: false,
     background: true,
-    committed: true,
+    committed: false,
     finished: false,
     searched: false,
   },
@@ -178,10 +184,15 @@ const respond = (request: Seen): Reply => {
   const step = steps[tag];
   if (!step.committed) {
     step.committed = true;
-    return tool("Bash", {
-      command: `${COMMIT[tag] ?? "true"} && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
-      description: "Commit",
-    });
+    return tool(
+      "Bash",
+      tag === "E"
+        ? { command: READ_E, description: "Read the large file" }
+        : {
+            command: `${COMMIT[tag] ?? "true"} && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
+            description: "Commit",
+          }
+    );
   }
   if (!step.background) {
     step.background = true;
@@ -196,9 +207,12 @@ const respond = (request: Seen): Reply => {
   }
   if (!step.finished && request.toolNames.includes(FINISH)) {
     step.finished = true;
+    // E reports what its checkout held, read in its own session: its clone
+    // may be archived by the time the spec looks.
+    const read = tag === "E" ? (SHA_SAID.exec(request.all)?.[0] ?? "") : "";
     return tool(FINISH, {
       headline: `Committed ${tag}.`,
-      summary: `Committed ${tag}.\n\nNot run: none.`,
+      summary: `Committed ${tag}.\n\n${read ? `${read}\n\n` : ""}Not run: none.`,
     });
   }
   if (
@@ -663,19 +677,17 @@ const run = async (kit: Kit) => {
     const downloadsBefore = (await lfsLines(project.id, "batch download"))
       .length;
     const e = await delegate("E");
-    const held = await readFile(join(e.clone, "large-d.bin"), "utf8").catch(
-      (error: unknown) => `not read: ${String(error)}`
-    );
+    const want = `LARGE-D-SHA ${new Bun.CryptoHasher("sha256").update("d".repeat(D_BYTES)).digest("hex")}`;
     const downloads = (await lfsLines(project.id, "batch download")).slice(
       downloadsBefore
     );
     check(
-      "E: its workspace was cut with D's large file, downloaded from the project's own repository on the hub, and its item is done, nothing to land",
+      "E: its workspace was cut with D's large file (its report gives the file's sha256, read in its own session), downloaded from the project's own repository on the hub, and its item is done, nothing to land",
       e.row.state === "done" &&
         e.result.includes("Nothing to land") &&
-        held === "d".repeat(D_BYTES) &&
+        e.result.includes(want) &&
         downloads.length > 0,
-      `${e.said}\nlarge-d.bin: ${held.slice(0, 80)} (${held.length} chars)\nhub: ${downloads.join("\n") || "no download batch for the project"}`
+      `${e.said}\nwanted: ${want}\nhub: ${downloads.join("\n") || "no download batch for the project"}`
     );
     const toOther = await lfsLines(other.id);
     check(
