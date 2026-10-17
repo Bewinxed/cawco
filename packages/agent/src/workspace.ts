@@ -39,6 +39,7 @@ import {
   isSecretFileName,
   workspaceCacheDir,
   workspaceCarriesDir,
+  workspaceFleetDir,
   workspaceScratchDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -938,11 +939,19 @@ const closeClone = async (
   const unread: WorkspaceUnlanded[] = ["check", "unmade"];
   const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
+  // A scratch fleet the workspace ran keeps its folders here on macOS,
+  // outside its scratch dir (core paths.ts `workspaceFleetDir`), and goes
+  // with it, beside the clone's DerivedData: "The Mac filled to 120 MB free
+  // on 2026-10-14 (a Catalyst link died with errno 28) because nothing
+  // removed a workspace once its work was over" (d31b2f5ac).
+  const fleet = await workspaceFleetDir(request.id);
   if (!path) {
     await Promise.all(
-      [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(
-        (dir) => rm(dir, { recursive: true, force: true })
-      )
+      [
+        join(workspacesDir(), request.id),
+        workspaceScratchDir(request.id),
+        ...(fleet ? [fleet] : []),
+      ].map((dir) => rm(dir, { recursive: true, force: true }))
     );
     return { carry: null };
   }
@@ -990,7 +999,7 @@ const closeClone = async (
       `[workspace] ${request.id}: ${words} in ${path} saved to the carry ${carry}`
     );
   }
-  const cached = await cacheOfClone(path);
+  const cached = [...(await cacheOfClone(path)), ...(fleet ? [fleet] : [])];
   await closeBoundary(workspace);
   await rm(workspace.path, { recursive: true, force: true });
   await Promise.all(
