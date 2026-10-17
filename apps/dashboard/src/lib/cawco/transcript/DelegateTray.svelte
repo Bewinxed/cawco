@@ -433,9 +433,9 @@
   const floorOf = (id: string): number => floors.get(id) ?? CHIP;
   function measureFloor(id: string) {
     return (node: HTMLElement) => {
-      const title = node.querySelector<HTMLElement>(".title");
+      const title = node.querySelector<HTMLElement>('[data-slot="title"]');
       const take = () => {
-        const note = node.querySelector<HTMLElement>(".note");
+        const note = node.querySelector<HTMLElement>('[data-slot="note"]');
         const titleLeast = title ? textFloor(title, TITLE_FLOOR) : 0;
         const noteLeast = note ? textFloor(note, NOTE_FLOOR) : 0;
         for (const [part, least] of [
@@ -458,7 +458,9 @@
       // Its parts change size with its state (a note arrives, a glyph
       // swaps); the chip's own box may not, held as it is by the row.
       const watch = new ResizeObserver(take);
-      for (const part of node.querySelectorAll(".mark, .words, .note, .slot")) {
+      for (const part of node.querySelectorAll(
+        '[data-slot="mark"], [data-slot="words"], [data-slot="note"], [data-slot="slot"]'
+      )) {
         watch.observe(part);
       }
       watch.observe(node);
@@ -763,7 +765,7 @@
       tick().then(() =>
         shelfEl
           ?.querySelector<HTMLElement>(
-            ".srow :is(button:not(:disabled), a), .shead button"
+            '[data-slot="srow"] :is(button:not(:disabled), a), [data-slot="shead"] button'
           )
           ?.focus()
       );
@@ -829,7 +831,7 @@
     const take = () => {
       const compact = matchMedia("(width < 640px), (pointer: coarse)").matches;
       const rows = [
-        ...node.querySelectorAll<HTMLElement>(":scope > .srow"),
+        ...node.querySelectorAll<HTMLElement>(':scope > [data-slot="srow"]'),
       ].filter((one) => !one.inert);
       const next = rows[compact ? 3 : 4];
       const cap = next ? `${next.offsetTop}px` : "";
@@ -1109,35 +1111,45 @@
   };
 </script>
 
+<!-- The delegate card's mark, at its size. -->
 {#snippet mark(item: WorkItemSummary, flies: boolean)}
   {@const Sprite = sessionSprite(item.instanceId)}
+  <!-- literal: 17px -->
   <span
     data-slot="mark"
     aria-hidden="true"
-    class="mark m{markHue(item.instanceId)}"
+    class="flex-none size-(--mark-size) rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
     data-box
+    style:--mark-size="17px"
+    style:--mark-bg="var(--mark-{markHue(item.instanceId)})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
-    ><Sprite /></span
+    ><Sprite class="size-icon-sm block text-mark-glyph" /></span
   >
 {/snippet}
 
+<!-- A state's glyph, in the chip's slot or the panel's state cell: 16px
+     either way. -->
 {#snippet glyph(tone: Tone)}
   {#if tone === "starting"}
-    <Spinner aria-hidden="true" role="presentation" />
+    <Spinner aria-hidden="true" class="size-icon-md block" role="presentation" />
   {:else if tone === "running"}
+    <!-- literal: 5px -->
+    <!-- literal: 50% -->
     <span
       data-slot="dot"
-      class="dot"
-      style:animation-delay="-{Date.now() % 2000}ms"
+      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph"
+      style:--dot="5px"
+      style:--dot-r="50%"
+      style:--dot-delay="-{Date.now() % 2000}ms"
     ></span>
   {:else if tone === "asked" || tone === "needs"}
-    <IconAsk />
+    <IconAsk class="size-icon-md block" />
   {:else if tone === "done"}
-    <IconSuccess />
+    <IconSuccess class="size-icon-md block" />
   {:else if tone === "failed"}
-    <IconWarningTriangle />
+    <IconWarningTriangle class="size-icon-md block" />
   {:else}
-    <IconStop />
+    <IconStop class="size-icon-md block" />
   {/if}
 {/snippet}
 
@@ -1147,16 +1159,25 @@
   {@const { item, tone, entry } = chip}
   {@const flies = entry === "fly"}
   {@const failed = tone === "failed"}
+  <!-- A chip: the tray row's (app.css .kit-tray-chip), its surface on a
+       layer of its own so it can arrive after a mark that flew in. Its
+       floor is measured (`measureFloor`); the failure chip stands at the
+       row's end, next to the plan. -->
+  <!-- literal: 224px -->
   <button
     data-end={failed || undefined}
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="chip kit-tray-chip touch-hit {tone}"
+    class="group/chip kit-tray-chip touch-hit flex-initial min-w-(--floor) max-w-(--chip-max) data-end:ms-auto status-failed:text-status-fail-ink"
     data-delegate-tray-tone={tone}
+    data-finished={(tone === "done" && (item.endedAt ?? 0) > mountedAt) ||
+      undefined}
     data-flip="pop"
     data-flip-enter={entry === "fade" ? undefined : "own"}
+    data-fly={flies || undefined}
     data-key={item.id}
+    data-status={tone}
     onblur={() => {
       focusedKey = null;
     }}
@@ -1169,32 +1190,60 @@
     onpointerenter={() => onchipenter(item.id)}
     tabindex={current === at ? 0 : -1}
     type="button"
-    style:min-inline-size="{floorOf(item.id)}px"
-    class:end={failed}
-    class:finished={tone === "done" && (item.endedAt ?? 0) > mountedAt}
-    class:fly={flies}
+    style:--floor="{floorOf(item.id)}px"
+    style:--chip-max="224px"
     {@attach measureFloor(item.id)}
   >
     {@render mark(item, flies)}
-    <span data-slot="words" aria-hidden="true" class="words mark-line" data-box>
-      <span data-slot="title" class="title">{item.title}</span>
+    <span
+      data-slot="words"
+      aria-hidden="true"
+      class="mark-line min-w-0 flex items-baseline gap-c-pill-gap"
+      data-box
+    >
+      <span
+        data-slot="title"
+        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{item.title}</span
+      >
+      <!-- The state gives way like the title, to its floor (`measureFloor`),
+           cut with an ellipsis inside the chip, before its glyph. -->
       {#if item.queued}
-        <span data-slot="note" class="note">{queuedWords(item)}</span>
+        <span
+          data-slot="note"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          >{queuedWords(item)}</span
+        >
       {:else if item.checkQueue}
-        <span data-slot="note" class="note">{checkQueueWords(item)}</span>
+        <span
+          data-slot="note"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          >{checkQueueWords(item)}</span
+        >
       {:else if tone === "needs"}
-        <span data-slot="note" class="note"
+        <span
+          data-slot="note"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
           >{questionWords(chip.questions)}</span
         >
       {:else if tone === "failed" || tone === "cancelled"}
-        <span data-slot="note" class="note">{tone}</span>
+        <span
+          data-slot="note"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap"
+          >{tone}</span
+        >
       {/if}
     </span>
-    <span data-slot="slot" aria-hidden="true" class="slot" data-box>
+    <span
+      data-slot="slot"
+      aria-hidden="true"
+      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink"
+      data-box
+    >
       {#key slotOf(tone)}
         <span
           data-slot="glyph"
-          class="glyph"
+          class="col-start-1 row-start-1 grid place-items-center"
           in:slotIn={tone === "done" || tone === "failed"}
           out:slotOut
         >
@@ -1212,26 +1261,50 @@
   {@const doing = acting.get(item.id)}
   {@const reason = reasons.get(item.id)}
   {@const later = laterThan(item)}
-  <li data-slot="srow" class="srow" data-flip data-shelf-row={item.id}>
-    <div class="sline mark-line">
+  <li
+    data-slot="srow"
+    class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
+    data-flip
+    data-shelf-row={item.id}
+  >
+    <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
-      <span class="stitle">{item.title}</span>
-      <span class="smeta">{failedWhen(item)}</span>
+      <span
+        class="flex-initial min-w-0 text-size-label font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+        >{item.title}</span
+      >
+      <span
+        class="flex-none ms-auto text-size-meta text-ink-muted whitespace-nowrap"
+        >{failedWhen(item)}</span
+      >
+      <!-- literal: 26px -->
+      <!-- literal: -5px -->
       <a
         aria-label="Open {item.title} in its own view"
-        class="jump touch-hit"
+        class="touch-hit flex-none size-(--jump) my-(--jump-my) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
         data-box
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
+        style:--jump="26px"
+        style:--jump-my="-5px"
       >
-        <IconExternal />
+        <IconExternal class="size-icon-sm block" />
       </a>
     </div>
-    <p class="serror">
+    <!-- literal: 17px -->
+    <p
+      class="m-0 ps-(--serror-start) text-size-meta text-status-fail-ink overflow-clip text-ellipsis whitespace-nowrap"
+      style:--serror-start="calc(17px + var(--space-2))"
+    >
       {item.firstLines.error || "It failed without saying why."}
     </p>
     {#if reason === undefined}
-      <div class="sacts">
+      <!-- literal: 17px -->
+      <div
+        class="flex flex-wrap items-center gap-space-2 mt-space-1 ps-(--sacts-start)"
+        style:--sacts-start="calc(17px + var(--space-2))"
+        style:--hit-gap-x="var(--space-2)"
+      >
         <Button
           label="Retry"
           onclick={() => retry(item)}
@@ -1265,8 +1338,13 @@
               {#each later as other (other.id)}
                 <DropdownMenu.Item onSelect={() => replace(item, other.id)}>
                   {@render mark(other, false)}
-                  <span class="mtitle">{other.title}</span>
-                  <span class="mstate">{other.state}</span>
+                  <span
+                    class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{other.title}</span
+                  >
+                  <span class="flex-none text-size-meta text-ink-muted"
+                    >{other.state}</span
+                  >
                 </DropdownMenu.Item>
               {/each}
             </DropdownMenu.Content>
@@ -1274,7 +1352,7 @@
         {:else}
           <span
             data-slot="nolater"
-            class="nolater"
+            class="inline-flex"
             title="No later item to point at yet"
           >
             <Button disabled size="sm" variant="ghost"
@@ -1292,20 +1370,23 @@
         />
       </div>
     {:else}
+      <!-- literal: 17px -->
       <form
         data-slot="reason"
-        class="sacts reason"
+        class="flex flex-nowrap items-center gap-space-2 mt-space-1 ps-(--sacts-start)"
         onsubmit={(event) => {
           event.preventDefault();
           dismiss(item);
         }}
+        style:--sacts-start="calc(17px + var(--space-2))"
+        style:--hit-gap-x="var(--space-2)"
       >
         <Input
           aria-label="Why {item.title} is no longer owed"
           bind:value={
             () => reasons.get(item.id) ?? "", (v) => reasons.set(item.id, v)
           }
-          class="sfield"
+          class="flex-auto min-w-0 h-c-btn-h-sm"
           placeholder="Why this is no longer owed"
         />
         <Button
@@ -1335,32 +1416,49 @@
 <!-- A delegate "+N" holds, as a row: what it is doing, for how long. -->
 {#snippet moreRow(chip: Chip)}
   {@const { item, tone } = chip}
-  <li data-slot="srow" class="srow" data-flip data-shelf-row={item.id}>
-    <div class="sline mark-line">
+  <li
+    data-slot="srow"
+    class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
+    data-flip
+    data-shelf-row={item.id}
+  >
+    <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
-      <span class="stitle">{item.title}</span>
-      <span class="smeta swords {tone}" data-delegate-tray-tone={tone}
-        >{stateWords(chip)}</span
+      <span
+        class="flex-initial min-w-0 text-size-label font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+        >{item.title}</span
+      >
+      <!-- A folded delegate's state gives way before its title does. -->
+      <span
+        class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis"
+        data-delegate-tray-tone={tone}
+        data-status={tone}>{stateWords(chip)}</span
       >
       <span
         aria-hidden="true"
-        class="pstate {tone}"
+        class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink"
         data-delegate-tray-tone={tone}
         data-box
+        data-status={tone}
       >
         {@render glyph(tone)}
       </span>
-      <span class="elapsed">{span(item.createdAt, item.endedAt ?? minute)}</span
+      <span class="flex-none text-size-meta text-ink-muted num"
+        >{span(item.createdAt, item.endedAt ?? minute)}</span
       >
       {#if !item.queued}
+        <!-- literal: 26px -->
+        <!-- literal: -5px -->
         <a
           aria-label="Open {item.title} in its own view"
-          class="jump touch-hit"
+          class="touch-hit flex-none size-(--jump) my-(--jump-my) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
           data-box
           href={hrefOf(item)}
           title="Open {item.title} in its own view"
+          style:--jump="26px"
+          style:--jump-my="-5px"
         >
-          <IconExternal />
+          <IconExternal class="size-icon-sm block" />
         </a>
       {/if}
     </div>
@@ -1369,11 +1467,23 @@
 
 <svelte:window onkeydown={onwindowkey} />
 
-<div data-slot="host" class="host" bind:contentRect={hostBox}>
+<!-- Always laid out, so the row's width is known before its first chip. The
+     row stops short of the plan's chip at its end (Composer `--ring-room`);
+     the shelf under it spans the whole composer. -->
+<div
+  data-slot="host"
+  class="pointer-events-none pe-(--host-end)"
+  style:--host-end="var(--ring-room, 0px)"
+  bind:contentRect={hostBox}
+>
   {#if chips.length}
+    <!-- The row of chips, standing a step off the composer's top edge: no
+         surface of its own, one line, never wrapping or scrolling sideways.
+         Its chip and step are the app's tray tokens, the row the composer
+         keeps. The shelf, open, stands between the row and that step. -->
     <div
       data-slot="tray"
-      class="tray"
+      class="relative pb-c-tray-gap"
       onpointerenter={() => {
         hovering = true;
         clearTimeout(closing);
@@ -1387,10 +1497,11 @@
       <div
         data-slot="row"
         aria-label="Delegates"
-        class="row"
+        class="flex flex-nowrap items-center gap-space-2 overflow-visible"
         inert={held}
         {onkeydown}
         role={keys.length >= 3 ? "toolbar" : "group"}
+        style:--hit-gap-x="var(--space-2)"
         bind:this={row}
         {@attach reflow()}
       >
@@ -1398,6 +1509,8 @@
           {@render chipButton(chip, i)}
         {/each}
         {#if hidden.length}
+          <!-- literal: 224px -->
+          <!-- literal: 52px -->
           <button
             data-needs={hidden.some((chip) => chip.tone === "needs") ||
               undefined}
@@ -1405,7 +1518,7 @@
             aria-controls={shelfId}
             aria-expanded={shelf === "more"}
             aria-label="{hidden.length} more delegates"
-            class="chip kit-tray-chip more touch-hit"
+            class="kit-tray-chip touch-hit flex-none min-w-0 max-w-(--chip-max) w-(--more-w) justify-center num data-needs:text-status-attn-ink"
             data-flip="pop"
             data-key="more"
             onclick={(event) => onpress("more", event)}
@@ -1416,14 +1529,17 @@
             onpointerenter={() => onchipenter("more")}
             tabindex={current === shown.length ? 0 : -1}
             type="button"
-            class:needs={hidden.some((chip) => chip.tone === "needs")}
+            style:--chip-max="224px"
+            style:--more-w="52px"
           >
             +{hidden.length}
           </button>
         {/if}
+        <!-- "N failed": the triangle and the count, whole. -->
         {#if lone}
           {@render chipButton(lone, keys.length - 1)}
         {:else if failures.length}
+          <!-- literal: 224px -->
           <button
             data-delegate-tray-failed
             data-slot="end"
@@ -1431,7 +1547,7 @@
             aria-controls={shelfId}
             aria-expanded={shelf === "failed"}
             aria-label="{failures.length} failed delegates"
-            class="chip kit-tray-chip failed count end touch-hit"
+            class="kit-tray-chip touch-hit flex-none min-w-0 max-w-(--chip-max) whitespace-nowrap ms-auto text-status-fail-ink"
             data-flip="pop"
             data-key="failed"
             onclick={(event) => onpress("failed", event)}
@@ -1442,10 +1558,14 @@
             onpointerenter={() => onchipenter("failed")}
             tabindex={current === keys.length - 1 ? 0 : -1}
             type="button"
+            style:--chip-max="224px"
             bind:offsetWidth={countWidth}
           >
-            <span data-slot="slot" aria-hidden="true" class="slot" data-box
-              ><IconWarningTriangle /></span
+            <span
+              data-slot="slot"
+              aria-hidden="true"
+              class="flex-none size-icon-md grid place-items-center"
+              data-box><IconWarningTriangle class="size-icon-md block" /></span
             >
             <span data-slot="num" class="num">{failures.length} failed</span>
           </button>
@@ -1455,13 +1575,16 @@
       {#if shelf}
         <!-- The shelf, between the row and the field: the dock grows up for
              it and the transcript keeps its room, so it covers no line. -->
+        <!-- What unfolds: the step under the row, and the shelf's surface,
+             a raised card in the dock, concentric with the composer's pill. -->
         <div
           data-slot="shelf-slot"
-          class="shelf-slot"
+          class="me-(--slot-end) pt-c-tray-gap pointer-events-auto"
           inert={held}
           onoutroend={() => {
             shelfPx = 0;
           }}
+          style:--slot-end="calc(-1 * var(--ring-room, 0px))"
           bind:clientHeight={shelfPx}
           in:shelfIn
           out:shelfOut
@@ -1473,14 +1596,19 @@
             aria-label={shelf === "failed"
               ? "Failed delegates"
               : "More delegates"}
-            class="shelf"
+            class="flex flex-col border border-border-hairline rounded-lg bg-surface-raised shadow-tile overflow-clip"
             id={shelfId}
             onkeydown={onshelfkey}
             bind:this={shelfEl}
             {@attach morph({ rows: true })}
           >
-            <header class="shead">
-              <h2 class="sheading">
+            <header
+              data-slot="shead"
+              class="flex items-center gap-space-2 py-space-2 pr-space-2 pl-space-4 border-b border-b-border-hairline"
+            >
+              <h2
+                class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
+              >
                 {#if shelf === "failed"}
                   {failures.length === 1
                     ? "1 failure needs a decision"
@@ -1501,7 +1629,7 @@
             </header>
             <ul
               data-slot="slist"
-              class="slist"
+              class="relative m-0 p-0 list-none overflow-y-auto overscroll-contain"
               {@attach reflow()}
               {@attach capRows}
             >
@@ -1516,7 +1644,10 @@
               {/if}
             </ul>
             {#if shelf === "failed" && failures.length > 1}
-              <footer data-slot="sfoot" class="sfoot">
+              <footer
+                data-slot="sfoot"
+                class="py-space-2 px-space-4 border-t border-t-border-hairline"
+              >
                 {#if allReason === null}
                   <Button
                     label="Dismiss all {failures.length} with one reason…"
@@ -1531,16 +1662,17 @@
                 {:else}
                   <form
                     data-slot="reason"
-                    class="sacts reason"
+                    class="flex flex-nowrap items-center gap-space-2 m-0 p-0"
                     onsubmit={(event) => {
                       event.preventDefault();
                       // biome-ignore lint/complexity/noVoid: each row says how it went.
                       void dismissAll();
                     }}
+                    style:--hit-gap-x="var(--space-2)"
                   >
                     <Input
                       aria-label="Why all {failures.length} are no longer owed"
-                      class="sfield"
+                      class="flex-auto min-w-0 h-c-btn-h-sm"
                       placeholder="Why these are no longer owed"
                       bind:ref={allField}
                       bind:value={allReason}
@@ -1586,31 +1718,45 @@
         {#snippet children()}
           {#if openChip}
             {@const { item, tone } = openChip}
-            <div class="phead mark-line">
+            <!-- The panel's surface, motion and size are the house hover
+                 panel's (HoverPanel); what is in it is drawn here. Its head:
+                 the mark, the title, and at the end the time it has taken
+                 and its state as a glyph. -->
+            <div class="mark-line flex items-center gap-space-2 mb-space-2">
               {@render mark(item, false)}
-              <span class="ptitle">{item.title}</span>
+              <span
+                class="flex-auto min-w-0 text-size-label font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+                >{item.title}</span
+              >
               <span
                 aria-label={stateWords(openChip)}
-                class="pstate {tone}"
+                class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink"
                 data-delegate-tray-tone={tone}
                 data-box
+                data-status={tone}
                 role="img"
               >
                 {@render glyph(tone)}
               </span>
-              <span class="elapsed"
+              <span class="flex-none text-size-meta text-ink-muted num"
                 >{span(item.createdAt, item.endedAt ?? minute)}</span
               >
-              <!-- A queued delegate has no session to open until it starts. -->
+              <!-- A queued delegate has no session to open until it starts.
+                   The delegate card's way out to its own view, as the card
+                   draws it. -->
               {#if !item.queued}
+                <!-- literal: 26px -->
+                <!-- literal: -5px -->
                 <a
                   aria-label="Open {item.title} in its own view"
-                  class="jump touch-hit"
+                  class="touch-hit flex-none size-(--jump) my-(--jump-my) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
                   data-box
                   href={hrefOf(item)}
                   title="Open {item.title} in its own view"
+                  style:--jump="26px"
+                  style:--jump-my="-5px"
                 >
-                  <IconExternal />
+                  <IconExternal class="size-icon-sm block" />
                 </a>
               {/if}
             </div>
@@ -1619,7 +1765,7 @@
               note={noteOf(openChip)}
             />
             {#if tone === "needs"}
-              <div data-slot="acts" class="acts">
+              <div data-slot="acts" class="mt-space-3 flex gap-space-2">
                 <Button href={hrefOf(item)} size="sm" variant="outline"
                   >Open question</Button
                 >
@@ -1633,131 +1779,17 @@
 </div>
 
 <style>
-  /* Always laid out, so the row's width is known before its first chip. */
-  .host {
-    pointer-events: none;
-    /* The row stops short of the plan's chip at its end (Composer
-       `--ring-room`); the shelf under it spans the whole composer. */
-    padding-inline-end: var(--ring-room, 0px);
-  }
-  /* The row of chips, standing a step off the composer's top edge: no
-     surface of its own, one line, never wrapping or scrolling sideways. Its
-     chip and step are the app's tray tokens, the row the composer keeps.
-     The shelf, open, stands between the row and that step. */
-  .tray {
-    position: relative;
-    padding-block-end: var(--c-tray-gap);
-  }
-  .row {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: var(--space-2);
-    overflow: visible;
-    --hit-gap-x: var(--space-2);
-  }
-
-  /* A chip: the tray row's (app.css .kit-tray-chip), its surface on a layer
-     of its own so it can arrive after a mark that flew in. */
-  .chip {
-    flex: 0 1 auto;
-    min-inline-size: 120px;
-    max-inline-size: 224px;
-  }
-  /* The failure chip stands at the row's end, next to the plan. */
-  .chip.end {
-    margin-inline-start: auto;
-  }
-  .chip.needs {
-    color: var(--status-attn-ink);
-
-    &::before {
-      background-color: var(--status-attn-bg);
-    }
-  }
-  .chip.failed {
-    color: var(--status-fail-ink);
-
-    &::before {
-      background-color: var(--status-fail-bg);
-    }
-  }
-  /* "N failed": the triangle and the count, whole. */
-  .chip.count {
-    flex: none;
-    min-inline-size: 0;
-    white-space: nowrap;
-  }
-
-  .words {
-    min-inline-size: 0;
-    display: flex;
-    align-items: baseline;
-    gap: var(--c-pill-gap);
-  }
-  .title {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The state gives way like the title, to its floor (`measureFloor`), cut
-     with an ellipsis inside the chip, before its glyph. */
-  .note {
-    min-inline-size: 0;
-    font-weight: var(--weight-body);
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .cancelled .note {
-    color: var(--ink-muted);
-  }
-
-  .slot {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-    display: grid;
-    place-items: center;
-
-    & > .glyph {
-      grid-area: 1 / 1;
-      display: grid;
-      place-items: center;
-    }
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-      display: block;
-    }
-  }
-  .starting .slot,
-  .running .slot,
-  .asked .slot,
-  .cancelled .slot {
-    color: var(--ink-muted);
-  }
-  .done .slot {
-    color: var(--status-done-ink);
-  }
-  .dot {
-    inline-size: 5px;
-    block-size: 5px;
-    border-radius: 50%;
-    background: var(--status-live-glyph);
-  }
-
+  /* residual: keyframes */
   /* The mark flew in; the chip's surface and words come in after it. */
   @media (prefers-reduced-motion: no-preference) {
-    .chip.fly::before,
-    .chip.fly .words,
-    .chip.fly .slot {
+    [data-fly]::before,
+    [data-fly] [data-slot="words"],
+    [data-fly] [data-slot="slot"] {
       animation: arrive var(--dur-menu) var(--ease-out) var(--dur-control) both;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .chip.fly {
+    [data-fly] {
       animation: arrive var(--dur-menu) var(--ease-out) both;
     }
   }
@@ -1766,10 +1798,9 @@
       opacity: 0;
     }
   }
-
   /* Finished while watched: one soft pulse of the success tint (after the
      arrival rules, which it replaces on a chip that flew in). */
-  .chip.finished::before {
+  [data-finished]::before {
     animation: finish calc(var(--dur-fade) * 2) var(--ease-out);
   }
   @keyframes finish {
@@ -1778,268 +1809,39 @@
     }
   }
 
-  .more {
-    flex: none;
-    min-inline-size: 0;
-    inline-size: 52px;
-    justify-content: center;
-    font-variant-numeric: tabular-nums;
+  /* residual: pseudo */
+  /* The chip's surface (.kit-tray-chip's ::before) in its state's tint. */
+  button[data-status="needs"]::before,
+  [data-needs]::before {
+    background-color: var(--status-attn-bg);
+  }
+  button[data-status="failed"]::before,
+  [data-slot="end"]::before {
+    background-color: var(--status-fail-bg);
   }
 
-  /* The delegate card's mark, at its size. */
-  .mark {
-    flex: none;
-    inline-size: 17px;
-    block-size: 17px;
-    border-radius: var(--radius-xs);
-    display: grid;
-    place-items: center;
-    background-image: var(--mark-overlay);
-    background-color: var(--mark-1);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-      display: block;
-      color: var(--mark-glyph);
-    }
-  }
-  .mark.m2 {
-    background-color: var(--mark-2);
-  }
-  .mark.m3 {
-    background-color: var(--mark-3);
-  }
-  .mark.m4 {
-    background-color: var(--mark-4);
-  }
-  .mark.m5 {
-    background-color: var(--mark-5);
-  }
-  .mark.m6 {
-    background-color: var(--mark-6);
-  }
-  .mark.m7 {
-    background-color: var(--mark-7);
-  }
-  .mark.m8 {
-    background-color: var(--mark-8);
-  }
-
-  /* ---- the shelf ---------------------------------------------------- */
-
-  /* What unfolds: the step under the row, and the shelf's surface. */
-  .shelf-slot {
-    margin-inline-end: calc(-1 * var(--ring-room, 0px));
-    padding-block-start: var(--c-tray-gap);
-    pointer-events: auto;
-  }
-  /* A raised card in the dock, concentric with the composer's pill. */
-  .shelf {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    overflow: clip;
-  }
-  .shead {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .sheading {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    margin: 0;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .slist {
-    position: relative;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .srow {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-3) var(--space-4);
-
-    & + .srow {
-      border-block-start: 1px solid var(--border-hairline);
-    }
-  }
-  .sline {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .stitle {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .smeta {
-    flex: 0 0 auto;
-    margin-inline-start: auto;
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  /* A folded delegate's state gives way before its title does. */
-  .swords {
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  .swords.needs {
+  /* residual: unmapped */
+  /* A delegate that needs you, in the ask ink wherever its state shows:
+     its chip, its folded row's words, its state cell. */
+  [data-status="needs"] {
     color: var(--status-attn-ink);
   }
-  .serror {
-    margin: 0;
-    padding-inline-start: calc(17px + var(--space-2));
-    font-size: var(--text-meta);
-    color: var(--status-fail-ink);
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .sacts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-1);
-    padding-inline-start: calc(17px + var(--space-2));
-    --hit-gap-x: var(--space-2);
-  }
-  .sacts.reason {
-    flex-wrap: nowrap;
-
-    & :global(.sfield) {
-      flex: 1 1 auto;
-      min-inline-size: 0;
-      block-size: var(--c-btn-h-sm);
-    }
-  }
-  .sfoot {
-    padding: var(--space-2) var(--space-4);
-    border-block-start: 1px solid var(--border-hairline);
-
-    & .sacts {
-      margin: 0;
-      padding: 0;
-    }
-  }
-  .nolater {
-    display: inline-flex;
-  }
-  .mtitle {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .mstate {
-    flex: none;
-    font-size: var(--text-meta);
+  /* The slot's glyph in the muted ink for the states with no tone of their
+     own (running's and done's are utilities on the slot). */
+  :is(
+      [data-status="starting"],
+      [data-status="asked"],
+      [data-status="cancelled"]
+    )
+    [data-slot="slot"] {
     color: var(--ink-muted);
   }
-
-  /* The panel's surface, motion and size are the house hover panel's
-     (HoverPanel); what is in it is drawn here. */
-  .ptitle {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The panel's head: the mark, the title, and at the end the time it has
-     taken and its state as a glyph. */
-  .phead {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-end: var(--space-2);
-  }
-  .elapsed {
-    flex: none;
-    font-size: var(--text-meta);
+  [data-status="cancelled"] [data-slot="note"] {
     color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
   }
-  .pstate {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-      display: block;
-    }
-  }
-  /* The delegate card's way out to its own view, as the card draws it. */
-  .jump {
-    flex: 0 0 auto;
-    inline-size: 26px;
-    block-size: 26px;
-    margin-block: -5px;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-xs);
-    color: var(--ink-muted);
-    transition:
-      color var(--dur-control) var(--ease-out),
-      background var(--dur-control) var(--ease-out);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-      display: block;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .jump:hover {
-      color: var(--brand-ink);
-      background: var(--surface-hover);
-    }
-  }
-  .pstate.needs {
-    color: var(--status-attn-ink);
-  }
-  .pstate.done {
-    color: var(--status-done-ink);
-  }
-  .pstate.failed {
-    color: var(--status-fail-ink);
-  }
-  .acts {
-    margin-block-start: var(--space-3);
-    display: flex;
-    gap: var(--space-2);
+  /* The dot's phase, set from the clock so every running dot reads as one
+     beat; animation-delay has no utility. */
+  [data-slot="dot"] {
+    animation-delay: var(--dot-delay);
   }
 </style>
