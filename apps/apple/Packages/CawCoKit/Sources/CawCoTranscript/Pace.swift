@@ -367,6 +367,9 @@ extension Pace {
             let s = t.spent
             func ms(_ part: Part) -> String { String(format: "%.1f", s.time[part.rawValue] * 1000) }
             log.notice("probe pace scroll=\(t.scroll * 1000, format: .fixed(precision: 1)) hitch=\(t.hitch * 1000, format: .fixed(precision: 1)) hitches=\(t.hitches) mainHitch=\(t.mainHitch * 1000, format: .fixed(precision: 1)) mainHitches=\(t.mainHitches) ticks=\(t.ticks) streamWall=\(t.streamWall * 1000, format: .fixed(precision: 1)) streamCPU=\(t.streamCPU * 1000, format: .fixed(precision: 1)) streamAwake=\(t.streamAwake * 1000, format: .fixed(precision: 1)) blankFrames=\(t.blankFrames) blankRows=\(t.blankRows) checked=\(t.checked) checking=\(t.checking * 1000, format: .fixed(precision: 1)) heightsChecked=\(t.heightsChecked) drifts=\(t.drifts) maxDrift=\(t.maxDrift, format: .fixed(precision: 2)) build=\(ms(.build), privacy: .public) builds=\(s.count[Part.build.rawValue]) measure=\(ms(.measure), privacy: .public) measures=\(s.count[Part.measure.rawValue]) warm=\(ms(.warm), privacy: .public) frameBuild=\(ms(.frameBuild), privacy: .public) frameMeasure=\(ms(.frameMeasure), privacy: .public) layout=\(ms(.layout), privacy: .public) layouts=\(s.count[Part.layout.rawValue]) text=\(ms(.text), privacy: .public) texts=\(s.count[Part.text.rawValue])")
+            // What laying tables out has cost since launch (probe-kit spec `ios-table-height`).
+            let c = TableBlock.cost
+            log.notice("probe table cost heights=\(c.heights) heightMs=\(c.heightTime * 1000, format: .fixed(precision: 2)) layouts=\(c.layouts) layoutMs=\(c.layoutTime * 1000, format: .fixed(precision: 2)) configures=\(c.configures)")
         }
         // The probe's own work is not the thread's: counted from here.
         lastCPU = threadCPU()

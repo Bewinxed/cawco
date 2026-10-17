@@ -369,6 +369,9 @@ final class RowStore {
     }
 
     #if DEBUG
+    /// The row view the store keeps for `id` (TranscriptView `probeBounds`).
+    func heldView(for id: String) -> UIView? { entries[id]?.view }
+
     /// A row stood at an exact height, measured as its view lays out once the
     /// list is at rest (`verify`): any difference is a drift (probe-kit spec
     /// `ios-scroll-up`, which must count none).

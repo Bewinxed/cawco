@@ -164,6 +164,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let probe = DisclosureProbe()
     /// The rows a blank was said for (`probeBlanks`), each said once.
     private var blankSaid = Set<String>()
+    /// What each row's `probe bounds` line was last said for: its print and its cell's size.
+    private var boundsSaid: [String: String] = [:]
     #endif
 
     /// The list's layout (RowLayout): each row at its exact height when one
@@ -265,7 +267,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(sceneLeft(_:)), name: UIScene.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(sceneReturned(_:)), name: UIScene.willEnterForegroundNotification, object: nil)
         #if DEBUG
-        if Pace.probing { Pace.afterCommit.append { [weak self] in self?.probeBlanks() } }
+        if Pace.probing {
+            Pace.afterCommit.append { [weak self] in self?.probeBlanks() }
+            Pace.afterCommit.append { [weak self] in self?.probeBounds() }
+        }
         #endif
         // Only the type size: the words are set in faces at it. Light and dark
         // are not this view's: the rendered words carry the colour sets, which
@@ -275,6 +280,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // snapshot it both ways: clearing here threw every row of a long
         // session away and built them all again on each trip (a 412ms frame
         // over 936 rows).
+        // A table's rules are taken down to the screen's pixels: its rows' exact heights are worked out again at a new scale.
+        registerForTraitChanges([UITraitDisplayScale.self]) { (view: TranscriptView, _: UITraitCollection) in
+            if view.transcript != nil { view.request() }
+        }
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
             // The words are set in faces at this type size: rendered again,
             // prepared again, every row drawn again.
@@ -824,6 +833,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         requestedWidth = rowWidth
         input.width = rowWidth.map(Double.init)
         input.speaker = speakerHeight
+        input.scale = Double(max(traitCollection.displayScale, 1))
         wanted = input
         pump()
     }
@@ -1166,19 +1176,20 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// height and is never measured, as it was once each frame it grew, and
     /// once more the frame it came (a turn's start: 12–18 ms).
     private let tailMeasure = TextMeasure()
-    /// The live blocks' heights by width and print, kept while the reply streams.
-    private var tailHeights: [String: Double?] = [:]
+    /// The live blocks' heights by width, scale and print, kept while the reply streams.
+    private var tailHeights: [String: Double] = [:]
 
     private func measuredTail(_ pieces: [Item]) -> [Item] {
         guard let width = rowWidth else { return pieces }
         let speaker = speakerHeight
-        var kept: [String: Double?] = [:]
+        let scale = Double(max(traitCollection.displayScale, 1))
+        var kept: [String: Double] = [:]
         defer { tailHeights = kept }
         return pieces.map { item in
             guard case let .piece(piece) = item.kind else { return item }
             var item = item
-            let key = "\(width)|\(item.print)"
-            let height = tailHeights[key] ?? kept[key] ?? PieceHeight.of(piece, width: Double(width), speaker: speaker, measure: tailMeasure)
+            let key = "\(width)|\(scale)|\(item.print)"
+            let height = tailHeights[key] ?? kept[key] ?? PieceHeight.of(piece, width: Double(width), speaker: speaker, scale: scale, measure: tailMeasure)
             kept[key] = height
             item.height = height
             item.heightWidth = Double(width)
@@ -2673,6 +2684,70 @@ extension TranscriptView {
         let top = collection.contentOffset.y <= -collection.adjustedContentInset.top + 1
         let first = collection.indexPathsForVisibleItems.min().flatMap { rows.id(at: $0) } ?? "-"
         Self.dockLog.notice("probe rest \(self.env.sessionId.prefix(8), privacy: .public): top=\(top ? 1 : 0) older=\(self.transcript?.cursor != nil ? 1 : 0) rows=\(self.rowCount) first=\(first, privacy: .public) offset=\(Double(self.collection.contentOffset.y), format: .fixed(precision: 0)) height=\(Double(self.collection.contentSize.height), format: .fixed(precision: 0))")
+    }
+
+    /// Run after each turn's commit (`Pace.afterCommit`): every row on the
+    /// screen draws inside its cell, and is the row of the item its cell
+    /// shows (probe-kit spec `ios-table-height`). Said once a row, print and
+    /// cell size: how far its views reach past the cell (`over`, 0 inside;
+    /// clipped where a view between clips), the view that reaches furthest,
+    /// the pictures it shows, and whether the cell holds another row than
+    /// the one the store keeps for its item (`stale`). Its tables are said
+    /// too (`tableSaid`).
+    fileprivate func probeBounds() {
+        guard inView, landed, !collection.isHidden else { return }
+        for cell in collection.visibleCells where !cell.isHidden {
+            guard let path = collection.indexPath(for: cell), let id = rows.id(at: path), let item = items[id],
+                  let row = cell.contentView.subviews.first(where: { !$0.isHidden }) else { continue }
+            let key = "\(item.print)|\(Int(cell.bounds.width))|\(Int(cell.bounds.height))"
+            guard boundsSaid[id] != key else { continue }
+            boundsSaid[id] = key
+            var over = 0.0
+            var furthest = "none"
+            var pictures = 0
+            var tables: [TableBlock] = []
+            func walk(_ view: UIView, clip: CGRect) {
+                guard !view.isHidden, view.alpha > 0.01 else { return }
+                if view is ShotView { pictures += 1 }
+                if let table = view as? TableBlock { tables.append(table) }
+                let drawn = view.convert(view.bounds, to: cell).intersection(clip)
+                if !drawn.isNull, drawn.width > 0, drawn.height > 0 {
+                    let past = max(cell.bounds.minY - drawn.minY, drawn.maxY - cell.bounds.maxY, 0)
+                    if past > over {
+                        over = past
+                        furthest = String(describing: type(of: view))
+                    }
+                }
+                // A text view's words stand in its own frame: what it holds are
+                // TextKit's drawing surfaces, padded past the words on purpose
+                // (ProseFragment `renderingSurfaceBounds`).
+                guard !(view is UITextView) else { return }
+                let inner = view.clipsToBounds ? clip.intersection(view.convert(view.bounds, to: cell)) : clip
+                guard !inner.isNull else { return }
+                for sub in view.subviews { walk(sub, clip: inner) }
+            }
+            walk(row, clip: .infinite)
+            let stale = store.heldView(for: id).map { $0 !== row } ?? true
+            let said = tables.map { " table " + Self.tableSaid($0, in: cell) }.joined()
+            Self.dockLog.notice("probe bounds \(id, privacy: .public) row=\(String(describing: type(of: row)), privacy: .public) cell=\(Double(cell.bounds.height), format: .fixed(precision: 2)) over=\(over, format: .fixed(precision: 2)) furthest=\(furthest, privacy: .public) pictures=\(pictures) stale=\(stale ? 1 : 0) tables=\(tables.count)\(said, privacy: .public)")
+        }
+    }
+
+    /// A table as it stands in `cell`, in the cell's space (its row's `probe bounds`, after `table`):
+    /// its frame, each row's frame and its tallest cell's words laid out at
+    /// the cell's width, and where what follows it starts: the block under it
+    /// in its piece, or the cell's foot, past which the next row stands.
+    private static func tableSaid(_ table: TableBlock, in cell: UIView) -> String {
+        let frame = table.convert(table.bounds, to: cell)
+        let rows = table.probeRows().map { row in
+            let rect = table.convert(row.frame, to: cell)
+            return String(format: "%.2f+%.2f/%.2f", rect.minY, rect.height, row.text)
+        }.joined(separator: ",")
+        let below = table.superview?.subviews
+            .filter { !$0.isHidden && $0 !== table && $0.frame.minY > table.frame.minY + 0.5 }
+            .map { $0.convert($0.bounds, to: cell).minY }.min()
+        let next = below.map { String(format: "%.2f block", $0) } ?? String(format: "%.2f end", cell.bounds.maxY)
+        return String(format: "w=%.1f table=%.2f+%.2f rows=[", cell.bounds.width, frame.minY, frame.height) + rows + "] next=" + next
     }
 
     /// Run after each turn's commit (`Pace.afterCommit`): whether the screen

@@ -172,6 +172,16 @@ final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
         return reveal.toggle(open: open)
     }
 
+    /// Whether a shut call's row is its line alone (Item `oneLine`): no
+    /// preview card in its line's place and no pictures hung under it (an
+    /// image it showed, the images its result carried, ToolGroup.svelte
+    /// `.shots`), which a shut call shows as an open one does. The rule the
+    /// row's body is attached by (`configure`), read where the transcript is
+    /// prepared: a row with pictures stands at the height its view measures.
+    nonisolated static func linesOnly(_ block: Block, renderer: ToolDescriptor.Renderer) -> Bool {
+        renderer != .preview && renderer != .image && (block.meta["resultImages"] as? [[String: Any]] ?? []).isEmpty
+    }
+
     /// Whether the body's column stands in the row: only while it shows something.
     private func attach(_ wanted: Bool) {
         guard wanted != (body.superview === self) else { return }
@@ -343,7 +353,7 @@ final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
         if open { fillBody(force: true) } else { bodyPrint = "" ; opened.arrangedSubviews.forEach { $0.removeFromSuperview() } }
         reveal.set(open: open)
         configureShots(block, renderer: d.renderer)
-        attach(preview || open || !shots.isHidden || reveal.travel != nil)
+        attach(!Self.linesOnly(block, renderer: d.renderer) || open || reveal.travel != nil)
         invalidateIntrinsicContentSize()
         setNeedsLayout()
     }

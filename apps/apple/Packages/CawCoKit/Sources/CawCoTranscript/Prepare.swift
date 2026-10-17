@@ -62,19 +62,20 @@ actor TranscriptPrep {
         var voiced = false
         var extras: [String: ThreadExtras] = [:]
         var voiceRevision = 0
-        /// The width the list's rows stand at, and its speaker line's height
-        /// (RowMetrics): with both, each assistant block's exact height is
-        /// worked out here (PieceHeight).
+        /// The width the list's rows stand at, its speaker line's height
+        /// (RowMetrics) and its screen's scale (a table's rules): with all
+        /// three, each assistant block's exact height is worked out here (PieceHeight).
         var width: Double?
         var speaker: Double?
+        var scale: Double?
     }
 
     /// Each block as last read, with the hub's value it was read from.
     private var read: [String: (source: Components.Schemas.TranscriptBlock, block: Block)] = [:]
     private let cache = BlockCache()
     private let measure = TextMeasure()
-    /// Each assistant block's height by its width and print, kept while a row is drawn from it.
-    private var heights: [String: Double?] = [:]
+    /// Each assistant block's height by its width, scale and print, kept while a row is drawn from it.
+    private var heights: [String: Double] = [:]
     /// The settled items the last preparation made.
     private var last: [Item] = []
 
@@ -101,23 +102,23 @@ actor TranscriptPrep {
 
     /// The items with their exact heights where they can be worked out
     /// here, and each tool call marked when its row is one line until opened.
-    private func measured(_ items: [Item], width: Double?, speaker: Double?) -> [Item] {
-        var kept: [String: Double?] = [:]
+    private func measured(_ items: [Item], width: Double?, speaker: Double?, scale: Double?) -> [Item] {
+        var kept: [String: Double] = [:]
         defer { heights = kept }
         return items.map { item in
             var item = item
             switch item.kind {
             case let .piece(piece):
-                guard let width, let speaker else { return item }
-                let key = "\(width)|\(item.print)"
-                let height = heights[key] ?? kept[key] ?? PieceHeight.of(piece, width: width, speaker: speaker, measure: measure)
+                guard let width, let speaker, let scale else { return item }
+                let key = "\(width)|\(scale)|\(item.print)"
+                let height = heights[key] ?? kept[key] ?? PieceHeight.of(piece, width: width, speaker: speaker, scale: scale, measure: measure)
                 kept[key] = height
                 item.height = height
                 item.heightWidth = width
             case let .tool(block):
                 let renderer = ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult,
                                                        status: block.toolStatus, patch: block.string("toolDiff")).renderer
-                item.oneLine = renderer != .preview && renderer != .image
+                item.oneLine = ToolLineView.linesOnly(block, renderer: renderer)
             default:
                 break
             }
@@ -164,7 +165,7 @@ actor TranscriptPrep {
         builder.extras = input.extras
         builder.voiceRevision = input.voiceRevision
         let (built, rail) = builder.items(rows)
-        let items = measured(built, width: input.width, speaker: input.speaker)
+        let items = measured(built, width: input.width, speaker: input.speaker, scale: input.scale)
         let stable = stablePrefix(items)
         let unchanged = stable == items.count && items.count == last.count
         last = items
