@@ -685,8 +685,21 @@ function geometry() {
       neckCut: style.getPropertyValue("--neck-cut").trim().slice(0, 30),
       flush: hung.dataset.flush ?? null,
     };
-    if (Math.abs(neck.left - glassBox.left) > 0.5 || Math.abs(neck.right - glassBox.right) > 0.5) {
-      findings.push(`the neck ${neck.left}–${neck.right} is not the glass's span ${glassBox.left}–${glassBox.right}`);
+    // At settle the neck is the glass's span in the card's own coordinates,
+    // to a hundredth of a pixel (HangCard redraws it as the glass's span
+    // changes, f844ee878).
+    const inCard = {
+      neckStart: px("--neck-start"),
+      neckEnd: px("--neck-end"),
+      glassStart: glassBox.left - card.left,
+      glassEnd: glassBox.right - card.left,
+    };
+    facts.neckInCard = inCard;
+    if (
+      Math.abs(inCard.neckStart - inCard.glassStart) > 0.01 ||
+      Math.abs(inCard.neckEnd - inCard.glassEnd) > 0.01
+    ) {
+      findings.push(`the neck ${inCard.neckStart}–${inCard.neckEnd} is not the glass's span ${inCard.glassStart}–${inCard.glassEnd} in the card`);
     }
     if (!facts.hang.joined) {
       findings.push("the glass is not joined to its open card");
