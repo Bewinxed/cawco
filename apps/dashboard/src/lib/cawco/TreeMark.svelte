@@ -122,9 +122,16 @@
   }
 </script>
 
+<!-- The lead slot's box (18px; --mark-size where a list sets its own): the
+     scene its deck recedes in. Over the nesting arm that ends at the tile
+     (.kit-nest, z-index 1): the arm runs under the mark, never across it.
+     A step up while its rows are out (--mark-level): their marks start and
+     end their ride under it (app.css, motion/branch). No tile: the face
+     stands bare in the slot, in the muted ink (a row that is no session or
+     project: "N older"). -->
 <span
   data-slot="tree-mark"
-  class="tree-mark"
+  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-mark-glyph data-bare:text-ink-muted"
   data-box
   data-bare={fill ? undefined : ""}
   data-dot={dot}
@@ -135,59 +142,175 @@
   data-switch={switches || rowToggles ? "" : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
+  style:--size="var(--mark-size, var(--space-5))"
+  style:--mark-z="var(--mark-level, 2)"
 >
   {#if has}
-    <span aria-hidden="true" class="deck" data-deck={Math.min(count, 3)}>
+    <!-- The deck: the tile's copies behind it. Card i stands i places back
+         (1 nearest), the tile scaled by 1 - --deck-shrink x its place about
+         a point under the tile (the deck's vanishing point), so it shows
+         --deck-step below the one in front; a card with no row to stand for
+         is not drawn. A plain scale, drawn with the row: receding in z
+         through a perspective put the same card in the same place, but each
+         card, each deck and each mark was then a layer of its own on the
+         compositor, and every tile over them one more. -->
+    <span
+      aria-hidden="true"
+      data-slot="tree-mark-deck"
+      class="absolute inset-0 pointer-events-none"
+      data-deck={Math.min(count, 3)}
+    >
       {#each [1, 2, 3] as i (i)}
-        <span data-slot="tree-mark-card" class="card" style:--i={i}></span>
+        <span
+          data-slot="tree-mark-card"
+          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale)"
+          style:--i={i}
+          style:--p="max(0, calc(var(--n) - var(--i) + 1))"
+          style:--card-seen="clamp(0, calc(var(--n) - var(--i) + 1), 1)"
+          style:--card-origin="50% calc(var(--size) + var(--deck-step) / var(--deck-shrink))"
+          style:--card-scale="scale(calc(1 - var(--deck-shrink) * var(--p)))"
+        ></span>
       {/each}
     </span>
   {/if}
   <!-- What the tile shows: its face, or its count, and the chevron either
        gives way to. The echo is the bare tile: only what grows past the
-       tile is ever seen of it. -->
-  <span data-slot="tile" aria-hidden="true" class="face tile">
-    <span class="rest">
+       tile is ever seen of it. Both stay in the tile; the one leaving
+       shrinks and blurs out as the other grows and sharpens in, by
+       transitions, so a pointer that turns back mid-way turns them with it.
+       Which of the two shows is --swap-away (1 for the one that has given
+       way): that number is what transitions (app.css); the swap is by
+       opacity, the shrink and the blur are motion and ride on it only where
+       motion is welcome. The chevron's turn and the tile's press are
+       numbers of the same kind. -->
+  <!-- literal: 0.25px -->
+  <span
+    data-slot="tile"
+    aria-hidden="true"
+    class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:dur-toggle motion-safe:ease-out"
+    style:--hole-edge="0.25px"
+  >
+    <span
+      data-slot="tree-mark-rest"
+      class="col-start-1 row-start-1 inline-grid place-items-center opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale)"
+      style:--swap-shown="calc(1 - var(--swap-away))"
+      style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
+    >
       {#if has && !faceAlways}
-        <span data-slot="num" class="num"><MorphText text={shown} /></span>
+        <!-- The count's box is fixed, and the morph (which animates its own
+             box's width and height) is contained in it: nothing outside it
+             is laid out as the figure changes, and 9 to 10 stays centred. -->
+        <!-- literal: 2ch, 1lh -->
+        <span
+          data-slot="num"
+          class="num inline-grid place-items-center w-(--num-w) h-(--num-h) font-body text-size-meta font-normal leading-none contain-layout contain-size"
+          style:--num-w="2ch"
+          style:--num-h="1lh"><MorphText text={shown} /></span
+        >
       {:else}
         {@render face()}
       {/if}
     </span>
     {#if parent && !faceAlways}
-      <span data-slot="chev" class="chev"
-        ><ChevronIcon aria-hidden="true" /></span
+      <span
+        data-slot="chev"
+        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale)"
+        style:--swap-shown="calc(1 - var(--swap-away))"
+        style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
+        ><ChevronIcon
+          aria-hidden="true"
+          class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:dur-toggle motion-safe:ease-out"
+        /></span
       >
     {/if}
   </span>
-  <span aria-hidden="true" class="skin" data-ride-skin></span>
+  <!-- The skin: a child's tile wears its parent's card (--p its place,
+       --pfill the parent's colour) as it leaves the deck, and sheds it on
+       its way to its row (motion/branch). Unseen at rest. -->
+  <span
+    aria-hidden="true"
+    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none"
+    data-ride-skin
+    style:--p="1"
+    style:--skin-fill="var(--pfill, var(--fill))"
+  ></span>
   {#if dot}
-    <span data-slot="dot" aria-hidden="true" class="dot"></span>
+    <!-- The status dot, for a row that needs you or has failed: a circle
+         centred on the tile's top-right corner, half of it out of the tile,
+         over the tile, its count and its deck. The tile is cut away round it
+         (--status-dot-cut wide) rather than ringed in a surface colour: what
+         shows in the cut is whatever the row stands on, so the dot reads on
+         every tile hue and over the hover and selected washes alike. The cut
+         is a hole in the face's mask; the tile's box and what it holds stay
+         where they are. -->
+    <span
+      data-slot="dot"
+      aria-hidden="true"
+      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none"
+      style:--dot-off="calc(var(--status-dot-size) / -2)"
+    ></span>
   {/if}
   {#if status === "live"}
     <!-- Last of what the mark draws, in a box cut to the outside of the
-         tile and its deck (the style below says why). -->
-    <span aria-hidden="true" class="echo-box">
-      <span data-slot="tile" class="echo tile" data-echo></span>
+         tile and its deck. The echo: a copy of the tile that grows from it
+         and fades, on its list's beat (motion/echo), seen only outside the
+         tile and its deck. It is under them by shape, not by order. The
+         browser runs the echo on a layer of its own, and whatever is drawn
+         after a moving layer and might touch it is put on a layer too: drawn
+         first, under the tile, the echo took the tile onto one, every mark
+         down the rail after it into the same one, and the pane behind them.
+         So it is the last thing the mark draws, in a box as large as it ever
+         grows (--echo-scale, to the pixel above), and the box is cut: the
+         tile's own rounded square is a hole in it, and so is the band of
+         each card that shows under the tile (--n of them, none while the
+         deck is away, --deck-away). The hole stands still; only the echo
+         inside moves. Last in order means over the switch too (`hit`,
+         z-index 4), which takes the presses through it. -->
+    <span
+      aria-hidden="true"
+      data-slot="tree-mark-echo-box"
+      class="absolute z-5 -inset-(--reach) pointer-events-none"
+      style:--reach="round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px)"
+      style:--r="var(--radius-xs)"
+      style:--side="calc(var(--size) - 2 * var(--r))"
+      style:--foot="calc(var(--reach) + var(--size))"
+      style:--cards="calc(var(--n, 0) * (1 - var(--deck-away, 0)))"
+    >
+      <span
+        data-slot="tile"
+        class="absolute inset-(--reach) grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none opacity-0"
+        data-echo
+      ></span>
     </span>
   {:else if status === "attn"}
     <!-- The dot's echo, on its list's beat with the working tiles. Over the
-         dot it is the dot's own colour, so it needs no cut. -->
+         dot it is the dot's own colour, so it needs no cut. Unseen until its
+         beat (motion/echo). -->
     <span
       data-ping
       data-slot="dot"
       aria-hidden="true"
-      class="dot ping"
+      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none opacity-0"
       data-echo
+      style:--dot-off="calc(var(--status-dot-size) / -2)"
     ></span>
   {/if}
   {#if switches}
+    <!-- The switch: over the tile, the dot's overhang round it and the deck
+         under it, and never past the gap to the next row (--mark-hit-max,
+         the room a row leaves under its mark plus the gap between rows), so
+         it takes no press meant for the row below. --reach is how far the
+         dot stands out of the tile. -->
+    <!-- literal: 5px -->
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
     <span
       data-slot="hit"
       aria-expanded={open}
       aria-label={label}
-      class="hit focus-inset touch-hit"
+      class="focus-inset touch-hit absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs cursor-pointer"
+      style:--reach="calc(var(--status-dot-size) / 2)"
+      style:--hit-max="var(--mark-hit-max, calc(5px + var(--tree-gap)))"
+      style:--hit-foot="calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"
       onclick={toggle}
       onkeydown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -201,67 +324,42 @@
 </span>
 
 <style>
-  /* The lead slot's box (18px; --mark-size where a list sets its own): the
-     scene its deck recedes in. Over the nesting arm that ends at the tile
-     (.kit-nest, z-index 1): the arm runs under the mark, never across it. */
-  .tree-mark {
-    --size: var(--mark-size, 18px);
-    position: relative;
-    /* A step up while its rows are out: their marks start and end their
-       ride under it (app.css, motion/branch). */
-    z-index: var(--mark-level, 2);
-    display: inline-block;
-    flex: none;
-    inline-size: var(--size);
-    block-size: var(--size);
-    color: var(--mark-glyph);
-  }
-  /* The tile, and its copy that echoes. */
-  .tile {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    border-radius: var(--radius-xs);
-    background-color: var(--fill);
-    background-image: var(--mark-overlay);
-
-    & > :global(*) {
-      grid-area: 1 / 1;
+  /* residual: pseudo — each card's shade, darker with depth, and the shadow
+     the card in front casts on the band of this one that shows. The skin
+     wears the same. */
+  [data-slot="tree-mark-card"],
+  [data-ride-skin] {
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--mark-deck-shade);
+      opacity: calc(var(--p) * var(--deck-shade-step));
+    }
+    &::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      inset-inline: 0;
+      inset-block-start: 0;
+      block-size: calc(var(--deck-step) * 1.5);
+      background: linear-gradient(var(--mark-deck-cast), transparent);
+      transform: translateY(
+        calc(
+          (
+              var(--size) - var(--deck-step) - var(--size) *
+                var(--deck-shrink) * var(--p)
+            ) /
+            (1 - var(--deck-shrink) * var(--p))
+        )
+      );
     }
   }
-  /* No tile: the face stands bare in the slot, in the muted ink (a row that
-     is no session or project: "N older"). */
-  .tree-mark[data-bare] {
-    color: var(--ink-muted);
 
-    & .tile {
-      background: none;
-    }
-  }
-  /* The echo: a copy of the tile that grows from it and fades, on its
-     list's beat (motion/echo), seen only outside the tile and its deck.
-     It is under them by shape, not by order. The browser runs the echo on
-     a layer of its own, and whatever is drawn after a moving layer and
-     might touch it is put on a layer too: drawn first, under the tile, the
-     echo took the tile onto one, every mark down the rail after it into
-     the same one, and the pane behind them. So it is the last thing the
-     mark draws, in a box as large as it ever grows (--echo-scale, to the
-     pixel above), and the box is cut: the tile's own rounded square is a
-     hole in it, and so is the band of each card that shows under the tile
-     (--n of them, none while the deck is away, --deck-away). The hole
-     stands still; only the echo inside moves. Last in order means over the
-     switch too (`.hit`, z-index 4), which takes the presses through it. */
-  .echo-box {
-    z-index: 5;
-    --reach: round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px);
-    --r: var(--radius-xs);
-    --side: calc(var(--size) - 2 * var(--r));
-    --foot: calc(var(--reach) + var(--size));
-    --cards: calc(var(--n, 0) * (1 - var(--deck-away, 0)));
-    position: absolute;
-    inset: calc(-1 * var(--reach));
-    pointer-events: none;
+  /* residual: unmapped — the echo box's cut, a clip-path shape(): the
+     tile's own rounded square is a hole in it, and so is the band of each
+     card that shows under the tile. */
+  [data-slot="tree-mark-echo-box"] {
     clip-path: shape(
       evenodd from 0 0,
       hline to 100%,
@@ -300,184 +398,49 @@
       close
     );
   }
-  .echo {
-    inset: var(--reach);
-    opacity: 0;
-  }
 
-  /* The deck: the tile's copies behind it. Card i stands i places back
-     (1 nearest), the tile scaled by 1 - --deck-shrink x its place about a
-     point under the tile (the deck's vanishing point), so it shows
-     --deck-step below the one in front; a card with no row to stand for is
-     not drawn. A plain scale, drawn with the row: receding in z through a
-     perspective put the same card in the same place, but each card, each
-     deck and each mark was then a layer of its own on the compositor, and
-     every tile over them one more. */
-  .deck {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  .card,
-  .skin {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    border-radius: var(--radius-xs);
-    background-color: var(--fill);
-    background-image: var(--mark-overlay);
-  }
-  .card {
-    --p: max(0, calc(var(--n) - var(--i) + 1));
-    opacity: clamp(0, calc(var(--n) - var(--i) + 1), 1);
-    transform-origin: 50%
-      calc(var(--size) + var(--deck-step) / var(--deck-shrink));
-    transform: scale(calc(1 - var(--deck-shrink) * var(--p)));
-  }
-  /* The skin: a child's tile wears its parent's card (--p its place,
-     --pfill the parent's colour) as it leaves the deck, and sheds it on its
-     way to its row (motion/branch). Unseen at rest. */
-  .skin {
-    --p: 1;
-    background-color: var(--pfill, var(--fill));
-    opacity: 0;
-    pointer-events: none;
-  }
-  .card,
-  .skin {
-    /* Darker with depth. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: var(--mark-deck-shade);
-      opacity: calc(var(--p) * var(--deck-shade-step));
-    }
-    /* The shadow the card in front casts on the band of this one that
-       shows. */
-    &::before {
-      content: "";
-      position: absolute;
-      z-index: 1;
-      inset-inline: 0;
-      inset-block-start: 0;
-      block-size: calc(var(--deck-step) * 1.5);
-      background: linear-gradient(var(--mark-deck-cast), transparent);
-      transform: translateY(
-        calc(
-          (
-              var(--size) - var(--deck-step) - var(--size) *
-                var(--deck-shrink) * var(--p)
-            ) /
-            (1 - var(--deck-shrink) * var(--p))
-        )
-      );
-    }
-  }
-
-  /* What the tile shows at rest (its face or its count), and the chevron
-     it gives way to: both stay in the tile; the one leaving shrinks and
-     blurs out as the other grows and sharpens in. Transitions, so a pointer
-     that turns back mid-way turns them with it. */
-  .num {
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    /* The count's box is fixed, and the morph (which animates its own box's
-       width and height) is contained in it: nothing outside it is laid out
-       as the figure changes, and 9 to 10 stays centred. */
-    display: inline-grid;
-    place-items: center;
-    inline-size: 2ch;
-    block-size: 1lh;
-    contain: layout size;
-  }
-  /* Which of the two shows (--swap-away: 1 for the one that has given way).
-     That number is what transitions (app.css): the swap is by opacity; the
-     shrink and the blur are motion, and ride on it only where motion is
-     welcome. The chevron's turn and the tile's press are numbers of the
-     same kind. */
-  .rest,
-  .chev {
-    display: inline-grid;
-    place-items: center;
-    opacity: calc(1 - var(--swap-away));
-    transition: --swap-away var(--dur-control) var(--ease-out);
-  }
-  .chev {
+  /* residual: unmapped — the swap, the turn and the press are registered
+     numbers that do not inherit (app.css @property), each moved by its own
+     transition: a state sets one on the element itself, and only a rule
+     can (an inline value would outrank every state). Open, the chevron
+     points down at the rows. It stands in the face's place, unless the
+     count is a status of the parent's own (`countIsStatus`): then the count
+     stays and only a pointer brings the chevron. The chevron's svg is the
+     icon component's own, so its turn keeps the original's :global. */
+  [data-slot="chev"] {
     --swap-away: 1;
-    inline-size: 12px;
-    block-size: 12px;
-
-    & :global(svg) {
-      inline-size: 100%;
-      block-size: 100%;
-      rotate: var(--swap-turn);
-    }
   }
-  /* Open, the chevron points down at the rows. It stands in the face's
-     place, unless the count is a status of the parent's own
-     (`countIsStatus`): then the count stays and only a pointer brings the
-     chevron. */
-  .tree-mark[data-open] .chev :global(svg) {
+  [data-slot="tree-mark"][data-open] [data-slot="chev"] :global(svg) {
     --swap-turn: 90deg;
   }
-  .tree-mark[data-open]:not([data-status-count], [data-face-always]) {
-    & .rest {
+  [data-slot="tree-mark"][data-open]:not([data-status-count], [data-face-always]) {
+    & [data-slot="tree-mark-rest"] {
       --swap-away: 1;
     }
-    & .chev {
+    & [data-slot="chev"] {
       --swap-away: 0;
     }
   }
   @media (hover: hover) and (pointer: fine) {
-    .tree-mark[data-switch]:not([data-face-always]):hover {
-      & .rest {
+    [data-slot="tree-mark"][data-switch]:not([data-face-always]):hover {
+      & [data-slot="tree-mark-rest"] {
         --swap-away: 1;
       }
-      & .chev {
+      & [data-slot="chev"] {
         --swap-away: 0;
       }
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .rest,
-    .chev {
-      scale: calc(1 - 0.75 * var(--swap-away));
-      filter: blur(calc(4px * var(--swap-away)));
-    }
-    .chev :global(svg) {
-      transition: --swap-turn var(--dur-toggle) var(--ease-out);
-    }
-    .face {
-      scale: var(--press-by);
-      transition: --press-by var(--dur-toggle) var(--ease-out);
+    [data-slot="tree-mark-rest"],
+    [data-slot="chev"] {
+      filter: blur(calc(var(--space-1) * var(--swap-away)));
     }
     /* The press: the tile gives a little under it. */
-    .tree-mark:has(.hit:active) .face {
+    [data-slot="tree-mark"]:has([data-slot="hit"]:active)
+      [data-slot="tile"]:not([data-echo]) {
       --press-by: var(--press-scale);
     }
-  }
-
-  /* The switch: over the tile, the dot's overhang round it and the deck
-     under it, and never past the gap to the next row (--mark-hit-max, the
-     room a row leaves under its mark plus the gap between rows), so it takes
-     no press meant for the row below. */
-  .hit {
-    /* How far the dot stands out of the tile. */
-    --reach: calc(var(--status-dot-size) / 2);
-    position: absolute;
-    z-index: 4;
-    inset: calc(-1 * var(--reach));
-    inset-block-end: calc(
-      -1 *
-        min(
-          var(--n) * var(--deck-step) + var(--reach),
-          var(--mark-hit-max, calc(5px + var(--tree-gap)))
-        )
-    );
-    border-radius: var(--radius-xs);
-    cursor: pointer;
   }
   /* Under a finger the switch is the kit's touch target (`.touch-hit`: a
      transparent area centred on it, up to 44px), and it is centred on the
@@ -486,58 +449,32 @@
      from its mark to its words), up and down at the midpoint of the gap
      between rows (--mark-hit-max, less half that gap). Where a row is
      tighter than 44px those win: 30 by 32px on a one-line row in the rail,
-     32 by 44px on a two-line row. */
+     32 by 44px on a two-line row. Only under a finger: these are the kit's
+     own names, read by .touch-hit. */
   @media (pointer: coarse) {
-    .hit {
-      inset-block-end: calc(-1 * var(--reach));
+    [data-slot="hit"] {
       --hit-gap-x: calc(
         2 * (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach))
       );
       --hit-gap-y: calc(
-        2 *
-          (
-            var(--mark-hit-max, calc(5px + var(--tree-gap))) - var(--tree-gap) /
-              2 - var(--reach)
-          )
+        2 * (var(--hit-max) - var(--tree-gap) / 2 - var(--reach))
       );
     }
   }
-
-  /* The status dot, for a row that needs you or has failed: a circle
-     centred on the tile's top-right corner, half of it out of the tile, over
-     the tile, its count and its deck. The tile is cut away round it
-     (--status-dot-cut wide) rather than ringed in a surface colour: what
-     shows in the cut is whatever the row stands on, so the dot reads on
-     every tile hue and over the hover and selected washes alike. The cut is
-     a hole in the face's mask; the tile's box and what it holds stay where
-     they are. */
-  .dot {
-    position: absolute;
-    z-index: 5;
-    top: calc(var(--status-dot-size) / -2);
-    right: calc(var(--status-dot-size) / -2);
-    inline-size: var(--status-dot-size);
-    block-size: var(--status-dot-size);
-    border-radius: var(--radius-pill);
-    background-color: var(--dot);
-    pointer-events: none;
-  }
-  /* The needs-you dot's echo: unseen until its beat (motion/echo). */
-  .ping {
-    opacity: 0;
-  }
-  .tree-mark[data-dot] .face {
+  /* The face's cut round the dot, and the dot's ink by status (a custom
+     property set by the status). */
+  [data-slot="tree-mark"][data-dot] [data-slot="tile"]:not([data-echo]) {
     --hole: calc(var(--status-dot-size) / 2 + var(--status-dot-cut));
     mask-image: radial-gradient(
       circle at 100% 0,
-      transparent calc(var(--hole) - 0.25px),
-      #000 calc(var(--hole) + 0.25px)
+      transparent calc(var(--hole) - var(--hole-edge)),
+      var(--mask-opaque) calc(var(--hole) + var(--hole-edge))
     );
   }
-  .tree-mark[data-dot="attn"] {
+  [data-slot="tree-mark"][data-dot="attn"] {
     --dot: var(--status-attn-glyph);
   }
-  .tree-mark[data-dot="fail"] {
+  [data-slot="tree-mark"][data-dot="fail"] {
     --dot: var(--status-fail-glyph);
   }
   /* Working: a still dot in the live ink, except while the echo that says it
@@ -545,14 +482,14 @@
      still dot is the rule, so the mark says its status wherever no echo
      runs: with reduced motion, once its echoes have played, in a list not
      rendered. The scheduler sets the attribute, so it is global here. */
-  .tree-mark[data-dot="live"] {
+  [data-slot="tree-mark"][data-dot="live"] {
     --dot: var(--status-live-glyph);
   }
-  .tree-mark[data-dot="live"]:has(:global([data-beating])) {
-    & .dot {
+  [data-slot="tree-mark"][data-dot="live"]:has(:global([data-beating])) {
+    & [data-slot="dot"] {
       display: none;
     }
-    & .face {
+    & [data-slot="tile"]:not([data-echo]) {
       mask-image: none;
     }
   }

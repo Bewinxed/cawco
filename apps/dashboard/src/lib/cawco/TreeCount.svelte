@@ -32,13 +32,16 @@
   }
 </script>
 
+<!-- A plain filled chip: a step stronger under the pointer and while its
+     fold is open, the press every compact control takes (.pressable). It
+     never yields or truncates: a row's title gives up its room first. -->
 <!-- biome-ignore lint/a11y/useSemanticElements: the chip's markup and press are the kit's span control (.pressable), as they were inside a row's link. -->
 <span
   data-num
   data-slot="count"
   aria-expanded={open}
   aria-label={open ? `Hide ${label}` : `Show ${label}`}
-  class="count num pressable focus-inset pointer-hit touch-hit"
+  class="num pressable focus-inset pointer-hit touch-hit inline-flex flex-none items-center justify-center h-space-5 min-w-space-5 px-space-1 overflow-visible rounded-xs bg-surface-fill text-ink-muted type-meta whitespace-nowrap cursor-pointer data-open:bg-surface-fill-strong data-open:text-ink-strong hover:bg-surface-fill-strong hover:text-ink-strong"
   data-open={open || undefined}
   onclick={toggle}
   onkeydown={(event) => {
@@ -53,38 +56,12 @@
 </span>
 
 <style>
-  /* A plain filled chip: a step stronger under the pointer and while its
-     fold is open, the press every compact control takes (.pressable). It
-     never yields or truncates: a row's title gives up its room first. */
-  .count {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    block-size: var(--space-5);
-    min-inline-size: var(--space-5);
-    padding-inline: var(--space-1);
-    overflow: visible;
-    border-radius: var(--radius-xs);
-    background: var(--surface-fill);
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    cursor: pointer;
+  /* residual: unmapped — two durations in one transition (needs a transition
+     token); unlayered, so it still wins over .pressable's own transition. */
+  [data-slot="count"] {
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
       transform var(--dur-toggle) var(--ease-out);
-  }
-  .count[data-open] {
-    background: var(--surface-fill-strong);
-    color: var(--ink-strong);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .count:hover {
-      background: var(--surface-fill-strong);
-      color: var(--ink-strong);
-    }
   }
 </style>
