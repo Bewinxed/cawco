@@ -140,6 +140,8 @@ const ASK_PEEK = "[data-needs-card-peek]";
 /** The note pasted beside your words in Caw's thread: its DocThumb's open. */
 const THREAD_NOTE = "Open phone-notes.txt";
 
+/** The adopted skill's row menu (RowMenu's "More for tray-check"). */
+const MORE_FOR_SKILL = /^More for tray-check$/;
 /** The fleet memory's row menu (RowMenu's "More for ~/.claude/CLAUDE.md"). */
 const MORE_FOR_MEMORY = /^More for .*CLAUDE\.md$/;
 /** What runs in a project, which its forget reads first (client.svelte.ts `projectRunning`). */
@@ -194,6 +196,17 @@ const REASONING = /^Reasoning/;
 const PLAN_RING = /^Plan, /;
 /** An API-key provider the scratch machine's OpenCode runs (the providers list's). */
 const KEY_PROVIDER = "302.AI";
+/** A new account's setup, its API-key provider chosen, on to signing in (AccountSetup). */
+const toKeyStep = async (page: Page) => {
+  await page.getByRole("textbox", { name: "Search providers" }).fill(KEY_PROVIDER);
+  await page
+    .locator("[data-choice]")
+    .filter({ hasText: KEY_PROVIDER })
+    .first()
+    .click();
+  await press("Continue")(page);
+};
+
 /** The keychain dialog's password field and its Unlock (UnlockKeychain's). */
 const KEYCHAIN_PASSWORD = /^Login password for /;
 const UNLOCK = /^Unlock$/;
@@ -371,7 +384,21 @@ const EDITORS: Record<string, State[]> = {
       ],
     ])
   ),
-  skills: [{ name: "fetch", act: press(FETCH_SKILL), root: "body" }],
+  skills: [
+    { name: "fetch", act: press(FETCH_SKILL), root: "body" },
+    {
+      // The adopted skill's Remove everywhere: the ask under its row, and
+      // the machines it reaches.
+      name: "remove-ask",
+      act: async (page) => {
+        await press(MORE_FOR_SKILL)(page);
+        await page
+          .getByRole("menuitem", { name: "Remove everywhere" })
+          .click();
+      },
+      root: "body",
+    },
+  ],
   memory: [
     { name: "new", act: press(NEW_MEMORY), root: "body" },
     {
@@ -442,16 +469,20 @@ const EDITORS: Record<string, State[]> = {
       // on to signing in: the key's field and the machines it goes to.
       name: "key",
       route: () => "/config/accounts/new",
+      act: toKeyStep,
+      root: "body",
+    },
+    {
+      // Its key sent: the account made and the machine holding the key. It
+      // writes, so it reads the hub its writes leave (scene.ts `written`).
+      name: "key-sent",
+      hub: "written",
+      route: () => "/config/accounts/new",
       act: async (page) => {
-        await page
-          .getByRole("textbox", { name: "Search providers" })
-          .fill(KEY_PROVIDER);
-        await page
-          .locator("[data-choice]")
-          .filter({ hasText: KEY_PROVIDER })
-          .first()
-          .click();
-        await press("Continue")(page);
+        await toKeyStep(page);
+        await page.getByRole("textbox", { name: "API key" }).fill("probe-302-key");
+        await press("Send key")(page);
+        await page.getByText("Key sent").first().waitFor();
       },
       root: "body",
     },
@@ -1115,6 +1146,27 @@ export const SURFACES: Surface[] = [
     states: [{ name: "rest", root: "body" }],
   },
   {
+    // Suggest while typing on: words naming the session's skill, and its chip.
+    name: "suggesting",
+    serve: "built",
+    route: (s) => `/session/${s.skillRun}`,
+    states: [
+      {
+        name: "chip",
+        hub: "suggesting",
+        act: async (page) => {
+          await page.locator(COMPOSER_FIELD).first().click();
+          await page.keyboard.type("Run tray-check on the chip row");
+          await page
+            .locator("[data-slot=suggest] fieldset button")
+            .first()
+            .waitFor();
+        },
+        root: MAIN,
+      },
+    ],
+  },
+  {
     // Every machine offline: where the page says where to start (MachinesEmpty).
     name: "no-machine",
     serve: "built",
@@ -1127,6 +1179,22 @@ export const SURFACES: Surface[] = [
         hub: "machineless",
         route: (s) => `/session/${s.chips}`,
         root: MAIN,
+      },
+      {
+        // A parked permission denied from its needs card while its machine
+        // is away: the hub's refusal, opened whole.
+        name: "answer-refused",
+        hub: "machineless",
+        act: async (page) => {
+          await page.click("[data-needs-caw]");
+          await page
+            .locator("[data-deny]")
+            .filter({ visible: true })
+            .first()
+            .click();
+          await page.getByTitle("Show the whole error").first().click();
+        },
+        root: "body",
       },
     ],
   },

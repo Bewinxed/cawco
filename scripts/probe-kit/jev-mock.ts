@@ -2,7 +2,8 @@
  * Jev as a scratch fleet's hub reaches it on the TypeSafe route
  * (`CAWCO_TYPESAFE_URL`, hub jev.ts), as scripts/probe-fleet-watch.ts
  * stands one in: every request kept whole, every question answered by its
- * type (https://docs.typesafe.ai/api.md). A noul is answered no, a score its
+ * type (https://docs.typesafe.ai/api.md). A noul is answered no (yes when it
+ * asks about a candidate the call's prompt names), a score its
  * lowest level, a choice `none` when it offers one, else its first option.
  * A starters call (hub jev-placement.ts `jevStarters`: its state holds
  * `shown` and `repository`) is answered by `starters`, which picks each
@@ -78,6 +79,23 @@ export const firstAsk = (call: JevCall): Record<string, StarterPick> =>
     ])
   );
 
+/**
+ * A noul's answer: yes (0.9) when it asks about a candidate (a composer
+ * suggestion's skill, tool or MCP server: hub suggest.ts) whose name the
+ * call's prompt says; no (0.05) otherwise.
+ */
+const candidateNamed = (call: JevCall, asked: JevAsked): number => {
+  const { candidate } = (asked.instructions ?? {}) as {
+    candidate?: { name?: unknown };
+  };
+  const { prompt } = call.state;
+  return typeof candidate?.name === "string" &&
+    typeof prompt === "string" &&
+    prompt.toLowerCase().includes(candidate.name.toLowerCase())
+    ? 0.9
+    : 0.05;
+};
+
 export const jevMock = (
   starters: (call: JevCall) => Record<string, StarterPick> = firstAsk
 ): JevMock => {
@@ -100,7 +118,7 @@ export const jevMock = (
       const answers: Record<string, unknown> = {};
       for (const [id, asked] of Object.entries(body.questions)) {
         if (asked.type === "noul") {
-          answers[id] = { type: "noul", noul: 0.05 };
+          answers[id] = { type: "noul", noul: candidateNamed(call, asked) };
         } else if (asked.type === "score") {
           answers[id] = {
             type: "score",

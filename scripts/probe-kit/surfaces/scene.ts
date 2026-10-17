@@ -244,7 +244,7 @@ const pieces = (words: string): string[] =>
 /** A slow reply's pace: a piece every 15 s, so a page shown it stands still between pieces (walk.ts `stand`). */
 const SLOW_MS = 15_000;
 /** What the live sessions say and think, long enough at {@link SLOW_MS} a piece to outlast the walk. */
-const LONG_NOTE = `The tray's chip row is measured at every width the dashboard is read at. At 390px the third chip is cut, and its count badge with it. The label takes its whole width because nothing lets it shrink, so a long branch name pushes everything after it out of the row. Letting the label shrink, clipping it with an ellipsis and keeping the badge whole fixes the phone. The tablet and the desk keep their widths. The next step is to measure the row again with a forty character branch name, then with two chips that both carry long names, and to say where each one clips and whether the badge stays readable at every width. After that the same check runs on the board's cards, which reuse the chip, and on the rail's rows, which show a smaller one. Each measurement is written down with its width, the branch name used and the pixel where the label clipped, so the next change to the chip can be checked against them.`;
+const LONG_NOTE = `${TODO_PHRASE} measure the tray's chip row at every width the dashboard is read at. At 390px the third chip is cut, and its count badge with it. The label takes its whole width because nothing lets it shrink, so a long branch name pushes everything after it out of the row. Letting the label shrink, clipping it with an ellipsis and keeping the badge whole fixes the phone. The tablet and the desk keep their widths. The next step is to measure the row again with a forty character branch name, then with two chips that both carry long names, and to say where each one clips and whether the badge stays readable at every width. After that the same check runs on the board's cards, which reuse the chip, and on the rail's rows, which show a smaller one. Each measurement is written down with its width, the branch name used and the pixel where the label clipped, so the next change to the chip can be checked against them.`;
 const LONG_THOUGHT = `The row is a flex row with no wrap. Each chip holds a label and a badge. The label has no minimum width of zero, so it never shrinks below its content. The badge comes after the label in source order. When the row is narrower than its chips, the last chip overflows the row. Clipping happens at the row's edge, so the last chip loses its badge first. The fix belongs on the label: let it shrink, clip it with an ellipsis, and leave the badge alone. Before writing it, the cards and the rail rows that reuse the chip need checking, because a change to the label's shrinking changes them too. The board's cards are wider, so they rarely clip. The rail's rows are narrower, and their chips already truncate, which suggests the rail styles the label differently. That difference is worth reading before the fix, so the fix is one rule and not two.`;
 
 /** The markdown a reply draws: one of each block the transcript renders. */
@@ -714,11 +714,19 @@ export interface Scene {
 
 /**
  * The hub states the scene moves the fleet into once the main recording is
- * done, in this order (each leaves the fleet in it): every machine offline,
- * then paired devices required. A state that reads one names it (catalogue
- * `hub`); the tape keeps each on its own (hub-tape.ts `variants`).
+ * done, in this order (each leaves the fleet in it): composer suggestions
+ * switched on; `written`, the hub as states that write to it leave it (an
+ * account made, a key sent), kept apart so no other state reads what they
+ * wrote; every machine offline; paired devices required. A state that
+ * reads one names it (catalogue `hub`); the tape keeps each on its own
+ * (hub-tape.ts `variants`).
  */
-export const VARIANTS = ["machineless", "pairing"] as const;
+export const VARIANTS = [
+  "suggesting",
+  "written",
+  "machineless",
+  "pairing",
+] as const;
 export type Variant = (typeof VARIANTS)[number];
 
 /** Moves the scene's fleet into `variant` (after the ones before it in {@link VARIANTS}). */
@@ -726,6 +734,24 @@ export async function enterVariant(
   fleet: KitFleet,
   variant: Variant
 ): Promise<void> {
+  if (variant === "suggesting") {
+    // Settings' "Suggest while typing" on (Jev is: the scene's TypeSafe key).
+    const response = await fetch(`${fleet.base}/api/jev/suggest`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `PUT /api/jev/suggest: ${response.status} ${await response.text()}`
+      );
+    }
+    return;
+  }
+  if (variant === "written") {
+    // Nothing moves: its states' own acts write to the hub.
+    return;
+  }
   if (variant === "machineless") {
     // Its one machine's agent stopped: no machine online (the Mac was never).
     await fleet.stop("agent");
@@ -855,10 +881,12 @@ export async function seedScene(
     answered,
     "Ask me what the hang card's states are called. PROBE-STEP:named"
   );
-  // A rule, and a session whose every turn ends on a TODO: the rule fires
-  // once and its reply is the session's next message (a rule's row), and,
-  // the next turn ending on it again, it stays waiting on an answer (the
-  // rules page's count). Its phrase is in no other session's words.
+  // A rule sent the moment its phrase streams, once per session, and a
+  // session that says it: its reply is the session's next message (a rule's
+  // row). The live session says it too, still talking as the walk reads it,
+  // so the rule waits on its answer there (the rules page's count: a fired
+  // rule waits until the session's next turn ends). Its phrase is in no
+  // other session's words.
   const rule = await send("/api/rules", "POST", {
     name: "Finish the TODO",
     enabled: true,
@@ -869,7 +897,7 @@ export async function seedScene(
     repeat: false,
     reply: "Finish the TODO before you stop.",
     scope: {},
-    timing: "turn",
+    timing: "immediate",
     watch: "text",
   });
   const todo = await fleet.spawn("claude", "Leave the TODO", fleet.repo);
@@ -1137,19 +1165,10 @@ export async function seedScene(
       180_000
     );
   }
-  // The TODO session's rule fired and still waiting on an answer, and the
-  // turn its reply started (ending on the TODO again) at rest.
-  await until(
-    "the TODO session's rule waiting on an answer",
-    () =>
-      fleet.query<{ status: string }>(
-        "SELECT status FROM rule_state WHERE rule_id = ? AND instance_id = ?",
-        rule.id,
-        todo
-      )[0]?.status,
-    (status) => status === "pending",
-    180_000
-  );
+  // The TODO session's rule fired, its reply read as the session's next
+  // message, and the turn that answered it at rest (the rule armed again:
+  // hub rules.ts `rearmRules`, a pending rule lasts until the session's next
+  // turn ends).
   await until(
     "the TODO session's answer to its rule's reply, at rest",
     async () => {
@@ -1564,18 +1583,19 @@ export async function seedScene(
   // a model's document, an MCP server the hub signs in to (McpSignIn), a
   // hook saved twice (its previous version), and a rule.
   /** The scratch machine's own last word on the model's document (its fleet report, as the hub keeps it). */
-  const machineDoc = () => {
+  const machineReport = () => {
     const [row] = fleet.query<{ fleet: string | null }>(
       "SELECT fleet FROM agents WHERE machine_id = ?",
       MACHINE
     );
-    const report = row?.fleet
-      ? (JSON.parse(row.fleet) as {
-          memoryDocs?: Record<string, { state: string }>;
-        })
+    return row?.fleet
+      ? (JSON.parse(row.fleet) as Record<
+          "memoryDocs" | "skills",
+          Record<string, { state: string }> | undefined
+        >)
       : null;
-    return report?.memoryDocs?.[MODEL_DOC]?.state;
   };
+  const machineDoc = () => machineReport()?.memoryDocs?.[MODEL_DOC]?.state;
   await send("/api/fleet/memory", "PUT", { content: MEMORY_V1 });
   await send("/api/fleet/memory", "PUT", { content: MEMORY_V2 });
   await send("/api/fleet/memory/docs", "PUT", {
@@ -1626,6 +1646,18 @@ export async function seedScene(
     (state) => state === "failed",
     120_000
   );
+  // The machine's own skill adopted into the fleet, as its machine's
+  // inventory adopts one: the fleet's from then on, held by the machine (a
+  // removal's ask names who holds it).
+  await send(`/api/fleet/skills/${SKILL_NAME}`, "PUT", {
+    fromMachine: MACHINE,
+  });
+  await until(
+    "the machine holding the fleet's skill",
+    () => machineReport()?.skills?.[SKILL_NAME]?.state,
+    (state) => state === "applied",
+    120_000
+  );
   // A second machine, a Mac, offline since it last registered: its
   // keychain locked Claude Code's login (`unreadable-credentials`, the
   // machine menu's Unlock keychain…), as the hub keeps a machine that went
@@ -1664,6 +1696,19 @@ export async function seedScene(
       120_000
     );
   }
+  // Its note's first words carry the rule's phrase: the rule fired on it,
+  // waiting for a turn that will not end while the walk reads it.
+  await until(
+    "the rule waiting on the live session's answer",
+    () =>
+      fleet.query<{ status: string }>(
+        "SELECT status FROM rule_state WHERE rule_id = ? AND instance_id = ?",
+        rule.id,
+        live
+      )[0]?.status,
+    (status) => status === "pending",
+    120_000
+  );
   kit.note(
     `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
