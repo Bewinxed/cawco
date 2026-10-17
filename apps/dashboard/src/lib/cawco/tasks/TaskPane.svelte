@@ -462,8 +462,8 @@
           <Input
             aria-label="Title"
             autocomplete="off"
-            class="text-title"
             onblur={saveTitle}
+            text="title"
             onkeydown={(event) => {
               if (event.key === "Escape") {
                 event.stopPropagation();
@@ -539,7 +539,8 @@
       >
         <!-- literal: 6rem -->
         <Skeleton
-          class="h-(--skeleton-h) w-full rounded-md"
+          class="h-(--skeleton-h) w-full"
+          radius="tile"
           style="--skeleton-h: 6rem"
         />
         <!-- literal: 0.5rem -->

@@ -87,6 +87,16 @@
     "created",
     "updated",
   ]);
+  /** Each column's width, its head's and its cells' alike; the title takes the rest. */
+  const COL_W: Record<string, string> = {
+    pick: "calc(1rem + 2 * var(--space-3))",
+    id: "6.5rem",
+    stage: "12rem",
+    labels: "14rem",
+    todos: "6rem",
+    created: "7rem",
+    updated: "7rem",
+  };
   /** A column the ledger holds in its own order. */
   const fixed = { enableSorting: false } as const;
   /** A time column: sorted by its ms epoch, newest first on the first pick. */
@@ -217,12 +227,13 @@
 >
   <Table.Root
     data-tasks
-    class="border-separate border-spacing-(--cell-gap) table-fixed max-phone:block"
+    class="border-separate table-fixed max-phone:block"
     ghostRows="tbody tr"
+    spacing="gap"
   >
     <Table.Header class="max-phone:hidden">
       {#each table.getHeaderGroups() as group (group.id)}
-        <Table.Row class="border-0 bg-surface-band">
+        <Table.Row variant="band">
           {#each group.headers as header (header.id)}
             {@const column = header.column}
             {@const sorted = column.getIsSorted()}
@@ -233,24 +244,17 @@
               aria-sort={sort}
               class={[
                 column.id === "created" &&
-                  "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted text-end @max-decisions-900px:hidden",
+                  "w-(--col-w) h-c-toolbar-ctl text-end @max-decisions-900px:hidden",
                 column.id === "updated" &&
-                  "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted text-end",
+                  "w-(--col-w) h-c-toolbar-ctl text-end",
                 column.id !== "created" &&
                   column.id !== "updated" &&
-                  "w-(--col-w) h-c-toolbar-ctl px-space-3 type-label tracking-caps uppercase text-ink-muted",
+                  "w-(--col-w) h-c-toolbar-ctl",
               ]}
               data-task-table-col={column.id}
               scope="col"
-              style="--col-w: {{
-                pick: 'calc(1rem + 2 * var(--space-3))',
-                id: '6.5rem',
-                stage: '12rem',
-                labels: '14rem',
-                todos: '6rem',
-                created: '7rem',
-                updated: '7rem',
-              }[column.id] ?? ''}"
+              variant="caps"
+              style="--col-w: {COL_W[column.id] ?? ''}"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: the tag above -->
               {#if column.id === "pick"}
@@ -302,27 +306,30 @@
         {@const on = picked?.(task.id) ?? false}
         <Table.Row
           data-task-table-row
-          class="group/row relative border-b-none data-picked:max-phone:bg-selected-bg max-phone:grid max-phone:grid-cols-(--row-cols) group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick) max-phone:items-center max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:px-space-3 max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none"
+          class="group/row relative max-phone:grid max-phone:grid-cols-(--row-cols) group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick) max-phone:items-center"
           data-picked={on || undefined}
           data-task={task.id}
+          variant="picks-stacks"
         >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
-              class={[
-                cell.column.id === "pick" &&
-                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-(--pick-row) max-phone:col-start-1",
-                cell.column.id === "title" &&
-                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
-                cell.column.id === "labels" &&
-                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:hidden",
-                cell.column.id === "created" &&
-                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent @max-decisions-900px:hidden",
-                cell.column.id === "updated" &&
-                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted text-end group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
-                !SPECIAL_CELLS.has(cell.column.id) &&
-                  "h-c-btn-h-lg py-0 px-space-3 border-b border-b-border-hairline type-meta text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg group-data-picked/row:max-phone:bg-transparent max-phone:block max-phone:w-auto max-phone:min-w-0 max-phone:h-auto max-phone:p-0 max-phone:border-none max-phone:border-current",
-              ]}
+              class={cell.column.id === "created"
+                ? "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto"
+                : [
+                    cell.column.id === "pick" &&
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-(--pick-row) max-phone:col-start-1",
+                    cell.column.id === "title" &&
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
+                    cell.column.id === "labels" &&
+                      "w-(--col-w) h-c-btn-h-lg max-phone:hidden max-phone:w-auto max-phone:h-auto",
+                    cell.column.id === "updated" &&
+                      "w-(--col-w) h-c-btn-h-lg text-end max-phone:block max-phone:w-auto max-phone:h-auto max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
+                    !SPECIAL_CELLS.has(cell.column.id) &&
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto",
+                  ]}
               data-task-table-col={cell.column.id}
+              style="--col-w: {COL_W[cell.column.id] ?? ''}"
+              variant="ledger-picks-stacks"
             >
               {#if cell.column.id === "pick"}
                 <Checkbox

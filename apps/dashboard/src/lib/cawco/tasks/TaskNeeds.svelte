@@ -123,7 +123,7 @@
       <section
         data-slot="needs"
         aria-label="Its session asks"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
       >
         <h3
           data-slot="head"
@@ -156,7 +156,7 @@
       <section
         data-slot="needs"
         aria-label="An approved action"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
       >
         <h3
           data-slot="head"
@@ -211,7 +211,7 @@
             <Button
               data-deny
               aria-label="Deny {action.tool} on {action.connection}"
-              class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
+              answer="deny"
               disabled={deciding !== null}
               onclick={() => decide(action, "deny")}
               size="sm"
@@ -223,7 +223,7 @@
             <Button
               data-approve
               aria-label="Approve {action.tool} on {action.connection}"
-              class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
+              answer="approve"
               disabled={deciding !== null}
               onclick={() => decide(action, "approve")}
               size="sm"
@@ -251,7 +251,7 @@
       <section
         data-slot="needs"
         aria-label="Its session"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-(--needs-ground)"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
         data-reason="failed"
       >
         <h3
@@ -339,14 +339,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  /* residual: unmapped */
-  [data-slot="needs"] {
-    --needs-ground: color-mix(
-      in oklab,
-      var(--status-attn-bg) 45%,
-      var(--surface-raised)
-    );
-  }
-</style>

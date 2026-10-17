@@ -51,7 +51,7 @@
       <Button
         data-text-section-count
         data-box
-        class="count"
+        class="ms-auto"
         onclick={() => {
           draft = text;
         }}
@@ -64,7 +64,8 @@
     <div class="flex flex-col gap-space-2">
       <Textarea
         aria-label={heading}
-        class="font-mono text-label"
+        face="mono"
+        text="label"
         onkeydown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();

@@ -56,6 +56,16 @@ export const LAYER =
 const press = (name: string | RegExp) => (page: Page) =>
   page.getByRole("button", { name }).filter({ visible: true }).first().click();
 
+/** Picks the board's first card, then presses the bulk bar's button named `name`. */
+const pickThen = (name: RegExp) => async (page: Page) => {
+  await page
+    .getByRole("checkbox", { name: PICK_TASK })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await press(name)(page);
+};
+
 /**
  * The composer focused and empty. A pass reads a surface's states on one
  * page, and the draft an earlier state typed stays the session's (it is
@@ -99,6 +109,16 @@ const NEW_MEMORY = /New memory|New/;
 const CAW_SEAT = /Caw, lead of/;
 /** A board card's pick box. */
 const PICK_TASK = /Pick tsk-1/;
+/** The bulk bar's two popover triggers, once a card is picked. */
+const BULK_DROP = /^Drop$/;
+const BULK_LABEL = /^Label$/;
+/** The project head's More menu, and its stages picker. */
+const PROJECT_MORE = /More for cawco/;
+const PICK_STAGES = /Pick stages/;
+/** The board's Archived rail, folded. */
+const ARCHIVED_RAIL = /^Archived, /;
+/** A task sheet's Details tab, beside Review. */
+const DETAILS_TAB = /^Details$/;
 /** The chips transcript's Write row, and its change's open control. */
 const WROTE_ROW = /Wrote chip\.css/;
 const OPEN_DIFF = /diff|Open|Expand/i;
@@ -463,6 +483,29 @@ export const SURFACES: Surface[] = [
         root: MAIN,
         widths: ["desk"],
       },
+      // The Archived rail open, the bulk bar's two popovers, the stages picker.
+      { name: "archive", act: press(ARCHIVED_RAIL), root: MAIN },
+      {
+        name: "drop",
+        act: pickThen(BULK_DROP),
+        root: LAYER,
+        widths: ["desk"],
+      },
+      {
+        name: "label",
+        act: pickThen(BULK_LABEL),
+        root: LAYER,
+        widths: ["desk"],
+      },
+      {
+        name: "stages",
+        act: async (page) => {
+          await press(PROJECT_MORE)(page);
+          await page.getByRole("menuitem", { name: PICK_STAGES }).click();
+        },
+        root: LAYER,
+        widths: ["desk"],
+      },
     ],
   },
   {
@@ -475,6 +518,25 @@ export const SURFACES: Surface[] = [
         // In review: its two attempts, the newest's result (the page it presented, the post, the notes).
         name: "review",
         route: (s) => `/project/${s.project}?task=${s.review}`,
+        root: "body",
+      },
+      {
+        // Every part a task's sheet draws: labels, fields, a blocker, to-dos, criteria, notes, an output.
+        name: "rich",
+        route: (s) => `/project/${s.project}?task=${s.rich}`,
+        root: "body",
+      },
+      {
+        // The same task's Details (it opens on Review, since it has an output):
+        // its fields, labels, the task it waits on, to-dos, criteria and notes.
+        name: "rich-details",
+        route: (s) => `/project/${s.project}?task=${s.rich}`,
+        act: (page) =>
+          page
+            .getByRole("tab", { name: DETAILS_TAB })
+            .filter({ visible: true })
+            .first()
+            .click(),
         root: "body",
       },
       {
@@ -491,13 +553,19 @@ export const SURFACES: Surface[] = [
     route: (s) => `/project/${s.project}`,
     // Each view is the project's route with its `view` (the view tabs' own
     // hrefs): a made view's tab is `view:<name>` (+page.svelte's `tabs`).
-    states: ["table", "pipeline", "routines", "decisions", "view:week"].map(
-      (view): State => ({
-        name: view.replace("view:", ""),
-        route: (s) => `/project/${s.project}?view=${view}`,
-        root: MAIN,
-      })
-    ),
+    // `made` stands while a task has made something (ViewMade, its outputs drawn small).
+    states: [
+      "table",
+      "pipeline",
+      "routines",
+      "decisions",
+      "made",
+      "view:week",
+    ].map((view): State => ({
+      name: view.replace("view:", ""),
+      route: (s) => `/project/${s.project}?view=${view}`,
+      root: MAIN,
+    })),
   },
   {
     // Three linked decision pages: the list, one page, and their graph.

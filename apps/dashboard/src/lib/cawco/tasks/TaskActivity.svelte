@@ -223,7 +223,7 @@
     <!-- mark-line: the glyph heads words that may wrap: it stands in a mark cell, one line tall, on the first line -->
     <li
       data-slot="change"
-      class="grid grid-cols-(--cols) items-start gap-space-2 type-meta text-ink-muted"
+      class="grid grid-cols-(--cols) items-box-start gap-space-2 type-meta text-ink-muted"
       style:--cols="var(--icon-sm) minmax(0, 1fr) auto"
     >
       <span class="mark-cell"
@@ -320,10 +320,13 @@
   {/if}
   <div data-slot="composer" class="flex flex-col gap-space-1">
     <!-- The session Composer, words only; it stands on this box's foot
-         (Composer .dock), the box as tall as what it stands. -->
+         (Composer .dock), the box as tall as what it stands. The dock
+         rises by the screen's bottom inset, so the box holds it too
+         (--safe-bottom is set only where data-safe-bottom is). -->
     <div
       data-slot="task-activity-field"
       class="relative h-(--foot) w-full"
+      data-safe-bottom
       style:--foot="calc({commentFoot}px + var(--space-4) + var(--safe-bottom))"
     >
       <Composer

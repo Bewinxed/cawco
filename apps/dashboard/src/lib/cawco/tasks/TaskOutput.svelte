@@ -145,7 +145,7 @@
     <div
       data-slot="body"
       data-roomy={(kind === "markdown" && !compact) || undefined}
-      class="p-space-3 group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
+      class="p-space-3 not-data-roomy:group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
     >
       {#if problem || postProblem}
         <p class="m-0 type-meta text-status-fail-ink">
@@ -168,7 +168,8 @@
         <div
           data-slot="markdown"
           style:--markdown-max="6rem"
-          class="group-data-compact:max-h-(--markdown-max) group-data-compact:overflow-hidden"
+          style:--markdown-fade={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--space-6)), transparent)"}
+          class="group-data-compact:max-h-(--markdown-max) group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />
         </div>
@@ -207,14 +208,3 @@
     </div>
   {/if}
 </figure>
-
-<style>
-  /* residual: unmapped */
-  figure[data-compact] [data-slot="markdown"] {
-    mask-image: linear-gradient(
-      to bottom,
-      var(--mask-opaque) calc(100% - var(--space-6)),
-      transparent
-    );
-  }
-</style>
