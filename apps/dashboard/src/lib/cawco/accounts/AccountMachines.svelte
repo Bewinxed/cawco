@@ -110,7 +110,13 @@
 </script>
 
 <NsPopoverGroup>
-  <ul aria-label={words.editor.machines} class="rows" {@attach reflow()}>
+  <!-- literal: minmax(0, 1fr) max-content -->
+  <ul
+    aria-label={words.editor.machines}
+    class="m-0 grid grid-cols-(--rows-cols) list-none p-0"
+    style:--rows-cols="minmax(0, 1fr) max-content"
+    {@attach reflow()}
+  >
     {#each machines as machine (machine.machineId)}
       {@const name = machineName(machine)}
       {@const online = machineOnline(machine)}
@@ -118,18 +124,24 @@
       {@const shown = online ? state : "offline"}
       {@const flow = flows.get(machine.machineId)}
       {@const open = openOn === machine.machineId}
-      <li class="mrow" data-flip>
-        <span class="mname">{name}</span>
-        <span class="trail">
+      <li
+        class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:border-t not-first:border-border-hairline"
+        data-flip
+      >
+        <span class="type-label truncate text-ink-strong">{name}</span>
+        <span class="flex min-w-0 items-center justify-end gap-space-3">
           {#if shown !== "signed-in"}
-            <span class="state mark-line" data-state={shown}>
+            <span
+              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] dur-panel ease-out state-mismatch:text-status-attn-ink"
+              data-state={shown}
+            >
               {#if shown === "mismatch"}
-                <IconWarningTriangle aria-hidden="true" />
+                <IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" />
               {/if}
               <span>{WORDS[shown]}</span>
             </span>
           {/if}
-          <span class="act">
+          <span class="flex min-w-0 justify-end">
             {#if online && (state !== "signed-in" || open)}
               <NsPopover
                 align="end"
@@ -146,8 +158,8 @@
                 {#snippet trigger()}
                   {verb}
                 {/snippet}
-                <div class="panel">
-                  <p data-slot="title" class="title">{name}</p>
+                <div class="flex flex-col gap-space-3 p-space-2">
+                  <p data-slot="title" class="type-label text-ink-strong">{name}</p>
                   {#if flow?.kind === "paste"}
                     <SigninPanel
                       expected={account.email}
@@ -187,96 +199,18 @@
           </span>
         </span>
         {#if refusals.get(machine.machineId)}
-          <p data-slot="refused" class="refused" data-flip role="alert">
+          <p
+            data-slot="refused"
+            class="col-span-full pb-space-2 type-meta text-status-fail-ink"
+            data-flip
+            role="alert"
+          >
             {refusals.get(machine.machineId)}
           </p>
         {/if}
       </li>
     {:else}
-      <li class="none">{words.machines.none}</li>
+      <li class="col-span-full px-space-4 py-space-3 type-meta text-ink-muted">{words.machines.none}</li>
     {/each}
   </ul>
 </NsPopoverGroup>
-
-<style>
-  /* Flat rows under hairlines, as the Accounts list draws its rows. One grid
-     for every row (each row a subgrid of it): the trailing column, the word
-     and its action, starts at one x on every row and ends on one edge. */
-  .rows {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) max-content;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .mrow {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: subgrid;
-    align-items: center;
-    column-gap: var(--space-4);
-    min-height: var(--c-btn-h-lg);
-    padding: var(--space-1) var(--space-2);
-  }
-  .mrow + .mrow {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .mname {
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .trail {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-3);
-    min-width: 0;
-  }
-  .state {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-    transition: color var(--dur-panel) var(--ease-out);
-  }
-  .state[data-state="mismatch"] {
-    color: var(--status-attn-ink);
-  }
-  .state :global(svg) {
-    flex: none;
-    width: 12px;
-    height: 12px;
-  }
-  .act {
-    display: flex;
-    justify-content: flex-end;
-    min-width: 0;
-  }
-  .panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-2);
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .refused {
-    grid-column: 1 / -1;
-    padding-block-end: var(--space-2);
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .none {
-    grid-column: 1 / -1;
-    padding: var(--space-3) var(--space-4);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-</style>

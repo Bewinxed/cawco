@@ -423,37 +423,59 @@
     />
   {/snippet}
 
-  <div data-slot="host" class="host">
-    <div class="setup">
-      <ol aria-label={words.stepsLabel} class="steps">
+  <div data-slot="host" class="@container/setup min-w-0">
+    <!-- literal: 184px minmax(0, 1fr) -->
+    <div
+      class="grid grid-cols-(--setup-cols) items-start gap-space-7 @max-setup/setup:grid-cols-(--setup-cols-narrow) @max-setup/setup:gap-space-4"
+      style:--setup-cols="184px minmax(0, 1fr)"
+      style:--setup-cols-narrow="minmax(0, 1fr)"
+    >
+      <ol
+        aria-label={words.stepsLabel}
+        class="sticky top-0 m-0 flex list-none flex-col gap-space-row p-0 @max-setup/setup:static @max-setup/setup:flex-row @max-setup/setup:flex-wrap @max-setup/setup:gap-space-1"
+      >
         {#each STEPS as id, place (id)}
+          <!-- literal: 34px, 6px -->
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class={[
-              "step",
-              "mark-line",
-              place < step && "done",
-              place === step && "cur",
-            ]}
+            class="group mark-line flex h-(--step-h) items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] dur-fade ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:text-selected-ink"
+            data-cur={place === step || undefined}
+            style:--step-h="34px"
           >
             {#if place < step}
-              <IconSuccess aria-hidden="true" />
+              <IconSuccess
+                aria-hidden="true"
+                class="size-icon-md flex-none text-status-done-glyph"
+              />
             {:else}
-              <span data-slot="dot" aria-hidden="true" class="dot" data-box
+              <span
+                data-slot="dot"
+                aria-hidden="true"
+                class="grid size-icon-md flex-none place-items-center"
+                data-box
+                style:--core="6px"
               ></span>
             {/if}
-            <span data-slot="name" class="name">{words.steps[id]}</span>
+            <span
+              data-slot="name"
+              class="@max-setup/setup:group-not-data-cur:absolute @max-setup/setup:group-not-data-cur:size-px @max-setup/setup:group-not-data-cur:overflow-clip @max-setup/setup:group-not-data-cur:whitespace-nowrap"
+              >{words.steps[id]}</span
+            >
           </li>
         {/each}
       </ol>
 
-      <div class="work">
-        <div class="box" {@attach morph()}>
+      <div class="flex min-w-0 flex-col">
+        <div
+          class="relative overflow-hidden rounded-lg border border-border-well bg-surface-well"
+          style:--swatch-ground="var(--surface-well)"
+          {@attach morph()}
+        >
           {#key step}
             <div
               data-picker={at === "provider" || undefined}
-              class={["in", at === "provider" && "picker"]}
+              class="p-space-6 @max-setup/setup:p-space-4"
               in:stepIn
               out:stepOut
             >
@@ -472,8 +494,8 @@
                   delegates = c;
                 })}
               {:else if at === "atLimit" && pair}
-                <section class="sec">
-                  <h2>{words.steps.atLimit}</h2>
+                <section class="flex min-w-0 flex-col">
+                  <h2 class="type-title mb-space-5 text-balance text-ink-strong">{words.steps.atLimit}</h2>
                   <AtLimitBlock
                     accounts={[pair[1], pair[0]]}
                     terms={provider === CLAUDE_PROVIDER}
@@ -482,9 +504,11 @@
                 </section>
               {:else if at === "done" && pair}
                 {@const line = routingLine(pair, { yours, delegates })}
-                <section class="sec">
-                  <h2>{words.setUp(nameOf(pair[0]), nameOf(pair[1]))}</h2>
-                  <p data-slot="lead" class="lead">
+                <section class="flex min-w-0 flex-col">
+                  <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+                    {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
+                  </h2>
+                  <p data-slot="lead" class="text-pretty text-ink-muted">
                     {limits && atLimit.move ? words.withMoves(line) : line}
                   </p>
                 </section>
@@ -493,9 +517,16 @@
           {/key}
         </div>
         {#if refused}
-          <p class="problem" role="alert" in:appear>{refused}</p>
+          <p class="type-meta mt-space-3 text-status-fail-ink" role="alert" in:appear>
+            {refused}
+          </p>
         {/if}
-        <div data-slot="foot" class="foot" {@attach aboveKeyboard()}>
+        <div
+          data-slot="foot"
+          class="mt-space-5 flex justify-end gap-space-3 @max-setup/setup:sticky @max-setup/setup:bottom-0 @max-setup/setup:z-1 @max-setup/setup:mx-(--foot-pull) @max-setup/setup:bg-surface-raised @max-setup/setup:px-space-7 @max-setup/setup:pt-space-3 @max-setup/setup:pb-space-2"
+          style:--foot-pull="calc(-1 * var(--space-7))"
+          {@attach aboveKeyboard()}
+        >
           <Button
             disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
             label={words.back}
@@ -517,13 +548,13 @@
 </SectionFrame>
 
 {#snippet pick()}
-  <section class="sec">
+  <section class="flex min-w-0 flex-col">
     {#if choices.length > 8}
       <Input
         data-search
         aria-label={words.search}
         autocomplete="off"
-        class="search"
+        class="mb-space-4"
         placeholder={words.search}
         spellcheck="false"
         type="search"
@@ -531,10 +562,15 @@
       />
     {/if}
     {#each pickGroups as group (group.label)}
-      <h3 class="ghead" id="pick-{group.id}">{group.label}</h3>
+      <h3
+        class="type-label px-space-3 pt-space-4 pb-space-1 text-ink-muted first-of-type:pt-0"
+        id="pick-{group.id}"
+      >{group.label}</h3>
       {@render choiceRows(group.rows, group.id)}
     {:else}
-      <p class="none">{words.noMatch(query.trim())}</p>
+      <p class="type-meta px-space-4 py-space-3 text-ink-muted">
+        {words.noMatch(query.trim())}
+      </p>
     {/each}
   </section>
 {/snippet}
@@ -542,38 +578,53 @@
 {#snippet choiceRows(rows: ProviderChoice[], group: string)}
   <ul
     aria-labelledby="pick-{group}"
-    class="choices"
-    {@attach highlight({ rows: ".choice:not([aria-disabled='true'])" })}
+    class="m-0 flex list-none flex-col p-0"
+    {@attach highlight({ rows: "[data-choice]:not([aria-disabled='true'])" })}
   >
     {#each rows as row (keyOf(row))}
       {@const free = runsOn(row.harnesses).length > 0}
       {@const label = choiceLabel(row)}
       {#snippet button(props: Record<string, unknown>)}
+        <!-- literal: 26px minmax(0, 1fr) 16px -->
         <button
           data-choice
           {...props}
           aria-disabled={free ? undefined : "true"}
-          class="choice mark-line"
+          class="mark-line grid min-h-c-btn-h-lg w-full cursor-pointer grid-cols-(--choice-cols) items-center gap-space-3 border-0 bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:cursor-default aria-disabled:opacity-50"
           onclick={(event) => {
             if (free) {
               choose(
                 row,
-                event.currentTarget.querySelector<HTMLElement>(".ptile")
+                event.currentTarget.querySelector<HTMLElement>(
+                  '[data-slot="ptile"]'
+                )
               );
             }
           }}
+          style:--choice-cols="26px minmax(0, 1fr) 16px"
+          style:--ptile="26px"
           type="button"
         >
-          <span class="ptile" data-box
+          <span
+            data-slot="ptile"
+            class="grid size-(--ptile) flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
+            data-box
             ><ProviderMark provider={row.provider} /></span
           >
-          <span class="plabel">{label}</span>
-          <span data-slot="chev" aria-hidden="true" class="chev" data-box
-            ><IconChevronRight /></span
+          <span
+            class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-row"
+            >{label}</span
+          >
+          <span
+            data-slot="chev"
+            aria-hidden="true"
+            class="flex text-ink-subtle"
+            data-box
+            ><IconChevronRight class="size-icon-md" /></span
           >
         </button>
       {/snippet}
-      <li class="crow">
+      <li class="not-first:border-t not-first:border-border-hairline">
         {#if free}
           {@render button({})}
         {:else}
@@ -593,12 +644,17 @@
 {/snippet}
 
 {#snippet signIn()}
-  <section class="sec">
+  <section class="flex min-w-0 flex-col">
     {#if choice}
-      <h2 class="titled mark-line">
+      <h2
+        class="mark-line type-title mb-space-5 flex items-center gap-space-3 text-balance text-ink-strong"
+      >
+        <!-- literal: 26px -->
         <span
-          class="ptile"
+          data-slot="ptile"
+          class="grid size-(--ptile) flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
           data-box
+          style:--ptile="26px"
           {@attach land(() =>
             choice ? `provider:${keyOf(choice)}` : undefined
           )}><ProviderMark provider={choice.provider} /></span
@@ -607,18 +663,32 @@
       </h2>
     {/if}
     {#if signedIn > 0 && choice?.signin !== "device-code"}
-      <div class="signed-as mark-line" in:unfold out:unfold>
-        <IconSuccess aria-hidden="true" />
+      <div
+        class="mark-line mb-space-4 flex items-center gap-space-3 rounded-md bg-surface-raised px-space-4 py-space-3"
+        in:unfold
+        out:unfold
+      >
+        <IconSuccess
+          aria-hidden="true"
+          class="size-icon-md flex-none text-status-done-glyph"
+        />
         <span
           >{accountsWords.signin.signedInAs}
-          <b>{email ?? accountsWords.signin.theAccount}</b></span
+          <b class="font-medium">{email ?? accountsWords.signin.theAccount}</b></span
         >
       </div>
     {/if}
     {#if choice?.signin === "api-key"}
       <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
     {:else}
-      <ul data-slot="machines" class="machines">
+      <!-- literal: 150px minmax(0, 1fr) auto, 14px -->
+      <ul
+        data-slot="machines"
+        class="m-0 flex list-none flex-col p-0"
+        style:--mrow-cols="150px minmax(0, 1fr) auto"
+        style:--mrow-cols-two="minmax(0, 1fr) auto"
+        style:--st-icon="14px"
+      >
         {#each machines as machine (machine.machineId)}
           {@const name = machineName(machine)}
           {@const online = machineOnline(machine)}
@@ -627,14 +697,28 @@
           {@const paste = pastes.get(machine.machineId)}
           {@const device = devices.get(machine.machineId)}
           {#if device}
-            <li class="mrow device">
-              <b class="mname">{name}</b>
-              <div data-slot="controls" class="controls">
+            <li
+              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-start"
+              data-device
+            >
+              <b
+                class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
+                style:--area="name">{name}</b
+              >
+              <div
+                data-slot="controls"
+                class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
+                style:--area="controls"
+              >
                 <DevicePanel flow={device} machine={name} {online} />
               </div>
-              <span class={["st", "mark-line", state === "mismatch" && "warn"]}>
+              <span
+                class="mark-line flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
+                data-warn={state === "mismatch" || undefined}
+                style:--area="st"
+              >
                 {#if !done && state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" /><span
+                  <IconWarningTriangle aria-hidden="true" class="size-(--st-icon)" /><span
                     >{words.someoneElse}</span
                   >
                 {:else if !online}
@@ -647,21 +731,28 @@
                  a new tab and opens the row onto the link, the paste field
                  and Done. Continue is how a machine is skipped. -->
             {@const asked = paste.phase !== "idle" || paste.url !== null}
-            <li class="mrow paste">
-              <b class="mname">{name}</b>
+            <li
+              class="mrow group grid grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-border-hairline py-space-3 @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-cols-(--mrow-cols-two)"
+              data-paste
+            >
+              <b
+                class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
+                style:--area="name">{name}</b
+              >
               <span
-                class={[
-                  "st",
-                  "mark-line",
-                  done && "ok",
-                  state === "mismatch" && "warn",
-                ]}
+                class="mark-line flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done-ink data-warn:text-status-attn-ink"
+                data-ok={done || undefined}
+                data-warn={state === "mismatch" || undefined}
+                style:--area="st"
               >
                 {#if done}
-                  <IconSuccess aria-hidden="true" /><span>{words.signedIn}</span
+                  <IconSuccess
+                    aria-hidden="true"
+                    class="size-(--st-icon) text-status-done-glyph"
+                  /><span>{words.signedIn}</span
                   >
                 {:else if paste.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" /><span
+                  <IconWarningTriangle aria-hidden="true" class="size-(--st-icon)" /><span
                     >{words.someoneElse}</span
                   >
                 {:else if !online}
@@ -677,7 +768,15 @@
                 {/if}
               </span>
               {#if asked && !done}
-                <div data-slot="controls" class="controls" in:unfold>
+                <!-- literal: 140px, 30px -->
+                <div
+                  data-slot="controls"
+                  class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
+                  in:unfold
+                  style:--area="controls"
+                  style:--code-flex="1 1 140px"
+                  style:--code-h="30px"
+                >
                   {#if paste.url}
                     <Button
                       href={paste.url}
@@ -704,7 +803,7 @@
                     aria-invalid={paste.problem ? "true" : undefined}
                     aria-label={words.codeFor(name)}
                     autocomplete="off"
-                    class="code h-[30px]"
+                    class="h-(--code-h) min-w-0 flex-(--code-flex)"
                     disabled={paste.url === null}
                     onkeydown={(event) => {
                       if (event.key === "Enter") {
@@ -728,18 +827,30 @@
                 </div>
               {/if}
               {#if paste.problem}
-                <p class="row-problem" role="alert" in:appear>
+                <p
+                  class="type-meta text-status-fail-ink"
+                  role="alert"
+                  in:appear
+                  style:--area="problem"
+                >
                   {paste.problem}
                 </p>
               {:else if paste.phase === "mismatch"}
-                <p class="row-warn" role="alert" in:appear>
+                <p
+                  class="type-meta text-status-attn-ink"
+                  role="alert"
+                  in:appear
+                  style:--area="problem"
+                >
                   {words.mismatch(name, paste.email)}
                 </p>
               {/if}
             </li>
           {/if}
         {:else}
-          <li class="none">
+          <li
+            class="type-meta border-t border-border-hairline px-0 py-space-3 text-ink-muted"
+          >
             {words.none(harnessWords(choice?.provider ?? CLAUDE_PROVIDER))}
           </li>
         {/each}
@@ -749,32 +860,48 @@
 {/snippet}
 
 {#snippet nameIt()}
-  <section class="sec">
-    <h2>{words.steps.nameIt}</h2>
-    <div class="fld">
-      <span data-slot="account-setup-label" class="label"
+  <section class="flex min-w-0 flex-col">
+    <h2 class="type-title mb-space-5 text-balance text-ink-strong">{words.steps.nameIt}</h2>
+    <!-- literal: 280px -->
+    <div
+      class="flex min-w-0 flex-col items-start gap-space-2 mb-space-5"
+      style:--nick-max="280px"
+    >
+      <span data-slot="account-setup-label" class="type-label text-ink-strong"
         >{words.howItShows}</span
       >
-      <div class="preview">
+      <!-- literal: 360px -->
+      <div
+        class="flex max-w-(--preview-max) min-w-0 items-center gap-space-3 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3"
+        style:--preview-max="360px"
+      >
         <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />
       </div>
     </div>
-    <div class="fld">
-      <label data-slot="account-setup-label" class="label" for="setup-nickname">
+    <!-- literal: 280px -->
+    <div
+      class="flex min-w-0 flex-col items-start gap-space-2 mb-space-5"
+      style:--nick-max="280px"
+    >
+      <label data-slot="account-setup-label" class="type-label text-ink-strong" for="setup-nickname">
         {words.nickname}
-        <span class="optional">{words.optional}</span>
+        <span class="font-normal text-ink-muted">{words.optional}</span>
       </label>
       <Input
         autocomplete="off"
-        class="nickname"
+        class="max-w-(--nick-max)"
         id="setup-nickname"
         placeholder={words.nicknamePlaceholder}
         bind:value={nickname}
       />
     </div>
-    <div class="fld">
-      <span data-slot="account-setup-label" class="label"
+    <!-- literal: 280px -->
+    <div
+      class="flex min-w-0 flex-col items-start gap-space-2 mb-space-5"
+      style:--nick-max="280px"
+    >
+      <span data-slot="account-setup-label" class="type-label text-ink-strong"
         >{accountsWords.colour}</span
       >
       <Swatches bind:value={hue} />
@@ -787,8 +914,8 @@
   value: StrategyChoice,
   onchoice: (choice: StrategyChoice) => void
 )}
-  <section class="sec">
-    <h2>{heading}</h2>
+  <section class="flex min-w-0 flex-col">
+    <h2 class="type-title mb-space-5 text-balance text-ink-strong">{heading}</h2>
     {#if pair}
       <StrategyPicker
         accounts={pair}
@@ -806,395 +933,45 @@
 {/snippet}
 
 <style>
-  .host {
-    min-width: 0;
-    container: setup / inline-size;
-  }
-  .setup {
-    display: grid;
-    grid-template-columns: 184px minmax(0, 1fr);
-    align-items: start;
-    gap: var(--space-7);
-  }
-  .steps {
-    position: sticky;
-    top: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .step {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    height: 34px;
-    padding: 0 var(--space-3);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    transition:
-      background-color var(--dur-fade) var(--ease-out),
-      color var(--dur-fade) var(--ease-out);
-  }
-  .step :global(svg) {
-    flex: none;
-    width: 16px;
-    height: 16px;
-    color: var(--status-done-glyph);
-  }
-  .dot {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 16px;
-    height: 16px;
-  }
-  .dot::after {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--neutral-8);
-    transition: background-color var(--dur-fade) var(--ease-out);
-  }
-  .step.cur {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-  }
-  .step.cur .dot::after {
-    background: var(--selected-icon);
-  }
-  .step.done {
-    color: var(--ink-row);
-  }
-  .work {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .box {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-lg);
-    background: var(--surface-well);
-    --swatch-ground: var(--surface-well);
-  }
-  .in {
-    padding: var(--space-6);
-  }
-  .foot {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-3);
-    margin-block-start: var(--space-5);
-  }
-  .problem {
-    margin-block-start: var(--space-3);
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .sec {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .sec h2 {
-    margin-block-end: var(--space-5);
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .sec h2.titled {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .lead {
-    color: var(--ink-muted);
-    text-wrap: pretty;
-  }
-
-  /* The provider picker: flat rows in the step's one container, in two
-     groups under their headings. */
-  .sec :global(.search) {
-    margin-block-end: var(--space-4);
-  }
-  .ghead {
-    padding: var(--space-4) var(--space-3) var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .ghead:first-of-type {
-    padding-block-start: 0;
-  }
-  .choices {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .crow + .crow {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .choice {
-    display: grid;
-    grid-template-columns: 26px minmax(0, 1fr) 16px;
-    align-items: center;
-    gap: var(--space-3);
-    width: 100%;
-    min-height: var(--c-btn-h-lg);
-    padding: 0 var(--space-4) 0 var(--space-3);
-    border: 0;
-    background: transparent;
-    color: inherit;
-    text-align: start;
-    cursor: pointer;
-  }
-  .choice:active:not([aria-disabled="true"]) {
-    background-color: var(--surface-fill);
-  }
-  .choice:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .choice[aria-disabled="true"] {
-    cursor: default;
-    opacity: 0.5;
-  }
-  .ptile {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .plabel {
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .chev {
-    display: flex;
-    color: var(--ink-subtle);
-  }
-  .chev :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-
-  .fld {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-    min-width: 0;
-    margin: 0 0 var(--space-5);
-    padding: 0;
-    border: 0;
-  }
-  .label {
-    padding: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .optional {
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .fld :global(.nickname) {
-    max-width: 280px;
-  }
-  .signed-as {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-block-end: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-  }
-  .signed-as :global(svg) {
-    flex: none;
-    width: 16px;
-    height: 16px;
-    color: var(--status-done-glyph);
-  }
-  .signed-as b {
-    font-weight: var(--weight-strong);
-  }
-  .machines {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
+  /* residual: unmapped */
   .mrow {
-    display: grid;
-    grid-template-columns: 150px minmax(0, 1fr) auto;
     grid-template-areas:
       "name controls st"
       ". problem problem";
-    align-items: center;
-    gap: var(--space-1) var(--space-3);
-    padding: var(--space-3) 0;
-    border-block-start: 1px solid var(--border-hairline);
   }
-  /* Claude's rows: the name and its one control; asked, the link, the paste
-     field and Done open on the line under them. */
-  .mrow.paste {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .mrow[data-paste] {
     grid-template-areas:
       "name st"
       "controls controls"
       "problem problem";
   }
-  .mrow.device {
-    align-items: start;
+  .mrow > * {
+    grid-area: var(--area);
   }
-  .mname {
-    grid-area: name;
-    min-width: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .mrow.device .mname {
-    line-height: var(--c-btn-h-sm);
-  }
-  .controls {
-    grid-area: controls;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2) var(--space-3);
-    min-width: 0;
-  }
-  .mrow.paste .controls {
-    padding-block-start: var(--space-2);
-  }
-  /* The code fills the line, so Done ends on the edge every row's Sign in
-     ends on, wrapped under the link or beside it. */
-  .controls :global(.code) {
-    flex: 1 1 140px;
-    min-width: 0;
-  }
-  .st {
-    grid-area: st;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    justify-self: end;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .st.ok {
-    color: var(--status-done-ink);
-  }
-  .st.warn {
-    color: var(--status-attn-ink);
-  }
-  .st :global(svg) {
-    width: 14px;
-    height: 14px;
-  }
-  .st.ok :global(svg) {
-    color: var(--status-done-glyph);
-  }
-  .row-problem,
-  .row-warn {
-    grid-area: problem;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .row-warn {
-    color: var(--status-attn-ink);
-  }
-  .none {
-    padding: var(--space-3) var(--space-4);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .machines .none {
-    padding-inline: 0;
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .preview {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 0;
-    max-width: 360px;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-  }
-
   /* A narrow page: the rail becomes a row of marks with the current step
      named, and each machine's controls go under its name. */
   @container setup (width < 640px) {
-    .setup {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-4);
-    }
-    .steps {
-      position: static;
-      flex-direction: row;
-      flex-wrap: wrap;
-      gap: var(--space-1);
-    }
-    .step {
-      padding: 0 var(--space-2);
-    }
-    .step:not(.cur) .name {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: clip;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-    .in {
-      padding: var(--space-4);
-    }
-    /* Back and Continue stay in reach on a phone: pinned to the foot of what
-       scrolls (the section's ground), across the card's width on its own
-       surface, and over a keyboard (aboveKeyboard). The shell already keeps
-       the home indicator clear under the ground, so no safe area here. A
-       tall step scrolls between the steps and them. */
-    .foot {
-      position: sticky;
-      bottom: 0;
-      z-index: 1;
-      margin-inline: calc(-1 * var(--space-7));
-      padding: var(--space-3) var(--space-7) var(--space-2);
-      background: var(--surface-raised);
-    }
     .mrow {
-      grid-template-columns: minmax(0, 1fr) auto;
       grid-template-areas:
         "name st"
         "controls controls"
         "problem problem";
     }
-    .controls {
-      padding-block-start: var(--space-2);
+    li:not([data-cur]) [data-slot="name"] {
+      clip-path: inset(50%);
     }
+  }
+
+  /* residual: pseudo */
+  [data-slot="dot"]::after {
+    content: "";
+    width: var(--core);
+    height: var(--core);
+    border-radius: 50%;
+    background: var(--neutral-8);
+    transition: background-color var(--dur-fade) var(--ease-out);
+  }
+  [data-cur] [data-slot="dot"]::after {
+    background: var(--selected-icon);
   }
 </style>

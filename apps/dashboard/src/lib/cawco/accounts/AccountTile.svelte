@@ -17,7 +17,7 @@
 <span
   data-slot="tile"
   aria-hidden="true"
-  class="tile"
+  class="grid size-(--tile) flex-none place-items-center rounded-sm text-(color:--c) transition-[background-color,color] dur-fade ease-out"
   style:--c={hueVar(hue)}
   style:--tile={`${size}px`}
 >
@@ -25,17 +25,8 @@
 </span>
 
 <style>
-  .tile {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: var(--tile);
-    height: var(--tile);
-    border-radius: var(--radius-sm);
+  /* residual: unmapped */
+  [data-slot="tile"] {
     background: color-mix(in oklab, var(--c) 18%, transparent);
-    color: var(--c);
-    transition:
-      background-color var(--dur-fade) var(--ease-out),
-      color var(--dur-fade) var(--ease-out);
   }
 </style>

@@ -26,55 +26,18 @@
 <span
   data-account-name-row={row || undefined}
   data-slot="name"
-  class={["name", "mark-line", row && "row", wrap && "wrap"]}
+  data-row={row || undefined}
+  data-wrap={wrap || undefined}
+  class="group mark-line inline-flex min-w-0 flex-col leading-ui data-row:flex-row data-row:items-baseline data-row:gap-space-2 data-wrap:data-row:flex-wrap data-wrap:data-row:gap-y-0"
   data-box
 >
   <b
+    class="type-label truncate text-ink-strong group-data-wrap:overflow-visible group-data-wrap:whitespace-normal group-data-wrap:wrap-anywhere"
     >{account.label || account.email
       ? nameOf(account)
       : accountsWords.notSignedInYet}</b
   >
   {#if account.label && account.email}
-    <small>{account.email}</small>
+    <small class="type-meta truncate text-ink-muted group-data-wrap:overflow-visible group-data-wrap:whitespace-normal group-data-wrap:wrap-anywhere">{account.email}</small>
   {/if}
 </span>
-
-<style>
-  .name {
-    display: inline-flex;
-    flex-direction: column;
-    min-width: 0;
-    line-height: var(--leading-ui);
-  }
-  .name.row {
-    flex-direction: row;
-    align-items: baseline;
-    gap: var(--space-2);
-  }
-  b,
-  small {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  b {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  small {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .wrap {
-    &.row {
-      flex-wrap: wrap;
-      row-gap: 0;
-    }
-    & b,
-    & small {
-      overflow: visible;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-  }
-</style>

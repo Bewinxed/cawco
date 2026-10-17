@@ -45,13 +45,16 @@
 </script>
 
 {#snippet face()}
+  <!-- literal: 8px, 50% -->
   <span
     data-slot="dot"
     aria-hidden="true"
-    class="dot"
+    class="size-(--dot) flex-none rounded-(--dot-r) bg-(--c)"
     style:--c={hueVar(shown?.hue ?? "amber")}
+    style:--dot="8px"
+    style:--dot-r="50%"
   ></span>
-  <span data-slot="chip-label" class="chip-label" data-account-chip>{name}</span
+  <span data-slot="chip-label" data-account-chip>{name}</span
   >
 {/snippet}
 
@@ -66,41 +69,57 @@
       }}
       {open}
       rows="[data-account-option]"
-      triggerClass="ns-chip-btn tool account-chip"
+      triggerClass="ns-chip-btn tool account-chip max-w-full min-w-0"
       width={320}
     >
       {#snippet trigger()}
         {@render face()}
-        <Down class="chevron" />
+        <Down data-slot="account-switch-chevron" />
       {/snippet}
-      <div data-slot="list" aria-label="Account" class="list" role="listbox">
+      <div
+        data-slot="list"
+        aria-label="Account"
+        class="flex flex-col p-space-2"
+        role="listbox"
+      >
         {#each accounts as account (account.id)}
           {@const current = account.id === instance.accountId}
           {@const going = account.id === target}
+          <!-- literal: 16px minmax(0, 1fr) 16px, 40px, 44px, 8px, 50% -->
           <button
             data-slot="option"
             aria-selected={current}
-            class="option mark-line"
+            class="group mark-line grid min-h-(--option-min) w-full cursor-pointer grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-0 bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-(--option-min-coarse) disabled:cursor-default"
             data-account-option={account.id}
             disabled={going}
             onclick={() => pick(account.id)}
             role="option"
+            style:--option-cols="16px minmax(0, 1fr) 16px"
+            style:--option-min="40px"
+            style:--option-min-coarse="44px"
             type="button"
           >
             <span
               data-account-switch-lead
               data-slot="dot"
               aria-hidden="true"
-              class="dot lead"
+              class="mx-space-1 size-(--dot) flex-none rounded-(--dot-r) bg-(--c)"
               data-box
               style:--c={hueVar(account.hue)}
+              style:--dot="8px"
+              style:--dot-r="50%"
             ></span>
             {#if going}
-              <span class="going">Moving to {nameOf(account)}…</span>
+              <span
+                class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
+                >Moving to {nameOf(account)}…</span
+              >
             {:else}
               <AccountName {account} row />
             {/if}
-            <IconCheck class="check" />
+            <IconCheck
+              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+            />
           </button>
         {/each}
       </div>
@@ -112,78 +131,10 @@
     <span
       data-tool
       data-slot="ns-chip-btn"
-      class="ns-chip-btn tool static account-chip"
+      class="static max-w-full min-w-0"
     >
       <span class="sr-only">Account:</span>
       {@render face()}
     </span>
   {/if}
 {/if}
-
-<style>
-  /* css-scope .account-chip: SessionDetails names it to leave this chip's chevron alone */
-  .dot {
-    flex: none;
-    inline-size: 8px;
-    block-size: 8px;
-    border-radius: 50%;
-    background: var(--c);
-  }
-  .dot.lead {
-    margin-inline: 4px;
-  }
-  /* The chip is as wide as the name; a long email ends in an ellipsis
-     inside the label (The Truncate Inside Rule), never on the chip. */
-  :global(.account-chip) {
-    max-inline-size: 100%;
-    min-inline-size: 0;
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-2);
-  }
-  .option {
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr) 16px;
-    gap: var(--space-3);
-    align-items: center;
-    inline-size: 100%;
-    min-block-size: 40px;
-    padding: var(--space-2) var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    text-align: start;
-    cursor: pointer;
-
-    @media (pointer: coarse) {
-      min-block-size: 44px;
-    }
-  }
-  .option:disabled {
-    cursor: default;
-  }
-  .going {
-    font: var(--type-label);
-    color: var(--ink-muted);
-    min-inline-size: 0;
-    overflow: clip;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .option :global(.check) {
-    inline-size: 16px;
-    block-size: 16px;
-    color: var(--selected-icon);
-    opacity: 0;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  .option[aria-selected="true"] :global(.check) {
-    opacity: 1;
-  }
-</style>
