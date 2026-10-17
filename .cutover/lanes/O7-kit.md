@@ -27,7 +27,7 @@ Every file: residual 0/0/0/0/0, no literals, no breakpoint edges, no STOP.
 | resizable/resizable-handle.svelte | dead hook `cn-resizable-handle` deleted |
 | resizable/resizable-pane-group.svelte | dead hook `cn-resizable-panel-group` deleted |
 | progress/progress.svelte | inline `style="transform: translateX(-…%)"` → `style:--progress-shift="translateX(-…%)"` + `transform-(--progress-shift)`; 1 declaration moved |
-| alert-dialog/alert-dialog-content.svelte, alert-dialog/alert-dialog-overlay.svelte, context-menu/context-menu-content.svelte, dialog/dialog-content.svelte, dialog/dialog-overlay.svelte, dropdown-menu/dropdown-menu-content.svelte, popover/popover-content.svelte, select/select-content.svelte, sheet/sheet-overlay.svelte | unchanged: `style:pointer-events` is forced inline (below) |
+| alert-dialog/alert-dialog-content.svelte, alert-dialog/alert-dialog-overlay.svelte, context-menu/context-menu-content.svelte, dialog/dialog-content.svelte, dialog/dialog-overlay.svelte, dropdown-menu/dropdown-menu-content.svelte, popover/popover-content.svelte, select/select-content.svelte, sheet/sheet-overlay.svelte | markup unchanged: `style:pointer-events` is forced inline (below); one reasoned `eslint-disable shadcn/no-inline-styles` comment added at the top of `<script>` |
 | the other 33 files | unchanged: no `<style>` and no eslint problem on this base |
 
 ### Why the `cn-*` deletions change nothing
@@ -71,7 +71,18 @@ under a state variant) loses to bits-ui's inline `auto` without `!important`, an
 closing menu, sheet or dialog would swallow the next press again. Tailwind 4.3 also has no
 `pointer-events-(--x)` form to read a custom property. This is foreign DOM in the brief's
 sense (the kit library sets the property inline at run time), so it is reported, not
-moved. Integration decides whether the eslint rule gets an allowance for these 13.
+moved.
+
+The lane's "ESLint clean" check needed these quiet, so each of the 9 files opens its
+`<script>` with
+`/* eslint-disable shadcn/no-inline-styles -- style:pointer-events overrides bits-ui's run-time inline pointer-events: auto, which no class can (floating-presence.ts pressable) */`.
+A per-line directive is not possible: this config has no eslint-plugin-svelte, so neither
+`<!-- eslint-disable-next-line … -->` in markup nor a `/* eslint-disable-line … */` inside
+the directive's expression is honoured (both tried; the error stayed). In each of the 9
+files these directives are the file's only inline styles (`grep -c style` = the
+pointer-events count), so the file-wide disable covers exactly them today. Integration's
+better home for this is eslint.config.mjs (not a lane file): `shadcn/no-inline-styles`
+with `allow: ["pointer-events"]` for these 9 files. Then the 9 comment lines are deleted.
 
 ## Lists
 
