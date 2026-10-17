@@ -67,7 +67,7 @@
    * (motion/rows).
    */
   const rest = $derived<TriggerProps>({
-    class: cn("cn-context-menu-trigger select-none", className),
+    class: cn("select-none", className),
     "data-slot": "context-menu-trigger",
     "data-state": "closed",
     "data-context-menu-trigger": "",

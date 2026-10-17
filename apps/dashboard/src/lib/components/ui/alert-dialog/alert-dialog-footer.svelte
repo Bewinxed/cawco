@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-    "cn-alert-dialog-footer flex phone:flex-row flex-col-reverse phone:justify-end gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2",
+    "flex phone:flex-row flex-col-reverse phone:justify-end gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2",
     className
   )}
   data-slot="alert-dialog-footer"
