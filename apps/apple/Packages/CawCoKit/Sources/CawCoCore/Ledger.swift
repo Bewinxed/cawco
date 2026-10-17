@@ -48,8 +48,6 @@ public final class Ledger {
         /// What an applied `send.withdraw` found (`CommandAck.outcome`):
         /// `withdrawn` before the session read the send, `started` after.
         public internal(set) var outcome: String?
-        /// Known never to have left this device: safe to offer again.
-        public internal(set) var undelivered = false
         /// The hub's own `failed` ack: it took the command and refused it, which,
         /// unlike a dropped socket or the ack timeout, says what became of it
         /// (stream.ts `refusedByHub`).
@@ -202,7 +200,9 @@ public final class Ledger {
 
     /// The socket dropped: every subscription and every unanswered command
     /// died with it. The next connection reads each watched transcript again
-    /// (`SessionsStore.reconnected`), and that read subscribes it.
+    /// (`SessionsStore.reconnected`), and that read subscribes it. A send's
+    /// failure here is no word from the hub, never its refusal
+    /// (`refusedByHub`): the send waits in `SendOutbox` and goes again.
     func noteDisconnect() {
         for id in cursors.keys {
             cursors[id]?.subscribed = false
@@ -477,7 +477,6 @@ public final class Ledger {
             commandId: id, kind: kind, machineId: machineId, payload: payload, sessionId: sessionId, _type: .command
         )
         if let refusal = dispatch(envelope) {
-            commands[id]?.undelivered = true
             advance(id, to: .failed, reason: refusal)
         }
         sweepCommands()

@@ -438,19 +438,24 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
             retrying = nil
         }
         self.block = block
-        // Drawn by this device, not taken by the hub yet (MessageRow.svelte `ghost`).
-        let ghost = block.state == "sending"
-        // Never reached the hub: this device's to send again (MessageRow.svelte `unreached`).
-        let unreached = block.state == "unreached"
-        let failed = block.state == "failed" || unreached
-        // A failed send going again says so, not the failure (MessageRow.svelte).
-        let sending = retried != nil || retrying != nil
+        // Drawn by this device, not taken by the hub yet (MessageRow.svelte `ghost`):
+        // on its way, or kept here until a connection to the hub is back (`LocalSend.State.waiting`).
+        let held = block.state == "waiting"
+        let ghost = block.state == "sending" || held
+        // The hub refused it, and said why: this device's to send again.
+        let refused = block.state == "refused"
+        let failed = block.state == "failed" || refused
+        // A failed send going again says so, not the failure (MessageRow.svelte),
+        // until the hub refuses the retry too: then its words are the row's.
+        let retry = retried.flatMap { env.hub?.ledger.commands[$0] }
+        let sending = retrying != nil || (retried != nil && retry?.refusedByHub != true)
         let waiting = block.state == "pending" || block.queued
         taken = waiting && env.isTaken(block.id)
         // On a touch screen, a queued message that can be edited says how.
         let tappable = waiting && !taken && Self.touch && env.canEditQueued(block.id)
         let queuedNote = tappable ? "queued · \(env.agentName) is still working · tap to edit" : "queued"
-        let note: String? = taken ? nil : ghost ? "sending…" : failed ? (sending ? "sending…" : "not sent") : waiting ? queuedNote : nil
+        let note: String? = taken ? nil : held ? "waiting for the hub" : ghost ? "sending…" : failed ? (sending ? "sending…" : "not sent")
+            : waiting ? queuedNote : nil
         let clock = failed || waiting || ghost ? nil : Item.clock(block.date)
         who.isHidden = turn.grouped
         who.configure(.init(name: "You", clock: clock, note: note, you: true))
@@ -477,7 +482,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
         if sending {
             showSendingAgain()
         } else {
-            let reasonText = block.string("sendFailed")
+            let reasonText = retry?.refusedByHub == true ? retry?.reason : block.string("sendFailed")
             reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                                   color: Palette.statusFailInk, lineBreak: .byWordWrapping)
         }
@@ -600,8 +605,8 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
     /// one, so the hub retires this row as the retry is taken.
     private func tryAgain() {
         guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
-        // One the hub never took goes again from this device, under its own id, on this row.
-        if block.state == "unreached" {
+        // One the hub refused before keeping a record goes again from this device, under its own id, on this row.
+        if block.state == "refused" {
             hub.sessions.resend(block.id)
             return
         }

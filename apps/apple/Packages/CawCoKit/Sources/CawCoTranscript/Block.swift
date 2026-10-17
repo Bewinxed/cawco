@@ -53,8 +53,8 @@ nonisolated struct Block: @unchecked Sendable {
     }
 
     /// A send this device drew that the hub has not taken (local.ts
-    /// `localUserMessage`): the reader's turn, its state `sending` or
-    /// `unreached`, carrying what went out with it.
+    /// `localUserMessage`): the reader's turn, its state `sending`,
+    /// `waiting` or `refused`, carrying what went out with it.
     init(_ local: LocalSend) {
         var meta: [String: Any] = [:]
         let attachments = local.texts.map { ["kind": "text", "name": $0.name, "content": $0.content] as [String: Any] }

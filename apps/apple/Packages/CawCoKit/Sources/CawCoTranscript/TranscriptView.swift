@@ -923,7 +923,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let rows = queued.filter { $0.id == id } + blocks.filter { $0.id == id }
             guard let row = rows.first else { return "\(id.prefix(8))=absent" }
             // A row this device drew wears its own states (`Block(LocalSend)`).
-            let local = row.state == LocalSend.State.sending.rawValue || row.state == LocalSend.State.unreached.rawValue
+            let local = [LocalSend.State.sending, .waiting, .refused].map(\.rawValue).contains(row.state)
             let place = queued.contains { $0.id == id } ? (local ? "local" : "queue") : "blocks"
             return "\(id.prefix(8))=\(place):\(row.state ?? "-")x\(rows.count)"
         }.joined(separator: " ")

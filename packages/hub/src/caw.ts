@@ -1950,7 +1950,61 @@ export const createCaw = ({
     event: { kind: "agents", sha },
   });
 
-  /** A message id the dashboard chose is a new one: a second send of it is refused. */
+  /**
+   * Each person's send to Caw still being kept or woken for, by its uuid,
+   * until it settles ({@link Caw.personSent}): the same send again in that
+   * time (a device resending after its socket dropped) is answered by the
+   * first one's settling, never kept twice nor settled before its wake.
+   */
+  const personSends = new Map<string, Promise<unknown>>();
+
+  /** Each of your messages being kept now, by the id the dashboard chose ({@link once}). */
+  const saying = new Map<string, Promise<ThreadSaid>>();
+
+  /**
+   * Your message under the id the dashboard chose for it, kept once: the
+   * same message again (a device sending again after its request got no
+   * answer) is answered with the message the thread keeps, nothing added,
+   * nobody woken twice; while the first is still being kept ("Make a note"
+   * commits first), with that one's answer. An id kept in another thread
+   * than `threadId`, or another project, is refused.
+   */
+  const once = (
+    projectId: string,
+    threadId: string | undefined,
+    id: string | undefined,
+    make: () => Promise<ThreadSaid>
+  ): Promise<ThreadSaid> => {
+    if (!id) {
+      return make();
+    }
+    const first = saying.get(id);
+    if (first !== undefined) {
+      return first;
+    }
+    const kept = db.threadMessage(id);
+    if (kept) {
+      const thread = db.thread(kept.threadId);
+      if (
+        !thread ||
+        thread.projectId !== projectId ||
+        (threadId && thread.id !== threadId)
+      ) {
+        return refuse(409, "That message is already in another thread.");
+      }
+      return Promise.resolve({
+        thread: summaryOf(thread),
+        message: messageOf(kept),
+      });
+    }
+    const keeping = make();
+    saying.set(id, keeping);
+    const done = () => saying.delete(id);
+    keeping.then(done, done);
+    return keeping;
+  };
+
+  /** A setup's prompt id the dashboard chose is a new one: a second of it is refused. */
   const unsaid = (id: string | undefined): void => {
     if (id && db.threadMessage(id)) {
       refuse(409, "That message is already in its thread.");
@@ -2308,32 +2362,33 @@ export const createCaw = ({
      * note: …" goes to AGENTS.md instead. `sent`: the message's id, the send
      * to his session it came as ({@link personSent}), and what rode with
      * your words, which the message keeps ({@link keepCarried}) and the wake
-     * carries to him.
+     * carries to him. The same `id` again is the same message ({@link once}).
      */
     async start(
       projectId: string,
       raw: string,
       { id, person, carried }: YourSend = {}
     ): Promise<ThreadSaid> {
-      const body = bodyOf(raw);
-      unsaid(id);
-      if (MAKE_A_NOTE.test(body)) {
-        projectOf(projectId);
-        const sha = await noteInAgents(projectId, body);
-        const opened = open(projectId, body, id);
-        noteIn(projectId, opened.row.id, notedLine(sha));
+      return await once(projectId, undefined, id, async () => {
+        const body = bodyOf(raw);
+        if (MAKE_A_NOTE.test(body)) {
+          projectOf(projectId);
+          const sha = await noteInAgents(projectId, body);
+          const opened = open(projectId, body, id);
+          noteIn(projectId, opened.row.id, notedLine(sha));
+          return { ...opened.said, thread: summaryOf(opened.row) };
+        }
+        listening(projectId);
+        const opened = open(projectId, body, id, keepCarried(carried));
+        wakeForYou(projectId, opened.row.id, opened.said.message.id, {
+          by: "you",
+          text: yourWords(opened.row, body, true),
+          threadId: opened.row.id,
+          ...(person ? { send: person } : {}),
+          ...(carried ? { carried } : {}),
+        });
         return { ...opened.said, thread: summaryOf(opened.row) };
-      }
-      listening(projectId);
-      const opened = open(projectId, body, id, keepCarried(carried));
-      wakeForYou(projectId, opened.row.id, opened.said.message.id, {
-        by: "you",
-        text: yourWords(opened.row, body, true),
-        threadId: opened.row.id,
-        ...(person ? { send: person } : {}),
-        ...(carried ? { carried } : {}),
       });
-      return { ...opened.said, thread: summaryOf(opened.row) };
     },
 
     /**
@@ -2343,8 +2398,8 @@ export const createCaw = ({
      * AGENTS.md instead, waking nobody). `id` is the
      * message's when the dashboard chose it, as a session's composer does:
      * the row your words fly into is then the one they went out as, however
-     * soon the hub's frame draws it. `person` and `carried` as for
-     * {@link start}.
+     * soon the hub's frame draws it, and the same `id` again is the same
+     * message ({@link once}). `person` and `carried` as for {@link start}.
      */
     async say(
       projectId: string,
@@ -2352,38 +2407,39 @@ export const createCaw = ({
       raw: string,
       { id, person, carried }: YourSend = {}
     ): Promise<ThreadSaid> {
-      const body = bodyOf(raw);
-      threadIn(projectId, threadId);
-      unsaid(id);
-      if (MAKE_A_NOTE.test(body)) {
-        const sha = await noteInAgents(projectId, body);
+      return await once(projectId, threadId, id, async () => {
+        const body = bodyOf(raw);
+        threadIn(projectId, threadId);
+        if (MAKE_A_NOTE.test(body)) {
+          const sha = await noteInAgents(projectId, body);
+          const added = db.addThreadMessage({
+            threadId,
+            author: "you",
+            body,
+            ...(id ? { id } : {}),
+          });
+          const out = said(added.thread, added.message, false);
+          noteIn(projectId, threadId, notedLine(sha));
+          return { ...out, thread: summaryOf(added.thread) };
+        }
+        listening(projectId);
         const added = db.addThreadMessage({
           threadId,
           author: "you",
           body,
+          ...keepCarried(carried),
           ...(id ? { id } : {}),
         });
         const out = said(added.thread, added.message, false);
-        noteIn(projectId, threadId, notedLine(sha));
+        wakeForYou(projectId, threadId, added.message.id, {
+          by: "you",
+          text: yourWords(added.thread, body, false),
+          threadId,
+          ...(person ? { send: person } : {}),
+          ...(carried ? { carried } : {}),
+        });
         return { ...out, thread: summaryOf(added.thread) };
-      }
-      listening(projectId);
-      const added = db.addThreadMessage({
-        threadId,
-        author: "you",
-        body,
-        ...keepCarried(carried),
-        ...(id ? { id } : {}),
       });
-      const out = said(added.thread, added.message, false);
-      wakeForYou(projectId, threadId, added.message.id, {
-        by: "you",
-        text: yourWords(added.thread, body, false),
-        threadId,
-        ...(person ? { send: person } : {}),
-        ...(carried ? { carried } : {}),
-      });
-      return { ...out, thread: summaryOf(added.thread) };
     },
 
     /**
@@ -2455,6 +2511,14 @@ export const createCaw = ({
         return;
       }
       const sent = payload.message;
+      // The same send again: while the first is still kept or woken for, its
+      // settling answers this one too; a "Make a note" kept twice would be
+      // two commits, and one settled early would write the send's record
+      // before its wake, which then never goes (server.ts `toCawThread`).
+      const first = personSends.get(sent.uuid);
+      if (first !== undefined) {
+        return first;
+      }
       if (db.threadMessage(sent.uuid)) {
         return Promise.resolve();
       }
@@ -2486,7 +2550,11 @@ export const createCaw = ({
       // send's own record ({@link server.ts toCawThread}) be written first,
       // which the wake then took for the same send again and never sent. A
       // send taken with no wake ("Make a note") is answered once it is kept.
-      return kept.then(() => woken);
+      const settling = kept.then(() => woken);
+      personSends.set(sent.uuid, settling);
+      const done = () => personSends.delete(sent.uuid);
+      settling.then(done, done);
+      return settling;
     },
 
     /**

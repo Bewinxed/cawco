@@ -206,7 +206,13 @@ public final class HubConnection {
         UserDefaults.standard.string(forKey: addressKey).flatMap(address(from:))
     }
 
-    public init() {
+    /// Whether this connection sends the messages kept for its hub
+    /// (`SendOutbox`) as it opens: every window's does; one a push's action
+    /// opens for itself, for a moment, sends only its own.
+    let drainsOutbox: Bool
+
+    public init(drainsOutbox: Bool = true) {
+        self.drainsOutbox = drainsOutbox
         needs = NeedsYouStore(ledger: ledger)
         address = Self.keptAddress
         ledger.send = { [weak self] data in

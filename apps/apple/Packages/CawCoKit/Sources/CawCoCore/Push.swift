@@ -869,7 +869,7 @@ public enum PushActions {
             return false
         }
         let deadline = ContinuousClock.now + window
-        let connection = HubConnection()
+        let connection = HubConnection(drainsOutbox: false)
         defer { connection.disconnect() }
         guard await until(deadline, { connection.socket == .connected }) else {
             log.error("reply to \(instanceId, privacy: .public): the hub socket did not open")
@@ -880,7 +880,18 @@ public enum PushActions {
         let stage = await settled(commandId, on: connection, deadline: deadline)
         log.notice("reply to \(instanceId, privacy: .public): command \(commandId, privacy: .public) \(stage?.rawValue ?? "unanswered", privacy: .public)")
         guard stage == .accepted || stage == .applied else {
-            await notSent(note, words, connection.ledger.commands[commandId]?.reason ?? "The hub never acknowledged it.")
+            let command = connection.ledger.commands[commandId]
+            // Refused: the notice's Reply writes it again, so this one is not kept.
+            if command?.refusedByHub == true {
+                connection.sessions.discard(commandId)
+                await notSent(note, words, command?.reason ?? "The hub refused it.")
+                return false
+            }
+            // No word: it may have reached the hub. It is kept, and goes again
+            // under its own id the next time CawCo reaches the hub; a second
+            // Reply would be a second message, so the notice offers none.
+            await post(note, title: nil, body: "\(note.title): reply waiting for the hub. “\(words)” It goes the next time CawCo reaches the hub.",
+                       category: nil)
             return false
         }
         return true
@@ -910,7 +921,7 @@ public enum PushActions {
             await post(note, title: note.title, body: "Already answered.", category: nil)
             return nil
         }
-        let connection = HubConnection()
+        let connection = HubConnection(drainsOutbox: false)
         guard await until(deadline, { connection.socket == .connected }) else {
             log.error("\(note.action, privacy: .public) \(requestId, privacy: .public): the hub socket did not open")
             connection.disconnect()

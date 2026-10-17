@@ -278,11 +278,15 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         } else {
             composerBinding.action = transcript.tail?.busy == true && canStop ? .stop : .send
         }
-        composerBinding.sendError = editNote ?? (command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
+        // Only the hub's refusal is a failure: a send it never answered waits on its row.
+        composerBinding.sendError = editNote ?? (command?.refusedByHub == true ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
         composerBinding.sendBlock = sendBlock(hub)
         syncCards()
         composerBinding.publish()
         syncPreview()
+        #if DEBUG
+        sendForProbe()
+        #endif
     }
 
     // MARK: An ask standing alone (SessionPane.svelte `askAlone`)
@@ -1137,6 +1141,29 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
     }
 
+    /// `-probe-send <words>`: once this pane can send, its Send sends `words`
+    /// with one picture of about 2 MB (noise, which does not compress), once
+    /// per launch, for a simulator pass (probe-kit spec `ios-send-outbox`).
+    private static let probeSendWords: String? = {
+        let args = ProcessInfo.processInfo.arguments
+        return args.firstIndex(of: "-probe-send").flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil }
+    }()
+    private static var probeSent = false
+
+    private func sendForProbe() {
+        guard let words = Self.probeSendWords, !Self.probeSent, canSend else { return }
+        Self.probeSent = true
+        var noise = [UInt8](repeating: 0, count: 720 * 720 * 4)
+        for at in noise.indices { noise[at] = .random(in: 0 ... 255) }
+        let png = noise.withUnsafeMutableBytes { bytes -> Data in
+            let context = CGContext(data: bytes.baseAddress, width: 720, height: 720, bitsPerComponent: 8,
+                                    bytesPerRow: 720 * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+            return context?.makeImage().flatMap { UIImage(cgImage: $0).pngData() } ?? Data()
+        }
+        Self.probeLog.notice("probe send: \(words, privacy: .public) with a picture of \(png.count) bytes")
+        send(words, [.image(name: "probe.png", mediaType: "image/png", data: png)])
+    }
+
     private func approveForProbe(_ ask: ParkedAsk?) {
         guard Self.approvesAsks, let ask, !ask.isQuestion, !approved.contains(ask.requestId) else { return }
         approved.insert(ask.requestId)
@@ -1218,9 +1245,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             case .file, .pending: return
             }
         }
-        let id = hub.sessions.steer(row, text: words, images: images, texts: texts, files: files)
-        sent = id
-        if hub.ledger.commands[id]?.undelivered != true { composerBinding.sent() }
+        // Kept with all it carries from here (`SendOutbox`): the field is free at once.
+        sent = hub.sessions.steer(row, text: words, images: images, texts: texts, files: files)
+        composerBinding.sent()
         requestRefresh()
     }
 
@@ -1285,13 +1312,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         command = hub.sessions.withdraw(row, sendId: id) { [weak self] stage, reason in
             guard let self else { return }
             if stage == .applied, hub.ledger.commands[command]?.outcome == "withdrawn" {
-                let replacement = hub.sessions.steer(row, text: text, images: images, texts: texts, files: files, replaces: id)
-                sent = replacement
-                // Withdrawn and its replacement never left this device: the words are only here, so they go back
-                // to the composer (as a plain send keeps its draft). A later failure stays a failed row to try again.
-                if hub.ledger.commands[replacement]?.undelivered == true {
-                    keepEdit(id, text, "Couldn't send your edit, and your queued message was already taken back. Your edit is back in the composer.")
-                }
+                // Kept like any send (`SendOutbox`): with no hub to take it now, it goes once one is back.
+                sent = hub.sessions.steer(row, text: text, images: images, texts: texts, files: files, replaces: id)
             } else if stage == .applied {
                 keepEdit(id, text, "Claude Code had already read your queued message, so it went as it was. Your edit is back in the composer.")
             } else {

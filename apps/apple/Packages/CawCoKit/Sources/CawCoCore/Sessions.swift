@@ -75,9 +75,13 @@ public struct LocalSend: Sendable, Equatable {
     public enum State: String, Sendable {
         /// On its way: the hub has not answered, or has and its row is not here yet.
         case sending
-        /// The hub never took it (the socket was down or went down, or nothing
-        /// answered): sent again from this device, under its own id.
-        case unreached
+        /// No word from the hub on it (the socket was down, went down, or
+        /// nothing answered): kept on this device (`SendOutbox`), it goes
+        /// again by itself, under its own id, once a connection is back.
+        case waiting
+        /// The hub refused it, and said why (`reason`): Send again sends it
+        /// from this device, under its own id.
+        case refused
     }
 
     public struct Image: Sendable, Equatable {
@@ -92,7 +96,7 @@ public struct LocalSend: Sendable, Equatable {
     public let files: [SentFile]
     public let images: [Image]
     public internal(set) var state: State = .sending
-    /// Why it was not taken, while `unreached`.
+    /// The hub's words, while `refused`.
     public internal(set) var reason: String?
 }
 
@@ -217,6 +221,7 @@ public final class SessionsStore {
         let transcript = SessionTranscript(id)
         transcripts[id] = transcript
         log.info("watching \(id, privacy: .public): \(self.watches.count) sessions watched")
+        for entry in SendOutbox.shared.entries where entry.sessionId == id { draw(entry) }
         read(id, because: .open)
         return transcript
     }
@@ -230,7 +235,6 @@ public final class SessionsStore {
         lapses.removeValue(forKey: id)?.cancel()
         olderLapses.removeValue(forKey: id)?.cancel()
         transcripts[id] = nil
-        for (uuid, held) in outbox where held.sessionId == id { outbox[uuid] = nil }
         hub.ledger.forget(except: watched)
         log.info("stopped watching \(id, privacy: .public): \(self.watches.count) sessions watched")
     }
@@ -247,7 +251,7 @@ public final class SessionsStore {
         transcripts = [:]
         watches = [:]
         peeked = nil
-        outbox = [:]
+        delivering = []
         hub.ledger.forget(except: [])
     }
 
@@ -258,10 +262,11 @@ public final class SessionsStore {
     /// so that cursor may sit inside another hub process's numbering, and a
     /// resume from it would replay that process's events onto rows they do
     /// not follow. A read in flight is read again here: it was asked of the
-    /// connection before.
+    /// connection before. Every send kept for the hub goes (`drain`).
     func reconnected() {
         hub.ledger.forget(except: watched)
         for id in watched { read(id, because: .reconnect) }
+        drain()
     }
 
     /// The app is active again, maybe back from Settings with Local Network
@@ -834,59 +839,139 @@ public final class SessionsStore {
                 + files.map { ["kind": "file", "name": $0.name, "mediaType": $0.mediaType, "size": $0.size, "ref": $0.ref] as [String: any Sendable] }
         }
         let payload = try! OpenAPIValueContainer(unvalidatedValue: body)
-        let id = submitSend(uuid, sessionId: sessionId, machineId: machineId, payload: payload)
-        // Drawn at once (client.svelte.ts `noteSendSubmitted`), unless it never
-        // left this device: then its words are still the composer's. A send in
-        // place of another draws nothing of its own: the one it replaces stands
-        // until the hub retires it as it takes this one.
-        if replaces == nil, let transcript = transcripts[sessionId], hub.ledger.commands[id]?.undelivered != true {
-            let sources = images.map { LocalSend.Image(src: "data:\($0.mediaType);base64,\($0.data.base64EncodedString())", mediaType: $0.mediaType) }
-            transcript.local.append(LocalSend(id: uuid, text: text, timestamp: ISO8601DateFormatter().string(from: Date()),
-                                              texts: texts.map { SentText(name: $0.name, content: $0.content) }, files: files, images: sources))
-            outbox[uuid] = (sessionId, machineId, payload)
-            transcript.blockRevision += 1
+        // Kept before anything can fail, with all it carries, so the person
+        // never has to write or attach it again: it is the outbox's from here.
+        let entry = SendOutbox.Entry(
+            uuid: uuid, hub: hub.address?.absoluteString ?? "", sessionId: sessionId, machineId: machineId, at: .now,
+            timestamp: ISO8601DateFormatter().string(from: .now), drawn: replaces == nil, text: text,
+            texts: texts.map { .init(name: $0.name, content: $0.content) },
+            files: files.map { .init(name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref) }, payload: payload)
+        SendOutbox.shared.keep(entry)
+        draw(entry)
+        deliver(entry)
+        return uuid
+    }
+
+    /// The sends kept for this connection that are on the socket now, by uuid:
+    /// each goes once per connection while it is out.
+    @ObservationIgnored private var delivering: Set<String> = []
+
+    /// A kept send's row, drawn at once (client.svelte.ts `noteSendSubmitted`)
+    /// and again in every transcript of its session opened before the hub
+    /// takes it, across a relaunch. A send in place of another draws nothing
+    /// of its own: the one it replaces stands until the hub retires it as it
+    /// takes this one.
+    private func draw(_ entry: SendOutbox.Entry) {
+        guard entry.drawn, let transcript = transcripts[entry.sessionId], !transcript.local.contains(where: { $0.id == entry.uuid }),
+              !transcript.blocks.contains(where: { $0.id == entry.uuid }), !transcript.queued.contains(where: { $0.id == entry.uuid })
+        else { return }
+        let state: LocalSend.State = entry.refusal != nil ? .refused : delivering.contains(entry.uuid) ? .sending : .waiting
+        transcript.local.append(LocalSend(
+            id: entry.uuid, text: entry.text, timestamp: entry.timestamp, texts: entry.texts.map { SentText(name: $0.name, content: $0.content) },
+            files: entry.files.map { SentFile(name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref) },
+            images: Self.images(of: entry.payload), state: state, reason: entry.refusal))
+        transcript.local.sort { $0.timestamp < $1.timestamp }
+        transcript.blockRevision += 1
+    }
+
+    /// A send's pictures, from the bytes it goes with, as `data:` addresses.
+    private static func images(of payload: OpenAPIValueContainer) -> [LocalSend.Image] {
+        guard let data = try? Wire.encoder().encode(payload),
+              let raw = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let images = raw["images"] as? [[String: Any]] else { return [] }
+        return images.compactMap { image in
+            guard let type = image["mediaType"] as? String, let bytes = image["data"] as? String else { return nil }
+            return LocalSend.Image(src: "data:\(type);base64,\(bytes)", mediaType: type)
         }
-        return id
     }
 
-    /// A send's command, under the message's own uuid (client.svelte.ts: the
-    /// command id is the uuid), so the hub's record of it and the row this
-    /// device drew are one id. Should the hub never take it, its row says so.
-    private func submitSend(_ uuid: String, sessionId: String, machineId: String, payload: OpenAPIValueContainer) -> String {
-        hub.ledger.submit(kind: .send, sessionId: sessionId, machineId: machineId, payload: payload, settlesAt: .accepted,
+    /// A kept send on the socket, under the message's own uuid (client.svelte.ts:
+    /// the command id is the uuid), so the hub's record of it and the row this
+    /// device drew are one id. With no socket open it waits for the next one
+    /// (`drain`). One the hub refused waits for the person's Send again.
+    private func deliver(_ entry: SendOutbox.Entry) {
+        guard entry.refusal == nil, entry.hub == hub.address?.absoluteString, !delivering.contains(entry.uuid) else { return }
+        guard hub.socket == .connected else {
+            log.notice("outbox: \(entry.uuid.prefix(8), privacy: .public) to \(entry.sessionId.prefix(8), privacy: .public) waiting for the hub")
+            mark(entry.uuid, in: entry.sessionId, .waiting)
+            return
+        }
+        delivering.insert(entry.uuid)
+        mark(entry.uuid, in: entry.sessionId, .sending)
+        log.notice("outbox: \(entry.uuid.prefix(8), privacy: .public) to \(entry.sessionId.prefix(8), privacy: .public) sending")
+        hub.ledger.submit(kind: .send, sessionId: entry.sessionId, machineId: entry.machineId, payload: entry.payload, settlesAt: .accepted,
                           effects: Ledger.Effects(settled: { [weak self] stage, reason in
-                              guard stage == .failed else { return }
-                              self?.unreached(uuid, in: sessionId, reason: reason)
-                          }), commandId: uuid)
+                              self?.settled(entry.uuid, stage, reason)
+                          }), commandId: entry.uuid)
     }
 
-    /// What each send drawn from this device went out with, by its uuid,
-    /// until the hub has its row: what Send again sends (client.svelte.ts `sendOutbox`).
-    @ObservationIgnored private var outbox: [String: (sessionId: String, machineId: String, payload: OpenAPIValueContainer)] = [:]
+    /// The hub's word on a kept send, or the connection's silence. Taken: it
+    /// leaves the outbox, its row is the hub's record from here. Refused by
+    /// the hub: its row says so in the hub's words, and keeps Send again. No
+    /// word (the socket dropped, or nothing answered in time): it waits, and
+    /// goes again on this connection while it is open, or on the next one.
+    private func settled(_ uuid: String, _ stage: Ledger.Stage, _ reason: String?) {
+        delivering.remove(uuid)
+        guard let entry = SendOutbox.shared.entry(uuid) else { return }
+        guard stage == .failed else {
+            log.notice("outbox: \(uuid.prefix(8), privacy: .public) taken by the hub")
+            SendOutbox.shared.remove(uuid)
+            return
+        }
+        if hub.ledger.commands[uuid]?.refusedByHub == true {
+            let words = reason ?? "The hub refused it."
+            log.notice("outbox: \(uuid.prefix(8), privacy: .public) refused by the hub: \(words, privacy: .public)")
+            SendOutbox.shared.refuse(uuid, words)
+            mark(uuid, in: entry.sessionId, .refused, words)
+            return
+        }
+        log.notice("outbox: \(uuid.prefix(8), privacy: .public) unanswered (\(reason ?? "no word", privacy: .public)): waiting for the hub")
+        mark(uuid, in: entry.sessionId, .waiting)
+        // Out of the ledger's own settle: the command under this id is replaced.
+        if hub.socket == .connected {
+            Task { [weak self] in self?.deliver(entry) }
+        }
+    }
 
-    /// The hub never took the send `uuid`: its row says it did not go, and why (client.svelte.ts `markUnreached`).
-    private func unreached(_ uuid: String, in sessionId: String, reason: String?) {
-        guard let transcript = transcripts[sessionId], let at = transcript.local.firstIndex(where: { $0.id == uuid }) else { return }
-        transcript.local[at].state = .unreached
-        transcript.local[at].reason = reason ?? "The hub never took it."
+    private func mark(_ uuid: String, in sessionId: String, _ state: LocalSend.State, _ reason: String? = nil) {
+        guard let transcript = transcripts[sessionId], let at = transcript.local.firstIndex(where: { $0.id == uuid }),
+              transcript.local[at].state != state || transcript.local[at].reason != reason else { return }
+        transcript.local[at].state = state
+        transcript.local[at].reason = reason
         transcript.blockRevision += 1
     }
 
-    /// Sends again a message the hub never took, under its own uuid, on its
-    /// own row, which goes back to sending where it stands (client.svelte.ts
-    /// `retrySend`). A hub that did take it after all answers with its record,
-    /// and hands the machine nothing twice.
+    /// A connection to the hub is open: every send kept for it goes, oldest
+    /// first, those from before a relaunch too. A connection a push's action
+    /// opened for itself sends only its own.
+    private func drain() {
+        guard hub.drainsOutbox else { return }
+        for entry in SendOutbox.shared.entries { deliver(entry) }
+    }
+
+    /// Sends again a message the hub refused, under its own uuid, on its own
+    /// row, which goes back to sending where it stands (client.svelte.ts
+    /// `retrySend`).
     public func resend(_ uuid: String) {
-        guard let held = outbox[uuid], let transcript = transcripts[held.sessionId],
-              let at = transcript.local.firstIndex(where: { $0.id == uuid }) else { return }
-        transcript.local[at].state = .sending
-        transcript.local[at].reason = nil
+        guard SendOutbox.shared.entry(uuid)?.refusal != nil else { return }
+        SendOutbox.shared.retry(uuid)
+        if let entry = SendOutbox.shared.entry(uuid) { deliver(entry) }
+    }
+
+    /// A kept send that is no longer this device's to send (a push's Reply
+    /// the hub refused, which its notice offers to write again): gone from
+    /// the outbox and from its row.
+    public func discard(_ uuid: String) {
+        guard let entry = SendOutbox.shared.entry(uuid) else { return }
+        SendOutbox.shared.remove(uuid)
+        guard let transcript = transcripts[entry.sessionId], transcript.local.contains(where: { $0.id == uuid }) else { return }
+        transcript.local.removeAll { $0.id == uuid }
         transcript.blockRevision += 1
-        _ = submitSend(uuid, sessionId: held.sessionId, machineId: held.machineId, payload: held.payload)
     }
 
     /// The sends this device drew that the hub's rows now hold go: the hub's
-    /// row for each stands in its place, under the same id.
+    /// row for each stands in its place, under the same id, and the outbox
+    /// lets go of it (the hub has it, whatever became of its acknowledgement).
     private func settleLocal(_ transcript: SessionTranscript) {
         guard !transcript.local.isEmpty else { return }
         var held = Set(transcript.queued.map(\.id))
@@ -894,7 +979,7 @@ public final class SessionsStore {
         let taken = transcript.local.filter { held.contains($0.id) }.map(\.id)
         guard !taken.isEmpty else { return }
         transcript.local.removeAll { held.contains($0.id) }
-        for uuid in taken { outbox[uuid] = nil }
+        for uuid in taken { SendOutbox.shared.remove(uuid) }
         transcript.blockRevision += 1
     }
 
