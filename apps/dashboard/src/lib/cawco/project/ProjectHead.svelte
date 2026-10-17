@@ -348,15 +348,26 @@
   }
 </script>
 
-<header data-slot="project-head" class="project-head">
-  <div data-slot="who" class="who">
+<!-- literal: 18rem, 3px, 24px, 12px -->
+<header
+  data-slot="project-head"
+  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-3 pt-space-6 pr-space-6 pb-space-4 pl-space-7 max-desk:pt-space-5 max-desk:pr-space-5 max-desk:pb-space-3 max-desk:pl-space-5"
+>
+  <div
+    data-slot="who"
+    class="flex min-w-0 shrink grow basis-(--who-basis) items-center gap-space-3"
+    style:--who-basis="18rem"
+  >
     {#if seated}
-      <div data-slot="seat" class="seat" transition:slot>
+      <div data-slot="seat" class="flex-none" transition:slot>
         <CawSeat {lead} projectId={project.id} projectName={project.name} />
       </div>
     {/if}
-    <div data-slot="txt" class="txt">
-      <h1 data-slot="title" class="title">
+    <div
+      data-slot="txt"
+      class="flex min-w-0 flex-col gap-space-1 has-data-field:flex-auto"
+    >
+      <h1 data-slot="title" class="type-title wrap-anywhere text-ink-strong">
         {#if draft !== null}
           <!-- svelte-ignore a11y_autofocus -->
           <input
@@ -365,7 +376,7 @@
             aria-label="Project name"
             autocomplete="off"
             autofocus
-            class="name field focus-inset"
+            class="focus-inset -mx-space-1 block w-full max-w-full cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out read-only:text-ink-muted"
             onblur={() => {
               // Left after a refusal, it stays as typed, the reason under
               // it; Enter or Try again sends it.
@@ -391,7 +402,7 @@
         {:else}
           <button
             data-slot="name"
-            class="name press-tint"
+            class="press-tint -mx-space-1 block max-w-full cursor-text rounded-xs border border-transparent bg-transparent px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover"
             onclick={editName}
             title="Rename"
             type="button"
@@ -406,23 +417,29 @@
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to
            tween. -->
-      <p class="line mark-line">
+      <p
+        class="mark-line type-label flex min-w-0 items-center gap-space-2 whitespace-nowrap text-ink-muted"
+      >
         {#if words?.kind === "ask"}
-          <a data-slot="ask" class="ask" href="/session/thread:{words.threadId}"
+          <a
+            data-slot="ask"
+            class="min-w-0 overflow-hidden text-ellipsis text-link-ink no-underline hover:underline hover:underline-offset-(--underline-offset)"
+            style:--underline-offset="3px"
+            href="/session/thread:{words.threadId}"
             ><MorphText text={words.text} /></a
           >
           {#if words.more > 0}
-            <span data-num data-slot="more" class="more num">+{words.more}</span
+            <span data-num data-slot="more" class="num text-ink-muted">+{words.more}</span
             >
           {/if}
         {:else if words}
-          <span class="said"><MorphText text={words.text} /></span>
+          <span class="min-w-0 overflow-hidden text-ellipsis"><MorphText text={words.text} /></span>
         {:else}
           <!-- The place is a press, as the name is: the project's details
                unfold under the head. -->
           <button
             aria-expanded={details !== null}
-            class="place-press mark-line"
+            class="mark-line -mx-space-1 flex min-w-0 cursor-pointer items-center gap-space-2 rounded-xs border-0 bg-transparent px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
             data-box
             data-place-line
             onclick={() => {
@@ -437,13 +454,13 @@
             bind:this={placeLine}
           >
             {#if machine}
-              <OsMark class="os" os={machine.os} />
+              <OsMark class="size-icon-sm flex-none" os={machine.os} />
             {/if}
-            <span class="place"><MorphText text={place} /></span>
+            <span class="min-w-0 overflow-hidden text-ellipsis"><MorphText text={place} /></span>
           </button>
           {#if checkouts > 1}
             <button
-              class="places"
+              class="flex-none cursor-pointer rounded-xs border-0 bg-transparent p-0 text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button
@@ -455,12 +472,15 @@
       <RowFault again={() => startSession("spin")} reason={spinFault} />
     </div>
   </div>
-  <div data-slot="acts" class="acts">
+  <div
+    data-slot="acts"
+    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 max-desk:shrink max-desk:grow max-desk:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
+  >
     {#if !primary}
       <!-- No checkout yet: a session needs a machine and folder, which the
            New Session dialog asks for. -->
       <Button
-        class="head-act pressable"
+        class="pressable max-phone:hidden"
         onclick={() => newSession({ projectId: project.id })}
         >New session</Button
       >
@@ -472,7 +492,7 @@
           }}
         >
           {#snippet child({ props })}
-            <Button {...props} class="head-act pressable">New session</Button>
+            <Button {...props} class="pressable max-phone:hidden">New session</Button>
           {/snippet}
         </Popover.Trigger>
         <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). Over
@@ -532,7 +552,7 @@
         </Popover.Content>
       </Popover.Root>
       <Button
-        class="head-act pressable"
+        class="pressable max-phone:hidden"
         data-share="session:new"
         data-share-ttl="8000"
         disabled={starting !== null && starting !== "spin"}
@@ -549,7 +569,9 @@
           <Button
             {...props}
             aria-label="More for {project.name}"
+            class="max-desk:ms-auto max-desk:me-(--more-bleed)"
             size="icon"
+            style="--more-bleed: calc((var(--c-btn-h) - var(--icon-md)) / -2)"
             variant="ghost"
             bind:ref={more}
           >
@@ -662,7 +684,7 @@
 <!-- Caw's settings, off `⋯`: the project's own, beside its other settings. -->
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
-    <Drawer.Content class="caw-sheet">
+    <Drawer.Content class="pb-(--safe-bottom)">
       <Drawer.Title class="sr-only">Caw, lead of {project.name}</Drawer.Title>
       <CawPanel {lead} projectId={project.id} projectName={project.name} />
     </Drawer.Content>
@@ -672,7 +694,8 @@
     <Popover.Content
       align="end"
       aria-label="Caw, lead of {project.name}"
-      class="caw-settings-pop"
+      class="w-(--settings-w) p-space-2 max-desk:w-(--settings-w-narrow)"
+      style="--settings-w: min(var(--c-panel-w), calc(100vw - 24px)); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))"
       collisionPadding={12}
       customAnchor={more}
       side="bottom"
@@ -697,6 +720,7 @@
 <ForgetProjectTray at={forgetAt} class="head-forget max-w-128" />
 
 <style>
+  /* residual: foreign-dom */
   /* The head's own leading padding, so the tray starts where its words do;
      as wide as the dialog it replaces (`max-w-lg`, set where it is drawn). */
   /* css-scope: the forget tray is drawn by ForgetProjectTray, outside this head's markup; only this head names the class */
@@ -704,190 +728,11 @@
     --ask-indent: var(--space-7);
     --fault-indent: var(--space-7);
   }
-  /* Caw's settings in the glass card's frame (home/CawPanel's
-     `.kit-pop.caw-pop`): the panel's width, its rows 7px in, a narrower cap
-     under 900px. */
-  :global(.kit-pop.caw-settings-pop) {
-    width: min(var(--c-panel-w), calc(100vw - 24px));
-    padding: 7px;
-  }
-  @media (max-width: 899px) {
-    :global(.kit-pop.caw-settings-pop) {
-      width: min(
-        var(--c-panel-w),
-        calc(100vw - 12px - env(safe-area-inset-right, 0px))
-      );
-    }
-  }
-  :global(.caw-sheet) {
-    padding-block-end: var(--safe-bottom);
-  }
-  .project-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3) var(--space-4);
-    padding: var(--space-6) var(--space-6) var(--space-4) var(--space-7);
-  }
-  .who {
-    display: flex;
-    flex: 1 1 18rem;
-    align-items: center;
-    gap: var(--space-3);
-    min-inline-size: 0;
-  }
-  .seat {
-    flex: none;
-  }
-  .txt {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-  }
-  .title {
-    font: var(--type-title);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  /* The name and the field it becomes are one box: the same type, the same
-     inset (a space-1 pad pulled back by a space-1 margin, so the words stand
-     where the line's do) and a 1px edge, clear at rest, so pressing it moves
-     nothing. Under a pointer the name takes the hover wash. */
-  .name {
-    display: block;
-    max-inline-size: 100%;
-    margin-inline: calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs);
-    background: none;
+  /* residual: unmapped */
+  /* The name, the place and the places line take the type they stand in. */
+  [data-slot="name"],
+  [data-place-line],
+  [data-places-line] {
     font: inherit;
-    color: inherit;
-    text-align: start;
-    cursor: text;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    button.name:hover {
-      background: var(--surface-hover);
-    }
-  }
-  /* Editing, the words' column takes the row's room, so a long name has the
-     field's whole width to be typed in. */
-  .txt:has(.field) {
-    flex: 1 1 auto;
-  }
-  .field {
-    inline-size: 100%;
-    border-color: var(--border-control);
-    background: var(--surface-raised);
-  }
-  .field[readonly] {
-    color: var(--ink-muted);
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .line :global(.os) {
-    inline-size: var(--icon-sm, 14px);
-    block-size: var(--icon-sm, 14px);
-    flex: none;
-  }
-  .place,
-  .said,
-  .ask {
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ask {
-    color: var(--link-ink);
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .ask:hover {
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-  }
-  .more {
-    color: var(--ink-muted);
-  }
-  /* The place is pressed as the name is: the same inset pulled back by its
-     margin, so its words stand where the line's do, and the hover wash. */
-  .place-press {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    margin-inline: calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: inherit;
-    color: inherit;
-    text-align: start;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .places {
-    flex: none;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    padding: 0;
-    font: inherit;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    .place-press:hover,
-    .place-press[aria-expanded="true"],
-    .places:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .acts {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  @media (max-width: 899px) {
-    .project-head {
-      padding: var(--space-5) var(--space-5) var(--space-3);
-    }
-    .acts {
-      flex: 1 1 100%;
-    }
-    .acts > :global(:last-child),
-    .acts :global([aria-label^="More for"]) {
-      margin-inline-start: auto;
-    }
-    /* The trailing ghost button's glyph stands on the page's edge, where the
-       filled controls under it end (the field's send): its box reaches past
-       the gutter by the glyph's inset. */
-    .acts :global([aria-label^="More for"]) {
-      margin-inline-end: calc((var(--c-btn-h) - 16px) / -2);
-    }
-  }
-  /* A phone's head carries no button but `⋯`, on the name's row: New
-     session is the views bar's "+", Spin off is in `⋯`. */
-  @media (max-width: 639px) {
-    .acts {
-      flex: none;
-    }
-    .acts :global(.head-act) {
-      display: none;
-    }
   }
 </style>
