@@ -418,8 +418,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       }
     )
     // The artifact's doc as a person's view reads it (the app's panel): its
-    // picks, their send, a sheet's stage. No read of the session's, and it
-    // never wakes a stage.
+    // picks and their send. No read of the session's, and it never wakes a stage.
     .get("/api/instances/:id/artifacts/:artifact/view", ({ params }) => {
       try {
         return artifacts.viewOf(params.id, params.artifact);

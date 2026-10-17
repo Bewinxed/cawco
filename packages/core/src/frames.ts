@@ -26,6 +26,7 @@ import type {
 } from "./index";
 import type { MoveJob } from "./move";
 import type { PermissionPresentation } from "./permission-presentation";
+import type { StageState } from "./stage";
 import type { ThreadMessage, ThreadSummary } from "./threads";
 import type { UsageLimitsReading, UsageSpend } from "./usage";
 
@@ -61,6 +62,12 @@ export interface PreviewFrame {
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
   source?: PreviewSource;
+  /**
+   * A sheet's stage as its doc keeps it (`meta.stage`), the frame published
+   * again at the same revision on each change: for a panel that holds no doc
+   * of its own (the app's), as the dashboard's pane reads it from the doc.
+   */
+  stage?: StageState;
   state: "open" | "closed";
 }
 

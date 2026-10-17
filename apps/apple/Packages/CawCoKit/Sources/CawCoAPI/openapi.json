@@ -24624,9 +24624,6 @@
               "null",
               "string"
             ]
-          },
-          "stage": {
-            "$ref": "#/components/schemas/StageState"
           }
         },
         "required": [
@@ -47773,6 +47770,10 @@
                 ]
               }
             ]
+          },
+          "stage": {
+            "$ref": "#/components/schemas/StageState",
+            "description": "A sheet's stage as its doc keeps it (`meta.stage`), the frame published\nagain at the same revision on each change: for a panel that holds no doc\nof its own (the app's), as the dashboard's pane reads it from the doc."
           },
           "state": {
             "$ref": "#/components/schemas/PreviewFrameState"

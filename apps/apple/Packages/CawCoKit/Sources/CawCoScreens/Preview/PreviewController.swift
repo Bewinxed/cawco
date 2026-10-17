@@ -69,11 +69,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The current document finished loading: the cover may go, unless a sheet's stage still has a word for it.
     private var pageLoaded = false
 
-    // A sheet's stage (live components), as its doc keeps it (SheetStage.swift).
+    // A sheet's stage (live components), as its frame carries it (SheetStage.swift).
     private var stage: StageState?
     private var stageShown = SheetStageShown(nil, connected: false)
-    private var stageReading = false
-    private var stageReadAgain = false
     /// `.sheet-dim`: the last good render, under the scrim, while it doesn't compile.
     private let dim = UIView()
     private let errorCard = SheetErrorCard()
@@ -709,6 +707,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // Out of sight, the page waits to be seen.
         guard pageShown else { return }
         let origin = route.origin
+        // A sheet's stage rides its frame, published again at the same
+        // revision on each change (core `PreviewFrame.stage`).
+        let shownStage = frame.artifact.kind == .sheet ? frame.stage : nil
+        if shownStage != stage {
+            stage = shownStage
+            paintStage()
+        }
         guard frame.revision != revision else { return }
         revision = frame.revision
         asleep = false
@@ -735,8 +740,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintSend()
         pageLoaded = false
         paintCover(animated: false)
-        // A sheet's stage as it stands as this page starts to load (asleep, waking, live).
-        readStage()
         byHost = route.byHost
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
@@ -806,9 +809,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// overlay hears it again once it says it is ready (`ready`), so the
     /// head and the page never disagree.
     func webView(_: WKWebView, didCommit _: WKNavigation!) {
-        // The page's answer has come: a sheet's stage serves it now, and its
-        // modules compile until the overlay says it is ready ("Compiling…").
-        readStage()
         #if DEBUG
         PreviewProbe.say("preview document")
         PreviewProbe.documents += 1
@@ -819,7 +819,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pageLoaded = true
         endRetry()
         paintCover(animated: true)
-        readStage()
         // A load served the page again: the stopped state goes.
         if !stopped.isHidden { showStopped(false) }
         guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
@@ -881,7 +880,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
         endRetry()
-        readStage()
         loaded(revision)
     }
 
@@ -889,7 +887,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
         endRetry()
-        readStage()
         loaded(revision)
     }
 
@@ -1010,45 +1007,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     // MARK: A sheet's stage
-
-    /// A sheet's stage as its doc keeps it: read as each page starts and ends
-    /// loading, and whenever the page says its doc changed (`cawco:doc`,
-    /// which a stage's change is); one read at a time, and one more after it
-    /// when asked meanwhile. Any other kind has none.
-    private func readStage() {
-        guard isViewLoaded, let artifact = artifactId,
-              hub.previews.byInstance[instanceId]?.artifact.kind == .sheet else {
-            if stage != nil {
-                stage = nil
-                paintStage()
-            }
-            return
-        }
-        guard !stageReading else {
-            stageReadAgain = true
-            return
-        }
-        stageReading = true
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let read = try await hub.sheetStage(artifact, in: instanceId)
-                if artifact == artifactId {
-                    stage = read
-                    paintStage()
-                }
-            } catch {
-                #if DEBUG
-                PreviewProbe.say("preview stage read failed: \(error.localizedDescription)")
-                #endif
-            }
-            stageReading = false
-            if stageReadAgain {
-                stageReadAgain = false
-                readStage()
-            }
-        }
-    }
 
     /// The stage on the pane: its word on the cover, its first compile error
     /// on a card over the dimmed last render, or the stage that didn't start
@@ -1278,8 +1236,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// more after it when asked meanwhile, so a read under way when the doc
     /// changed is never the last.
     private func refresh() {
-        // A sheet's doc changed too (its stage, its errors): its stage is read with the pins.
-        readStage()
         guard let artifact = artifactId else { return }
         guard !reading else {
             readAgain = true
