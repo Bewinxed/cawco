@@ -235,8 +235,9 @@
          while a machine is online to start one on. -->
     <div
       data-slot="dock"
-      class="sticky bottom-0 mt-auto px-space-5 pt-space-3 pb-(--dock-foot)"
+      class="sticky bottom-0 mt-auto bg-(image:--dock-fade) px-space-5 pt-space-3 pb-(--dock-foot)"
       data-safe-bottom
+      style:--dock-fade={"linear-gradient(transparent, var(--surface-recess) var(--space-4))"}
       style:--dock-foot="calc(var(--space-3) + var(--safe-bottom))"
     >
       <Button class="w-full" onclick={() => newSession()} size="lg">
@@ -246,14 +247,3 @@
     </div>
   {/if}
 </section>
-
-<style>
-  /* residual: unmapped — the dock fades in over the list (a gradient: no
-     utility; Tailwind's gradient utilities interpolate in oklab). */
-  [data-slot="dock"] {
-    background: linear-gradient(
-      transparent,
-      var(--surface-recess) var(--space-4)
-    );
-  }
-</style>

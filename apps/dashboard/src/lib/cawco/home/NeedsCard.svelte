@@ -367,7 +367,7 @@
      .mark-text, centred on the lead (the rows under it hold other things) -->
 <div
   data-slot="row"
-  class="group/row relative grid min-h-(--row-min) grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"
+  class="group/row relative grid min-h-(--row-min) grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55 can-hover:has-[[data-slot=cover]:hover]:bg-surface-hover"
   data-flip
   data-kind={item.kind}
   data-peek={peeks || undefined}
@@ -478,7 +478,7 @@
             data-needs-card-peek
             {...tip}
             aria-label="Peek {item.title}"
-            class="touch-hit pointer-hit focus-inset grid size-(--peek-box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press)"
+            class="touch-hit pointer-hit focus-inset grid size-(--peek-box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press)"
             onclick={peekAsk}
             {onkeydown}
             style:--peek-box="24px"
@@ -881,11 +881,9 @@
   }
   /* residual: unmapped — the peek's glyph is a custom property that
      switches under a finger (the house's touch size, `icon-lg`), and
-     --peek-ink and --peek-room follow it; a row lights while its cover is
-     under the pointer (a run-time :has); the cover takes the row's radius
-     (`inherit`); the peek's three transitions run at two durations (needs
-     transition token); and the clamp's standard property, which a choice's
-     risk drops: read whole, never cut. */
+     --peek-ink and --peek-room follow it; the cover takes the row's radius
+     (`inherit`); and the clamp's standard property, which a choice's risk
+     drops: read whole, never cut. */
   [data-slot="row"] {
     --peek-glyph: var(--icon-md);
   }
@@ -894,19 +892,8 @@
       --peek-glyph: var(--icon-lg);
     }
   }
-  @media (hover: hover) and (pointer: fine) {
-    [data-slot="row"]:has([data-slot="cover"]:hover) {
-      background: var(--surface-hover);
-    }
-  }
   [data-slot="cover"] {
     border-radius: inherit;
-  }
-  [data-needs-card-peek] {
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      transform var(--dur-toggle) var(--ease-out);
   }
   [data-slot="want"] {
     line-clamp: 2;

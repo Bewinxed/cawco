@@ -164,7 +164,7 @@
          edge at night). -->
     <div
       data-slot="side-well"
-      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0"
+      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 in-[.preview-pane]:transition-[outline-color] in-[.preview-pane]:dur-control in-[.preview-pane]:ease-in-out motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
       bind:this={well}
     >
       {@render children()}
@@ -227,18 +227,5 @@
      and weight normal; no utility says line-height: normal. */
   [data-slot="subtitle"] {
     font: var(--text-meta) var(--font-mono);
-  }
-  /* residual: unmapped — the well's edges on the split's slide. A single
-     duration and easing, but PreviewPane's own unlayered
-     `.preview-pane .side-well` transition (0,2,0) would beat a utility;
-     this rule beat it at (0,3,0) and still does. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global([data-split-sliding]) [data-slot="side-well"] {
-      transition:
-        padding var(--dur-panel) var(--ease-drawer),
-        border-radius var(--dur-panel) var(--ease-drawer),
-        border-width var(--dur-panel) var(--ease-drawer),
-        box-shadow var(--dur-panel) var(--ease-drawer);
-    }
   }
 </style>

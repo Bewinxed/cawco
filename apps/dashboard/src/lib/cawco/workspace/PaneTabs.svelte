@@ -1433,7 +1433,7 @@
         data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1) ||
           undefined}
-        class="group/tab relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z)"
+        class="group/tab relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:[.ff-tabs-list[data-reordering]>&]:not-data-following:transition-[translate] motion-safe:[.ff-tabs-list[data-reordering]>&]:not-data-following:dur-panel motion-safe:[.ff-tabs-list[data-reordering]>&]:not-data-following:ease-drawer"
         style:--drop-z="calc(var(--stack-top) + 1)"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1477,7 +1477,17 @@
         style:--lone-end={Number(i === tabs.length - 1)}
         style:--lone-start={Number(i === 0)}
         style:--rim-full={RIM[tab.tone].full}
+        style:--rim-ink="var(--tone)"
         style:--rim-rest={RIM[tab.tone].rest}
+        style:--sheet={cardHere || menuHere
+          ? "var(--surface-recess)"
+          : undefined}
+        style:--tab-fill={cardHere || menuHere
+          ? "var(--surface-recess)"
+          : undefined}
+        style:--tab-hover={cardHere || menuHere
+          ? "var(--surface-recess)"
+          : undefined}
         style:--tone={TONE_INK[tab.tone]}
         style:--z-rest={restAt(i)}
         use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
@@ -1507,7 +1517,8 @@
         <span
           data-slot="shade"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0"
+          class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0 mask-(--shade-mask)"
+          style:--shade-mask={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
           style:--shade-x="calc(-1 * var(--flare))"
           style:--cast-start="calc(var(--flare) + var(--slope-start))"
           style:--cast-end="calc(var(--flare) + var(--slope-end))"
@@ -1677,7 +1688,7 @@
                   <button
                     data-slot="tdetails"
                     aria-hidden="true"
-                    class="touch-hit pointer-hit pressable grid h-(--tdetails-h) w-(--tdetails-w) flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent text-ink-muted hover:bg-surface-fill max-desk:hidden"
+                    class="touch-hit pointer-hit pressable grid h-(--tdetails-h) w-(--tdetails-w) flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent text-ink-muted in-data-ride:transition-off hover:bg-surface-fill data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off"
                     style:--hit-gap-x="var(--space-1)"
                     style:--tdetails-w="20px"
                     style:--tdetails-h="24px"
@@ -1893,7 +1904,7 @@
     >
       <div
         data-slot="details-morph"
-        class="h-(--morph-h) w-full overflow-hidden"
+        class="h-(--morph-h) w-full overflow-hidden motion-safe:in-[[data-session-details-popover][data-morph]]:transition-[height] motion-safe:in-[[data-session-details-popover][data-morph]]:dur-pop motion-safe:in-[[data-session-details-popover][data-morph]]:ease-drawer"
         style:--morph-h={detailsHeight ? `${detailsHeight}px` : undefined}
       >
         <div
@@ -2245,79 +2256,20 @@
   [data-slot="details-measure"] {
     max-height: inherit;
   }
-  /* The card's height on the glide (a run-time `data-morph` on the
-     HangCard content above it). */
-  @media (prefers-reduced-motion: no-preference) {
-    :global([data-session-details-popover][data-morph])
-      [data-slot="details-morph"] {
-      transition: height var(--dur-pop) var(--ease-drawer);
-    }
-  }
-  /* The chevron comes and goes with the choice; under a gesture's ride it
-     follows the finger with no easing. Another tab's slot: kept, empty, and
-     part of that tab. The ride's `transition: none` and the idle `scale`
-     (one value, the property the transition runs) have no utility that
-     computes the same, so the three stay together. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="tdetails"] {
-      transition:
-        opacity var(--choose-dur) var(--choose-ease),
-        scale var(--choose-dur) var(--choose-ease);
-    }
-  }
-  :global([data-ride]) [data-slot="tdetails"] {
-    transition: none;
-  }
-  [data-slot="tdetails"][data-idle] {
-    opacity: 0;
-    scale: var(--pop-scale);
-  }
-  /* The tab's custom properties, by state and medium: no utility sets a
-     custom property, and a `style:` one would outrank the media queries
-     and states that change them. The tab's end pad, a pixel short of the
-     kit's: the width every tab has had (a hidden options button stood in
-     its flow and took the pixel; the tab's own Shift+F10 does its work
-     now). The strengths a rim takes (`RIM`, written on each tab,
-     `--rim-rest` unchosen and `--rim-full` chosen), solid under Increase
-     Contrast. */
+  /* The tab's custom properties, by medium: no utility sets a custom
+     property, and a `style:` one would outrank the media queries that
+     change them. The tab's end pad, a pixel short of the kit's: the width
+     every tab has had (a hidden options button stood in its flow and took
+     the pixel; the tab's own Shift+F10 does its work now). The strengths a
+     rim takes (`RIM`, written on each tab, `--rim-rest` unchosen and
+     `--rim-full` chosen), solid under Increase Contrast. */
   [data-slot="tab"] {
     --px-end: calc(var(--px) - 1px);
-  }
-  /* ── A tab carried along its strip (tab-drag.svelte.ts) ────────────
-     The tab itself is what moves. Lifted, it stands over every tab in the
-     strip, in front of both neighbours (the track ranks it so: both its
-     feet drawn, TabsList), and casts both its edges. It follows the
-     pointer with no easing (`data-following`); its neighbours slide into
-     the slots it leaves on the strip's own slide (PaneTabs `slide`), and it
-     takes the same on its way back. With less motion they stand in their
-     slots at once. */
-  [data-slot="tab"][data-lifted] {
-    --lone-start: 0;
-    --lone-end: 0;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.ff-tabs-list[data-reordering])
-      > [data-slot="tab"]:not([data-following]) {
-      transition: translate var(--dur-panel) var(--ease-drawer);
-    }
-  }
-  /* The cast fades out over the flare above the foot, gone where the foot
-     begins, so the corner shows only what lies under it and the foot's
-     curve is the one edge there (owner: "the curve beteween the left of
-     the tab's foot and the hover menu has a blur or alias"). No utility
-     says mask-image. */
-  [data-slot="shade"] {
-    mask-image: linear-gradient(
-      to bottom,
-      var(--mask-opaque) calc(100% - 2 * var(--flare)),
-      transparent calc(100% - var(--flare))
-    );
   }
   [data-slot="tab"] {
     --rim-subtle: var(--tab-rim-mix-subtle);
     --rim-chosen: var(--tab-rim-mix-chosen);
     --rim-idle: var(--tab-rim-mix-idle);
-    --rim-ink: var(--tone);
 
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
       --rim-subtle: 1;
@@ -2336,11 +2288,6 @@
       --px-start: calc(var(--overlap) + var(--c-tab-lead));
       --px-end: calc(var(--overlap) + var(--radius-lg) - 1px);
     }
-  }
-  [data-slot="tab"][data-hung] {
-    --sheet: var(--surface-recess);
-    --tab-fill: var(--surface-recess);
-    --tab-hover: var(--surface-recess);
   }
   /* residual: pseudo — where a drop would land: a 2px rule in the gap, on
      the near side. */

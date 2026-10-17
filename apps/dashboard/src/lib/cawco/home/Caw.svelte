@@ -729,7 +729,7 @@
     >
       <canvas
         data-caw-shown={layer.shown || undefined}
-        class="absolute top-(--top) left-(--left) size-(--artboard) opacity-0"
+        class="absolute top-(--top) left-(--left) size-(--artboard) opacity-0 data-caw-shown:opacity-100"
         {@attach mount(layer)}
       ></canvas>
     </div>
@@ -743,8 +743,5 @@
      bottom. peek.riv draws its own wing tips in front of the edge. */
   [data-slot="layer"][data-behind] {
     clip-path: inset(calc(var(--artboard) * -1) calc(var(--artboard) * -1) 0);
-  }
-  canvas[data-caw-shown] {
-    opacity: 1;
   }
 </style>

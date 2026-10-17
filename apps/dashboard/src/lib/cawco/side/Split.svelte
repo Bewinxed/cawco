@@ -416,7 +416,7 @@
         <!-- literal: 320px -->
         <div
           data-split-shown={open || undefined}
-          class="w-full min-w-(--surface-min) p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out"
+          class="w-full min-w-(--surface-min) p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-min="320px"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"
@@ -437,17 +437,6 @@
 </div>
 
 <style>
-  /* residual: unmapped — needs transition token: opacity and transform on
-     --ease-out, padding on --ease-drawer, one --dur-panel. The surface
-     sliding in with the split. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-split-sliding] [data-split-shown] {
-      transition:
-        opacity var(--dur-panel) var(--ease-out),
-        transform var(--dur-panel) var(--ease-out),
-        padding var(--dur-panel) var(--ease-drawer);
-    }
-  }
   /* residual: foreign-dom — a frame anywhere in the split (a preview's
      iframe, another component's DOM) takes no pointer while the divider is
      dragged. */

@@ -1947,11 +1947,12 @@
   /* residual: foreign-dom */
   /* The well is the card's (SideSurface). Comment and Draw turn the well's
      own border the accent, 2px, inside its box: never a second ring round
-     it. Interact leaves it as the page's own. */
+     it. Interact leaves it as the page's own. The ring's transition is the
+     well's own (SideSurface, `in-[.preview-pane]:`), so the split's slide
+     can take it over. */
   :global(.preview-pane [data-slot="side-well"]) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
-    transition: outline-color var(--dur-control) var(--ease-in-out);
   }
   :global(.preview-pane:is(.mode-comment, .mode-draw) [data-slot="side-well"]) {
     outline-color: var(--accent);

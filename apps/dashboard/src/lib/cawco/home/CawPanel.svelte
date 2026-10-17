@@ -159,13 +159,14 @@
 <div
   data-slot="list"
   class={[
-    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:pt-space-2",
+    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid/(--tab-rim-mix) [&>[data-slot=section]+[data-slot=section]]:pt-space-2 contrast-more:[&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid",
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom
   style:--fade-len="40px"
   style:--list-max="min(560px, calc(100dvh - 120px))"
   style:--list-max-phone={"calc(100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px)"}
+  style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--fade-start), var(--mask-opaque))"}
   {@attach reflow()}
   {@attach measured}
 >
@@ -342,32 +343,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: unmapped — while the update's footer holds at the list's foot
-     (UpdateCard `data-stuck`), it draws the foot's fade itself, above it:
-     the list's own fade at the foot gives way, and its head's stays. A mask
-     has no utility. */
-  [data-slot="list"]:has(:global([data-stuck])) {
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      var(--mask-opaque) var(--fade-start),
-      var(--mask-opaque)
-    );
-  }
-  /* The sections' vermillion hairline is a mix (no colour utility); its
-     width and the space around it are utilities on the list. */
-  [data-slot="section"] + [data-slot="section"] {
-    border-block-start-color: color-mix(
-      in oklab,
-      var(--brand-solid) var(--tab-rim-mix),
-      transparent
-    );
-  }
-  @media (prefers-contrast: more) {
-    [data-slot="section"] + [data-slot="section"] {
-      border-block-start-color: var(--brand-solid);
-    }
-  }
-</style>

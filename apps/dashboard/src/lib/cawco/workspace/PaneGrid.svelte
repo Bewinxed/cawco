@@ -208,8 +208,13 @@
       <!-- paneforge sizes a pane with flex-basis and leaves its INSIDE to the
            consumer, so without this the group inside collapses to the height
            of its own chrome — a strip and a header with nothing under them. -->
+      <!-- The groups either side of a divider paneforge holds from the
+           keyboard: a drag tracks the pointer 1:1, but a step from the
+           keyboard (paneforge marks its divider `keyboard` while it holds
+           focus) is a jump, so the groups either side tween to it at the
+           control tier. -->
       <Resizable.Pane
-        class="flex min-h-0 min-w-0 overflow-hidden"
+        class="flex min-h-0 min-w-0 overflow-hidden motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:transition-[flex-grow] motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:dur-control motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:ease-out"
         data-slot="grid-pane"
         defaultSize={drawn.sizes[i] ?? 100 / drawn.kids.length}
         minSize={12}
@@ -219,20 +224,3 @@
     {/each}
   </Resizable.PaneGroup>
 {/if}
-
-<style>
-  /* residual: unmapped — the groups either side of a divider paneforge
-     holds from the keyboard: data-active="keyboard" is a run-time state of a
-     sibling the panes cannot read through any variant. A drag tracks the
-     pointer 1:1. A step from the keyboard (paneforge marks its divider
-     `keyboard` while it holds focus) is a jump, so the groups either side
-     tween to it at the control tier. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(
-      [data-grid-group]:has(> [data-pane-resizer][data-active="keyboard"])
-        > [data-slot="grid-pane"]
-    ) {
-      transition: flex-grow var(--dur-control) var(--ease-out);
-    }
-  }
-</style>

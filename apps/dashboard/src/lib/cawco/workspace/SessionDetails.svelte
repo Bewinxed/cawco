@@ -585,7 +585,7 @@
 >
   <div
     data-slot="details-body"
-    class="min-h-0 touch-pan-y overflow-y-auto overscroll-contain"
+    class="min-h-0 touch-pan-y overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
   >
     <!-- The head is the tab's own surface, continued through the junction
          where the card hangs from the tab: the folder's label band. A
@@ -612,7 +612,7 @@
           <button
             data-slot="icon-action"
             aria-label="Copy link"
-            class="touch-hit grid size-(--icon-action) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent hover:bg-surface-hover"
+            class="touch-hit grid size-(--icon-action) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted hover:bg-surface-hover"
             style:--icon-action="28px"
             onclick={() =>
               copyToClipboard("Link", new URL(href, location.origin).href)}
@@ -657,7 +657,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="min-w-0 cursor-pointer border-none border-current bg-transparent p-0 text-left wrap-anywhere"
+            class="min-w-0 cursor-pointer border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-left wrap-anywhere text-inherit [@media(hover:hover)]:[&:hover]:text-ink-strong"
             onclick={() => copyToClipboard("Working directory", cwd)}
             title={cwd}
             type="button"
@@ -874,7 +874,7 @@
   >
     <button
       data-slot="primary"
-      class="ns-btn cursor-pointer"
+      class="ns-btn cursor-pointer max-phone:h-(--footer-btn-h) max-phone:flex-1"
       data-size="xs"
       data-variant="primary"
       onclick={() => {
@@ -893,38 +893,6 @@
      cap, from the popover it stands in). */
   [data-slot="session-details"] {
     max-height: inherit;
-  }
-  /* residual: unmapped — no utility says scrollbar-width: thin or
-     scrollbar-color. */
-  [data-slot="details-body"] {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-control) transparent;
-  }
-  /* residual: unmapped — these outrank the shared sheet's unlayered
-     `.ns-theme button { font: inherit; color: inherit }` (0,1,1), as they
-     did at (0,2,0) and (0,3,0); as layered utilities they would lose to it
-     (the path would lose its mono face, the copy button its muted ink). */
-  [data-slot="cwd"] {
-    color: inherit;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-  }
-  [data-slot="icon-action"] {
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    [data-slot="cwd"]:hover {
-      color: var(--ink-strong);
-    }
-  }
-  /* The footer's button takes the row, 44px tall under a finger: the
-     footer makes it outrank the shared sheet's `.ns-theme .ns-btn.xs`
-     (0,3,0) at (0,4,0). */
-  @media (max-width: 640px) {
-    [data-slot="footer"] [data-slot="primary"] {
-      flex: 1;
-      height: var(--footer-btn-h);
-    }
   }
   /* residual: foreign-dom — svg the icon components draw; the settings'
      chips, which NsPopover's trigger (the model chip, by its
