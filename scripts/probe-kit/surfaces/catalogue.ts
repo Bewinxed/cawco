@@ -158,6 +158,19 @@ const openJump = async (page: Page) => {
   await page.keyboard.press("Control+k");
 };
 
+/** The graph workflow's step and branch, by their titles (scene.ts GRAPH). */
+const GRAPH_STEP = "Audit the chip row";
+const GRAPH_BRANCH = "Overflows?";
+/** The memory read's and the skill's tool rows. */
+const MEMORY_ROW = /fleet memory/i;
+const SKILL_ROW = /tray-check/;
+/** The composer's file input (AttachButton's). */
+const HIDDEN_FILE = "input[type=file][data-slot=hidden-file]";
+
+/** A graph workflow's node picked on its canvas, by its title. */
+const pickNode = (title: string) => (page: Page) =>
+  page.getByText(title, { exact: true }).first().click();
+
 /** The project's ⋯ menu, then its row named `item`. */
 const fromMore = (item: string) => async (page: Page) => {
   await press(MORE_FOR_CAWCO)(page);
@@ -596,9 +609,38 @@ export const SURFACES: Surface[] = [
         root: MAIN,
       },
       {
+        // CawCo's fleet-memory read, its card opened: the memory it read.
+        name: "memory-tool",
+        route: (s) => `/session/${s.memoryRead}`,
+        act: press(MEMORY_ROW),
+        root: MAIN,
+      },
+      {
+        // A skill the session ran, its card opened: what it was asked.
+        name: "skill-tool",
+        route: (s) => `/session/${s.skillRun}`,
+        act: press(SKILL_ROW),
+        root: MAIN,
+      },
+      {
         // The workflow run it started: the RunBlock and its steps.
         name: "run-block",
         route: (s) => `/session/${s.runner}`,
+        root: MAIN,
+      },
+      {
+        // A note attached in the composer: its chip over the field. Late:
+        // the draft, attachments and all, is the session's from then on.
+        name: "attached",
+        act: (page) =>
+          page
+            .locator(HIDDEN_FILE)
+            .first()
+            .setInputFiles({
+              name: "chip-notes.txt",
+              mimeType: "text/plain",
+              buffer: Buffer.from("The badge is cut at 390px.\n"),
+            }),
         root: MAIN,
       },
       {
@@ -908,6 +950,20 @@ export const SURFACES: Surface[] = [
       },
       // A graph workflow: the canvas, its nodes and edges, the inspector.
       { name: "graph", route: (s) => `/workflows/${s.graph}`, root: "body" },
+      // Its step picked: the inspector's prompt and output schema.
+      {
+        name: "graph-step",
+        route: (s) => `/workflows/${s.graph}`,
+        act: pickNode(GRAPH_STEP),
+        root: "body",
+      },
+      // Its branch picked: each case's condition.
+      {
+        name: "graph-branch",
+        route: (s) => `/workflows/${s.graph}`,
+        act: pickNode(GRAPH_BRANCH),
+        root: "body",
+      },
       // The finished run in its own pane: its steps.
       { name: "run", route: (s) => `/session/run:${s.run}`, root: "body" },
     ],

@@ -128,7 +128,7 @@ const TRAY_PNG =
 /** Caw's words in the cawco project's thread, over the two tasks that wait on you. */
 const CAW_SAYS =
   "The push probe audit is ready for your review, and the token sheet's attempt failed: it needs you to say whether to try again.";
-/** A workflow drawn as a graph (the editor's canvas): start, one step, end. */
+/** A workflow drawn as a graph (the editor's canvas): start, one step, a branch on what it found, end. */
 const GRAPH = {
   nodes: [
     {
@@ -152,10 +152,21 @@ const GRAPH = {
       failedPorts: ["fail"],
     },
     {
+      // Whether the step found an overflow: its condition, then the else.
+      id: "branch-1",
+      kind: "branch",
+      title: "Overflows?",
+      position: { x: 560, y: 120 },
+      cases: [
+        { port: "overflows", when: { op: "truthy", path: "step-1.overflows" } },
+        { port: "else" },
+      ],
+    },
+    {
       id: "end-1",
       kind: "end",
       title: "End",
-      position: { x: 560, y: 120 },
+      position: { x: 800, y: 120 },
       outputs: {},
     },
   ],
@@ -165,7 +176,17 @@ const GRAPH = {
       from: { node: "start-1", port: "out" },
       to: { node: "step-1" },
     },
-    { id: "e2", from: { node: "step-1", port: "out" }, to: { node: "end-1" } },
+    {
+      id: "e2",
+      from: { node: "step-1", port: "out" },
+      to: { node: "branch-1" },
+    },
+    {
+      id: "e3",
+      from: { node: "branch-1", port: "overflows" },
+      to: { node: "end-1" },
+    },
+    { id: "e4", from: { node: "branch-1", port: "else" }, to: { node: "end-1" } },
   ],
 };
 /** A workflow that sets one slot and runs one step (its session hands in `overflows`), then returns. */
@@ -292,6 +313,25 @@ const plans = (repo: string): Record<string, Step[]> => ({
     {
       words: `The chip's label shrinks now. ${TODO_PHRASE} measure it on a phone.`,
     },
+  ],
+  memory: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${ADMIN_MEMORY_READ}`, max_results: 1 },
+      },
+    },
+    { tool: { name: ADMIN_MEMORY_READ, input: { action: "get" } } },
+    { words: "The fleet's memory asks for a proof with every change." },
+  ],
+  skill: [
+    {
+      tool: {
+        name: "Skill",
+        input: { skill: SKILL_NAME, args: "Measure the chip row at 390px." },
+      },
+    },
+    { words: "The tray check passed." },
   ],
   named: [
     {
@@ -469,6 +509,18 @@ const DELEGATE = "mcp__cawco__delegate";
 const FINISH_ITEM = "mcp__cawco__finish_item";
 const WORKFLOW_RUN = "mcp__cawco__workflow_run";
 const SUBMIT_RESULT = "mcp__cawco__submit_result";
+/** CawCo's fleet-memory read (admin-tools.ts `admin_<group>_read`), deferred. */
+const ADMIN_MEMORY_READ = "mcp__cawco__admin_memory_read";
+/** A skill on the machine (`~/.claude/skills`), which the "skill" session runs. */
+const SKILL_NAME = "tray-check";
+const SKILL = `---
+name: ${SKILL_NAME}
+description: Check the tray's chip row at a phone's width.
+---
+# Tray check
+
+Measure the chip row at 390px and say whether the count badge is whole.
+`;
 /** The delegate the "split" session starts: its card's name in the parent's transcript. */
 export const DELEGATE_TITLE = "Check the chip row";
 const WORKFLOW_NAME = "Chip audit";
@@ -713,6 +765,19 @@ export async function seedScene(
   });
   const todo = await fleet.spawn("claude", "Leave the TODO", fleet.repo);
   await fleet.send(todo, "Say what is left on the chip. PROBE-STEP:todo");
+  // A session that reads the fleet's memory through CawCo's tool, and one
+  // that runs a skill on the machine: each tool's own card.
+  const memoryRead = await fleet.spawn(
+    "claude",
+    "Read the fleet memory",
+    fleet.repo
+  );
+  await fleet.send(memoryRead, "What does the fleet memory ask? PROBE-STEP:memory");
+  const skillDir = join(fleet.home, CLAUDE_DIR_NAME, "skills", SKILL_NAME);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(join(skillDir, "SKILL.md"), SKILL);
+  const skillRun = await fleet.spawn("claude", "Run the tray check", fleet.repo);
+  await fleet.send(skillRun, "Run the tray check skill. PROBE-STEP:skill");
   // A delegate it starts, which reports back: its card, transcript inline.
   const split = delegate
     ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
@@ -940,6 +1005,8 @@ export async function seedScene(
     ["the art session's turn done", art],
     ["the decision session's turn done", decision],
     ["the named session's turn done", answered],
+    ["the memory session's turn done", memoryRead],
+    ["the skill session's turn done", skillRun],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
@@ -1399,6 +1466,8 @@ export async function seedScene(
     second: SECOND_ACCOUNT,
     rule: rule.id,
     todo,
+    memoryRead,
+    skillRun,
     hook: HOOK_ID,
     memoryDoc: MODEL_DOC,
   };
