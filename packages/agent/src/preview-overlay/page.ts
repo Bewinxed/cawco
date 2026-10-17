@@ -47,7 +47,9 @@ import { inkChrome } from "./radial";
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
-  /<script src="\/__cawco\/overlay\.js" data-page-hash="([0-9a-f]{64})"/;
+  /<script src="\/__cawco\/overlay\.js(?:\?k=[0-9a-z]+)?" data-page-hash="([0-9a-f]{64})"/;
+/** The overlay's own tag's address: its path, at the overlay's key (core `keyOverlay`) or not. */
+const OVERLAY_SRC = /^\/__cawco\/overlay\.js(?:\?|$)/;
 /**
  * The pane's mode (its head's Interact | Comment | Draw): Interact gives the
  * page every press; Comment takes them, and a tap pins a comment to what it
@@ -477,7 +479,7 @@ const kept = (node: Node): boolean =>
   node === ink.layer ||
   node === pins.layer ||
   (node instanceof HTMLScriptElement &&
-    node.getAttribute("src") === "/__cawco/overlay.js");
+    OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
 
 /**
  * Where the page was served: the root of its own address in the panel, its

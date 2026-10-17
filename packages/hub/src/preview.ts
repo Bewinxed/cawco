@@ -20,6 +20,8 @@ import {
   folderKey,
   IMMUTABLE,
   injectOverlay,
+  keyOverlay,
+  OVERLAY_KEY,
   OVERLAY_PATH,
   overlayResponse,
   type PreviewSocket,
@@ -159,6 +161,16 @@ const framedBy = (answer: Response): Response => {
     return copy;
   }
 };
+
+/**
+ * `answer`, when it is a page, with its overlay tag at the overlay's key
+ * (core `keyOverlay`): the hub's own pages and a machine's alike, since only
+ * the hub knows the overlay's whole text (its parents line).
+ */
+const withKeyedOverlay = (answer: Response): Promise<Response> | Response =>
+  answer.body && answer.headers.get("content-type")?.startsWith("text/html")
+    ? keyOverlay(answer, previewParents())
+    : answer;
 
 /** Where a shown preview is served now, or the hop that failed and why (server.ts `reachPreview`). */
 export type PreviewReach =
@@ -464,14 +476,16 @@ async function serveSession(
   instanceId: string,
   deps: PreviewListenerDeps
 ): Promise<Response | undefined> {
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
   if (pathname === PREVIEW_PING_PATH) {
     return ping();
   }
   if (pathname === OVERLAY_PATH) {
     return overlayResponse(
       previewParents(),
-      request.headers.get("accept-encoding")
+      request.headers.get("accept-encoding"),
+      url.searchParams.get(OVERLAY_KEY)
     );
   }
   const synced = pathname.match(ARTIFACT_PATH);
@@ -754,7 +768,7 @@ export function createPreviewListeners(
           return framedBy(downResponse("closed", 404));
         }
         const answer = await serveSession(request, server, instanceId, deps);
-        return answer && framedBy(answer);
+        return answer && framedBy(await withKeyedOverlay(answer));
       },
     });
 

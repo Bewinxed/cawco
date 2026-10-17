@@ -32,10 +32,14 @@
  *    when its tab is back.
  * 5. Back from parked, the frame's document fetches none of the page's
  *    files again (Resource Timing, `transferSize` 0): each stands at its
- *    folder's key (core `versionAssets`) and comes from the cache.
+ *    folder's key (core `versionAssets`) and comes from the cache, and so
+ *    does the overlay, at its own key (core `keyOverlay`).
  * 6. A file of the folder changed on disk, then the pane's Reload: the
  *    page's files stand at a new key, and the changed sheet is fetched
  *    with its new bytes.
+ * 8. A dashboard opened at another origin (`localhost`) adds a parent to
+ *    the overlay's text: after a reload the overlay stands at a new key and
+ *    is fetched over the network.
  * 7. Heavy page, WebKit at a phone (the owner's Brave on iOS), which runs
  *    every frame on the dashboard's thread: its load to its thumbnail is
  *    noted (the page's own work is in it); the page settled, the thumbnail
@@ -225,7 +229,17 @@ const previewFrameOf = (page: Page, origin: string): Frame | undefined =>
     );
 
 /** What the frame's document loaded of its origin's files, by Resource Timing: at a key or not, from the cache (`transferSize` 0) or the network. */
-function fetchedFiles(page: Page, origin: string) {
+interface Fetched {
+  cached: number;
+  fetched: string[];
+  fetchedBytes: number;
+  keys: string[];
+  overlayBytes: number;
+  overlayKey: string;
+  versioned: number;
+}
+
+function fetchedFiles(page: Page, origin: string): Promise<Fetched> {
   const frame = previewFrameOf(page, origin);
   if (!frame) {
     return Promise.resolve({
@@ -234,6 +248,7 @@ function fetchedFiles(page: Page, origin: string) {
       fetched: ["no preview frame"],
       fetchedBytes: 0,
       overlayBytes: 0,
+      overlayKey: "",
       keys: [] as string[],
     });
   }
@@ -258,6 +273,10 @@ function fetchedFiles(page: Page, origin: string) {
       fetched: fetched.map((entry) => path(entry)),
       fetchedBytes: fetched.reduce((sum, entry) => sum + entry.transferSize, 0),
       overlayBytes: overlay?.transferSize ?? 0,
+      // Its address's `?k=<key>`: the overlay's key (core `keyOverlay`).
+      overlayKey: overlay
+        ? (new URL(overlay.name).searchParams.get("k") ?? "")
+        : "",
       // `/__cawco/v/<key>/…`: its third segment.
       keys: [
         ...new Set(
@@ -416,9 +435,12 @@ const run = async (kit: Kit) => {
   const returned = await fetchedFiles(desk, previewOrigin);
   numbers.returned = returned;
   kit.check(
-    "5: back from parked, none of the page's files is fetched again: each comes from the cache at its folder's key",
-    returned.versioned > 0 && returned.fetched.length === 0,
-    `${returned.versioned} files at a key, ${returned.cached} from the cache; fetched again ${returned.fetched.length} (${returned.fetchedBytes} bytes): ${returned.fetched.slice(0, 6).join(", ") || "none"}; the overlay ${returned.overlayBytes} bytes`
+    "5: back from parked, none of the page's files nor the overlay is fetched again: each comes from the cache at its key",
+    returned.versioned > 0 &&
+      returned.fetched.length === 0 &&
+      !!returned.overlayKey &&
+      returned.overlayBytes === 0,
+    `${returned.versioned} files at a key, ${returned.cached} from the cache; fetched again ${returned.fetched.length} (${returned.fetchedBytes} bytes): ${returned.fetched.slice(0, 6).join(", ") || "none"}; the overlay at key ${returned.overlayKey || "none"}, ${returned.overlayBytes} bytes over the network`
   );
 
   // 6. A new revision (one file changed on disk) loads the new files.
@@ -453,6 +475,45 @@ const run = async (kit: Kit) => {
       revised.fetched &&
       revised.text.includes(marker),
     `sheet ${sheet}: key ${revised.key} (was ${returned.keys.join(", ")}), fetched ${revised.fetched}, new bytes ${revised.text.includes(marker)}`
+  );
+
+  // 8. A changed overlay (a dashboard on a new origin adds a parent to its
+  // text, as one reached by another name does) loads at its new key.
+  const keyBefore = (await fetchedFiles(desk, previewOrigin)).overlayKey;
+  const elsewhere = await kit.page("desk");
+  await open(
+    elsewhere,
+    `${base.replace("127.0.0.1", "localhost")}/session/${heavyOne}`,
+    'iframe[title="Preview"]'
+  );
+  await elsewhere.close();
+  await desk.evaluate(() => {
+    (window as unknown as { __cost: Cost }).__cost.heard.length = 0;
+  });
+  await desk
+    .locator(
+      `[data-slot="pane"][data-pane="${heavyOne}"] button[aria-label="Reload"]`
+    )
+    .click();
+  await until(
+    "the page ready under the changed overlay",
+    () => costOf(desk),
+    (read) => read.heard.some(([, type]) => type === "cawco:ready"),
+    120_000
+  );
+  const changed = await fetchedFiles(desk, previewOrigin);
+  numbers.overlayChanged = {
+    before: keyBefore,
+    after: changed.overlayKey,
+    bytes: changed.overlayBytes,
+  };
+  kit.check(
+    "8: a changed overlay (a new parent origin) is a new key, fetched once over the network",
+    !!keyBefore &&
+      !!changed.overlayKey &&
+      changed.overlayKey !== keyBefore &&
+      changed.overlayBytes > 0,
+    `the overlay's key ${keyBefore || "none"} → ${changed.overlayKey || "none"}, ${changed.overlayBytes} bytes over the network`
   );
 
   // The light page alone, the tool's own cost.

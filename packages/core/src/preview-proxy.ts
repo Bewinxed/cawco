@@ -58,23 +58,82 @@ let zipped: { text: string; body: Uint8Array<ArrayBuffer> } | undefined;
 const GZIP = /\bgzip\b/i;
 
 /**
- * The overlay as a response to {@link OVERLAY_PATH}, the origins a host may
- * frame it from (`parents`, the dashboards the hub is reached from) frozen
- * on the window before it runs: its hello is heard from those alone, so a
- * page of another site that frames the preview can't take its picks.
- * Gzipped for a browser that takes it (`accepts`, the request's
- * Accept-Encoding): it is loaded into every preview, uncached, and was most
- * of an artifact's own tab's JS (220 KB of its 640).
+ * The overlay's whole text: the origins a host may frame it from
+ * (`parents`, the dashboards the hub is reached from) frozen on the window
+ * before it runs, so its hello is heard from those alone and a page of
+ * another site that frames the preview can't take its picks; then its build.
+ */
+async function overlayText(parents: readonly string[]): Promise<string> {
+  const named = `Object.defineProperty(window,${JSON.stringify(PARENTS_GLOBAL)},{value:Object.freeze(${JSON.stringify(parents).replaceAll("<", "\\u003c")})});`;
+  return `${named}\n${await loadOverlay()}`;
+}
+
+/** The query parameter that names the overlay's key on {@link OVERLAY_PATH}. */
+export const OVERLAY_KEY = "k";
+/** The last key made, by the text it was made from. */
+let keyed: { key: string; text: string } | undefined;
+
+/**
+ * The overlay's key now: its whole text hashed, so a new build or a new
+ * parent origin is a new key. The hub writes it into every page's overlay
+ * tag ({@link keyOverlay}), and serves the overlay at it for good.
+ */
+export async function overlayKey(parents: readonly string[]): Promise<string> {
+  const text = await overlayText(parents);
+  if (keyed?.text !== text) {
+    const hex = new Bun.CryptoHasher("sha256").update(text).digest("hex");
+    keyed = { text, key: BigInt(`0x${hex.slice(0, 24)}`).toString(36) };
+  }
+  return keyed.key;
+}
+
+/**
+ * `answer`, a page on a preview origin (the hub's own, or one a machine's
+ * listener made: neither knows the hub's parents), with its overlay tag at
+ * the overlay's key now, streamed through as it is read.
+ */
+export async function keyOverlay(
+  answer: Response,
+  parents: readonly string[]
+): Promise<Response> {
+  const at = `${OVERLAY_PATH}?${OVERLAY_KEY}=${await overlayKey(parents)}`;
+  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
+  const rewritten = new HTMLRewriter()
+    .on(`script[src="${OVERLAY_PATH}"]`, {
+      element(element) {
+        element.setAttribute("src", at);
+      },
+    })
+    .transform(answer);
+  const headers = new Headers(rewritten.headers);
+  // The tag's new address is longer than the old.
+  headers.delete("content-length");
+  return new Response(rewritten.body, {
+    status: rewritten.status,
+    statusText: rewritten.statusText,
+    headers,
+  });
+}
+
+/**
+ * The overlay as a response to {@link OVERLAY_PATH} (overlay.ts, its text
+ * {@link overlayText}). At its key now (`asked`, the request's `k`), it is
+ * kept for good ({@link IMMUTABLE}): any change to its text is a new key,
+ * which every page's tag names from then on. At any other address it is
+ * the overlay as it is now, never kept. Gzipped for a browser that takes
+ * it (`accepts`, the request's Accept-Encoding): it is loaded into every
+ * preview, and was most of an artifact's own tab's JS (220 KB of its 640).
  */
 export async function overlayResponse(
   parents: readonly string[],
-  accepts: string | null
+  accepts: string | null,
+  asked: string | null
 ): Promise<Response> {
-  const named = `Object.defineProperty(window,${JSON.stringify(PARENTS_GLOBAL)},{value:Object.freeze(${JSON.stringify(parents).replaceAll("<", "\\u003c")})});`;
-  const text = `${named}\n${await loadOverlay()}`;
+  const text = await overlayText(parents);
+  const current = asked !== null && asked === (await overlayKey(parents));
   const headers = {
     "content-type": "text/javascript",
-    "cache-control": "no-store",
+    "cache-control": current ? IMMUTABLE : "no-store",
     vary: "accept-encoding",
   };
   if (!(accepts && GZIP.test(accepts))) {
@@ -247,6 +306,12 @@ export function injectOverlay(
  * a new address for every file, and no cache can hand an old file to a
  * page that asked for the new one. A frame loaded again (a reload, a tab
  * back from parked) asks the network for its document alone.
+ *
+ * What a script builds from a root path or the document's base
+ * (`fetch("/x.riv")`, `new URL(x, document.baseURI)`) is not at the key, and
+ * stays `no-store`: only a key makes a kept file safe. Kept by validation
+ * instead (`no-cache` and an ETag), a file is what Cloudflare's Browser
+ * Cache TTL rewrote to `max-age=14400` and served four hours stale.
  *
  * `immutable` with a year's `max-age`, `public`: Cloudflare in front of a
  * dashboard rewrites a `Cache-Control` shorter than its Browser Cache TTL
