@@ -220,7 +220,7 @@
             out:faceOut
             ><ThinkingIndicator
               aria-live={announce ? "polite" : "off"}
-              class="p-0 gap-(--indicator-gap)"
+              fit="inline"
               style="--indicator-gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph)); --thinking-icon-size: var(--w-glyph)"
             /></span
           >

@@ -337,9 +337,8 @@
       <!-- shadcn Badge, dressed on the DESIGN.md scale rather than the stock
            ladder. -->
       {#if d.chip}
-        <Badge
-          class="h-auto rounded-xs border-transparent bg-surface-recess px-space-2 py-px text-size-meta font-normal text-ink-muted! flex-none"
-          variant="secondary"><span>{d.chip}</span></Badge
+        <Badge class="h-auto flex-none" kind="meta" variant="secondary"
+          ><span>{d.chip}</span></Badge
         >
       {/if}
       <!-- One chain, so a fact arriving with its result fades in (Svelte plays
@@ -354,7 +353,7 @@
           >{#each factParts(d.fact) as part, i (i)}
             <span
               data-add={part.add || undefined}
-              class="data-add:text-data-ok data-del:text-data-bad"
+              class="not-data-del:data-add:text-data-ok data-del:text-data-bad"
               data-del={part.del || undefined}>{part.text}</span
             >
           {/each}</span
@@ -599,7 +598,7 @@
                           >
                           <!-- literal: 300px -->
                           <pre
-                            class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap"
+                            class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
                             style:--value-max="300px">{result.text}</pre>
                         </div>
                       </div>
@@ -630,7 +629,7 @@
                             >
                             <!-- literal: 300px -->
                             <pre
-                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap"
+                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
                               style:--value-max="300px">{f.text}</pre>
                           </div>
                         {/each}
@@ -645,7 +644,7 @@
                             >
                             <!-- literal: 300px -->
                             <pre
-                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap"
+                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
                               style:--value-max="300px">{result.text}</pre>
                             {#if result.more}
                               <span
@@ -744,12 +743,6 @@
     position: absolute;
     inset: 0;
     border-radius: var(--radius-md);
-  }
-
-  /* residual: unmapped — word-break: break-word, which no utility writes
-     (break-words is overflow-wrap) */
-  [data-slot="tool-group-field"] > pre {
-    word-break: break-word;
   }
 
   /* residual: foreign-dom */

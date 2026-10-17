@@ -1137,11 +1137,13 @@
       role="presentation"
     />
   {:else if tone === "running"}
+    <!-- The dot's phase is set from the clock, so every running dot reads
+         as one beat. -->
     <!-- literal: 5px -->
     <!-- literal: 50% -->
     <span
       data-slot="dot"
-      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph"
+      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph anim-delay-(--dot-delay)"
       style:--dot="5px"
       style:--dot-r="50%"
       style:--dot-delay="-{Date.now() % 2000}ms"
@@ -1337,7 +1339,7 @@
                  over the shelf's own rows, and a press in it is the shelf's. -->
             <DropdownMenu.Content
               align="start"
-              class="w-auto min-w-48"
+              class="w-auto"
               portalProps={{ disabled: true }}
               side="bottom"
             >
@@ -1392,7 +1394,8 @@
           bind:value={
             () => reasons.get(item.id) ?? "", (v) => reasons.set(item.id, v)
           }
-          class="flex-auto min-w-0 h-c-btn-h-sm"
+          class="flex-auto h-c-btn-h-sm"
+          measure="shrink"
           placeholder="Why this is no longer owed"
         />
         <Button
@@ -1678,7 +1681,8 @@
                   >
                     <Input
                       aria-label="Why all {failures.length} are no longer owed"
-                      class="flex-auto min-w-0 h-c-btn-h-sm"
+                      class="flex-auto h-c-btn-h-sm"
+                      measure="shrink"
                       placeholder="Why these are no longer owed"
                       bind:ref={allField}
                       bind:value={allReason}
@@ -1824,12 +1828,5 @@
   button[data-status="failed"]::before,
   [data-slot="end"]::before {
     background-color: var(--status-fail-bg);
-  }
-
-  /* residual: unmapped */
-  /* The dot's phase, set from the clock so every running dot reads as one
-     beat; animation-delay has no utility. */
-  [data-slot="dot"] {
-    animation-delay: var(--dot-delay);
   }
 </style>

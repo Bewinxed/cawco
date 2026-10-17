@@ -152,7 +152,16 @@
 </script>
 
 <!-- Half the chevron's mark and gap: how far the centre and each arm move to
-     hold it. -->
+     hold it. The chevron's clock and the line's ink are custom properties
+     the button's own states rewrite (`divider-chevron`: focus, open, hover,
+     a finger, settling), and every part of the row reads them. How far in
+     the chevron is: 0 away, 1 beside the word. It leaves a little quicker
+     than it arrives; a state that shows it names the arrival's clock, since
+     a transition runs on the clock of the state it is going to. Each arm
+     draws back from the centre as the chevron comes in. While the word
+     turns from "Compacting…" to "Compacted" its box takes the new word's
+     width at once and the letters leaving fade past its end: clipped
+     across, never up or down, the word is its box throughout. -->
 <!-- literal: minmax(0, 1fr) auto minmax(0, 1fr), 12px -->
 <button
   data-compaction-divider-live={live || undefined}
@@ -162,7 +171,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="group/divider grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="group/divider divider-chevron grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
@@ -180,7 +189,8 @@
   <!-- Mirrored, so both arms run outward from the word.
        literal: scaleX(-1) -->
   <span
-    class="arm start @container group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
+    class="@container clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg
       aria-hidden="true"
@@ -246,7 +256,7 @@
       {/if}</span
     ><!-- literal: -0.5em --><span
       style:--word-clip="inset(-0.5em 0)"
-      class="word"
+      class="group-data-settling/divider:clip-path-(--word-clip)"
       >{#if failed}
         <!-- A compaction that failed never reads "Compacted", seen or not. -->
       {:else if watched}
@@ -275,7 +285,8 @@
     ></span
   >
   <span
-    class="arm @container group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    style:--arm-clip="inset(0 0 0 calc(var(--chev) * var(--room)))"
+    class="@container clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg aria-hidden="true" class="wave block w-full h-(--tx-compact-wave)"
       ><path
@@ -332,62 +343,6 @@
 {/if}
 
 <style>
-  /* residual: unmapped: the chevron's clock and the line's ink are custom
-     properties the button's own states rewrite (focus, open, hover, a
-     finger, settling), and every part of the row reads them; a state has no
-     utility that sets a custom property. How far in the chevron is: 0
-     away, 1 beside the word. It leaves a little quicker than it arrives; a
-     state that shows it names the arrival's clock, since a transition runs
-     on the clock of the state it is going to. */
-  [data-slot="divider"] {
-    --line: var(--brand-solid);
-    --chev: 0;
-    --chev-dur: var(--dur-control);
-    --chev-ease: var(--ease-out);
-
-    /* The chevron is in for keyboard focus and while the brief is open. */
-    &:is(:focus-visible, [aria-expanded="true"]) {
-      --chev: 1;
-      --chev-dur: var(--dur-toggle);
-      --chev-ease: var(--ease-arrive);
-    }
-    /* Under the pointer the line and word step to the stronger vermillion
-       and the chevron comes in; nothing else. */
-    @media (hover: hover) and (pointer: fine) {
-      &:hover:not(:disabled) {
-        --line: var(--brand-ink-strong);
-        --chev: 1;
-        --chev-dur: var(--dur-toggle);
-        --chev-ease: var(--ease-arrive);
-      }
-    }
-    /* A finger has no hover: what opens always shows that it does. */
-    @media (pointer: coarse) {
-      &:not(:disabled) {
-        --chev: 1;
-      }
-    }
-    /* Settling, nothing offers the brief yet: the chevron comes in once the
-       word reads "Compacted", on its own clock. */
-    &[data-settling] {
-      --chev: 0;
-    }
-  }
-  /* While the word turns from "Compacting…" to "Compacted" its box takes the
-     new word's width at once and the letters leaving fade past its end.
-     Clipped across, never up or down, the word is its box throughout. Each
-     arm draws back from the centre as the chevron comes in. clip-path has
-     no utility. */
-  [data-settling] .word {
-    clip-path: var(--word-clip);
-  }
-  .arm {
-    clip-path: inset(0 0 0 calc(var(--chev) * var(--room)));
-
-    &.start {
-      clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
-    }
-  }
   /* residual: svg-paint: how much of the path the arm shows, along the
      curve: the wave is 1.087px long for each pixel it crosses. Dashed to
      that length, the line ends on a round cap just inside the column. */

@@ -247,10 +247,12 @@
       {#each shown as { candidate, noul }, i (candidate.id)}
         <!-- Tinted by confidence: `--conf` runs 0 → 1 across the shown range
              (noul 0.6 → 1), and the accent's share of the fill runs 8% → 32%
-             with it. -->
+             with it. The border takes the fill's share at 1.5×, mixed in
+             sRGB so the accent reads as if laid over the surface; a
+             confidence that moves in place re-tints over --dur-panel. -->
         <button
           data-slot="suggest-chip"
-          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 rounded-sm shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) hover:text-ink-strong mark-line touch-hit"
+          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) [&:hover]:bg-suggest-tint-hover hover:text-ink-strong mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
@@ -332,32 +334,3 @@
   {/if}
   <p aria-live="polite" class="sr-only">{announced}</p>
 </div>
-
-<style>
-  /* residual: unmapped: the chip's tint is a mix per chip: the border takes
-     the fill's share at 1.5×, mixed in sRGB so the accent reads as if laid
-     over the surface. A colour in an inline custom property is refused, and
-     no utility mixes. A confidence that moves in place re-tints over
-     --dur-panel. */
-  [data-slot="suggest-chip"] {
-    border: 1px solid
-      color-mix(
-        in srgb,
-        var(--action-solid) calc(var(--tint) * 1.5),
-        var(--surface-raised)
-      );
-    background: color-mix(
-      in srgb,
-      var(--action-solid) var(--tint),
-      var(--surface-raised)
-    );
-
-    &:hover {
-      background: color-mix(
-        in srgb,
-        var(--action-solid) calc(var(--tint) + 6%),
-        var(--surface-raised)
-      );
-    }
-  }
-</style>

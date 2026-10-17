@@ -3126,7 +3126,7 @@
       <!-- literal: the one-cell track -->
       <div
         data-slot="tray-slot"
-        class="relative grid grid-cols-(--tray-cols) min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
+        class="relative grid grid-cols-(--tray-cols) items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
         style:--ring-room={planRing
           ? `calc(${ringWidth}px + var(--space-2))`
           : undefined}
@@ -3362,7 +3362,7 @@
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
         aria-label={FIELD_LABEL}
-        class="group/cin kit-dock-shell field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-none [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-current [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-(length:--ring-off) not-focus-within:touch-none"
+        class="group/cin kit-dock-shell field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-none [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-current [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-(length:--ring-off) not-focus-within:touch-none not-focus-within:touch-callout-none"
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
         onpointerdown={onholddown}
@@ -3465,7 +3465,12 @@
              cue: the edge with text out of sight fades over about a line.
              A folded draft has no cue: it keeps its own fade, its first
              line fading out where the line ends and clear under the "+N
-             lines" standing there. -->
+             lines" standing there. The draft as the recall wheel's first
+             row: its text, and what a folded one says is out of sight, roll
+             down off the field's line as the wheel rolls up, cut at the
+             line's foot. The wheel writes `--roll-y` and `--roll-o` on this
+             box while the roll is off the draft; with neither, the roll's
+             translate and clip are invalid and so none. -->
         <!-- literal: 4.5rem, 16px, 200px, -0.01em, 1lh, -100vh, -100vw, 6px, 15px, 22px -->
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
@@ -3474,9 +3479,11 @@
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="group/field touch-hit relative flex flex-auto min-w-0 [&>[data-slot=editor]]:min-h-(--cin-ctl) [&>[data-slot=editor]]:max-h-(--field-max-h) [&>[data-slot=editor]]:text-(length:--field-size) [&>[data-slot=editor]]:py-(--field-pad) [&>[data-slot=editor]]:px-0 motion-safe:group-data-settling/cin:[&>[data-slot=editor]]:dur-grow-exit motion-safe:group-data-settling/cin:[&>[data-slot=editor]]:ease-drawer [&>[data-slot=editor][data-cue-top]]:mask-(--cue-top-fade) [&>[data-slot=editor][data-cue-bottom]]:mask-(--cue-bottom-fade) [&>[data-slot=editor][data-cue-top][data-cue-bottom]]:mask-(--cue-both-fade) data-folded:[&>[data-slot=editor]]:mask-(--fold-fade)"
+          class="group/field touch-hit relative flex flex-auto min-w-0 [&>[data-slot=editor]]:min-h-(--cin-ctl) [&>[data-slot=editor]]:max-h-(--field-max-h) [&>[data-slot=editor]]:text-(length:--field-size) [&>[data-slot=editor]]:py-(--field-pad) [&>[data-slot=editor]]:px-0 motion-safe:group-data-settling/cin:[&>[data-slot=editor]]:dur-grow-exit motion-safe:group-data-settling/cin:[&>[data-slot=editor]]:ease-drawer [&>[data-slot=editor][data-cue-top]]:mask-(--cue-top-fade) [&>[data-slot=editor][data-cue-bottom]]:mask-(--cue-bottom-fade) [&>[data-slot=editor][data-cue-top][data-cue-bottom]]:mask-(--cue-both-fade) data-folded:[&>[data-slot=editor]]:mask-(--fold-fade) [&>[data-slot=editor]]:translate-raw-(--roll-move) [&>[data-slot=editor]]:clip-path-(--roll-clip)"
           inert={askOpen}
           bind:this={fieldWrap}
+          style:--roll-move="0 var(--roll-y)"
+          style:--roll-clip={"inset(var(--roll-reach-y) var(--roll-reach-x) var(--roll-y))"}
           style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run))"}
           style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--mask-opaque) var(--cue-run))"}
           style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run), var(--mask-opaque) calc(100% - var(--cue-run)), transparent)"}
@@ -3577,17 +3584,22 @@
                  scroll its field has left below, so a long one shows the
                  lines the field shows. Each layer is as wide as the field's
                  text runs (`inline-size`, set from the field), never the
-                 overlay's own width. -->
+                 overlay's own width. Clipped to the field's box as it
+                 glides, as the field clips its own text, and sideways only
+                 as far as the pill's inset on the left and the gap to the
+                 controls on the right, so nothing paints outside the pill or
+                 over its buttons. -->
             <!-- literal: the one-cell track -->
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-(--flight-cols) py-(--field-pad) px-0 font-body text-(length:--field-size) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none group-data-folded/field:mask-(--fold-fade)"
+              class="absolute inset-0 z-2 grid grid-cols-(--flight-cols) content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-body text-(length:--field-size) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
               style:--flight-cols="minmax(0, 1fr)"
+              style:--flight-clip={"inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)))"}
             >
               <span
                 data-slot="flight-text"
-                class="row-start-1 col-start-1 w-(--flight-w) opacity-(--flight-o) transform-(--flight-from) translate-y-(--flight-drop)"
+                class="row-start-1 col-start-1 justify-self-box-start w-(--flight-w) opacity-(--flight-o) transform-(--flight-from) translate-y-(--flight-drop)"
                 data-rest="{flight.outRest}&#8203;"
                 bind:this={flightOut}
                 style:--flight-w="{flight.outWrap}px"
@@ -3597,7 +3609,7 @@
               >
               <span
                 data-slot="flight-text"
-                class="row-start-1 col-start-1 opacity-0 translate-y-(--flight-drop)"
+                class="row-start-1 col-start-1 justify-self-box-start opacity-0 translate-y-(--flight-drop)"
                 data-rest="{flight.text.slice(typed.length)}&#8203;"
                 bind:this={flightIn}
                 style:--flight-drop="{inDrop}px">{typed}</span
@@ -3611,7 +3623,7 @@
             <span
               data-slot="more"
               aria-hidden="true"
-              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-(--more-room) h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) group-data-asking/dock:invisible group-data-asking/cin:invisible"
+              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-(--more-room) h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
               >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
             >
           {/if}
@@ -3630,11 +3642,12 @@
         <!-- Attach + send, together and bottom-aligned, so they hold their
              box as the text above them runs on. On a coarse pointer the gap
              opens to 10px, so each 34px control's touch area reaches 44px
-             before meeting its neighbour's. -->
+             before meeting its neighbour's: the touch areas' gap
+             (`--hit-gap-x`, which .touch-hit reads) switches with it. -->
         <!-- literal: 10px -->
         <div
           data-slot="ctrls"
-          class="flex items-center gap-space-2 coarse:gap-(--ctrls-gap-coarse) flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+          class="flex items-center gap-space-2 coarse:gap-(--ctrls-gap-coarse) hit-gap-x-space-2 coarse:hit-gap-x-(--ctrls-gap-coarse) flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
           inert={!!recall}
           bind:this={ctrls}
           style:--ctrls-gap-coarse="10px"
@@ -3710,11 +3723,6 @@
 <style>
   /* css-scope .lift-copy: lift.svelte.ts makes the element for this composer; its look is here */
 
-  /* residual: unmapped — align-items: end (items-end writes flex-end) */
-  [data-slot="tray-slot"] {
-    align-items: end;
-  }
-
   /* residual: foreign-dom — AttachmentChips' root, which takes no class.
      Everything in the composer takes the pointer; while the canvas stands,
      the chips stand in the grown shape over the field, above its surface;
@@ -3741,24 +3749,6 @@
      the tray chip's own surface (app.css .kit-tray-chip) */
   [data-slot="asked-chip"]::before {
     background-color: var(--status-attn-bg);
-  }
-
-  /* residual: unmapped — -webkit-touch-callout has no utility */
-  [data-slot="cin"]:not(:focus-within) {
-    -webkit-touch-callout: none;
-  }
-
-  /* residual: unmapped — the draft as the recall wheel's first row: its
-     text, and what a folded one says is out of sight, roll down off the
-     field's line as the wheel rolls up, leaving as every row leaves, cut at
-     the line's foot. The wheel writes `--roll-y` and `--roll-o` on the
-     field's box while the roll is off the draft; with neither, nothing here
-     applies (translate: 0 var(--roll-y) computes to none unset, where
-     translate-y-(--roll-y) would compute to 0px). */
-  [data-slot="composer-field"]
-    > :is(:global([data-slot="editor"]), [data-slot="more"]) {
-    translate: 0 var(--roll-y);
-    clip-path: inset(var(--roll-reach-y) var(--roll-reach-x) var(--roll-y));
   }
 
   /* residual: pseudo — the field's hint (MentionField's ::before) and what
@@ -3808,26 +3798,11 @@
     visibility: hidden;
   }
 
-  /* residual: unmapped — the flight's alignment (`unsafe end`, which no
-     utility writes) and its clip: clipped to the field's box as it glides,
-     as the field clips its own text, and sideways only as far as the pill's
-     inset on the left and the gap to the controls on the right, so nothing
-     paints outside the pill or over its buttons. */
-  [data-slot="flight"] {
-    align-content: unsafe end;
-    align-items: unsafe end;
-    clip-path: inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)));
-  }
-  /* justify-self-start writes flex-start */
-  [data-slot="flight-text"] {
-    justify-self: start;
-
-    /* residual: pseudo — drawn clear after the layer's text, the rest of
-       the text it will be, so it lays out whole */
-    &::after {
-      content: attr(data-rest);
-      color: transparent;
-    }
+  /* residual: pseudo — drawn clear after the layer's text, the rest of the
+     text it will be, so it lays out whole */
+  [data-slot="flight-text"]::after {
+    content: attr(data-rest);
+    color: transparent;
   }
   /* residual: foreign-dom — the group's heading, which bits-ui renders */
   [data-slot="menu"]
@@ -3840,16 +3815,6 @@
     color: var(--ink-muted);
   }
 
-  /* residual: unmapped — the touch areas' gap between the controls (app.css
-     .touch-hit reads --hit-gap-x), switching with the pointer: a custom
-     property under a media query, which neither style: nor a utility sets */
-  [data-slot="ctrls"] {
-    --hit-gap-x: var(--space-2);
-
-    @media (pointer: coarse) {
-      --hit-gap-x: var(--ctrls-gap-coarse);
-    }
-  }
   /* residual: foreign-dom — AttachButton's button, which takes no class;
      Attach takes Send's box. In the recall wheel's deck every button behind
      Send is a card: its face, its edge at the outline button's 3:1 (the

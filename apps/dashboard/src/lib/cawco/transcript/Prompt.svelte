@@ -731,7 +731,9 @@
            own height (its 24px box overhangs the label line). -->
       <Button
         aria-label="Minimize question"
-        class="touch-hit flex-none -my-space-1 ms-auto peer-data-num/place:ms-0 text-ink-muted"
+        class="touch-hit flex-none -my-space-1 ms-auto"
+        margin="beside-num"
+        tone="muted"
         data-box
         onclick={onminimize}
         size="icon-xs"
@@ -842,7 +844,7 @@
             <ToggleGroup.Item
               data-sel={sel || undefined}
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:min-w-0{sel
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0{sel
                 ? ' sel'
                 : ''}"
               onkeydown={optionKey}
@@ -858,7 +860,7 @@
             <ToggleGroup.Item
               data-sel={otherPicked(q) || otherAt === qi || undefined}
               aria-keyshortcuts={live ? String(own + 1) : undefined}
-              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:min-w-0{otherPicked(
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-(--opt-cols) group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0{otherPicked(
                 q
               ) || otherAt === qi
                 ? ' sel'
@@ -880,7 +882,8 @@
         <!-- The chip row is the kit's option-chip recipe (.kit-chips /
              .kit-chip in app.css); the card only sets where it sits. The list
              form is the chip recipe grown to one full-width row per option:
-             one column the card's width (`minmax(0, 1fr)`). -->
+             one column the card's width (`minmax(0, 1fr)`), each row
+             standing its keycap on the label's first line. -->
         {#if q.multiSelect}
           <!-- literal: minmax(0, 1fr) -->
           <!-- literal: auto minmax(0, 1fr) -->
@@ -949,7 +952,8 @@
       <div class="flex gap-space-2">
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-4 text-label font-medium"
+          class="h-space-8 coarse:h-(--btn-h-coarse)"
+          fit="prompt-wide"
           disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
           failed={failedOf("answer")}
           icon={IconCheck}
@@ -961,8 +965,9 @@
         />
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+          class="h-space-8 coarse:h-(--btn-h-coarse)"
           disabled={disabledOf("deny")}
+          fit="prompt"
           failed={failedOf("deny")}
           label="Dismiss"
           onclick={dismissQuestion}
@@ -1027,7 +1032,8 @@
               aria-label={commandOpen
                 ? "Show the command on one line"
                 : "Show the whole command"}
-              class="touch-hit flex-none -my-space-1 text-ink-muted"
+              class="touch-hit flex-none -my-space-1"
+              tone="muted"
               onclick={() => {
                 commandOpen = !commandOpen;
               }}
@@ -1073,7 +1079,7 @@
               </dt>
               <!-- literal: 200px -->
               <dd
-                class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap"
+                class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-word"
                 style:--value-max="200px"
               >
                 {field.value}
@@ -1110,7 +1116,10 @@
              move never makes one the more inviting. -->
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-done-ink bg-surface-recess hover:bg-surface-recess"
+          answer="approve-strong"
+          class="h-space-8 coarse:h-(--btn-h-coarse) flex-none"
+          fit="prompt"
+          width="shrink"
           data-prompt-grant={grant}
           disabled={disabledOf("allow")}
           failed={failedOf("allow")}
@@ -1124,7 +1133,10 @@
         />
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium flex-none min-w-0 text-ink-strong! border-status-fail-ink bg-surface-recess hover:bg-surface-recess"
+          answer="deny-strong"
+          class="h-space-8 coarse:h-(--btn-h-coarse) flex-none"
+          fit="prompt"
+          width="shrink"
           data-prompt-refuse={refuse}
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
@@ -1161,8 +1173,9 @@
              (warning tint, warning ink, a real edge). -->
           <!-- literal: 12px, 2.75rem -->
           <Button
-            class="h-space-8 coarse:h-(--btn-h-coarse) gap-(--btn-gap) rounded-sm px-space-3 text-label font-medium"
+            class="h-space-8 coarse:h-(--btn-h-coarse)"
             disabled={disabledOf("always")}
+            fit="prompt"
             failed={failedOf("always")}
             icon={IconShield}
             label="Always allow {rule.short}"
@@ -1177,18 +1190,3 @@
     </div>
   {/if}
 </section>
-
-<style>
-  /* residual: unmapped — word-break: break-word, which no utility writes
-     (break-words is overflow-wrap); align-items: start (items-start writes
-     flex-start) */
-  [data-slot="prompt-field"] > dd {
-    word-break: break-word;
-  }
-  /* A list-form option row stands its keycap on the label's first line:
-     the cross axis starts at `start` (items-start writes `flex-start`). The
-     row is bits-ui's ToggleGroup item, reached through the body. */
-  [data-slot="body"] :global([data-list] > .kit-chip) {
-    align-items: start;
-  }
-</style>

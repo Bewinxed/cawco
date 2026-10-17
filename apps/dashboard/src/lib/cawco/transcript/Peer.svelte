@@ -151,7 +151,7 @@
            literal (the link's underline offset): 0.2em -->
       <span
         data-slot="text"
-        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        class="min-w-0 overflow-clip clip-margin-space-1 text-ellipsis whitespace-nowrap"
       >
         {row.lead}
         {#if senderId}
@@ -238,10 +238,5 @@
       outline: var(--focus-ring-width) solid var(--focus-ring);
       outline-offset: var(--focus-ring-inset);
     }
-  }
-  /* residual: unmapped: the name's clip keeps a margin (no utility), so
-     the link's padded hit area is not clipped with the ellipsis. */
-  [data-slot="text"] {
-    overflow-clip-margin: var(--space-1);
   }
 </style>

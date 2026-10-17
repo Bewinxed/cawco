@@ -574,7 +574,7 @@
           <!-- literal: 68ch -->
           <p
             data-slot="now"
-            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 text-size-meta font-normal text-ink-strong data-err:text-status-fail-ink leading-body max-w-(--measure)"
+            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong data-err:text-status-fail-ink leading-body max-w-(--measure)"
             data-err={status.err || undefined}
             style:--measure="68ch"
             in:lineSwap
@@ -677,12 +677,5 @@
   [data-slot="rail-row"] :global([data-slot="rail-row"] [data-bhead]) {
     flex: 1 1 auto;
     min-inline-size: 0;
-  }
-
-  /* residual: unmapped */
-  /* The status line's words start the cross axis at `start`; items-start
-     writes `flex-start`, a different computed value. */
-  [data-slot="now"] {
-    align-items: start;
   }
 </style>

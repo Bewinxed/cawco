@@ -159,7 +159,7 @@
       <!-- literal: 68ch -->
       <p
         data-slot="now"
-        class="rail-line mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
+        class="rail-line mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
         style:--measure="68ch"
       >
         <!-- literal: 5px -->
@@ -176,7 +176,7 @@
       <!-- literal: 68ch -->
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink leading-body max-w-(--measure)"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-status-fail-ink leading-body max-w-(--measure)"
         style:--measure="68ch"
       >
         {headline(branch.error)}
@@ -185,7 +185,7 @@
       <!-- literal: 68ch -->
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
         style:--measure="68ch"
       >
         {headline(view.report)}
@@ -264,12 +264,5 @@
   [data-slot="rail-row"] :global(*) {
     --rail-head: var(--rail);
     --rail-gap: var(--space-4);
-  }
-
-  /* residual: unmapped */
-  /* The live line's words start the cross axis at `start`; items-start
-     writes `flex-start`, a different computed value. */
-  [data-slot="now"] {
-    align-items: start;
   }
 </style>
