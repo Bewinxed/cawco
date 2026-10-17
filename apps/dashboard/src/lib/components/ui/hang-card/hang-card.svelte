@@ -131,7 +131,18 @@
       return;
     }
     read(at);
-    const sized = new ResizeObserver(() => read(at));
+    // A card that keeps its x while the anchor grows (the glass's trailing
+    // card) gets no placement and no resize of its own: its neck is drawn
+    // again from the new span here.
+    const sized = new ResizeObserver(() => {
+      read(at);
+      if (card && placedAt !== null) {
+        const neck = neckAt(card, placedAt, flared);
+        if (neck) {
+          draw(card, neck);
+        }
+      }
+    });
     sized.observe(at);
     const away = () => {
       moved = true;
