@@ -35,8 +35,12 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     /// The sheet's width on a wide screen (`sm:max-w-2xl`).
     static let sheetWidth = 672.0
 
-    /// Presents the sheet: medium and large detents on an iPhone, a form sheet
-    /// the web pane's width on an iPad and the Mac.
+    /// The detent a wide screen's sheet rests at should it go compact: the height its content fits in.
+    private static let fitted = UISheetPresentationController.Detent.Identifier("task-fitted")
+
+    /// Presents the sheet: medium and large detents on an iPhone; on an iPad
+    /// and the Mac a form sheet the web pane's width, as tall as what it
+    /// holds (`fit`), so the decision stands right under the report.
     static func present(projectId: String, taskId: String, hub: HubConnection, home: HomeModel,
                         from presenter: UIViewController, openSession: @escaping (String) -> Void) {
         let sheet = TaskSheetController(projectId: projectId, taskId: taskId, hub: hub, home: home, openSession: openSession)
@@ -55,7 +59,20 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             }
         } else {
             sheet.modalPresentationStyle = .formSheet
-            sheet.preferredContentSize = CGSize(width: sheetWidth, height: presenter.view.window?.bounds.height ?? presenter.view.bounds.height)
+            sheet.screenHeight = Double(presenter.view.window?.bounds.height ?? presenter.view.bounds.height)
+            if let controller = sheet.sheetPresentationController {
+                // A form sheet's size follows preferredContentSize (UIKit,
+                // `prefersPageSizing`: "When the value is set to false, the
+                // sheet uses formSheet behavior, in which the sheet size
+                // follows the presented view controller's preferredContentSize").
+                // Gone compact, it rests at the same fitted height.
+                controller.prefersPageSizing = false
+                controller.detents = [.custom(identifier: fitted) { [weak sheet] context in
+                    min(sheet?.fits.map { CGFloat($0) } ?? context.maximumDetentValue, context.maximumDetentValue)
+                }]
+            }
+            // Until the task is read: a skeleton's height, then it fits what it holds.
+            sheet.preferredContentSize = CGSize(width: sheetWidth, height: min(480, sheet.screenHeight))
         }
         // The dialog tray's corner (`--radius-modal`), not the system sheet's.
         sheet.sheetPresentationController?.preferredCornerRadius = Radius.radiusModal
@@ -97,6 +114,10 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private var picked: Int?
     /// Each row's space above it, as the parts and their gaps lay it out.
     private var tops: [Item: Double] = [:]
+    /// On a wide screen: the height its content fits in, once the task is read, and the screen's that caps it.
+    private(set) var fits: Double?
+    private var screenHeight = Double.greatestFiniteMagnitude
+    private var listWatch: NSKeyValueObservation?
 
     // The head: the task's id over the facts line, the title, what refused, the switch.
     private let headView = UIView()
@@ -258,9 +279,37 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             collection.dequeueConfiguredReusableCell(using: cell, for: indexPath, item: item)
         }
         wireFields()
+        // On a wide screen the sheet follows what it holds as that is laid out.
+        if traitCollection.userInterfaceIdiom != .phone {
+            review.onFit = { [weak self] in self?.view.setNeedsLayout() }
+            listWatch = collection.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.view.setNeedsLayout() }
+            }
+        }
         render()
         watchNeeds()
         Task { await load() }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        fit()
+    }
+
+    /// A wide screen's sheet is as tall as what it holds, capped at the
+    /// screen: the head and its rule, then the review's bands with the stage
+    /// at its content's height, or the details' whole list.
+    private func fit() {
+        guard traitCollection.userInterfaceIdiom != .phone, task != nil || readProblem != nil,
+              let controller = sheetPresentationController else { return }
+        let body = review.isHidden
+            ? collection.contentSize.height + collection.adjustedContentInset.top + collection.adjustedContentInset.bottom
+            : review.fittedHeight
+        let height = min((headView.frame.height + 1 + body).rounded(.up), screenHeight)
+        guard abs((fits ?? 0) - height) > 0.5 else { return }
+        fits = height
+        preferredContentSize = CGSize(width: Self.sheetWidth, height: height)
+        controller.animateChanges { controller.invalidateDetents() }
     }
 
     private func buildHead() {
@@ -376,6 +425,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             MainActor.assumeIsolated {
                 guard let self, let body = self.collection else { return }
                 TaskSheetProbe.report(self.view, body: body)
+                TaskSheetProbe.standing(self, fits: self.fits ?? 0)
             }
         }
         #endif
@@ -1315,6 +1365,22 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         let row = UIStackView(arrangedSubviews: [view, UIView()])
         row.alignment = .center
         return row
+    }
+
+    /// A ghost button at the column's start, its glyph on the edge the
+    /// section headings' words start on: its own inset, where only its press
+    /// paints, hangs outside the column.
+    static func flush(_ button: UIButton) -> UIView {
+        let box = UIView()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.topAnchor.constraint(equalTo: box.topAnchor),
+            button.bottomAnchor.constraint(equalTo: box.bottomAnchor),
+            button.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: -(button.configuration?.contentInsets.leading ?? 0)),
+            button.trailingAnchor.constraint(lessThanOrEqualTo: box.trailingAnchor),
+        ])
+        return box
     }
 
     /// The kit's Input at the small control height in label type (`h-[var(--c-btn-h-sm)] text-label`).

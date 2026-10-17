@@ -446,7 +446,7 @@ final class TaskFieldsPart: UIView {
                 DispatchQueue.main.async { self.newKey.becomeFirstResponder() }
             }
             add.accessibilityIdentifier = "task-field-add"
-            stack.addArrangedSubview(TaskSheetController.leading(add))
+            stack.addArrangedSubview(TaskSheetController.flush(add))
         }
         if let problem { stack.addArrangedSubview(TaskSheetController.problemLabel(problem)) }
         onResize()

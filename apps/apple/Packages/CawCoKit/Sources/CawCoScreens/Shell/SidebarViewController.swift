@@ -223,6 +223,8 @@ final class SidebarViewController: ObservedViewController {
         homeSlot.translatesAutoresizingMaskIntoConstraints = false
         column.addArrangedSubview(homeSlot)
         column.addArrangedSubview(buildProjects())
+        // Everything else that can be opened, after the projects; the phone's sheet leaves it to the page.
+        if !inSheet { mountRecent() }
         if inSheet, let machines = host as? MachinesHost { column.addArrangedSubview(buildMachines(machines)) }
         mountHome(nil)
         // The session card, beside the rail a pointer rests in; the sheet is a finger's.
@@ -424,6 +426,49 @@ final class SidebarViewController: ObservedViewController {
             seam.bottomAnchor.constraint(equalTo: homeSlot.bottomAnchor),
         ])
         homeController.didMove(toParent: self)
+    }
+
+    // MARK: Recent
+
+    /// Recent under the projects (Sidebar.svelte `<HomeRecent inset />` where `!narrow`).
+    private var recent: RailRecentController?
+
+    private func mountRecent() {
+        let recent = RailRecentController(hub: hub, home: home)
+        recent.onOpen = { [weak self] id in self?.host?.openSession(id) }
+        recent.sessionMenus = { [weak self] in self?.host?.sessionMenus }
+        recent.onSearchBegan = { [weak self] row in self?.raise(row) }
+        addChild(recent)
+        column.addArrangedSubview(recent.view)
+        recent.didMove(toParent: self)
+        self.recent = recent
+        #if DEBUG
+        recent.onLaidOut = { [weak self, weak recent] in
+            guard let self else { return }
+            recent?.probeLog(rail: view, projects: projectsGroup)
+        }
+        #endif
+        // A docked keyboard covers the rail's foot: the list scrolls on under it, so Recent's search and results stay in reach.
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    }
+
+    @objc private func keyboardMoved(_ note: Notification) {
+        guard let window = view.window, let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+        // Docked means it reaches the screen's foot; a floating keyboard covers nothing to make room for.
+        let screen = window.screen.bounds
+        let docked = end.height > 0 && end.maxY >= screen.maxY - 1 && end.minY < screen.maxY
+        let top = scroll.convert(window.convert(end, from: window.screen.coordinateSpace), from: window).minY
+        let covered = docked ? max(0, scroll.bounds.maxY - top) : 0
+        scroll.contentInset.bottom = covered
+        scroll.verticalScrollIndicatorInsets.bottom = covered
+        if let row = recent?.searchRow, row.field.isFirstResponder { raise(row) }
+    }
+
+    /// Brings Recent's search into view, with room under it for what it finds.
+    private func raise(_ row: UIView) {
+        let at = row.convert(row.bounds, to: scroll)
+        let room = scroll.bounds.height - scroll.adjustedContentInset.top - scroll.adjustedContentInset.bottom
+        scroll.scrollRectToVisible(CGRect(x: at.minX, y: at.minY, width: at.width, height: max(at.height, room)), animated: true)
     }
 
     // MARK: The phone's Search and Machines

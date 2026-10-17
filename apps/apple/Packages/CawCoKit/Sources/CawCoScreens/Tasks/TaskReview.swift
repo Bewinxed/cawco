@@ -150,6 +150,34 @@ final class TaskReviewView: UIView, UITextViewDelegate {
         fatalError("TaskReviewView is built in code")
     }
 
+    /// What it would take to stand whole: the result, the stage as tall as
+    /// what it holds, the decision. A presented page has no height of its
+    /// own, so it asks for all the room there is.
+    var fittedHeight: Double {
+        let stage = artifact != nil ? .greatestFiniteMagnitude : stageScroll.contentSize.height
+        var height = Space.space3 + resultBand.bounds.height + Space.space3 + 1 + stage
+        if !decideBand.isHidden {
+            height += 1 + Space.space3 + decideBand.bounds.height + max(Space.space3, safeAreaInsets.bottom)
+        }
+        return height
+    }
+
+    /// Its fitted height may have moved: the stage's content or a band was laid out again.
+    var onFit: () -> Void = {}
+    private var stageWatch: NSKeyValueObservation?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onFit()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        stageWatch = window == nil ? nil : stageScroll.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.onFit() }
+        }
+    }
+
     /// The decision band stands clear of the home indicator (`max(space-3, safe area)`).
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
@@ -234,7 +262,9 @@ final class TaskReviewView: UIView, UITextViewDelegate {
                 button.addAction(UIAction { [weak self] _ in self?.open(one) }, for: .primaryActionTriggered)
                 return button
             }
-            let row = WrapLayout(links, gap: Space.space3, rowGap: Space.space1)
+            // Wrapped rows stand as far apart as the links in a row: each link
+            // is a finger tall around its words, so the rows' frames overlap by that slack.
+            let row = WrapLayout(links, gap: Space.space3, rowGap: Space.space3 - (AttachmentButton.hit - AttachmentButton.words))
             row.accessibilityIdentifier = "task-review-attachments"
             resultBand.addArrangedSubview(row)
         }
@@ -576,6 +606,11 @@ private final class ReviewWords: UIStackView {
 /// One thing it attached (`.attachment`): its glyph and name in muted label
 /// type, a link that opens it; 44pt tall to a finger.
 private final class AttachmentButton: UIControl {
+    /// A finger's height: the button stands this tall around its words.
+    static let hit = 44.0
+    /// What its words stand in: the glyph beside the label's line.
+    static var words: Double { max(Size.iconSm, TypeScale.typeLabel.lineHeight) }
+
     init(_ one: Handed) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -603,7 +638,7 @@ private final class AttachmentButton: UIControl {
             row.bottomAnchor.constraint(equalTo: bottomAnchor),
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: Self.hit),
         ])
         isAccessibilityElement = true
         accessibilityTraits = .link

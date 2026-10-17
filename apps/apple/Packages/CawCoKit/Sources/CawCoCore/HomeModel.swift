@@ -637,6 +637,12 @@ public final class HomeModel {
     /// handed the remembered Recent still redraws when Recent would come out differently.
     private var recentRevision = 0
 
+    /// Recent alone, as the board lists it: what the rail's Recent reads
+    /// without working out the tabs' groups.
+    public var recentItems: [RecentItem] {
+        recent(working: working, finished: finished)
+    }
+
     /// Everything else that can be opened: idle and sleeping sessions, and the stored transcripts.
     private func recent(working: [InstanceRow], finished: [InstanceRow]) -> [RecentItem] {
         _ = recentRevision
