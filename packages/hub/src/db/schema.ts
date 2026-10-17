@@ -3420,6 +3420,14 @@ export const artifacts = sqliteTable(
     sourceWorkspace: text("source_workspace").references(() => workspaces.id, {
       onDelete: "set null",
     }),
+    /**
+     * A sheet's place instead (core `isLeadPlace`): the boundary over the
+     * folder of a session with no workspace, whose stage runs there. No
+     * workspace row is ever made for a place (archiving one deletes its
+     * folder), so it is no key: the hub finds it through the session that
+     * names it (server.ts `stageWhere`).
+     */
+    sourcePlace: text("source_place"),
     /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
     sourceStageDir: text("source_stage_dir"),
     sourceStageFile: text("source_stage_file"),

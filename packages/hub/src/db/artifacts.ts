@@ -1,4 +1,5 @@
 import type { PreviewSource } from "@cawco/core";
+import { isLeadPlace } from "@cawco/core/workspace-policy";
 import { and, asc, count, desc, eq, gt, gte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -15,6 +16,7 @@ type SourceColumn =
   | "sourcePort"
   | "sourcePath"
   | "sourceWorkspace"
+  | "sourcePlace"
   | "sourceStageDir"
   | "sourceStageFile"
   | "sourceServeCommand"
@@ -25,6 +27,16 @@ export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
   source: PreviewSource;
 };
 
+/** A port source's `workspace`: a workspace's id, kept as its key, or a place's, kept as itself ({@link isLeadPlace}). */
+const workspaceColumnsOf = (
+  source: PreviewSource
+): Pick<StoredArtifact, "sourcePlace" | "sourceWorkspace"> => {
+  const named = "port" in source ? (source.workspace ?? null) : null;
+  return named !== null && isLeadPlace(named)
+    ? { sourceWorkspace: null, sourcePlace: named }
+    : { sourceWorkspace: named, sourcePlace: null };
+};
+
 /** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it. */
 export const sourceColumnsOf = (
   source: PreviewSource
@@ -33,7 +45,7 @@ export const sourceColumnsOf = (
   sourceDir: "dir" in source ? source.dir : null,
   sourcePort: "port" in source ? source.port : null,
   sourcePath: "page" in source ? null : (source.path ?? null),
-  sourceWorkspace: "port" in source ? (source.workspace ?? null) : null,
+  ...workspaceColumnsOf(source),
   sourceStageDir: "port" in source ? (source.stage?.dir ?? null) : null,
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
   sourceServeCommand: "port" in source ? (source.serve?.command ?? null) : null,
@@ -47,6 +59,7 @@ export const artifactOf = ({
   sourcePort,
   sourcePath,
   sourceWorkspace,
+  sourcePlace,
   sourceStageDir,
   sourceStageFile,
   sourceServeCommand,
@@ -54,6 +67,7 @@ export const artifactOf = ({
   ...row
 }: StoredArtifact): ArtifactRow => {
   const path = sourcePath === null ? {} : { path: sourcePath };
+  const workspace = sourceWorkspace ?? sourcePlace;
   const port = (): PreviewSource => ({
     port: sourcePort ?? 0,
     ...path,
@@ -63,7 +77,7 @@ export const artifactOf = ({
     ...(sourceServeCommand === null
       ? {}
       : { serve: { command: sourceServeCommand, cwd: sourceServeCwd ?? "." } }),
-    ...(sourceWorkspace === null ? {} : { workspace: sourceWorkspace }),
+    ...(workspace === null ? {} : { workspace }),
   });
   const folder = (): PreviewSource =>
     sourceDir === null ? port() : { dir: sourceDir, ...path };
@@ -295,6 +309,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .where(
         or(
           eq(artifacts.sourceWorkspace, id),
+          eq(artifacts.sourcePlace, id),
           and(
             eq(artifacts.machineId, machineId),
             or(
