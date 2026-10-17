@@ -2,9 +2,13 @@ Plan for claude-sonnet-5-5, effort medium, at most 4 calls at once. Measured fro
 
 Spent so far (ledger):
 
-(no calls yet)
+| phase | calls ok | failed attempts | of them refused | off-model | input | cache write | cache read | output (of it thinking) | cost reported | call-seconds |
+|---|---|---|---|---|---|---|---|---|---|---|
+| build-B | 18 | 1,165 | 0 | 0 | 36 | 182,267 | 494,224 | 16,122 (0) | $0.67 | 534 |
+| build-A | 11 | 3 | 0 | 0 | 22 | 158,895 | 1,095,385 | 12,720 (0) | $0.63 | 116 |
+| **all** | 29 | 1,168 | 0 | 0 | 58 | 341,162 | 1,589,609 | 28,842 (0) | $1.30 | 650 |
 
-Measured: 0.442 tokens per character sent (2.26 characters a token).
+Measured: 0.449 tokens per character sent (2.23 characters a token).
 
 Build still to do (cache off: plain input at $2/MTok):
 
@@ -16,20 +20,22 @@ Answers: memory sizes are the built texts; the tree view at most 67,022 bytes (u
 
 | scope | runs | answer calls | judge calls | input tokens | of it read from cache | output | $ answer + judge | $ with build |
 |---|---|---|---|---|---|---|---|---|
-Incremental builds still to do (dry run on the real chat: the batch tree's lines stand in for the replies, 15% of lines over the limit; 5-minute cache; 0.442 tokens a character):
+Incremental builds still to do (dry run on the real chat: the batch tree's lines stand in for the replies, 15% of lines over the limit; 5-minute cache; 0.449 tokens a character):
 
 | design | calls (by request) | cache write | cache read | output | $ |
 |---|---|---|---|---|---|
-| A | 126 (file 78, merge 38, shorten 10) | 1,140,347 | 12,185,007 | 179,255 | 5.86 |
-| B | 808 (file 506, merge 247, shorten 55) | 5,628,749 | 22,227,845 | 1,022,118 | 26.52 |
-| **incremental build, +5%** | | | | | **34.00** |
+| A | 126 (file 78, merge 38, shorten 10) | 1,156,221 | 12,354,633 | 181,750 | 5.94 |
+| B | 808 (file 506, merge 247, shorten 55) | 5,707,106 | 22,537,276 | 1,036,346 | 26.88 |
+| **incremental build, +5%** | | | | | **34.47** |
 
 | full | cawco, cc, factory, cc-real, cc+C-existing, cc+C-filed, cc-real+C-existing, cc-real+C-filed, tree, tree-nozoom, real-cawco-2319, replay-cawco-2319, real-native-0055, replay-cc-0055 | 0 | 0 | 0 | 0 | 0 | 0.00 | 0.00 |
-| end | cawco, cc, factory, cc-real, cc+C-existing, cc+C-filed, cc-real+C-existing, cc-real+C-filed, tree, tree-nozoom | 0 | 162 | 290,341 | 0 | 64,800 | 1.23 | 1.23 |
-| decision | cawco, cc-real, cc-real+C-existing, cc-real+C-filed, tree, tree-nozoom | 0 | 108 | 181,614 | 0 | 43,200 | 0.80 | 0.80 |
-| minimal | cawco, cc-real+C-filed, tree | 0 | 54 | 90,807 | 0 | 21,600 | 0.40 | 0.40 |
-| incremental (chosen) | tree, cc-real+C-filed, tree-B | 125 | 54 | 4,223,273 | 3,923,831 | 59,100 | 1.69 | 35.68 |
+| end | cawco, cc, factory, cc-real, cc+C-existing, cc+C-filed, cc-real+C-existing, cc-real+C-filed, tree, tree-nozoom | 0 | 162 | 294,383 | 0 | 64,800 | 1.24 | 1.24 |
+| decision | cawco, cc-real, cc-real+C-existing, cc-real+C-filed, tree, tree-nozoom | 0 | 108 | 184,142 | 0 | 43,200 | 0.80 | 0.80 |
+| minimal | cawco, cc-real+C-filed, tree | 0 | 54 | 92,071 | 0 | 21,600 | 0.40 | 0.40 |
+| incremental (chosen) | tree, cc-real+C-filed, tree-B | 125 | 54 | 4,282,065 | 3,978,455 | 59,100 | 1.70 | 36.17 |
 
-Chosen scope incremental: about $35.68 still to spend; the budget is $40 (EVAL_BUDGET).
+Chosen scope incremental: about $36.17 still to spend; the budget is $40 (EVAL_BUDGET).
 
 Prices: $2 input, $2.50 5-minute cache write, $0.10 cache read, $10 output per MTok (https://platform.claude.com/docs/en/about-claude/pricing). On a subscription the run uses up usage allowance rather than dollars.
+
+Budget: $1.30 already spent by this measurement plus the plan's $36.17 is $37.47 of $40 (EVAL_BUDGET): within it.
