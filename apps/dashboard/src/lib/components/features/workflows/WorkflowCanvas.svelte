@@ -162,12 +162,16 @@
   <ContextMenu.Trigger>
     {#snippet child({ props })}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: these are the kit menu trigger's own handlers (in `props`), narrowed to a node; the node's inspector is the keyboard path to the same actions -->
+      <!-- literal: 280px, 10px -->
       <section
         {...props}
         aria-label="Workflow graph"
-        class="canvas"
+        class="h-full min-h-(--canvas-min) min-w-0 bg-surface-recess"
+        data-canvas
         oncontextmenu={onNode(props.oncontextmenu)}
         onpointerdown={onNode(props.onpointerdown)}
+        style:--canvas-min="280px"
+        style:--handle-size="10px"
         style:--hit-scale={zoom}
       >
         {#if mounted}
@@ -254,20 +258,15 @@
 </ContextMenu.Root>
 
 <style>
-  .canvas {
-    height: 100%;
-    min-height: 280px;
-    min-width: 0;
-    background: var(--surface-recess);
-  }
-  .canvas :global(.svelte-flow__handle) {
+  /* residual: foreign-dom — the handles are xyflow's. */
+  [data-canvas] :global(.svelte-flow__handle) {
     background: var(--neutral-8);
     border-color: var(--surface-raised);
-    width: 10px;
-    height: 10px;
+    width: var(--handle-size);
+    height: var(--handle-size);
   }
   /* A handle is placed by its transform, so its press is colour, not scale. */
-  .canvas :global(.svelte-flow__handle:active) {
+  [data-canvas] :global(.svelte-flow__handle:active) {
     background: var(--brand-solid);
   }
 </style>

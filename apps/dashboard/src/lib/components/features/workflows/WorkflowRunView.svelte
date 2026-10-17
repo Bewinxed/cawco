@@ -227,10 +227,16 @@
       "Run the workflow again from this step, keeping what came before it"}
     variant="outline"
   />
-  <RowFault class="act-fault" reason={faultOf(key)} />
+  <RowFault reason={faultOf(key)} />
 {/snippet}
 
-<div data-slot="tx-columns" data-run-view class="run-view tx-columns">
+<!-- literal: 26px, 14rem -->
+<div
+  data-slot="tx-columns"
+  data-run-view
+  class="tx-columns flex min-h-0 min-w-0 flex-auto flex-col gap-space-5 overflow-y-auto bg-surface-recess pt-space-6 pr-space-6 pb-space-7 pl-space-7 text-size-body font-normal text-ink-strong max-desk:px-space-5"
+  style:--rail-none="0px"
+>
   {#if errorMessage}
     <Alert role="alert" variant="destructive">
       <AlertDescription>{errorMessage}</AlertDescription>
@@ -239,33 +245,50 @@
   <!-- The name waits for the workflow list, so it never paints as
        "Workflow" and then widens into the real one. -->
   {#if !(run && (workflow || workflowState.loaded))}
-    <div aria-label="Loading workflow run" class="loading" role="status">
-      <Skeleton class="h-icon-md w-56" />
-      <Skeleton class="h-[26px] w-full" />
-      <Skeleton class="h-[26px] w-full" />
+    <div
+      aria-label="Loading workflow run"
+      class="flex flex-col gap-space-3"
+      role="status"
+      style:--skeleton-h="26px"
+      style:--skeleton-w="14rem"
+    >
+      <Skeleton class="h-icon-md w-(--skeleton-w)" />
+      <Skeleton class="h-(--skeleton-h) w-full" />
+      <Skeleton class="h-(--skeleton-h) w-full" />
     </div>
   {:else}
     <!-- What the tab cannot say, before the run: it stands at the page's
          edge as a transcript's prose does, clear of the run's lines. -->
-    <header data-slot="head" class="head">
-      <div class="facts">
-        <p class="started">Started {startedAt}</p>
+    <header
+      data-slot="head"
+      class="flex flex-wrap items-start justify-between gap-x-space-5 gap-y-space-3"
+    >
+      <div
+        class="flex min-w-0 flex-col gap-space-1 text-size-meta leading-meta"
+      >
+        <p class="m-0 text-ink-muted">Started {startedAt}</p>
         <!-- A command of the run held by its machine's pause, or queued for
              a shared slot: said where the run's facts are, until it goes. -->
         {#if going && run.waiting}
-          <p class="waiting" role="status">
+          <p class="m-0 text-ink-strong" role="status">
             {run.waiting.charAt(0).toUpperCase()}{run.waiting.slice(1)}
           </p>
         {/if}
         {#if inputs.length}
-          <dl class="inputs">
+          <!-- literal: 72ch -->
+          <dl
+            class="m-0 grid grid-cols-(--pair-cols) gap-x-space-3 gap-y-space-1"
+            style:--measure="72ch"
+            style:--pair-cols="auto minmax(0, 1fr)"
+          >
             {#each inputs as [key, value] (key)}
-              <div>
-                <dt>{key}</dt>
+              <div class="contents">
+                <dt class="text-ink-muted">{key}</dt>
                 <dd
                   data-workflow-run-view-code={typeof value !== "string" ||
                     undefined}
-                  class:code={typeof value !== "string"}
+                  class="m-0 max-w-(--measure) wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
+                  data-is-code={typeof value !== "string" || undefined}
                 >
                   {shown(value)}
                 </dd>
@@ -274,7 +297,7 @@
           </dl>
         {/if}
       </div>
-      <div data-slot="actions" class="actions">
+      <div data-slot="actions" class="flex flex-wrap gap-space-2">
         {#if going}
           <Button
             aria-expanded={asks.pending !== null}
@@ -304,7 +327,7 @@
           size="sm"
           variant="outline">Edit workflow</Button
         >
-        <RowFault class="act-fault" reason={faultOf("rerun")} />
+        <RowFault class="basis-full" reason={faultOf("rerun")} />
       </div>
     </header>
     <AskHere asker={asks} at="cancel-run" />
@@ -315,20 +338,26 @@
       {@const ask = run.ask}
       <!-- The question folds open; answered, the picked option pends until
            the hub moves the run on, and then the block folds away. -->
-      <div class="answer" in:unfold out:unfold>
+      <!-- literal: 72ch -->
+      <div
+        class="max-w-(--measure)"
+        style:--measure="72ch"
+        in:unfold
+        out:unfold
+      >
         <Card.Root size="sm">
           <Card.Header>
             <Card.Title>{ask.question}</Card.Title>
           </Card.Header>
-          <Card.Content class="answer-body">
+          <Card.Content class="flex flex-col gap-space-4">
             {#if ask.options.length}
               <!-- Peers the workflow's author wrote, none of them the
                    recommended action: each an outline button, its
                    description beside it. -->
-              <ul class="options">
+              <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
                 {#each ask.options as option (option.label)}
                   {@const key = `answer:${option.label}`}
-                  <li>
+                  <li class="flex min-w-0 items-baseline gap-space-3">
                     <Button
                       disabled={(busy && acting !== key) || !live}
                       failed={faultOf(key) !== null}
@@ -348,21 +377,21 @@
                       variant="outline"
                     />
                     {#if option.description}
-                      <p class="hint">{option.description}</p>
+                      <p class="m-0 text-size-meta leading-meta wrap-anywhere text-ink-muted">{option.description}</p>
                     {/if}
                     <RowFault reason={faultOf(key)} />
                   </li>
                 {/each}
               </ul>
             {/if}
-            <div data-slot="workflow-run-view-field" class="field">
+            <div data-slot="workflow-run-view-field" class="flex flex-col gap-space-2">
               <Label for="run-note-{runId}">Note (optional)</Label>
               <Input id="run-note-{runId}" bind:value={note} />
             </div>
             {#if ask.answerSchema}
               <!-- A typed answer: its JSON is checked by the hub against the
                    schema the program declared, shown here as the placeholder. -->
-              <div data-slot="workflow-run-view-field" class="field">
+              <div data-slot="workflow-run-view-field" class="flex flex-col gap-space-2">
                 <Label for="run-value-{runId}">Answer value (JSON)</Label>
                 <Textarea
                   id="run-value-{runId}"
@@ -372,7 +401,7 @@
                 />
               </div>
               {#if !ask.options.length}
-                <div data-slot="send" class="send">
+                <div data-slot="send" class="flex">
                   <Button
                     disabled={!valueText.trim() ||
                       (busy && acting !== "value") ||
@@ -396,9 +425,9 @@
               {/if}
             {/if}
             {#if ask.allowOther}
-              <div data-slot="workflow-run-view-field" class="field">
+              <div data-slot="workflow-run-view-field" class="flex flex-col gap-space-2">
                 <Label for="run-other-{runId}">Other answer</Label>
-                <div data-slot="other" class="other">
+                <div data-slot="other" class="flex items-center gap-space-2">
                   <Input id="run-other-{runId}" bind:value={other} />
                   <Button
                     disabled={!other || (busy && acting !== "answer") || !live}
@@ -428,17 +457,33 @@
     {/if}
 
     {#if logLines.length}
-      <details class="log" bind:open={logOpen} in:unfold out:unfold>
+      <!-- literal: 30dvh -->
+      <details
+        data-slot="log"
+        bind:open={logOpen}
+        style:--log-h="30dvh"
+        style:--pair-cols="auto minmax(0, 1fr)"
+        in:unfold
+        out:unfold
+      >
         <summary
+          class="cursor-pointer py-space-2 text-size-label font-medium text-ink-muted coarse:py-space-4"
           >Log · <span data-slot="num" class="num">{logLines.length}</span
           ></summary
         >
         <!-- A line arrives the house way (motion/rows), and the log keeps
              the newest in view only while the reader is at its end. -->
-        <ol {@attach reflow()} {@attach followTail()}>
+        <ol
+          class="m-0 grid h-(--log-h) list-none content-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
+          {@attach reflow()}
+          {@attach followTail()}
+        >
           {#each logLines as line (line.seq)}
-            <li data-flip>
-              <time data-slot="num" class="num"
+            <li
+              class="grid grid-cols-(--pair-cols) gap-space-3 wrap-anywhere"
+              data-flip
+            >
+              <time data-slot="num" class="num text-size-meta text-ink-muted"
                 >{new Date(line.at).toLocaleTimeString()}</time
               ><span>{line.text}</span>
             </li>
@@ -450,168 +495,9 @@
 </div>
 
 <style>
-  /* The tab's column: the transcript's own ledger padding and field, so a
-     run reads in the place a conversation would. */
-  .run-view {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    min-block-size: 0;
-    overflow-y: auto;
-    padding: var(--space-6) var(--space-6) var(--space-7) var(--space-7);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-
-    @media (width <= 900px) {
-      padding-inline: var(--space-5);
-    }
-  }
-  /* The run's block draws its own rail-row gap; the column's gap stands for it. */
-  .run-view > :global(.run-block) {
-    --rail-gap: 0px;
-  }
-  .loading {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    justify-content: space-between;
-    gap: var(--space-3) var(--space-5);
-  }
-  .facts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    font-size: var(--text-meta);
-    line-height: var(--leading-meta);
-  }
-  .started {
-    margin: 0;
-    color: var(--ink-muted);
-  }
-  .waiting {
-    margin: 0;
-    color: var(--ink-strong);
-  }
-  .inputs {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: var(--space-1) var(--space-3);
-    margin: 0;
-
-    & > div {
-      display: contents;
-    }
-    & dt {
-      color: var(--ink-muted);
-    }
-    & dd {
-      margin: 0;
-      max-inline-size: 72ch;
-      color: var(--ink-strong);
-      overflow-wrap: anywhere;
-    }
-    & dd.code {
-      font-family: var(--font-mono);
-      font-variant-ligatures: none;
-    }
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  /* A refused re-run, under the buttons, on a line of its own. */
-  .actions > :global(.act-fault) {
-    flex-basis: 100%;
-  }
-  .answer {
-    max-inline-size: 72ch;
-  }
-  .answer :global(.answer-body) {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .options {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-
-    & li {
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-3);
-      min-inline-size: 0;
-    }
-  }
-  .hint {
-    margin: 0;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    line-height: var(--leading-meta);
-    overflow-wrap: anywhere;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .other {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .send {
-    display: flex;
-  }
-  /* Left as a list-item so the native disclosure marker survives: a flex
-     summary silently loses the triangle, and then nothing says it opens. */
-  .log summary {
-    padding-block: var(--space-2);
-    cursor: pointer;
-    color: var(--ink-muted);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  /* Open, the log is one fixed height: lines arriving fill and scroll it,
-     and never push the run below it down. */
-  .log ol {
-    display: grid;
-    align-content: start;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-2) 0 0;
-    list-style: none;
-    block-size: 30dvh;
-    overflow-y: auto;
-  }
-  .log li {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: var(--space-3);
-    overflow-wrap: anywhere;
-  }
-  .log time {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  /* DESIGN.md: every affordance reaches 44px under a coarse pointer. */
-  @media (pointer: coarse) {
-    .log summary {
-      padding-block: var(--space-4);
-    }
+  /* residual: foreign-dom — the run's block is RunBlock's own root; it draws
+     its own rail-row gap, and the column's gap stands for it. */
+  [data-run-view] > :global(.run-block) {
+    --rail-gap: var(--rail-none);
   }
 </style>

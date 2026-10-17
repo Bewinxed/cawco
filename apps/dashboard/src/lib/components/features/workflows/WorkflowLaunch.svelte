@@ -131,6 +131,7 @@
   }
 </script>
 
+<!-- literal: 90dvh, 36rem, 44px -->
 <Dialog.Root
   onOpenChangeComplete={(next) => {
     if (!next) {
@@ -139,11 +140,16 @@
   }}
   bind:open={shown}
   ><Dialog.Content
-    class="max-h-[90dvh] overflow-y-auto phone:max-w-144"
+    class="max-h-(--dialog-max) overflow-y-auto phone:max-w-(--dialog-w)"
     escapeKeydownBehavior={busy ? "ignore" : "close"}
     interactOutsideBehavior={busy ? "ignore" : "close"}
+    style="--dialog-max: 90dvh; --dialog-w: 36rem"
     bind:ref={content}
-    ><div class="wf wf-stack wf-launch">
+    ><div
+      class="wf wf-stack"
+      data-slot="launch"
+      style:--hit-min="44px"
+    >
       <Dialog.Header
         ><Dialog.Title>Run {workflow.name}</Dialog.Title><Dialog.Description
           >Choose the inputs and workspace for this workflow run.</Dialog.Description
@@ -279,7 +285,8 @@
 >
 
 <style>
-  .wf-launch :global(button) {
-    min-height: 44px;
+  /* residual: foreign-dom — the directory picker's buttons are its own. */
+  [data-slot="launch"] :global(button) {
+    min-height: var(--hit-min);
   }
 </style>
