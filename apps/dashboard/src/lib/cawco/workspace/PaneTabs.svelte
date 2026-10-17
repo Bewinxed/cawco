@@ -1524,10 +1524,10 @@
           style:--cast-end="calc(var(--flare) + var(--slope-end))"
           style:--cast-r="var(--radius) var(--radius) 0 0"
           ><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-lifted/tab:opacity-100 group-data-chosen/tab:shadow-tab-start-chosen motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-start, 0))"
           ></span><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-lifted/tab:opacity-100 group-data-chosen/tab:shadow-tab-end-chosen motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-end, 0))"
           ></span></span
         >
