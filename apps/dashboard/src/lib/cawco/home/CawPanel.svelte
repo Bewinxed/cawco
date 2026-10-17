@@ -146,11 +146,26 @@
 </script>
 
 <!-- More than the panel holds: the house edge fade at the foot while more
-     is below, and at the head once scrolled. -->
+     is below, and at the head once scrolled. The kit's edge fade at its
+     full length on every width: a phone's short fade (the recipe's, for a
+     narrow track's edge) lands in the gap between a row's words and its
+     buttons and shows nothing; the panel's foot must read as "more below".
+     On a phone the composer's row stays reachable under it: the bar, the
+     gap, the home indicator and the composer's own row are kept clear.
+     Sections part with a vermillion hairline: 1px of the brand's vermillion
+     (`brand-solid`) at `tab-rim-mix` (the strength a status rim holds 3:1
+     at), across the rows' width. Increase Contrast draws it solid. -->
+<!-- literal: 40px; 560px, 120px; 44px, 96px -->
 <div
   data-slot="list"
-  class={["list", overflowing && "kit-edge-fade-block"]}
+  class={[
+    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:pt-space-2",
+    overflowing && "kit-edge-fade-block",
+  ]}
   data-safe-bottom
+  style:--fade-len="40px"
+  style:--list-max="min(560px, calc(100dvh - 120px))"
+  style:--list-max-phone="calc(100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px)"
   {@attach reflow()}
   {@attach measured}
 >
@@ -158,20 +173,34 @@
     <section
       data-slot="section"
       aria-labelledby="caw-needs"
-      class="section"
       data-flip="box"
     >
-      <div data-slot="head" class="head mark-line">
+      <div
+        data-slot="head"
+        class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
+      >
+        <!-- The section's glyph centred in the panel's one lead column, so
+             its title starts on the rows' text column. -->
+        <!-- literal: 28px -->
         <span
           data-slot="needs"
           data-caw-panel-glyph
-          class="glyph needs"
-          data-box><IconNeedsYou aria-hidden="true" /></span
+          class="me-(--glyph-gap) grid w-(--glyph-w) flex-none place-items-center self-center text-status-attn-glyph"
+          data-box
+          style:--glyph-gap="calc(var(--space-3) - var(--space-2))"
+          style:--glyph-w="28px"
+          ><IconNeedsYou aria-hidden="true" class="size-icon-md" /></span
         >
-        <span data-slot="title" class="title" id="caw-needs">Needs you</span>
-        <span data-slot="count" class="count">{needs.length}</span>
+        <span
+          data-slot="title"
+          class="type-label text-ink-strong"
+          id="caw-needs">Needs you</span
+        >
+        <span data-slot="count" class="type-meta num text-ink-muted"
+          >{needs.length}</span
+        >
       </div>
-      <ul class="rows" {@attach echoBeat()}>
+      <ul class="m-0 list-none p-0" {@attach echoBeat()}>
         {#each needs as item (item.key)}
           <li data-flip><NeedsCard {item} {onchoose} {stale} /></li>
         {/each}
@@ -183,31 +212,71 @@
     <section
       data-slot="section"
       aria-labelledby="caw-notices"
-      class="section"
       data-flip="box"
     >
-      <div data-slot="head" class="head mark-line">
-        <span data-slot="glyph" class="glyph" data-box
-          ><IconNotices aria-hidden="true" /></span
+      <div
+        data-slot="head"
+        class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
+      >
+        <!-- literal: 28px -->
+        <span
+          data-slot="glyph"
+          class="me-(--glyph-gap) grid w-(--glyph-w) flex-none place-items-center self-center text-ink-muted"
+          data-box
+          style:--glyph-gap="calc(var(--space-3) - var(--space-2))"
+          style:--glyph-w="28px"
+          ><IconNotices aria-hidden="true" class="size-icon-md" /></span
         >
-        <span data-slot="title" class="title" id="caw-notices">Notices</span>
-        <span data-slot="count" class="count">{noticeCount}</span>
+        <span
+          data-slot="title"
+          class="type-label text-ink-strong"
+          id="caw-notices">Notices</span
+        >
+        <span data-slot="count" class="type-meta num text-ink-muted"
+          >{noticeCount}</span
+        >
         {#if clearable}
+          <!-- Clear all: the kit's xs ghost, always shown, its words ending
+               on the panel's one trailing edge: it hangs past the edge by
+               what stands between its box and its last letter's ink (the
+               kit's 1px transparent border, the xs size's 8px padding and
+               the l's side bearing in Figtree, 0.07em), so its box and its
+               hover fill keep their size. It rides the head's line without
+               making it taller. -->
+          <!-- literal: -4px; 8px, 0.07em -->
           <Button
             data-clear
             aria-label="Clear all {noticeCount} notices"
             data-box
-            class="clear text-[var(--ink-muted)] hover:text-[var(--ink-strong)]"
+            class="ms-auto me-(--clear-hang) my-(--clear-pull) self-center text-ink-muted hover:text-ink-strong"
             onclick={clearAll}
             size="xs"
+            style="--clear-pull: -4px; --clear-hang: calc(-1 * (1px + 8px + 0.07em));"
             variant="ghost">Clear all</Button
           >
         {/if}
       </div>
-      <ul data-slot="notices" class="rows notices">
+      <!-- Notices part with a hairline, as rows of one list do. -->
+      <ul
+        data-slot="notices"
+        class="m-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-t-border-hairline"
+      >
         {#if damaged}
-          <li class="damaged" data-flip>
-            <p data-slot="words" class="words" role="alert">
+          <!-- The damaged record: its words on the rows' text column, Reset
+               at the panel's one trailing edge, the hub's refusal under
+               them. -->
+          <!-- literal: 1fr auto; 28px -->
+          <li
+            class="grid grid-cols-(--damaged-cols) items-start gap-x-space-2 gap-y-space-1 py-space-2 pr-space-3 pl-(--damaged-lead)"
+            data-flip
+            style:--damaged-cols="1fr auto"
+            style:--damaged-lead="calc(var(--space-3) + 28px + var(--space-3))"
+          >
+            <p
+              data-slot="words"
+              class="m-0 type-meta text-status-fail-ink"
+              role="alert"
+            >
               {damagedHubRecordWords("notices", damaged)}
             </p>
             <Button
@@ -220,7 +289,9 @@
               variant="secondary"
             />
             {#if resetProblem}
-              <p class="problem">{resetProblem}</p>
+              <p class="col-span-full m-0 type-meta text-ink-muted"
+                >{resetProblem}</p
+              >
             {/if}
           </li>
         {/if}
@@ -267,7 +338,7 @@
     <!-- mark-line: Caw stands above the words, not beside them -->
     <div
       data-slot="caw-panel-empty"
-      class="empty"
+      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-5 type-label text-ink-muted outline-none"
       data-flip
       role="status"
       tabindex="-1"
@@ -281,6 +352,7 @@
 </div>
 
 <style>
+  /* deferred to integration: GlassCard FRAME.caw */
   /* css-scope .caw-pop: GlassCard names its Caw face with it; this panel draws that face's frame */
   /* The panel hangs from his glass (a HangCard on the glass: `kit-hang`
      and `glass-card` in app.css draw its edge, its cut, its hung shadow and
@@ -298,133 +370,30 @@
       );
     }
   }
-  /* The kit's edge fade at its full length on every width: a phone's short
-     fade (the recipe's, for a narrow track's edge) lands in the gap between
-     a row's words and its buttons and shows nothing; the panel's foot must
-     read as "more below". */
-  .list {
-    --fade-len: 40px;
-    display: flex;
-    flex-direction: column;
-    max-block-size: min(560px, calc(100dvh - 120px));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* On a phone the composer's row stays reachable under it: the bar, the
-     gap, the home indicator and the composer's own row are kept clear. */
-  @media (max-width: 639px) {
-    .list {
-      max-block-size: calc(
-        100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px
-      );
-    }
-  }
-  /* While the update's footer holds at the list's foot (UpdateCard
-     `data-stuck`), it draws the foot's fade itself, above it: the list's
-     own fade at the foot gives way, and its head's stays. */
-  .list:has(:global([data-stuck])) {
+  /* residual: unmapped — while the update's footer holds at the list's foot
+     (UpdateCard `data-stuck`), it draws the foot's fade itself, above it:
+     the list's own fade at the foot gives way, and its head's stays. A mask
+     has no utility. */
+  [data-slot="list"]:has(:global([data-stuck])) {
     mask-image: linear-gradient(
       to bottom,
       transparent,
-      #000 var(--fade-start),
-      #000
+      var(--mask-opaque) var(--fade-start),
+      var(--mask-opaque)
     );
   }
-  /* Sections part with a vermillion hairline: 1px of the brand's vermillion
-     (`brand-solid`) at `tab-rim-mix` (the strength a status rim holds 3:1 at),
-     across the rows' width. Increase Contrast draws it solid. */
-  .section + .section {
-    margin-block-start: var(--space-2);
-    padding-block-start: var(--space-2);
-    border-block-start: 1px solid
-      color-mix(in oklab, var(--brand-solid) var(--tab-rim-mix), transparent);
+  /* The sections' vermillion hairline is a mix (no colour utility); its
+     width and the space around it are utilities on the list. */
+  [data-slot="section"] + [data-slot="section"] {
+    border-block-start-color: color-mix(
+      in oklab,
+      var(--brand-solid) var(--tab-rim-mix),
+      transparent
+    );
   }
   @media (prefers-contrast: more) {
-    .section + .section {
+    [data-slot="section"] + [data-slot="section"] {
       border-block-start-color: var(--brand-solid);
     }
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3) var(--space-1);
-  }
-  /* The section's glyph centred in the panel's one lead column, so its
-     title starts on the rows' text column. */
-  .glyph {
-    display: grid;
-    flex: none;
-    place-items: center;
-    align-self: center;
-    inline-size: 28px;
-    margin-inline-end: calc(var(--space-3) - var(--space-2));
-    color: var(--ink-muted);
-  }
-  .glyph.needs {
-    color: var(--status-attn-glyph);
-  }
-  .glyph > :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .count {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Clear all: the kit's xs ghost, always shown, its words ending on the
-     panel's one trailing edge: it hangs past the edge by what stands
-     between its box and its last letter's ink (the kit's 1px transparent
-     border, the xs size's 8px padding and the l's side bearing in Figtree,
-     0.07em), so its box and its hover fill keep their size. It rides the
-     head's line without making it taller. */
-  .head > :global(.clear) {
-    align-self: center;
-    margin-block: -4px;
-    margin-inline: auto calc(-1 * (1px + 8px + 0.07em));
-  }
-  .rows {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* Notices part with a hairline, as rows of one list do. */
-  .notices > li + li {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  /* The damaged record: its words on the rows' text column, Reset at the
-     panel's one trailing edge, the hub's refusal under them. */
-  .damaged {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: start;
-    gap: var(--space-1) var(--space-2);
-    padding: var(--space-2) var(--space-3) var(--space-2)
-      calc(var(--space-3) + 28px + var(--space-3));
-  }
-  .damaged .words {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .damaged .problem {
-    grid-column: 1 / -1;
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .empty {
-    display: grid;
-    justify-items: center;
-    gap: var(--space-2);
-    padding: var(--space-6) var(--space-4) var(--space-5);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    outline: none;
   }
 </style>
