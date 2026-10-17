@@ -126,7 +126,7 @@
   >
     <span
       data-slot="id"
-      class="text-meta font-mono liga-none text-ink-subtle"
+      class="text-meta font-(family-name:--font-mono) liga-none text-ink-subtle"
       >{task.id}</span
     >
     {#if task.problem}
@@ -186,7 +186,7 @@
         <span
           data-when
           data-slot="num"
-          class="num font-mono liga-none"
+          class="num font-(family-name:--font-mono) liga-none"
           >{date}</span
         >
       {/if}
@@ -212,7 +212,7 @@
         <span class="mark-line inline-flex items-center gap-space-1">
           <IconLock aria-hidden="true" class="size-icon-sm" />
           <span>after</span>
-          <span class="font-mono liga-none text-ink-strong">{waitsOn[0]}</span>
+          <span class="font-(family-name:--font-mono) liga-none text-ink-strong">{waitsOn[0]}</span>
           {#if waitsOn.length > 1}
             <span data-slot="num" class="num">+{waitsOn.length - 1}</span>
           {/if}

@@ -101,7 +101,7 @@
           {:else}
             <button
               data-slot="shown"
-              class="press-tint focus-inset min-w-0 flex-auto cursor-text rounded-sm border-0 bg-transparent px-space-2 py-space-1 type-body wrap-anywhere text-start text-ink-strong hover:bg-surface-hover"
+              class="press-tint focus-inset min-w-0 flex-auto cursor-text rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 type-body wrap-anywhere text-start text-ink-strong hover:bg-surface-hover"
               onclick={() => {
                 editing = key;
                 draft = said(value);

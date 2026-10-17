@@ -287,7 +287,7 @@
           <li data-slot="fold">
             <Collapsible.Root>
               <Collapsible.Trigger
-                class="group press-tint mark-line flex w-full cursor-pointer items-center gap-space-1 rounded-sm border-0 bg-transparent px-0 py-space-1 type-label text-start text-ink-muted"
+                class="group press-tint mark-line flex w-full cursor-pointer items-center gap-space-1 rounded-sm border-none border-current bg-transparent px-0 py-space-1 type-label text-start text-ink-muted"
               >
                 <IconChevronRight
                   data-chev

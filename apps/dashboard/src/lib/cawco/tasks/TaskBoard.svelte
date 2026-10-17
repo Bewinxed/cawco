@@ -187,7 +187,7 @@
         <button
           data-slot="rail-close"
           bind:this={foldButton}
-          class="press-tint min-h-c-btn-h-sm cursor-pointer rounded-sm border-0 bg-transparent p-space-1 type-meta text-ink-muted coarse:min-h-c-btn-h-lg"
+          class="press-tint min-h-c-btn-h-sm cursor-pointer rounded-sm border-none border-current bg-transparent p-space-1 type-meta text-ink-muted coarse:min-h-c-btn-h-lg"
           onclick={() => setRail(false)}
           type="button"
         >
@@ -202,7 +202,7 @@
         aria-label="Archived, {archived.length} {archived.length === 1
           ? 'task'
           : 'tasks'}. Open it."
-        class="press-tint mb-space-3 flex w-c-btn-h-lg flex-none cursor-pointer flex-col items-center gap-space-2 rounded-lg border-0 bg-surface-band px-0 py-space-3 text-ink-muted"
+        class="press-tint mb-space-3 flex w-c-btn-h-lg flex-none cursor-pointer flex-col items-center gap-space-2 rounded-lg border-none border-current bg-surface-band px-0 py-space-3 text-ink-muted"
         onclick={() => setRail(true)}
         type="button"
       >
