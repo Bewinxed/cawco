@@ -439,7 +439,7 @@
                unfold under the head. -->
           <button
             aria-expanded={details !== null}
-            class="mark-line -mx-space-1 flex min-w-0 cursor-pointer items-center gap-space-2 rounded-xs border-0 bg-transparent px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
+            class="mark-line -mx-space-1 flex min-w-0 cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent px-space-1 text-start text-inherit transition-[background-color] dur-control ease-out hover:bg-surface-hover can-hover:aria-expanded:bg-surface-hover"
             data-box
             data-place-line
             onclick={() => {
@@ -460,7 +460,7 @@
           </button>
           {#if checkouts > 1}
             <button
-              class="flex-none cursor-pointer rounded-xs border-0 bg-transparent p-0 text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+              class="flex-none cursor-pointer rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button

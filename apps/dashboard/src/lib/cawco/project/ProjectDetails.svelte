@@ -277,7 +277,7 @@
         <div class="flex flex-wrap items-center justify-between gap-space-2 pt-space-1">
           <button
             aria-expanded={listOpen}
-            class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-0 bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+            class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
             style:--chev="14px"
             data-places-toggle
             onclick={() => {

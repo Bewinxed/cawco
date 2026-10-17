@@ -34,7 +34,7 @@
         <IconDocument class="size-icon-md flex-none text-ink-muted" />
         <bdi
           data-slot="path"
-          class="min-w-0 overflow-clip font-mono text-size-code text-ellipsis whitespace-nowrap"
+          class="min-w-0 overflow-clip font-(family-name:--font-mono) text-size-code text-ellipsis whitespace-nowrap"
           >{path}</bdi>
       </button>
     </li>

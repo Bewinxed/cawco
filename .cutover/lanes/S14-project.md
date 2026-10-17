@@ -59,3 +59,20 @@ none
 - StarterCards `.cards` first column `minmax(0,1fr)` is `grid-cols-1` (`repeat(1, minmax(0,1fr))`), same track list.
 - ProjectHead `.name`: `background: none` is `bg-transparent`; `color: inherit` is `text-inherit`; `:read-only` stands for `[readonly]`.
 - ProjectDetails/ProjectHead use `has-data-field:` for `.txt:has(.field)` (input already carries `data-field`).
+
+## Contracts
+none
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/project/CawSeat.svelte:49
+R2 fixed: apps/dashboard/src/lib/cawco/project/CawThread.svelte:264
+R2 fixed: apps/dashboard/src/lib/cawco/project/CawThread.svelte:279
+R2 fixed: apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte:280
+R2 fixed: apps/dashboard/src/lib/cawco/project/ProjectHead.svelte:442
+R2 fixed: apps/dashboard/src/lib/cawco/project/ProjectHead.svelte:463
+R2 fixed: apps/dashboard/src/lib/cawco/project/StarterCards.svelte:98
+R3 fixed: apps/dashboard/src/lib/cawco/project/FolderFiles.svelte:37
+(FolderFile.svelte:90 is a `<pre>`: `font-mono` stays. No box-shadow state mixes a residual with a utility.)
+
+## Fix after first report
+ViewBar.svelte: `style:--list-max` on `Select.Content` is invalid on a component; now `style="--list-max: …"` (commit 99ed8a700).
