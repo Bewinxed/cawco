@@ -214,8 +214,17 @@ export async function passPage(
 const CLOCK_LEAD_MS = 1000;
 /** Real time for the browser's pointer-over under a still pointer once layout has moved (it sends one on a timer). */
 const POINTER_BEAT_MS = 250;
-/** The page time an act is given: its clock stands this far past where the act began, whatever the act took. */
-const ACT_MS = 60_000;
+/**
+ * The page time an act is given: its clock stands this far past where the
+ * act began, whatever the act took. Past any act's own run (one that runs
+ * longer is extended, and says so), and short of what a state waits on: the
+ * jump fires every timer due before it, and at 60s a state that shows a
+ * wait was read after its wait gave up (home/unlocking: a machine control's
+ * 15s CONTROL_TIMEOUT_MS fired, and the keychain dialog read its error, not
+ * the unlock under way). With the walk's settling after it, a state is read
+ * some 12s past its act. Our call: eight seconds.
+ */
+const ACT_MS = 8000;
 
 /**
  * Where each page's fake clock stands (`now`), the walk's own count: Date
