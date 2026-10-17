@@ -959,7 +959,9 @@ async function startMove(fleet: KitFleet): Promise<void> {
   };
   type Job = { askId?: string; id: string; stage: string };
   const job = () =>
-    fleet.api<Job[]>("/api/moves").then((jobs) => jobs.find((j) => j.id === id));
+    fleet
+      .api<Job[]>("/api/moves")
+      .then((jobs) => jobs.find((j) => j.id === id));
   await until(
     "the sketches' move asking for its yes",
     job,
