@@ -189,7 +189,6 @@ export async function passPage(
   // Date stands at the tape's moment whatever stretches the timers are run
   // on: what a read says of the time ("2m ago") is the same on every run.
   await page.clock.setFixedTime(at);
-  clockOf.set(page, { at, now: at });
   const pending = new Set<Request>();
   inFlight.set(page, pending);
   page.on("request", (request) => pending.add(request));
@@ -215,52 +214,38 @@ const CLOCK_LEAD_MS = 1000;
 /** Real time for the browser's pointer-over under a still pointer once layout has moved (it sends one on a timer). */
 const POINTER_BEAT_MS = 250;
 /**
- * The page time an act is given: its clock stands this far past where the
- * act began, whatever the act took. Past any act's own run (one that runs
- * longer is extended, and says so), and short of what a state waits on: the
- * jump fires every timer due before it, and a state that shows a wait was
- * read after its wait gave up (home/unlocking: a machine control's 15s
- * CONTROL_TIMEOUT_MS fired, and the keychain dialog read its error, not the
- * unlock under way). After the mark the walk runs some 10s of page time of
- * its own (`arrive`: two settles round a nudge), so what an act's last step
- * sets off is read 11 to 14s later: at 8s it was 15.5s, past the wait. Our
- * call: four seconds, past an act's own run (one that runs longer is
- * extended from its end, and says so).
+ * The page time an act is given: its clock stands this far past the tick
+ * the act began at, whatever the act took. Past an act's own run, and short
+ * of what a state waits on: home/unlocking shows the keychain's unlock under
+ * way, and a machine control gives up after CONTROL_TIMEOUT_MS (15s). After
+ * the mark the walk runs 11s of page time of its own (`arrive`: two settles
+ * round a nudge), so a step at the act's end is read at most ACT_MS + 11s
+ * later. Our call: five seconds.
  */
-const ACT_MS = 4000;
-
-/**
- * Where each page's fake clock stands (`now`), the walk's own count: Date
- * is fixed at the tape's moment (`at`), so the page cannot say.
- */
-const clockOf = new WeakMap<Page, { at: number; now: number }>();
-
-/** The page's timers run on `ms`, its clock's count kept. */
-async function runOn(page: Page, ms: number): Promise<void> {
-  await page.clock.runFor(ms);
-  const clock = clockOf.get(page);
-  if (clock) {
-    clock.now += ms;
-  }
-}
+const ACT_MS = 5000;
 
 /**
  * An act, with the page's time flowing as a person's clicks meet a page
  * whose motions play (a popover's control is clickable once its opening
- * has moved it into place); then the clock stands again at ACT_MS past
- * where the act began, the same mark on every run, Date at the tape's
- * moment still. An act that moves the page's time itself (rail/older sets
- * it a day on, so its sessions read old) keeps it: Date stands at the
- * act's moment, and the mark is counted from there. Counted from the walk's
- * own moment instead, the mark stood in the past ("Cannot fast-forward to
- * the past") and Date was put back under the state.
+ * has moved it into place); then the clock stands at ACT_MS past the tick
+ * the act began at, the same tick on every run.
+ *
+ * The clock is counted in its own ticks (`performance.now()`, the fake
+ * clock's ticks across reloads), never in wall time: Date is pinned
+ * (`setFixedTime`), and Playwright's `pauseAt(time)` consumes
+ * `time - this._now.time` of that pinned wall time. A mark set in wall time
+ * jumped the clock by everything the walk had run since the page opened,
+ * plus the act's own: home/unlocking's 15s wait was given up 18s into a
+ * single jump. Paused at Date's own moment, it consumes nothing; the act's
+ * remainder of ACT_MS is then run, timer by timer. An act that moves Date
+ * (rail/older sets it a day on, so its sessions read old) keeps its moment.
+ * An act that runs past ACT_MS stands where it ended, and says so.
  */
 async function acting(
   page: Page,
   act: (page: Page) => Promise<unknown>
 ): Promise<void> {
-  const clock = clockOf.get(page);
-  const began = performance.now();
+  const began = await page.evaluate(() => performance.now());
   await page.clock.resume();
   await page.evaluate(() => {
     window.__ssReader?.pointerFrom();
@@ -272,26 +257,17 @@ async function acting(
     await page
       .evaluate(() => window.__ssReader?.holding(false))
       .catch(() => undefined);
-    if (clock) {
-      const moved = await page.evaluate(() => Date.now());
-      if (moved !== clock.at) {
-        clock.at = moved;
-        clock.now = Math.max(clock.now, moved);
-      }
-      // The act ran in real time, its page time flowing with it: the mark
-      // stands ACT_MS on, past any act under it. One that ran longer stands
-      // past itself instead, and says so: that state is no longer still.
-      const took = performance.now() - began;
-      let mark = clock.now + ACT_MS;
-      if (took >= ACT_MS - 1000) {
-        mark = clock.now + took + ACT_MS;
-        console.log(
-          `  act: ran ${Math.round(took)} ms of real time, past its ${ACT_MS} ms of page time`
-        );
-      }
-      await page.clock.pauseAt(mark);
-      await page.clock.setFixedTime(clock.at);
-      clock.now = mark;
+    const moment = await page.evaluate(() => Date.now());
+    await page.clock.pauseAt(moment);
+    await page.clock.setFixedTime(moment);
+    const now = await page.evaluate(() => performance.now());
+    const rest = began + ACT_MS - now;
+    if (rest > 0) {
+      await page.clock.runFor(rest);
+    } else {
+      console.log(
+        `  act: ran ${Math.round(now - began)} ms of page time, past its ${ACT_MS}`
+      );
     }
   }
 }
@@ -359,7 +335,7 @@ async function settle(page: Page): Promise<void> {
   for (let step = 0; step < SETTLE_STEPS; step += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each stretch runs on what the last one left
     await quiet(page);
-    await runOn(page, SETTLE_STEP_MS);
+    await page.clock.runFor(SETTLE_STEP_MS);
   }
   await quiet(page);
 }
@@ -427,7 +403,7 @@ async function stillInPageTime(page: Page): Promise<void> {
   for (let i = 0; i < STILL_STRETCHES && still < 3; i += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: polled until the page holds still
     await quiet(page);
-    await runOn(page, STILL_STEP_MS);
+    await page.clock.runFor(STILL_STEP_MS);
     await holdStill(page);
     const now = await page.evaluate(scrollsAndBoxes);
     still = now === last ? still + 1 : 0;
@@ -454,7 +430,7 @@ async function arrive(page: Page): Promise<void> {
   if (size) {
     await page.setViewportSize({ width: size.width + 1, height: size.height });
     await quiet(page);
-    await runOn(page, SETTLE_STEP_MS);
+    await page.clock.runFor(SETTLE_STEP_MS);
     await page.setViewportSize(size);
   }
   await stand(page);
