@@ -37,6 +37,7 @@
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { failureWords as message } from "../hub-read";
+  import { idForWords, type SentWords } from "../id";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import {
@@ -183,6 +184,9 @@
     }
   }
 
+  /** The note a Send back that did not go through carried, and its comment's id. */
+  let noteSent: SentWords | null = null;
+
   /** Your note goes on the task as your comment, then the task goes back. */
   async function sendBack() {
     const text = note?.trim();
@@ -191,9 +195,12 @@
     }
     sending = true;
     problem = null;
+    // The same note again, after a Send back that did not go through, is the same comment.
+    noteSent = idForWords(noteSent, text);
     try {
-      onchanged(await addComment(projectId, task.id, text));
+      onchanged(await addComment(projectId, task.id, text, noteSent.id));
       await onmove(backTo.name);
+      noteSent = null;
       note = null;
     } catch (error) {
       problem = message(error);

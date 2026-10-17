@@ -44,7 +44,7 @@ const OFFLINE = "This machine is offline";
 const WINDOW_MS = 60_000;
 const SLACK_MS = 20_000;
 const TITLE = "Reconnect probe";
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** The app's line as it schedules the lapse: `… lapses in <n> seconds`. */
 const LAPSES_IN = /reconnecting window lapses in ([\d.]+) seconds/;
 

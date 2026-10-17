@@ -49,7 +49,7 @@ const BUSY = "PROBE-BUSY answer slowly";
 const BUSY_S = 90;
 /** The responses notice (core injected.ts `artifactResponsesNotice`). */
 const NOTICE = /^\[CawCo\] The page "coconut-song" has new responses since \d+/;
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /**
  * How soon the head shows a change: the page's word (`cawco:doc`, 100 ms)
  * and one read. A poll every 3 s could not keep to it.

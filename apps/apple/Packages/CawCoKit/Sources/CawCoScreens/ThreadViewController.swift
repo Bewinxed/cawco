@@ -607,13 +607,18 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
 
     private var sending = false
     private var sendError: String?
+    /// The words a send got no answer for, and the id they went as
+    /// (ThreadPane.svelte `unanswered`): the hub may have kept them, so the
+    /// same words sent again go under the same id, which the hub answers with
+    /// the message it kept rather than a second one.
+    private var unanswered: (words: String, id: String)?
 
     /// Your words go to the thread as one message (ThreadPane.svelte
     /// `onsubmit`): its row lands them however soon its frame draws it; a
     /// refusal gives them back to the field with why.
     private func send(_ words: String) {
         guard hub.state == .connected, writable, !sending, !projectId.isEmpty else { return }
-        let id = UUID().uuidString.lowercased()
+        let id = unanswered.flatMap { $0.words == words ? $0.id : nil } ?? UUID().uuidString.lowercased()
         sending = true
         sendError = nil
         composerBinding.sent()
@@ -621,10 +626,13 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         Task { [weak self, hub, projectId, threadId] in
             do {
                 let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id)
+                self?.unanswered = nil
                 if threadId == nil { self?.started(said.id) }
             } catch {
                 self?.composerBinding.setDraft(words)
-                self?.sendError = ThreadsStore.unreachable(error) ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)
+                let unreached = ThreadsStore.unreachable(error)
+                self?.unanswered = unreached ? (words, id) : nil
+                self?.sendError = unreached ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)
                 Self.log.error("thread send refused: \(error.localizedDescription, privacy: .public)")
             }
             self?.sending = false

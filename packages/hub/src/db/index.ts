@@ -202,6 +202,7 @@ import {
   spendSettings,
   supervisorConfig,
   type Tracker,
+  taskCommentIds,
   threadMessages,
   threadMessageTasks,
   tools,
@@ -1275,6 +1276,12 @@ export interface DbShape {
     instanceId: string,
     repeat: boolean
   ) => RuleState;
+  /** Notes a comment written under the id its device chose, once committed. */
+  readonly noteTaskComment: (said: {
+    id: string;
+    projectId: string;
+    taskId: string;
+  }) => void;
   /** The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). */
   readonly noteTurnEnded: (id: string, at: Date) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
@@ -2114,6 +2121,10 @@ export interface DbShape {
   readonly takeOwedSpawn: (id: string) => boolean;
   /** A run's notes, oldest first, taken: none is handed out twice. */
   readonly takeWorkflowNotes: (runId: string) => string[];
+  /** The task a comment written under the id its device chose went on (`task_comment_ids`). */
+  readonly taskCommentSaid: (
+    id: string
+  ) => { projectId: string; taskId: string } | undefined;
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
   /** The indexed tasks that wait for `taskId` (`after:`), by number: an indexed lookup. */
@@ -7473,6 +7484,21 @@ const make = async (path: string): Promise<DbShape> => {
       withTasks(
         db.select().from(threadMessages).where(eq(threadMessages.id, id)).all()
       )[0],
+    taskCommentSaid: (id) =>
+      db
+        .select({
+          projectId: taskCommentIds.projectId,
+          taskId: taskCommentIds.taskId,
+        })
+        .from(taskCommentIds)
+        .where(eq(taskCommentIds.id, id))
+        .get(),
+    noteTaskComment: ({ id, projectId, taskId }) => {
+      db.insert(taskCommentIds)
+        .values({ id, projectId, taskId, saidAt: new Date() })
+        .onConflictDoNothing()
+        .run();
+    },
     createThread: ({ id, projectId, title, setup, first }) =>
       db.transaction((tx) => {
         const at = new Date();

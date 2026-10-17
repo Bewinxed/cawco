@@ -105,6 +105,7 @@ import {
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
   machineFaultWords,
+  machineLabel,
   questionsOf,
   RESOLVE_PERMISSION,
   relaunchOf,
@@ -156,6 +157,7 @@ import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
+import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild } from "./served-build.svelte";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
@@ -3713,8 +3715,20 @@ export function submitCommand<K extends CommandKind>(
   // the operator got a toast and their typed words were gone, which is the
   // original defect wearing a different hat.
   if (kind === "send") {
-    const { text, extras } = intent as CommandIntents["send"];
+    const { text, extras, replaces } = intent as CommandIntents["send"];
     rememberSend(commandId, instanceId, machineId, text, extras ?? {});
+    // Kept past a reload too, until it settles (send-store.ts).
+    keepSend({
+      at: Date.now(),
+      commandId,
+      extras: extras ?? {},
+      instanceId,
+      machineId,
+      text,
+      ...(replaces ? { replaces } : {}),
+    }).catch((error: unknown) =>
+      console.warn(`[cawco] send ${commandId} not kept for a reload`, error)
+    );
   }
   if (kind === "permission.answer") {
     const { requestId } = intent as CommandIntents["permission.answer"];
@@ -4052,8 +4066,69 @@ export function restoreDraft(commandId: string): void {
   }
   sendOutbox.delete(commandId);
   outboxVersion += 1;
+  forgetSend(commandId).catch(() => undefined);
   dropSendEcho(entry.instanceId, commandId);
   restoreComposer(entry.instanceId, entry.text, entry.extras);
+}
+
+/**
+ * The sends an earlier load of this page kept and the hub never took
+ * (send-store.ts), sent again under their own ids, oldest first, as this
+ * page starts: each draws its row again and waits, as any send does, for
+ * the socket (`resumePendingSends`). The hub takes a repeat of an id as
+ * the same send. One the hub refused is drawn refused again, in its words,
+ * with Try again and Edit, and goes only when the person sends it; past
+ * the time those stand (the ledger's own), it is let go.
+ */
+async function resumeKeptSends(): Promise<void> {
+  for (const kept of await keptSends()) {
+    if (streamState.commands[kept.commandId]) {
+      continue;
+    }
+    if (kept.refused) {
+      if (Date.now() - kept.refused.at >= SETTLED_COMMAND_TTL_MS) {
+        forgetSend(kept.commandId).catch(() => undefined);
+        continue;
+      }
+      rememberSend(
+        kept.commandId,
+        kept.instanceId,
+        kept.machineId,
+        kept.text,
+        kept.extras
+      );
+      noteSendSubmitted(
+        kept.instanceId,
+        kept.text,
+        kept.extras,
+        kept.commandId,
+        kept.replaces
+      );
+      failLocally(
+        streamState,
+        streamHost,
+        {
+          commandId: kept.commandId,
+          sessionId: kept.instanceId,
+          kind: "send",
+          settlesAt: SETTLES_AT.send,
+        },
+        kept.refused.reason
+      );
+      continue;
+    }
+    submitCommand(
+      kept.instanceId,
+      kept.machineId,
+      "send",
+      {
+        text: kept.text,
+        extras: kept.extras,
+        ...(kept.replaces ? { replaces: kept.replaces } : {}),
+      },
+      kept.commandId
+    );
+  }
 }
 
 function restoreComposer(
@@ -4297,6 +4372,14 @@ function streamEffectsFor<K extends CommandKind>(
             commandId,
             replaces
           ),
+        // Taken: no reload sends it again. Refused: kept with the hub's
+        // words, so a reload draws it refused, Try again and Edit standing.
+        settled: (stage, reason) => {
+          (stage === "failed"
+            ? refuseSend(commandId, reason ?? "The hub refused it.")
+            : forgetSend(commandId)
+          ).catch(() => undefined);
+        },
       };
     }
     case "interrupt":
@@ -4901,8 +4984,17 @@ function dropDeadSocket(socket: WebSocket): void {
   socketClosed();
 }
 
+/** The sends an earlier load kept were sent again: once per load of the page. */
+let keptSendsResumed = false;
+
 /** What routes call on mount: the socket is app-scoped, not page-scoped. */
 export function ensureConnected(): void {
+  if (!keptSendsResumed) {
+    keptSendsResumed = true;
+    resumeKeptSends().catch((error: unknown) =>
+      console.warn("[cawco] kept sends could not be read", error)
+    );
+  }
   const socket = globalThis.__cawcoSocket;
   if (
     socket &&
@@ -6137,11 +6229,13 @@ export async function wakeThread(
 /** "Ask Caw for a view": a new thread with your words, Caw woken to draft it. */
 export async function requestView(
   projectId: string,
-  text: string
+  text: string,
+  /** The ask's id: the hub takes the same id again as the same ask. */
+  id: string
 ): Promise<ThreadSaid> {
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/view-requests`,
-    json("POST", { text })
+    json("POST", { text, id })
   );
   state.threadMessages[said.thread.id] ??= [];
   adoptThreadMessage(said.thread.id, said.message);
@@ -6739,12 +6833,12 @@ export function readFaultOf(
   return { reason: "failed", message: failureReason(failure) };
 }
 
-/** A machine as the fleet list names it, else its id. */
+/** A machine as the fleet list names it (its label), else its id. */
 function machineName(machineId: string): string {
-  return (
-    state.machines.find((row) => row.machineId === machineId)?.hostname ||
-    machineId
-  );
+  const hostname = state.machines.find(
+    (row) => row.machineId === machineId
+  )?.hostname;
+  return hostname ? machineLabel(hostname) : machineId;
 }
 
 /**

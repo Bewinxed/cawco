@@ -248,6 +248,7 @@ import {
   type PlacementStrategy,
   PREVIEW_START,
   PREVIEW_STOP,
+  PREVIEW_WEIGHT,
   PROVIDER_ACCOUNT_KINDS,
   PROVIDER_RETRY,
   type ProviderAccountReading,
@@ -298,6 +299,7 @@ import {
   toolSpec,
   transcriptUserText,
   UPDATE_CAWCO,
+  UPSTREAM_ORIGIN,
   undeliveredNotice,
   unshownAskMessage,
   validateWorkflow,
@@ -331,7 +333,7 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
-import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import { DOWN_WORDS, type FolderWeight } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type Found,
@@ -2869,7 +2871,7 @@ export const createServer = (
         .trim();
       return { ok: called.result.isError !== true, said };
     },
-    tell: (instanceId, text) => tellSession(instanceId, text, "upstream"),
+    tell: (instanceId, text) => tellSession(instanceId, text, UPSTREAM_ORIGIN),
     threadOf: (actor) => lead?.askThread(actor),
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
@@ -3428,7 +3430,8 @@ export const createServer = (
    * Whether a send from `origin` may start a turn in `row` when its process
    * is gone ({@link wakesForSend}). A stopped or stopping session, ended by
    * its person, its parent or the hub, is woken only by a person (their
-   * words, or their Send on one of its artifacts: core `byPerson`) or by its
+   * words, their Send on one of its artifacts, or their answer to its held
+   * upstream post: core `byPerson`) or by its
    * own parent:
    * a delegate's report, another session's hand-off and every hub notice
    * wait for one of them. A sleeping or failed one is woken by anything but
@@ -5804,6 +5807,8 @@ export const createServer = (
   // Who may call the hub: the mode, the person's devices, machines' keys
   // (hub-auth.ts). Its hooks are set once the sockets they reach exist.
   const hubAuth = createHubAuth({
+    // Where a pairing's code and QR send the person: https once a dashboard reached the hub over it.
+    dashboard: () => secureDashboardUrl(registry) ?? dashboardUrl(registry),
     db: db.hubAuth,
     hubId,
     session: (authorization) => identities.resolve(authorization),
@@ -10513,6 +10518,39 @@ export const createServer = (
       }
       return answer.result as StageState;
     },
+    // A folder preview's weight, from its folder on the machine that serves it.
+    folderWeight: async (machineId, dir) => {
+      const asked = await callAgent(
+        machineId,
+        PREVIEW_WEIGHT,
+        [dir],
+        BUSY_TIMEOUT_MS
+      );
+      switch (asked.kind) {
+        case "unanswered":
+          throw asked.reason === "dead"
+            ? new ArtifactRefusal(
+                503,
+                "The folder's machine isn't connected to the hub, so its folder can't be read."
+              )
+            : new ArtifactRefusal(
+                504,
+                `The folder's machine didn't answer within ${Math.round(asked.after / 1000)}s.`
+              );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      const answer = asked.value;
+      if (!answer.ok) {
+        throw new ArtifactRefusal(
+          422,
+          answer.error ?? "The folder couldn't be read."
+        );
+      }
+      return answer.result as FolderWeight;
+    },
     unserve: (machineId, workspace, port) => {
       detach(
         callAgent(machineId, STAGE_UNSERVE, [workspace, port], BUSY_TIMEOUT_MS),
@@ -13957,6 +13995,9 @@ export const createServer = (
   };
 
   hubAuth.setHooks({
+    // A pairing waiting on the person pushes to the app; settled, its push comes down.
+    asked: (request) => push.pairing(request),
+    settled: (userCode) => push.pairingSettled(userCode),
     changed: (frame) =>
       registry.broadcast({
         verb: "frames",
@@ -17385,25 +17426,73 @@ export const createServer = (
     }
   };
 
-  const createOrJoinProject = async (asked: {
-    name: string;
-    checkout?: { machineId: string; cwd: string };
+  interface ProjectAsk {
     /** Made with Caw: a new project's Caw starts on. */
     caw?: boolean;
-    template?: StagesTemplate;
+    checkout?: { machineId: string; cwd: string };
+    name: string;
     /** What the Setup thread opens with: your prompt, or a note of where the project came from. */
     setup?: {
       note?: ThreadNote;
       prompt?: string;
       promptId?: string;
     };
-  }): Promise<{
-    project: ProjectRow;
+    template?: StagesTemplate;
+  }
+  interface ProjectMade {
+    joined: boolean;
     place: PlaceRow;
     placeAdded: boolean;
-    joined: boolean;
+    project: ProjectRow;
     setupThread?: ThreadSummary;
-  }> => {
+  }
+
+  /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
+  const projectsMaking = new Map<string, Promise<ProjectMade>>();
+
+  /** The place a project was made from: its checkout, else its folder on the hub. */
+  const madeFrom = (project: ProjectRow): PlaceRow =>
+    checkoutOf(project) ??
+    project.places.find((each) => each.kind === "hub") ??
+    (project.places[0] as PlaceRow);
+
+  /**
+   * A project made, or a folder joined to the one it belongs to. The same
+   * prompt again under the id it went as (a device sending again after its
+   * answer was lost) is the project it made, with its Setup thread: nothing
+   * is made twice, and one still being made answers both.
+   */
+  const createOrJoinProject = (asked: ProjectAsk): Promise<ProjectMade> => {
+    const promptId = asked.setup?.promptId;
+    if (!promptId) {
+      return makeOrJoinProject(asked);
+    }
+    const first = projectsMaking.get(promptId);
+    if (first !== undefined) {
+      return first;
+    }
+    const kept = db.threadMessage(promptId);
+    const thread = kept && db.thread(kept.threadId);
+    const project = thread && db.project(thread.projectId);
+    if (thread && project) {
+      return Promise.resolve({
+        project,
+        place: madeFrom(project),
+        placeAdded: false,
+        joined: false,
+        ...(lead
+          ? { setupThread: lead.read(project.id, thread.id).thread }
+          : {}),
+      });
+    }
+    const making = makeOrJoinProject(asked);
+    projectsMaking.set(promptId, making);
+    const done = () => projectsMaking.delete(promptId);
+    making.then(done, done);
+    return making;
+  };
+
+  const makeOrJoinProject = async (asked: ProjectAsk): Promise<ProjectMade> => {
     const checkout = asked.checkout && {
       machineId: asked.checkout.machineId,
       path: askedMachinePath(
@@ -17444,15 +17533,10 @@ export const createServer = (
     projectsChanged();
     projectStarters.touched(created.id, "project created");
     madeFromFolder(created.id, checkout || undefined, remote);
-    // The place it was made from: its checkout, else its folder on the hub.
-    const place =
-      checkoutOf(created) ??
-      created.places.find((each) => each.kind === "hub") ??
-      created.places[0];
     const setupThread = await startProject(created, asked);
     return {
       project: created,
-      place,
+      place: madeFrom(created),
       placeAdded: false,
       joined: false,
       ...(setupThread ? { setupThread } : {}),
@@ -17466,7 +17550,7 @@ export const createServer = (
    */
   const startProject = async (
     created: ProjectRow,
-    asked: Parameters<typeof createOrJoinProject>[0]
+    asked: ProjectAsk
   ): Promise<ThreadSummary | undefined> => {
     if (asked.template) {
       if (asked.template !== "code") {
@@ -17886,6 +17970,8 @@ export const createServer = (
       fanOutFleet();
     },
     attempts: db.projectAttempts,
+    commentSaid: db.taskCommentSaid,
+    noteComment: db.noteTaskComment,
     saveResult: (workItemId, taskResult) => {
       db.updateWorkItem(workItemId, { taskResult });
     },

@@ -63,7 +63,11 @@ export interface UpstreamAsksDeps {
   readonly pending: () => Envelope[];
   /** Takes a settled ask off the pending ledger. */
   readonly settle: (requestId: string) => void;
-  /** Says something to a session, as the hub. */
+  /**
+   * Says the person's answer to the session, as their act (core
+   * `UPSTREAM_ORIGIN`): it wakes the session and reopens its finished item,
+   * since the session that asked has usually moved on by then.
+   */
   readonly tell: (instanceId: string, text: string) => void;
   /** The thread a project's Caw asks in; undefined for any other session. */
   readonly threadOf: (actor: InstanceRow) => string | undefined;

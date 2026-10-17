@@ -260,6 +260,8 @@ enum Frame {
     case lawsBroken([Components.Schemas.LawBroken])
     /// The fleet's upstream answer was given or changed, anywhere: Needs you stops asking.
     case fleetUpstream(Components.Schemas.FleetChoicesUpstream)
+    /// The hub's mode and what waits on the person to pair or admit, whole, on each change.
+    case hubAuth(Components.Schemas.HubAuthFrame)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -313,6 +315,8 @@ enum Frame {
             self = .lawsBroken(frame.broken)
         case .fleet_upstream(let frame):
             self = .fleetUpstream(frame.upstream)
+        case .hubAuth(let frame):
+            self = .hubAuth(frame)
         default:
             self = .ignored
         }

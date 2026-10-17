@@ -1,4 +1,5 @@
 public import CawCoAPI
+import CawCoPush
 public import Foundation
 import HTTPTypes
 import OpenAPIRuntime
@@ -15,8 +16,38 @@ extension Client {
             serverURL: url,
             configuration: Configuration(dateTranscoder: .iso8601WithFractionalSeconds),
             transport: URLSessionTransport(),
-            middlewares: [LossyReads()]
+            middlewares: [OwnerPass(), LossyReads()]
         )
+    }
+}
+
+extension URLRequest {
+    /// A request for `url` on the hub, as the person when this device holds
+    /// a pass to that hub (CawCoPush `HubPass`): every request the app makes
+    /// to its hub outside the generated client is made from this.
+    public static func hub(_ url: URL) -> URLRequest {
+        HubPass.request(url)
+    }
+}
+
+/// Every generated call as the person: `Authorization: Owner <token>` with
+/// this device's pass to the hub it calls, when it holds one (CawCoPush
+/// `HubPass`); a hub that trusts its network takes the call without it.
+private struct OwnerPass: ClientMiddleware {
+    @concurrent
+    func intercept(
+        _ request: HTTPRequest,
+        body: HTTPBody?,
+        baseURL: URL,
+        operationID _: String,
+        next: @concurrent @Sendable (HTTPRequest, HTTPBody?, URL) async throws -> (HTTPResponse, HTTPBody?)
+    ) async throws -> (HTTPResponse, HTTPBody?) {
+        guard let token = HubPass.token(for: baseURL) else {
+            return try await next(request, body, baseURL)
+        }
+        var owned = request
+        owned.headerFields[.authorization] = "\(HubPass.scheme) \(token)"
+        return try await next(owned, body, baseURL)
     }
 }
 

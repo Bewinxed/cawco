@@ -90,7 +90,10 @@ export async function overlayKey(parents: readonly string[]): Promise<string> {
 /**
  * `answer`, a page on a preview origin (the hub's own, or one a machine's
  * listener made: neither knows the hub's parents), with its overlay tag at
- * the overlay's key now, streamed through as it is read.
+ * the overlay's key now, streamed through as it is read. Never stored: a
+ * kept copy would name the key it was served with, and its server's
+ * validators (Vite's `no-cache` and ETag on `index.html`) name the page it
+ * sent, not this one, so a reload would 304 to an old key.
  */
 export async function keyOverlay(
   answer: Response,
@@ -108,6 +111,9 @@ export async function keyOverlay(
   const headers = new Headers(rewritten.headers);
   // The tag's new address is longer than the old.
   headers.delete("content-length");
+  headers.set("cache-control", "no-store");
+  headers.delete("etag");
+  headers.delete("last-modified");
   return new Response(rewritten.body, {
     status: rewritten.status,
     statusText: rewritten.statusText,
@@ -332,24 +338,177 @@ const LEADING_SLASH = /^\//;
 /** The overlay's own and the hub's: never one of the page's files. */
 const RESERVED_PATH = "/__cawco/";
 
+/** A `Cache-Control` value's directive names, lower case. */
+const directives = (value: string | null): Set<string> =>
+  new Set(
+    (value ?? "")
+      .split(",")
+      .map((part) => part.split("=")[0]?.trim().toLowerCase() ?? "")
+  );
+
+/**
+ * What a port preview's answer may say of itself downstream, from what its
+ * server said (`upstream`). `direct`: the request reached the hub on a
+ * session's own port listener, which no CDN stands in front of; host mode's
+ * by-Host listener is where DNS or a proxy brings the names, Cloudflare on
+ * the owner's.
+ *
+ * - `immutable` (Vite's `?v=` deps, "strongly cached with HTTP headers
+ *   `max-age=31536000,immutable`", vite.dev/guide/dep-pre-bundling#browser-cache;
+ *   a folder's file at its key): kept everywhere, validators too. An
+ *   address that never changes its bytes is safe in any cache.
+ * - `no-cache` with its `etag`/`last-modified`, on a direct path only: the
+ *   browser revalidates each module and the dev server answers 304.
+ * - `no-store` otherwise, validators dropped: a missing header, an app's own
+ *   `max-age`, or `no-cache` where a CDN may stand. Cloudflare rewrites
+ *   `no-cache`, `max-age=0` and a missing header to its Browser Cache TTL and
+ *   keeps the file at its edge (`max-age=14400`, a module four hours stale);
+ *   `no-store` is the one value it leaves alone ("Will not cache",
+ *   developers.cloudflare.com/cache/concepts/cache-control/).
+ */
+export function previewCache(
+  upstream: Headers,
+  direct: boolean
+): "immutable" | "no-cache" | "no-store" {
+  const said = directives(upstream.get("cache-control"));
+  if (said.has("no-store")) {
+    return "no-store";
+  }
+  if (said.has("immutable")) {
+    return "immutable";
+  }
+  return direct && said.has("no-cache") ? "no-cache" : "no-store";
+}
+
+/**
+ * `headers`, a port preview's answer of `status` on its way down, saying of
+ * itself what {@link previewCache} lets it. A 304 goes on as it came: it
+ * carries no policy of its own (Vite's has no headers), and the one its
+ * stored answer carries stands.
+ */
+export function cachePreview(
+  headers: Headers,
+  status: number,
+  direct: boolean
+): void {
+  if (status === 304) {
+    return;
+  }
+  const policy = previewCache(headers, direct);
+  headers.delete("expires");
+  if (policy === "immutable") {
+    return;
+  }
+  headers.set("cache-control", policy);
+  if (policy === "no-store") {
+    headers.delete("etag");
+    headers.delete("last-modified");
+  }
+}
+
+/**
+ * What {@link compressed} gzips, by media type: text, scripts, JSON, wasm and
+ * SVG. An event stream is text too, but gzip holds its events back until a
+ * block fills, so it goes as it is.
+ */
+const COMPRESSIBLE =
+  /^(?:text\/(?!event-stream$)|application\/(?:javascript|json|wasm)$|image\/svg\+xml$)/;
+
+/**
+ * `answer` gzipped for a client that takes it (`acceptEncoding`, the
+ * request's Accept-Encoding), once, by the hop that sends it to the browser
+ * after its own rewriting: a dev server compresses nothing, and Vite's
+ * modules and a folder's bundle are most of a preview's bytes. Only a whole
+ * 200 of a {@link COMPRESSIBLE} type with a body and no encoding yet (the
+ * overlay is gzipped already), never one that says `no-transform`. A strong
+ * ETag becomes weak, as the bytes are no longer the server's; a weak one
+ * (Vite's) is the same representation's still.
+ */
+export function compressed(
+  answer: Response,
+  acceptEncoding: string | null
+): Response {
+  const type =
+    answer.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ??
+    "";
+  if (
+    answer.status !== 200 ||
+    !answer.body ||
+    !(acceptEncoding && GZIP.test(acceptEncoding)) ||
+    answer.headers.has("content-encoding") ||
+    !COMPRESSIBLE.test(type) ||
+    directives(answer.headers.get("cache-control")).has("no-transform")
+  ) {
+    return answer;
+  }
+  const headers = new Headers(answer.headers);
+  headers.set("content-encoding", "gzip");
+  headers.append("vary", "accept-encoding");
+  headers.delete("content-length");
+  const etag = headers.get("etag");
+  if (etag && !etag.startsWith("W/")) {
+    headers.set("etag", `W/${etag}`);
+  }
+  return new Response(answer.body.pipeThrough(new CompressionStream("gzip")), {
+    status: answer.status,
+    statusText: answer.statusText,
+    headers,
+  });
+}
+
 /** A versioned address's file, its path under the mount; null when `pathname` is not one. */
 export const versionedFile = (pathname: string): string | null =>
   pathname.match(VERSIONED)?.[2] ?? null;
 
-/** The key of `root`'s files as they are now: each one's path, size and change time, hashed. */
-export async function folderKey(root: string): Promise<string> {
+/** Each file under `root` as it is now, by its path from `root`, in path order. */
+async function folderFiles(
+  root: string
+): Promise<{ mtimeMs: number; name: string; size: number }[]> {
   const names = (await readdir(root, { recursive: true })).sort();
-  const hasher = new Bun.CryptoHasher("sha256");
   const stats = await Promise.all(
     names.map((name) => stat(join(root, name)).catch(() => null))
   );
-  for (const [index, name] of names.entries()) {
+  return names.flatMap((name, index) => {
     const one = stats[index];
-    if (one?.isFile()) {
-      hasher.update(`${name}\0${one.size}\0${one.mtimeMs}\n`);
-    }
+    return one?.isFile()
+      ? [{ name, size: one.size, mtimeMs: one.mtimeMs }]
+      : [];
+  });
+}
+
+/** The key of `root`'s files as they are now: each one's path, size and change time, hashed. */
+export async function folderKey(root: string): Promise<string> {
+  const hasher = new Bun.CryptoHasher("sha256");
+  for (const { name, size, mtimeMs } of await folderFiles(root)) {
+    hasher.update(`${name}\0${size}\0${mtimeMs}\n`);
   }
   return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
+}
+
+/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's. */
+export interface FolderWeight {
+  bytes: number;
+  files: number;
+  js: number;
+  wasm: number;
+}
+
+const JS_FILE = /\.[cm]?js$/;
+const WASM_FILE = /\.wasm$/;
+
+/** `root`'s weight, from the same walk as its {@link folderKey}. */
+export async function folderWeight(root: string): Promise<FolderWeight> {
+  const weight: FolderWeight = { files: 0, bytes: 0, js: 0, wasm: 0 };
+  for (const { name, size } of await folderFiles(root)) {
+    weight.files += 1;
+    weight.bytes += size;
+    if (JS_FILE.test(name)) {
+      weight.js += size;
+    } else if (WASM_FILE.test(name)) {
+      weight.wasm += size;
+    }
+  }
+  return weight;
 }
 
 /** The attributes that name one of the page's files, by the elements that carry them. */

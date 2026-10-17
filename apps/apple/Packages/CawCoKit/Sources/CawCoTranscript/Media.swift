@@ -1,3 +1,4 @@
+import CawCoCore
 import CawCoDesign
 import UIKit
 
@@ -18,7 +19,7 @@ final class ImageStore {
         waiting[url] = [done]
         Task {
             let image: UIImage? = await {
-                guard let (data, response) = try? await URLSession.shared.data(from: url),
+                guard let (data, response) = try? await URLSession.shared.data(for: .hub(url)),
                       (response as? HTTPURLResponse).map({ (200 ..< 300).contains($0.statusCode) }) ?? true else { return nil }
                 return await Self.decode(data)
             }()

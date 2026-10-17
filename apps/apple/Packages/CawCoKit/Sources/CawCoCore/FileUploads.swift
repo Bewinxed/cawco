@@ -59,7 +59,7 @@ extension HubConnection {
     public func uploadFile(at file: URL, name: String, mediaType: String,
                            progress: @escaping @Sendable (Double) -> Void) async throws -> UploadedFile {
         guard let address else { throw TaskRefusal(message: "No hub is connected.") }
-        var request = URLRequest(url: address.appending(path: "api/files"))
+        var request = URLRequest.hub(address.appending(path: "api/files"))
         request.httpMethod = "POST"
         request.setValue(mediaType, forHTTPHeaderField: "Content-Type")
         // `encodeURIComponent`'s ASCII set: `.alphanumerics` would let a non-ASCII letter into the header.

@@ -80,7 +80,7 @@ export const artifactCreate = {
     "CawCo runs there with PORT and keeps up (never start it yourself). Options to pick between: " +
     "design-explore skill first. A canvas is `elements` or `mermaid`, " +
     "or empty for the person. The same kind and name again replaces it, picks kept. " +
-    "Answers its id and `opened` (false: `why`).",
+    "Answers its id and `opened` (false: `why`); a folder preview, its `weight`.",
   input: {
     kind: z.enum(["page", "sheet", "preview", "canvas"]),
     name: z
@@ -208,7 +208,8 @@ export const artifactRead = {
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A sheet adds " +
-    "`sheet` (stories, args, props) and its stage's `status` and `errors`; its picks are stories; a served preview, its server's `stage`.",
+    "`sheet` (stories, args, props), its stage's `status` and `errors`, and `weight` (null until viewed; `heaviest`: " +
+    "the imports to cut); its picks are stories; a served preview, its server's `stage`.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),

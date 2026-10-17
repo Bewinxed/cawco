@@ -20,6 +20,20 @@ public struct HubAPI: Sendable {
     public var moves: Moves { Moves(client: client) }
     public var push: Push { Push(client: client) }
     public var updates: Updates { Updates(client: client) }
+    public var pairings: Pairings { Pairings(client: client) }
+
+    /// A hub that requires paired devices (hub-auth.svelte.ts): what this app
+    /// is to it, its own pairing (RFC 8628's ask and poll), and the person's
+    /// answer to another device's.
+    public struct Pairings: Sendable {
+        let client: Client
+        public func auth(_ input: Operations.GetApiAuth.Input = .init()) async throws -> Operations.GetApiAuth.Output { try await client.getApiAuth(input) }
+        public func start(_ input: Operations.PostApiPair.Input) async throws -> Operations.PostApiPair.Output { try await client.postApiPair(input) }
+        public func poll(_ input: Operations.PostApiPairPoll.Input) async throws -> Operations.PostApiPairPoll.Output { try await client.postApiPairPoll(input) }
+        public func requests(_ input: Operations.GetApiPairRequests.Input = .init()) async throws -> Operations.GetApiPairRequests.Output { try await client.getApiPairRequests(input) }
+        public func approve(_ input: Operations.PostApiPairRequestsByUserCodeApprove.Input) async throws -> Operations.PostApiPairRequestsByUserCodeApprove.Output { try await client.postApiPairRequestsByUserCodeApprove(input) }
+        public func deny(_ input: Operations.PostApiPairRequestsByUserCodeDeny.Input) async throws -> Operations.PostApiPairRequestsByUserCodeDeny.Output { try await client.postApiPairRequestsByUserCodeDeny(input) }
+    }
 
     /// Configure › Phone (routes/config/phone): the devices the hub pushes to, and a test to every one.
     public struct Push: Sendable {

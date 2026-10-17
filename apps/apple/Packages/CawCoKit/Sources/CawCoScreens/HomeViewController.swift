@@ -17,7 +17,6 @@ import UIKit
 /// each run applies the new snapshot and reconfigures the items that stay.
 final class HomeViewController: ObservedViewController, UICollectionViewDelegate, RelayHost, BranchHost {
     static let cawSide = 160.0
-    static let recentPage = 30
 
     nonisolated enum Section: Int, Hashable, Sendable {
         case top, work, caw, recent
@@ -33,11 +32,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case row(String)
         case more(String)
         case caw
-        case recentHead
-        case recentSearch
-        case recent(String)
-        case recentNone
-        case recentMore
+        /// One of Recent's lines (RecentList), on the page.
+        case recent(RecentList.Line)
         /// A question about a session, under the row that asked (AskHere), by where it stands.
         case ask(String)
     }
@@ -61,7 +57,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// Where accounts are signed in: the usage sheet's "Sign in an account".
     var onUsageSignIn: (() -> Void)?
     /// What a row's session menu does through the shell (LiveSessionMenu, StoredSessionMenu).
-    var sessionMenus: (() -> SessionMenuContext?)?
+    var sessionMenus: (() -> SessionMenuContext?)? {
+        didSet { recent?.sessionMenus = sessionMenus }
+    }
     /// Set on the page (not the rail's copy): its dock's Start session.
     var onStart: (() -> Void)?
     var collectionView: UICollectionView!
@@ -73,9 +71,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// Each echoing row's place among the list's echoes (motion/echo): they beat top to bottom.
     private var echoing: [String: Int] = [:]
     private var groups: [String: (group: HomeModel.MachineGroup, seam: Bool)] = [:]
-    private var recentItems: [String: HomeModel.RecentItem] = [:]
-    /// Everything Recent lists, before the search narrows it.
-    private var recentAll: [HomeModel.RecentItem] = []
+    /// Recent, on the page only: in the rail it stands under Projects (RailRecentController).
+    private let recent: RecentList?
     /// A cell is under the finger; `pending` is the snapshot waiting for it to lift.
     private var pressed = false
     private var pending: (snapshot: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool)?
@@ -95,8 +92,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var usageStrip: UsageRings?
 
     // The view's own state.
-    private var search = ""
-    private var recentShown = HomeViewController.recentPage
     /// The driven motions: a tab switch or "N more" (the relay), a tree's fold.
     /// While one runs, the list waits for it before it takes the next change.
     private let relay = RelayMotion()
@@ -144,7 +139,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         self.home = home
         drawnTab = home.tab
         self.variant = variant
+        recent = variant == .page ? RecentList(hub: hub, home: home, place: "page-recent") : nil
         super.init(nibName: nil, bundle: nil)
+        recent?.onChange = { [weak self] in self?.requestRefresh() }
+        recent?.onSearchBegan = { [weak self] in self?.raiseSearch() }
     }
 
     func collectionView(_: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt _: IndexPath) {
@@ -253,7 +251,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     private func raiseSearch() {
-        guard let at = dataSource?.indexPath(for: .recentSearch),
+        guard let at = dataSource?.indexPath(for: .recent(.search)),
               let cell = collectionView.cellForItem(at: at) as? SearchCell, cell.field.isFirstResponder
         else { return }
         collectionView.scrollToItem(at: at, at: .top, animated: true)
@@ -376,9 +374,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             ObjectIdentifier(UICollectionView.CellRegistration<CawCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<MachineCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<MoreCell, Item>.self),
-            ObjectIdentifier(UICollectionView.CellRegistration<RecentHeadCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<RecentHeadCell, RecentList.Line>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<RowCell, Item>.self),
-            ObjectIdentifier(UICollectionView.CellRegistration<SearchCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<SearchCell, RecentList.Line>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<AskCell, Item>.self),
         ]
     }
@@ -386,7 +384,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// Where this home's lists ask their questions: the rail's work list
     /// and the page's are each their own place, Recent another.
     private var workPlace: String { variant == .rail ? "rail-work" : "page-work" }
-    private static let recentPlace = "page-recent"
 
     /// The window's question about a session, read where the board is read.
     private var asks: SessionAsks? { sessionMenus?()?.asks }
@@ -402,7 +399,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             guard let path = dataSource.indexPath(for: item) else { continue }
             let mine: Bool = switch item {
             case let .row(rid): rid == id
-            case let .recent(rid): rid == id || recentItems[rid]?.instance?.id == id
+            case let .recent(line): recent?.holds(line, session: id) ?? false
             default: false
             }
             // Brought into view, as a finger would scroll to it.
@@ -413,8 +410,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             switch item {
             case let .row(rid) where rid == id:
                 if let cell = collectionView.cellForItem(at: path) as? RowCell { return (workPlace, cell.row, item) }
-            case let .recent(rid) where rid == id || recentItems[rid]?.instance?.id == id:
-                if let cell = collectionView.cellForItem(at: path) as? RecentRowCell { return (Self.recentPlace, cell.row, item) }
+            case .recent where mine:
+                if let recent, let cell = collectionView.cellForItem(at: path) as? RecentRowCell { return (recent.place, cell.row, item) }
             default:
                 continue
             }
@@ -502,56 +499,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.side = self?.variant == .rail ? 112 : Self.cawSide
             cell.configure(line: self?.cawLine ?? "", status: self?.cawStatus ?? .sleeping)
         }
-        let recentHead = UICollectionView.CellRegistration<RecentHeadCell, Item> { [weak self] cell, _, _ in
-            guard let self else { return }
-            cell.configure(count: recentAll.count, open: home.recentOpen)
-        }
-        let recentSearch = UICollectionView.CellRegistration<SearchCell, Item> { [weak self] cell, _, _ in
-            guard let self else { return }
-            if cell.field.text != search {
-                cell.field.text = search
-            }
-            cell.field.removeTarget(nil, action: nil, for: [.editingChanged, .editingDidBegin])
-            cell.field.addAction(UIAction { [weak self] _ in self?.raiseSearch() }, for: .editingDidBegin)
-            cell.field.addAction(UIAction { [weak self, weak cell] _ in
-                guard let self, let cell else { return }
-                search = cell.field.text ?? ""
-                recentShown = Self.recentPage
-                requestRefresh()
-            }, for: .editingChanged)
-        }
-        let recentRow = UICollectionView.CellRegistration<RecentRowCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .recent(id) = item, let content = recentContent(id) else { return }
-            cell.row.configure(content)
-            // Recent is the page's alone, and the page offers no Peek.
-            cell.actions.configure(title: content.title, peeks: false, archives: false)
-            // LiveSessionMenu for a session the hub holds, StoredSessionMenu for a stored transcript.
-            cell.row.menu = { [weak self] copy in
-                guard let self, let context = sessionMenus?()?.at(Self.recentPlace), let recent = recentItems[id] else { return nil }
-                if let held = recent.instance {
-                    guard BoardRun.runId(of: held.id) == nil, !ThreadTabs.isThread(held.id), let now = hub.fleet.byId[held.id] else { return nil }
-                    return SessionMenus.live(now, context: context, copy: copy)
-                }
-                let fleet = hub.fleet
-                guard let info = fleet.catalog(recent.machineId).first(where: {
-                    fleet.conversationId(sessionKey: $0.sessionId, machineId: recent.machineId, cwd: $0.cwd) == id
-                }) else { return nil }
-                return SessionMenus.stored(machineId: recent.machineId, info: info, context: context, copy: copy)
-            }
-        }
-        let note = UICollectionView.CellRegistration<NoteCell, Item> { [weak self] cell, _, _ in
-            cell.label.text = "No session matches “\(self?.search ?? "")”."
-        }
-        let showMore = UICollectionView.CellRegistration<ButtonCell, Item> { [weak self] cell, _, _ in
-            guard let self else { return }
-            let left = recentMatches().count - recentShown
-            cell.configure(title: "Show \(min(Self.recentPage, left)) more")
-            cell.onTap = { [weak self] in
-                guard let self else { return }
-                recentShown += Self.recentPage
-                requestRefresh()
-            }
-        }
         let ask = UICollectionView.CellRegistration<AskCell, Item> { [weak self] cell, _, item in
             guard let self, case let .ask(at) = item, let asks, asks.at == at else { return }
             // Under the row's own words, as deep as the row stands.
@@ -559,6 +506,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.hold(asks.view, indent: Double(rows[id]?.line.line.depth ?? 0) * Nest.indent)
         }
 
+        // Recent's lines are only ever the page's, which holds a RecentList.
+        let recent = self.recent
         return UICollectionViewDiffableDataSource(collectionView: collectionView) { view, index, item in
             switch item {
             case .status: view.dequeueConfiguredReusableCell(using: status, for: index, item: item)
@@ -568,11 +517,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             case .row: view.dequeueConfiguredReusableCell(using: row, for: index, item: item)
             case .more: view.dequeueConfiguredReusableCell(using: more, for: index, item: item)
             case .caw: view.dequeueConfiguredReusableCell(using: caw, for: index, item: item)
-            case .recentHead: view.dequeueConfiguredReusableCell(using: recentHead, for: index, item: item)
-            case .recentSearch: view.dequeueConfiguredReusableCell(using: recentSearch, for: index, item: item)
-            case .recent: view.dequeueConfiguredReusableCell(using: recentRow, for: index, item: item)
-            case .recentNone: view.dequeueConfiguredReusableCell(using: note, for: index, item: item)
-            case .recentMore: view.dequeueConfiguredReusableCell(using: showMore, for: index, item: item)
+            case let .recent(line): recent!.cell(line, in: view, at: index)
             case .ask: view.dequeueConfiguredReusableCell(using: ask, for: index, item: item)
             }
         }
@@ -650,24 +595,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         )
     }
 
-    private func recentContent(_ id: String) -> SessionRowView.Content? {
-        guard let recent = recentItems[id] else { return nil }
-        // Acted on by its live menu under its instance's id, by its stored menu under its own.
-        let asked = hub.acts.words(recent.instance?.id ?? recent.id, status: recent.instance?.status.rawValue)
-        return SessionRowView.Content(
-            id: recent.id,
-            place: recent.markPlace,
-            status: Self.status(recent.instance, home: home),
-            title: recent.title,
-            line: asked?.text ?? recent.place,
-            lineFails: asked?.failed ?? false,
-            trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
-            stale: !home.live,
-            hover: recent.instance?.id,
-            endWord: recent.instance?.endWord
-        )
-    }
-
     /// What an item draws, as something two passes can compare. A session's
     /// row carries state of its own (a pulse, an age); every other item
     /// draws only what `build()` read,
@@ -678,8 +605,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             guard let entry = rows[id], let content = rowContent(id) else { return AnyHashable(contentRevision) }
             let line = entry.line.line
             return AnyHashable([AnyHashable(line.depth), AnyHashable(line.first), AnyHashable(line.last), AnyHashable(entry.through), AnyHashable(content)])
-        case let .recent(id):
-            return recentContent(id).map(AnyHashable.init) ?? AnyHashable(contentRevision)
+        case let .recent(line):
+            return recent?.print(of: line) ?? AnyHashable(contentRevision)
         case .caw:
             return AnyHashable([cawLine, cawStatus.rawValue])
         case .ask:
@@ -755,9 +682,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendItems(items, toSection: .work)
         }
 
-        let recent = board.recent
-        recentAll = recent
-        if live, needList.isEmpty, working.isEmpty, finished.isEmpty, recent.isEmpty {
+        if live, needList.isEmpty, working.isEmpty, finished.isEmpty, board.recent.isEmpty {
             // Caw only on a fleet with nothing in it yet, or while a machine has not answered.
             let waiting = home.waitingOn
             cawStatus = waiting.isEmpty ? .sleeping : .ready
@@ -772,39 +697,19 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendItems([.caw], toSection: .caw)
         }
 
-        recentItems = [:]
-        // Recent is the page's (Home.svelte: `HomeRecent` only where `variant === "page"`); the rail lists projects under the home instead.
-        if variant == .page, ready, !recent.isEmpty {
+        // Recent closes the page; in the wide rail it stands under Projects
+        // instead (Sidebar.svelte `HomeRecent inset` where `!narrow`: RailRecentController).
+        let entries = recent?.entries(board.recent, asked: asked) ?? []
+        if !entries.isEmpty {
             snapshot.appendSections([.recent])
-            var items: [Item] = [.recentHead]
-            if home.recentOpen {
-                items.append(.recentSearch)
-                let matches = recentMatches()
-                for item in matches.prefix(recentShown) {
-                    recentItems[item.id] = item
-                    items.append(.recent(item.id))
-                    // Its live menu asks by the instance, its stored menu by the conversation.
-                    let here = [item.id, item.instance?.id].compactMap { $0.map { "\(Self.recentPlace)/\($0)" } }
-                    if let asked, here.contains(asked) { items.append(.ask(asked)) }
+            snapshot.appendItems(entries.map { entry in
+                switch entry {
+                case let .line(line): .recent(line)
+                case let .ask(at): .ask(at)
                 }
-                if matches.isEmpty {
-                    items.append(.recentNone)
-                } else if matches.count > recentShown {
-                    items.append(.recentMore)
-                }
-            }
-            snapshot.appendItems(items, toSection: .recent)
+            }, toSection: .recent)
         }
         return snapshot
-    }
-
-    /// What the last update listed in Recent, narrowed by the search.
-    private func recentMatches() -> [HomeModel.RecentItem] {
-        let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else {
-            return recentAll
-        }
-        return recentAll.filter { $0.title.lowercased().contains(needle) || $0.place.lowercased().contains(needle) }
     }
 
     /// Applies `next`. Of the lines that stay, the ones whose drawn state
@@ -956,7 +861,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case let .machine(id): return .line(key: RelayPlan.head(id), group: id)
         case let .row(id): return .line(key: id, group: rows[id]?.group ?? "")
         case let .more(id): return .line(key: RelayPlan.more(id), group: id)
-        case .caw, .recentHead, .recentSearch, .recent, .recentNone, .recentMore, .ask: return .tail
+        case .caw, .recent, .ask: return .tail
         case .status, .usage, .tabs: return .none
         }
     }
@@ -1107,7 +1012,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     func collectionView(_: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
         switch dataSource.itemIdentifier(for: indexPath) {
-        case .row, .recent, .recentHead: true
+        case .row: true
+        case let .recent(line): RecentList.selects(line)
         default: false
         }
     }
@@ -1115,9 +1021,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: false)
         switch dataSource.itemIdentifier(for: indexPath) {
-        case .recentHead: home.recentOpen.toggle()
         case let .row(id): onOpen(id)
-        case let .recent(id): onOpen(id)
+        case let .recent(line): recent?.select(line, open: onOpen)
         default: break
         }
     }

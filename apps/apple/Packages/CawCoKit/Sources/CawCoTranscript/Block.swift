@@ -53,8 +53,8 @@ nonisolated struct Block: @unchecked Sendable {
     }
 
     /// A send this device drew that the hub has not taken (local.ts
-    /// `localUserMessage`): the reader's turn, its state `sending` or
-    /// `unreached`, carrying what went out with it.
+    /// `localUserMessage`): the reader's turn, its state `sending`,
+    /// `waiting` or `refused`, carrying what went out with it.
     init(_ local: LocalSend) {
         var meta: [String: Any] = [:]
         let attachments = local.texts.map { ["kind": "text", "name": $0.name, "content": $0.content] as [String: Any] }
@@ -67,6 +67,29 @@ nonisolated struct Block: @unchecked Sendable {
         if !meta.isEmpty { raw["metadata"] = meta }
         let signature = (try? JSONSerialization.data(withJSONObject: raw, options: .sortedKeys)) ?? Data()
         self.init(raw, signature: signature)
+    }
+
+    /// This failed send with its retry from this device, when there is one
+    /// (`SessionTranscript.retries`): `retry` in its metadata, `sending` or
+    /// `refused` with the hub's words in `retryRefused`, and in its print,
+    /// so its row is drawn again as the retry moves.
+    func retried(_ retry: SendRetry?) -> Block {
+        guard let retry else { return self }
+        var meta = self.meta
+        switch retry {
+        case .sending:
+            meta["retry"] = "sending"
+        case let .refused(reason):
+            meta["retry"] = "refused"
+            meta["retryRefused"] = reason
+        }
+        var raw: [String: Any] = ["id": id, "type": type, "content": content, "queued": queued, "metadata": meta]
+        raw["timestamp"] = timestamp
+        raw["state"] = state
+        raw["toolCallId"] = toolCallId
+        raw["sdkUuid"] = sdkUuid
+        raw["parentToolUseId"] = parentToolUseId
+        return Block(raw, signature: signature + Data("|retry \(retry)".utf8))
     }
 
     func string(_ key: String) -> String? {

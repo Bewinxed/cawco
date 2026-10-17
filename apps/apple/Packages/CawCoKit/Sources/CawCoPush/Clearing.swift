@@ -178,7 +178,7 @@ public enum NotificationClearing {
             let deliveredAt: [String: Int64]?
         }
         let delivered = deliveredAt.filter { ids.contains($0.key) }.mapValues { Int64($0) }
-        var request = URLRequest(url: hub.appending(path: "api/notifications/dismiss"))
+        var request = HubPass.request(hub.appending(path: "api/notifications/dismiss"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 8

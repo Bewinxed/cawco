@@ -97,10 +97,23 @@ final class UsageCell: HomeCell {
         face.ground = home ? Palette.surfaceRaised : ground
         face.gap = home ? Space.space6 : Space.space2
         // The rail's words start on its content edge; the home card's
-        // `space-4` inside its own edge, which stands on the status line's.
-        let inset = home ? Space.space4 + textInset - 8 : 8 + textInset
+        // `space-4` inside the card's own edge (`.strip[data-variant="home"]
+        // .strip-hit` padding), the card standing 8pt out past the page's column.
+        let inset = home ? Space.space4 : 8 + textInset
         for edge in faceEdges { edge.constant = inset }
     }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let usageProbe else { return }
+        // How far in from the card's edge its words start.
+        let line = "card variant=\(variant == .home ? "home" : "rail") card=\(Int(strip.frame.width))x\(Int(strip.frame.height)) words-in=\(face.frame.minX) words-end=\(strip.bounds.width - face.frame.maxX)"
+        guard line != probed else { return }
+        probed = line
+        usageProbe.notice("\(line, privacy: .public)")
+    }
+
+    private var probed = ""
 
     func configure(_ view: UsageRings, gap: Usage.Gap?, empty: String) {
         face.configure(view, gap: gap, empty: empty)

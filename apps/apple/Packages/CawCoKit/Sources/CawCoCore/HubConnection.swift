@@ -126,6 +126,14 @@ public final class HubConnection {
     }
     @ObservationIgnored private var hubNewerWatch: (any NSObjectProtocol)?
 
+    /// This app's own pairing with a hub that requires paired devices
+    /// (HubPairing.swift); nil while it has none to do.
+    public internal(set) var pairing: DevicePairing?
+    /// The person's answers to other devices' pairings, by code, while on their way or refused.
+    public internal(set) var pairingAnswers: [String: PairingAnswer] = [:]
+    @ObservationIgnored var pairingRun: Task<Void, Never>?
+    let pairingLog = Logger(subsystem: "dev.cawco.app", category: "Pairing")
+
     public let ledger = Ledger()
     public let fleet = FleetStore()
     /// What the operator asked of each session from where it is listed, until the hub answers.
@@ -206,7 +214,13 @@ public final class HubConnection {
         UserDefaults.standard.string(forKey: addressKey).flatMap(address(from:))
     }
 
-    public init() {
+    /// Whether this connection sends the messages kept for its hub
+    /// (`SendOutbox`) as it opens: every window's does; one a push's action
+    /// opens for itself, for a moment, sends only its own.
+    let drainsOutbox: Bool
+
+    public init(drainsOutbox: Bool = true) {
+        self.drainsOutbox = drainsOutbox
         needs = NeedsYouStore(ledger: ledger)
         address = Self.keptAddress
         ledger.send = { [weak self] data in
@@ -308,14 +322,25 @@ public final class HubConnection {
         if let old = self.address, old != address {
             // The hub this device leaves stops pushing to it.
             PushRegistry.shared.leave(old)
+            // Its sessions are no longer this device's to write to: what was kept for them goes with them.
+            SendOutbox.shared.leave(old.absoluteString)
         }
         self.address = address
         UserDefaults.standard.set(address.absoluteString, forKey: Self.addressKey)
         // The extension tells this hub what the person cleared.
         NotificationClearing.keepHub(address)
+        endPairing()
         resetFleet()
         attempts = 0
         start()
+    }
+
+    /// A new hub: whatever pairing was under way was with the one before it.
+    private func endPairing() {
+        pairingRun?.cancel()
+        pairingRun = nil
+        pairing = nil
+        pairingAnswers = [:]
     }
 
     /// A new connection now, whatever the socket's state: the reader updated
@@ -353,6 +378,7 @@ public final class HubConnection {
     /// reads have the same lifetime as that scene, including pending RPCs.
     public func disconnect() {
         run?.cancel(); run = nil
+        pairingRun?.cancel(); pairingRun = nil
         heartbeat?.cancel(); heartbeat = nil
         fleetRead?.cancel(); fleetRead = nil
         outageTimer?.cancel(); outageTimer = nil
@@ -371,6 +397,7 @@ public final class HubConnection {
         fleet.hubBuild = nil
         fleet.adopt(rows: [])
         fleet.projects = []
+        fleet.pairingRequests = []
         fleet.resetPulses()
         fleet.catalogs = [:]
         fleet.catalogLeftOut = [:]
@@ -442,6 +469,19 @@ public final class HubConnection {
             live = nil
             closed()
             guard !Task.isCancelled else {
+                return
+            }
+            // A hub that requires paired devices refuses this app until it
+            // pairs: nothing reconnects meanwhile, and the hub is not away.
+            if await mustPair(address) {
+                guard mine == generation else { return }
+                outageTimer?.cancel()
+                outageTimer = nil
+                outage = false
+                retryAt = nil
+                return
+            }
+            guard mine == generation, !Task.isCancelled else {
                 return
             }
             let delay = min(Self.reconnectBase * pow(2, Double(min(attempts, Self.reconnectMaxAttempts))), Self.reconnectMax)
@@ -760,7 +800,7 @@ public final class HubConnection {
     /// One JSON write to the hub, its refusal thrown in the hub's words.
     private func sendJSON(_ path: String, method: String, _ body: [String: Any]) async throws {
         guard let address else { throw ControlError(message: "No hub is connected.") }
-        var request = URLRequest(url: address.appending(path: path))
+        var request = URLRequest.hub(address.appending(path: path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -1004,6 +1044,8 @@ public final class HubConnection {
         async let choices = try? await client.getApiFleetChoices().ok.body.json
         // The approved actions waiting on you: frames keep them from here.
         async let waiting = try? await client.getApiActionsWaiting().ok.body.json.actions
+        // The devices waiting to pair: the `hub_auth` frame keeps them from here.
+        async let pairings = try? await client.getApiPairRequests().ok.body.json
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -1014,6 +1056,7 @@ public final class HubConnection {
         let readWatched = await watched
         let readUpstream = await choices.map { UpstreamAnswer($0.upstream) }
         let readWaiting = await waiting
+        let readPairings = await pairings
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -1088,6 +1131,9 @@ public final class HubConnection {
             if let readWaiting {
                 hub.fleet.actions = readWaiting
             }
+            if let readPairings {
+                hub.adopt(pairingRequests: readPairings)
+            }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
                 return false
@@ -1138,7 +1184,7 @@ public final class HubConnection {
     /// custom views load from.
     public func dashboardAddress() async throws -> URL {
         guard let address else { throw URLError(.notConnectedToInternet) }
-        let (data, _) = try await URLSession.shared.data(from: address.appending(path: "health"))
+        let (data, _) = try await URLSession.shared.data(for: .hub(address.appending(path: "health")))
         guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let said = body["dashboard"] as? String, let url = URL(string: said) else {
             throw ControlError(message: "The hub did not say where its dashboard is. Update the hub, then try again.")
@@ -1151,7 +1197,7 @@ public final class HubConnection {
     /// from. Nil when the hub knows none (or is older than the field).
     public func secureDashboardAddress() async throws -> URL? {
         guard let address else { throw URLError(.notConnectedToInternet) }
-        let (data, _) = try await URLSession.shared.data(from: address.appending(path: "health"))
+        let (data, _) = try await URLSession.shared.data(for: .hub(address.appending(path: "health")))
         guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ControlError(message: "The hub's health answer did not read. Try again.")
         }
@@ -1161,7 +1207,7 @@ public final class HubConnection {
     /// The hub's version, as its `/health` says it.
     @concurrent
     private nonisolated static func hubVersion(_ address: URL) async -> String? {
-        guard let (data, _) = try? await URLSession.shared.data(from: address.appending(path: "health")),
+        guard let (data, _) = try? await URLSession.shared.data(for: .hub(address.appending(path: "health"))),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return body["version"] as? String
     }
@@ -1215,8 +1261,8 @@ public final class HubConnection {
     public func reloadCatalog(_ machineId: String) async throws {
         defer { fleet.catalogsTried.insert(machineId) }
         let listing = try await listSessions(machineId: machineId)
-        // The web's sentence names the machine as client.svelte.ts `machineName` does: its hostname, else its id.
-        let machine = fleet.machines.first { $0.machineId == machineId }.map(\.hostname).flatMap { $0.isEmpty ? nil : $0 } ?? machineId
+        // The web's sentence names the machine as client.svelte.ts `machineName` does: by its label, else its id.
+        let machine = fleet.machines.first { $0.machineId == machineId }.map(\.hostname).flatMap { $0.isEmpty ? nil : Naming.machineLabel($0) } ?? machineId
         let said = listing.unanswered.map {
             Words.Catalog.harnessDidntAnswer(harness: $0.harness.rawValue, machine: machine, seconds: Int(($0.after / 1000).rounded()))
         } + listing.failed.map {
@@ -1443,6 +1489,8 @@ public final class HubConnection {
             fleet.lawsBroken = broken
         case let .fleetUpstream(answer):
             fleet.upstream = .answered(answer)
+        case let .hubAuth(frame):
+            adopt(pairingRequests: frame.requests)
         case .ignored:
             break
         }

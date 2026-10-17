@@ -11,6 +11,7 @@
     THREAD_SEND_UNREACHED,
     unreachable,
   } from "#lib/cawco/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -522,12 +523,16 @@
   let askAgain = $state(false);
   /** What the Composer stands over its foot: its box holds that much room. */
   let askFoot = $state(0);
-  async function ask(text: string, id: string) {
+  /** The words an ask that did not go through carried, and its id: the same words again are the same ask. */
+  let askUnsent: SentWords | null = null;
+  async function ask(text: string, fresh: string) {
     askSending = true;
     askRefused = "";
     askAgain = false;
+    askUnsent = idForWords(askUnsent, text, fresh);
     try {
-      const said = await startThread(project.id, text, id);
+      const said = await startThread(project.id, text, askUnsent.id);
+      askUnsent = null;
       // A starter pressed into the field went, as it stood or changed:
       // Jev's steering (hub project-starters.ts), told without a wait.
       const pressed = askDraft.takePressed(text);

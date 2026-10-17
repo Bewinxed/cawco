@@ -601,16 +601,25 @@
     return { duration: 0 };
   }
 
-  async function onsubmit(text: string, extras: SendExtras, id: string) {
+  /**
+   * The words a send got no answer for, and the id they went as: the hub may
+   * have kept them, so the same words sent again go under the same id, which
+   * the hub answers with the message it kept rather than a second one.
+   */
+  let unanswered: { text: string; id: string } | null = null;
+
+  async function onsubmit(text: string, extras: SendExtras, fresh: string) {
     sending = true;
     sendError = "";
     sendAgain = false;
+    const id = unanswered?.text === text ? unanswered.id : fresh;
     try {
       // The words left the field as `sent:<id>`, and go to the hub as that
       // message: its row lands them however soon its frame draws it.
       const said = threadId
         ? await sayInThread(projectId, threadId, text, id, extras)
         : await startThread(projectId, text, id, extras);
+      unanswered = null;
       // A starter pressed into the field went: as its words stood, or
       // changed. Told after the hub took the words; the hub keeps it as
       // Jev's steering, and nothing here waits on it.
@@ -628,6 +637,7 @@
     } catch (error) {
       draft.restore(text, extras);
       sendAgain = unreachable(error);
+      unanswered = sendAgain ? { text, id } : null;
       sendError = sendAgain ? THREAD_SEND_UNREACHED : failureWords(error);
     } finally {
       sending = false;

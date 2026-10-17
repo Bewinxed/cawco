@@ -449,18 +449,24 @@ final class CellText: UIView, NSTextLayoutManagerDelegate {
     private var wrappedFor: CGFloat?
     /// The text's height at the width it was last laid out at.
     private var fitted: CGFloat = 0
-    private var laidWidth: CGFloat?
+    /// The width the words were last measured at (`height(at:)`): the one the table stands the cell at.
+    private var measuredAt: CGFloat?
 
-    /// The width the cell's words stand at, where the table knows it (ProseView `fitWidth`).
-    var fitWidth: CGFloat? {
-        didSet {
-            guard fitWidth != oldValue else { return }
-            prose?.fitWidth = fitWidth
-            invalidateIntrinsicContentSize()
+    /// The words' height `width` wide, laid out as the cell draws them there
+    /// (TableGeometry). Once a text view stands in, it is the one measured.
+    func height(at width: CGFloat) -> CGFloat {
+        if measuredAt.map({ abs($0 - width) >= 0.5 }) ?? true {
+            measuredAt = width
+            prose?.fitWidth = width
             setNeedsDisplay()
         }
+        if let prose { return prose.intrinsicContentSize.height }
+        guard width > 0, text.length > 0 else { return 0 }
+        lay(at: width)
+        return fitted
     }
 
+    /// Placed by frame (TableBlock `layoutSubviews`), at the width and height `height(at:)` said.
     init(_ text: NSAttributedString) {
         self.text = text
         let style = text.length > 0 ? text.attribute(.paragraphStyle, at: text.length - 1, effectiveRange: nil) as? NSParagraphStyle : nil
@@ -472,11 +478,9 @@ final class CellText: UIView, NSTextLayoutManagerDelegate {
         content.primaryTextLayoutManager = layout
         layout.delegate = self
         content.textStorage?.setAttributedString(text)
-        translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = .clear
         isOpaque = false
         contentMode = .redraw
-        setContentCompressionResistancePriority(.required, for: .vertical)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: CellText, _: UITraitCollection) in cell.setNeedsDisplay() }
     }
 
@@ -507,25 +511,14 @@ final class CellText: UIView, NSTextLayoutManagerDelegate {
         fitted = layout.usageBoundsForTextContainer.height + below
     }
 
-    /// The words' height at the width they stand at: `fitWidth`, else the one
-    /// layout gave the cell. Once a text view stands in, it is the one measured.
-    override var intrinsicContentSize: CGSize {
-        let width = fitWidth ?? laidWidth ?? 0
-        guard prose == nil, width > 0, text.length > 0 else { return CGSize(width: UIView.noIntrinsicMetric, height: prose == nil ? 0 : UIView.noIntrinsicMetric) }
-        lay(at: width)
-        return CGSize(width: UIView.noIntrinsicMetric, height: fitted)
+    #if DEBUG
+    /// The words' height laid out at the width the cell stands at, as it draws them.
+    func laidHeight() -> CGFloat {
+        if let prose { return prose.intrinsicContentSize.height }
+        lay(at: bounds.width)
+        return fitted
     }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard prose == nil, bounds.width > 0 else { return }
-        if let fit = fitWidth, abs(bounds.width - fit) > 0.5 { fitWidth = nil }
-        if fitWidth == nil, abs(bounds.width - (laidWidth ?? -1)) > 0.5 {
-            laidWidth = bounds.width
-            invalidateIntrinsicContentSize()
-            remeasureRow()
-        }
-    }
+    #endif
 
     override func draw(_ rect: CGRect) {
         guard prose == nil, let context = UIGraphicsGetCurrentContext() else { return }
@@ -544,10 +537,9 @@ final class CellText: UIView, NSTextLayoutManagerDelegate {
         if let prose { return prose }
         let view = ProseView()
         view.attributedText = text
-        view.fitWidth = fitWidth ?? laidWidth
+        view.fitWidth = measuredAt ?? bounds.width
         prose = view
         pin(view)
-        invalidateIntrinsicContentSize()
         setNeedsDisplay()
         layoutIfNeeded()
         return view
@@ -671,87 +663,86 @@ final class CodeWell: UIView {
     }
 }
 
-/// A Markdown table (prose-sm): the table's own margins inside its scrolling
-/// wrapper, rules under the head and each row, and the columns laid out as
-/// CSS lays out a `width: 100%` table with `table-layout: auto`: each column
-/// at its widest cell's one-line width, grown in proportion to fill the
-/// width; where those don't fit, between each column's narrowest (its longest
-/// word, any character of code, which breaks anywhere) and widest, in
-/// proportion to the room between; past the narrowest, at those, scrolling
-/// sideways.
-final class TableBlock: UIView {
-    /// A table's cell box: prose-sm's (`.prose`), or the kit's (ui/table,
-    /// `.kit`): `p-3` on every side, its head `h-12` on one line.
-    struct Metrics {
-        /// Above a body cell, and below every cell.
-        let block: Double
-        /// Either side of a cell.
-        let inline: Double
-        /// The first cell's start and the last's end take no inline padding.
-        let flush: Bool
-        /// The head row's own height, its words centred in it; nil: the body's padding.
-        let headHeight: Double?
-        /// The table's own margin above and below, inside its scroller.
-        let margin: Double
-
-        /// th and td: 1em inline, the first cell's start and the last's end flush;
-        /// .666em below, and above a body cell.
-        static let prose = Metrics(block: TypeScale.textMeta * 2 / 3, inline: TypeScale.textMeta, flush: true,
-                                   headHeight: nil, margin: Size.proseSmTable)
-        /// table-head `h-12 px-3 whitespace-nowrap`, table-cell `p-3`.
-        static let kit = Metrics(block: Space.space3, inline: Space.space3, flush: false, headHeight: 48, margin: 0)
+/// A Markdown table's layout `width` wide (prose-sm): the columns laid out as
+/// CSS lays out a `width: 100%` table with `table-layout: auto` (`columns`),
+/// each row as tall as its tallest cell's words laid out at that cell's
+/// column width with the cell's padding, a rule under the head and each row
+/// but the last, and the table's own margins. Worked out this one way for the
+/// height a row stands at and for what the table draws: by the view
+/// (TableBlock, each cell measured by the cell that draws it), and where a
+/// transcript is prepared, off the main thread before any view (PieceHeight,
+/// each cell measured by TextMeasure, which lays text out as a cell does).
+nonisolated struct TableGeometry {
+    /// One line of cells, the head first.
+    struct Line {
+        /// Where its box starts, from the rows' top (the table's margin above them).
+        let top: Double
+        /// Its box: its tallest cell's words and the cells' padding.
+        let height: Double
+        /// Above the words: a body cell's padding; the head has none.
+        let pad: Double
+        /// Where the rule under it is drawn, from the rows' top; nil: none.
+        let rule: Double?
     }
 
-    private let metrics: Metrics
-    private let scroll = UIScrollView()
-    private let grid = UIStackView()
-    /// Each column's narrowest and widest content, cell padding included.
-    private var extents: [(least: Double, most: Double)] = []
-    /// Every cell's width, by column.
-    private var columnWidths: [[NSLayoutConstraint]] = []
-    /// Every cell's text, by column, with the padding either side of it.
-    private var columnTexts: [[(text: CellText, padding: Double)]] = []
-    private var laidWidth: CGFloat = -1
-    /// The width the table will stand at, where its row knows it (ProseView `fitWidth`).
-    var fitWidth: CGFloat?
+    /// Each column's width, its cells' inline padding included.
+    let columns: [Double]
+    let lines: [Line]
+    /// The rows' height, the rules' halves between them included.
+    let rows: Double
+    /// The whole table's: its rows and its margins.
+    var height: Double { rows + 2 * Self.margin }
 
-    init(metrics: Metrics = .prose) {
-        self.metrics = metrics
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.showsHorizontalScrollIndicator = false
-        grid.axis = .vertical
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        pin(scroll, insets: UIEdgeInsets(top: metrics.margin, left: 0, bottom: metrics.margin, right: 0))
-        scroll.addSubview(grid)
-        NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
-            grid.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
-            grid.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
-            grid.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
-            scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor),
-        ])
+    /// th and td: 1em inline, the first cell's start and the last's end
+    /// flush; .666em below, and above a body cell.
+    static let block = TypeScale.textMeta * 2 / 3
+    static let inline = TypeScale.textMeta
+    /// The table's own margin above and below, inside its scroller.
+    static let margin = Size.proseSmTable
+
+    /// A cell's inline padding at its start and its end, in a table of `count` columns.
+    static func edges(_ column: Int, of count: Int) -> (start: Double, end: Double) {
+        (column == 0 ? 0 : inline, column == count - 1 ? 0 : inline)
     }
 
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("built in code") }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard bounds.width > 0, abs(bounds.width - laidWidth) > 0.5 else { return }
-        laidWidth = bounds.width
-        let widths = Self.columns(extents, fitting: bounds.width)
-        for (column, constraints) in columnWidths.enumerated() {
-            for constraint in constraints where abs(constraint.constant - widths[column]) > 0.25 {
-                constraint.constant = widths[column]
-            }
-            for cell in columnTexts[column] { cell.text.fitWidth = widths[column] - cell.padding }
+    /// Each column's room for its cells' words: its width less their inline padding.
+    static func inner(_ columns: [Double]) -> [Double] {
+        columns.enumerated().map { column, width in
+            let edge = edges(column, of: columns.count)
+            return width - edge.start - edge.end
         }
     }
 
+    /// The table laid out in `columns` (`columns(_:fitting:)`): `words` each
+    /// cell's words' height at its column's room (`inner`), by line and
+    /// column, the first line the head when `headed`; `scale` the screen's,
+    /// which the rules' halves are taken down to.
+    init(columns: [Double], words: [[Double]], headed: Bool, scale: Double) {
+        // A collapsed 1px border gives each of the two rows it parts half of
+        // itself, and WebKit takes each half down to a whole device pixel:
+        // at 3x a third of a point either side, 0.67 in all, under a rule
+        // painted its full point. Mobile Safari: head 26.33, rows 54.20 and
+        // 53.88 around two-line cells 53.55 tall, rules 54.33 apart.
+        let half = scale >= 2 ? (scale / 2).rounded(.down) / scale : 0.5
+        var y = 0.0
+        var lines: [Line] = []
+        for (line, cells) in words.enumerated() {
+            let head = headed && line == 0
+            // A rule under the head, and under every row but the last.
+            let ruled = head || line < words.count - 1
+            if line > 0 { y += half }
+            let pad = head ? 0 : Self.block
+            let height = pad + (cells.max() ?? 0) + Self.block
+            lines.append(Line(top: y, height: height, pad: pad, rule: ruled ? y + height : nil))
+            y += height + (ruled ? half : 0)
+        }
+        self.columns = columns
+        self.lines = lines
+        rows = y
+    }
+
     /// CSS's auto table layout for a table as wide as `width`.
-    private static func columns(_ extents: [(least: Double, most: Double)], fitting width: Double) -> [Double] {
+    static func columns(_ extents: [(least: Double, most: Double)], fitting width: Double) -> [Double] {
         let least = extents.reduce(0) { $0 + $1.least }
         let most = extents.reduce(0) { $0 + $1.most }
         if most > 0, most <= width { return extents.map { $0.most * width / most } }
@@ -796,85 +787,138 @@ final class TableBlock: UIView {
         return (min(least, most), most)
     }
 
-    func configure(head: [NSAttributedString], rows: [[NSAttributedString]]) {
-        laidWidth = -1
-        setNeedsLayout()
-        grid.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let columns = max(head.count, rows.map(\.count).max() ?? 0)
-        let metrics = metrics
-        /// A cell's inline padding at its start and its end.
-        func edges(_ i: Int) -> (start: Double, end: Double) {
-            (metrics.flush && i == 0 ? 0 : metrics.inline, metrics.flush && i == columns - 1 ? 0 : metrics.inline)
-        }
-        extents = (0 ..< columns).map { i in
-            let padding = edges(i).start + edges(i).end
-            return ([head] + rows).enumerated().reduce((least: padding, most: padding)) { sofar, entry in
-                let (index, row) = entry
-                guard i < row.count else { return sofar }
-                var cell = Self.extent(row[i])
-                // A kit head stays on one line (`whitespace-nowrap`).
-                if index == 0, !head.isEmpty, metrics.headHeight != nil { cell.least = cell.most }
+    /// Each column's narrowest and widest content, its cells' padding included.
+    static func extents(of lines: [[NSAttributedString]]) -> [(least: Double, most: Double)] {
+        let count = lines.map(\.count).max() ?? 0
+        return (0 ..< count).map { column in
+            let edge = edges(column, of: count)
+            let padding = edge.start + edge.end
+            return lines.reduce((least: padding, most: padding)) { sofar, line in
+                guard column < line.count else { return sofar }
+                let cell = extent(line[column])
                 return (max(sofar.least, cell.least + padding), max(sofar.most, cell.most + padding))
             }
         }
-        columnWidths = Array(repeating: [], count: columns)
-        columnTexts = Array(repeating: [], count: columns)
-        let known = bounds.width > 0 ? bounds.width : fitWidth
-        let start = Self.columns(extents, fitting: known ?? extents.reduce(0) { $0 + $1.most })
-        // A collapsed 1px border gives each of the two rows it parts half of
-        // itself, and WebKit takes each half down to a whole device pixel:
-        // at 3x a third of a point either side, 0.67 in all, under a rule
-        // painted its full point. Mobile Safari: head 26.33, rows 54.20 and
-        // 53.88 around two-line cells 53.55 tall, rules 54.33 apart.
+    }
+}
+
+/// A Markdown table (prose-sm), laid out by frame as its geometry says
+/// (TableGeometry) at the width it stands at: its rows inside its own
+/// margins, in a scroller that scrolls sideways where the columns at their
+/// narrowest are wider than the table. Its height at a width is the height
+/// it draws at that width (`height(for:)`), its cells' words measured by the
+/// cells that draw them.
+final class TableBlock: UIView {
+    private let scroll = UIScrollView()
+    /// The lines as given, the head first when `headed`.
+    private var source: [[NSAttributedString]] = []
+    private var headed = false
+    /// Each column's narrowest and widest content, its cells' padding included.
+    private var extents: [(least: Double, most: Double)] = []
+    /// Each line's cells, one a column.
+    private var cells: [[CellText]] = []
+    /// One rule a line, shown under the lines the geometry rules.
+    private var rules: [UIView] = []
+    /// The geometry last worked out, with the width and scale it was worked out at.
+    private var laid: (width: CGFloat, scale: CGFloat, geometry: TableGeometry)?
+    /// The width and scale the cells were last placed at.
+    private var placed: (width: CGFloat, scale: CGFloat)?
+
+    init() {
+        super.init(frame: .zero)
+        scroll.showsHorizontalScrollIndicator = false
+        addSubview(scroll)
+        registerForTraitChanges([UITraitDisplayScale.self]) { (table: TableBlock, _: UITraitCollection) in table.setNeedsLayout() }
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    #if DEBUG
+    /// What laying tables out has cost since launch (probe-kit spec `ios-table-height`, Pace `probe table cost`).
+    static var cost = (heights: 0, heightTime: 0.0, layouts: 0, layoutTime: 0.0, configures: 0)
+
+    /// Each line's box as laid out at the table's width, in its space, with its tallest cell's words as drawn.
+    func probeRows() -> [(frame: CGRect, text: CGFloat)] {
+        let geometry = geometry(at: bounds.width)
+        return geometry.lines.enumerated().map { line, row in
+            (CGRect(x: 0, y: TableGeometry.margin + row.top, width: geometry.columns.reduce(0, +), height: row.height),
+             cells[line].map { $0.laidHeight() }.max() ?? 0)
+        }
+    }
+    #endif
+
+    /// Its geometry `width` wide, at the screen's scale.
+    private func geometry(at width: CGFloat) -> TableGeometry {
         let scale = max(traitCollection.displayScale, 1)
-        let half = scale >= 2 ? (scale / 2).rounded(.down) / scale : 0.5
-        /// One row. `ruled`: the rule under it; `under`: a rule stands above it.
-        func line(_ cells: [NSAttributedString], head: Bool, ruled: Bool, under: Bool) -> UIView {
-            let row = UIStackView()
-            row.axis = .horizontal
-            row.alignment = .top
-            for i in 0 ..< columns {
-                let text = i < cells.count ? cells[i] : NSAttributedString()
-                let label = CellText(text)
-                let box = UIView()
-                let padding = edges(i).start + edges(i).end
-                if known != nil { label.fitWidth = start[i] - padding }
-                columnTexts[i].append((label, padding))
-                var top = head ? 0 : metrics.block
-                var bottom = metrics.block
-                if head, let height = metrics.headHeight {
-                    // `h-12 align-middle`: one line, centred in the head's height.
-                    let style = text.length > 0 ? text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle : nil
-                    let font = text.length > 0 ? text.attribute(.font, at: 0, effectiveRange: nil) as? UIFont : nil
-                    let line = style.map(\.minimumLineHeight).flatMap { $0 > 0 ? $0 : nil } ?? font?.lineHeight ?? 0
-                    top = max(0, (height - line) / 2)
-                    bottom = top
-                }
-                box.pin(label, insets: UIEdgeInsets(top: top, left: edges(i).start, bottom: bottom, right: edges(i).end))
-                let width = box.widthAnchor.constraint(equalToConstant: start[i])
-                width.isActive = true
-                columnWidths[i].append(width)
-                row.addArrangedSubview(box)
+        if let laid, abs(laid.width - width) < 0.5, laid.scale == scale { return laid.geometry }
+        let columns = TableGeometry.columns(extents, fitting: width)
+        let inner = TableGeometry.inner(columns)
+        let words = cells.map { line in zip(line, inner).map { cell, room in Double(cell.height(at: room)) } }
+        let geometry = TableGeometry(columns: columns, words: words, headed: headed, scale: scale)
+        laid = (width, scale, geometry)
+        return geometry
+    }
+
+    /// Its height `width` wide: the height it draws at that width.
+    func height(for width: CGFloat) -> CGFloat {
+        #if DEBUG
+        let start = CACurrentMediaTime()
+        defer { Self.cost.heights += 1; Self.cost.heightTime += CACurrentMediaTime() - start }
+        #endif
+        return geometry(at: width).height
+    }
+
+    override func layoutSubviews() {
+        #if DEBUG
+        let start = CACurrentMediaTime()
+        defer { Self.cost.layouts += 1; Self.cost.layoutTime += CACurrentMediaTime() - start }
+        #endif
+        super.layoutSubviews()
+        let scale = max(traitCollection.displayScale, 1)
+        guard bounds.width > 0, placed.map({ abs($0.width - bounds.width) >= 0.5 || $0.scale != scale }) ?? true else { return }
+        placed = (bounds.width, scale)
+        let geometry = geometry(at: bounds.width)
+        let wide = geometry.columns.reduce(0, +)
+        scroll.frame = CGRect(x: 0, y: TableGeometry.margin, width: bounds.width, height: geometry.rows)
+        scroll.contentSize = CGSize(width: wide, height: geometry.rows)
+        let inner = TableGeometry.inner(geometry.columns)
+        for (line, row) in geometry.lines.enumerated() {
+            var x = 0.0
+            for (column, width) in geometry.columns.enumerated() {
+                let cell = cells[line][column]
+                let start = TableGeometry.edges(column, of: geometry.columns.count).start
+                cell.frame = CGRect(x: x + start, y: row.top + row.pad, width: inner[column], height: cell.height(at: inner[column]))
+                x += width
             }
-            let wrap = UIView()
-            wrap.pin(row, insets: UIEdgeInsets(top: under ? half : 0, left: 0, bottom: ruled ? half : 0, right: 0))
-            guard ruled else { return wrap }
+            rules[line].isHidden = row.rule == nil
+            rules[line].frame = CGRect(x: 0, y: row.rule ?? 0, width: wide, height: 1)
+        }
+    }
+
+    func configure(head: [NSAttributedString], rows: [[NSAttributedString]]) {
+        #if DEBUG
+        Self.cost.configures += 1
+        #endif
+        let lines = head.isEmpty ? rows : [head] + rows
+        guard lines != source || headed == head.isEmpty else { return }
+        source = lines
+        headed = !head.isEmpty
+        extents = TableGeometry.extents(of: lines)
+        for view in cells.joined() { view.removeFromSuperview() }
+        for view in rules { view.removeFromSuperview() }
+        let count = extents.count
+        cells = lines.map { line in (0 ..< count).map { CellText($0 < line.count ? line[$0] : NSAttributedString()) } }
+        rules = lines.map { _ in
             let rule = UIView()
             rule.backgroundColor = Palette.border
-            rule.translatesAutoresizingMaskIntoConstraints = false
-            wrap.addSubview(rule)
-            NSLayoutConstraint.activate([
-                rule.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
-                rule.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
-                rule.topAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -half),
-                rule.heightAnchor.constraint(equalToConstant: 1),
-            ])
-            return wrap
+            return rule
         }
-        if !head.isEmpty { grid.addArrangedSubview(line(head, head: true, ruled: true, under: false)) }
-        for (i, row) in rows.enumerated() {
-            grid.addArrangedSubview(line(row, head: false, ruled: i < rows.count - 1, under: i > 0 || !head.isEmpty))
-        }
+        for view in cells.joined() { scroll.addSubview(view) }
+        for view in rules { scroll.addSubview(view) }
+        laid = nil
+        placed = nil
+        setNeedsLayout()
     }
 }
 
@@ -973,9 +1017,7 @@ func blockHeight(_ view: UIView, width: CGFloat) -> CGFloat {
     case let well as CodeWell:
         return well.intrinsicContentSize.height
     case let table as TableBlock:
-        table.fitWidth = width
-        return table.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
-                                             verticalFittingPriority: .fittingSizeLevel).height
+        return table.height(for: width)
     default:
         // A rule.
         return 1

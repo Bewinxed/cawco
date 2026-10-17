@@ -717,9 +717,9 @@
           comments={shown.comments}
           {history}
           {historyProblem}
-          oncomment={async (text) => {
+          oncomment={async (text, id) => {
             if (shown) {
-              took(await addComment(projectId, shown.id, text));
+              took(await addComment(projectId, shown.id, text, id));
             }
           }}
           {reaches}

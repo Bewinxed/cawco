@@ -2587,6 +2587,22 @@ export const configTrash = sqliteTable("config_trash", {
 });
 
 /**
+ * Each comment you wrote on a task under an id your device chose for it
+ * (POST /api/projects/:id/tasks/:taskId/comments `id`), once it is
+ * committed: the same comment sent again after its answer was lost is the
+ * one already written, and nothing is added (tasks.ts `comment`). Gone with
+ * its project.
+ */
+export const taskCommentIds = sqliteTable("task_comment_ids", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  taskId: text("task_id").notNull(),
+  saidAt: timestamp("said_at").notNull(),
+});
+
+/**
  * Hooks the fleet keeps (NEW.md §11): one row per hook, registered on every
  * machine at the event it names. This is the one fleet row that is
  * executable — converging it writes a script and wires it into Claude Code's

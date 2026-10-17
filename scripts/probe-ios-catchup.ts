@@ -159,7 +159,7 @@ const LIVE = option("--live");
 const BACK_LINES = /app active|status line|shell shows|hub socket open/;
 const TRAILING_SLASH = /\/$/;
 /** A log line up to what it says: its stamp, process and category. */
-const LIVE_LOG_HEAD = /^.*\] /;
+const LIVE_LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const SHOWN =
   / because |catch-up |stream: (reset|resync|backlog)|transcript read for|page adopted|toast/;
 const BECAUSE = / because /;
@@ -840,7 +840,7 @@ const launch = (id?: string) =>
 /** The pill's transitions in the app's log from line `from` on: when (ms of the log's clock) and which way. */
 const DOCK = /^(\S+ \S+).*dock (.+) (shown|hidden) (\S+)/;
 /** A log line's stamp, process and category, up to what it says. */
-const LOG_PREFIX = /^.*\] /;
+const LOG_PREFIX = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** Panes side by side each float their own pill: only the long session's (its id's first 8) counts. */
 const transitions = (title: string, from = 0) =>
   // The log stream can hand a line over twice: each line once.

@@ -255,6 +255,10 @@ public final class FleetStore {
     /// The project moves the hub is carrying (core move.ts), settled ones for a
     /// few minutes after: the board frame's on connect, then each `moves` frame.
     public internal(set) var moves: [Components.Schemas.MoveJob] = []
+    /// The devices waiting on the person to approve their pairing (hub
+    /// hub-auth.ts), oldest first: the hub's read on connect, then each
+    /// `hub_auth` frame (`HubConnection.adopt(pairingRequests:)`).
+    public internal(set) var pairingRequests: [Components.Schemas.PairingRequest] = []
 
     /// A move as the hub just answered a Cancel or a Retry (move.svelte.ts
     /// `heardMove`): it stands in the table at once, so no screen reads an

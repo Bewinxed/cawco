@@ -81,7 +81,7 @@ const WANTED_MENU =
   "Board*,Table,Pipeline,Probe week,Probe draft+draft,Probe scrap+draft";
 /** The count tile over the tasks: the `stages` tool's total, as the page's words read. */
 const ALL_THREE = /All tasks\s*\|?\s*3/;
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const POINT = /^(\d+),(\d+)$/;
 const STRIP_LINE =
   /views strip chosen=(.*?) phone=(true|false) room=(-?\d+)-(-?\d+) items=(\S.*?)(?: more=(\d+),(\d+) menu=(.*))?$/;

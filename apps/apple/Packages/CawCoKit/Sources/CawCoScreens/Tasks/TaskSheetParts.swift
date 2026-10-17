@@ -328,6 +328,7 @@ final class TaskTextPart: UIView, UITextViewDelegate {
 enum TaskSheetProbe {
     private static let log = Logger(subsystem: "dev.cawco.app", category: "TaskSheet")
     private static var last: [String: String] = [:]
+    private static var lastSheet = ""
 
     static func report(_ root: UIView, body: UICollectionView) {
         var lines: [String: String] = [:]
@@ -351,6 +352,35 @@ enum TaskSheetProbe {
             log.notice("gone \(id, privacy: .public)")
         }
         last = lines
+    }
+
+    /// The sheet as it stands: the style its traits resolve to and the
+    /// window's, the colour its ground and its "nothing handed in" line
+    /// resolve to, what is presented over it, and its frame against the
+    /// height its content fits in, each time that moves.
+    static func standing(_ sheet: UIViewController, fits: Double) {
+        let view = sheet.view!
+        func style(_ style: UIUserInterfaceStyle) -> String {
+            switch style {
+            case .dark: "dark"
+            case .light: "light"
+            default: "unspecified"
+            }
+        }
+        func hex(_ color: UIColor?) -> String {
+            guard let color = color?.resolvedColor(with: view.traitCollection) else { return "none" }
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &b, alpha: &a)
+            return String(format: "#%02X%02X%02X/%.2f", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()), a)
+        }
+        var none: UILabel?
+        visit(view) { if $0.accessibilityIdentifier == "task-review-none" { none = $0 as? UILabel } }
+        let window = view.window
+        let frame = view.convert(view.bounds, to: nil)
+        let line = "sheet style=\(style(view.traitCollection.userInterfaceStyle)) window=\(style(window?.traitCollection.userInterfaceStyle ?? .unspecified)) override=\(style(window?.overrideUserInterfaceStyle ?? .unspecified)) ground=\(hex(view.backgroundColor)) none-ink=\(hex(none?.textColor)) over=\(sheet.presentedViewController.map { String(describing: type(of: $0)) } ?? "nothing") frame=\(box(frame)) fits=\(String(format: "%.1f", fits)) screen=\(String(format: "%.1f", window?.bounds.height ?? 0))"
+        guard lastSheet != line else { return }
+        lastSheet = line
+        log.notice("\(line, privacy: .public)")
     }
 
     /// Every view under `view`, but not into a transcript, a page or a document, which hold no part.

@@ -154,8 +154,10 @@ public struct ProjectTasks: Sendable {
     }
 
     /// Your comment on the task (`addComment`): it goes where the hub sends it.
-    public func comment(_ taskId: String, text: String) async throws -> TaskView {
-        let output = try await client.postApiProjectsByIdTasksByTaskIdComments(path: .init(id: projectId, taskId: taskId), body: .json(.init(text: text)))
+    /// `id` is the comment's: the hub writes it once however often it is sent.
+    public func comment(_ taskId: String, text: String, id: String) async throws -> TaskView {
+        let output = try await client.postApiProjectsByIdTasksByTaskIdComments(path: .init(id: projectId, taskId: taskId),
+                                                                               body: .json(.init(text: text, id: id)))
         if case let .ok(ok) = output { return try ok.body.json }
         throw await TaskRefusal.reading(output)
     }
@@ -271,7 +273,7 @@ public struct ProjectTasks: Sendable {
         var url = address.appending(path: "api/projects").appending(path: projectId).appending(path: "tasks")
             .appending(path: taskId).appending(path: "outputs/file")
         url.append(queryItems: [URLQueryItem(name: "name", value: name)])
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: .hub(url))
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw TaskRefusal(message: Wire.words(data) ?? Wire.reason(data, status: status)) }
         return (data, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? "")

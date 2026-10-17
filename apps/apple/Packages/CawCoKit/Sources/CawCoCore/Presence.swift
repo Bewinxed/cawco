@@ -146,7 +146,7 @@ public final class Presence {
         #else
         let client = "ios"
         #endif
-        var request = URLRequest(url: hub.appending(path: "api/presence"))
+        var request = URLRequest.hub(hub.appending(path: "api/presence"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 10

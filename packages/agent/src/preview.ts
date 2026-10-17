@@ -3,9 +3,12 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { PreviewSource } from "@cawco/core";
 import {
+  cachePreview,
   causeOf,
   downResponse,
+  type FolderWeight,
   folderKey,
+  folderWeight,
   IMMUTABLE,
   injectOverlay,
   type PreviewSocket,
@@ -283,6 +286,26 @@ const portSource = (
   ...(parts.serve === undefined ? {} : { serve: parts.serve }),
 });
 
+/** A folder preview's folder, its links resolved; refused when it is no absolute path to a folder. */
+async function folderRoot(dir: string): Promise<string> {
+  if (!isAbsolute(dir)) {
+    throw new Error("Directory must be an absolute path.");
+  }
+  const root = await realpath(dir);
+  if (!(await stat(root)).isDirectory()) {
+    throw new Error("Directory does not exist.");
+  }
+  return root;
+}
+
+/** What a folder preview of `dir` loads at most (core `folderWeight`). */
+export async function previewWeight(dir: unknown): Promise<FolderWeight> {
+  if (typeof dir !== "string") {
+    throw new Error("previewWeight takes a folder's absolute path.");
+  }
+  return folderWeight(await folderRoot(dir));
+}
+
 export function startPreview(options: {
   instanceId: string;
   port?: number;
@@ -322,13 +345,7 @@ async function start(
   ) {
     throw new Error("Port must be an integer from 1 to 65535.");
   }
-  if (dir !== undefined && !isAbsolute(dir)) {
-    throw new Error("Directory must be an absolute path.");
-  }
-  const root = dir === undefined ? undefined : await realpath(dir);
-  if (root && !(await stat(root)).isDirectory()) {
-    throw new Error("Directory does not exist.");
-  }
+  const root = dir === undefined ? undefined : await folderRoot(dir);
   const source: Exclude<PreviewSource, { page: string }> =
     port === undefined
       ? { dir: root as string }
@@ -396,9 +413,6 @@ async function start(
         const headers = proxyHeaders(request.headers);
         // The relay's credential is this listener's, never the app's.
         headers.delete(RELAY_HEADER);
-        // A preview always asks for bytes, never a cached representation.
-        headers.delete("if-none-match");
-        headers.delete("if-modified-since");
         headers.set("host", `localhost:${source.port}`);
         for (const name of FORWARDING_HEADERS) {
           headers.delete(name);
@@ -513,7 +527,14 @@ async function start(
         if (!(await stat(actual)).isFile()) {
           return new Response("Not found", { status: 404 });
         }
-        response = new Response(Bun.file(actual));
+        // A file at its folder's key never changes its bytes, so it is kept
+        // for good (core `IMMUTABLE`, longer than any TTL a CDN would set);
+        // the page's own address is what is on disk now.
+        response = new Response(Bun.file(actual), {
+          headers: {
+            "cache-control": versioned === null ? "no-store" : IMMUTABLE,
+          },
+        });
       }
       const headers = proxyHeaders(response.headers);
       // fetch has already decoded the body; a `content-encoding` left on the
@@ -529,19 +550,11 @@ async function start(
       ]) {
         headers.delete(name);
       }
-      // A preview is work in progress, so nothing in it is kept: the page the
-      // operator reloads is the page on disk now. A dev server's own
-      // `no-cache` does not say that to a CDN in front of the dashboard —
-      // Cloudflare rewrites it, and a missing header, to `max-age=14400` and
-      // caches the file at its edge, so a module stayed four hours stale in
-      // the browser and a fix to the proxy never reached it. `no-store` is the
-      // one value it passes through untouched. A folder's file at its
-      // folder's key never changes its bytes, so it is kept for good
-      // (core `IMMUTABLE`, longer than any TTL the CDN would set).
-      headers.set("cache-control", versioned === null ? "no-store" : IMMUTABLE);
-      headers.delete("expires");
-      headers.delete("etag");
-      headers.delete("last-modified");
+      // What the server said of its caching, as far as it is safe (core
+      // `previewCache`): no CDN stands between this hop and the hub, so the
+      // hub's listener for host-mode names is where `no-cache` becomes
+      // `no-store`.
+      cachePreview(headers, response.status, true);
       if ("port" in source) {
         const location = headers.get("location");
         if (location) {

@@ -1640,6 +1640,8 @@ export interface PreviewElement {
 }
 export const PREVIEW_START = "previewStart";
 export const PREVIEW_STOP = "previewStop";
+/** The daemon's control method that weighs a folder preview's folder on its machine (core preview-proxy `folderWeight`). */
+export const PREVIEW_WEIGHT = "previewWeight";
 
 /**
  * The session tag a spin-off's transcript carries (NEW.md §1). The agent
@@ -1797,6 +1799,7 @@ export * from "./words/accounts";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/helpers";
+export * from "./words/pairing";
 export * from "./words/preview";
 export * from "./words/sidebar";
 export * from "./workflow";

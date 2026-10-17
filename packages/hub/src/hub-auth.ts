@@ -16,7 +16,7 @@
  *   (Tailscale's device approval: "a new device that accesses your network
  *   displays a notification that the device is awaiting approval",
  *   https://tailscale.com/kb/1099/device-approval). Each owner client pairs
- *   once, approved from a paired device, in RFC 8628's
+ *   once, approved from a paired device or the app's push, in RFC 8628's
  *   shape ("instructs the user to review the authorization request on a
  *   secondary device", https://www.rfc-editor.org/rfc/rfc8628 §1); the card
  *   shows the code the client shows, so a remote ask is told apart (§5.4).
@@ -213,6 +213,8 @@ interface Waiting extends WaitingMachine {
 
 /** What the server does as the person changes the mode or a device. */
 export interface HubAuthHooks {
+  /** A pairing waits on the person: the app's push. */
+  readonly asked: (request: PairingRequest) => void;
   /** Whatever every paired screen shows changed: the mode, a pairing, a waiting machine. */
   readonly changed: (frame: HubAuthFrame) => void;
   /** A device was removed: its open sockets close. */
@@ -223,9 +225,16 @@ export interface HubAuthHooks {
    * it opens again as what it is.
    */
   readonly pairingOn: () => void;
+  /**
+   * A pairing no longer waits on the person: answered, past its time, or
+   * pushed out by newer asks. Its push comes down.
+   */
+  readonly settled: (userCode: string) => void;
 }
 
 export interface HubAuthDeps {
+  /** The dashboard's address, https when one is known: where a pairing is approved. */
+  readonly dashboard: () => string;
   readonly db: HubAuthDb;
   readonly hubId: () => string;
   /** The session a Bearer names (session-identity.ts). */
@@ -245,7 +254,12 @@ export const addressOf = (
   request: Request
 ): string | null => server?.requestIP(request)?.address ?? null;
 
-export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
+export const createHubAuth = ({
+  dashboard,
+  db,
+  hubId,
+  session,
+}: HubAuthDeps) => {
   let hooks: HubAuthHooks | undefined;
   const pairings = new Map<string, Pairing>();
   const waiting = new Map<string, Waiting>();
@@ -261,11 +275,19 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
   const mode = (): HubAuthMode =>
     db.pairingRequired() ? "pairing" : "trusted";
 
+  /** A pairing leaves the table; one still unanswered settles as it goes. */
+  const drop = (deviceCode: string, pairing: Pairing) => {
+    pairings.delete(deviceCode);
+    if (!(pairing.approved || pairing.denied)) {
+      hooks?.settled(pairing.userCode);
+    }
+  };
+
   const sweep = () => {
     const now = Date.now();
     for (const [code, pairing] of pairings) {
       if (pairing.expiresAt <= now) {
-        pairings.delete(code);
+        drop(code, pairing);
       }
     }
     for (const [mac, until] of spent) {
@@ -527,11 +549,11 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
   ): PairingStart => {
     sweep();
     while (pairings.size >= PAIRINGS_HELD) {
-      const oldest = pairings.keys().next().value;
+      const oldest = pairings.entries().next().value;
       if (oldest === undefined) {
         break;
       }
-      pairings.delete(oldest);
+      drop(...oldest);
     }
     const deviceCode = newToken();
     let code = userCode();
@@ -553,12 +575,20 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
     console.log(
       `[hub-auth] ${kind} "${name}" at ${address ?? "an unknown address"} asks to pair: ${code}`
     );
+    hooks?.asked(pairing);
     changed();
+    const verification = new URL("/config/devices", dashboard());
+    const complete = new URL(verification);
+    complete.searchParams.set("code", code);
+    complete.searchParams.set("hub", hubId());
     return {
       deviceCode,
       userCode: code,
       interval: POLL_INTERVAL_S,
       expiresIn: PAIRING_TTL_MS / 1000,
+      hubId: hubId(),
+      verificationUri: verification.href,
+      verificationUriComplete: complete.href,
     };
   };
 
@@ -576,6 +606,7 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
     } else {
       pairing.denied = true;
     }
+    hooks?.settled(code);
     changed();
     return true;
   };

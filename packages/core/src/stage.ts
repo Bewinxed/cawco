@@ -21,6 +21,44 @@ export const STORIES_PATH = "/__cawco/stories";
 /** Where the daemon writes a story's args into its file (`POST`, a {@link SheetWrite}), next to the stage: under the hub's own prefix, so no preview reaches it. */
 export const WRITE_PATH = "/__cawco/write";
 
+/** Where the daemon reads a sheet's {@link SheetWeight} (`?file=<story file>`), next to the stage; under the hub's own prefix, so no preview reaches it. */
+export const WEIGHT_PATH = "/__cawco/weight";
+
+/**
+ * What a sheet loads, read from the stage's Vite module graph from its story
+ * file: the project's modules (its source and any package Vite serves file
+ * by file) and Vite's prebundled deps apart, which the browser keeps by
+ * their `?v=` address. `heaviest` is the story file's imports that bring
+ * the most project code, each with all it brings that no earlier import
+ * did: the import to cut. Vite transforms a module when a page asks for it,
+ * so a sheet has a weight once a view has loaded it.
+ */
+export interface SheetWeight {
+  /** Project code: its modules and their transformed bytes. */
+  bytes: number;
+  deps: { bytes: number; modules: number };
+  heaviest: SheetImport[];
+  measuredAt: string;
+  modules: number;
+}
+
+/** One of a story file's imports, as its sheet's weight names it. */
+export interface SheetImport {
+  bytes: number;
+  /** The module it resolves to, from the toolchain root. */
+  file: string;
+  modules: number;
+  /** As the story file writes it, like `#lib/cawco/client.svelte`. */
+  specifier: string;
+  /**
+   * The modules under it where most of its weight enters, from the toolchain
+   * root, each bringing at least half of the one before: a fixture's
+   * `home/CawPanel.svelte`, then what that brings. Empty when it is its own
+   * weight or spreads it evenly.
+   */
+  via: string[];
+}
+
 /** Where the daemon reads the stage's components (§6's discovery), next to the stage. */
 export const COMPONENTS_PATH = "/__cawco/components";
 
@@ -284,6 +322,8 @@ export interface StageOpened {
   port: number;
   sheet: SheetRead;
   state: StageState;
+  /** What the sheet loads; null until a view has loaded it. */
+  weight: SheetWeight | null;
 }
 
 /**

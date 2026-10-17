@@ -484,17 +484,29 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         fail(socket, commandId, "a send command carries no message");
         return;
       }
-      ports.relaySend({
-        verb: "send",
-        machineId,
-        instanceId: sessionId,
-        // The envelope's session is authoritative: the payload's own copy is
-        // normalised onto it so the two can never disagree on the wire.
-        payload: {
-          ...payload,
+      // A send the hub refuses outright (a Claude conversation gone, which
+      // keeps no record) is answered `failed` with why: unanswered, the client
+      // reads silence, keeps the send and offers it again on every connection.
+      try {
+        ports.relaySend({
+          verb: "send",
+          machineId,
           instanceId: sessionId,
-        } as unknown as SendPayload,
-      });
+          // The envelope's session is authoritative: the payload's own copy is
+          // normalised onto it so the two can never disagree on the wire.
+          payload: {
+            ...payload,
+            instanceId: sessionId,
+          } as unknown as SendPayload,
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[hub] dashboard send ${commandId} for ${sessionId} refused: ${reason}`
+        );
+        fail(socket, commandId, reason);
+        return;
+      }
       ackTo(socket, {
         type: "command.ack",
         commandId,

@@ -520,13 +520,18 @@ export const readHistory = (
   taskId: string
 ): Promise<TaskHistory> => send(`${one(projectId, taskId)}/history`);
 
-/** A comment, written by the hub into the task's `## Comments` as yours. */
+/**
+ * A comment, written by the hub into the task's `## Comments` as yours.
+ * `id` is the comment's, chosen by its sender: the hub writes it once
+ * however often it is sent (id.ts `idForWords`).
+ */
 export const addComment = (
   projectId: string,
   taskId: string,
-  text: string
+  text: string,
+  id: string
 ): Promise<TaskView> =>
-  send(`${one(projectId, taskId)}/comments`, json("POST", { text }));
+  send(`${one(projectId, taskId)}/comments`, json("POST", { text, id }));
 
 export const addTodo = (
   projectId: string,

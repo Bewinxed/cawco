@@ -226,6 +226,11 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
                 #if DEBUG
                 ViewsProbe.say("views load \(url.absoluteString)")
                 #endif
+                // The dashboard reads the person's cookie, as it does a paired browser's.
+                if let pass = hub.passCookie(on: url) {
+                    await web.configuration.websiteDataStore.httpCookieStore.setCookie(pass)
+                }
+                guard self.view?.name == name, self.projectId == project else { return }
                 web.load(URLRequest(url: url))
             } catch {
                 guard self.view?.name == name else { return }

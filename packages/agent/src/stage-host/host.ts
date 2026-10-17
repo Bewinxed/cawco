@@ -28,8 +28,9 @@
  * Next to it, never through a preview (the hub answers `/__cawco/` itself
  * on every preview origin), the daemon reads a sheet ({@link STORIES_PATH}:
  * its stories, args and props), writes one ({@link WRITE_PATH}: a story's
- * args, a story added, duplicated, removed or moved) and lists the
- * components ({@link COMPONENTS_PATH}, spec §6's discovery).
+ * args, a story added, duplicated, removed or moved), reads what it loads
+ * ({@link WEIGHT_PATH}) and lists the components ({@link COMPONENTS_PATH},
+ * spec §6's discovery).
  */
 import {
   existsSync,
@@ -49,14 +50,17 @@ import {
   type Found,
   HEALTH_PATH,
   SHEET_PATH,
+  type SheetImport,
   type SheetOnPage,
   type SheetRead,
+  type SheetWeight,
   type SheetWrite,
   type SheetWritten,
   STORIES_PATH,
   STORY_FILE,
   type StageError,
   type StageToolchain,
+  WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
@@ -74,7 +78,11 @@ type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 interface ModuleNode {
   file: string | null;
   id: string | null;
+  importedModules: Set<ModuleNode>;
   importers: Set<ModuleNode>;
+  /** Its code as last served; null until a page asked for it. */
+  transformResult: { code: string } | null;
+  url: string;
 }
 
 /** What the stage uses of the project's dev server: Vite's own API, its Environment API from Vite 6 on. */
@@ -895,6 +903,120 @@ function storyFilesUnder(dir: string): string[] {
   });
 }
 
+/** A module Vite prebundled, kept by the browser at its `?v=` address. */
+const PREBUNDLED = /\/node_modules\/\.vite\/deps\/|[?&]v=/;
+/** How many of a story file's imports a weight names. The design's number. */
+const HEAVIEST = 3;
+/** How far a weight's `via` goes down from an import. Ours: past it, the import to cut is named. */
+const VIA_DEPTH = 6;
+
+/**
+ * What sheet `file` loads, walked breadth first through Vite's module graph
+ * from its story file's node (spec: Vite's own graph, no scanner of ours):
+ * each module a page has asked for, counted once, under the story file's
+ * import that reached it first. Null until a page has loaded the sheet.
+ */
+async function weightOf(file: string): Promise<SheetWeight | null> {
+  const abs = resolve(root, file);
+  const story = [
+    ...(server?.environments.client.moduleGraph.getModulesByFile(abs) ?? []),
+  ].find((one) => one.transformResult);
+  if (!story) {
+    return null;
+  }
+  // Each import as the story file writes it, by the file it resolves to.
+  const writtenAs = new Map<string, string>();
+  const read = readStoryFile(abs, readFileSync(abs, "utf8"));
+  await Promise.all(
+    [...new Set(read.imports.values())].map(async (source) => {
+      const to = await resolved(source, abs);
+      if (to) {
+        writtenAs.set(to, source);
+      }
+    })
+  );
+  // Each module under the story's import that reached it first, and the module that did.
+  const under = new Map<ModuleNode, ModuleNode>([[story, story]]);
+  const parent = new Map<ModuleNode, ModuleNode>();
+  const queue: ModuleNode[] = [];
+  const reach = (mod: ModuleNode, by: ModuleNode, from: ModuleNode) => {
+    if (!under.has(mod) && mod.transformResult) {
+      under.set(mod, by);
+      parent.set(mod, from);
+      queue.push(mod);
+    }
+  };
+  for (const top of story.importedModules) {
+    reach(top, top, story);
+  }
+  // Breadth first: an array's iterator reaches what is pushed while it runs.
+  for (const mod of queue) {
+    for (const next of mod.importedModules) {
+      reach(next, under.get(mod) as ModuleNode, mod);
+    }
+  }
+  // Each module's project bytes with all it reached first, leaves up.
+  const brought = new Map<ModuleNode, number>();
+  const children = new Map<ModuleNode, ModuleNode[]>();
+  for (const mod of queue.toReversed()) {
+    const own = PREBUNDLED.test(mod.url)
+      ? 0
+      : (mod.transformResult?.code.length ?? 0);
+    const total = own + (brought.get(mod) ?? 0);
+    brought.set(mod, total);
+    const up = parent.get(mod) as ModuleNode;
+    brought.set(up, (brought.get(up) ?? 0) + total);
+    children.set(up, [...(children.get(up) ?? []), mod]);
+  }
+  /** Down from `top` while one module brings at least half of the one above it. */
+  const viaOf = (top: ModuleNode): string[] => {
+    const path: string[] = [];
+    for (let at = top; path.length < VIA_DEPTH;) {
+      const [next] = (children.get(at) ?? []).sort(
+        (a, b) => (brought.get(b) ?? 0) - (brought.get(a) ?? 0)
+      );
+      if (!next || (brought.get(next) ?? 0) * 2 < (brought.get(at) ?? 0)) {
+        break;
+      }
+      path.push(relative(root, next.file ?? next.url));
+      at = next;
+    }
+    return path;
+  };
+  const own = { modules: 0, bytes: 0 };
+  const deps = { modules: 0, bytes: 0 };
+  const byImport = new Map<ModuleNode, { bytes: number; modules: number }>();
+  for (const [mod, top] of under) {
+    const bytes = mod.transformResult?.code.length ?? 0;
+    if (PREBUNDLED.test(mod.url)) {
+      deps.modules += 1;
+      deps.bytes += bytes;
+      continue;
+    }
+    own.modules += 1;
+    own.bytes += bytes;
+    if (top !== story) {
+      const sum = byImport.get(top) ?? { modules: 0, bytes: 0 };
+      sum.modules += 1;
+      sum.bytes += bytes;
+      byImport.set(top, sum);
+    }
+  }
+  const heaviest: SheetImport[] = [...byImport]
+    .sort(([, a], [, b]) => b.bytes - a.bytes)
+    .slice(0, HEAVIEST)
+    .map(([top, sum]) => {
+      const at = top.file ?? top.url;
+      return {
+        specifier: writtenAs.get(at) ?? relative(root, at),
+        file: relative(root, at),
+        ...sum,
+        via: viaOf(top),
+      };
+    });
+  return { ...own, deps, heaviest, measuredAt: new Date().toISOString() };
+}
+
 /** A refusal's answer: a write the file can't take is the person's or agent's to fix (422); anything else is the stage's. */
 const refusedWith = (res: ServerResponse, error: unknown) =>
   json(res, error instanceof StoryRefusal ? 422 : 500, {
@@ -942,7 +1064,7 @@ async function serveStage(
       );
     return;
   }
-  if (path !== SHEET_PATH && path !== STORIES_PATH) {
+  if (path !== SHEET_PATH && path !== STORIES_PATH && path !== WEIGHT_PATH) {
     next();
     return;
   }
@@ -956,6 +1078,13 @@ async function serveStage(
   }
   if (path === SHEET_PATH) {
     await serveSheet(dev, req, res, next, file);
+    return;
+  }
+  if (path === WEIGHT_PATH) {
+    await weightOf(file).then(
+      (weight) => json(res, 200, { weight }),
+      (error) => refusedWith(res, error)
+    );
     return;
   }
   await sheetRead(file).then(
@@ -1194,14 +1323,106 @@ function stamp() {
 
 const JSX_FILE = /\.[jt]sx$/;
 
+/** A Kit stub's id: `cawco:kit/navigation`. */
+const KIT_STUB = "cawco:kit/";
+/** `goto` and its kind on a sheet: they say so, and do nothing. */
+const SAYS = (name: string) =>
+  `console.info("[cawco] ${name} on a sheet does nothing")`;
+const NAVIGATION_ASYNC = [
+  "goto",
+  "invalidate",
+  "invalidateAll",
+  "refreshAll",
+  "preloadData",
+  "preloadCode",
+];
+const NAVIGATION_SYNC = ["pushState", "replaceState"];
+const NAVIGATION_NOOP = [
+  "afterNavigate",
+  "beforeNavigate",
+  "onNavigate",
+  "disableScrollHandling",
+  "snapshot",
+];
+const PAGE =
+  "{ url: new URL(location.href), params: {}, route: { id: null }, status: 200, error: null, data: {}, form: null, state: {}, shallow: null }";
+const NAVIGATING =
+  "{ from: null, to: null, type: null, willUnload: null, delta: null, complete: null }";
+
+/**
+ * SvelteKit's client modules on a stage, as Storybook's SvelteKit framework
+ * mocks them (storybook.js.org/docs/get-started/frameworks/sveltekit:
+ * `$app/navigation`, `$app/stores`, `$app/state`, `$app/forms` mocked;
+ * `$app/environment`, `$app/paths` real): the real ones are Kit's client
+ * router, which a sheet never starts and whose 47 files a story that reached
+ * it loaded. Each export the installed Kit (3.0) has, so an import of any
+ * still links.
+ */
+const KIT_STUBS: Record<string, string> = {
+  navigation: [
+    ...NAVIGATION_ASYNC.map(
+      (name) =>
+        `export const ${name} = () => { ${SAYS(name)}; return Promise.resolve(); };`
+    ),
+    ...NAVIGATION_SYNC.map(
+      (name) => `export const ${name} = () => { ${SAYS(name)}; };`
+    ),
+    ...NAVIGATION_NOOP.map((name) => `export const ${name} = () => {};`),
+  ].join("\n"),
+  state: `export const page = ${PAGE};
+export const navigating = ${NAVIGATING};
+export const updated = { current: false, check: async () => false };`,
+  stores: `import { readable } from "svelte/store";
+export const page = readable(${PAGE});
+export const navigating = readable(null);
+export const updated = { ...readable(false), check: async () => false };
+export const getStores = () => ({ page, navigating, updated });`,
+  forms: `export const enhance = () => ({ destroy() {} });
+export const applyAction = () => Promise.resolve();
+export const deserialize = (result) => JSON.parse(result);`,
+};
+
+/**
+ * The Kit stubs: `$app/<name>` aliased to `cawco:kit/<name>`, loaded from
+ * {@link KIT_STUBS}. The alias goes in a config hook ordered after Kit's
+ * own, whose `$app` alias would match first otherwise (Vite merges a later
+ * hook's aliases ahead of the earlier ones').
+ */
+function cawcoKit() {
+  return {
+    name: "cawco:stage-kit",
+    enforce: "pre" as const,
+    config: {
+      order: "post" as const,
+      handler: () => ({
+        resolve: {
+          alias: Object.keys(KIT_STUBS).map((name) => ({
+            find: new RegExp(`^\\$app/${name}$`),
+            replacement: `${KIT_STUB}${name}`,
+          })),
+        },
+      }),
+    },
+    resolveId(id: string) {
+      return id.startsWith(KIT_STUB) ? `\0${id}` : null;
+    },
+    load(id: string) {
+      return id.startsWith(`\0${KIT_STUB}`)
+        ? (KIT_STUBS[id.slice(KIT_STUB.length + 1)] ?? null)
+        : null;
+    },
+  };
+}
+
 const CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
   (ext) => `vite.config.${ext}`
 );
 
-/** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already. */
+/** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already; SvelteKit's client modules are stubs. */
 const plugins = () => [
   cawcoStage(),
   ...(framework === "svelte" ? [] : [stamp()]),
+  ...(kit ? [cawcoKit()] : []),
 ];
 
 /**

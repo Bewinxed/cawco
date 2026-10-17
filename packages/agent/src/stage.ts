@@ -49,6 +49,7 @@ import {
   SERVE_COMMAND_LIMIT,
   type ServeSpec,
   type SheetRead,
+  type SheetWeight,
   type SheetWrite,
   type SheetWritten,
   STAGE_HEALTH_MS,
@@ -63,6 +64,7 @@ import {
   type StageState,
   type StageStatus,
   type StageToolchain,
+  WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { ensureBoundary, shellQuote } from "./boundary";
@@ -953,8 +955,9 @@ async function stageAtRoot(
 
 /**
  * The stage a story file runs on, started or woken when it is not live, and
- * waited on: its port, root and state, and the sheet as it reads (its
- * stories, args and props). An agent's use: its idle time starts again.
+ * waited on: its port, root and state, the sheet as it reads (its stories,
+ * args and props) and what it loads ({@link sheetWeight}). An agent's use:
+ * its idle time starts again.
  * Refused with why, when the sheet cannot run.
  */
 export async function ensureStage(
@@ -964,19 +967,37 @@ export async function ensureStage(
   const story = storyPath(workspace, file);
   const stage = await stageAtRoot(stageFor(workspace, story), "a sheet's read");
   const rel = relative(stage.root, story);
-  const sheet = await answerOf<SheetRead>(
-    stage,
-    `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
-    READ_WAIT_MS,
-    `read ${rel}'s stories`
-  );
+  const [sheet, weight] = await Promise.all([
+    answerOf<SheetRead>(
+      stage,
+      `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
+      READ_WAIT_MS,
+      `read ${rel}'s stories`
+    ),
+    sheetWeight(stage, rel),
+  ]);
   return {
     port: stage.port,
     dir: stage.dir,
     file: rel,
     state: stateOf(stage),
     sheet,
+    weight,
   };
+}
+
+/** What sheet `rel` (from the stage's root) loads, as its stage's module graph has it; null until a view has loaded it. */
+async function sheetWeight(
+  stage: Stage,
+  rel: string
+): Promise<SheetWeight | null> {
+  const { weight } = await answerOf<{ weight: SheetWeight | null }>(
+    stage,
+    `${WEIGHT_PATH}?file=${encodeURIComponent(rel)}`,
+    READ_WAIT_MS,
+    `read what ${rel} loads`
+  );
+  return weight;
 }
 
 /**

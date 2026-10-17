@@ -14,10 +14,10 @@ import UIKit
 /// same fragments, the float kept clear at its first line's end, its last
 /// line's leading under it. A listing (CodeWell) is its lines at their own
 /// width and the well's padding; a quote its text past the rule; a rule a
-/// point. A table is not worked out here (its columns are TableBlock's):
-/// its row is measured on the main thread when it is built, as before.
+/// point; a table its geometry (TableGeometry) at the screen's `scale`, each
+/// cell's words laid out at its column's width, as TableBlock draws it.
 nonisolated enum PieceHeight {
-    static func of(_ piece: Item.Piece, width: Double, speaker: Double, measure: TextMeasure) -> Double? {
+    static func of(_ piece: Item.Piece, width: Double, speaker: Double, scale: Double, measure: TextMeasure) -> Double {
         var height = piece.header == nil ? 0 : speaker + Space.space2
         let last = piece.blocks.count - 1
         for (i, block) in piece.blocks.enumerated() {
@@ -35,8 +35,12 @@ nonisolated enum PieceHeight {
                 height += measure.height(text, width: width - QuoteBlock.inset)
             case .rule:
                 height += 1
-            case .table:
-                return nil
+            case let .table(head, rows):
+                let lines = head.isEmpty ? rows : [head] + rows
+                let columns = TableGeometry.columns(TableGeometry.extents(of: lines), fitting: width)
+                let inner = TableGeometry.inner(columns)
+                let words = lines.map { line in zip(line, inner).map { cell, room in measure.height(cell, width: room) } }
+                height += TableGeometry(columns: columns, words: words, headed: !head.isEmpty, scale: scale).height
             }
         }
         return height

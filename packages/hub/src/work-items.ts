@@ -1092,7 +1092,8 @@ const messageOf = (
 
 /**
  * Who may give finished work another turn: the reader (dashboard or app,
- * their words or their Send on its artifact: core `byPerson`), the
+ * their words, their Send on its artifact, or their answer to its held
+ * upstream post: core `byPerson`), the
  * session that delegated it, or its project's lead (a co-parent of every
  * item of its project).
  */

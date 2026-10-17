@@ -13,6 +13,7 @@
    */
   import Choice from "#lib/cawco/config/Choice.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import {
     stageLabel,
@@ -50,7 +51,8 @@
      */
     reaches: { kind: "live"; session: string } | { kind: "resumes" } | null;
     /** Writes the comment; throws the hub's refusal. */
-    oncomment: (text: string) => Promise<void>;
+    /** A comment's words and its id, which this box chooses (`sendComment`). */
+    oncomment: (text: string, id: string) => Promise<void>;
   } = $props();
 
   let only = $state<"all" | "comments">("all");
@@ -64,17 +66,21 @@
   /** What the Composer stands over its foot: its box holds that much room. */
   let commentFoot = $state(0);
   /** The comment goes; a refusal puts the words back with the hub's reason over them. */
+  /** The words a comment that did not go through carried, and its id: the same words again are the same comment. */
+  let unsent: SentWords | null = null;
   async function sendComment(text: string) {
     commenting = true;
     commentRefused = "";
     commentAgain = false;
+    unsent = idForWords(unsent, text);
     try {
-      await oncomment(text);
+      await oncomment(text, unsent.id);
+      unsent = null;
     } catch (error) {
       commentDraft.restore(text);
       commentAgain = unreachable(error);
       commentRefused = commentAgain
-        ? "Comment not sent: the dashboard couldn't reach the hub. Your words are back in the field. Send again once the hub answers."
+        ? "Your comment may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once."
         : failureWords(error);
     } finally {
       commenting = false;

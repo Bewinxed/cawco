@@ -352,7 +352,7 @@ public extension HubConnection {
     /// `NSNull` in `body` is sent as `null` (a nickname cleared).
     private func accountsWrite(_ path: String, method: String, body: [String: Any]? = nil) async throws -> Data {
         guard let address else { throw URLError(.notConnectedToInternet) }
-        var request = URLRequest(url: address.appending(path: path))
+        var request = URLRequest.hub(address.appending(path: path))
         request.httpMethod = method
         // A write can wait on a machine as long as the hub does (a code
         // exchanged, a device code waited for a minute at a time), and then on

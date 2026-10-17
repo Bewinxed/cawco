@@ -33,7 +33,7 @@
    * the same row with its risk as its line and its two options as the
    * peers; it opens nothing, and leaves once the hub has the answer.
    */
-  import { questionsOf } from "@cawco/core";
+  import { pairingWords, questionsOf } from "@cawco/core";
   import {
     UPSTREAM_POSTS,
     UPSTREAM_WORDS,
@@ -116,7 +116,7 @@
       case "choice":
         return UPSTREAM_WORDS.risk;
       case "pairing":
-        return `Wants to run your fleet with code ${item.request.userCode}. Approve only if it's the code on that device.`;
+        return pairingWords.asks(item.request.userCode);
       case "admission":
         return "Waits to join your fleet. Admitted, it runs sessions like your other machines.";
       case "task":

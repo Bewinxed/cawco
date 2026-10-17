@@ -26,6 +26,8 @@ A sheet exists for one of two things:
 
 A change with one right answer gets no sheet. Build it, prove it with its check, and say what changed. A decision that isn't visual, such as a name, a policy or a scope, goes on a decision page (decision-page skill).
 
+A sheet mounts the piece, never the surface around it: the row, the card, the dialog, not the panel or page that holds it. A piece whose props cannot show the state gets a fixture component beside it (`preview/<Component>Fixture.svelte`, in the project's framework) that feeds it the state, never the live shell.
+
 ## Variants
 
 Each variant is a different answer to the same brief. Pick **one primary axis**, and give each variant a different position on it:
@@ -62,7 +64,7 @@ Feed each state through the component's props, as its story's `args`, with fixtu
 1. **Read the ground.** Read the brief (`task_read` when it is a task), the design system (`design/DESIGN.md` and `design/tokens.css`, or the repository's own) and the component itself: its props, its branches, its data. Done when you can say in one sentence what the piece is, where it renders, its production width, and what it must do.
 2. **Name the set before any code.** Write the axis and each variant's position, or the state list and the kinds you dropped and why. Done when no two variants share a position and every state maps to a branch you can point at.
 3. **Write the sheet** beside the component: `export default { component, args }` with the props every story shares, then one export per variant or state with only the args it changes; a story's width is `parameters.viewport` when the piece has one. Import the real component untouched. Done when every story from step 2 is an export and the build and type-check pass.
-4. **Open it.** Call `artifact_create({ kind: "sheet", file: "<repo-relative path>" })`. It answers the stories it found and their props; the stage starts on first open. Read it back with `artifact_read`: every story renders and the stage reports no `errors`. A compile error reaches you by itself with its `file:line:column`: fix it and read again. Done when it answers `opened: true` and every story renders.
+4. **Open it.** Call `artifact_create({ kind: "sheet", file: "<repo-relative path>" })`. It answers the stories it found and their props; the stage starts on first open. Read it back with `artifact_read`: every story renders, the stage reports no `errors`, and its `weight` is under the budget: at most 250 project modules and 1 MB of project code, `deps` aside. Over it, `heaviest` names the import to cut and its `via` the module inside it where the weight enters (a fixture's live panel); cut it and read again. A compile error reaches you by itself with its `file:line:column`: fix it and read again. Done when it answers `opened: true`, every story renders and the weight is under the budget. A folder preview of built components (`artifact_create({ kind: "preview", dir })`) answers its `weight` at once: at most 1.5 MB of `js`, and `wasm` 0 unless the piece shown is what needs it (a Rive mark does; a settings card does not).
 5. **Hand over the decision.** Give a table with each variant's axis position, when it is right, and what it costs, with no favourite marked; asked directly, answer from how often the piece is seen and the product's personality. Then end your turn.
 6. **Read what comes back.** The person's pick (the story they chose) and the args they edited come from `artifact_read`; their pins, each with its `source`, come from `comment_read`, and each is a change you make in the component or the story at that line. Asked for another round, keep the sheet and add stories around the direction they leaned toward. Done when every pin is answered in its thread.
 7. **Build the pick.** In a task flow (brief → explore → review → picked → build), file the build with `task_create` once the task is picked: `after` this task, `acceptance` listing every state of the picked variant. Otherwise build it where it belongs, following the project's conventions, with the args the person tuned. Then delete the variant stories and variant components that lost, so only the shipped component's own states stay in its sheet.
@@ -73,6 +75,7 @@ Feed each state through the component's props, as its story's `args`, with fixtu
 | --- | --- |
 | A static page, a copied component, or the whole app on a dev server | A sheet beside the real component |
 | Live data, a request, a story that dies with a server | Fixtures as `args`, providers as `decorators` |
+| Mounting the panel to show one row in it | Mount the row; feed the state as args or through a fixture |
 | Variants that look the same, or differ only in tint | A different position on the one axis, or cut it |
 | Every axis varies at once | Vary one; the rest follows from it |
 | Today missing, or not first | `Today` is the first export |

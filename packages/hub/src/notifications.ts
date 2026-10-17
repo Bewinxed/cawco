@@ -86,6 +86,9 @@ export const runCollapseId = (runId: string): string =>
 /** A task waiting on the owner: its move and its failed attempt are one notification. */
 export const taskCollapseId = (projectId: string, taskId: string): string =>
   collapseOf("task", `${projectId}:${taskId}`);
+/** A device asking to pair (hub-auth.ts), by the code it shows: one per pairing. */
+export const pairingCollapseId = (userCode: string): string =>
+  collapseOf("pairing", userCode);
 /** A burst of things that need you shown as one notification (push.ts), by when it began. */
 export const needsCollapseId = (firstAt: number): string =>
   collapseOf("needs", firstAt.toString(36));

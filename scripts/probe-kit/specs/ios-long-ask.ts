@@ -235,7 +235,7 @@ const taps = process.env.PROBE_IOS !== "27" || taps27;
 /** `ioreg -n Root -d1 -a`'s word that the console is locked. */
 const CONSOLE_LOCKED = /<key>IOConsoleLocked<\/key>\s*<true\/>/;
 const THREAD_HEAD = /^\s{4}\d+ Thread_/;
-const LOG_HEAD = /^.*\] /;
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const SPACES = /\s+/;
 
 const pause = (ms: number) => Bun.sleep(ms);
