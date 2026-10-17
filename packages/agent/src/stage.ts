@@ -319,10 +319,13 @@ function notInstalled(
   if (!version) {
     return `${name} isn't installed in ${dir}: run the project's install there, then call again.`;
   }
-  const major = Number(version.split(".")[0]);
-  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on.
-  if (toolchain === "vite" && !(major >= 6)) {
-    return `Live components need Vite 6 or later, whose Environment API the stage runs on; ${dir} runs Vite ${version}.`;
+  const [major, minor] = version.split(".").map(Number);
+  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on;
+  // its config loads by `configLoader: "native"`, which writes nothing into
+  // node_modules (stage-host/host.ts `startVite`): "Added as exprimental in
+  // vite@6.1.0" (github.com/vitejs/vite/discussions/20162).
+  if (toolchain === "vite" && !(major > 6 || (major === 6 && minor >= 1))) {
+    return `Live components need Vite 6.1 or later, whose Environment API and native config loading the stage runs on; ${dir} runs Vite ${version}.`;
   }
   if (toolchain === "astro" && major !== ASTRO_MAJOR) {
     return `The stage starts Astro through its experimental programmatic API, read for Astro ${ASTRO_MAJOR}; ${dir} runs Astro ${version}, whose API this CawCo hasn't read.`;

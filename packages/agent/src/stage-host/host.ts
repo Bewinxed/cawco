@@ -1566,6 +1566,11 @@ async function startNuxt(): Promise<Started> {
     overrides: {
       modules: [cawcoNuxtModule],
       vite: { cacheDir: CACHE_DIR },
+      // Chrome DevTools Workspaces ("Default: `true`", nuxt.com/docs/api/
+      // nuxt-config): its `chrome-workspace.json` goes into
+      // node_modules/.cache/nuxt, and its route hands the project's root path
+      // to whoever views the preview. A sheet is no workspace to map.
+      experimental: { chromeDevtoolsProjectSettings: false },
       // A stage reports nothing anywhere: no telemetry from a boundary.
       telemetry: false,
     },
