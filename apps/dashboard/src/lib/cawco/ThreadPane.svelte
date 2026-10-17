@@ -1154,33 +1154,38 @@
   .seat {
     inline-size: var(--seat);
   }
-  /* The hero: the empty board's (project page `.caw-empty`), centred in the
-     room over the composer, which it clears as the transcript does. */
+  /* The hero: the empty board's (project page `.caw-empty`), from the
+     room's top on the composer's own column, so Caw, the title, the line
+     and the starters share the composer's start edge. It clears the
+     composer as the transcript does. */
   .hero {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    justify-content: center;
     min-block-size: 0;
-    padding: var(--space-6) var(--space-5) var(--composer-clearance);
+    /* The empty state's own --space-6 is the room above it. */
+    padding-block-end: var(--composer-clearance);
     overflow-y: auto;
     /* Its own stacking: what is raised inside it (an Earlier row's mark)
        stays under the foot fade as it scrolls past the composer. */
     isolation: isolate;
   }
   .hero :global(.kit-empty) {
-    align-items: center;
-    inline-size: 100%;
-    max-inline-size: var(--c-starters-w);
+    inline-size: var(--c-composer-w);
     margin-inline: auto;
-    text-align: center;
+
+    /* Where the composer goes edge to edge (Composer, max-width 900px). */
+    @media (max-width: 900px) {
+      inline-size: auto;
+      margin-inline: var(--space-3);
+    }
   }
   .hero :global(.kit-empty-action) {
     align-self: stretch;
   }
   .caw-80 {
     display: grid;
-    place-items: center;
+    justify-items: start;
     margin-block-end: var(--space-3);
   }
   /* The docked composer's layer, as the group's (PaneLeaf `.dock`): over

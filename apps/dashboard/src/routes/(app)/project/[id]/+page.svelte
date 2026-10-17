@@ -2245,10 +2245,6 @@
     margin-inline: auto;
     max-inline-size: var(--c-starters-w);
   }
-  .caw-empty :global(.kit-empty) {
-    align-items: center;
-    text-align: center;
-  }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;
   }
@@ -2270,7 +2266,7 @@
   }
   .caw-80 {
     display: grid;
-    place-items: center;
+    justify-items: start;
     margin-block-end: var(--space-3);
   }
   .first {

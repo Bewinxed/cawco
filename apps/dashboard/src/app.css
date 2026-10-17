@@ -1110,13 +1110,16 @@
   }
 
   /* The one empty state (ui/empty): mark, title, why, one action, set on
-     the column the content would have started on. */
+     the column the content would have started on. One start edge for all
+     of them, its words at the reading measure; never centred line by
+     line. */
   .kit-empty {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-2);
     padding-block: var(--space-6);
+    text-align: start;
 
     & > [data-slot="empty-mark"] {
       inline-size: 20px;
@@ -1126,6 +1129,7 @@
     }
   }
   .kit-empty-title {
+    max-inline-size: 60ch;
     font: var(--type-title);
     letter-spacing: -0.01em;
     color: var(--ink-strong);

@@ -5,6 +5,8 @@
    * that there is nothing to show, so it renders only once the data is known
    * to be empty — never while it is still being read. `mark` stands in
    * for the glyph where something drawn is the mark (Caw on an empty board).
+   * Mark, title, line and action share one start edge (app.css
+   * `.kit-empty`); a surface places the block, never centres its lines.
    * `inline`: the same claim in a strip's room (the usage strip), on one line
    * with its action beside it.
    */
