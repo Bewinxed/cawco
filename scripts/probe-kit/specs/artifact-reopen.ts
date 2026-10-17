@@ -90,12 +90,13 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
   let sent = 0;
-  for (const view of ["desk", "phone"] as const) {
-    await leg(kit, fleet, base, view, () => {
-      sent += 1;
-      return String(sent);
-    });
-  }
+  const next = () => {
+    sent += 1;
+    return String(sent);
+  };
+  // One leg after the other: the mock model answers one numbered call at a time.
+  await leg(kit, fleet, base, "desk", next);
+  await leg(kit, fleet, base, "phone", next);
 };
 
 /** Checks 1–5 at `view`, on a session of its own; `next` numbers each call. */
