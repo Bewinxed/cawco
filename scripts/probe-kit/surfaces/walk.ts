@@ -237,7 +237,11 @@ async function runOn(page: Page, ms: number): Promise<void> {
  * whose motions play (a popover's control is clickable once its opening
  * has moved it into place); then the clock stands again at ACT_MS past
  * where the act began, the same mark on every run, Date at the tape's
- * moment still.
+ * moment still. An act that moves the page's time itself (rail/older sets
+ * it a day on, so its sessions read old) keeps it: Date stands at the
+ * act's moment, and the mark is counted from there. Counted from the walk's
+ * own moment instead, the mark stood in the past ("Cannot fast-forward to
+ * the past") and Date was put back under the state.
  */
 async function acting(
   page: Page,
@@ -257,6 +261,11 @@ async function acting(
       .evaluate(() => window.__ssReader?.holding(false))
       .catch(() => undefined);
     if (clock) {
+      const moved = await page.evaluate(() => Date.now());
+      if (moved !== clock.at) {
+        clock.at = moved;
+        clock.now = Math.max(clock.now, moved);
+      }
       // The act ran in real time, its page time flowing with it: the mark
       // stands ACT_MS on, past any act under it. One that ran longer stands
       // past itself instead, and says so: that state is no longer still.
