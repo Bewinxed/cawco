@@ -23,7 +23,13 @@
     type ToolCallStatus,
   } from "#lib/components/features/tool-cards/descriptors.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconCpu, IconHandoff, IconReport, IconRules } from "#lib/icons.js";
+  import {
+    IconCpu,
+    IconError,
+    IconHandoff,
+    IconReport,
+    IconRules,
+  } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
@@ -51,6 +57,9 @@
     | { key: string; kind: "say" | "stream"; text: string }
     | { key: string; kind: "peer"; icon: Component; lead: string; name: string }
     | TailNote;
+
+  /** A failed call's glyph ink, the transcript's (ToolGroup `.glyph.err`). */
+  const FAILED_INK = "text-[var(--data-bad)]";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;
@@ -102,6 +111,26 @@
           icon: IconRules,
           lead: "Rule ·",
           name: meta.ruleName ?? "",
+        };
+      case "result.error":
+      case "ui.error":
+      case "ui.session_error":
+        // A failed turn, drawn as the transcript draws a failed tool row (its
+        // glyph in the failure ink) under the failure line's own title
+        // (SystemLine), with the error's own words: the harness's errors
+        // where it gave them, else the line's.
+        return {
+          key,
+          kind: "tool",
+          icon: IconError,
+          color: FAILED_INK,
+          verb: meta.errorTitle ?? "Turn failed",
+          arg:
+            (meta.resultErrors ?? [])
+              .map((error) => error.trim())
+              .filter(Boolean)
+              .join(" ") || m.content.trim(),
+          live: false,
         };
       case "user.peer":
         return meta.reportKind
