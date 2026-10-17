@@ -101,14 +101,27 @@ export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
     `save ${draft.name || "the rule"}`
   );
 
-export const removeRule = async (id: string, name: string): Promise<void> => {
-  const response = await fetch(`/api/rules/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error(`Could not delete ${name} — ${await said(response)}.`);
-  }
+/**
+ * Delete: the rule stops at once, and the hub keeps it whole for the
+ * milliseconds it answers with (0 when it held no such rule), the window
+ * {@link restoreRule} can bring it back in.
+ */
+export const removeRule = async (id: string, name: string): Promise<number> => {
+  const { restorableForMs } = await send<{ restorableForMs: number }>(
+    `/api/rules/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    `delete ${name}`
+  );
+  return restorableForMs;
 };
+
+/** Undo a delete: the rule back whole, its history with it, as the list reads it. */
+export const restoreRule = (id: string, name: string): Promise<RuleRow> =>
+  send<RuleRow>(
+    `/api/rules/${encodeURIComponent(id)}/restore`,
+    { method: "POST" },
+    `bring back ${name}`
+  );
 
 /** A blank rule, on the defaults that make the common case one field of typing. */
 export const blankRule = (): RuleDraft => ({

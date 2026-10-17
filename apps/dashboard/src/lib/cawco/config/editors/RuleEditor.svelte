@@ -34,13 +34,7 @@
   import { failureWords as message } from "../../hub-read";
   import RuleActivity from "../../RuleActivity.svelte";
   import RuleTester from "../../RuleTester.svelte";
-  import {
-    blankRule,
-    createRule,
-    draftOf,
-    removeRule,
-    saveRule,
-  } from "../../rules";
+  import { blankRule, createRule, draftOf, saveRule } from "../../rules";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";
   import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
@@ -49,6 +43,7 @@
   import Field from "../Field.svelte";
   import PickerChip from "../PickerChip.svelte";
   import ReadingWell from "../ReadingWell.svelte";
+  import { deleteRule } from "../rule-delete";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert, withStats } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
@@ -236,34 +231,26 @@
     void goto("/config/rules");
   }
 
-  async function askRemove() {
+  /**
+   * Delete: at once, with Undo in the toast (rule-delete.ts). Back to the
+   * list first, so the row is seen leaving it; a refusal stands in the
+   * editor's head, the rule kept.
+   */
+  async function remove() {
     if (!id) {
       return;
     }
-    await question.ask({
-      title: `Delete ${draft.name || "this rule"}?`,
-      body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
-      confirmLabel: "Delete rule",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        deleting = true;
-        try {
-          await removeRule(id, draft.name);
-          kept.drop();
-          // Back to the list first, so the row is seen leaving it.
-          await goto("/config/rules");
-          if (store.rules.value) {
-            store.rules.value = store.rules.value.filter(
-              (row) => row.id !== id
-            );
-          }
-        } catch (error) {
-          deleting = false;
-          throw error;
-        }
-      },
-    });
+    deleting = true;
+    failed = undefined;
+    try {
+      await deleteRule(store, { id, name: baseline.name }, () => {
+        kept.drop();
+        return goto("/config/rules");
+      });
+    } catch (error) {
+      deleting = false;
+      failed = message(error);
+    }
   }
 
   /** Text-matching options fold away for a meaning rule: a panel's length,
@@ -288,7 +275,7 @@
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
-  ondelete={id ? askRemove : undefined}
+  ondelete={id ? remove : undefined}
   onsubmit={save}
   {question}
   saveLabel={id ? "Save changes" : "Create rule"}

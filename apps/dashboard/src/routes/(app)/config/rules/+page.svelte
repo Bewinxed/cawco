@@ -3,6 +3,7 @@
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
+  import { deleteRule } from "#lib/cawco/config/rule-delete.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -13,11 +14,11 @@
     createRule,
     draftOf,
     RULE_TEMPLATES,
-    removeRule,
     saveRule,
     since,
     times,
   } from "#lib/cawco/rules.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -66,26 +67,17 @@
     }
   }
 
-  /** Delete asks under the rule's row, in the page. */
   const asks = new Asker<AskHereRequest>();
-  async function askRemove(row: RuleRow) {
-    await asks.ask({
-      at: row.id,
-      title: `Delete ${row.name}?`,
-      body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
-      confirmLabel: "Delete rule",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        busy[row.id] = true;
-        try {
-          await removeRule(row.id, row.name);
-          store.rules.value = rules.filter((other) => other.id !== row.id);
-        } finally {
-          delete busy[row.id];
-        }
-      },
-    });
+  /** Delete: at once, with Undo in the toast (rule-delete.ts). */
+  async function remove(row: RuleRow) {
+    busy[row.id] = true;
+    try {
+      await deleteRule(store, row);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete busy[row.id];
+    }
   }
 
   async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {
@@ -191,7 +183,7 @@
               label: "Delete rule",
               icon: IconTrash,
               destructive: true,
-              onselect: () => askRemove(row),
+              onselect: () => remove(row),
             },
           ]}
           enabled={row.enabled}
