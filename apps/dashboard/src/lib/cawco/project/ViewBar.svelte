@@ -159,7 +159,7 @@
         data-view-list
         align="start"
         class="max-w-(--list-max)"
-        style:--list-max="calc(100vw - 2 * var(--space-3))"
+        style="--list-max: calc(100vw - 2 * var(--space-3))"
         collisionPadding={8}
         customAnchor={shell}
         side="top"
