@@ -47,6 +47,17 @@ export class TabRects {
   /** The track's own inner size, re-read with the items: a track that
       narrows moves what is in view even when no item moved. */
   viewport = $state({ width: 0, height: 0 });
+  /**
+   * The order and the boxes of one measure, together: what `at` reads. The
+   * order changes the moment a tab arrives, leaves or moves (`#sort`), the
+   * boxes only when they are measured; read apart, a place in the new order
+   * met the box measured for another tab that stood there before (the
+   * segment at Working's place with Finished's width).
+   */
+  #measured = $state.raw<{
+    items: HTMLElement[];
+    rects: ReadonlyMap<HTMLElement, ItemRect>;
+  }>({ items: [], rects: new Map() });
 
   readonly #values = new Map<HTMLElement, string>();
   readonly #onOrder: (values: string[]) => void;
@@ -60,9 +71,13 @@ export class TabRects {
     this.#onOrder = onOrder;
   }
 
-  /** The box of the tab at a place in the order. */
+  /** The box of the tab at a place in the order, both from the same measure. */
   at(index: number | null): ItemRect | undefined {
-    return index === null ? undefined : this.rects.get(this.items[index]);
+    if (index === null) {
+      return;
+    }
+    const { items, rects } = this.#measured;
+    return rects.get(items[index]);
   }
 
   /** Svelte action for the track. */
@@ -187,6 +202,8 @@ export class TabRects {
     }
     this.items = next;
     this.#onOrder(next.map((el) => this.#values.get(el) as string));
+    // The new order is read with its own boxes once they are measured.
+    this.#schedule();
   }
 
   /**
@@ -264,6 +281,9 @@ export class TabRects {
     }
     if (changed) {
       this.rects = rects;
+    }
+    if (changed || this.#measured.items !== this.items) {
+      this.#measured = { items: this.items, rects: this.rects };
     }
     if (
       container.clientWidth !== this.viewport.width ||
