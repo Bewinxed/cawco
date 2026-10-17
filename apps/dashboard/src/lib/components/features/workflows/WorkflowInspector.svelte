@@ -185,13 +185,20 @@
   }
 </script>
 
-<section aria-label="Workflow inspector" class="wf wf-stack inspector">
+<section
+  aria-label="Workflow inspector"
+  class="wf wf-stack px-space-4 pt-space-5 pb-space-8"
+>
   <!-- What is selected gives way to the next in place: the two cross-fade
        (the one leaving is taken out of the flow) while the box tweens to
        the new one's height, and the problems below slide with it. -->
-  <div data-slot="swap" class="swap" {@attach morph({ ms: dur("--dur-pop") })}>
+  <div
+    data-slot="swap"
+    class="relative min-w-0"
+    {@attach morph({ ms: dur("--dur-pop") })}
+  >
     {#key node?.id ?? edge?.id ?? "settings"}
-      <div class="view wf-stack" in:crossIn out:crossOut>
+      <div class="wf-stack min-w-0" in:crossIn out:crossOut>
         {#if node}
           <div class="wf-row wf-spread">
             <h2>{node.kind === "step" ? "Step" : node.kind} inspector</h2>
@@ -222,7 +229,7 @@
                 </select></label
               >
               <fieldset>
-                <legend>Harness</legend>
+                <legend class="mb-space-2 text-size-label font-medium">Harness</legend>
                 <div class="wf-row">
                   {#each ["claude", "opencode", "pi"] as harness (harness)}
                     <button
@@ -1063,7 +1070,11 @@
               {/each}
             </section>
             <details>
-              <summary>Unwired ports</summary>
+              <!-- literal: 36px -->
+              <summary
+                class="min-h-(--summary-min) cursor-pointer"
+                style:--summary-min="36px">Unwired ports</summary
+              >
               {#each workflowPorts(node) as port (port)}
                 <label class="wf-check"
                   ><input
@@ -1203,14 +1214,19 @@
       </div>
     {/key}
   </div>
-  <section aria-label="Problems" class="wf-stack">
+  <!-- literal: 44px -->
+  <section
+    aria-label="Problems"
+    class="wf-stack"
+    style:--problem-min="44px"
+  >
     <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
     {#if !problems.length}
       <p class="wf-muted">No problems found.</p>
     {/if}
     {#each problems as problem, index (index)}
       <button
-        class="problem"
+        class="min-h-(--problem-min) rounded-sm bg-surface-recess p-space-3 text-left wrap-anywhere"
         onclick={() => onselect(problem.nodeId ?? problem.edgeId)}
         type="button"
       >
@@ -1219,33 +1235,3 @@
     {/each}
   </section>
 </section>
-
-<style>
-  .inspector {
-    padding: var(--space-5) var(--space-4) var(--space-8);
-  }
-  .swap {
-    position: relative;
-    min-width: 0;
-  }
-  .view {
-    min-width: 0;
-  }
-  legend {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    margin-bottom: var(--space-2);
-  }
-  .problem {
-    padding: var(--space-3);
-    background: var(--surface-recess);
-    border-radius: var(--radius-sm);
-    text-align: left;
-    overflow-wrap: anywhere;
-    min-height: 44px;
-  }
-  summary {
-    min-height: 36px;
-    cursor: pointer;
-  }
-</style>
