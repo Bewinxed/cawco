@@ -112,4 +112,44 @@ public extension HubConnection {
         let output = try await api.instances.showArtifact(.init(path: .init(id: instanceId, artifact: id)))
         guard case .ok = output else { throw await TaskRefusal.reading(output) }
     }
+
+    /// A session's artifacts, newest first (artifact-api.ts `listArtifacts`): the panel's title menu.
+    func listArtifacts(in instanceId: String) async throws -> [ArtifactSummary] {
+        let output = try await api.instances.artifacts(.init(path: .init(id: instanceId)))
+        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+        return try answer.body.json
+    }
+
+    /// Removes one of a session's artifacts (artifact-api.ts `removeArtifact`):
+    /// a panel that showed it follows its frame to the next newest, or closes.
+    func removeArtifact(_ id: String, in instanceId: String) async throws {
+        let output = try await api.instances.removeArtifact(.init(path: .init(id: instanceId, artifact: id)))
+        guard case .ok = output else { throw await TaskRefusal.reading(output) }
+    }
+
+    /// The person's write to a sheet's story file (artifact-api.ts
+    /// `writeSheet`, live components spec §5): the stage writes it in the
+    /// session's workspace and the session is told. Sent as JSON written
+    /// here rather than through the generated client: a move to the end says
+    /// `before: null`, which the hub requires, and the generated body leaves
+    /// an absent optional out. The page redraws from the file, so the answer
+    /// is read only for its refusal.
+    func writeSheet(_ id: String, in instanceId: String, change: SheetChange) async throws {
+        guard let address else { throw TaskRefusal(message: "No hub is connected.") }
+        var request = URLRequest.hub(address.appending(path: "api/instances/\(instanceId)/artifacts/\(id)/sheet"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: change.json)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw TaskRefusal(message: text.isEmpty ? Wire.reason(data, status: status) : text)
+        }
+    }
 }
+
+/// One artifact as the panel's title menu lists it (core `ArtifactSummary`), newest first.
+public typealias ArtifactSummary = Components.Schemas.ArtifactSummary
+/// What an artifact is: a page, a canvas, a preview or a sheet (core `ArtifactKind`).
+public typealias ArtifactKind = OpenEnums.ArtifactKind

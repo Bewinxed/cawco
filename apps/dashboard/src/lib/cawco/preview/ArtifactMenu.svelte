@@ -10,7 +10,11 @@
    * lists the session's artifacts (`held`), and the panel follows that frame
    * when the removed one was shown.
    */
-  import type { ArtifactKind, ArtifactSummary } from "@cawco/core";
+  import {
+    type ArtifactKind,
+    type ArtifactSummary,
+    artifactWords,
+  } from "@cawco/core";
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
@@ -117,7 +121,7 @@
       },
       (error: Error) => {
         removing.delete(artifact.id);
-        toast.error(`${artifact.name} wasn't removed: ${error.message}`);
+        toast.error(artifactWords.notRemoved(artifact.name, error.message));
       }
     );
   }
@@ -251,8 +255,10 @@
                 data-slot="row-promoted"
                 class="row-promoted"
                 id={part(artifact.id, "promoted")}
-                title="Promoted into the project's folder at artifacts/{artifact.name}/"
-                >Promoted {artifact.promoted.commit.slice(0, 7)}</span
+                title={artifactWords.promotedTitle(artifact.name)}
+                >{artifactWords.promoted(
+                  artifact.promoted.commit.slice(0, 7)
+                )}</span
               >
             {/if}
           </span>
@@ -265,7 +271,7 @@
             >
           {/if}
           <button
-            aria-label="Remove {artifact.name}"
+            aria-label={artifactWords.removeNamed(artifact.name)}
             class="row-remove"
             data-box
             disabled={removing.has(artifact.id)}
@@ -276,7 +282,7 @@
             onpointerdown={own}
             onpointerup={own}
             tabindex={-1}
-            title="Remove"
+            title={artifactWords.remove}
             type="button"
           >
             <IconTrash />

@@ -770,6 +770,138 @@ public enum Words {
         public static let reloading = "Reloading…"
     }
 
+    public enum Artifacts {
+        // packages/core/src/words/artifacts.ts `artifactWords`
+        /// A row's Remove, for a screen reader: its trailing glyph says it.
+        public static func removeNamed(name: String) -> String {
+            "Remove \(name)"
+        }
+
+        public static let remove = "Remove"
+
+        /// A promoted row's tag: its commit, short.
+        public static func promoted(commit: String) -> String {
+            "Promoted \(commit)"
+        }
+
+        public static func promotedTitle(name: String) -> String {
+            "Promoted into the project's folder at artifacts/\(name)/"
+        }
+
+        public static func notRemoved(name: String, why: String) -> String {
+            "\(name) wasn't removed: \(why)"
+        }
+
+        public static let inspect = "Inspect"
+
+        public static let inspectTitle = "Inspect: change the story's props, then Save them into its file"
+
+        public static let closeInspector = "Close the inspector"
+
+        public static let readingProps = "Reading the sheet's props"
+
+        public static let theStoryFile = "the story file"
+
+        public static let theStory = "the story"
+
+        public static func noStories(file: String) -> String {
+            "\(file) has no stories yet. Add one below."
+        }
+
+        public static let story = "Story"
+
+        public static func storyOption(name: String, edited: Bool) -> String {
+            edited ? "\(name) · edited" : name
+        }
+
+        public static let duplicateStory = "Duplicate the story"
+
+        public static let duplicate = "Duplicate"
+
+        public static let moveStoryUp = "Move the story up"
+
+        public static let moveUp = "Move up"
+
+        public static let moveStoryDown = "Move the story down"
+
+        public static let moveDown = "Move down"
+
+        public static let removeStory = "Remove the story"
+
+        public static func removeTitle(name: String) -> String {
+            "Remove the story \(name)?"
+        }
+
+        public static func removeBody(file: String) -> String {
+            "Its export goes from \(file), and its frame from the sheet. The component stays as it is."
+        }
+
+        public static let removeConfirm = "Remove story"
+
+        public static let removing = "Removing…"
+
+        public static func storyNotRemoved(name: String) -> String {
+            "\(name) wasn't removed."
+        }
+
+        public static let nameRule = "A story's name starts with a capital: letters, digits and _ only, like Roomy."
+
+        public static func nameTaken(file: String, name: String) -> String {
+            "\(file) has a story \(name) already."
+        }
+
+        public static let required = "required"
+
+        public static func resetProp(prop: String) -> String {
+            "Reset \(prop)"
+        }
+
+        public static func resetTitle(prop: String) -> String {
+            "Reset \(prop) to the sheet's or the component's default"
+        }
+
+        public static let slot = "Content is a pin: Comment on the page to change it."
+
+        public static let setInFile = "Set it in the file."
+
+        public static let codeInFile = "Code in the file: a pin changes it."
+
+        public static func takesNoProps(name: String) -> String {
+            "\(name) takes no props."
+        }
+
+        /// Before the meta field it names, which is set as code: `component`, then a full stop.
+        public static let noComponent = "The sheet's meta names no component the stage could find, so it has no controls. Give its default export a"
+
+        public static let newStoryName = "New story's name"
+
+        public static func nameCopy(story: String) -> String {
+            "Name the copy of \(story)"
+        }
+
+        public static let namePlaceholder = "Roomy"
+
+        public static let cancel = "Cancel"
+
+        public static let addStory = "Add story"
+
+        public static let addStoryTitle = "A new story from the controls as they stand"
+
+        public static let adding = "Adding…"
+
+        public static let duplicating = "Duplicating…"
+
+        public static let discard = "Discard"
+
+        public static let save = "Save"
+
+        public static let saving = "Saving…"
+
+        public static func saveTitle(story: String, file: String) -> String {
+            "Write \(story)'s args into \(file)"
+        }
+    }
+
     public enum Pairing {
         // packages/core/src/words/pairing.ts `pairingWords`
         /// A pairing waiting on the person: the code the asking device shows, and how to tell it is theirs.

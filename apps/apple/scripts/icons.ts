@@ -158,6 +158,7 @@ const SOLAR_ICONS = [
   "chat-round-dots-bold-duotone", // IconComment
   "pen-bold-duotone", // IconPen: the preview's Draw
   "restart-bold-duotone", // IconReopen
+  "undo-left-bold-duotone", // IconReset: a sheet inspector's prop back to its default
   "map-point-bold-duotone", // IconMapPoint: the moved tray
   // Configure → Accounts (accounts/AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).
   "logout-2-bold-duotone", // IconLogout

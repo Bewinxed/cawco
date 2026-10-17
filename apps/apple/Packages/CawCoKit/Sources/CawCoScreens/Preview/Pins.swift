@@ -877,6 +877,21 @@ enum PreviewProbe {
     static let on = ProcessInfo.processInfo.arguments.contains("-preview-probe")
     /// `-preview-working`: the session counts as mid-turn, for the live dot (the probe's mock session ends its turns at once).
     static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
+    /// `-inspect-set <prop>=<value>`: once a sheet's page says its sheet, the
+    /// inspector opens, the chosen story's `prop` takes the option `value`,
+    /// and Save runs, as the person's taps would (scripts/probe-kit/specs/ios-sheet-inspector.ts).
+    static let inspectSet: (prop: String, value: String)? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-inspect-set"), arguments.indices.contains(flag + 1) else { return nil }
+        let pair = arguments[flag + 1].split(separator: "=", maxSplits: 1).map(String.init)
+        return pair.count == 2 ? (pair[0], pair[1]) : nil
+    }()
+    /// `-menu-remove <name>`: once the page is ready, the title menu opens and its row `name` is removed.
+    static let menuRemove: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-menu-remove"), arguments.indices.contains(flag + 1) else { return nil }
+        return arguments[flag + 1]
+    }()
 
     static func say(_ line: String) {
         guard on else { return }

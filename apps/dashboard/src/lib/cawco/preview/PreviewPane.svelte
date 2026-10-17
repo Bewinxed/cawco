@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    artifactWords,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
     PREVIEW_PING_PATH,
@@ -1455,11 +1456,11 @@
   {#if inspector}
     <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
     <button
-      aria-label="Inspect"
+      aria-label={artifactWords.inspect}
       aria-pressed={inspectOpen}
       class="inspect touch-hit"
       onclick={() => showInspector(!inspectOpen)}
-      title="Inspect: change the story's props, then Save them into its file"
+      title={artifactWords.inspectTitle}
       type="button"
     >
       <IconTuning />

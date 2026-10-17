@@ -152,6 +152,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case pen = "pen-bold-duotone"
     /// A pin's Reopen (PinCard.svelte `IconReopen`).
     case reopen = "restart-bold-duotone"
+    /// A sheet inspector's prop back to its default (SheetInspector.svelte `IconReset`).
+    case reset = "undo-left-bold-duotone"
     /// The pins' moved tray (PinList.svelte `IconMapPoint`).
     case mapPoint = "map-point-bold-duotone"
     // Configure → Accounts (AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).

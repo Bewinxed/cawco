@@ -6,7 +6,8 @@ import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
-/// artifact's name and path, Send picks, the mode, Comments, Reload, Close) over the
+/// artifact's name as the title menu (ArtifactMenu.swift) and its path, Send
+/// picks, a sheet's Inspect, the mode, Comments, Reload, Close) over the
 /// page, which a web view loads from the session's own preview origin (a
 /// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
@@ -20,7 +21,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     let instanceId: String
 
     private var web: WKWebView!
-    private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+    /// The head's first control: the shown artifact's name, which opens the session's artifacts.
+    private let titleButton = ArtifactTitleButton()
+    private weak var menu: ArtifactMenuController?
+    /// A sheet's Inspect (PreviewPane.svelte `.inspect`), pressed while its inspector stands.
+    private var inspectButton: UIButton!
+    /// The shown sheet's inspector state, one per sheet: another sheet starts with nothing unsaved.
+    private var inspection: SheetInspection?
+    private var inspector: SheetInspectorView?
+    /// Whether the person keeps the inspector open, for the session (`cawco-preview-inspect:<session>`).
+    private var inspectOpen = false
+    private var inspectKey: String { "cawco-preview-inspect:\(instanceId)" }
+    /// The web view's trailing edge: in from the well's by the inspector's width while it stands as a panel.
+    private var webTrailing: NSLayoutConstraint!
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
     private var sendButton: UIButton!
@@ -180,17 +193,37 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The identity gives way to the actions: its title is one line cut at
         // its tail, its path one line cut in its middle, and both stop 8pt
         // short of the first action.
-        titleLabel.lineBreakMode = .byTruncatingTail
         pathLabel.lineBreakMode = .byTruncatingMiddle
-        let identity = UIStackView(arrangedSubviews: [titleLabel, pathLabel])
+        titleButton.addAction(UIAction { [weak self] _ in self?.openMenu() }, for: .touchUpInside)
+        // The title control keeps its own width up to the head's room; the path under it gives way first.
+        let title = UIStackView(arrangedSubviews: [titleButton, UIView()])
+        // The path starts where the title control's glyph does.
+        let path = UIView()
+        path.hold(pathLabel, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: 0))
+        let identity = UIStackView(arrangedSubviews: [title, path])
         identity.axis = .vertical
         identity.isLayoutMarginsRelativeArrangement = true
-        identity.directionalLayoutMargins.leading = Space.space1
+        identity.directionalLayoutMargins.leading = 0
         identity.directionalLayoutMargins.trailing = 8 - Space.space1
-        for part in [identity, titleLabel, pathLabel] as [UIView] {
+        for part in [identity, title, titleButton, path, pathLabel] as [UIView] {
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
+        inspectButton = KitButton.make("", glyph: .tuning, variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            showInspector(!inspectOpen)
+        }
+        inspectButton.accessibilityLabel = Words.Artifacts.inspect
+        inspectButton.toolTip = Words.Artifacts.inspectTitle
+        // Pressed while the inspector stands (PreviewPane.svelte `.inspect[aria-pressed="true"]`: `--surface-fill`).
+        let restingInspect = inspectButton.configurationUpdateHandler
+        inspectButton.configurationUpdateHandler = { [weak self] button in
+            restingInspect?(button)
+            guard let self, inspectOpen, inspection != nil else { return }
+            button.configuration?.background.backgroundColor = Palette.surfaceFill
+        }
+        inspectButton.isHidden = true
+        inspectOpen = UserDefaults.standard.string(forKey: inspectKey) == "open"
         sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Comments", glyph: .chat, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
         pinsBadge.isUserInteractionEnabled = false
@@ -220,12 +253,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         expandButton.toolTip = "Expand"
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
         closeButton.accessibilityLabel = "Close"
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, modes, pinsButton, reload, expandButton, closeButton])
+        let head = UIStackView(arrangedSubviews: [identity, sendButton, inspectButton, modes, pinsButton, reload, expandButton, closeButton])
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for control in [sendButton!, modes!, pinsButton!, reload, expandButton!, closeButton!] as [UIView] {
+        for control in [sendButton!, inspectButton!, modes!, pinsButton!, reload, expandButton!, closeButton!] as [UIView] {
             control.setContentHuggingPriority(.required, for: .horizontal)
             control.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -292,7 +325,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [sendButton, modes, pinsButton, reload, expandButton, closeButton]
+        grabArea.yields = [titleButton, sendButton, inspectButton, modes, pinsButton, reload, expandButton, closeButton]
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -487,12 +520,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return web
     }
 
-    /// The web view fills the well.
+    /// The web view fills the well, less the inspector's width while it stands beside the page as a panel.
     private func placeWeb() {
+        webTrailing = web.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: inspector?.layout == .panel ? -Size.cSheetInspectorW : 0)
         NSLayoutConstraint.activate([
             web.topAnchor.constraint(equalTo: well.topAnchor),
             web.leadingAnchor.constraint(equalTo: well.leadingAnchor),
-            web.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            webTrailing,
             web.bottomAnchor.constraint(equalTo: well.bottomAnchor),
         ])
     }
@@ -606,6 +640,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if drawer { expanded = false }
         placeHead()
         placeCardConstraints()
+        // The inspector as the drawer has it, a sheet; beside the transcript, a panel.
+        placeInspector()
     }
 
     /// Drawn inside another surface (a task's review stage, PreviewPane.svelte
@@ -696,6 +732,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func show() {
         guard isViewLoaded, let frame = hub.previews.byInstance[instanceId], frame.state == .open,
               let route = hub.previewRoute(frame) else { return }
+        // Every frame, the same revision's too: the title and its menu's list move on their own.
+        let artifact = frame.artifact
+        titleButton.show(kind: artifact.kind, name: artifact.name)
+        menu?.follow(held: frame.artifacts, shown: (artifact.id, artifact.kind, artifact.name))
         // Out of sight, the page waits to be seen.
         guard pageShown else { return }
         let origin = route.origin
@@ -726,8 +766,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             list?.dismiss(animated: true)
             paintPins()
             refresh()
+            adoptSheet(frame)
         }
-        titleLabel.text = frame.artifact.name
         pathLabel.text = Self.place(frame)
         self.origin = origin
         connected = false
@@ -908,8 +948,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             if let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
                 pathLabel.text = at.path() + (at.query().map { "?\($0)" } ?? "")
             }
-            if let title = Self.text(body["title"], 300), !title.isEmpty { titleLabel.text = title }
             if body["type"] as? String == "cawco:ready" { ready() }
+        case "cawco:sheet":
+            // A sheet's page said its stories and props: the inspector's controls.
+            if let said = SheetOnPage(body["sheet"]) {
+                #if DEBUG
+                PreviewProbe.say("inspector heard file=\(said.file) stories=\(said.stories.map(\.name).joined(separator: ",")) components=\(said.components.map { "\($0.name):\($0.props.map(\.name).joined(separator: "+"))" }.joined(separator: ","))")
+                #endif
+                inspection?.heard(said)
+                #if DEBUG
+                inspectAtLaunch()
+                #endif
+            }
         case "cawco:doc":
             // A pick, a note, a pin, the agent's patch or a Send's stamp: the pins and Send picks read again now.
             refresh()
@@ -982,6 +1032,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview ready")
         PreviewMeter.ready(web)
         if byHost { PreviewProbe.lapse(web) }
+        if PreviewProbe.menuRemove != nil, !menuAtLaunch {
+            menuAtLaunch = true
+            openMenu()
+        }
         #endif
         paintSend()
         // The page's mode as the person left it, its pins shown or hidden, and the open card's pin tracked again.
@@ -1855,6 +1909,26 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return "\(Int(x.rounded())),\(Int(Double(box.midY).rounded()))"
     }
 
+    /// `-menu-remove` and `-inspect-set` act once a launch.
+    private static var menuDone = false
+    private static var inspectDone = false
+    private var menuAtLaunch: Bool {
+        get { Self.menuDone }
+        set { Self.menuDone = newValue }
+    }
+
+    /// `-inspect-set`: the inspector opened, the prop set to the option named, Save, once.
+    private func inspectAtLaunch() {
+        guard let (name, value) = PreviewProbe.inspectSet, !Self.inspectDone, let inspection,
+              let prop = inspection.component?.props.first(where: { $0.name == name }),
+              let option = prop.options?.first(where: { $0.shown == value }) else { return }
+        Self.inspectDone = true
+        showInspector(true)
+        inspection.set(prop, option)
+        PreviewProbe.say("inspector set \(name)=\(value) story=\(inspection.chosen ?? "-")")
+        Task { await inspection.save() }
+    }
+
     /// Expand's words and centre and Close's centre, for the session's `split` line.
     var probeExpand: String {
         "expand=\(expandButton.accessibilityLabel ?? "?")@\(PreviewProbe.centre(expandButton)) close=\(PreviewProbe.centre(closeButton))"
@@ -1996,6 +2070,131 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
       };
     })();
     """
+}
+
+// MARK: A sheet's inspector, the artifacts' menu
+
+extension PreviewController {
+    /// The panel shows another artifact: a sheet gets its own inspector,
+    /// with nothing unsaved; anything else has none.
+    fileprivate func adoptSheet(_ frame: PreviewFrame) {
+        inspector?.removeFromSuperview()
+        inspector = nil
+        let id = frame.artifact.id
+        if frame.artifact.kind == .sheet {
+            inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) },
+                                         write: { [weak self] change in
+                                             guard let self else { return }
+                                             try await hub.writeSheet(id, in: instanceId, change: change)
+                                             #if DEBUG
+                                             PreviewProbe.say("inspector wrote \(change)")
+                                             #endif
+                                         })
+        } else {
+            inspection = nil
+        }
+        inspectButton.isHidden = inspection == nil
+        placeInspector()
+    }
+
+    /// Inspect (PreviewPane.svelte `showInspector`): kept for the session, as Comments is.
+    fileprivate func showInspector(_ open: Bool) {
+        inspectOpen = open
+        UserDefaults.standard.set(open ? "open" : "shut", forKey: inspectKey)
+        placeInspector()
+    }
+
+    /// The inspector as the panel stands: a right panel beside the page in a
+    /// pane, the page narrowed by its width; a sheet over the page's foot in
+    /// the phone's drawer, the page live above it. It slides in from its
+    /// edge over `--dur-panel` on the drawer curve and out over `--dur-exit`;
+    /// with less motion a fade.
+    fileprivate func placeInspector() {
+        guard isViewLoaded else { return }
+        inspectButton.setNeedsUpdateConfiguration()
+        inspectButton.accessibilityTraits = inspectOpen ? [.button, .selected] : .button
+        let layout: SheetInspectorView.Layout = drawer ? .sheet : .panel
+        let wanted = inspectOpen ? inspection : nil
+        if let inspector, inspector.inspection === wanted, inspector.layout == layout { return }
+        if let leaving = inspector {
+            inspector = nil
+            slide(leaving, in: false)
+        }
+        guard let wanted else {
+            webTrailing.constant = 0
+            return
+        }
+        let view = SheetInspectorView(inspection: wanted, layout: layout)
+        view.onClose = { [weak self] in self?.showInspector(false) }
+        well.insertSubview(view, belowSubview: card)
+        if layout == .panel {
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(equalTo: well.topAnchor),
+                view.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+                view.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                view.widthAnchor.constraint(equalToConstant: Size.cSheetInspectorW),
+                view.widthAnchor.constraint(lessThanOrEqualTo: well.widthAnchor),
+            ])
+            webTrailing.constant = -Size.cSheetInspectorW
+        } else {
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                view.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+                view.heightAnchor.constraint(lessThanOrEqualTo: well.heightAnchor, multiplier: 0.6),
+            ])
+            webTrailing.constant = 0
+        }
+        inspector = view
+        slide(view, in: true)
+        #if DEBUG
+        DispatchQueue.main.async { [weak self, weak view] in
+            guard let self, let view else { return }
+            self.view.layoutIfNeeded()
+            let box = view.convert(view.bounds, to: nil)
+            let page = web.convert(web.bounds, to: nil)
+            PreviewProbe.say("inspector layout=\(layout) frame=\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height)) web=\(Int(page.minX)),\(Int(page.minY)),\(Int(page.width)),\(Int(page.height))")
+        }
+        #endif
+    }
+
+    private func slide(_ part: SheetInspectorView, in arriving: Bool) {
+        view.layoutIfNeeded()
+        let away: CGAffineTransform = part.layout == .panel
+            ? CGAffineTransform(translationX: part.bounds.width, y: 0)
+            : CGAffineTransform(translationX: 0, y: part.bounds.height)
+        let calm = UIAccessibility.isReduceMotionEnabled
+        if arriving {
+            if calm { part.alpha = 0 } else { part.transform = away }
+            Motion.easeDrawer.animator(calm ? Motion.durFade : Motion.durPanel) {
+                part.alpha = 1
+                part.transform = .identity
+                self.view.layoutIfNeeded()
+            }.startAnimation()
+            UIAccessibility.post(notification: .screenChanged, argument: part)
+        } else {
+            let out = Motion.easeOut.animator(Motion.durExit) {
+                if calm { part.alpha = 0 } else { part.transform = away }
+                self.view.layoutIfNeeded()
+            }
+            out.addCompletion { _ in part.removeFromSuperview() }
+            out.startAnimation()
+        }
+    }
+
+    /// The title control's menu: the session's artifacts, newest first (ArtifactMenu.swift).
+    fileprivate func openMenu() {
+        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        let artifact = frame.artifact
+        let content = ArtifactMenuController(hub: hub, instanceId: instanceId, shown: (artifact.id, artifact.kind, artifact.name),
+                                             held: frame.artifacts)
+        menu = content
+        content.loadViewIfNeeded()
+        KitPopover.present(content, from: titleButton, in: self, align: .start, side: .bottom, offset: Space.space1)
+        #if DEBUG
+        PreviewProbe.say("artifact menu open")
+        #endif
+    }
 }
 
 extension PreviewController: UIGestureRecognizerDelegate {
