@@ -367,13 +367,7 @@
       data-slot="txt"
       class="flex min-w-0 flex-col gap-space-1 has-data-field:flex-auto"
     >
-      <!-- The title role's face, size, weight and leading; its tracking stays
-           the page's (the role was a `font` shorthand, which sets none). -->
-      <h1
-        data-slot="title"
-        class="type-title tracking-(--title-track) wrap-anywhere text-ink-strong"
-        style:--title-track="normal"
-      >
+      <h1 data-slot="title" class="type-title wrap-anywhere text-ink-strong">
         {#if draft !== null}
           <!-- svelte-ignore a11y_autofocus -->
           <input

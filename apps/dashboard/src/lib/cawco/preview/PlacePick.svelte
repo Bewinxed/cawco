@@ -76,14 +76,7 @@
   onsubmit={use}
   transition:appear
 >
-  <!-- The title role without its tracking: the role was a `font`
-       shorthand, which sets none. -->
-  <h2
-    class="type-title tracking-(--title-track) text-ink-strong"
-    style:--title-track="normal"
-  >
-    Pick a machine and folder
-  </h2>
+  <h2 class="type-title text-ink-strong">Pick a machine and folder</h2>
   <div class="flex flex-col gap-space-1">
     <span class="text-label text-ink-muted" id="place-machine-label"
       >Machine</span
