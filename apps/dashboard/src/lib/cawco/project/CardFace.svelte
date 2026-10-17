@@ -29,56 +29,30 @@
   } = $props();
 </script>
 
-<span data-slot="head" class="head">
-  <span data-slot="tile" class="tile" style:color={hue}><Icon /></span>
+<span
+  data-slot="head"
+  class="relative z-2 mb-space-2 flex min-h-(--tile) items-center gap-space-2"
+  style:--tile="26px"
+>
+  <!-- literal: 26px -->
+  <span
+    data-slot="tile"
+    class="inline-grid size-(--tile) flex-none place-items-center rounded-sm bg-surface-tile text-(color:--tile-hue) shadow-tile"
+    style:--tile="26px"
+    style:--tile-hue={hue}><Icon /></span
+  >
   {@render aside?.()}
 </span>
 {#if art}
-  <span class="art">{@render art()}</span>
+  <span class="relative z-2 mb-space-2 self-center">{@render art()}</span>
 {/if}
-<span data-slot="name" class="name">{name}</span>
-<span data-slot="meta" class="meta">{meta}</span>
+<span data-slot="name" class="type-label relative z-2 font-medium text-ink-strong">{name}</span>
+<span data-slot="meta" class="relative z-2 text-ink-muted">{meta}</span>
 
 <style>
-  /* Over the card's highlight layers. */
-  .head,
-  .art,
-  .name,
-  .meta {
-    position: relative;
-    z-index: 2;
-  }
-  .art {
-    align-self: center;
-    margin-block-end: var(--space-2);
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 26px;
-    margin-block-end: var(--space-2);
-  }
-  .tile {
-    display: inline-grid;
-    place-items: center;
-    flex: none;
-    inline-size: 26px;
-    block-size: 26px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-tile);
-    box-shadow: var(--shadow-tile);
-  }
-  .tile :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .name {
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .meta {
-    color: var(--ink-muted);
+  /* residual: foreign-dom */
+  [data-slot="tile"] :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
 </style>

@@ -46,7 +46,7 @@
   aria-expanded={lead.open}
   aria-haspopup="dialog"
   aria-label="Caw, lead of {projectName}. {lead.sentence}"
-  class="caw-seat press-tint"
+  class="press-tint grid size-(--seat) flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0"
   data-share="caw:{projectId}"
   onclick={() => {
     lead.open = !lead.open;
@@ -60,20 +60,3 @@
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />
   {/if}
 </button>
-
-<style>
-  /* His still's box is the button; his acting spills past it, unclipped,
-     and never takes the pointer (Caw.svelte). */
-  .caw-seat {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: var(--seat);
-    block-size: var(--seat);
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: transparent;
-    cursor: pointer;
-  }
-</style>

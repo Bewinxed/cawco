@@ -28,42 +28,20 @@
   <ul
     data-slot="caw-starters"
     aria-label="Things to ask Caw"
-    class="caw-starters kit-chips"
+    class="kit-chips m-0 list-none justify-center p-0"
   >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
-      <li>
+      <li class="flex max-w-full">
         <button
           class="kit-chip touch-hit"
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph data-starter-glyph aria-hidden="true" class="starter-glyph" />
+          <Glyph data-starter-glyph aria-hidden="true" class="size-icon-md flex-none text-ink-strong" />
           <span>{starter.text}</span>
         </button>
       </li>
     {/each}
   </ul>
 {/if}
-
-<style>
-  .caw-starters {
-    justify-content: center;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .caw-starters li {
-    display: flex;
-    max-inline-size: 100%;
-  }
-  /* The glyph in the words' own ink: a Solar duotone's half-ink layer in
-     muted ink fades into the chip (the magnifier's handle went, its lens
-     left as a grey dot), in the strong ink each layer stands clear. */
-  .caw-starters :global(.starter-glyph) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--ink-strong);
-  }
-</style>
