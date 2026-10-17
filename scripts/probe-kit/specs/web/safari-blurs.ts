@@ -30,11 +30,13 @@
  * and the page answered a script within {@link ANSWERS_MS} the whole way.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one case, one step at a time, as a hand makes them
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
 import {
+  COMPOSER_FIELD,
   type Kit,
   type KitFleet,
   open,
@@ -51,8 +53,8 @@ const QUESTION = "PROBE-QUESTION";
  * transition, drawn in software at 3x, took up to 906ms.
  */
 const ANSWERS_MS = 3000;
-/** The composer's field; its sizing mirror is a second textarea, hidden. */
-const FIELD = "textarea[role='combobox']:not([aria-hidden])";
+/** The composer's field (MentionField's editable box, kit {@link COMPOSER_FIELD}). */
+const FIELD = COMPOSER_FIELD;
 
 /** A turn that runs for a while; a question; every other one, a word. */
 const respond = (request: Seen): Reply => {
@@ -108,12 +110,18 @@ async function drive(
   what: string,
   act: () => Promise<{ happened: boolean; detail: string }>
 ): Promise<void> {
+  // A step that threw says what it was waiting on: the error's first line
+  // and the last lines of Playwright's call log.
+  const said = (error: unknown) => {
+    if (!(error instanceof Error)) {
+      return String(error);
+    }
+    const lines = error.message.split("\n").map((line) => line.trim());
+    const log = lines.filter((line) => line.startsWith("- ")).slice(-4);
+    return [lines[0], ...log].join(" ");
+  };
   const run = await answering(page, () =>
-    act().catch((error: unknown) => ({
-      happened: false,
-      detail:
-        error instanceof Error ? error.message.split("\n")[0] : String(error),
-    }))
+    act().catch((error: unknown) => ({ happened: false, detail: said(error) }))
   );
   kit.check(
     `${what}: it moves, and the page keeps answering`,
@@ -151,10 +159,9 @@ async function recallWheel(kit: Kit, bench: string) {
       );
       await page.keyboard.press("Enter");
       await page.waitForTimeout(800);
+      // The field's words are its textContent (kit COMPOSER_FIELD).
       const taken = await page.evaluate(
-        (sel) =>
-          (document.querySelector(sel) as HTMLTextAreaElement | null)?.value ??
-          "",
+        (sel) => document.querySelector(sel)?.textContent?.trim() ?? "",
         FIELD
       );
       return {
@@ -340,7 +347,65 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     }
   );
   page = await phone(kit);
+  // What the page heard about this session (each frame's kinds and types)
+  // and asked the hub, on the wall clock the card's record below keeps, said
+  // on a miss.
+  const heard: string[] = [];
+  const t0 = Date.now();
+  const kinds = (text: string) =>
+    [
+      ...new Set(
+        [
+          ...text.matchAll(/"(kind|type|subtype|verb)":"([a-z_.]+)"/g),
+        ].map((m) => `${m[1]}=${m[2]}`)
+      ),
+    ]
+      .slice(0, 6)
+      .join(" ");
+  page.on("websocket", (socket) => {
+    socket.on("framereceived", ({ payload }) => {
+      const text = String(payload);
+      if (text.includes(asker)) {
+        heard.push(`${Date.now() - t0}ms ${kinds(text)}`);
+      }
+    });
+  });
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/")) {
+      heard.push(`${Date.now() - t0}ms GET ${url.pathname.slice(0, 60)}`);
+    }
+  });
   await open(page, `${base}/session/${asker}`, FIELD, 90_000);
+  heard.length = 0;
+  // The ask card's and the composer's comings and goings, said on a miss.
+  await page.evaluate((from) => {
+    const said: string[] = [];
+    const at = () => Date.now() - from;
+    const watched = '[data-slot="ask"], [data-slot="dock"], [data-slot="hitl"]';
+    const name = (el: Element) =>
+      `${el.getAttribute("data-slot")}${el.closest("[data-pane]") ? " in a pane" : ""}${el.closest("[data-slot='leaf']") ? " in a leaf" : ""}`;
+    const note = (nodes: NodeList, how: string) => {
+      for (const node of nodes) {
+        if (node instanceof Element) {
+          const hit = [
+            ...(node.matches(watched) ? [node] : []),
+            ...node.querySelectorAll(watched),
+          ];
+          for (const el of hit) {
+            said.push(`${at()}ms ${how}${name(el)}`);
+          }
+        }
+      }
+    };
+    new MutationObserver((records) => {
+      for (const record of records) {
+        note(record.addedNodes, "+");
+        note(record.removedNodes, "-");
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+    (window as unknown as { __askSaid: string[] }).__askSaid = said;
+  }, t0);
   await fleet.send(asker, `${QUESTION} pick a voice`);
   const minimize = page.locator(
     "[data-slot=\"ask\"] button[aria-label='Minimize question']"
@@ -352,7 +417,43 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
     page,
     "a minimized question's bar comes up, and the card again",
     async () => {
-      await minimize.tap();
+      // What the composer's ask holds as the press goes in, and after a
+      // press that missed, said on a miss.
+      const asks = () =>
+        page.evaluate(
+          () =>
+            [...document.querySelectorAll('[data-slot="ask"]')]
+              .map(
+                (ask) =>
+                  `"${ask.textContent?.replace(/\s+/g, " ").trim().slice(0, 120)}" [${[
+                    ...ask.querySelectorAll("button"),
+                  ]
+                    .map(
+                      (b) => b.getAttribute("aria-label") ?? b.textContent?.trim()
+                    )
+                    .join(", ")}]`
+              )
+              .join("; ") || "nothing"
+        );
+      const asking = await asks();
+      await minimize.tap().catch(async (error: unknown) => {
+        // Who took the question down: the fleet's own logs, kept for a reader.
+        for (const role of ["hub", "agent", "sessiond"] as const) {
+          await Bun.write(
+            join(kit.out, `question-${role}.log`),
+            await fleet.logs(role)
+          );
+        }
+        const row = await fleet.instance(asker);
+        const came = await page.evaluate(() =>
+          (window as unknown as { __askSaid?: string[] }).__askSaid
+            ?.slice(-24)
+            .join(", ")
+        );
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}\n- the ask held ${asking}, then ${await asks()}; the session ${JSON.stringify(row ?? null).slice(0, 300)}; came and went: ${came}; the page heard ${heard.slice(0, 40).join(", ") || "nothing of it"}; at ${page.url()}; the fleet's logs in ${kit.out}`
+        );
+      });
       const bar = await present(page, '[data-slot="asked-chip"]');
       await page.waitForTimeout(800);
       await page.locator('[data-slot="asked-chip"]').tap();
