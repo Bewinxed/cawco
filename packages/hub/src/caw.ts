@@ -98,7 +98,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
-import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
+import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
@@ -242,8 +242,8 @@ export const withCawDenials = (
  * manager and see no other session's processes, exactly as a delegate's. Its
  * id names the project, machine and folder (the first 8 characters name its
  * scratch and door dirs, so they are the hash's), and ends
- * {@link LEAD_PLACE_SUFFIX}, which the machine's policy reads as a lead's
- * place (workspace-policy.ts `isLeadPlace`). None for any other row.
+ * {@link PLACE_SUFFIX}, which the machine's policy reads as a place
+ * (workspace-policy.ts `isPlace`). None for any other row.
  */
 export const leadPlaceRef = (
   row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">
@@ -253,7 +253,7 @@ export const leadPlaceRef = (
         id: `${createHash("sha256")
           .update(`${row.projectId}\0${row.machineId}\0${row.cwd}`)
           .digest("hex")
-          .slice(0, 8)}${LEAD_PLACE_SUFFIX}`,
+          .slice(0, 8)}${PLACE_SUFFIX}`,
         path: row.cwd,
       }
     : undefined;
@@ -263,7 +263,7 @@ export const leadPlaceRef = (
  * own (live components): Caw's place ({@link leadPlaceRef}); for any other
  * session, a place over the folder it works in, on its machine, so the stage
  * mounts the very files the session edits. Its boundary is the one a lead's
- * place has (workspace-policy.ts `isLeadPlace`): the project's toolchain runs
+ * place has (workspace-policy.ts `isPlace`): the project's toolchain runs
  * with no credential store, no service manager and its own network, as on a
  * delegate's clone, while the session's own commands stay on the host. Its id
  * names the machine and folder, so every session there shares one stage.
@@ -275,7 +275,7 @@ export const stagePlaceRef = (
     id: `${createHash("sha256")
       .update(`${row.machineId}\0${row.cwd}`)
       .digest("hex")
-      .slice(0, 8)}${LEAD_PLACE_SUFFIX}`,
+      .slice(0, 8)}${PLACE_SUFFIX}`,
     path: row.cwd,
   };
 

@@ -214,11 +214,13 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
  * lines): its policy denies what is there ({@link workspaceDenies},
  * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config
  * by name (`protectConfig`), and its guard checks each command
- * (boundary.ts `PLACE_GUARD`).
+ * (boundary.ts `PLACE_GUARD`). Every place's id ends {@link PLACE_SUFFIX},
+ * Caw's and a session's stage place alike. The suffix stays `-caw`, the one
+ * it had when only Caw had a place, so the place records already on disk
+ * still read as places.
  */
-export const LEAD_PLACE_SUFFIX = "-caw";
-export const isLeadPlace = (id: string): boolean =>
-  id.endsWith(LEAD_PLACE_SUFFIX);
+export const PLACE_SUFFIX = "-caw";
+export const isPlace = (id: string): boolean => id.endsWith(PLACE_SUFFIX);
 
 /** The most `find` writes about a place: every path it names, NUL-separated. */
 const FIND_OUTPUT_MAX = 64 * 1024 * 1024;
@@ -332,7 +334,7 @@ export const workspaceDenies = async (
   workspace: WorkspaceRef
 ): Promise<readonly CloneDeny[]> => {
   const clone = resolveReal(workspace.path);
-  if (!isLeadPlace(workspace.id)) {
+  if (!isPlace(workspace.id)) {
     return cloneDenies(clone);
   }
   return (await protectedIn(clone)).map((path) => ({
@@ -892,7 +894,7 @@ export const workspacePolicy = async (
   ]);
   // A lead's place: what only its owner may read in it is hidden from the
   // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).
-  const lead = isLeadPlace(workspace.id);
+  const lead = isPlace(workspace.id);
   const ownerOnly = lead ? await ownerOnlyIn(clone) : [];
   // What shares an inode with a file elsewhere is only read (`linkedIn`).
   const linked = lead ? await linkedIn(clone) : [];

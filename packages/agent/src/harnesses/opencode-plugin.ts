@@ -66,7 +66,7 @@ import {
 } from "@cawco/core/paths";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
+import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson, writeJson } from "./fleet-common";
@@ -268,9 +268,9 @@ const withoutSecret = (input) => {
   return rest;
 };
 
-// A project lead's place (the agent's isLeadPlace): a person's own folder,
+// A project lead's place (the agent's isPlace): a person's own folder,
 // bounded only for the lead's own sessions there.
-const leadPlaceSuffix = ${JSON.stringify(LEAD_PLACE_SUFFIX)};
+const leadPlaceSuffix = ${JSON.stringify(PLACE_SUFFIX)};
 
 const OUTPUT_LIMIT = 30000;
 // Runs \`file args\` as one \`shell\` call of the session: its env, its

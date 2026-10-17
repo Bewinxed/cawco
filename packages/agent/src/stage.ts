@@ -6,7 +6,7 @@
  * sees and writes what the workspace's commands do and listens on the
  * boundary's loopback, which the preview bridge reaches (`preview-bridge.ts`).
  * A session with no workspace of its own has its stage in a place over the
- * folder it works in (core `isLeadPlace`, hub `stagePlaceRef`): a boundary
+ * folder it works in (core `isPlace`, hub `stagePlaceRef`): a boundary
  * like a workspace's, over the person's own files.
  *
  * One stage per toolchain root of a workspace's clone (the dir of its
@@ -70,7 +70,7 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
-import { isLeadPlace } from "@cawco/core/workspace-policy";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { ensureBoundary, shellQuote } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
@@ -941,7 +941,7 @@ async function stageAtRoot(
 ): Promise<Stage> {
   let stage = stages.get(found.key);
   if (!stage) {
-    if (isLeadPlace(found.workspace.id)) {
+    if (isPlace(found.workspace.id)) {
       await keepPlace(found.workspace);
     }
     stage = {

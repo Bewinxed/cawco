@@ -1544,6 +1544,57 @@ async function standUp(
   };
   const post = async (message: object) =>
     (await dashboard()).send(JSON.stringify(message));
+  /** A machine control asked as a dashboard asks it, on its socket: the `control_result` it answers. */
+  const controlAnswer = async (
+    method: string,
+    args: unknown[],
+    ms = 60_000
+  ): Promise<{ error?: string; ok: boolean; result?: unknown }> => {
+    const ws = await dashboard();
+    const requestId = crypto.randomUUID();
+    const result = Promise.withResolvers<{
+      error?: string;
+      ok: boolean;
+      result?: unknown;
+    }>();
+    const heard = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as {
+        payload?: { kind?: string; requestId?: string; ok?: boolean };
+      };
+      if (
+        message.payload?.kind === "control_result" &&
+        message.payload.requestId === requestId
+      ) {
+        result.resolve(message.payload as { ok: boolean });
+      }
+    };
+    ws.addEventListener("message", heard);
+    ws.send(
+      JSON.stringify({
+        verb: "control",
+        machineId: MACHINE,
+        requestId,
+        payload: { requestId, method, args },
+      })
+    );
+    try {
+      const read = await readWithin(ms, () => result.promise);
+      switch (read.kind) {
+        case "answered":
+          return read.value;
+        case "unanswered":
+          throw new Error(
+            `${method}: no control_result within ${read.after} ms (${read.reason})`
+          );
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    } finally {
+      ws.removeEventListener("message", heard);
+    }
+  };
   /**
    * A fetch the hub runs after its request has answered (a skill, a plugin,
    * a marketplace read or link): asked with `ask`, resolved with what `pick`
@@ -2030,6 +2081,7 @@ async function standUp(
     heldProcs,
     api,
     post,
+    controlAnswer,
     fetched,
     query,
     write,

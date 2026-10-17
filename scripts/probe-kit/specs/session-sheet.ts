@@ -16,9 +16,13 @@
  *    with its story file, never "this session runs in no workspace".
  * 2. `artifact_create(kind: "sheet", file: "src/Card.stories.js")` answers
  *    an id and its stage `live`.
- * 3. `artifact_read` of it answers its stage `live` with no errors, and its
+ * 3. A dashboard's raw `stageEnsure` control, naming a place id and a folder
+ *    the hub never resolved (the same project, copied elsewhere), is refused
+ *    at the hub's relay as the hub's to send, and never reaches the machine:
+ *    no place record is kept for it (stage.ts `keepPlace`).
+ * 4. `artifact_read` of it answers its stage `live` with no errors, and its
  *    story `One`.
- * 4. The sheet through the session's preview origin mounts `One`; the
+ * 5. The sheet through the session's preview origin mounts `One`; the
  *    session rewrites `Card.svelte` with its shell, and the open sheet shows
  *    the edit in place, with no reload.
  *
@@ -28,8 +32,10 @@
  *
  *   bun scripts/probe-kit/run.ts session-sheet
  */
+import { existsSync } from "node:fs";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { STAGE_ENSURE } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -113,18 +119,28 @@ const ERRORS = /"errors":(\[[^\]]*\])/;
 const ID = /"id":"([0-9a-f-]{36})"/;
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
 
-const run = async (kit: Kit) => {
-  const fleet = await kit.fleet(respond);
-  await mkdir(join(fleet.repo, "src"), { recursive: true });
+/** A place id no session names: what a dashboard's raw stage control could invent. */
+const FORGED_PLACE = "0badc0de-caw";
+
+/** {@link PROJECT} written into `dir`, the dashboard's packages linked in. */
+const writeProject = async (dir: string) => {
+  await mkdir(join(dir, "src"), { recursive: true });
   await Promise.all(
     Object.entries(PROJECT).map(([file, text]) =>
-      writeFile(join(fleet.repo, file), text)
+      writeFile(join(dir, file), text)
     )
   );
   await symlink(
     join(ROOT, "apps/dashboard/node_modules"),
-    join(fleet.repo, "node_modules")
+    join(dir, "node_modules")
   );
+};
+
+const run = async (kit: Kit) => {
+  const fleet = await kit.fleet(respond);
+  await writeProject(fleet.repo);
+  const elsewhere = join(fleet.sandbox, "elsewhere");
+  await writeProject(elsewhere);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -168,21 +184,39 @@ const run = async (kit: Kit) => {
     !!id && created.match(STATUS)?.[1] === "live",
     short(created)
   );
+
+  // 3. A dashboard's raw stage control, on a folder the hub never resolved.
+  // A machine that took it answers once its stage is up or has failed.
+  const forged = await fleet.controlAnswer(
+    STAGE_ENSURE,
+    [{ id: FORGED_PLACE, path: elsewhere }, STORY],
+    180_000
+  );
+  const kept = existsSync(
+    join(fleet.env.HOME as string, ".cawco", "workspaces", FORGED_PLACE)
+  );
+  kit.check(
+    "3: a dashboard's stageEnsure naming an arbitrary folder is refused at the relay, and the machine keeps no place for it",
+    !forged.ok &&
+      (forged.error ?? "").includes(`${STAGE_ENSURE} is the hub's to send`) &&
+      !kept,
+    `${JSON.stringify(forged).slice(0, 300)}; place record ${kept ? "kept" : "none"}`
+  );
   if (!id) {
     return;
   }
 
-  // 3. Read back: live, no errors, its story.
-  const read = await call("3", "mcp__cawco__artifact_read", { id });
+  // 4. Read back: live, no errors, its story.
+  const read = await call("4", "mcp__cawco__artifact_read", { id });
   kit.check(
-    "3: artifact_read answers the stage live with no errors, and story One",
+    "4: artifact_read answers the stage live with no errors, and story One",
     read.match(STATUS)?.[1] === "live" &&
       read.match(ERRORS)?.[1] === "[]" &&
       read.includes('"One"'),
     short(read)
   );
 
-  // 4. The sheet through the session's preview, and the session's edit reaching it.
+  // 5. The sheet through the session's preview, and the session's edit reaching it.
   const { port } = (await (
     await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
       method: "POST",
@@ -207,7 +241,7 @@ const run = async (kit: Kit) => {
   await page.evaluate(() => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
-  const edit = await call("4", "Bash", {
+  const edit = await call("5", "Bash", {
     command: `cat > ${join(fleet.repo, "src/Card.svelte")} <<'EOF'\n${EDITED}EOF`,
     description: "Rewrite the card's heading",
   });
@@ -221,7 +255,7 @@ const run = async (kit: Kit) => {
     .evaluate(() => (window as unknown as { __stayed?: boolean }).__stayed)
     .catch(() => false);
   kit.check(
-    "4: the sheet mounts One through the session's preview, and the session's edit to Card.svelte reaches it in place",
+    "5: the sheet mounts One through the session's preview, and the session's edit to Card.svelte reaches it in place",
     before === "Hello" && after === "Edited Hello" && stayed === true,
     `before "${before}", after "${after}", ${stayed ? "no reload" : "reloaded"}; the edit answered ${short(edit).slice(0, 120)}`
   );

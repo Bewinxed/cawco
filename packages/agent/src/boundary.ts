@@ -155,7 +155,7 @@ import {
 } from "@cawco/core/upstream-guard";
 import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
-  isLeadPlace,
+  isPlace,
   workspaceDenies,
   workspacePolicy,
 } from "@cawco/core/workspace-policy";
@@ -1262,7 +1262,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
   // A gate an agent left as it died names no process this one waits for.
   await rm(gateOf(id), { force: true });
   const ref = { id, path: held.path };
-  if (isLeadPlace(id)) {
+  if (isPlace(id)) {
     // A person's own folder: what earlier builds stood in there goes once
     // nothing holds it, and nothing is listed in its exclude.
     await removeStandIns(ref).catch(
@@ -1285,7 +1285,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
   }
   // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
   // an earlier build wrote there go, and a user's own files show again.
-  if (!isLeadPlace(id)) {
+  if (!isPlace(id)) {
     await listStandIns(ref, false).catch(
       said("its clone's stand-ins could not be listed in its info/exclude")
     );
@@ -1556,7 +1556,7 @@ const readWorkspaces = async (): Promise<{
       });
       continue;
     }
-    const created = isLeadPlace(id)
+    const created = isPlace(id)
       ? undefined
       : await readRecord<{ path?: string }>(
           join(stateDir(id), "create.json")
@@ -1899,8 +1899,13 @@ const ownKeeperOwed = async (): Promise<boolean> => {
   return (await readUpdateState())?.keeperFailedVersion !== runtimeVersion;
 };
 
+/** Why a boundary can't start: a workspace's runs a delegate, a place's (core `isPlace`) a person's own folder. */
 const refusal = (id: string, why: string): Error =>
-  new Error(`workspace ${id} cannot run a delegate on this machine: ${why}`);
+  new Error(
+    isPlace(id)
+      ? `place ${id} cannot be bounded on this machine: ${why}`
+      : `workspace ${id} cannot run a delegate on this machine: ${why}`
+  );
 
 /**
  * What a Linux machine runs a boundary with, each by the package that ships
@@ -2058,7 +2063,7 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
  * ({@link refuseGone}).
  */
 const placeReady = async (ref: WorkspaceRef): Promise<void> => {
-  if (isLeadPlace(ref.id)) {
+  if (isPlace(ref.id)) {
     const place = await stat(ref.path).catch(() => undefined);
     if (!place?.isDirectory()) {
       await refuseGone(ref, `${ref.path} is not a folder`);
@@ -2471,7 +2476,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         .update("\0")
         .update(exec)
         .update("\0")
-        .update(isLeadPlace(id) ? PLACE_GUARD : "")
+        .update(isPlace(id) ? PLACE_GUARD : "")
         .digest("hex")
         .slice(0, 16),
       spec: {
@@ -2500,7 +2505,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           CAWCO_WORKSPACE: id,
           [BOUNDARY_MARKER]: gen,
           TMPDIR: workspaceTmpDir(id),
-          ...(isLeadPlace(id) ? { [LEAD_PLACE_ENV]: "1" } : {}),
+          ...(isPlace(id) ? { [LEAD_PLACE_ENV]: "1" } : {}),
         },
       },
     };
@@ -2518,7 +2523,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     runner: join(generationDir(id, gen), "runner.sh"),
     denies: join(generationDir(id, gen), "denies.json"),
   };
-  const lead = isLeadPlace(id);
+  const lead = isPlace(id);
   return {
     files: [
       [files.settings, settings],
@@ -2771,7 +2776,7 @@ const LEAD_PLACE_ENV = "CAWCO_LEAD_PLACE";
 
 /** A lead's place's guard, written into the boundary's generation dir ({@link PLACE_GUARD}); none for a clone. */
 const guardFiles = (id: string, gen: string): [string, string][] =>
-  isLeadPlace(id) ? [[guardOf(id, gen), PLACE_GUARD]] : [];
+  isPlace(id) ? [[guardOf(id, gen), PLACE_GUARD]] : [];
 
 const guardOf = (id: string, gen: string | undefined): string =>
   join(generationDir(id, gen), "place-guard.pl");
@@ -3626,7 +3631,7 @@ const attachedIn = (
     if (!(proc.alive && (kind === "claude" || kind === "pi"))) {
       return false;
     }
-    if (isLeadPlace(id)) {
+    if (isPlace(id)) {
       return commands.byPid.get(proc.pid)?.includes(hook) ?? false;
     }
     return (
@@ -4196,7 +4201,7 @@ take() {
  */
 /** A lead's place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
-  isLeadPlace(id)
+  isPlace(id)
     ? `if ! /usr/bin/perl ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
   echo "cawco: this place's guard could not look at it before the command, so the command did not run: $(cat "$req/guard-err")" >&2
   rm -rf "$req"
@@ -4210,7 +4215,7 @@ const guardAfter = (
   id: string,
   held: Pick<Held, "gen" | "path" | "scratch">
 ): string =>
-  isLeadPlace(id)
+  isPlace(id)
     ? `/usr/bin/perl ${shellQuote(guardOf(id, held.gen))} after "$req" ${shellQuote(held.path)} ${shellQuote(held.scratch)} ${shellQuote(workspacePolicyFile(id))} "$HOME" >&2
 guarded=$?
 if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco: this place's guard could not check what the command changed, so the command is taken as failed." >&2; status=1; fi
@@ -4683,7 +4688,7 @@ const launch = async (
   const linux = process.platform === "linux";
   // A lead's place is a person's own folder: nothing of the boundary's is
   // written into it (no copied inodes, no stand-ins, no exclude lines).
-  const own = !isLeadPlace(ref.id);
+  const own = !isPlace(ref.id);
   const procId = boundaryProcId(ref.id, gen);
   if (linux) {
     // Only with no sandbox of the workspace running: a handover starts this

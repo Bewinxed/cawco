@@ -50,7 +50,7 @@ import { projectClaudeDir } from "@cawco/core/paths";
 import {
   type CloneDeny,
   cloneDenies,
-  isLeadPlace,
+  isPlace,
 } from "@cawco/core/workspace-policy";
 import { excludedStandIns, excludeStandIns, gitIn } from "./checkout-exclude";
 
@@ -352,7 +352,7 @@ export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
   // a repository, and its earlier stand-ins go as ever.
   if (
     !(await statOf(ref.path)) ||
-    (!isLeadPlace(ref.id) && (await noRepositoryAt(ref.path)))
+    (!isPlace(ref.id) && (await noRepositoryAt(ref.path)))
   ) {
     return;
   }

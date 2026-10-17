@@ -15,7 +15,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import { isLeadPlace } from "@cawco/core/workspace-policy";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { reportDamaged } from "./damaged-records";
 
 interface Scan {
@@ -25,7 +25,7 @@ interface Scan {
 }
 
 /**
- * Keeps place `ref` (core `isLeadPlace`) as a stage ran there: its boundary's
+ * Keeps place `ref` (core `isPlace`) as a stage ran there: its boundary's
  * record goes when it closes once quiet, and a preview's request for its
  * stage after the daemon restarted finds the folder here (stage.ts
  * `wakeSource`). A clone has its `create.json`.
@@ -131,12 +131,12 @@ export const workspaceHolding = (
  * The boundary a spawn that names none runs in: a delegation workspace's,
  * when `path` is inside its clone ({@link workspaceHolding}), and never a
  * project lead's place. A lead's place is a person's own folder (core
- * `isLeadPlace`), bounded only for the lead's own row, which the hub names
+ * `isPlace`), bounded only for the lead's own row, which the hub names
  * on every spawn of it (hub caw.ts `leadPlaceRef`); a person's session in
  * that folder runs on the host.
  */
 export const cloneHolding = (path: string): Promise<WorkspaceRef | undefined> =>
-  holding(path, (ref) => !isLeadPlace(ref.id));
+  holding(path, (ref) => !isPlace(ref.id));
 
 /** {@link workspaceHolding} over the workspaces `take` keeps. */
 const holding = async (
