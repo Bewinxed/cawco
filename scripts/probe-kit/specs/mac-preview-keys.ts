@@ -8,7 +8,7 @@
  * Catalyst probe build (ios-accounts MAC_PROBE_BUILD) runs on the session,
  * its input through Peekaboo's background mode (never the owner's pointer
  * or keys), and everything is read from the app's DEBUG lines and the
- * page's report:
+ * page's report, never from pixels:
  *
  * 1. With `probe-keep` focused, ⌘K is the page's: the app leaves the key
  *    to it ("key command jumpToSession left to the page"), the page keeps
@@ -23,22 +23,27 @@
  *   bun scripts/probe-kit/run.ts mac-preview-keys
  *
  * Needs the Mac probe build of this tree (scripts/lib/apple-app.ts
- * `macProbeApp`) and the notarized Peekaboo CLI (`brew install
- * openclaw/tap/peekaboo`; Homebrew core's `peekaboo` is a source build
- * without release signing, which "Local in-process commands still work"
- * with but not "normal Bridge and daemon use", peekaboo.sh/install.html).
- * Its `see`, `click` and `press` run as separate processes, and a snapshot
- * belongs to the host that took it ("A stopped producer, no owner, or
- * multiple claimants is a pre-dispatch refusal", peekaboo.sh/commands/
- * click.html), so the run holds one host for all of them: Peekaboo's own
- * build-scoped daemon, on the socket the CLI derives (a custom socket path
- * "remain[s] limited to protocol 1.28", which an exact-window capture
- * refuses, peekaboo.sh/commands/bridge.html), every call pinned to it
- * (`PEEKABOO_BRIDGE_SOCKET`: strict, never the local runtime), started by
- * the run when it is not up and stopped after. That daemon must hold
- * Accessibility, Event Synthesizing and Screen Recording; the run says
- * which it lacks before any input.
+ * `macProbeApp`) and the Peekaboo CLI (`brew install
+ * openclaw/tap/peekaboo`). Every call runs in the CLI's own process
+ * (`--no-remote`: "checks only the current local process",
+ * peekaboo.sh/commands/click.html), never a daemon or app host, so macOS
+ * weighs each against the grants of the process responsible for the run: a
+ * CawCo session's is the agent (`dev.cawco.agent`), an SSH shell's
+ * sshd-keygen-wrapper. Nothing takes a picture, so the run needs no Screen
+ * Recording: a field takes the keyboard by a background query click, which
+ * on a focusable text field "uses the field's writable `AXFocused`
+ * attribute" (click.html); ⌘K is a background press on the app's exact
+ * window ("Send a chord to one already-focused exact window without
+ * activating it", peekaboo.sh/commands/press.html), as real key events
+ * (`synthOnly`), since the page's claim on keys is what is proven; the menu
+ * item is an Accessibility press. So the run asks Accessibility and Event
+ * Synthesizing of its responsible process, and says which it lacks before
+ * any input. Peekaboo keeps its state in the run's own scratch folder
+ * (`PEEKABOO_CONFIG_DIR`), gone with the run.
  */
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { macProbeApp } from "../../lib/apple-app";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -74,16 +79,16 @@ report();
 </script></body></html>`;
 
 /**
- * Runs Peekaboo with `args`, on the host at `socket` when one is given
- * (`PEEKABOO_BRIDGE_SOCKET`, strict); its stdout, or throws with what it
- * said: its JSON's `error` (and the last of its debug lines) when it wrote
- * JSON, else its own words.
+ * Runs Peekaboo in its own process with `args`, its state in `home`; its
+ * stdout, or throws with what it said: its JSON's `error` (and the last of
+ * its debug lines) when it wrote JSON, else its own words.
  */
-async function peekaboo(args: string[], socket?: string): Promise<string> {
-  const env = socket
-    ? { ...process.env, PEEKABOO_BRIDGE_SOCKET: socket }
-    : process.env;
-  const run = await Bun.$`${PEEKABOO} ${args}`.env(env).quiet().nothrow();
+async function peekaboo(home: string, args: string[]): Promise<string> {
+  const env = { ...process.env, PEEKABOO_CONFIG_DIR: home };
+  const run = await Bun.$`${PEEKABOO} ${args} --no-remote --json`
+    .env(env)
+    .quiet()
+    .nothrow();
   if (run.exitCode !== 0) {
     const said = (run.stdout.toString() || run.stderr.toString()).trim();
     let why = said.slice(-600);
@@ -106,83 +111,29 @@ async function peekaboo(args: string[], socket?: string): Promise<string> {
   return run.stdout.toString();
 }
 
-/** The CLI's build-scoped daemon socket, `daemon-<build>.sock`, as `bridge status` lists it among its candidates. */
-const BUILD_DAEMON = /\/daemon-[0-9a-f]+\.sock$/;
-
-/** The grants the run's input needs of its host, as `daemon status --json` names them in `data.permissions`. */
-const GRANTS = {
-  accessibility: "Accessibility",
-  postEvent: "Event Synthesizing",
-  screenRecording: "Screen Recording",
-} as const;
-
-/** The Peekaboo host the run holds: its socket, and whether the run started it. */
-interface PeekabooHost {
-  socket: string;
-  started: boolean;
-}
-
-/** `daemon status --json` on `socket`: whether it runs, its pid, and its grants. */
-async function daemonOn(socket: string) {
-  const status = JSON.parse(
-    await peekaboo(["daemon", "status", "--bridge-socket", socket, "--json"])
-  ) as {
-    data?: {
-      permissions?: Partial<Record<keyof typeof GRANTS, boolean>>;
-      pid?: number;
-      running?: boolean;
-    };
-  };
-  return status.data ?? {};
-}
+/**
+ * The grants the run's input uses, by the names `permissions status` gives
+ * them: Accessibility for the field's focus and the menu item's press,
+ * Event Synthesizing for ⌘K's key events.
+ */
+const GRANTS = ["Accessibility", "Event Synthesizing"];
 
 /**
- * The run's one host: the CLI's own build-scoped daemon, up and granted, or
- * why not. A source build of the CLI, no such socket among the candidates,
- * or a missing grant is the run's failure, said before any input.
+ * The grants of `GRANTS` the run's responsible process lacks, as Peekaboo
+ * finds them in its own process (`permissions status --no-remote`).
  */
-async function peekabooHost(): Promise<PeekabooHost | string> {
-  const bridge = JSON.parse(await peekaboo(["bridge", "status", "--json"])) as {
-    data?: {
-      candidates?: { socketPath?: string }[];
-      client?: { teamIdentifier?: string };
-    };
+async function lacking(home: string): Promise<string[]> {
+  const status = JSON.parse(
+    await peekaboo(home, ["permissions", "status"])
+  ) as {
+    data?: { permissions?: { isGranted?: boolean; name?: string }[] };
   };
-  if (!bridge.data?.client?.teamIdentifier) {
-    return `${PEEKABOO} is not release-signed (Homebrew core's source build): it keeps no daemon a later command can reach. Install the notarized CLI: brew install openclaw/tap/peekaboo (peekaboo.sh/install.html)`;
-  }
-  const socket = bridge.data.candidates
-    ?.map((one) => one.socketPath ?? "")
-    .find((path) => BUILD_DAEMON.test(path));
-  if (!socket) {
-    return `bridge status names no build-scoped daemon socket: ${JSON.stringify(bridge.data.candidates)}`;
-  }
-  const before = await daemonOn(socket);
-  if (!before.running) {
-    await peekaboo(["daemon", "start", "--bridge-socket", socket, "--json"]);
-  }
-  const now = await daemonOn(socket);
-  const lacks = (Object.keys(GRANTS) as (keyof typeof GRANTS)[])
-    .filter((grant) => now.permissions?.[grant] !== true)
-    .map((grant) => GRANTS[grant]);
-  if (!now.running || lacks.length > 0) {
-    if (!before.running) {
-      await peekaboo(["daemon", "stop", "--bridge-socket", socket, "--json"]);
-    }
-    return now.running
-      ? `Peekaboo's daemon (pid ${now.pid}, ${socket}) lacks ${lacks.join(", ")}: grant them to it in System Settings > Privacy & Security (peekaboo.sh/permissions.html)`
-      : `Peekaboo's daemon did not start on ${socket}`;
-  }
-  return { socket, started: !before.running };
-}
-
-/** One of `see --json`'s `data.ui_elements`: its opaque id and the AX words it is found by (peekaboo.sh/commands/see.html). */
-interface SeenElement {
-  description?: string | null;
-  id: string;
-  identifier?: string | null;
-  label?: string | null;
-  title?: string | null;
+  const granted = new Set(
+    (status.data?.permissions ?? [])
+      .filter((one) => one.isGranted === true)
+      .map((one) => one.name)
+  );
+  return GRANTS.filter((grant) => !granted.has(grant));
 }
 
 /**
@@ -202,9 +153,9 @@ for (let i = 0; i < list.count; i++) {
 JSON.stringify(out);`;
 
 /**
- * The app's window by its CGWindowID, the identity Peekaboo's
- * `--window-id` takes ("the captured process generation, window ID, and
- * bounds must still match", peekaboo.sh/commands/see.html), as the window
+ * The app's window by its CGWindowID, the exact window Peekaboo's
+ * `--window-id` takes ("An exact window selector enables receipt-pinned
+ * background press", peekaboo.sh/commands/press.html), as the window
  * server lists it: the app's one on-screen window at the normal layer (0),
  * the largest when Catalyst stands helpers beside it.
  */
@@ -236,33 +187,6 @@ async function windowOf(pid: number): Promise<string> {
   return String(main.id);
 }
 
-/**
- * A fresh exact-window snapshot of the app's window (`see --window-id …
- * --json`): `data.snapshot_id`, the window, and the element of
- * `data.ui_elements` whose AX words name `field` (the field's aria-label),
- * so a background click lands on it and a background press has its
- * exact-window receipt (peekaboo.sh/commands/press.html).
- */
-async function look(socket: string, pid: number, field?: string) {
-  const window = await windowOf(pid);
-  const seen = JSON.parse(
-    await peekaboo(
-      ["see", "--window-id", window, "--pid", String(pid), "--json"],
-      socket
-    )
-  ) as { data?: { snapshot_id?: string | null; ui_elements?: SeenElement[] } };
-  const element = field
-    ? seen.data?.ui_elements?.find((one) =>
-        [one.label, one.description, one.title, one.identifier].includes(field)
-      )
-    : undefined;
-  return {
-    snapshot: seen.data?.snapshot_id ?? undefined,
-    window,
-    element: element?.id,
-  };
-}
-
 const run = async (kit: Kit) => {
   const { path: binary, problem } = macProbeApp(ROOT);
   if (
@@ -274,38 +198,29 @@ const run = async (kit: Kit) => {
   ) {
     return;
   }
-  // Peekaboo's one host for the run, said before anything starts.
-  const host = await peekabooHost();
-  if (
-    !kit.check(
-      "Peekaboo holds one granted host for the run: its build-scoped daemon",
-      typeof host !== "string",
-      typeof host === "string"
-        ? host
-        : `${host.socket}${host.started ? " (started by the run)" : ""}`
-    ) ||
-    typeof host === "string"
-  ) {
-    return;
-  }
+  const home = await mkdtemp(join(tmpdir(), "mac-preview-keys-peekaboo-"));
   try {
-    await keys(kit, binary, host.socket);
-  } finally {
-    // The daemon the run started goes with it; one already up stays as it was.
-    if (host.started) {
-      await peekaboo([
-        "daemon",
-        "stop",
-        "--bridge-socket",
-        host.socket,
-        "--json",
-      ]).catch((error) => console.log(`  peekaboo daemon stop: ${error}`));
+    // The grants the input uses, said before anything starts.
+    const lacks = await lacking(home);
+    if (
+      !kit.check(
+        "the run's responsible process holds what its input uses: Accessibility and Event Synthesizing",
+        lacks.length === 0,
+        lacks.length === 0
+          ? "granted"
+          : `lacks ${lacks.join(", ")}: macOS weighs Peekaboo's own process against the process responsible for the run (a CawCo session's agent, an SSH shell's sshd-keygen-wrapper); run it from a shell whose responsible process holds them`
+      )
+    ) {
+      return;
     }
+    await keys(kit, binary, home);
+  } finally {
+    await rm(home, { force: true, recursive: true });
   }
 };
 
-/** The fleet, the Mac app and the three checks, every input through the run's Peekaboo host at `socket`. */
-const keys = async (kit: Kit, binary: string, socket: string) => {
+/** The fleet, the Mac app and the three checks, every input through Peekaboo in its own process, its state in `home`. */
+const keys = async (kit: Kit, binary: string, home: string) => {
   const fleet = await kit.fleet(() => ({ everyMs: 10, words: ["ok"] }));
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -365,41 +280,32 @@ const keys = async (kit: Kit, binary: string, socket: string) => {
     ) {
       return;
     }
-    /** A background click on `field`, then its report with that focus. */
+    /**
+     * A background query click on `field` (its aria-label) in the app's
+     * window: the field's `AXFocused`, no pointer. Then its report with that
+     * focus.
+     */
     const focus = async (field: string) => {
-      const at = await look(socket, app.pid, field);
-      if (!(at.element && at.snapshot)) {
-        throw new Error(
-          `no ${field} in Peekaboo's snapshot (${JSON.stringify(at)})`
-        );
-      }
-      await peekaboo(
-        [
-          "click",
-          "--on",
-          at.element,
-          "--snapshot",
-          at.snapshot,
-          "--pid",
-          String(app.pid),
-        ],
-        socket
-      );
+      await peekaboo(home, [
+        "click",
+        field,
+        "--pid",
+        String(app.pid),
+        "--window-id",
+        await windowOf(app.pid),
+      ]);
       return report(0, (m) => m[3] === field, 15_000);
     };
-    /** ⌘K to the app's window, in the background, on a fresh exact-window snapshot. */
+    /** ⌘K as key events to the app's exact window, in the background. */
     const commandK = async () => {
-      const at = await look(socket, app.pid);
-      if (!at.snapshot) {
-        throw new Error(
-          `no snapshot of window ${at.window} from Peekaboo (${JSON.stringify(at)})`
-        );
-      }
-      // An exact-window selector and its fresh snapshot: the receipt a background press needs.
-      await peekaboo(
-        ["press", "cmd+k", "--window-id", at.window, "--snapshot", at.snapshot],
-        socket
-      );
+      await peekaboo(home, [
+        "press",
+        "cmd+k",
+        "--window-id",
+        await windowOf(app.pid),
+        "--input-strategy",
+        "synthOnly",
+      ]);
       await Bun.sleep(1500);
     };
 
@@ -459,10 +365,14 @@ const keys = async (kit: Kit, binary: string, socket: string) => {
     // 3. The menu bar stays live to the pointer while the page holds the keyboard.
     await focus("probe-leave");
     mark = app.lines.length;
-    await peekaboo(
-      ["menu", "click", "--pid", String(app.pid), "--path", JUMP_ITEM],
-      socket
-    );
+    await peekaboo(home, [
+      "menu",
+      "click",
+      "--pid",
+      String(app.pid),
+      "--path",
+      JUMP_ITEM,
+    ]);
     await Bun.sleep(1500);
     kit.check(
       `3: with the page holding the keyboard, a click on ${JUMP_ITEM} opens Jump: the menu bar's item stays live`,
