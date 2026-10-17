@@ -49,3 +49,17 @@ none
 - NewMemoryPopover.svelte:100 Popover.Content gap-3, p-3; :121 Input font-mono
 - PickerChip.svelte:50 Popover.Trigger gap-(--chip-gap), px-(--chip-pad), border, border-border-control, rounded-md, bg-surface-raised, type-label, text-ink-strong, transition-control, hover:bg-surface-hover; :57 Popover.Content max-h-80, w-64, gap-0
 EditorFrame trigger: the dropdown trigger now renders through `child` snippet as Button variant=ghost size=icon (same button, same classes) so its class is static; the require-static-classes hit is gone.
+
+## Contracts
+contract: apps/dashboard/src/lib/cawco/config/EditorFooter.svelte:129 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/EditorFrame.svelte:199 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte:128 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte:160 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte:188 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte:150 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte:169 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte:193 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte:100 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte:121 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/PickerChip.svelte:50 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+contract: apps/dashboard/src/lib/cawco/config/PickerChip.svelte:57 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
