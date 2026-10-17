@@ -74,3 +74,12 @@ No colour literal in any `<style>`; no `needs colour token` lines. No class of m
 
 ## Contracts
 none
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:246
+R3 fixed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:222
+R3 fixed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:231
+R3 fixed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:250
+R3 fixed: apps/dashboard/src/lib/components/features/tool-cards/OutputBlock.svelte:58
+R3 fixed: apps/dashboard/src/lib/components/features/workflows/TemplateInput.svelte:153
+(font-mono kept where the source already wrote it as a class: DiffModal:96, DiffView:117, DirectoryPicker:200,233. No box-shadow state mixes a residual with a utility.)
