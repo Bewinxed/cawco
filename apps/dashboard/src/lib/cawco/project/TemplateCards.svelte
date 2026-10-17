@@ -139,11 +139,11 @@
   });
 </script>
 
-<div class="templates">
+<div class="pt-space-8">
   <RadioGroup.Root
     data-cards
     aria-label="Template"
-    class="icon-cards cards"
+    class="icon-cards gap-y-space-8"
     onValueChange={(next) => {
       selected = (next || null) as TemplateName | null;
     }}
@@ -157,7 +157,7 @@
   >
     {#each cards as card (card.template)}
       {@const acted = action?.template === card.template ? action : undefined}
-      <div class="tcell">
+      <div class="relative grid">
         <RadioGroup.Item
           class="icon-card"
           data-template={card.template}
@@ -177,21 +177,22 @@
             {/snippet}
             {#snippet aside()}
               {#if fit === card.template && peek}
-                <span class="fits" transition:appear>Fits your prompt</span>
+                <span class="type-label text-brand-ink" transition:appear>Fits your prompt</span>
               {/if}
             {/snippet}
           </CardFace>
           {#if acted}
             <!-- The room its action stands in, under its notice. -->
-            <span aria-hidden="true" class="action-room"></span>
+            <span aria-hidden="true" class="mt-space-2 h-c-btn-h-sm"></span>
           {/if}
         </RadioGroup.Item>
         {#if acted}
           <Button
-            class="tcard-action"
+            class="absolute start-(--action-off) bottom-(--action-off) z-4"
             label={acted.label}
             onclick={acted.onclick}
             size="sm"
+            style="--action-off: calc(var(--space-4) + 1px)"
             variant="outline"
           />
         {/if}
@@ -202,10 +203,11 @@
       <div
         data-slot="peek"
         aria-hidden="true"
-        class="peek"
+        class="pointer-events-none absolute top-0 left-0 z-3 translate-x-(--peek-x) translate-y-(--peek-y) motion-safe:data-placed:transition-[translate] motion-safe:data-placed:dur-panel motion-safe:data-placed:ease-drawer"
         data-share={peekShare}
-        style:translate="{peekAt.x}px {peekAt.y}px"
-        class:placed
+        data-placed={placed || undefined}
+        style:--peek-x="{peekAt.x}px"
+        style:--peek-y="{peekAt.y}px"
       >
         <Caw
           ledge
@@ -218,50 +220,3 @@
     {/if}
   </RadioGroup.Root>
 </div>
-
-<style>
-  /* Room above the first row for Caw: his rise over the ledge line takes
-     the gap above and the first lines of padding of a card in the row
-     above, never its words. */
-  .templates {
-    padding-top: var(--space-8);
-  }
-  /* The cards are app.css's icon cards; rows stand further apart here, so
-     Caw's rise has the room. */
-  .templates :global(.cards) {
-    row-gap: var(--space-8);
-  }
-  /* Each card's cell: the card fills it, and an action stands over the
-     room the card keeps for it. */
-  .tcell {
-    position: relative;
-    display: grid;
-  }
-  .action-room {
-    block-size: var(--c-btn-h-sm);
-    margin-block-start: var(--space-2);
-  }
-  .tcell :global(.tcard-action) {
-    position: absolute;
-    inset-inline-start: calc(var(--space-4) + 1px);
-    inset-block-end: calc(var(--space-4) + 1px);
-    z-index: 4;
-  }
-  .fits {
-    font: var(--type-label);
-    color: var(--brand-ink);
-  }
-  /* Caw stands on the fitting card, painted over the grid. */
-  .peek {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 3;
-    pointer-events: none;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .peek.placed {
-      transition: translate var(--dur-panel) var(--ease-drawer);
-    }
-  }
-</style>

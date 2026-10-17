@@ -212,9 +212,13 @@
      opens a tab (a modifier, the middle button) still does. -->
 {#snippet under()}
   {#if earlier.length > 0}
-    <section data-slot="earlier" aria-label="Earlier threads" class="earlier">
-      <h3>Earlier</h3>
-      <ul>
+    <section
+      data-slot="earlier"
+      aria-label="Earlier threads"
+      class="mt-space-4 flex flex-col gap-space-1 text-start"
+    >
+      <h3 class="type-meta px-space-2 font-medium text-ink-muted">Earlier</h3>
+      <ul class="m-0 list-none p-0">
         {#each earlier as each (each.id)}
           {@const row = cawco.instanceIndex.byId.get(threadTabId(each.id))}
           <li
@@ -245,15 +249,19 @@
   {/if}
 {/snippet}
 
-<div class="caw-thread" data-caw-panel>
-  <div data-slot="head" class="head" data-caw-head>
-    <div class="identity">
+<div class="flex h-full min-h-0 flex-auto flex-col" data-caw-panel>
+  <div
+    data-slot="head"
+    class="flex min-h-c-btn-h-sm flex-none items-center gap-space-2 border-b border-border-hairline pt-space-2 pr-space-2 pb-space-2 pl-space-4"
+    data-caw-head
+  >
+    <div class="flex min-w-0 flex-auto flex-col items-start">
       {#if leadId}
         <button
           data-slot="name"
           aria-expanded={cardOpen}
           aria-haspopup="dialog"
-          class="name press-tint"
+          class="press-tint type-label -mx-space-1 cursor-pointer rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={cardPress}
           onpointerenter={(event) => {
             cardAnchor = event.currentTarget;
@@ -263,16 +271,18 @@
           type="button"
           bind:this={cardAnchor}
         >
-          Caw{#if off}<span class="off-word">{" · off"}</span>{/if}
+          Caw{#if off}<span class="font-normal text-ink-muted">{" · off"}</span>{/if}
         </button>
       {:else}
-        <span data-slot="name" class="name"
-          >Caw{#if off}<span class="off-word">{" · off"}</span>{/if}</span
+        <span
+          data-slot="name"
+          class="type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong"
+          >Caw{#if off}<span class="font-normal text-ink-muted">{" · off"}</span>{/if}</span
         >
       {/if}
-      <span class="line" data-caw-line>{said}</span>
+      <span class="type-meta max-w-full truncate text-ink-muted" data-caw-line>{said}</span>
     </div>
-    <div class="head-actions">
+    <div class="flex flex-none gap-space-1">
       {#if threadId}
         <Tip label="New thread">
           {#snippet children(tip)}
@@ -303,7 +313,7 @@
       {/if}
     </div>
   </div>
-  <div data-slot="well" class="well">
+  <div data-slot="well" class="flex min-h-0 flex-auto flex-col">
     {#key chosen}
       <!-- The panel's thread is the transcript being read over the page:
            focused, so its rows follow every message as it lands and it rides
@@ -326,6 +336,7 @@
   </div>
 </div>
 
+<!-- literal: 416px, 24px, 760px -->
 {#if leadId}
   <Popover.Root
     onOpenChange={(next) => {
@@ -339,7 +350,8 @@
       data-caw-lead-card
       align="start"
       aria-label="Caw's session"
-      class="caw-lead-card"
+      class="z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden p-0"
+      style="--lead-w: min(416px, calc(100vw - 24px)); --lead-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {
@@ -374,109 +386,3 @@
     </Popover.Content>
   </Popover.Root>
 {/if}
-
-<style>
-  .caw-thread {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    block-size: 100%;
-  }
-  /* His name over his line, and the thread's two actions: the head a
-     session pane's tab row stands in for, on the panel's surface. */
-  .head {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .identity {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    align-items: flex-start;
-    min-inline-size: 0;
-  }
-  .head-actions {
-    display: flex;
-    flex: none;
-    gap: var(--space-1);
-  }
-  .name {
-    margin-inline: calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  button.name {
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) {
-    button.name:hover {
-      background: var(--surface-hover);
-    }
-  }
-  button.name:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-  .off-word {
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .line {
-    max-inline-size: 100%;
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The well holds the thread pane, which stands its composer over its foot. */
-  .well {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  .earlier {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin-block-start: var(--space-4);
-    text-align: start;
-  }
-  .earlier h3 {
-    padding-inline: var(--space-2);
-    font: var(--type-meta);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-  }
-  .earlier ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* His lead session's card: a session tab's card's width (PaneTabs
-     `.session-details-popover`), its content edge to edge. */
-  :global(.kit-pop.caw-lead-card) {
-    display: flex;
-    z-index: 60;
-    inline-size: min(416px, calc(100vw - 24px));
-    max-block-size: min(
-      760px,
-      var(--bits-popover-content-available-height, 85dvh)
-    );
-    overflow: hidden;
-    padding: 0;
-  }
-</style>

@@ -105,7 +105,10 @@
 </script>
 
 <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-<label class="lead-switch">
+<label
+  data-slot="lead-switch"
+  class="flex cursor-pointer flex-wrap items-center gap-space-2"
+>
   <Switch
     data-caw-lead-switch
     disabled={lead.moving || !lead.view || cutting}
@@ -114,8 +117,10 @@
   <span>{label}</span>
 </label>
 {#if turnLine}
-  <div class="turn-off" data-caw-turn-line transition:unfold>
-    <span class="turn-words"
+  <div
+  class="flex min-h-c-btn-h-sm flex-wrap items-center gap-space-2"
+  data-caw-turn-line transition:unfold>
+    <span class="type-meta min-w-0 shrink grow basis-full text-ink-muted"
       >{turnLine.title ?? "Answering an event"}. Off, it can finish or stop now.</span
     >
     <Button
@@ -148,33 +153,5 @@
   />
 {/if}
 {#if lead.refused}
-  <p data-slot="refused" class="refused" role="alert">{lead.refused}</p>
+  <p data-slot="refused" class="type-meta text-error-11" role="alert">{lead.refused}</p>
 {/if}
-
-<style>
-  .lead-switch {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    cursor: pointer;
-  }
-  /* His own turn, asked about under the switch: its words, then the two ways. */
-  .turn-off {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: var(--c-btn-h-sm);
-  }
-  .turn-words {
-    flex: 1 1 100%;
-    min-inline-size: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .refused {
-    font: var(--type-meta);
-    color: var(--error-11);
-  }
-</style>

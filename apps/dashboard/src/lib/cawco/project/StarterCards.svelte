@@ -82,85 +82,27 @@
   } = $props();
 </script>
 
-<div data-slot="starter-cards" class="starter-cards">
-  <ul data-slot="cards" aria-label="Starters" class="cards">
+<div data-slot="starter-cards" class="@container w-full">
+  <!-- One column in a narrow container; wider, as many columns as fit. -->
+  <ul
+    data-slot="cards"
+    aria-label="Starters"
+    class="m-0 grid list-none auto-rows-fr grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols)"
+    style:--cards-cols="repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"
+  >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
       <li>
         <button
           data-slot="starter"
-          class="starter mark-line press-tint"
+          class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph data-starter-glyph aria-hidden="true" class="starter-glyph" />
-          <span data-slot="starter-text" class="starter-text"
-            >{starter.text}</span
-          >
+          <Glyph data-starter-glyph aria-hidden="true" class="size-icon-md flex-none text-ink-strong" />
+          <span data-slot="starter-text">{starter.text}</span>
         </button>
       </li>
     {/each}
   </ul>
 </div>
-
-<style>
-  .starter-cards {
-    inline-size: 100%;
-    container-type: inline-size;
-  }
-  .cards {
-    display: grid;
-    /* One column in a narrow container. */
-    grid-template-columns: minmax(0, 1fr);
-    /* Every card the tallest card's height (routines-wireframe §7.5). */
-    grid-auto-rows: 1fr;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  @container (min-width: 30rem) {
-    .cards {
-      grid-template-columns: repeat(
-        auto-fill,
-        minmax(min(100%, var(--c-starter-w)), 1fr)
-      );
-    }
-  }
-  .starter {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: 100%;
-    block-size: 100%;
-    min-block-size: var(--c-starter-h);
-    padding: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-align: start;
-    text-wrap: pretty;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  /* The glyph in the words' own ink, so its duotone's darker layer stands
-     clear of the card (CawStarters' chips the same). */
-  .starter :global(.starter-glyph) {
-    flex: none;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--ink-strong);
-  }
-  @media (hover: hover) {
-    .starter:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .starter:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-</style>
