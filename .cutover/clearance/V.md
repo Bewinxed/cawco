@@ -139,3 +139,21 @@ Each pair (line, A, B, shared property, Tailwind's winner today):
 | `src/lib/components/ui/thinking-steps/thinking-step.svelte:128` | `status-ahead:text-ink-muted` | `motion-safe:data-shimmer:text-transparent` | color | `status-ahead:text-ink-muted` |
 | `src/lib/components/ui/toggle/toggle.svelte:6` | `hover:bg-[var(--surface-hover)]` | `aria-pressed:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` | background-color | `aria-pressed:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` |
 | `src/lib/components/ui/toggle/toggle.svelte:6` | `hover:bg-[var(--surface-hover)]` | `data-[state=on]:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` | background-color | `data-[state=on]:bg-[light-dark(var(--surface-fill-strong),var(--surface-fill))]` |
+
+## Pruned style rules: `svelte-unused-css`
+
+Invariant: no style rule the cutover keeps is pruned by Svelte without anyone knowing.
+
+**Upstream.** svelte 5.57.1 is installed, and `npm view svelte version` gives 5.57.2. 5.57.2's changelog (https://raw.githubusercontent.com/sveltejs/svelte/main/packages/svelte/CHANGELOG.md) has no CSS-pruning change: its entries are runtime, hydration, `migrate` and parser fixes, plus one a11y warning. A bump would not change this.
+- The parent's shape (a nested `.tab:global([data-lifted]) > & > :is(.s, .e)` inside `.shade`, with `data-lifted` set only from script) compiles in 5.57.1 with `dev: true` as follows. When an element with class `tab` holds the shade, directly, through a snippet, through `class={["tab", …]}` or through `<svelte:element>`, it is kept, scoped as `.tab:where(.svelte-…)[data-lifted] > & > …`, with no warning. When no element it can see carries `tab` (the tab is `data-slot="tab"`, or `class="tab"` goes to a child component), it is written as `/* (unused) … */` **and** `css_unused_selector` fires.
+- In every variant tried, the prune and the warning come together. Both read one flag in Svelte's source: `css-warn.js` warns on each `ComplexSelector` without `metadata.used`, and the transform comments out a rule when no selector of it has `metadata.used`.
+- svelte-check reports that warning too: the scratch file under `src/` gave `src/vo-scratch/Repro.svelte:22:5 warning: Unused CSS selector ".nope > &"`, and the count rose to 4 warnings. But `bun run typecheck` passes on warnings (its proof is `0 ERRORS`), so a prune passes as one more warning beside Shot's.
+- At main the rule is not pruned. b8b16770b keeps `class="tab"` on the tab ("The tab's own class keeps Svelte from pruning a selector on an attribute only tab-drag sets"), and the compiled stylesheet has it scoped with no warning.
+
+**The gate.** `apps/dashboard/scripts/svelte-unused-css.ts` compiles every `src/**/*.svelte` through the project's preprocess and compiler options as vite.config.ts gives them to `sveltekit()` (`vitePreprocess()`, `experimental.async`; the project has no svelte.config), with `dev: true` and `css: "external"`. It lists each `/* (unused) */` rule with file and line and exits 1 on any. It runs in root `lint` and `lint:changed`, after `lib-import-check`. In `lint:changed` it is part of the hub's gate; in `lint` it runs before `eslint src`, which still fails on 1a. On the scratch files it lists all five prunes and exits 1.
+
+**Inventory.**
+- ac7b79de8: `svelte-unused-css: 611 file(s), no style rule pruned`.
+- This branch (1a plus V): `svelte-unused-css: 610 file(s), no style rule pruned`.
+
+So no declaration the cutover kept is pruned on this branch, and nothing was already pruned at ac7b79de8. There is nothing to fix and nothing to list per owner. A set's merge that drops the class a kept rule names now fails `lint:changed`.
