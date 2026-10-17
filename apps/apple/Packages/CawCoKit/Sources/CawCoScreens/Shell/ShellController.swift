@@ -668,6 +668,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             }
             line += " transcriptTop=\(top) gap=\(top - glass.maxY) label=\(caw.accessibilityLabel ?? "")"
         }
+        // The phone's board bar: its cluster, his glass and Caw against the window's width.
+        if compact, compactNav.topViewController !== workspaceController, let window = compactCluster.window {
+            let box = { (v: UIView) -> String in
+                let r = v.convert(v.bounds, to: window)
+                return "\(r.minX),\(r.minY),\(r.width)x\(r.height)"
+            }
+            line += " boardBar cluster=\(box(compactCluster)) glass=\(box(compactCluster.glass)) caw=\(box(compactCluster.caw)) window=\(window.bounds.width) safeRight=\(window.safeAreaInsets.right)"
+        }
         let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
         probe.notice("\(line, privacy: .public)")
         // What keeps the app from going idle this second, and how often the

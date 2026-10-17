@@ -263,6 +263,19 @@ public final class KitBadge: UIView {
     public enum Variant: Sendable { case plain, secondary, outline, attn, done, fail, live }
 
     private var label: KitLabel!
+    private var row: UIStackView!
+    private var trailing: NSLayoutConstraint!
+
+    /// A control standing inside the badge at its end (TaskLabels.svelte's
+    /// remove button in the Badge): 2pt after the words, the badge's end
+    /// inset given back by 2 (`.remove { margin-inline-end: -2px }`).
+    public func end(with control: UIView) {
+        row.setCustomSpacing(2, after: label)
+        row.addArrangedSubview(control)
+        trailing.constant = -4
+        // The words and the control each speak for themselves.
+        isAccessibilityElement = false
+    }
 
     /// Its words, said anew (a count that changed).
     public var text: String {
@@ -297,10 +310,12 @@ public final class KitBadge: UIView {
         if let glyph { row.insertArrangedSubview(GlyphView(glyph, size: 12, tint: ink), at: 0) }
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
+        self.row = row
+        trailing = row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6)
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 20),
             row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            trailing,
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         setContentHuggingPriority(.required, for: .horizontal)

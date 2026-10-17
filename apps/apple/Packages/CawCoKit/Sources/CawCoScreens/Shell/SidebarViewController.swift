@@ -62,7 +62,8 @@ final class SidebarViewController: ObservedViewController {
     /// The account row, and under the name the one place CawCo Pro shows (DESIGN.md T):
     /// the free week's days left, or the Pro tag.
     private let user = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
-    private let trialLine = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    /// Said whole: it wraps under the name rather than cut mid-word in a narrow rail.
+    private let trialLine = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private let proTag = ProTag()
     private var navHeights: [NSLayoutConstraint] = []
 
@@ -371,8 +372,10 @@ final class SidebarViewController: ObservedViewController {
     private var homeHeight: NSKeyValueObservation?
     private var homeFits: NSLayoutConstraint?
 
-    private func fitHome(_ height: Double) {
-        guard let homeFits, height > 0, abs(homeFits.constant - height) > 0.5 else { return }
+    private func fitHome(_ height: Double, list: UICollectionView) {
+        // A list with lines but no height yet reports none: only an empty one folds the home to nothing.
+        let lines = (0 ..< list.numberOfSections).reduce(0) { $0 + list.numberOfItems(inSection: $1) }
+        guard let homeFits, height > 0 || lines == 0, abs(homeFits.constant - height) > 0.5 else { return }
         homeFits.constant = height
     }
 
@@ -408,10 +411,13 @@ final class SidebarViewController: ObservedViewController {
         ])
         homeFits = fits
         homeHeight?.invalidate()
-        if let list = content.subviews.compactMap({ $0 as? UIScrollView }).first {
-            homeHeight = list.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, change in
+        // The home's list, not the first scroller under it: that is the
+        // Working/Finished pager, whose content is as tall as itself, so
+        // the home stood at its cap and pushed the projects down the rail.
+        if let list = (homeController as? HomeViewController)?.collectionView {
+            homeHeight = list.observe(\.contentSize, options: [.initial, .new]) { [weak self] list, change in
                 guard let size = change.newValue else { return }
-                MainActor.assumeIsolated { self?.fitHome(size.height) }
+                MainActor.assumeIsolated { self?.fitHome(size.height, list: list) }
             }
         }
         // The seam under the home: a pixel above the gap that follows it.
@@ -445,7 +451,7 @@ final class SidebarViewController: ObservedViewController {
         #if DEBUG
         recent.onProbe = { [weak self, weak recent] in
             guard let self else { return }
-            recent?.probeLog(rail: view, projects: projectsGroup, scroll: scroll)
+            recent?.probeLog(rail: view, projects: projectsGroup, scroll: scroll, home: homeSlot, trial: trialLine)
         }
         #endif
         // A docked keyboard covers the rail's foot: the list scrolls on under it, so Recent's search and results stay in reach.
@@ -585,6 +591,9 @@ final class SidebarViewController: ObservedViewController {
         let avatar = BrandMark(round: true)
         let name = KitLabel(TypeScale.typeBody, ink: Palette.foreground)
         name.text = "bewinxed"
+        trialLine.wrap = .pretty
+        // The words outweigh the row's nav height: a wrapped line grows the row, never clips.
+        for label in [name, trialLine] { label.setContentCompressionResistancePriority(.required, for: .vertical) }
         let named = UIStackView(arrangedSubviews: [name, trialLine])
         named.axis = .vertical
         named.alignment = .leading
@@ -599,7 +608,8 @@ final class SidebarViewController: ObservedViewController {
 
         configureButton.addAction(UIAction { [weak self] _ in self?.host?.go(.configure) }, for: .primaryActionTriggered)
         KitTip.attach(to: configureButton, label: "Configure")
-        let account = UIStackView(arrangedSubviews: [user, configureButton, soundButton, themeButton])
+        // Configure, the theme and sound, in the web footer's order.
+        let account = UIStackView(arrangedSubviews: [user, configureButton, themeButton, soundButton])
         account.spacing = 4
         account.alignment = .center
         navRow(account)
@@ -629,7 +639,7 @@ final class SidebarViewController: ObservedViewController {
         _ = prefs.sort
         _ = home.delegates
         _ = home.now
-        _ = host?.activeSessionId
+        _ = activeSession
         _ = fleet.machines.isEmpty
         _ = fleet.claudeLimits
         _ = fleet.openCodeGoLimits
@@ -746,8 +756,8 @@ final class SidebarViewController: ObservedViewController {
         defer { Self.performance.debug("rail rows \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
         #endif
         guard let host else { return }
-        // Places.
-        fleetRow.active = host.destination == .fleet
+        // Places: Fleet is the place on its page while no session stands in front (Sidebar.svelte `activeSession === null`).
+        fleetRow.active = host.destination == .fleet && activeSession == nil
         // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
         workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
         if configureButton.on != (host.destination == .configure) { configureButton.on = host.destination == .configure }
@@ -782,7 +792,7 @@ final class SidebarViewController: ObservedViewController {
     }
 
     private func olderShown(_ list: RailProjectList) -> Bool {
-        olderOpen.contains(list.project.id) || list.older.contains { $0.row.id == host?.activeSessionId }
+        olderOpen.contains(list.project.id) || list.older.contains { $0.row.id == activeSession }
     }
 
     private func clear(_ stack: UIStackView) {
@@ -849,6 +859,13 @@ final class SidebarViewController: ObservedViewController {
         }
         blocks = keptBlocks
         sessionRows = keptRows
+    }
+
+    /// The session in front, only while its page is (Sidebar.svelte
+    /// `activeSession`): one row is the place at a time, a project's page or a
+    /// session, never both.
+    private var activeSession: String? {
+        host?.destination == .fleet ? host?.activeSessionId : nil
     }
 
     /// A session and, when it is open, the sessions it started on a rail of their own.
@@ -920,7 +937,7 @@ final class SidebarViewController: ObservedViewController {
     /// in front. Only a row whose drawn state moved, or one just built, is
     /// filled again: a session's pulse redraws its own row and no other.
     private func update(_ lists: [RailProjectList]) {
-        let active = host?.activeSessionId
+        let active = activeSession
              for (node, row) in shownNodes {
                 let at = hub.fleet.lastAt(node.row)
                 let title = hub.fleet.title(node.row)
@@ -975,7 +992,7 @@ final class SidebarViewController: ObservedViewController {
                       place: node.row.cwd.isEmpty ? node.row.machineId : node.row.cwd,
                       age: at == 0 ? "" : RailAge.short(at, now: home.now),
                       count: node.count, failed: node.failed, open: openTrees.contains(node.row.id))
-        row.active = node.row.id == host?.activeSessionId
+        row.active = node.row.id == activeSession
     }
 
     /// What each rail row and project block last drew.
