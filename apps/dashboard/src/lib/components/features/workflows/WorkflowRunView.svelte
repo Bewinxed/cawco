@@ -287,7 +287,7 @@
                 <dd
                   data-workflow-run-view-code={typeof value !== "string" ||
                     undefined}
-                  class="m-0 max-w-(--measure) wrap-anywhere text-ink-strong data-is-code:font-mono data-is-code:liga-none"
+                  class="m-0 max-w-(--measure) wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
                   data-is-code={typeof value !== "string" || undefined}
                 >
                   {shown(value)}

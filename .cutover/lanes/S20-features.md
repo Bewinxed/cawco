@@ -52,3 +52,7 @@ none.
 ## Contracts
 contract: apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte:48 shadcn/no-unknown-classes | @xyflow/svelte reads .nodrag/.nopan via closest() | ESLint config allows xyflow's documented hook classes
 contract: apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte:175 shadcn/no-unknown-classes | @xyflow/svelte reads .nodrag/.nopan via closest() | ESLint config allows xyflow's documented hook classes
+
+## Delta R
+- R3 fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowRunView.svelte:290
+- R2: no `border: 0`/`none` in this lane. R1: every box-shadow here is a single `shadow-tile`, no state change.
