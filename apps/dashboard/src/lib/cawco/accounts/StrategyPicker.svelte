@@ -94,28 +94,28 @@
       event.key
     ];
     if (event.key === "Enter" || event.key === " ") {
-      if ((event.target as HTMLElement).matches(".card")) {
+      if ((event.target as HTMLElement).matches('[data-slot="strategy-picker-card"]')) {
         event.preventDefault();
         choose(offered[at]);
       }
       return;
     }
-    if (by === undefined || !(event.target as HTMLElement).matches(".card")) {
+    if (by === undefined || !(event.target as HTMLElement).matches('[data-slot="strategy-picker-card"]')) {
       return;
     }
     event.preventDefault();
     const next = (at + by + offered.length) % offered.length;
     choose(offered[next]);
     await tick();
-    grid?.querySelectorAll<HTMLElement>(".card")[next]?.focus();
+    grid?.querySelectorAll<HTMLElement>('[data-slot="strategy-picker-card"]')[next]?.focus();
   }
 </script>
 
-<div data-slot="picker" class="picker">
+<div data-slot="picker" class="@container flex flex-col gap-space-3">
   <div
     data-slot="cards"
     aria-label={label}
-    class="cards"
+    class="grid grid-cols-2 gap-space-3 @max-decisions-520px:grid-cols-1"
     role="radiogroup"
     bind:this={grid}
   >
@@ -126,9 +126,10 @@
         data-slot="strategy-picker-card"
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
-        class="card"
+        class="group flex min-w-0 cursor-pointer flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] dur-fade ease-out hover:border-border-control aria-checked:border-focus-ring aria-checked:hover:border-focus-ring focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:active:scale-(--card-press)"
+        style:--card-press="0.995"
         onclick={(event) => {
-          if (!(event.target as HTMLElement).closest("select, .order")) {
+          if (!(event.target as HTMLElement).closest('select, [data-slot="order"]')) {
             choose(strategy);
           }
         }}
@@ -142,16 +143,31 @@
         role="radio"
         tabindex={checked ? 0 : -1}
       >
-        <div data-slot="top" class="top">
-          <span aria-hidden="true" class="radio"></span>
-          <span data-slot="words" class="words">
+        <div
+          data-slot="top"
+          class="flex min-h-c-btn-h-sm flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
+        >
+          <!-- literal: 1.5px, 50%, 8px -->
+          <span
+            aria-hidden="true"
+            class="radio grid size-icon-md flex-none place-items-center rounded-(--radio-radius) border-(length:--radio-border) border-neutral-8 transition-[border-color] dur-fade ease-out group-aria-checked:border-selected-icon"
+            style:--radio-border="1.5px"
+            style:--radio-radius="50%"
+            style:--radio-dot="8px"
+          ></span>
+          <!-- literal: 1px -->
+          <span
+            data-slot="words"
+            class="type-label flex min-w-0 flex-auto flex-col gap-(--words-gap) text-ink-strong"
+            style:--words-gap="1px"
+          >
             {strategy.label}
-            <small>{strategy.line}</small>
+            <small class="type-meta text-ink-muted">{strategy.line}</small>
           </span>
           <!-- Only the chosen Pinned card names its account: an unchosen one
                keeps no room for it. -->
           {#if strategy.id === "pinned" && checked}
-            <span class="pin" in:appear out:crossOut>
+            <span class="ms-auto max-w-full min-w-0 flex-initial" in:appear out:crossOut>
               <NativeSelect
                 aria-label={words.pinnedAccount}
                 onchange={(event) => {
@@ -174,7 +190,7 @@
           {/if}
         </div>
         {#if strategy.id === "fill-first" && checked}
-          <div class="order" in:unfold out:unfold>
+          <div data-slot="order" in:unfold out:unfold>
             <OrderList {accounts} onchange={onorder} {order} />
           </div>
         {/if}
@@ -193,136 +209,44 @@
       </div>
     {/each}
   </div>
-  <p class="forks mark-line">
-    <IconSubagent />
+  <!-- literal: 14px -->
+  <p
+    class="mark-line type-meta flex items-center gap-space-2 text-ink-muted"
+    style:--forks-icon="14px"
+  >
+    <IconSubagent class="size-(--forks-icon)" />
     <span>{words.forks}</span>
   </p>
 </div>
 
 <style>
-  .picker {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    container-type: inline-size;
-  }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-3);
-  }
-  @container (width < 520px) {
-    .cards {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    min-width: 0;
-    padding: var(--space-3);
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    text-align: start;
-    cursor: pointer;
-    transition:
-      border-color var(--dur-fade) var(--ease-out),
-      background-color var(--dur-fade) var(--ease-out);
-  }
+  /* residual: unmapped */
   @media (prefers-reduced-motion: no-preference) {
-    .card {
+    [data-slot="strategy-picker-card"] {
       transition:
         border-color var(--dur-fade) var(--ease-out),
         background-color var(--dur-fade) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-    .card:active {
-      transform: scale(0.995);
+        scale var(--dur-control) var(--ease-out);
     }
   }
-  @media (hover: hover) and (pointer: fine) {
-    .card:hover {
-      border-color: var(--border-control);
-    }
-  }
-  .card[aria-checked="true"] {
-    border-color: var(--focus-ring);
+  [data-slot="strategy-picker-card"][aria-checked="true"] {
     background: color-mix(
       in oklab,
       var(--selected-bg) 45%,
       var(--surface-raised)
     );
   }
-  .card:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-  /* Where the pinned account's name doesn't fit beside the words, its pill
-     takes a line of its own, at the name's own width, rather than cutting
-     the name short. */
-  .top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2) var(--space-3);
-    min-height: 30px;
-    padding-inline: var(--space-1);
-  }
-  .radio {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 16px;
-    height: 16px;
-    border: 1.5px solid var(--neutral-8);
-    border-radius: 50%;
-    transition: border-color var(--dur-fade) var(--ease-out);
-  }
+  /* residual: pseudo */
   .radio::after {
     content: "";
-    width: 8px;
-    height: 8px;
+    width: var(--radio-dot);
+    height: var(--radio-dot);
     border-radius: 50%;
     background: var(--selected-icon);
     scale: 0;
     transition: scale var(--dur-toggle) var(--ease-out);
   }
-  .card[aria-checked="true"] .radio {
-    border-color: var(--selected-icon);
-  }
-  .card[aria-checked="true"] .radio::after {
+  [data-slot="strategy-picker-card"][aria-checked="true"] .radio::after {
     scale: 1;
-  }
-  .words {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .words small {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .pin {
-    flex: 0 1 auto;
-    max-width: 100%;
-    min-width: 0;
-    margin-inline-start: auto;
-  }
-  .forks {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .forks :global(svg) {
-    width: 14px;
-    height: 14px;
   }
 </style>

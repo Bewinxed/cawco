@@ -20,7 +20,8 @@
 <span
   data-slot="mark"
   aria-hidden="true"
-  class={["mark", mono && "mono"]}
+  data-mono={mono || undefined}
+  class="inline-grid h-(--mark-size) w-(--mark-size) flex-none place-items-center text-ink-strong data-mono:text-inherit"
   data-box
   style:--mark-size={`${size}px`}
 >
@@ -30,30 +31,18 @@
     <!-- The mark's own source, from the icon sets bundled at build. -->
     {@html mark.logo}
   {:else}
-    <i class="ink" style:--mask={mark.mask}></i>
+    <i class="size-full bg-current" style:--mask={mark.mask}></i>
   {/if}
 </span>
 
 <style>
-  .mark {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    width: var(--mark-size);
-    height: var(--mark-size);
-    color: var(--ink-strong);
-  }
-  .mono {
-    color: inherit;
-  }
-  .mark :global(svg) {
+  /* residual: foreign-dom */
+  [data-slot="mark"] :global(svg) {
     width: 100%;
     height: 100%;
   }
-  .ink {
-    width: 100%;
-    height: 100%;
-    background: currentColor;
+  /* residual: unmapped */
+  i {
     mask: var(--mask) center / contain no-repeat;
   }
 </style>

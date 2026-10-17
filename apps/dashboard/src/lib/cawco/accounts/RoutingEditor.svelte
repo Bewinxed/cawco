@@ -148,13 +148,15 @@
     <ProviderMark {provider} />
   {/snippet}
   {#snippet header()}
-    <h1 data-slot="title" class="title">{title}</h1>
+    <h1 data-slot="title" class="type-title text-ink-strong">{title}</h1>
     {#if refused}
-      <p class="problem" role="alert" in:appear>{refused}</p>
+      <p class="type-meta text-status-fail-ink" role="alert" in:appear>{refused}</p>
     {/if}
   {/snippet}
 
-  <section class="kinds">
+  <section
+    class="@container/kinds flex min-w-0 flex-col items-start gap-space-4"
+  >
     <Tabs
       onValueChange={(value) => {
         toward = value === "delegates" ? 1 : -1;
@@ -166,7 +168,10 @@
         {#each [["yours", words.yours], ["delegates", words.delegates]] as [kind, label] (kind)}
           <TabItem {label} value={kind}>
             {#snippet trail()}
-              <span class="strategy"
+              <!-- literal: 0.25em -->
+              <span
+                class="ms-(--strategy-gap) font-normal text-ink-muted @max-kinds/kinds:hidden"
+                style:--strategy-gap="0.25em"
                 >{words.trail(
                   strategyLabel(draft[kind as Kind].strategy)
                 )}</span
@@ -176,9 +181,9 @@
         {/each}
       </TabsList>
     </Tabs>
-    <div class="slide" {@attach morph()}>
+    <div class="relative min-w-0 self-stretch" {@attach morph()}>
       {#key tab}
-        <div data-slot="pane" class="pane" in:slideIn out:slideOut>
+        <div data-slot="pane" in:slideIn out:slideOut>
           <StrategyPicker
             {accounts}
             choice={draft[tab]}
@@ -198,7 +203,10 @@
   </section>
 
   {#if limits}
-    <section data-slot="well" class="well">
+    <section
+      data-slot="well"
+      class="rounded-lg border border-border-well bg-surface-well px-space-6 py-space-5 max-phone:p-space-4"
+    >
       <AtLimitBlock
         accounts={limitLanes}
         terms={provider === "anthropic"}
@@ -207,52 +215,3 @@
     </section>
   {/if}
 </EditorFrame>
-
-<style>
-  .title {
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-    color: var(--ink-strong);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .kinds {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-4);
-    min-width: 0;
-    container: kinds / inline-size;
-  }
-  /* Where the two tabs and their strategies don't fit on one row, the tabs
-     keep their whole names and the strategy is the chosen card's to say. */
-  @container kinds (width < 480px) {
-    .strategy {
-      display: none;
-    }
-  }
-  /* "Your sessions · Spread": a space before the dot, as in a sentence. */
-  .strategy {
-    margin-inline-start: 0.25em;
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .slide {
-    position: relative;
-    align-self: stretch;
-    min-width: 0;
-  }
-  .well {
-    padding: var(--space-5) var(--space-6);
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-lg);
-    background: var(--surface-well);
-  }
-  @media (max-width: 640px) {
-    .well {
-      padding: var(--space-4);
-    }
-  }
-</style>

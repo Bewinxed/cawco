@@ -37,21 +37,21 @@
     ondismiss={() => ondismiss(notices.map((one) => one.id))}
   >
     {#snippet lead()}
-      <span data-slot="glyph" class="glyph"
-        ><IconAccounts aria-hidden="true" /></span
+      <span data-slot="glyph" class="grid place-items-center text-ink-muted"
+        ><IconAccounts aria-hidden="true" class="size-icon-md" /></span
       >
     {/snippet}
-    <h3 data-slot="head" class="head">
-      Sessions rebalanced <span data-slot="count" class="count"
+    <h3 data-slot="head" class="type-label m-0 pe-(--x-room) text-ink-strong">
+      Sessions rebalanced <span data-slot="count" class="type-meta num text-ink-muted"
         >{notices.length}</span
       >
     </h3>
-    <p data-slot="explainer" class="explainer">
+    <p data-slot="explainer" class="type-meta m-0 text-ink-muted">
       An account came, so sessions moved off accounts about to run out and held
       ones were placed again.
     </p>
   </NoticeRow>
-  <ul data-slot="entries" class="entries">
+  <ul data-slot="entries" class="m-0 flex list-none flex-col px-0 pt-0 pb-space-2">
     {#each notices as notice (notice.id)}
       {@const words = rebalanceWords(notice)}
       {@const first = notice.came[0]?.account}
@@ -68,65 +68,12 @@
               <AccountTile hue={first.hue} {provider} size={28} />
             {/if}
           {/snippet}
-          <span data-slot="title" class="title">{words.title}</span>
+          <span data-slot="title" class="type-body truncate pe-(--x-room) text-ink-row">{words.title}</span>
           {#each words.lines as line, n (n)}
-            <span class="line">{line}</span>
+            <span class="type-meta wrap-anywhere text-ink-muted">{line}</span>
           {/each}
         </NoticeRow>
       </li>
     {/each}
   </ul>
 </div>
-
-<style>
-  /* The group's glyph in the lead column (MovedLogins'). */
-  .glyph {
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-  }
-  .glyph > :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .head {
-    margin: 0;
-    padding-inline-end: var(--x-room);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .count {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .explainer {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* No indent: each pass is a row of the panel (MovedLogins' shape), apart
-     from the head and its explainer by the head's foot and the first
-     entry's, more than the gap between two entries. */
-  .entries {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0 0 var(--space-2);
-    list-style: none;
-  }
-  /* A step under the head's label: body type in row ink. */
-  .title {
-    overflow: hidden;
-    padding-inline-end: var(--x-room);
-    font: var(--type-body);
-    color: var(--ink-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-</style>
