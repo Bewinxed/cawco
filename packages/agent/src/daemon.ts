@@ -1768,7 +1768,7 @@ const attach = (
         unreadAccounts: _unread,
         ...rest
       } = old;
-      const next = { ...rest, ...(await claudeSignins(read)) };
+      const next = { ...rest, ...claudeSignins(read) };
       return Bun.deepEquals(next, old) ? undefined : next;
     };
 

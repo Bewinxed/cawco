@@ -3773,7 +3773,7 @@ export class ClaudeHarness implements Harness {
       accountReports(),
       installed ? claudeHostVersion() : undefined,
     ]);
-    const signins = await claudeSignins(read);
+    const signins = claudeSignins(read);
     // Dirs that gave no answer leave the machine's word as it was.
     this.auth = signins.auth ?? this.auth;
     const version = said?.kind === "answered" ? said.value : undefined;

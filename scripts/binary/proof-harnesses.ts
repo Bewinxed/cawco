@@ -208,7 +208,7 @@ const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
   return {
     harness: kind,
     installed: false,
-    ...(await claudeSignins(await accountReports())),
+    ...claudeSignins(await accountReports()),
     capabilities: CAPABILITIES_NONE,
   };
 };
