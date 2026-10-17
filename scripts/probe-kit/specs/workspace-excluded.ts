@@ -1,6 +1,6 @@
 /**
  * A workspace is never retired over work git does not see (hub
- * work-items.ts `settle` and `archive`, `pointedAt`; agent workspace.ts
+ * work-items.ts `settle` and `archive`, `placesIn`; agent workspace.ts
  * `excludedIn`). On 2026-10-17 two workspaces were retired after their
  * items finished: one held a design page's source kept out of its landing
  * by `.git/info/exclude`, the other two live test projects' folders in its

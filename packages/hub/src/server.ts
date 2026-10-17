@@ -25194,8 +25194,9 @@ export const createServer = (
       // writes its unlanded commits, changes, stashes and excluded files to a
       // carry first, whose folder the answer names as `carry`. Files a
       // tracked `.gitignore` covers go with the clone either way. Refused
-      // (409) whatever `discard` says while an artifact or a project's
-      // folder points into its clone or scratch dir.
+      // (409) whatever `discard` says while a project's folder is inside its
+      // clone or scratch dir. A preview of it does not refuse: the archive
+      // ends its served server.
       .post(
         "/api/workspaces/:id/archive",
         { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },

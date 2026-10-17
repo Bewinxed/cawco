@@ -3045,21 +3045,25 @@ export const createWorkItems = ({
     }
   };
 
+  /** A workspace's clone and its scratch dir (its commands' `TMPDIR`, which goes with it). */
+  const rootsOf = (workspace: WorkspaceRow): string[] => [
+    workspace.path,
+    ...(workspace.tmp ? [workspace.tmp] : []),
+  ];
+
   /**
-   * What the hub knows that points into a workspace's clone or its scratch
-   * dir (its commands' `TMPDIR`, which goes with it), in words, or nothing:
-   * an artifact, any session's, showing what it serves (db artifacts.ts
-   * `previewing`: a port preview naming it, a folder preview inside either),
-   * or a project's place inside either, other than the workspace's own. On
-   * 2026-10-15 a workspace was retired while it served the owner's two open
-   * previews; on 2026-10-17 one was retired with two live test projects'
-   * folders in its scratch dir, and they went with it.
+   * The artifacts, any session's, showing what a workspace serves (db
+   * artifacts.ts `previewing`: a port preview naming it, a folder preview
+   * inside its clone or scratch dir), in words, or nothing. On 2026-10-15 a
+   * workspace was retired while it served the owner's two open previews.
+   * Only retirement waits for them ({@link holdOn}); an explicit archive ends
+   * their served servers, and their rows stay, reading as a workspace that
+   * isn't running.
    */
-  const pointedAt = (workspace: WorkspaceRow): string | undefined => {
-    const roots = [workspace.path, ...(workspace.tmp ? [workspace.tmp] : [])];
+  const previewedBy = (workspace: WorkspaceRow): string | undefined => {
     const shown = [
       ...new Set(
-        roots.flatMap((path) =>
+        rootsOf(workspace).flatMap((path) =>
           db.artifacts
             .previewing({
               id: workspace.id,
@@ -3073,6 +3077,16 @@ export const createWorkItems = ({
     if (shown.length > 0) {
       return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
     }
+  };
+
+  /**
+   * The projects' places inside a workspace's clone or its scratch dir, other
+   * than the workspace's own, in words, or nothing. On 2026-10-17 one was
+   * retired with two live test projects' folders in its scratch dir, and they
+   * went with it.
+   */
+  const placesIn = (workspace: WorkspaceRow): string | undefined => {
+    const roots = rootsOf(workspace);
     const inside = (path: string): boolean =>
       roots.some((root) => path === root || path.startsWith(`${root}/`));
     const places = db
@@ -3100,7 +3114,8 @@ export const createWorkItems = ({
    * has none), a message on its way that wakes one of those sessions there,
    * a continuation of one of them being prepared or under way (it reads the
    * clone and its new session starts there, taking the item on:
-   * {@link sessionsHold}), or what points into it ({@link pointedAt}). On
+   * {@link sessionsHold}), an artifact previewing it ({@link previewedBy}),
+   * or a project's folder inside it ({@link placesIn}). On
    * 2026-10-17 one was retired between the check that its clone was there
    * and a continuation's read of it (attach-continue, "could not read git …
    * ENOENT"). A hold defers
@@ -3121,7 +3136,7 @@ export const createWorkItems = ({
     if (held) {
       return held;
     }
-    return pointedAt(workspace);
+    return previewedBy(workspace) ?? placesIn(workspace);
   };
 
   /** What one {@link settle} came to. */
@@ -3334,12 +3349,13 @@ export const createWorkItems = ({
       );
     }
     // Even with `discard`: a discard lets go of the clone's own work, never
-    // what an artifact or a project still reads there.
-    const pointer = pointedAt(workspace);
-    if (pointer) {
+    // a project's folder there. A preview of it does not refuse: the archive
+    // ends its served server ({@link previewedBy}).
+    const places = placesIn(workspace);
+    if (places) {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${workspace.id} was not archived and nothing was deleted: ${pointer}. Delete or move that, then archive it again.`
+        `Workspace ${workspace.id} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`
       );
     }
     const skip = handedOver(workspace);
