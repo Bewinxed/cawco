@@ -651,7 +651,7 @@
         <button
           {...props}
           aria-label="{shown}: {tip}"
-          class="grid cursor-help rounded-(--tip-round) border-0 bg-transparent p-0"
+          class="grid cursor-help rounded-(--tip-round) border-none border-current bg-transparent p-0"
           style:--tip-round="50%"
           data-dial-tip
           data-stale-ring={ring.state === "stale" ? "" : undefined}
@@ -1028,7 +1028,7 @@
                      the whole popover, edge to edge, as a section's edge
                      is. -->
                 <hr
-                  class="col-span-full mx-(--seam-pull) my-space-1 border-0 border-t border-t-border-hairline"
+                  class="col-span-full mx-(--seam-pull) my-space-1"
                   style:--seam-pull="calc(-1 * var(--group-pad-x))"
                 />
                 {@render cell(openCode, null, sideFor())}
@@ -1138,7 +1138,7 @@
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-0 bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        class="strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1155,7 +1155,7 @@
     <Popover.Root bind:open>
       <Popover.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-0 bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        class="strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1208,6 +1208,12 @@
   .cell-d[data-lit] {
     background: var(--surface-hover);
     --ring-ground: var(--surface-hover);
+  }
+  /* The providers' hairline: `border: 0` then its top edge, which
+     `border-none` would leave unstyled (delta R2). */
+  [data-slot="wall"] hr {
+    border: 0;
+    border-block-start: 1px solid var(--border-hairline);
   }
   [data-slot="group"] + [data-slot="group"],
   [data-slot="group"] + .pop-note,

@@ -485,7 +485,7 @@
             data-needs-card-peek
             {...tip}
             aria-label="Peek {item.title}"
-            class="touch-hit pointer-hit focus-inset grid size-(--peek-box) cursor-pointer place-items-center rounded-xs border-0 bg-transparent p-0 text-ink-muted hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press)"
+            class="touch-hit pointer-hit focus-inset grid size-(--peek-box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press)"
             onclick={peekAsk}
             {onkeydown}
             style:--peek-box="24px"
@@ -601,7 +601,8 @@
       <dt class="text-ink-muted">Tool</dt>
       <dd
         data-slot="tool"
-        class="m-0 font-mono wrap-anywhere text-ink-strong">{call.tool}</dd
+        class="m-0 font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+        >{call.tool}</dd
       >
     </dl>
     <!-- A scroller with no focusable child is itself in the tab order

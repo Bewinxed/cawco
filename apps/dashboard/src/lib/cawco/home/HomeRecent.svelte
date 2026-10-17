@@ -94,7 +94,7 @@
     <button
       data-slot="disclosure"
       aria-expanded={recentOpen}
-      class="group/disclosure kit-section-head press-tint focus-inset min-h-(--disclosure-min) w-full cursor-pointer rounded-t-sm border-0 bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
+      class="group/disclosure kit-section-head press-tint focus-inset min-h-(--disclosure-min) w-full cursor-pointer rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
       onclick={toggleRecent}
       style:--disclosure-min="36px"
       type="button"
@@ -144,7 +144,7 @@
         >
           <IconSearch aria-hidden="true" class="size-icon-md flex-none" />
           <input
-            class="min-w-0 flex-auto border-0 bg-transparent type-body text-ink-strong outline-none"
+            class="min-w-0 flex-auto border-none border-current bg-transparent type-body text-ink-strong outline-none"
             aria-label="Search recent sessions"
             oninput={() => {
               recentShown = RECENT_PAGE;

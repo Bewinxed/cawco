@@ -629,7 +629,7 @@
       <!-- literal: 22px -->
       <button
         aria-label="Archive all finished on {group.name}"
-        class="mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-(--archive-h) cursor-pointer items-center gap-space-1 rounded-xs border-0 bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+        class="mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-(--archive-h) cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
         data-box
         onclick={() => archive(finished)}
         style:--archive-h="22px"
@@ -822,7 +822,7 @@
             {...tip}
             aria-label="Delegates"
             aria-pressed={rail.delegates}
-            class="focus-inset touch-hit mb-space-row inline-grid size-(--delegates-side) flex-none cursor-pointer place-items-center rounded-sm border-0 bg-transparent text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
+            class="focus-inset touch-hit mb-space-row inline-grid size-(--delegates-side) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
             data-on={rail.delegates || undefined}
             onclick={() => rail.setDelegates(!rail.delegates)}
             style:--delegates-side="28px"
@@ -927,7 +927,7 @@
                 <!-- literal: 28px; 0.3em -->
                 <button
                   data-slot="more"
-                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-0 bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
+                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
                   data-flip={plan ? undefined : ""}
                   data-key={moreKey(id)}
                   data-rail-row
@@ -949,7 +949,7 @@
                 <span
                   data-slot="more"
                   aria-hidden="true"
-                  class="mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-0 bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
+                  class="mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
                   style={leaveAnim(moreKey(id))}
                   style:--more-min="28px">{plan.more.get(id)}</span
                 >
