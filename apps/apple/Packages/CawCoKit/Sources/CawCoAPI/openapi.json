@@ -16209,6 +16209,23 @@
         }
       }
     },
+    "/api/tailnet-https": {
+      "get": {
+        "operationId": "getApiTailnetHttps",
+        "responses": {
+          "200": {
+            "description": "getApiTailnetHttps 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TailnetHttps"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "operationId": "getApiAgents",
@@ -25305,6 +25322,9 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -25318,9 +25338,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -25377,6 +25394,9 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -25390,9 +25410,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -25435,6 +25452,9 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -25448,9 +25468,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -30074,6 +30091,9 @@
             "$ref": "#/components/schemas/FleetUpstreamFrame"
           },
           {
+            "$ref": "#/components/schemas/TailnetHttpsFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetFetchFrame"
           },
           {
@@ -30145,6 +30165,7 @@
             "starters.changed": "#/components/schemas/StartersChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
+            "tailnet.https": "#/components/schemas/TailnetHttpsFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
@@ -31084,10 +31105,33 @@
           "port": {
             "description": "The session's own preview port, listened on in either mode.",
             "type": "number"
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetOrigin",
+            "description": "The session's origin on the hub machine's tailnet name, while the hub\nserves HTTPS there (core tailnet-https.ts): on the tailnet addresses the\nport answers HTTPS alone."
           }
         },
         "required": [
           "port"
+        ]
+      },
+      "TailnetOrigin": {
+        "description": "A session's preview origin on the tailnet name, beside its port\n({@link PreviewAddress}): `origin` is `https://<name>:<port>`, and `hosts`\nevery host a client reaches the hub's machine by over the tailnet (its\ntailnet addresses, its full name and its short one). A client that reached\nthe hub by one of them loads the preview from `origin`: on those\naddresses the port answers HTTPS alone.",
+        "type": "object",
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hosts",
+          "origin"
         ]
       },
       "PreviewTicket": {
@@ -33148,6 +33192,10 @@
           "stage": {
             "$ref": "#/components/schemas/StageState",
             "description": "A sheet's stage, or a served preview's server, as it stands once started."
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetOrigin",
+            "description": "A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`)."
           },
           "weight": {
             "$ref": "#/components/schemas/FolderWeight",
@@ -38924,6 +38972,9 @@
         "description": "A workflow as the list carries it: everything but its program, which only\nthe workflow's own read serves. The graph stays: the editor resolves a\ncalled workflow's Start inputs from it, and the app's launch form reads it.",
         "type": "object",
         "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -38951,9 +39002,6 @@
                 "type": "string"
               }
             ]
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -39973,6 +40021,53 @@
         "required": [
           "message",
           "name"
+        ]
+      },
+      "TailnetHttps": {
+        "description": "What `GET /api/tailnet-https` answers, and the `tailnet.https` frame carries.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "The command the step runs on the hub's machine, for `operator` and `port`.",
+            "type": "string"
+          },
+          "dashboard": {
+            "description": "The dashboard's https address while `serving`: `https://<name>:<port>`.",
+            "type": "string"
+          },
+          "host": {
+            "description": "The hub's machine, by its hostname.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The machine's tailnet name (`machine.tailnet.ts.net`), once its tailnet names it.",
+            "type": "string"
+          },
+          "port": {
+            "description": "The port a `port` step names.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TailnetHttpsState"
+          },
+          "step": {
+            "$ref": "#/components/schemas/TailnetHttpsStep",
+            "description": "What the person does next, while `needs`."
+          }
+        },
+        "required": [
+          "host",
+          "state"
+        ]
+      },
+      "TailnetHttpsState": {
+        "description": "Where it stands on the hub's machine:\n- `absent`: no Tailscale there (no CLI, or its daemon is not running);\n- `signed-out`: Tailscale is there but not signed in to a tailnet;\n- `needs`: on a tailnet, and one step of the person's stands between it\n  and HTTPS ({@link TailnetHttpsStep});\n- `serving`: the dashboard and the previews answer over HTTPS on the name.",
+        "type": "string",
+        "enum": [
+          "absent",
+          "needs",
+          "serving",
+          "signed-out"
         ]
       },
       "AgentRow": {
@@ -47838,6 +47933,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/PreviewFrameState"
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetOrigin",
+            "description": "The session's origin on the tailnet name while the hub serves HTTPS there ({@link PreviewAddress})."
           }
         },
         "required": [
@@ -51446,6 +51545,25 @@
           "upstream"
         ]
       },
+      "TailnetHttpsFrame": {
+        "description": "Hub-originated: HTTPS on the hub machine's tailnet name changed state (hub\ntailnet-https.ts): a step came to need the person, they took it, or the\nname began or stopped answering. Every dashboard takes it at once, so its\nonboarding row in Needs you shows the step that stands, or ticks.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tailnet.https"
+            ]
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetHttps"
+          }
+        },
+        "required": [
+          "kind",
+          "tailnet"
+        ]
+      },
       "FleetFetchFrame": {
         "description": "Hub-originated: a download at the hub began (`fetching`) or landed. A fetch\nruns after the request that asked for it has answered, so this is how\nevery dashboard learns what came of it. Exactly one of the four is set:\n- `skill`, `plugin`: a fetch of a fleet row's files, the row whole as\n  `/api/fleet` reads it (files, or the sentence it failed with);\n- `marketplace`: a read of a marketplace source (its name and offers);\n- `link`: a link of a marketplace source, linked or refused.",
         "type": "object",
@@ -52784,6 +52902,16 @@
         "enum": [
           "file",
           "template"
+        ]
+      },
+      "TailnetHttpsStep": {
+        "type": "string",
+        "enum": [
+          "enable-https",
+          "enable-magicdns",
+          "operator",
+          "port",
+          "userspace"
         ]
       },
       "TaskHistoryState": {

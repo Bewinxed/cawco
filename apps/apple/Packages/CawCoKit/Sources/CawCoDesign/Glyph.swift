@@ -90,6 +90,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case refresh = "refresh-bold-duotone"
     case settings = "settings-bold-duotone"
     case shield = "shield-bold-duotone"
+    /// HTTPS on the tailnet (icons.ts `IconTailnetHttps`).
+    case tailnetHttps = "shield-network-bold-duotone"
     case sidebar = "sidebar-minimalistic-line-duotone"
     case sort = "sort-bold-duotone"
     case unfold = "sort-vertical-bold-duotone"

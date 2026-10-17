@@ -43,9 +43,9 @@ public struct CanvasExport: Sendable {
 
 public extension HubConnection {
     /// The session's preview route for a canvas, from what the hub named (`previewRoute`'s rule).
-    private func listener(port: Double?, origin named: String?) throws -> PreviewRoute {
+    private func listener(port: Double?, origin named: String?, tailnet: Components.Schemas.TailnetOrigin?) throws -> PreviewRoute {
         guard address != nil else { throw TaskRefusal(message: "No hub is connected.") }
-        guard let route = previewRoute(port: port, origin: named) else {
+        guard let route = previewRoute(port: port, origin: named, tailnet: tailnet) else {
             throw TaskRefusal(message: "The hub didn't say where its canvases stand. Update the hub, then try again.")
         }
         return route
@@ -61,7 +61,7 @@ public extension HubConnection {
         ))
         guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
         let made = try answer.body.json
-        let route = try listener(port: made.port, origin: made.origin)
+        let route = try listener(port: made.port, origin: made.origin, tailnet: made.tailnet)
         return CanvasPage(id: made.id, name: made.name, origin: route.origin, byHost: route.byHost)
     }
 
@@ -91,7 +91,11 @@ public extension HubConnection {
         let drawn = elements.count { ($0["isDeleted"] as? Bool) != true }
         let text = String(decoding: try JSONSerialization.data(withJSONObject: file), as: UTF8.self)
         let png = (body["png"] as? String).flatMap { Data(base64Encoded: $0) }
-        let route = try listener(port: body["port"] as? Double, origin: body["origin"] as? String)
+        let onTailnet = (body["tailnet"] as? [String: Any]).flatMap { named -> Components.Schemas.TailnetOrigin? in
+            guard let hosts = named["hosts"] as? [String], let origin = named["origin"] as? String else { return nil }
+            return .init(hosts: hosts, origin: origin)
+        }
+        let route = try listener(port: body["port"] as? Double, origin: body["origin"] as? String, tailnet: onTailnet)
         let page = CanvasPage(id: id, name: name, origin: route.origin, byHost: route.byHost)
         return CanvasExport(file: text, drawn: drawn, outline: outline, png: png, page: page)
     }

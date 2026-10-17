@@ -143,6 +143,8 @@ typeOverrides:
     StarterGlyph: OpenEnums.StarterGlyph
     StarterPlace: OpenEnums.StarterPlace
     StarterSourceKind: OpenEnums.StarterSourceKind
+    TailnetHttpsState: OpenEnums.TailnetHttpsState
+    TailnetHttpsStep: OpenEnums.TailnetHttpsStep
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState

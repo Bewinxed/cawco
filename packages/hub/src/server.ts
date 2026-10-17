@@ -450,7 +450,11 @@ import {
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
-import { dashboardUrl, secureDashboardUrl } from "./dashboard-url";
+import {
+  dashboardUrl,
+  noteTailnetDashboard,
+  secureDashboardUrl,
+} from "./dashboard-url";
 import type {
   AgentAuth,
   BoardInstanceRow,
@@ -677,6 +681,7 @@ import {
 } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
+import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
 import { TaskDoc } from "./task-file";
 import {
@@ -10666,11 +10671,35 @@ export const createServer = (
     socket: artifactSocket(artifactDocs),
     state: artifactDocs.snapshot,
   };
+  /**
+   * HTTPS on the machine's tailnet name (tailnet-https.ts): the dashboard's
+   * port first, relayed to the dashboard on loopback, then every preview
+   * listener's twin. `tailnet.start()` once the hub listens (index.ts). A
+   * change names the https dashboard as the one the hub hands out and lets
+   * it frame previews from the start, tells every dashboard (its onboarding
+   * row), and sends each shown preview's address again, its tailnet origin
+   * come or gone.
+   */
+  const tailnetHttps = createTailnetHttps({ dashboardPort: DASHBOARD_PORT });
+  tailnetHttps.beside(DASHBOARD_PORT, dashboardRelay(DASHBOARD_PORT));
+  tailnetHttps.onChange((tailnet) => {
+    noteTailnetDashboard(tailnetHttps.dashboard());
+    noteParent(tailnet.dashboard);
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "tailnet.https", tailnet },
+    });
+    for (const [instanceId, target] of previewTargets) {
+      publishPreview(instanceId, "open", target);
+    }
+  });
   /** Every session's preview origin (preview.ts): `previews.start()` once the hub listens (index.ts). */
   const previewListeners = createPreviewListeners(
     BIND_HOST,
     artifactListener,
-    db.previews
+    db.previews,
+    tailnetHttps
   );
 
   /**
@@ -21766,6 +21795,10 @@ export const createServer = (
         // what the app keeps for a hub it found on this network.
         localName: localHubName() ?? null,
       }))
+      // HTTPS on the machine's tailnet name (tailnet-https.ts): where it
+      // stands, the step that needs the person while one does. Every change
+      // after it comes as a `tailnet.https` frame.
+      .get("/api/tailnet-https", () => tailnetHttps.state())
       // The fleet's list is the person's. A machine reads its own row alone,
       // by its own id (hub-auth.ts): what its CLI's health, install and
       // service checks ask.
@@ -28615,6 +28648,6 @@ export const createServer = (
           streams.dropSocket(ws.id);
         },
       }),
-    { previews: previewListeners }
+    { previews: previewListeners, tailnet: tailnetHttps }
   );
 };

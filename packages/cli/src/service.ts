@@ -1255,6 +1255,11 @@ const listenAddress = ({ host, port }: { host: string; port: string }) =>
  * address it listens on. The service unit of the same name is the one it
  * starts; `FileDescriptorName=` is what the service collects them by.
  * `NoDelay=` because every byte on them is an interactive page load.
+ * `ReusePort=` so the hub's HTTPS listener on the machine's tailnet address
+ * can stand on the network port (hub tailnet-https.ts): Linux binds an
+ * address's listener beside the wildcard one only when both sockets set
+ * SO_REUSEPORT, and gives that address's connections to it. None of these
+ * addresses is a tailnet one, so none shares the HTTPS listener's.
  */
 const socketUnit = (
   spec: ServiceSpec,
@@ -1266,6 +1271,7 @@ Description=${spec.description} socket
 ${socket.listens.map((listen) => `ListenStream=${listenAddress(listen)}`).join("\n")}
 FileDescriptorName=${socket.name}
 NoDelay=true
+ReusePort=true
 
 [Install]
 WantedBy=sockets.target

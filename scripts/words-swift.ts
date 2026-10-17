@@ -75,6 +75,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "upstream-guard.ts", export: "UPSTREAM_WORDS", as: "" }],
   },
   {
+    // HTTPS on the tailnet: its onboarding row in Needs you.
+    swift: "Tailnet",
+    members: [{ file: "words/tailnet.ts", export: "tailnetWords", as: "" }],
+  },
+  {
     swift: "Catalog",
     members: [{ file: "words/catalog.ts", export: "catalogWords", as: "" }],
   },

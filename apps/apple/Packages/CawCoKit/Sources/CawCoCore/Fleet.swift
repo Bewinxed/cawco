@@ -359,6 +359,13 @@ public final class FleetStore {
     /// people's repositories. Read on connect, then on each `fleet.upstream`
     /// frame; Needs you asks it while nobody has answered.
     public internal(set) var upstream: UpstreamAnswer = .unread
+    /// HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`,
+    /// client.svelte.ts `tailnetHttps`): read on connect, then on each
+    /// `tailnet.https` frame; Needs you shows its step while one stands.
+    public internal(set) var tailnetHttps: Components.Schemas.TailnetHttps?
+    /// Its step was taken while this app was connected, a moment ago: the
+    /// row ticks for `HubConnection.tailnetTick`, then leaves.
+    public internal(set) var tailnetTicked = false
 
     /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
     func adopt(noticesSeen ids: [String]) {

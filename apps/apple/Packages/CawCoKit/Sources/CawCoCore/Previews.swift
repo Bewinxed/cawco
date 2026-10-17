@@ -141,11 +141,16 @@ public extension HubConnection {
     /// a LAN address): the session's preview port on the hub's host, on the
     /// hub's scheme, with no ticket.
     func previewRoute(_ frame: PreviewFrame) -> PreviewRoute? {
-        previewRoute(port: frame.port, origin: frame.origin)
+        previewRoute(port: frame.port, origin: frame.origin, tailnet: frame.tailnet)
     }
 
-    /// A preview route from what the hub named: a port, and in host mode a whole origin too.
-    func previewRoute(port: Double?, origin: String?) -> PreviewRoute? {
+    /// A preview route from what the hub named: a port, in host mode a whole
+    /// origin too, and while the hub serves HTTPS on its tailnet name the
+    /// session's origin there. Reached by one of the tailnet's hosts (its
+    /// address, its short or full name, over plain http to the hub's own
+    /// port), the app loads that origin: on those addresses the preview's
+    /// port answers HTTPS alone (core `previewRoute`).
+    func previewRoute(port: Double?, origin: String?, tailnet: Components.Schemas.TailnetOrigin? = nil) -> PreviewRoute? {
         if let origin, var parts = URLComponents(string: origin), parts.scheme != nil,
            let name = parts.host?.lowercased(), let reached = address?.host()?.lowercased(),
            let dot = name.firstIndex(of: ".") {
@@ -156,6 +161,12 @@ public extension HubConnection {
                 parts.fragment = nil
                 return parts.url.map { PreviewRoute(origin: $0, byHost: true) }
             }
+        }
+        if let tailnet, let reached = address?.host()?.lowercased(),
+           tailnet.hosts.contains(reached.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))),
+           var parts = URLComponents(string: tailnet.origin) {
+            parts.path = "/"
+            return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
         }
         guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false), let port else { return nil }
         parts.path = "/"

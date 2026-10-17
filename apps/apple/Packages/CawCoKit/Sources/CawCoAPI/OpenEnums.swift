@@ -5964,6 +5964,97 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/TailnetHttpsState`.
+    public enum TailnetHttpsState: OpenEnum {
+        case absent
+        case needs
+        case serving
+        case signedOut
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "absent": self = .absent
+            case "needs": self = .needs
+            case "serving": self = .serving
+            case "signed-out": self = .signedOut
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .absent: "absent"
+            case .needs: "needs"
+            case .serving: "serving"
+            case .signedOut: "signed-out"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.absent, .needs, .serving, .signedOut]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TailnetHttpsStep`.
+    public enum TailnetHttpsStep: OpenEnum {
+        case enableHttps
+        case enableMagicdns
+        case _operator
+        case port
+        case userspace
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "enable-https": self = .enableHttps
+            case "enable-magicdns": self = .enableMagicdns
+            case "operator": self = ._operator
+            case "port": self = .port
+            case "userspace": self = .userspace
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .enableHttps: "enable-https"
+            case .enableMagicdns: "enable-magicdns"
+            case ._operator: "operator"
+            case .port: "port"
+            case .userspace: "userspace"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.enableHttps, .enableMagicdns, ._operator, .port, .userspace]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/TaskHistoryActorMover`.
     public enum TaskHistoryActorMover: OpenEnum {
         case action

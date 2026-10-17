@@ -18,6 +18,7 @@ import type {
   NeutralSessionInfo,
   PairingRequest,
   ProjectCap,
+  TailnetHttps,
   WaitingMachine,
   WorkflowRun,
 } from "@cawco/core";
@@ -26,6 +27,7 @@ import {
   machineLabel,
   projectsFor,
   questionsOf,
+  tailnetWords,
   topsIn,
 } from "@cawco/core";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
@@ -375,6 +377,22 @@ export interface ChoiceItem {
 }
 
 /**
+ * HTTPS on the hub machine's tailnet name, while a step of the person's
+ * stands in its way (core tailnet-https.ts): the first such step, said in
+ * one line with its one button. The hub checks again on its own; once the
+ * step is taken the row ticks (`done`) for a moment, then leaves.
+ */
+export interface TailnetItem {
+  done: boolean;
+  key: string;
+  kind: "tailnet";
+  place: string;
+  raisedAt: undefined;
+  tailnet: TailnetHttps;
+  title: string;
+}
+
+/**
  * A device asking to pair (hub hub-auth.ts): approved here, it runs the
  * fleet as you. Its code is the one on that device's screen.
  */
@@ -428,6 +446,7 @@ export type NeedsItem =
   | ActionItem
   | WatchItem
   | ChoiceItem
+  | TailnetItem
   | PairingItem
   | AdmissionItem
   | TaskItem;
@@ -1086,6 +1105,24 @@ class Home {
             },
           ]
         : [];
+    // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
+    const tailnet = cawco.tailnetHttps;
+    const secured: NeedsItem[] =
+      tailnet &&
+      (tailnet.state === "needs" ||
+        (tailnet.state === "serving" && cawco.tailnetTicked))
+        ? [
+            {
+              kind: "tailnet",
+              key: "tailnet:https",
+              tailnet,
+              done: tailnet.state === "serving",
+              title: tailnetWords.title,
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // Devices asking to pair and machines waiting to be admitted
     // (hub-auth.svelte.ts): answered here or in Configure › Devices.
     const pairings: NeedsItem[] = hubAuth.requests.map((request) => ({
@@ -1128,6 +1165,7 @@ class Home {
       ...actions,
       ...watched,
       ...unanswered,
+      ...secured,
       ...pairings,
       ...admissions,
       ...waitingTasks,

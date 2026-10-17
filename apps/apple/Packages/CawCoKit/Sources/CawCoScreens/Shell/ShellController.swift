@@ -1391,7 +1391,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
         // Answered on its row; it opens nothing.
-        case .choice: break
+        case .choice, .tailnet: break
         }
     }
 

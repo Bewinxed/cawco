@@ -51,6 +51,8 @@ public final class HubConnection {
     /// `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_DEADLINE_MS`).
     static let heartbeatInterval: Duration = .seconds(20)
     static let heartbeatDeadline: Duration = .seconds(10)
+    /// How long HTTPS's onboarding row stands ticked once its step is taken (client.svelte.ts `TAILNET_TICK_MS`).
+    static let tailnetTick: Duration = .seconds(12)
     private static let addressKey = "cawco-hub-url"
 
     /// The hub's address, as the operator entered it; nil until then.
@@ -1042,6 +1044,8 @@ public final class HubConnection {
         async let watched = try? await client.getApiFleetWatchNotices().ok.body.json.notices
         // The fleet's upstream answer: Needs you asks it while nobody has.
         async let choices = try? await client.getApiFleetChoices().ok.body.json
+        // HTTPS on the tailnet name: Needs you shows its step while one stands.
+        async let tailnet = try? await client.getApiTailnetHttps().ok.body.json
         // The approved actions waiting on you: frames keep them from here.
         async let waiting = try? await client.getApiActionsWaiting().ok.body.json.actions
         // The devices waiting to pair: the `hub_auth` frame keeps them from here.
@@ -1055,6 +1059,7 @@ public final class HubConnection {
         let readMoves = await moving
         let readWatched = await watched
         let readUpstream = await choices.map { UpstreamAnswer($0.upstream) }
+        let readTailnet = await tailnet
         let readWaiting = await waiting
         let readPairings = await pairings
         let readMachines = try? machines.get()
@@ -1127,6 +1132,9 @@ public final class HubConnection {
             }
             if let readUpstream {
                 hub.fleet.upstream = readUpstream
+            }
+            if let readTailnet {
+                hub.fleet.tailnetHttps = readTailnet
             }
             if let readWaiting {
                 hub.fleet.actions = readWaiting
@@ -1489,6 +1497,18 @@ public final class HubConnection {
             fleet.lawsBroken = broken
         case let .fleetUpstream(answer):
             fleet.upstream = .answered(answer)
+        case let .tailnetHttps(tailnet):
+            // Its step taken while connected: the row ticks, then leaves
+            // (client.svelte.ts `tailnetTicked`).
+            let ticked = fleet.tailnetHttps?.state == .needs && tailnet.state == .serving
+            fleet.tailnetHttps = tailnet
+            fleet.tailnetTicked = ticked
+            if ticked {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: Self.tailnetTick)
+                    self?.fleet.tailnetTicked = false
+                }
+            }
         case let .hubAuth(frame):
             adopt(pairingRequests: frame.requests)
         case .ignored:

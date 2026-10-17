@@ -693,6 +693,56 @@ public enum Words {
         public static let inherit = "Same as the fleet"
     }
 
+    public enum Tailnet {
+        // packages/core/src/words/tailnet.ts `tailnetWords`
+        public static let title = "HTTPS on your tailnet"
+
+        /// Where the row comes from: onboarding, on the hub's machine's Tailscale.
+        public static func meta(host: String) -> String {
+            "Onboarding · Tailscale on \(host)"
+        }
+
+        /// MagicDNS is off, and HTTPS Certificates need it (tailscale.com/kb/1153/enabling-https: "Enable MagicDNS if not already enabled").
+        public static let enableMagicDns = "Turn on MagicDNS, then HTTPS Certificates, on Tailscale's DNS page, and every device on your tailnet opens CawCo over HTTPS. Tailscale lists your machine names in the public certificate log."
+
+        /// The tailnet has no certificates ("Under HTTPS Certificates, select Enable HTTPS"; "your machine names … will be published on a public ledger").
+        public static let enableHttps = "Turn on HTTPS Certificates on Tailscale's DNS page, and every device on your tailnet opens CawCo over HTTPS. Tailscale lists your machine names in the public certificate log."
+
+        /// Tailscale gives its certificate only to root and its operator.
+        public static func `operator`(host: String, command: String) -> String {
+            "Tailscale on \(host) gives its certificate only to root and its operator. Run \(command) there once."
+        }
+
+        /// tailscaled runs with `--tun=userspace-networking`: no tailnet address to listen on.
+        public static func userspace(host: String) -> String {
+            "Tailscale on \(host) runs in userspace networking, so CawCo can't listen on its tailnet address. Run tailscaled as root there, without --tun=userspace-networking."
+        }
+
+        /// A listener the hub can't share holds a port on the tailnet address.
+        public static func port(host: String, port: Int, command: String) -> String {
+            "Port \(port) on \(host)'s tailnet address is held by a listener CawCo can't share. Run \(command) there once."
+        }
+
+        /// HTTPS came on while the row stood: its tick.
+        public static func done(dashboard: String) -> String {
+            "HTTPS is on. Every device on your tailnet opens CawCo at \(dashboard)."
+        }
+
+        public static let openDnsPage = "Open Tailscale's DNS page"
+
+        /// The admin console's DNS page, where MagicDNS and HTTPS Certificates are switched on (tailscale.com/kb/1153/enabling-https).
+        public static let dnsPage = "https://console.tailscale.com/admin/dns"
+
+        public static let openDocs = "Open Tailscale's docs"
+
+        /// Tailscale's page on kernel and userspace networking.
+        public static let userspacePage = "https://tailscale.com/kb/1177/kernel-vs-userspace-routers"
+
+        public static let copyCommand = "Copy command"
+
+        public static let openDashboard = "Open the HTTPS dashboard"
+    }
+
     public enum Catalog {
         // packages/core/src/words/catalog.ts `catalogWords`
         /// One harness on `machine` didn't list in time: its sessions are the ones it listed last.

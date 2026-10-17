@@ -83,6 +83,8 @@ export * from "./secret-text";
 export * from "./starters";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
+// HTTPS on the hub machine's tailnet name: its state, and a preview's origin there.
+export * from "./tailnet-https";
 // A project's threads with its Caw: rows, messages and their frames.
 export * from "./threads";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
@@ -1480,6 +1482,7 @@ export type FramePayload =
   | import("./starters").StartersChangedFrame
   | import("./frames").ProjectsChangedFrame
   | import("./frames").FleetUpstreamFrame
+  | import("./frames").TailnetHttpsFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
@@ -1833,6 +1836,7 @@ export * from "./words/pairing";
 export * from "./words/preview";
 export * from "./words/sheet";
 export * from "./words/sidebar";
+export * from "./words/tailnet";
 export * from "./workflow";
 export * from "./workflow-compile";
 
