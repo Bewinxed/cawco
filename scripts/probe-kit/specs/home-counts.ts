@@ -1,8 +1,8 @@
 /**
  * The home's Working count is of top-level sessions only (owner: "the
- * working count shouldn't count delegates"), and every count pill's numeral
- * holds 4.5:1 on what is drawn under it (owner: "the count background is
- * styled in an unreadable way").
+ * working count shouldn't count delegates"), and every count is a pill that
+ * reads against its sheet, its numeral readable on it (owner: "the count
+ * background is styled in an unreadable way").
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) with one orchestrator holding three delegates (each spawned
@@ -10,18 +10,27 @@
  * other session, all four mid-turn. The built dashboard, on the desk view in
  * each scheme:
  *
- *  a. every Working count on the page (the rail's and the home's) reads 2,
- *     with the Delegates switch off and on;
- *  b. each count's numeral (the chosen tab's status ink, the other's muted
- *     ink) against what is drawn under it: the tab's sheet (`.fold .sheet`,
- *     its computed fill) with the count's own wash over it, rasterised
- *     through a canvas to the sRGB the page draws.
+ *  a. every Working count on the page reads 2, with the Delegates switch off
+ *     and on;
+ *  b. each count, in each state a person puts it in (chosen and not, at
+ *     rest, the unchosen one hovered and pressed, the chosen one pressed,
+ *     and Finished failed, chosen and not): the pill holds 3:1 (WCAG 1.4.11)
+ *     against the ground beside it and its numeral 4.5:1 on the pill. Read
+ *     twice: from the engine (the page under the tab, the tab's sheet
+ *     `.fold .sheet` and the count's own computed colours, rasterised
+ *     through a canvas to the sRGB the page draws), and from the pixels
+ *     drawn (the ground just past the pill's end, the pill's fill inside
+ *     its start, and its numeral's strongest pixel). Finished's failure is
+ *     the count's own `data-failed`, set on the drawn element: no turn of
+ *     the mock fails a session.
  *
  *   bun scripts/probe-kit/run.ts home-counts
  */
+
+import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { boxes } from "../geom";
-import { capture, peakContrast } from "../ink";
+import { box } from "../geom";
+import { at, capture, contrast, peakContrast, type Rgb } from "../ink";
 import { type Kit, open, type Spec, settle, THEMES } from "../kit";
 
 /** A prompt the mock answers for minutes: its session stays working. */
@@ -36,17 +45,61 @@ const respond = (request: Seen): Reply =>
       }
     : { words: ["Done."], everyMs: 20 };
 
-/** A work tab's count (WorkTabs.svelte); other counts on the page carry no tab. */
-const COUNT = '[data-slot="count"][data-tab]';
-
-/** What the page draws for one count: its numeral and the ground under it. */
-interface Pill {
-  chosen: boolean;
-  ground: number[];
-  ink: number[];
-  ratio: number;
-  tab: string;
+/** One count's colours as the engine computes them, composited to sRGB. */
+interface Computed {
+  ground: Rgb;
+  numeral: Rgb;
+  pill: Rgb;
   text: string;
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** `tab`'s count as the engine says it is drawn, over the page under its tab. */
+function computed(page: Page, tab: string): Promise<Computed | null> {
+  return page.evaluate((selector): Computed | null => {
+    const el = document.querySelector(selector);
+    const item = el?.closest(".ff-tab");
+    if (!(el && item)) {
+      return null;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const pen = canvas.getContext("2d", { willReadFrequently: true });
+    const paint = (stack: string[]): Rgb => {
+      pen?.clearRect(0, 0, 1, 1);
+      for (const layer of stack) {
+        if (pen) {
+          pen.fillStyle = layer;
+          pen.fillRect(0, 0, 1, 1);
+        }
+      }
+      const [r = 0, g = 0, b = 0] = pen?.getImageData(0, 0, 1, 1).data ?? [];
+      return [r, g, b];
+    };
+    // The first opaque ground under the tab: the rail's or the home's.
+    let under = "white";
+    for (let up = item.parentElement; up; up = up.parentElement) {
+      const bg = getComputedStyle(up).backgroundColor;
+      if (paint(["black", bg]).join() === paint(["white", bg]).join()) {
+        under = bg;
+        break;
+      }
+    }
+    const sheet = item.querySelector(".fold .sheet");
+    const layers = [
+      under,
+      sheet ? getComputedStyle(sheet).fill : "transparent",
+    ];
+    const pill = [...layers, getComputedStyle(el).backgroundColor];
+    return {
+      ground: paint(layers),
+      pill: paint(pill),
+      numeral: paint([...pill, getComputedStyle(el).color]),
+      text: el.textContent ?? "",
+    };
+  }, `[data-slot="count"][data-tab="${tab}"]`);
 }
 
 /**
@@ -132,7 +185,7 @@ const spec: Spec = {
           .waitForFunction(
             (sel) => {
               const all = [...document.querySelectorAll(`${sel}`)].map(
-                (el) => el.firstElementChild?.textContent ?? ""
+                (el) => el.textContent ?? ""
               );
               return all.length > 0 && all.every((t) => t === "2") ? all : null;
             },
@@ -142,7 +195,7 @@ const spec: Spec = {
           .then((handle) => handle.jsonValue() as Promise<string[]>)
           .catch(async () =>
             page.$$eval(`[data-slot="count"][data-tab="working"]`, (els) =>
-              els.map((el) => el.firstElementChild?.textContent ?? "")
+              els.map((el) => el.textContent ?? "")
             )
           );
         kit.check(
@@ -152,80 +205,88 @@ const spec: Spec = {
         );
       }
       await settle(page);
-      const pills = await page.$$eval(COUNT, (els): Pill[] => {
-        const canvas = document.createElement("canvas");
-        canvas.width = 1;
-        canvas.height = 1;
-        const pen = canvas.getContext("2d", { willReadFrequently: true });
-        const paint = (layers: string[]) => {
-          if (!pen) {
-            return [];
-          }
-          pen.clearRect(0, 0, 1, 1);
-          for (const layer of layers) {
-            pen.fillStyle = layer;
-            pen.fillRect(0, 0, 1, 1);
-          }
-          return [...pen.getImageData(0, 0, 1, 1).data].slice(0, 3);
-        };
-        const lum = (rgb: number[]) => {
-          const [r = 0, g = 0, b = 0] = rgb.map((c) => {
-            const s = c / 255;
-            return s <= 0.040_45 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-          });
-          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        };
-        return els.map((el) => {
-          const tab = el.closest(".ff-tab");
-          const sheet = tab?.querySelector(".fold .sheet");
-          const fill = sheet ? getComputedStyle(sheet).fill : "transparent";
-          const chosen = tab?.classList.contains("selected") ?? false;
-          // The numeral on top: the loud one while chosen, else the count's own.
-          const loud = el.querySelector(".loud");
-          const ink =
-            chosen && loud
-              ? getComputedStyle(loud).color
-              : getComputedStyle(el).color;
-          const ground = paint([fill, getComputedStyle(el).backgroundColor]);
-          const drawn = paint([fill, ink]);
-          const [hi, lo] = [lum(drawn), lum(ground)].sort((x, y) => y - x);
-          return {
-            tab: (el as HTMLElement).dataset.tab ?? "",
-            chosen,
-            text: el.firstElementChild?.textContent ?? "",
-            ink: drawn,
-            ground,
-            ratio:
-              Math.round((((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05)) * 100) / 100,
-          };
-        });
-      });
-      for (const pill of pills) {
-        kit.check(
-          `(b) ${theme}: the ${pill.tab} count, ${pill.chosen ? "chosen" : "not chosen"}, holds 4.5:1 on its ground`,
-          pill.ratio >= 4.5,
-          `${pill.ratio}:1, numeral rgb(${pill.ink}) on rgb(${pill.ground}), reads ${pill.text}`
-        );
-      }
-      // As painted: whatever stands over the count or under it, the
-      // strongest ink any pixel of its numeral reaches against its ground.
-      const drawn = await boxes(page, COUNT);
-      for (const [i, at] of drawn.entries()) {
-        // biome-ignore lint/performance/noAwaitInLoops: one capture at a time
+      const hit = (tab: string) =>
+        page
+          .locator(`.ff-tab:has([data-slot="count"][data-tab="${tab}"]) .hit`)
+          .first();
+      /** Reads `tab`'s count in the state the page stands in, both ways. */
+      const read = async (tab: string, state: string) => {
+        await settle(page);
+        const engine = await computed(page, tab);
+        const at0 = await box(page, `[data-slot="count"][data-tab="${tab}"]`);
+        if (!(engine && at0)) {
+          kit.check(
+            `(b) ${theme}: the ${tab} count, ${state}, is drawn`,
+            false
+          );
+          return;
+        }
         const raster = await capture(page, {
-          x: at.left,
-          y: at.top,
-          width: at.right - at.left,
-          height: at.bottom - at.top,
+          x: at0.left - 4,
+          y: at0.top,
+          width: at0.width + 8,
+          height: at0.height,
         });
-        const peak = Math.round(peakContrast(raster, at) * 100) / 100;
-        const pill = pills[i];
+        const mid = at0.top + at0.height / 2;
+        // Just past the pill's end, in the tab's own padding; and the pill's
+        // fill inside its start, before the numeral's first stroke.
+        const groundPx = at(raster, at0.right + 2, mid);
+        const pillPx = at(raster, at0.left + 1.5, mid);
+        const numeralPeak = peakContrast(raster, at0);
+        const label = `(b) ${theme}: the ${tab} count, ${state}`;
         kit.check(
-          `(b) ${theme}: the ${pill?.tab} count as painted holds 4.5:1`,
-          peak >= 4.5,
-          `${peak}:1 at its strongest pixel, reads ${pill?.text}`
+          `${label}: the pill holds 3:1 on its ground`,
+          contrast(engine.pill, engine.ground) >= 3 &&
+            contrast(pillPx, groundPx) >= 3,
+          `computed ${r2(contrast(engine.pill, engine.ground))}:1 (pill rgb(${engine.pill}) on rgb(${engine.ground})), drawn ${r2(contrast(pillPx, groundPx))}:1 (rgb(${pillPx}) on rgb(${groundPx}))`
         );
-      }
+        kit.check(
+          `${label}: its numeral holds 4.5:1 on the pill`,
+          contrast(engine.numeral, engine.pill) >= 4.5 && numeralPeak >= 4.5,
+          `computed ${r2(contrast(engine.numeral, engine.pill))}:1 (rgb(${engine.numeral})), drawn ${r2(numeralPeak)}:1 at its strongest pixel, reads ${engine.text}`
+        );
+      };
+      const choose = async (tab: string) => {
+        await hit(tab).click();
+        await page.waitForSelector(
+          `.ff-tab.selected [data-slot="count"][data-tab="${tab}"]`
+        );
+      };
+      /** Holds `tab` pressed while `then` reads it, and lets go off the tab. */
+      const pressed = async (tab: string, then: () => Promise<void>) => {
+        await hit(tab).hover();
+        await page.mouse.down();
+        await then();
+        await page.mouse.move(0, 0);
+        await page.mouse.up();
+      };
+
+      await choose("working");
+      await page.mouse.move(0, 0);
+      await read("working", "chosen, at rest");
+      await read("finished", "not chosen, at rest");
+      await hit("finished").hover();
+      await read("finished", "not chosen, hovered");
+      await pressed("finished", () => read("finished", "not chosen, pressed"));
+      await choose("working");
+      await pressed("working", () => read("working", "chosen, pressed"));
+      // Finished's failure, on the count the page draws.
+      await page.evaluate(() =>
+        document
+          .querySelector('[data-slot="count"][data-tab="finished"]')
+          ?.setAttribute("data-failed", "")
+      );
+      await page.mouse.move(0, 0);
+      await read("finished", "failed, not chosen, at rest");
+      await hit("finished").hover();
+      await read("finished", "failed, not chosen, hovered");
+      await pressed("finished", () =>
+        read("finished", "failed, not chosen, pressed")
+      );
+      await choose("finished");
+      await page.mouse.move(0, 0);
+      await read("finished", "failed, chosen, at rest");
+      await read("working", "not chosen, at rest (Finished chosen)");
     }
   },
 };

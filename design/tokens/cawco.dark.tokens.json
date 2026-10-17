@@ -983,45 +983,6 @@
         }
       }
     },
-    "count-wash-live": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.81848, 0.044977, 234.554838],
-        "alpha": 0.1
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-live-ink} 10%, transparent)"
-        }
-      }
-    },
-    "count-wash-done": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.83976, 0.076493, 114.507742],
-        "alpha": 0.1
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-done-ink} 10%, transparent)"
-        }
-      }
-    },
-    "count-wash-fail": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.87776, 0.054068, 14.390596],
-        "alpha": 0.1
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
-        }
-      }
-    },
     "presence-online": {
       "$type": "color",
       "$value": {

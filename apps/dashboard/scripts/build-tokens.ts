@@ -17,8 +17,18 @@
  * module: a colour asset catalog and Tokens.swift (build-tokens-apple.ts).
  *
  *   bun run tokens
+ *
+ * `--check` writes nothing: it reads every output as it stands, runs
+ * `bun run tokens` (this build, then the formatter over what it wrote),
+ * reads them again, puts the first reading back and exits 1 naming each
+ * file the build would change. Without the formatter step a check left
+ * tokens.css unformatted and failed lint.
+ *
+ *   bun scripts/build-tokens.ts --check
  */
-import { join } from "node:path";
+import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import StyleDictionary from "style-dictionary";
 import type { TransformedToken } from "style-dictionary/types";
 import {
@@ -36,6 +46,74 @@ const TYPES_OUT = "src/lib/tokens/tokens.ts";
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */
 const SKILL_OUT = "../../packages/hub/skills/decision-page/kit/tokens.css";
+
+/** Every file under `paths` (a file, or a folder read whole), by path. */
+function reading(paths: string[]): Map<string, Buffer> {
+  const files = new Map<string, Buffer>();
+  const walk = (path: string) => {
+    if (!statSync(path, { throwIfNoEntry: false })) {
+      return;
+    }
+    if (statSync(path).isDirectory()) {
+      for (const entry of readdirSync(path)) {
+        walk(join(path, entry));
+      }
+      return;
+    }
+    files.set(path, readFileSync(path));
+  };
+  for (const path of paths) {
+    walk(path);
+  }
+  return files;
+}
+
+if (process.argv.includes("--check")) {
+  const outputs = [
+    DIR,
+    OUT,
+    TYPES_OUT,
+    SKILL_OUT,
+    join(APPLE_DIR, "Generated/Tokens.swift"),
+    join(APPLE_DIR, "Resources/Tokens.xcassets"),
+  ];
+  const before = reading(outputs);
+  const run = Bun.spawnSync(["bun", "run", "tokens"], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const after = reading(outputs);
+  const stale = [...new Set([...before.keys(), ...after.keys()])].filter(
+    (path) => !before.get(path)?.equals(after.get(path) ?? Buffer.alloc(0))
+  );
+  for (const path of after.keys()) {
+    if (!before.has(path)) {
+      rmSync(path);
+      // A colour set the build added is its own folder: it goes with it.
+      if (readdirSync(dirname(path)).length === 0) {
+        rmSync(dirname(path), { recursive: true });
+      }
+    }
+  }
+  await Promise.all(
+    [...before].map(async ([path, bytes]) => {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, bytes);
+    })
+  );
+  if (run.exitCode !== 0) {
+    console.error(`tokens --check: bun run tokens exited ${run.exitCode}`);
+    process.exit(1);
+  }
+  if (stale.length > 0) {
+    console.error(
+      `tokens --check: run \`bun run tokens\`; it changes:\n${stale.map((path) => `  ${path}`).join("\n")}`
+    );
+    process.exit(1);
+  }
+  console.log("tokens --check: every output is as `bun run tokens` makes it");
+  process.exit(0);
+}
 
 const built = await buildTokens(
   RESOLVER,

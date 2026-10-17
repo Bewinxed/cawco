@@ -4,7 +4,7 @@
    * phone home's, reading one remembered choice (work-tab). The header is the
    * session tabs' own folder tabs (ui/fluid-tabs, hosted the way PaneTabs
    * hosts them in a bar: no shelf, the chosen sheet the only mark), each a
-   * label and a count washed in its status ink.
+   * label and a count, a pill solid in its status hue.
    *
    * The rows under a machine's header change in a relay (motion/list-swap):
    * the old lines leave top down, and each new line arrives the moment the
@@ -756,10 +756,7 @@
                       data-failed={(tab.id === "finished" && finishedFailed) ||
                         undefined}
                       data-flip="pop"
-                      data-tab={tab.id}
-                      ><span>{count}</span><span aria-hidden="true" class="loud"
-                        >{count}</span
-                      ></span
+                      data-tab={tab.id}>{count}</span
                     >
                   {/key}
                 {/if}
@@ -1010,16 +1007,13 @@
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .hit) {
     flex-shrink: 0;
   }
-  /* The count, washed in its tab's status ink (the usage tints' strength),
-     on the chosen tab only; the other's is a plain numeral, muted unless
-     it says something failed. The wash and the ink come and go with the
-     choice, as the tab's own sheet and title do, on its clock
-     (ui/fluid-tabs, `--pick`, typed and carried by the choice itself): the
-     wash as its background, the ink as the numeral again in it over the
-     muted one, faded in. */
+  /* The count, a pill solid in its tab's status hue (count-fill-*), chosen
+     or not: it reads as a pill on whatever sheet it stands on, chosen,
+     recessed, hovered or pressed, and its numeral (count-fill-ink) holds
+     on it. A 6% wash of the ink read as a smudge on the sheet (owner: "the
+     count background is styled in an unreadable way"). */
   .count {
-    --ink: var(--status-live-ink);
-    --wash: var(--count-wash-live);
+    --fill: var(--count-fill-live);
     display: inline-grid;
     place-items: center;
     min-inline-size: 18px;
@@ -1030,39 +1024,17 @@
     pointer-events: none;
     margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
     border-radius: var(--radius-xs);
-    background: color-mix(
-      in oklab,
-      var(--wash) calc(var(--pick) * 100%),
-      transparent
-    );
-    color: var(--ink-muted);
+    background: var(--fill);
+    color: var(--count-fill-ink);
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
-
-    & > span {
-      grid-area: 1 / 1;
-    }
-  }
-  .loud {
-    color: var(--ink);
-    opacity: var(--pick);
   }
   .count[data-tab="finished"] {
-    --ink: var(--status-done-ink);
-    --wash: var(--count-wash-done);
+    --fill: var(--count-fill-done);
   }
-  /* Something listed as finished failed: the numeral says so, chosen or
-     not. */
+  /* Something listed as finished failed: the pill says so, chosen or not. */
   .count[data-failed] {
-    --ink: var(--status-fail-ink);
-    --wash: var(--count-wash-fail);
-    color: var(--ink);
-  }
-  /* By day a press fills an unchosen tab in surface-fill-strong (TabItem
-     `--press`), where the muted numeral held 3.92:1: it goes strong with
-     its tab's label, as TabItem's own press rule takes the label. */
-  :global(:root:not(.dark) .ff-tab:has(.hit:active)) .count:not([data-failed]) {
-    color: var(--ink-strong);
+    --fill: var(--count-fill-fail);
   }
   /* The corner actions' icon button (Sidebar .head-action), at one size
      whatever it shows. Pressed, its glyph turns solid in strong ink: no
