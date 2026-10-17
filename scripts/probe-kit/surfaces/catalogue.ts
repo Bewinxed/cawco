@@ -150,16 +150,19 @@ const PROJECT_RUNNING = "**/api/projects/*/running";
 const ARTIFACT_READ = "**/api/artifacts/*";
 /** The decision page the cawco project's session made (its artifact's name). */
 const CHIP_DECISION = "chip-decision";
+/** A pairing's start (hub-auth.svelte.ts `startPairing`), not its polls. */
+const PAIR_START = "**/api/pair";
 /** The dashboard's one socket, on the dashboard's own origin. */
 const DASHBOARD_SOCKET = /\/ws\/dashboard/;
 
 /**
  * The route loaded again with `hold` routed first: what it holds the hub
- * never answers, so the page stands as it does while the hub has not
- * answered yet. The route stays the page's, so such a state comes last in
- * its surface.
+ * never answers (the page stands as it does while the hub has not answered
+ * yet), or what it refuses never reaches the hub (as when the hub can't be
+ * reached just then). The route stays the page's, so such a state comes
+ * last in its surface.
  */
-const unanswered =
+const reloadedWith =
   (hold: (page: Page) => Promise<unknown>) => async (page: Page) => {
     await hold(page);
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -200,7 +203,8 @@ const KEY_PROVIDER = "302.AI";
 const SIGN_IN_ON = /^Sign in .+ on /;
 /** A new account's setup, its API-key provider chosen, on to signing in (AccountSetup). */
 const toKeyStep = async (page: Page) => {
-  await page.getByRole("textbox", { name: "Search providers" }).fill(KEY_PROVIDER);
+  // A search field (role searchbox), found by the words in it.
+  await page.getByPlaceholder("Search providers").fill(KEY_PROVIDER);
   await page
     .locator("[data-choice]")
     .filter({ hasText: KEY_PROVIDER })
@@ -241,6 +245,67 @@ const withholding =
         }
       });
     });
+
+/**
+ * A transcript's row pressed, scrolled to as a person scrolls to it: the
+ * transcript draws only the rows near its view (its virtualiser), so a row
+ * far above the newest is mounted once the transcript is wheeled up to it.
+ */
+const pressInTranscript = async (page: Page, name: RegExp) => {
+  const box = await page.locator(MAIN).first().boundingBox();
+  if (box) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  }
+  for (let turn = 0; turn < TRANSCRIPT_WHEELS; turn += 1) {
+    const row = page.getByRole("button", { name }).filter({ visible: true });
+    // biome-ignore lint/performance/noAwaitInLoops: one look per wheel
+    if ((await row.count()) > 0) {
+      await row.first().click();
+      return;
+    }
+    await page.mouse.wheel(0, -TRANSCRIPT_WHEEL_PX);
+    await page.waitForTimeout(120);
+  }
+  throw new Error(`no transcript row named ${name} after scrolling up`);
+};
+/** How far, and how many times, a transcript is wheeled up looking for a row. */
+const TRANSCRIPT_WHEEL_PX = 600;
+const TRANSCRIPT_WHEELS = 20;
+
+/** The spawn sheet's project and machines chips, and its Start once a move is due. */
+const PROJECT_CHIP = /^Project: /;
+const MACHINES_CHIP = /^Machines: /;
+const CAWCO_PROJECT = /^cawco\b/;
+const MOVE_AND_START = /^Move & start$/;
+/** A machine row in the Machines chip's popover (MachinesChip's), not its Add. */
+const MACHINE_ROW = "button[data-slot=row]:not([data-add])";
+
+/**
+ * In the spawn sheet: the cawco project, on the one online machine that is
+ * not the one chosen (the scene's second online machine, which has no
+ * checkout of it). The machines carry this host's one hostname, so the row
+ * is told by its place: the chosen one unpressed, the other pressed.
+ */
+const toOtherMachine = async (page: Page) => {
+  await press(PROJECT_CHIP)(page);
+  await page.getByRole("button", { name: CAWCO_PROJECT }).first().click();
+  await press(MACHINES_CHIP)(page);
+  const rows = page.locator(LAYER).locator(MACHINE_ROW);
+  const pressed = await rows.evaluateAll((all) =>
+    all.map((row) => ({
+      on: row.getAttribute("aria-pressed") === "true",
+      online: !(row as HTMLButtonElement).disabled,
+    }))
+  );
+  const current = pressed.findIndex((row) => row.on);
+  const other = pressed.findIndex((row, i) => i !== current && row.online);
+  if (current === -1 || other === -1) {
+    throw new Error(`no second online machine to start on (${JSON.stringify(pressed)})`);
+  }
+  await rows.nth(other).click();
+  await rows.nth(current).click();
+  await page.keyboard.press("Escape");
+};
 
 /** The project's ⋯ menu, then its row named `item`. */
 const fromMore = (item: string) => async (page: Page) => {
@@ -426,7 +491,7 @@ const EDITORS: Record<string, State[]> = {
     {
       // The fleet not read yet: the section's skeleton rows. Last (its route stays).
       name: "reading",
-      act: unanswered((page) => page.route("**/api/fleet", () => undefined)),
+      act: reloadedWith((page) => page.route("**/api/fleet", () => undefined)),
       root: "body",
     },
   ],
@@ -533,7 +598,7 @@ export const SURFACES: Surface[] = [
         name: "unlocking",
         widths: ["desk"],
         act: async (page) => {
-          await unanswered(withholding(UNLOCK_CONTROL))(page);
+          await reloadedWith(withholding(UNLOCK_CONTROL))(page);
           await openKeychain(page);
           await page.getByPlaceholder(KEYCHAIN_PASSWORD).fill("probe-password");
           await press(UNLOCK)(page);
@@ -556,7 +621,7 @@ export const SURFACES: Surface[] = [
         // The hub's socket open and silent: the status line, on the way.
         // Last (its route stays).
         name: "connecting",
-        act: unanswered((page) =>
+        act: reloadedWith((page) =>
           page.routeWebSocket(DASHBOARD_SOCKET, () => undefined)
         ),
         root: "body",
@@ -647,13 +712,18 @@ export const SURFACES: Surface[] = [
       // Compacted: the divider where the summary starts.
       { name: "compacted", route: (s) => `/session/${s.compact}`, root: MAIN },
       // The plan's ring pressed: its steps in the side panel.
-      { name: "plan", act: press(PLAN_RING), root: "body" },
+      {
+        name: "plan",
+        route: (s) => `/session/${s.planned}`,
+        act: press(PLAN_RING),
+        root: "body",
+      },
       {
         name: "tools-open",
         act: async (page) => {
           for (const name of TOOL_ROWS) {
             // biome-ignore lint/performance/noAwaitInLoops: one tool row at a time, in the transcript's order
-            await press(name)(page);
+            await pressInTranscript(page, name);
           }
         },
         root: MAIN,
@@ -891,7 +961,7 @@ export const SURFACES: Surface[] = [
         // In review, its page not found yet: the stage's cover. Last (its route stays).
         name: "review-opening",
         route: (s) => `/project/${s.project}?task=${s.review}`,
-        act: unanswered((page) => page.route(ARTIFACT_READ, () => undefined)),
+        act: reloadedWith((page) => page.route(ARTIFACT_READ, () => undefined)),
         root: "body",
       },
     ],
@@ -1022,6 +1092,13 @@ export const SURFACES: Surface[] = [
         root: "body",
       },
       { name: "account", act: inSheet(press(ACCOUNT_CHIP)), root: "body" },
+      {
+        // The cawco project on the machine with no checkout of it: Move &
+        // start, and the move it asks a yes for.
+        name: "move",
+        act: inSheet(toOtherMachine, press(MOVE_AND_START)),
+        root: "[role=dialog][data-state=open]",
+      },
       {
         name: "insert",
         act: inSheet(async (page) => {
@@ -1158,7 +1235,7 @@ export const SURFACES: Surface[] = [
     states: [{ name: "rest", root: "body" }],
   },
   {
-    // Suggest while typing on: words naming the session's skill, and its chip.
+    // Suggest while typing on: words for the task the session's skill is made for, and its chip.
     name: "suggesting",
     serve: "built",
     route: (s) => `/session/${s.skillRun}`,
@@ -1168,7 +1245,9 @@ export const SURFACES: Surface[] = [
         hub: "suggesting",
         act: async (page) => {
           await page.locator(COMPOSER_FIELD).first().click();
-          await page.keyboard.type("Run tray-check on the chip row");
+          // The task the skill is made for, in words that do not name it (a
+          // chip already named in the draft is left off: SuggestionChips `shown`).
+          await page.keyboard.type("Check the tray's chip row at a phone's width");
           await page
             .locator("[data-slot=suggest] fieldset button")
             .first()
@@ -1192,22 +1271,6 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.chips}`,
         root: MAIN,
       },
-      {
-        // A parked permission denied from its needs card while its machine
-        // is away: the hub's refusal, opened whole.
-        name: "answer-refused",
-        hub: "machineless",
-        act: async (page) => {
-          await page.click("[data-needs-caw]");
-          await page
-            .locator("[data-deny]")
-            .filter({ visible: true })
-            .first()
-            .click();
-          await page.getByTitle("Show the whole error").first().click();
-        },
-        root: "body",
-      },
     ],
   },
   {
@@ -1215,7 +1278,22 @@ export const SURFACES: Surface[] = [
     name: "pairing",
     serve: "built",
     route: () => "/",
-    states: [{ name: "rest", hub: "pairing", root: "body" }],
+    states: [
+      { name: "rest", hub: "pairing", root: "body" },
+      {
+        // Its pairing asked of a hub it can't reach just then: "Pairing
+        // didn't start", and the reason opened whole.
+        name: "start-failed",
+        hub: "pairing",
+        act: async (page) => {
+          await reloadedWith((p) =>
+            p.route(PAIR_START, (route) => route.abort("connectionrefused"))
+          )(page);
+          await page.getByTitle("Show the whole error").first().click();
+        },
+        root: "body",
+      },
+    ],
   },
   ...BENCHES.map(([name, path]): Surface => ({
     name: `bench-${name}`,

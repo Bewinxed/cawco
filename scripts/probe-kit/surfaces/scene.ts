@@ -43,7 +43,7 @@ import {
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
 import { seedDecisions } from "../../decisions-preview/seed";
-import type { Reply, Seen } from "../../scratch-fleet";
+import type { Machine, Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet } from "../kit";
@@ -124,6 +124,8 @@ const MEMORY_V2 =
 const MODEL_DOC = "models/claude-opus-5-5.md";
 const MCP_NAME = "tray-docs";
 const HOOK_ID = "lint-written";
+/** The third machine: online, a second agent on this host (scratch-fleet.ts `launchMachine`). */
+const BENCH_MACHINE = "machine-bench";
 /** The second machine: a Mac, offline, its keychain locked. */
 export const STUDIO_HOST = "studio";
 const STUDIO_MACHINE = "machine-studio-mac";
@@ -386,6 +388,28 @@ const plans = (repo: string): Record<string, Step[]> => ({
     },
   ],
   compact: [{ words: "The chip notes are in order." }],
+  plan: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${TODO_WRITE}`, max_results: 1 },
+      },
+    },
+    {
+      tool: {
+        name: TODO_WRITE,
+        input: {
+          steps: [
+            { content: "Read the tray's chip row", status: "completed" },
+            { content: "Let the label shrink", status: "in_progress" },
+            { content: "Keep the badge whole", status: "pending" },
+          ],
+          spec: "# The chip's wrap\n\nThe label shrinks and clips; the count badge never does.\n",
+        },
+      },
+    },
+    { words: "The plan is set: the label first, then the badge." },
+  ],
   limit: [
     {
       words: "The badge fits; the count stays whole.",
@@ -587,6 +611,8 @@ const DELEGATE = "mcp__cawco__delegate";
 const FINISH_ITEM = "mcp__cawco__finish_item";
 const WORKFLOW_RUN = "mcp__cawco__workflow_run";
 const SUBMIT_RESULT = "mcp__cawco__submit_result";
+/** CawCo's plan writer (task-tools.ts `todo_write`, its session scope), deferred. */
+const TODO_WRITE = "mcp__cawco__todo_write";
 /** CawCo's fleet-memory read (admin-tools.ts `admin_<group>_read`), deferred. */
 const ADMIN_MEMORY_READ = "mcp__cawco__admin_memory_read";
 /** A skill on the machine (`~/.claude/skills`), which the "skill" session runs. */
@@ -794,8 +820,10 @@ export async function enterVariant(
     return;
   }
   if (variant === "machineless") {
-    // Its one machine's agent stopped: no machine online (the Mac was never).
+    // Its machines' agents stopped: no machine online (the Mac was never).
     await fleet.stop("agent");
+    bench?.agent.kill("SIGTERM");
+    await bench?.agent.exited;
     await until(
       "every machine offline on the hub",
       () => fleet.api<{ status: string }[]>("/api/agents"),
@@ -818,6 +846,9 @@ export async function enterVariant(
     );
   }
 }
+
+/** The scene's second online machine (no checkout of any project on it), once `seedScene` launches it. */
+let bench: Machine | null = null;
 
 /** The MCP server behind OAuth the scene signs the hub in to, standing while the scene's hub does (`sceneHub`). */
 let trayDocs: McpOauthMock | null = null;
@@ -939,14 +970,7 @@ export async function seedScene(
     timing: "turn",
     watch: "text",
   });
-  // A session that reads the fleet's memory through CawCo's tool, and one
-  // that runs a skill on the machine: each tool's own card.
-  const memoryRead = await fleet.spawn(
-    "claude",
-    "Read the fleet memory",
-    fleet.repo
-  );
-  await fleet.send(memoryRead, "What does the fleet memory ask? PROBE-STEP:memory");
+  // A session that runs a skill on the machine: the skill's own card.
   const skillDir = join(fleet.home, CLAUDE_DIR_NAME, "skills", SKILL_NAME);
   await mkdir(skillDir, { recursive: true });
   await writeFile(join(skillDir, "SKILL.md"), SKILL);
@@ -962,6 +986,9 @@ export async function seedScene(
     fleet.repo
   );
   await fleet.send(compact, "Put the chip notes in order. PROBE-STEP:compact");
+  // A session that writes its plan (CawCo's list: the plan's ring, its panel).
+  const planned = await fleet.spawn("claude", "Plan the chip's fix", fleet.repo);
+  await fleet.send(planned, "Plan the chip's fix. PROBE-STEP:plan");
   // A delegate it starts, which reports back: its card, transcript inline.
   const split = delegate
     ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
@@ -1189,10 +1216,10 @@ export async function seedScene(
     ["the art session's turn done", art],
     ["the decision session's turn done", decision],
     ["the named session's turn done", answered],
-    ["the memory session's turn done", memoryRead],
     ["the skill session's turn done", skillRun],
     ["the thinking session's turn done", think],
     ["the compact session's turn done", compact],
+    ["the planning session's turn done", planned],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
@@ -1654,6 +1681,21 @@ export async function seedScene(
   const machineDoc = () => machineReport()?.memoryDocs?.[MODEL_DOC]?.state;
   await send("/api/fleet/memory", "PUT", { content: MEMORY_V1 });
   await send("/api/fleet/memory", "PUT", { content: MEMORY_V2 });
+  // A session that reads that memory through CawCo's own tool: the memory
+  // tool's card, with the memory it read (a read before the memory was
+  // saved finds none, and its card has nothing to open).
+  const memoryRead = await fleet.spawn(
+    "claude",
+    "Read the fleet memory",
+    fleet.repo
+  );
+  await fleet.send(memoryRead, "What does the fleet memory ask? PROBE-STEP:memory");
+  await until(
+    "the memory session's turn done",
+    () => fleet.instance(memoryRead),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
   await send("/api/fleet/memory/docs", "PUT", {
     path: MODEL_DOC,
     content: "# Opus\n\nKeep each brief under a page.\n",
@@ -1729,6 +1771,10 @@ export async function seedScene(
   if (unoffered.length > 0) {
     throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
   }
+  // A second machine online, with no checkout of any project: a session
+  // started there in a project asks to move the project first (New
+  // session's Move & start).
+  bench = await fleet.launchMachine(BENCH_MACHINE);
   // Last of all, two turns still going while the walk reads them, a piece
   // every SLOW_MS for longer than the walk lasts. The TODO session's turn
   // ends on the rule's phrase, so the rule answers it, and its answer to
@@ -1803,6 +1849,7 @@ export async function seedScene(
     memoryRead,
     think,
     compact,
+    planned,
     liveThink,
     skillRun,
     hook: HOOK_ID,
