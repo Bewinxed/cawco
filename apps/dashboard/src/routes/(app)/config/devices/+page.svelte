@@ -120,7 +120,14 @@
   ready={loaded}
   title={section.label}
 >
-  <div data-slot="group" class="group">
+  <!-- literal: 72ch -->
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--group-gap)"
+    style:--group-gap="8px"
+    style:--note-measure="72ch"
+  >
     <SectionHeader hue={HUE} icon={IconLock} label="Pairing" />
     <!-- The switch shows the change while it is confirmed, and goes back on Cancel. -->
     <SwitchField
@@ -136,11 +143,16 @@
       }}
     />
     {#if confirming === "on"}
-      <div class="confirm" transition:unfold>
-        <p data-slot="lead" class="lead">
+      <div
+        class="flex max-w-(--note-measure) flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+        transition:unfold
+      >
+        <p data-slot="lead" class="type-body text-ink-strong">
           Require paired devices? From the moment you confirm:
         </p>
-        <ul class="effects">
+        <ul
+          class="type-body m-0 flex list-disc flex-col gap-space-1 ps-space-5 text-ink-muted"
+        >
           <li>This browser is the first paired device.</li>
           <li>
             The machines connected now are admitted and keep running their
@@ -157,12 +169,12 @@
             hub until its update arrives.
           </li>
           <li>
-            Each run of <code>cawco connections</code>, <code>relay</code> or
-            <code>jev</code> asks you to approve it once.
+            Each run of <code class="type-code text-ink-strong">cawco connections</code>, <code class="type-code text-ink-strong">relay</code> or
+            <code class="type-code text-ink-strong">jev</code> asks you to approve it once.
           </li>
           <li>Sessions keep their tools. Telegram keeps working as it does.</li>
         </ul>
-        <div class="buttons">
+        <div class="flex justify-end gap-space-2">
           <Button
             disabled={saving}
             label="Cancel"
@@ -182,13 +194,16 @@
         </div>
       </div>
     {:else if confirming === "off"}
-      <div class="confirm" transition:unfold>
-        <p data-slot="lead" class="lead">
+      <div
+        class="flex max-w-(--note-measure) flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+        transition:unfold
+      >
+        <p data-slot="lead" class="type-body text-ink-strong">
           Stop requiring paired devices? Every device on your network reaches
           the fleet again. The paired devices and machine keys are forgotten:
           turning it on again starts from the device that does.
         </p>
-        <div class="buttons">
+        <div class="flex justify-end gap-space-2">
           <Button
             disabled={saving}
             label="Cancel"
@@ -212,21 +227,33 @@
   </div>
 
   {#if required && (hubAuth.requests.length > 0 || hubAuth.waiting.length > 0)}
-    <div data-slot="group" class="group" transition:unfold>
+    <!-- literal: 8px -->
+    <div
+      data-slot="group"
+      class="mt-space-6 flex flex-col gap-(--group-gap)"
+      style:--group-gap="8px"
+      transition:unfold
+    >
       <SectionHeader hue={HUE} icon={IconClock} label="Waiting for you" />
-      <ul class="rows">
+      <ul class="flex flex-col">
         {#each hubAuth.requests as request (request.userCode)}
-          <li data-slot="row" class="row">
-            <div data-slot="who" class="who">
-              <span data-slot="name" class="name">{request.name}</span>
-              <span data-num data-slot="meta" class="meta num">
-                Code <span data-slot="code" class="code"
+          <!-- literal: 12px, 10px -->
+          <li
+            data-slot="row"
+            class="grid items-center gap-(--row-gap) border-t border-border-hairline py-(--row-pad-y) first:border-t-0"
+            style:--row-gap="12px"
+            style:--row-pad-y="10px"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong">{request.name}</span>
+              <span data-num data-slot="meta" class="num type-meta wrap-anywhere text-ink-muted">
+                Code <span data-slot="code" class="type-code text-ink-strong"
                   >{request.userCode}</span
                 >{request.address ? ` · ${request.address}` : ""} · asked {formatDistanceToNow(
                   new Date(request.at)
                 )}
               </span>
-              <span data-slot="meta" class="meta">
+              <span data-slot="meta" class="type-meta wrap-anywhere text-ink-muted">
                 Approve only if this is the code on the device in front of you.
               </span>
             </div>
@@ -256,12 +283,18 @@
           </li>
         {/each}
         {#each hubAuth.waiting as machine (machine.machineId)}
-          <li data-slot="row" class="row">
-            <div data-slot="who" class="who">
-              <span data-slot="name" class="name"
+          <!-- literal: 12px, 10px -->
+          <li
+            data-slot="row"
+            class="grid items-center gap-(--row-gap) border-t border-border-hairline py-(--row-pad-y) first:border-t-0"
+            style:--row-gap="12px"
+            style:--row-pad-y="10px"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong"
                 >{machine.hostname ?? machine.machineId}</span
               >
-              <span data-num data-slot="meta" class="meta num">
+              <span data-num data-slot="meta" class="num type-meta wrap-anywhere text-ink-muted">
                 Machine{machine.platform
                   ? ` · ${machine.platform}`
                   : ""}{machine.address ? ` · ${machine.address}` : ""} · waiting
@@ -298,18 +331,33 @@
   {/if}
 
   {#if required}
-    <div data-slot="group" class="group" transition:unfold>
+    <!-- literal: 72ch -->
+    <!-- literal: 8px -->
+    <div
+      data-slot="group"
+      class="mt-space-6 flex flex-col gap-(--group-gap)"
+      style:--group-gap="8px"
+      style:--note-measure="72ch"
+      transition:unfold
+    >
       <SectionHeader hue={HUE} icon={IconLaptop} label="Paired devices" />
-      <ul class="rows">
+      <ul class="flex flex-col">
         {#each devices as device (device.id)}
-          <li data-slot="row" class="row devices">
-            <div data-slot="who" class="who">
-              <span data-slot="name" class="name"
+          <!-- literal: 12px, 10px -->
+          <li
+            data-slot="row"
+            data-devices
+            class="grid items-center gap-(--row-gap) border-t border-border-hairline py-(--row-pad-y) first:border-t-0"
+            style:--row-gap="12px"
+            style:--row-pad-y="10px"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong"
                 >{device.name}{device.id === current
                   ? " · this browser"
                   : ""}</span
               >
-              <span data-num data-slot="meta" class="meta num">
+              <span data-num data-slot="meta" class="num type-meta wrap-anywhere text-ink-muted">
                 {KINDS[device.kind]} · paired {formatDistanceToNow(
                   new Date(device.createdAt)
                 )}{device.lastUsedAt
@@ -330,7 +378,7 @@
         {/each}
       </ul>
       {#if devices.length === 1}
-        <p data-slot="note" class="note">
+        <p data-slot="note" class="type-meta max-w-(--note-measure) wrap-anywhere text-ink-muted">
           The only paired device stays until you pair another or turn pairing
           off, so the fleet always has someone who can approve.
         </p>
@@ -339,92 +387,21 @@
   {/if}
 
   {#if problem}
-    <p class="problem" role="alert" transition:unfold>{problem}</p>
+    <p
+      class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+      role="alert"
+      transition:unfold
+    >{problem}</p>
   {/if}
 </SectionFrame>
 
 <style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .group + .group {
-    margin-top: var(--space-6);
-  }
-  .confirm {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    max-width: 72ch;
-    padding: var(--space-4);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess);
-  }
-  .lead {
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .effects {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding-inline-start: var(--space-5);
-    font: var(--type-body);
-    color: var(--ink-muted);
-    list-style: disc;
-  }
-  .effects code,
-  .code {
-    font: var(--type-code);
-    color: var(--ink-strong);
-  }
-  .buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-  }
-  .row {
-    display: grid;
+  /* residual: unmapped */
+  [data-slot="row"] {
     grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
   }
-  .row.devices {
+  /* residual: unmapped */
+  [data-slot="row"][data-devices] {
     grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .row + .row {
-    border-top: 1px solid var(--border-hairline);
-  }
-  .who {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .name {
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .meta,
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .note {
-    max-width: 72ch;
-  }
-  .problem {
-    margin-top: var(--space-4);
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
   }
 </style>
