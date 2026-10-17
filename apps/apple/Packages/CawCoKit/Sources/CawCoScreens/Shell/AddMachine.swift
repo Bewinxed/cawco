@@ -276,7 +276,7 @@ final class AddMachineController: KitDialogController {
         })
         select.accessibilityLabel = "Hub address this machine should use"
         let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkSubtle, lines: 0)
-        hint.text = "The machine downloads the install script from here, so it has to be able to reach it."
+        hint.text = "The machine downloads the install script from here, so it has to be able to reach it. The .local name reaches machines on the same network, or on a VPN that carries it like ZeroTier; Tailscale and WireGuard don't."
         let column = field("Hub address this machine should use", select)
         column.addArrangedSubview(hint)
         return column

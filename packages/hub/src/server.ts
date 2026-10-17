@@ -540,6 +540,7 @@ import {
   PAUSE_ORIGIN,
   WouldWait,
 } from "./machine-pause";
+import { localHubName } from "./mdns";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
@@ -21601,6 +21602,9 @@ export const createServer = (
         hubId: hubId(),
         dashboard: dashboardUrl(registry),
         secureDashboard: secureDashboardUrl(registry),
+        // The `.local` name it holds on its networks (mdns.ts), or null:
+        // what the app keeps for a hub it found on this network.
+        localName: localHubName() ?? null,
       }))
       // The fleet's list is the person's. A machine reads its own row alone,
       // by its own id (hub-auth.ts): what its CLI's health, install and

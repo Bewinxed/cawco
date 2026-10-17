@@ -9,10 +9,13 @@ import dnssd
 /// discovery.ts browses it). Each service is resolved to an address and
 /// kept only once it answers as a hub does: `/health` names the hub's id to
 /// anyone, a hub that requires paired devices too, so a 200 carrying a
-/// `hubId` is the test.
+/// `hubId` is the test. What is kept is the `.local` name the same answer
+/// says the hub holds (`localName`, `cawco.local` or `cawco-2.local`), not
+/// the address it resolved to: the name follows the hub to a new address.
 ///
 /// Multicast is link-local: a hub across a router or only on a tailnet is not
-/// found here, and is entered by hand.
+/// found here, and is entered by hand. Tailscale and WireGuard carry no
+/// multicast, so its `.local` name doesn't reach it over them either.
 @MainActor
 @Observable
 public final class HubDiscovery {
@@ -20,6 +23,7 @@ public final class HubDiscovery {
         public var id: URL { address }
         /// The service's name, `cawco-<hostname>`.
         public let name: String
+        /// The hub's `.local` name and port, `http://cawco.local:3456`.
         public let address: URL
     }
 
@@ -177,10 +181,10 @@ public final class HubDiscovery {
                 // or move to a new address while the hub is starting.
                 while !Task.isCancelled {
                     if let address = await Self.address(of: endpoint), !Task.isCancelled {
-                        let isHub = await Self.isHub(address)
+                        let local = await Self.localAddress(of: address)
                         guard !Task.isCancelled else { return }
-                        if isHub {
-                            self?.accept(Found(name: name, address: address), for: endpoint)
+                        if let local {
+                            self?.accept(Found(name: name, address: local), for: endpoint)
                             return
                         }
                     }
@@ -260,15 +264,23 @@ public final class HubDiscovery {
 
     /// A CawCo hub answers `/health` with its id, to anyone: one that
     /// requires paired devices refuses every other read until this app pairs.
-    private nonisolated static func isHub(_ address: URL) async -> Bool {
+    /// The same answer names the `.local` name it holds (mdns.ts
+    /// `localHubName`): the address, with that name for its host. Nil until a
+    /// hub answers with both, as one still settling its name does not yet.
+    private nonisolated static func localAddress(of address: URL) async -> URL? {
         var request = URLRequest.hub(address.appending(path: "health"))
         request.timeoutInterval = probeTimeout
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              body["hubId"] is String,
+              let name = body["localName"] as? String,
+              var parts = URLComponents(url: address, resolvingAgainstBaseURL: false)
         else {
-            return false
+            return nil
         }
-        return ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["hubId"] is String
+        parts.host = name
+        return parts.url
     }
 
     /// A continuation resumed exactly once, from whichever callback comes first.

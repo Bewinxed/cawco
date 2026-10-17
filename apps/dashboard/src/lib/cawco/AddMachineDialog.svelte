@@ -304,7 +304,8 @@
     </NativeSelect.Root>
     <span class="hint">
       The machine downloads the install script from here, so it has to be able
-      to reach it.
+      to reach it. The .local name reaches machines on the same network, or on a
+      VPN that carries it like ZeroTier; Tailscale and WireGuard don't.
     </span>
   </div>
 {/snippet}

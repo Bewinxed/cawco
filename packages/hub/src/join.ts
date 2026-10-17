@@ -45,6 +45,7 @@ import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { Elysia, t } from "elysia";
 import { DB_PATH, HUB_PORT } from "./config";
 import type { HubLifetimeShape } from "./lifetime";
+import { localHubName } from "./mdns";
 
 /** How long a short command gets to answer. Our choice. */
 const OUTPUT_MS = 3000;
@@ -88,9 +89,12 @@ const TRAILING_DOT = /\.$/;
 /**
  * Every address a machine could reach this hub on: Tailscale first, because a
  * tailnet address works from anywhere the machine is, then every non-internal
- * IPv4 labelled with its interface. The Tailscale IP also shows up as an
- * interface (`tailscale0`, `utun…`); it is listed once, under Tailscale.
- * A machine without the `tailscale` binary simply has no Tailscale rows.
+ * IPv4 labelled with its interface, then the `.local` name the hub holds on
+ * its networks (mdns.ts), which keeps working when the hub's address changes
+ * but reaches only machines on the same network. The Tailscale IP also shows
+ * up as an interface (`tailscale0`, `utun…`); it is listed once, under
+ * Tailscale. A machine without the `tailscale` binary simply has no Tailscale
+ * rows, and a hub with mDNS off has no `.local` row.
  */
 export const joinAddresses = async (): Promise<JoinAddress[]> => {
   const url = (host: string): string => `http://${host}:${HUB_PORT}`;
@@ -124,6 +128,10 @@ export const joinAddresses = async (): Promise<JoinAddress[]> => {
         found.push({ label: name, url: candidate });
       }
     }
+  }
+  const local = localHubName();
+  if (local) {
+    found.push({ label: "On this network", url: url(local) });
   }
   return found;
 };
