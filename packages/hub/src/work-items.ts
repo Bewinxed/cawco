@@ -1763,6 +1763,34 @@ const finishedReport = (
   return `${failure}\n\n${head}${landed}${tail}`;
 };
 
+/**
+ * What `finish_item` answers once a landing ended its item: done, or failed
+ * because it could not land or its outputs did not arrive. `gateSaid` is the
+ * landing gate's lines, `held` the words on a group's held report.
+ */
+const landedText = (
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
+  collected: { ok: boolean; line: string },
+  gateSaid: string,
+  held: string
+): { done: boolean; text: string } => {
+  if (landing.kind !== "done") {
+    return {
+      done: false,
+      text: `The work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+    };
+  }
+  return collected.ok
+    ? {
+        done: true,
+        text: `${landing.line}${collected.line}${gateSaid}\n\nThe item is done${held}. End your turn.`,
+      }
+    : {
+        done: false,
+        text: `${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+      };
+};
+
 /** A push to an item's own branch that did not happen, as its landing. */
 const unpushed = (
   pushed: Exclude<BranchOutcome, { kind: "pushed" | "stopped" }>,
@@ -5781,21 +5809,7 @@ export const createWorkItems = ({
       ...settled,
     });
     const held = reportOrHold(row, ended, body, submission.headline);
-    if (landing.kind !== "done") {
-      return {
-        done: false,
-        text: `The work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
-      };
-    }
-    return collected.ok
-      ? {
-          done: true,
-          text: `${landing.line}${collected.line}${gateSaid}\n\nThe item is done${held}. End your turn.`,
-        }
-      : {
-          done: false,
-          text: `${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
-        };
+    return landedText(landing, collected, gateSaid, held);
   };
 
   /** The paths of the workspace's changes against its target that the Swift build reads (apple-gate.ts). */
