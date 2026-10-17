@@ -637,6 +637,19 @@ export function highlight(options: HighlightOptions) {
       forgetScroll();
       pointer = null;
       if (!hovered) {
+        // It fades where its row stands now. Placed as the list's content
+        // moved under a still pointer (a `pointerover` the list had not
+        // seen the pointer for), the place was the list's at that moment;
+        // the list moving on without resizing, with the same row under the
+        // pointer, set nothing measuring it again, and the ghost faded,
+        // and stayed, off its row by as much (the spawn sheet's model list,
+        // 142.469px or 142.016px down by the race).
+        const box = ghostRow?.isConnected ? boxOf(ghostRow) : undefined;
+        if (box) {
+          setGlide(ghost, false);
+          place(ghost, box);
+          ghostBox = box;
+        }
         showGhost(null);
       }
     };
