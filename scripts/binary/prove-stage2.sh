@@ -255,8 +255,17 @@ orchestrate() {
       fixture broken-binary "$out/shared/broken-cawco" &&
       fixture broken-binary "$out/shared/migrating-cawco" migrates &&
       bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))" &&
-      cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-send.ts" "$here/stage2-sends.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$here/stage2-preview-port.ts" "$here/stage2-answer-prompts.py" "$out/shared/" &&
+      machine_helpers "$out/shared" &&
       write_machine_scripts "$out/shared"
+  }
+  # The helpers the machines run from /shared (run_script), each bundled into one self-contained file under its own
+  # name: /shared holds no repo tree, so a relative import left in a raw source has nothing to resolve to (nightly
+  # cca90e213: "Cannot find module '../../packages/core/src/bounded' from '/shared/stage2-send.ts'").
+  machine_helpers() {
+    local dir=$1 helper
+    for helper in start-session stop-session send sends during-install hook-calls preview-port; do
+      bun build "$here/stage2-$helper.ts" --target=bun --outfile "$dir/stage2-$helper.ts" || return 1
+    done
   }
   echo "preparing (images and fixtures at once)"
   proof_images "$out/images" host machine > "$out/images/tags" 2> "$out/logs/images.log" &
