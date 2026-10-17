@@ -64,20 +64,17 @@
 {:else if staged && drawn}
   <PreviewPane inset instanceId={staged.instanceId} />
 {:else}
-  <div data-slot="cover" aria-hidden="true" class="cover">
+  <div
+    data-slot="cover"
+    aria-hidden="true"
+    class="flex-1 p-space-5 border border-border-well rounded-sm bg-surface-recess"
+  >
+    <!-- literal: 42% -->
     <span
       data-slot="block"
-      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+      style:--block-w="42%"
+      class="kit-skeleton block h-space-3 w-(--block-w) rounded-xs"
     ></span>
   </div>
 {/if}
 
-<style>
-  .cover {
-    flex: 1;
-    padding: var(--space-5);
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-</style>
