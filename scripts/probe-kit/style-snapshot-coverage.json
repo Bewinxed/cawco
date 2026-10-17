@@ -622,6 +622,7 @@
     "board",
     "decisions",
     "project",
+    "session",
     "task",
     "views"
   ],
@@ -815,11 +816,15 @@
   "apps/dashboard/src/lib/cawco/accounts/AtLimitBlock.svelte": [
     "config-accounts"
   ],
-  "apps/dashboard/src/lib/cawco/accounts/Check.svelte": [],
+  "apps/dashboard/src/lib/cawco/accounts/Check.svelte": [
+    "config-accounts"
+  ],
   "apps/dashboard/src/lib/cawco/accounts/DevicePanel.svelte": [
     "config-accounts"
   ],
-  "apps/dashboard/src/lib/cawco/accounts/KeyPanel.svelte": [],
+  "apps/dashboard/src/lib/cawco/accounts/KeyPanel.svelte": [
+    "config-accounts"
+  ],
   "apps/dashboard/src/lib/cawco/accounts/OrderList.svelte": [
     "config-accounts"
   ],
@@ -1048,6 +1053,7 @@
     "config-skills"
   ],
   "apps/dashboard/src/lib/cawco/config/RowList.svelte": [
+    "config-connections",
     "config-delegate-types",
     "config-hooks",
     "config-mcp",
@@ -1074,6 +1080,7 @@
     "config-updates"
   ],
   "apps/dashboard/src/lib/cawco/config/SectionRow.svelte": [
+    "config-connections",
     "config-delegate-types",
     "config-hooks",
     "config-mcp",
@@ -1149,7 +1156,9 @@
   "apps/dashboard/src/lib/cawco/decisions/graph/DecisionNode.svelte": [
     "decisions"
   ],
-  "apps/dashboard/src/lib/cawco/find/FindPeek.svelte": [],
+  "apps/dashboard/src/lib/cawco/find/FindPeek.svelte": [
+    "jump"
+  ],
   "apps/dashboard/src/lib/cawco/find/FindRow.svelte": [
     "jump",
     "session"
@@ -1600,7 +1609,9 @@
     "usage",
     "workflows"
   ],
-  "apps/dashboard/src/lib/cawco/join/AddMachineLink.svelte": [],
+  "apps/dashboard/src/lib/cawco/join/AddMachineLink.svelte": [
+    "config-memory"
+  ],
   "apps/dashboard/src/lib/cawco/join/CheckInStatus.svelte": [
     "home"
   ],
@@ -1615,11 +1626,16 @@
     "bench-new-session",
     "new-session"
   ],
-  "apps/dashboard/src/lib/cawco/move/MoveAsk.svelte": [],
+  "apps/dashboard/src/lib/cawco/move/MoveAsk.svelte": [
+    "new-session"
+  ],
   "apps/dashboard/src/lib/cawco/move/MoveWait.svelte": [],
-  "apps/dashboard/src/lib/cawco/plan/PlanPane.svelte": [],
+  "apps/dashboard/src/lib/cawco/plan/PlanPane.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/plan/PlanRing.svelte": [
-    "bench-delegate-tray"
+    "bench-delegate-tray",
+    "session"
   ],
   "apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte": [
     "artifact"
@@ -1642,6 +1658,7 @@
   ],
   "apps/dashboard/src/lib/cawco/preview/SheetInspector.svelte": [],
   "apps/dashboard/src/lib/cawco/project/CardFace.svelte": [
+    "no-machine",
     "project"
   ],
   "apps/dashboard/src/lib/cawco/project/CawFloat.svelte": [
@@ -1708,7 +1725,9 @@
     "project",
     "views"
   ],
-  "apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte": [],
+  "apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte": [
+    "views"
+  ],
   "apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte": [
     "views"
   ],
@@ -1721,6 +1740,7 @@
   "apps/dashboard/src/lib/cawco/side/SideSurface.svelte": [
     "artifact",
     "project",
+    "session",
     "task"
   ],
   "apps/dashboard/src/lib/cawco/side/Split.svelte": [
@@ -1896,7 +1916,9 @@
   "apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte": [
     "session"
   ],
-  "apps/dashboard/src/lib/cawco/transcript/Behind.svelte": [],
+  "apps/dashboard/src/lib/cawco/transcript/Behind.svelte": [
+    "session"
+  ],
   "apps/dashboard/src/lib/cawco/transcript/CatchUp.svelte": [],
   "apps/dashboard/src/lib/cawco/transcript/CompactionDivider.svelte": [
     "session"
@@ -2438,7 +2460,6 @@
   ],
   "apps/dashboard/src/lib/components/features/ProviderLogo.svelte": [
     "bench-new-session",
-    "config-connections",
     "new-session",
     "session"
   ],
