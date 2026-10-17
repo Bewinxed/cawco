@@ -46,65 +46,25 @@
 <span
   data-slot="time"
   data-num
-  class="time num mark-line"
+  class="group/time mark-line num inline-flex max-w-full items-center gap-space-1 align-bottom type-meta whitespace-nowrap text-ink-muted status-failed:text-status-fail-ink status-running:text-status-live-ink status-waiting:text-status-attn-ink"
   data-status={status}
   title={title ?? undefined}
 >
   {#if status === "running"}
-    <Spinner aria-hidden="true" class="status-glyph" role="presentation" />
+    <Spinner
+      aria-hidden="true"
+      class="size-icon-sm flex-none group-status-running/time:text-status-live-glyph"
+      role="presentation"
+    />
   {:else}
     {@const Glyph = GLYPH[status]}
-    <Glyph aria-hidden="true" class="status-glyph" />
+    <Glyph
+      aria-hidden="true"
+      class="size-icon-sm flex-none group-status-done/time:text-status-done-glyph group-status-failed/time:text-status-fail-glyph group-status-neutral/time:text-ink-subtle group-status-waiting/time:text-status-attn-glyph"
+    />
   {/if}
   {#if said}
     <span class="sr-only">{said},</span>
   {/if}
-  <span class="time-words">{text}</span>
+  <span class="overflow-clip text-ellipsis">{text}</span>
 </span>
-
-<style>
-  .time {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    max-inline-size: 100%;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-    white-space: nowrap;
-    vertical-align: bottom;
-  }
-  .time-words {
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  .time :global(.status-glyph) {
-    flex: none;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  [data-status="done"] :global(.status-glyph) {
-    color: var(--status-done-glyph);
-  }
-  [data-status="failed"] {
-    color: var(--status-fail-ink);
-  }
-  [data-status="failed"] :global(.status-glyph) {
-    color: var(--status-fail-glyph);
-  }
-  [data-status="running"] {
-    color: var(--status-live-ink);
-  }
-  [data-status="running"] :global(.status-glyph) {
-    color: var(--status-live-glyph);
-  }
-  [data-status="waiting"] {
-    color: var(--status-attn-ink);
-  }
-  [data-status="waiting"] :global(.status-glyph) {
-    color: var(--status-attn-glyph);
-  }
-  [data-status="neutral"] :global(.status-glyph) {
-    color: var(--ink-subtle);
-  }
-</style>
