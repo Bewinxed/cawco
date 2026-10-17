@@ -60,6 +60,7 @@ import {
   type Snapshot,
   SnapshotWriter,
   saveSnapshot,
+  type Tally,
 } from "../surfaces/snapshot";
 import { PASSES, Servers, TAPE, walk } from "../surfaces/walk";
 
@@ -209,7 +210,13 @@ async function report(
     if (!pair) {
       continue;
     }
-    const lines = differences(pair[0], pair[1]);
+    const tally: Tally = { shadowLayers: 0 };
+    const lines = differences(pair[0], pair[1], tally);
+    if (tally.shadowLayers > 0) {
+      kit.note(
+        `${surface.name}: ${tally.shadowLayers} box-shadow value(s) equal once their blank layers (rgba(0, 0, 0, 0) 0px 0px 0px 0px) are set aside`
+      );
+    }
     all.push(...lines.map((line) => parsed(surface.name, line)));
     for (const line of lines.slice(0, SHOWN)) {
       kit.check(`${surface.name}/${line}`, false);
