@@ -213,8 +213,33 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         let line = "ask=\(ask.requestId) " + String(format: "card=%.1f,%.1f anchor=%.1f,%.1f body=%.1f,%.1f content=%.1f",
                                                     bounds.width, bounds.height, anchor.minX, anchor.minY,
                                                     body.minY, body.maxY, scroll.contentSize.height)
-        guard line != loggedLayout else { return }
-        loggedLayout = line
+        if line != loggedLayout {
+            loggedLayout = line
+            Self.layoutLog.notice("\(line, privacy: .public)")
+        }
+        logOptions()
+    }
+
+    /// Each option's span across the card, in its own points, and its
+    /// description's length as drawn: `options ask=<id> card=<width>
+    /// q<n>=list|chips o<n>.<k>=<minX>,<maxX>,<chars> …`, Other last.
+    private var loggedOptions = ""
+
+    private func logOptions() {
+        guard ask.isQuestion else { return }
+        var parts = ["options ask=\(ask.requestId)", String(format: "card=%.1f", bounds.width)]
+        for (qi, row) in chips.enumerated() {
+            let shown = row + [otherChips[qi]].compactMap(\.self)
+            let listed = shown.first?.superview is UIStackView
+            parts.append("q\(qi + 1)=\(listed ? "list" : "chips")")
+            for (i, chip) in shown.enumerated() {
+                let box = chip.convert(chip.bounds, to: self)
+                parts.append(String(format: "o%d.%d=%.1f,%.1f,%d", qi + 1, i + 1, box.minX, box.maxX, chip.probeDetail))
+            }
+        }
+        let line = parts.joined(separator: " ")
+        guard line != loggedOptions else { return }
+        loggedOptions = line
         Self.layoutLog.notice("\(line, privacy: .public)")
     }
     #endif
@@ -370,9 +395,15 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         for (qi, question) in ask.questions.enumerated() {
             // The lede's 7 and the options' 2 are adjoining margins: they collapse to 7.
             place(lede(question.question), gap: Space.space2)
+            // A question whose options say more than their labels, or that has
+            // more than three, lists them: one full-width row each, its
+            // description under its label. Three or fewer bare labels stay chips.
+            let listed = question.options.count > 3 || question.options.contains {
+                !$0.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
             var row: [OptionChip] = []
             for (i, option) in question.options.enumerated() {
-                let chip = OptionChip(key: i + 1, label: option.label)
+                let chip = OptionChip(key: i + 1, label: option.label, detail: listed ? option.description : nil, listed: listed)
                 chip.accessibilityIdentifier = "prompt-option-\(qi + 1)-\(i + 1)"
                 // A plain UIControl sends touchUpInside, never primaryActionTriggered.
                 chip.addAction(UIAction { [weak self] _ in self?.toggle(qi, option.label) }, for: .touchUpInside)
@@ -384,14 +415,22 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
             // the next digit, while a digit is left for it.
             var shown: [UIView] = row
             if question.options.count < 9 {
-                let other = OptionChip(key: question.options.count + 1, label: "Other")
+                let other = OptionChip(key: question.options.count + 1, label: "Other", listed: listed)
                 other.accessibilityIdentifier = "prompt-other-\(qi + 1)"
                 other.accessibilityHint = "Write your own answer. Key \(question.options.count + 1)"
                 other.addAction(UIAction { [weak self] _ in self?.openOther(qi) }, for: .touchUpInside)
                 otherChips[qi] = other
                 shown.append(other)
             }
-            place(WrapLayout(shown), gap: Space.space2)
+            if listed {
+                // The rows, Other the last of them, `space-2` apart as the chips are.
+                let list = UIStackView(arrangedSubviews: shown)
+                list.axis = .vertical
+                list.spacing = Space.space2
+                place(list, gap: Space.space2)
+            } else {
+                place(WrapLayout(shown), gap: Space.space2)
+            }
             // The line under the choices it stands in for, before the card's actions.
             let field = KitField(placeholder: "Your answer…")
             field.accessibilityLabel = "Your answer to: \(question.question)"
@@ -996,13 +1035,25 @@ final class PromptBar: UIControl {
 /// control border, radius 8, raised, the label role, led by its 17pt mono
 /// keycap. Picked, it takes the brand edge, a recess fill and an inverted
 /// keycap; a keycap the digits are not pointed at goes quiet.
+///
+/// Listed (a question whose options carry descriptions, or more than three
+/// of them), it is one full-width row: the keycap leading at the label's
+/// top, the label at the strong weight, and the description under it in
+/// the meta role and muted ink, wrapping in full, never cut. Picked, the
+/// same edge, fill and keycap, at the same size.
 final class OptionChip: UIControl {
     private let keycap = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
     private let cap = UIView()
     private let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+    private let detail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var selectedNow = false
 
-    init(key: Int, label: String) {
+    #if DEBUG
+    /// The description's length as drawn, for a simulator pass; 0 for none.
+    var probeDetail: Int { detail.isHidden ? 0 : (detail.text ?? "").count }
+    #endif
+
+    init(key: Int, label: String, detail words: String? = nil, listed: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusSm
@@ -1016,11 +1067,38 @@ final class OptionChip: UIControl {
         cap.translatesAutoresizingMaskIntoConstraints = false
         cap.addSubview(keycap)
         // The option's words keep the page's body leading (13px / 18.85px on the web).
-        title.role = TypeScale.typeLabel.with(leading: TypeScale.leadingBody)
+        title.role = listed
+            ? TypeScale.typeLabel.with(weight: TypeScale.weightStrong, leading: TypeScale.leadingBody)
+            : TypeScale.typeLabel.with(leading: TypeScale.leadingBody)
         title.text = label
-        let row = UIStackView(arrangedSubviews: [cap, title])
+        let said = words?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        detail.text = said
+        detail.wrap = .pretty
+        detail.isHidden = said.isEmpty
+        // Listed, the label and its description stand in a column beside the
+        // keycap, which is centred on the label's first line: a holder one
+        // line tall, at the row's top.
+        let column = UIStackView(arrangedSubviews: [title, detail])
+        column.axis = .vertical
+        column.spacing = Space.space1
+        let lead: UIView
+        if listed {
+            let holder = UIView()
+            holder.translatesAutoresizingMaskIntoConstraints = false
+            holder.addSubview(cap)
+            NSLayoutConstraint.activate([
+                holder.heightAnchor.constraint(equalToConstant: TypeScale.typeLabel.points * TypeScale.leadingBody),
+                cap.centerYAnchor.constraint(equalTo: holder.centerYAnchor),
+                cap.leadingAnchor.constraint(equalTo: holder.leadingAnchor),
+                cap.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+            ])
+            lead = holder
+        } else {
+            lead = cap
+        }
+        let row = UIStackView(arrangedSubviews: [lead, listed ? column : title])
         row.spacing = Space.space2
-        row.alignment = .center
+        row.alignment = listed ? .top : .center
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
@@ -1038,7 +1116,7 @@ final class OptionChip: UIControl {
             heightAnchor.constraint(greaterThanOrEqualToConstant: 30),
         ])
         isAccessibilityElement = true
-        accessibilityLabel = label
+        accessibilityLabel = said.isEmpty ? label : "\(label). \(said)"
         accessibilityHint = "Key \(key)"
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: OptionChip, _: UITraitCollection) in
             chip.paint()
