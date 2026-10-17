@@ -157,7 +157,7 @@
   .foot {
     flex: none;
     inline-size: var(--column);
-    margin-inline: auto;
+    margin-inline-start: calc((100cqi - var(--column)) / 2);
     padding-block-end: var(--space-4);
   }
   /* The composer's layer (ThreadPane `.composer-dock`): over the room,

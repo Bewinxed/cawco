@@ -132,7 +132,7 @@
     >
       {#if id === "today"}
         <p
-          class="m-auto max-w-[46ch] p-(--space-6) text-[var(--ink-muted)] text-body"
+          class="m-0 max-w-[60ch] py-(--space-6) text-[var(--ink-muted)] text-body"
         >
           The thread could not be read: {READ_PROBLEM}
         </p>
