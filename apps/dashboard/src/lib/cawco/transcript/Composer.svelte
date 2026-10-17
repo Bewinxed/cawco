@@ -2954,33 +2954,65 @@
      behind the panel. -->
 <svelte:window onkeydown={windowKey} />
 
+<!-- What steps aside while an ask holds the composer (--step-aside) comes
+     back at once and fades in. On a narrow screen the dock's foot clears the
+     home indicator by the resting gap plus the safe area, and the composer,
+     the tray row and the cards keep the composer's edges. It stays absolute
+     (docked at the bottom of the transcript pane) rather than viewport-fixed,
+     so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
+     owns the safe-area inset. -->
 <div
   data-slot="dock"
   data-asking={askRaised || undefined}
-  class="dock"
+  data-drawing={canvasUp || undefined}
+  data-minimized={minimized || undefined}
+  data-perched={!!perch || undefined}
+  class="group/dock absolute inset-x-0 top-0 bottom-(--dock-foot) max-desk:bottom-(--dock-foot-narrow) z-20 flex flex-col justify-end items-center pointer-events-none"
   data-keeps-draft
   data-safe-bottom
   bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
-  class:asking={askRaised}
-  class:drawing={canvasUp}
-  class:minimized
+  style:--step-aside="opacity var(--dur-fade) var(--ease-out), visibility 0s"
+  style:--dock-foot="calc(var(--space-4) + var(--safe-bottom))"
+  style:--dock-foot-narrow="calc(var(--space-2) + var(--safe-bottom))"
 >
   {#if offered.length > 0}
+    <!-- The rest of the dock above the panel, cards stood on its bottom
+         edge; the gap to the panel is the stack's own bottom padding, so its
+         measured height carries it. A parked card keeps the composer's whole
+         row (Prompt: the answer row needs its width) and stands above what
+         peeks over the pill, never over it. On a narrow screen the cards keep
+         the desktop's step off the panel. -->
     <div
-      class="prompts"
+      data-slot="prompts"
+      class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none group-data-perched/dock:pb-(--perch-rise) group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto max-desk:mb-(--prompts-step)"
       inert={askRaised}
       bind:this={offers}
       {@attach reflow()}
+      style:--prompts-step="calc(var(--space-4) - var(--space-2))"
     >
       <!-- Each conversation's offer, built, standing on the stack's foot;
-           the one written to is seen, and the stack is as tall as it. -->
-      <div data-slot="stack" class="stack" style:block-size="{stack}px">
+           the one written to is seen, and the stack is as tall as it. What
+           the column measures into the composer's height: the offer shown,
+           and its step. Every offer stands on its foot out of flow, so a
+           switch changes which is seen and the stack's height, never what is
+           laid out. -->
+      <div
+        data-slot="stack"
+        class="relative flex-none h-(--stack-h)"
+        style:--stack-h="{stack}px"
+      >
         {#each offered as row (row.id)}
+          <!-- The step under a card parked, on the card's own row; nothing
+               under a row with no card. Asked of the row, not of the stack
+               past the away offers: a class in a `:has()` before a universal
+               makes each of its changes restyle the whole row. The offer of
+               a conversation not being written to: built and laid out where
+               it would stand, unseen and out of reach (`visibility` takes it
+               out of the tab order and the accessibility tree). -->
           <div
             data-composer-away={row.id !== showing || undefined}
-            class="offer"
-            class:away={row.id !== showing}
+            class="absolute inset-x-0 bottom-0 pointer-events-auto has-[>*]:pb-space-3 data-composer-away:invisible"
             bind:clientHeight={offerHeights[row.id]}
           >
             {@render row.prompts?.()}
@@ -2993,9 +3025,11 @@
        tray's fixed row, and the suggestion chips standing on it (out of
        flow). Both rows are kept clear at every transcript's foot (app.css
        `--c-tray-row`, `--c-suggest-room`). An offer stands on top of both. -->
+  <!-- The delegate tray's row, on the composer's width and left edge. It is
+       the positioned box the suggestion chips stand on. -->
   <div
     data-slot="lift"
-    class="lift"
+    class="relative flex-none w-c-composer-w pointer-events-none group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto"
     inert={askRaised}
     bind:clientHeight={lift}
     style:--shelf-rise={shelves[showing] ? `${shelves[showing]}px` : null}
@@ -3005,23 +3039,42 @@
            face, what it asks, and the chevron it comes back up by. The
            tray's chips and the plan's ring step aside meanwhile, as they do
            while the card is up, so the bar costs the transcript nothing the
-           row did not already keep clear. -->
+           row did not already keep clear. The bar is the tray row's chip
+           (app.css .kit-tray-chip) in its needs tone (DelegateTray: a
+           session asking for something is the one loud colour), across the
+           composer's width, standing in the tray row as the tray's chips do:
+           a tray chip high, a tray gap off the pill. It stands under the
+           grown shape (`.grown-halo`, z 1): brought back, the card grows over
+           the bar as it fades. -->
       {@const [first] = askQuestions}
-      <div class="asked" in:askedIn out:askedOut>
+      <div
+        class="absolute inset-0 flex items-end pb-c-tray-gap pointer-events-none"
+        in:askedIn
+        out:askedOut
+      >
         <button
           data-slot="asked-chip"
           aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
-          class="asked-chip kit-tray-chip touch-hit"
+          class="kit-tray-chip touch-hit w-full min-w-0 text-status-attn-ink pointer-events-auto"
           onclick={restoreAsk}
           type="button"
           bind:this={askedChip}
         >
-          <span aria-hidden="true" class="asked-face" data-box>
+          <span
+            aria-hidden="true"
+            class="inline-grid flex-none place-items-center"
+            data-box
+          >
             <CawFace size={16} status="needs-you" />
           </span>
-          <span class="asked-text">{first?.question ?? first?.header}</span>
+          <span
+            class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
+            >{first?.question ?? first?.header}</span
+          >
           {#if ask.more > 0}
-            <span data-slot="num" class="asked-more num">+{ask.more}</span>
+            <span data-slot="num" class="num flex-none font-normal"
+              >+{ask.more}</span
+            >
           {/if}
           <IconChevronUp aria-hidden="true" />
         </button>
@@ -3040,25 +3093,47 @@
       {/key}
     {/if}
     {#if planRing}
-      <div class="progress-slot" bind:clientWidth={ringWidth}>
+      <!-- The plan's chip, at the tray row's trailing end, standing on the
+           tray's line: the step off the panel the delegate chips stand on.
+           On the tray's line: risen by the tray's shelf while it is open. -->
+      <div
+        data-slot="progress-slot"
+        class="absolute bottom-(--progress-foot) end-0 z-1 flex items-end h-c-tray-row pb-c-tray-gap pointer-events-auto group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible"
+        bind:clientWidth={ringWidth}
+        style:--progress-foot="var(--shelf-rise, 0px)"
+      >
         {@render planRing()}
       </div>
     {/if}
     {#if trayed.length > 0}
+      <!-- One conversation's tray over the next while they cross-fade, in a
+           column the composer's width: an auto column grew to the chips' own
+           width. The slot is the tray's one row from the composer's first
+           render, chips or none (app.css `--c-tray-row`, which every
+           transcript keeps clear), with the tray standing on its foot: a chip
+           arriving late fills room already there, and the suggestion row
+           standing on the slot never moves. The row, and the tray's shelf
+           under it while it is open: the dock grows up by the shelf, and the
+           transcript keeps the room. -->
+      <!-- literal: the one-cell track -->
       <div
-        class="tray-slot"
+        data-slot="tray-slot"
+        class="relative grid grid-cols-(--tray-cols) min-h-c-tray-row group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible"
         style:--ring-room={planRing
           ? `calc(${ringWidth}px + var(--space-2))`
           : undefined}
+        style:--tray-cols="minmax(0, 1fr)"
       >
         <!-- Each conversation's tray, built, in the slot's one cell: handed
-             the next, the one written to fades in over the last. -->
+             the next, the one written to fades in over the last as it fades
+             out, so neither the slot nor anything standing on it moves.
+             Opacity only, so it runs with or without motion; the one leaving
+             is out of reach once it has faded. -->
         {#each trayed as row (row.id)}
           <div
             data-slot="tray"
             data-composer-away={row.id !== showing || undefined}
-            class="tray"
-            class:away={row.id !== showing}
+            class="row-start-1 col-start-1 data-composer-away:opacity-0 data-composer-away:invisible"
           >
             <DelegateTray
               {held}
@@ -3072,9 +3147,11 @@
       </div>
     {/if}
   </div>
+  <!-- Everything in the composer takes the pointer; the composer itself, and
+       the canvas's box, do not. -->
   <div
     data-slot="composer"
-    class="composer"
+    class="relative flex-none w-c-composer-w flex flex-col gap-space-3 pointer-events-none max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto"
     bind:this={column}
     bind:clientHeight={panel}
     in:rise
@@ -3082,11 +3159,14 @@
   >
     {#if canvasStands}
       <!-- The canvas's box over the field: its stage (canvas/) stands on
-           it, the grown shape round it and the field. -->
+           it, the grown shape round it and the field. On the composer's top,
+           a pixel inside the grown shape's edge; the room writes its height,
+           and its left and right when it stands wider than the pill (the
+           grown shape's own physical sides). -->
       <div
         data-slot="canvas-slot"
         aria-hidden="true"
-        class="canvas-slot"
+        class="absolute left-px right-px bottom-full pointer-events-none"
         bind:this={canvasSlot}
       ></div>
     {/if}
@@ -3100,15 +3180,18 @@
       bind:canvasChip
     />
 
-    <!-- A send that failed says so right over the field it left. -->
+    <!-- A send that failed says so right over the field it left; the way
+         back stands on the line that says what failed, after its words.
+         While the canvas stands, it stands in the grown shape over the
+         field, above its surface. -->
     {#if sendNotice}
       <div
         data-slot="send-error"
-        class="send-error"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
-        <p>{sendNotice}</p>
+        <p class="min-w-0">{sendNotice}</p>
         {#if sendAgain && sendError === sendNotice}
           <Button
             disabled={pending}
@@ -3119,7 +3202,13 @@
         {/if}
       </div>
     {:else if signInNote}
-      <p class="send-note" role="status" transition:unfold>{signInNote}</p>
+      <p
+        class="pointer-events-auto px-space-3 text-ink-muted text-size-meta font-normal"
+        role="status"
+        transition:unfold
+      >
+        {signInNote}
+      </p>
     {/if}
 
     <!-- The pill, and what grows up out of it over the transcript: the
@@ -3129,9 +3218,8 @@
     <div
       data-slot="shell"
       data-rolling={!!recall || undefined}
-      class="shell"
+      class="relative pointer-events-auto"
       bind:this={shell}
-      class:rolling={!!recall}
     >
       {#if recall && shell && fieldWrap}
         <RecallWheel
@@ -3160,24 +3248,41 @@
       {/if}
       {#if edit}
         <!-- What is happening, and the two ways out: the keys on a desk, a
-             button on a touch screen, which has no Esc. -->
+             button on a touch screen, which has no Esc. The row the
+             composer grows while a queued message is edited, inset past the
+             shoulders' curve, and clear of the fade at the grown top. The
+             label and the hints come up with the shape one after the other,
+             by opacity and translate alone, and sink back as it folds. No
+             filter: a blur transitioning here hung WebKit's web process for
+             good as the row came up (Playwright WebKit 2359 at an iPhone's
+             size, probe-kit safari-blurs), as the ask card's parts did on the
+             owner's iPhone. -->
         <div
           data-composer-shown={edit.shown || undefined}
           data-slot="edit-row"
-          class="edit-row"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) bottom-(--edit-foot) h-(--edit-h) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none"
           bind:this={editRow}
           style:--edit-inset="{edit.inset}px"
-          style:bottom="{edit.base}px"
-          style:height="{edit.row}px"
-          class:shown={edit.shown}
+          style:--edit-foot="{edit.base}px"
+          style:--edit-h="{edit.row}px"
         >
-          <span data-slot="what" class="what">Editing your queued message</span>
-          <span class="hint">
+          <span
+            data-slot="what"
+            class="inline-flex items-center gap-space-2 me-auto text-ink-row opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none"
+            >Editing your queued message</span
+          >
+          <!-- A touch screen has no Esc: a button keeps the message as it
+               was, and the keys are not shown. -->
+          <span
+            data-slot="hint"
+            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none"
+          >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
           </span>
           <Button
-            class="keep touch-hit"
+            class="touch-hit"
+            data-keep
             onclick={() => returnEdit()}
             size="xs"
             variant="ghost"
@@ -3188,10 +3293,13 @@
       {/if}
       {#if drawnAsk && askBox}
         <!-- The ask the composer has grown into, on the shell's foot over
-             the pill and cut to the shape as it grows and folds. -->
+             the pill and cut to the shape as it grows and folds, across the
+             composer's width: over the pill, as the wheel's rows and the
+             editing row are, so the pill's row is the card's own and no
+             empty band stands under it. -->
         <div
           data-slot="ask"
-          class="ask"
+          class="absolute z-3 inset-x-0 bottom-0"
           inert={!askShown}
           bind:this={askPanel}
           style:--ask-max="{askBox.max}px"
@@ -3211,30 +3319,58 @@
       <!-- With the keyboard down a touch screen's pill is a control to hold
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
+      <!-- One shape, always. --radius-lg outside, --space-2 of inset, and the
+           controls inside carry (panel − inset) so the curves are concentric
+           rather than two unrelated roundings stacked. The shell is the text
+           field (app.css field-shell): keyboard focus in the textarea draws
+           the ring over the shell's own border, an outline that moves
+           nothing, and the textarea itself draws none. Its one-line box is
+           the app's composer tokens (app.css `--c-composer-*`), which every
+           transcript keeps clear. It is the panel material (app.css
+           `--material-*`, its shell the kit's `.kit-dock-shell`), so the
+           transcript shows faintly through it, and opaque where translucency
+           is turned down. The pill's box is what grows out of it shares: the
+           grown shape is drawn behind the pill and its rows over it. While
+           it is grown, the grown shape is the composer: the pill's own
+           surface steps aside, and its edge is the control border, never the
+           ring. The wheel's shape stays the composer until it has folded back
+           into the pill's outline, so the pill's edge never comes back
+           across the rows folding with it. Keyboard down, a touch screen's
+           pill is a control to hold, so the page does not pan from it; typed
+           in, its touches are the field's. -->
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑, the field's aria-keyshortcuts) -->
       <form
         data-slot="cin"
         data-asking={askOpen || undefined}
+        data-grown={!!edit || askOpen || canvasUp || undefined}
+        data-hint-back={!!hintBack || undefined}
+        data-recalling={!!recall || undefined}
+        data-settling={(!!recall && !wheeling) || undefined}
+        data-wheeling={wheeling || undefined}
         aria-keyshortcuts={recallOf
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
         aria-label={FIELD_LABEL}
-        class="cin kit-dock-shell field-shell"
+        class="group/cin kit-dock-shell field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none not-focus-within:touch-none"
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
         onpointerdown={onholddown}
         onsubmit={(e) => e.preventDefault()}
         ontouchend={onholdnative}
         bind:this={pill}
-        class:asking={askOpen}
-        class:grown={!!edit || askOpen || canvasUp}
-        class:hint-back={!!hintBack}
-        class:recalling={!!recall}
-        class:settling={!!recall && !wheeling}
-        class:wheeling
+        style:--cin-pad="var(--c-composer-inset)"
+        style:--cin-ctl="var(--c-composer-field)"
       >
         {#if perch}
-          <div aria-hidden="true" class="perch" bind:clientHeight={perchHeight}>
+          <!-- On the pill's top-leading corner, its foot on the pill's top
+               edge: what stands there (a project's Caw) peeks over the
+               composer and takes no pointer. -->
+          <div
+            data-slot="perch"
+            aria-hidden="true"
+            class="absolute bottom-full start-space-3 pointer-events-none group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible"
+            bind:clientHeight={perchHeight}
+          >
             {@render perch()}
           </div>
         {/if}
@@ -3243,16 +3379,25 @@
            while its next word is being chosen. -->
           <!-- Focus never leaves the field: the menu swallows the mousedown that
            would blur it, so a clicked row lands on the message being written. -->
+          <!-- The `/` and `@` menu, above the pill and matched to its width:
+               a kit floating surface (app.css `.kit-pop`) that rises out of
+               the field below it, growing from its bottom edge, the side the
+               caret is on. The list inside carries its own inset. -->
+          <!-- literal: 320px, and a row's 30px (44px under a finger) -->
           <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the field, it is not a user interaction target. -->
           <div
             data-slot="menu"
-            class="menu kit-pop"
+            class="kit-pop absolute left-0 right-0 bottom-(--menu-foot) max-h-(--menu-max-h) overflow-hidden p-0 origin-bottom"
             data-side="top"
             data-state="open"
             id="composer-menu"
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
             out:menuOut
+            style:--menu-foot="calc(100% + var(--space-2))"
+            style:--menu-max-h="320px"
+            style:--menu-row-h="30px"
+            style:--menu-row-h-coarse="44px"
           >
             <Command.Root loop shouldFilter={false} bind:value={highlight}>
               <Command.List>
@@ -3264,11 +3409,16 @@
                         onSelect={() => choose(entry)}
                         value={entry.id}
                       >
-                        <span data-slot="e-label" class="e-label"
+                        <!-- A command, in the code face. -->
+                        <span
+                          data-slot="e-label"
+                          class="font-(family-name:--font-mono) font-medium text-ink-strong whitespace-nowrap flex-none"
                           >{entry.label}</span
                         >
                         {#if entry.detail}
-                          <span data-slot="e-detail" class="e-detail"
+                          <span
+                            data-slot="e-detail"
+                            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-size-meta font-normal text-ink-muted flex-auto"
                             >{entry.detail}</span
                           >
                         {/if}
@@ -3287,13 +3437,31 @@
         <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
+        <!-- The field's box. Its custom properties reach the field and the
+             autosize twin beside it (a copy of the field without its inline
+             style): the field's size, ceiling and padding, the hint's
+             tracking and ink, the scroll cue's run, the roll's reach, the
+             folded line's end the "+N lines" stands on, and the mention
+             chips' sizes (MentionField's own, for the twin). -->
+        <!-- literal: 4.5rem, 16px, 200px, -0.01em, 1lh, -100vh, -100vw, 6px, 15px, 22px -->
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="field touch-hit"
+          class="group/field touch-hit relative flex flex-auto min-w-0"
           inert={askOpen}
           bind:this={fieldWrap}
-          class:folded
+          style:--more-room="4.5rem"
+          style:--field-size="16px"
+          style:--field-max-h="200px"
+          style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
+          style:--hint-track="-0.01em"
+          style:--hint-ink="var(--ink-muted)"
+          style:--cue-run="1lh"
+          style:--roll-reach-y="-100vh"
+          style:--roll-reach-x="-100vw"
+          style:--mention-chip-pad-end="6px"
+          style:--mention-chip-size="15px"
+          style:--mention-chip-leading="22px"
           onclick={(event) => {
             if (field && !field.contains(event.target as Node)) {
               field.focus();
@@ -3301,18 +3469,28 @@
             }
           }}
         >
+          <!-- The field (MentionField's editable box), above the .touch-hit
+               area, which covers it: a press on the text lands on the field
+               itself, so iOS's hold-to-select and its Paste callout reach it;
+               the area still takes the pill's padding. It grows with what is
+               in it (motion/autosize.svelte.ts), a line at a time over 120ms,
+               from one line's worth of the control height to a ceiling, and
+               scrolls past that; folding and opening a long draft run over
+               --dur-morph. No scrollbar is drawn, so the text wraps at the
+               field's full width in every state. While another draft's words
+               fly in over it, or an ask's card stands over it, it draws none
+               of its own text or caret; while the wheel is up, no caret. -->
           <MentionField
             aria-activedescendant={recall ? recallActive : activeDescendant}
             aria-controls={recall ? recallId : "composer-menu"}
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class={{
-              "cue-bottom": cueBottom && !folded,
-              "cue-top": cueTop && !folded,
-              flying: flight !== null || !wordsLanded,
-              folding,
-            }}
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-w-0 no-scrollbar opacity-(--roll-o) motion-safe:transition-[height] motion-safe:dur-control motion-safe:ease-out motion-safe:data-folding:dur-morph data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden"
+            data-cue-bottom={(cueBottom && !folded) || undefined}
+            data-cue-top={(cueTop && !folded) || undefined}
+            data-flying={flight !== null || !wordsLanded || undefined}
+            data-folding={folding || undefined}
             here={mentionsFrom}
             label={FIELD_LABEL}
             menuHost={pill}
@@ -3361,22 +3539,37 @@
                the text it will be (`data-rest`), so it lays out whole. The
                trailing zero-width space holds a final empty line open, as
                the field does. -->
-            <span aria-hidden="true" class="flight">
+            <!-- One draft handing the field to the next, laid exactly over
+                 the field's text box: its padding, face, size, leading and
+                 wrapping. Both texts stand on the box's foot, where the
+                 field's fitted text ends, each dropped (`translate`) by the
+                 scroll its field has left below, so a long one shows the
+                 lines the field shows. Each layer is as wide as the field's
+                 text runs (`inline-size`, set from the field), never the
+                 overlay's own width. -->
+            <!-- literal: the one-cell track -->
+            <span
+              data-slot="flight"
+              aria-hidden="true"
+              class="absolute inset-0 z-2 grid grid-cols-(--flight-cols) py-(--field-pad) px-0 font-body text-(length:--field-size) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none"
+              style:--flight-cols="minmax(0, 1fr)"
+            >
               <span
-                class="flight-text"
+                data-slot="flight-text"
+                class="row-start-1 col-start-1 w-(--flight-w) opacity-(--flight-o) transform-(--flight-from) translate-y-(--flight-drop)"
                 data-rest="{flight.outRest}&#8203;"
                 bind:this={flightOut}
-                style:inline-size="{flight.outWrap}px"
-                style:opacity={flight.from.opacity}
-                style:transform={flight.from.transform}
-                style:translate="0 {flight.outDrop}px">{flight.out}</span
+                style:--flight-w="{flight.outWrap}px"
+                style:--flight-o={flight.from.opacity}
+                style:--flight-from={flight.from.transform}
+                style:--flight-drop="{flight.outDrop}px">{flight.out}</span
               >
               <span
-                class="flight-text"
+                data-slot="flight-text"
+                class="row-start-1 col-start-1 opacity-0 translate-y-(--flight-drop)"
                 data-rest="{flight.text.slice(typed.length)}&#8203;"
                 bind:this={flightIn}
-                style:opacity="0"
-                style:translate="0 {inDrop}px">{typed}</span
+                style:--flight-drop="{inDrop}px">{typed}</span
               >
             </span>
           {/if}
@@ -3384,7 +3577,10 @@
             <!-- What the folded field keeps out of sight, over its faded line
                end: standing in the field, it takes none of the field's width,
                so the text wraps as it does unfolded. -->
-            <span data-slot="more" aria-hidden="true" class="more"
+            <span
+              data-slot="more"
+              aria-hidden="true"
+              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-(--more-room) h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) group-data-asking/dock:invisible group-data-asking/cin:invisible"
               >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
             >
           {/if}
@@ -3400,7 +3596,18 @@
         <!-- While the wheel is up its buttons fold into a deck at the pill's
              trailing end, which is not a control: Esc, ↓ past the draft or
              a press outside put the wheel away. -->
-        <div data-slot="ctrls" class="ctrls" inert={!!recall} bind:this={ctrls}>
+        <!-- Attach + send, together and bottom-aligned, so they hold their
+             box as the text above them runs on. On a coarse pointer the gap
+             opens to 10px, so each 34px control's touch area reaches 44px
+             before meeting its neighbour's. -->
+        <!-- literal: 10px -->
+        <div
+          data-slot="ctrls"
+          class="flex items-center gap-space-2 coarse:gap-(--ctrls-gap-coarse) flex-none group-data-asking/dock:opacity-0 group-data-asking/dock:invisible"
+          inert={!!recall}
+          bind:this={ctrls}
+          style:--ctrls-gap-coarse="10px"
+        >
           {#if attach}
             <AttachButton
               {draft}
@@ -3409,12 +3616,18 @@
           {/if}
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
+          <!-- Send is the kit's (app.css `.kit-send`). Optical centring: the
+               send plane's mass sits low-left of its box, so the glyph is
+               nudged up and right to look centred rather than measure
+               centred. -->
+          <!-- literal: translate(0.5px, -0.5px) -->
           <button
             data-slot="stop"
             aria-busy={pending || undefined}
             aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
-            class="kit-send stop touch-hit pressable"
+            class="kit-send group/stop touch-hit pressable"
+            style:--send-nudge="translate(0.5px, -0.5px)"
             disabled={!(
               busy ||
               pending ||
@@ -3428,13 +3641,27 @@
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
             {#key pending ? "wait" : stops}
-              <span data-slot="swap" class="swap" out:glyphOut>
+              <!-- The glyph carrier, not the button: it is content-sized and
+                   centred, so scaling it in cannot change the control's box.
+                   The one cell of the button's grid: an outgoing glyph and
+                   its replacement overlap there while they cross-fade. -->
+              <!-- literal: 4px, the swap's blur -->
+              <span
+                data-slot="swap"
+                class="row-start-1 col-start-1 grid place-items-center"
+                out:glyphOut
+                style:--swap-blur="4px"
+              >
                 {#if pending}
-                  <Spinner aria-hidden="true" role="presentation" />
+                  <Spinner
+                    aria-hidden="true"
+                    class="group-enabled/stop:transform-(--send-nudge)"
+                    role="presentation"
+                  />
                 {:else if stops}
-                  <IconStop />
+                  <IconStop class="group-enabled/stop:transform-(--send-nudge)" />
                 {:else}
-                  <IconSend />
+                  <IconSend class="group-enabled/stop:transform-(--send-nudge)" />
                 {/if}
               </span>
             {/key}
@@ -3447,492 +3674,275 @@
 
 <style>
   /* css-scope .lift-copy: lift.svelte.ts makes the element for this composer; its look is here */
-  .dock {
-    /* What steps aside while an ask holds the composer comes back at once
-       and fades in (`.dock.asking`, below). */
-    --step-aside: opacity var(--dur-fade) var(--ease-out), visibility 0s;
-    position: absolute;
-    inset: 0 0 calc(var(--space-4) + var(--safe-bottom));
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: center;
-    pointer-events: none;
+
+  /* residual: unmapped — needs transition token: opacity var(--dur-fade)
+     var(--ease-out), visibility 0s (--step-aside: what steps aside while an
+     ask holds the composer comes back at once and fades in) */
+  :is(
+      [data-slot="prompts"],
+      [data-slot="tray-slot"],
+      [data-slot="progress-slot"],
+      [data-slot="lift"],
+      [data-slot="perch"],
+      [data-slot="ctrls"]
+    ) {
+    transition: var(--step-aside);
   }
-  .composer {
-    flex: none;
-    width: var(--c-composer-w);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    pointer-events: none;
+  /* residual: unmapped — needs transition token: opacity var(--dur-fade)
+     var(--ease-out), visibility 0s linear var(--dur-fade). While the
+     composer is grown into an ask, everything in it that does not act on
+     the ask steps aside: the offer column, the tray row with its chips and
+     the plan's ring, a perch, the attachments, and the pill's own controls.
+     They fade out and are gone, out of the tab order with them, and come
+     back the same way (`--step-aside`) as the ask folds. A minimized
+     question's bar takes the tray row: the tray and the plan's ring step
+     aside under it and come back as it goes. */
+  [data-slot="dock"][data-minimized]
+    :is([data-slot="tray-slot"], [data-slot="progress-slot"]),
+  [data-slot="dock"][data-asking]
+    :is(
+      [data-slot="prompts"],
+      [data-slot="lift"],
+      [data-slot="perch"],
+      [data-slot="ctrls"]
+    ),
+  [data-slot="dock"][data-drawing]
+    :is([data-slot="prompts"], [data-slot="lift"], [data-slot="perch"]) {
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s linear var(--dur-fade);
   }
-  .composer > :global(*) {
+  /* residual: unmapped — needs transition token: opacity var(--dur-exit)
+     var(--ease-out), visibility 0s (and visibility 0s var(--dur-exit) for
+     the tray leaving) */
+  [data-slot="tray"] {
+    transition:
+      opacity var(--dur-exit) var(--ease-out),
+      visibility 0s;
+  }
+  [data-slot="tray"][data-composer-away] {
+    transition:
+      opacity var(--dur-exit) var(--ease-out),
+      visibility 0s var(--dur-exit);
+  }
+  /* residual: unmapped — align-items: end (items-end writes flex-end) */
+  [data-slot="tray-slot"] {
+    align-items: end;
+  }
+
+  /* residual: foreign-dom — AttachmentChips' root, which takes no class.
+     Everything in the composer takes the pointer; while the canvas stands,
+     the chips stand in the grown shape over the field, above its surface;
+     while an ask holds the composer they step aside with the rest. */
+  [data-slot="composer"] > :global([data-slot="atts"]) {
     pointer-events: auto;
   }
-  .composer {
-    position: relative;
-  }
-  /* The canvas's box: on the composer's top, a pixel inside the grown
-     shape's edge; the room writes its height, and its left and right when
-     it stands wider than the pill (the grown shape's own physical sides).
-     Its stage stands over it. */
-  .composer > .canvas-slot {
-    position: absolute;
-    left: 1px;
-    right: 1px;
-    bottom: 100%;
-    pointer-events: none;
-  }
-  /* While the canvas stands, the chips and a notice stand in the grown
-     shape over the field, above its surface. */
-  .dock.drawing .composer > :global(:is(.atts, .send-error)) {
+  [data-slot="dock"][data-drawing]
+    [data-slot="composer"]
+    > :global([data-slot="atts"]) {
     position: relative;
     z-index: 2;
   }
-  /* The rest of the dock above the panel, cards stood on its bottom edge;
-     the gap to the panel is the stack's own bottom padding, so its
-     measured height carries it. */
-  .prompts {
-    flex: 1 1 0;
-    min-height: 0;
-    width: var(--c-composer-w);
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    pointer-events: none;
-    transition: var(--step-aside);
-  }
-  /* A minimized question's bar: the tray row's chip (app.css
-     .kit-tray-chip) in its needs tone (DelegateTray `.chip.needs`: a
-     session asking for something is the one loud colour), across the
-     composer's width, standing in the tray row as the tray's chips do: a
-     tray chip high, a tray gap off the pill. The row is kept clear at
-     every transcript's foot, so the bar covers no line the row did not.
-     The tray and the plan's ring step aside under it (`.dock.minimized`)
-     and come back as it goes. It stands under the grown shape (`.grown-halo`,
-     z 1): brought back, the card grows over the bar as it fades. */
-  .asked {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: flex-end;
-    padding-block-end: var(--c-tray-gap);
-    pointer-events: none;
-  }
-  .tray-slot,
-  .progress-slot {
-    transition: var(--step-aside);
-  }
-  .dock.minimized :is(.tray-slot, .progress-slot) {
+  [data-slot="dock"][data-asking] :global([data-slot="atts"]) {
     opacity: 0;
     visibility: hidden;
     transition:
       opacity var(--dur-fade) var(--ease-out),
       visibility 0s linear var(--dur-fade);
   }
-  .asked-chip {
-    inline-size: 100%;
-    min-inline-size: 0;
-    color: var(--status-attn-ink);
-    pointer-events: auto;
 
-    &::before {
-      background-color: var(--status-attn-bg);
-    }
-  }
-  .asked-face {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-  }
-  .asked-text {
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: clip;
-    text-align: start;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .asked-more {
-    flex: none;
-    font-weight: var(--weight-body);
-  }
-  /* The delegate tray's row, on the composer's width and left edge. It is
-     the positioned box the suggestion chips stand on. */
-  .lift {
-    position: relative;
-    flex: none;
-    width: var(--c-composer-w);
-    pointer-events: none;
-    transition: var(--step-aside);
-  }
-  /* One conversation's tray over the next while they cross-fade, in a column
-     the composer's width: an auto column grew to the chips' own width. The
-     slot is the tray's one row from the composer's first render, chips or
-     none (app.css `--c-tray-row`, which every transcript keeps clear), with
-     the tray standing on its foot: a chip arriving late fills room already
-     there, and the suggestion row standing on the slot never moves. */
-  /* The plan's chip, at the tray row's trailing end, standing on the
-     tray's line: the step off the panel the delegate chips stand on. */
-  .progress-slot {
-    position: absolute;
-    /* On the tray's line: risen by the tray's shelf while it is open. */
-    inset-block-end: var(--shelf-rise, 0px);
-    inset-inline-end: 0;
-    z-index: 1;
-    display: flex;
-    align-items: flex-end;
-    block-size: var(--c-tray-row);
-    padding-block-end: var(--c-tray-gap);
-    pointer-events: auto;
-  }
-  .tray-slot {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: end;
-    /* The row, and the tray's shelf under it while it is open: the dock
-       grows up by the shelf, and the transcript keeps the room. */
-    min-block-size: var(--c-tray-row);
-  }
-  /* What the column measures into the composer's height: the cards and
-     the step under them, and nothing at all with no card parked. */
-  /* What the column measures into the composer's height: the offer shown,
-     and its step. Every offer stands on its foot out of flow, so a switch
-     changes which is seen and the stack's height, never what is laid out. */
-  .stack {
-    position: relative;
-    flex: none;
-  }
-  .offer {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    pointer-events: auto;
-  }
-  /* The step under a card parked, on the card's own row; nothing under a
-     row with no card. Asked of the row, not of the stack past `.away`: a
-     class in a `:has()` before a universal makes each of its changes
-     restyle the whole row. */
-  .offer:has(> :global(*)) {
-    padding-bottom: var(--space-3);
-  }
-  /* The offer of a conversation not being written to: built and laid out
-     where it would stand, unseen and out of reach (`visibility` takes it
-     out of the tab order and the accessibility tree). */
-  .offer.away {
-    visibility: hidden;
-  }
-  /* Each conversation's tray in the slot's one cell: the one written to
-     fades in over the last as it fades out, so neither the slot nor
-     anything standing on it moves. Opacity only, so it runs with or without
-     motion; the one leaving is out of reach once it has faded. */
-  .tray {
-    grid-area: 1 / 1;
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      visibility 0s;
-  }
-  .tray.away {
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      visibility 0s var(--dur-exit);
+  /* residual: pseudo — the minimized question's bar in its needs tone, on
+     the tray chip's own surface (app.css .kit-tray-chip) */
+  [data-slot="asked-chip"]::before {
+    background-color: var(--status-attn-bg);
   }
 
-  /* One shape, always. --radius-lg outside, --space-2 of inset, and the
-     controls inside carry (panel − inset) so the curves are concentric rather
-     than two unrelated roundings stacked. The shell is the text field
-     (app.css field-shell): keyboard focus in the textarea draws the ring over
-     the shell's own border, an outline that moves nothing, and the textarea
-     itself draws none. Its one-line box is the app's composer tokens
-     (app.css `--c-composer-*`), which every transcript keeps clear. It is
-     the panel material (app.css `--material-*`), so the transcript shows
-     faintly through it, and opaque where translucency is turned down. */
-  /* The pill's box, which what grows out of it shares: the grown shape is
-     drawn behind the pill and its rows over it. Grown, the shape's edge is
-     the control border and never the ring: the grown composer is plainly
-     where the keys go, the caret and the row on the line say the rest, and
-     the pill, stepped aside, draws none. */
-  .shell {
-    position: relative;
-  }
-  /* On the pill's top-leading corner, its foot on the pill's top edge: what
-     stands there (a project's Caw) peeks over the composer and takes no
-     pointer. */
-  .perch {
-    position: absolute;
-    inset-block-end: 100%;
-    inset-inline-start: var(--space-3);
-    pointer-events: none;
-    transition: var(--step-aside);
-  }
-  /* A parked card keeps the composer's whole row (Prompt: the answer row
-     needs its width) and stands above what peeks over the pill, never over
-     it. */
-  .dock:has(.perch) .prompts {
-    padding-block-end: var(--perch-rise, 0px);
-  }
-  .cin {
-    --cin-pad: var(--c-composer-inset);
-    --cin-ctl: var(--c-composer-field);
-    /* Its shell is the kit's (app.css `.kit-dock-shell`). */
-    position: relative;
-    z-index: 2;
-    padding: var(--cin-pad) var(--cin-pad) var(--cin-pad) var(--space-3);
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-2);
-
-    /* While it is grown, the grown shape is the composer: the pill's own
-       surface steps aside. The wheel's shape stays the composer until it
-       has folded back into the pill's outline, so the pill's edge never
-       comes back across the rows folding with it. */
-    &.recalling,
-    &.grown {
+  /* residual: unmapped — the grown or recalling pill's outline and
+     backdrop. Its outline: none is the shorthand over field-shell's focus
+     ring, a utility at (0,3,0) that a state utility would lose to, so it
+     stays out of the layers as it was; backdrop-filter has no utility on a
+     real element. */
+  [data-slot="cin"] {
+    &:is([data-recalling], [data-grown]) {
       outline: none;
-      background: transparent;
-      border-color: transparent;
-      box-shadow: none;
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
     }
-    /* Keyboard down, a touch screen's pill is a control to hold, so the
-       page does not pan from it; typed in, its touches are the field's. */
     &:not(:focus-within) {
-      touch-action: none;
       -webkit-touch-callout: none;
     }
   }
-  .field {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  /* One draft handing the field to the next, laid exactly over the field's
-     text box: its padding, face, size, leading and wrapping. Both texts
-     stand on the box's foot, where the field's fitted text ends, each
-     dropped (`translate`) by the scroll its field has left below, so a long
-     one shows the lines the field shows. The field under it keeps its box
-     with its text, hint and caret clear. */
-  .flight {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-content: unsafe end;
-    align-items: unsafe end;
-    padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
-    font-family: var(--font-body);
-    font-size: 16px;
-    line-height: var(--leading-ui);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    /* Clipped to the field's box as it glides, as the field clips its own
-       text, and sideways only as far as the pill's inset on the left and
-       the gap to the controls on the right, so nothing paints outside the
-       pill or over its buttons. */
-    clip-path: inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)));
-    pointer-events: none;
-  }
-  /* Each layer as wide as the field's text runs (`inline-size`, set from
-     the field), never the overlay's own width. */
-  .flight-text {
-    grid-area: 1 / 1;
-    justify-self: start;
 
-    &::after {
-      content: attr(data-rest);
-      color: transparent;
-    }
-  }
-  /* The field (MentionField's editable box). Above the .touch-hit area,
-     which covers it: a press on the text lands on the field itself, so
-     iOS's hold-to-select and its Paste callout reach it; the area still
-     takes the pill's padding. */
-  .field > :global(.editor) {
-    position: relative;
-    z-index: 1;
-    flex: 1 1 auto;
-    border: 0;
-    background: transparent;
-    font-family: var(--font-body);
-    font-weight: var(--weight-body);
-    font-size: 16px;
-    line-height: var(--leading-ui);
-    color: var(--ink-strong);
-    overflow-y: auto;
-    /* Grows with what is in it (motion/autosize.svelte.ts), a line at a time
-       over 120ms, from one line's worth of the control height to a ceiling,
-       and scrolls past that. The control row sets the resting height so a
-       single line sits on the buttons' midline. */
-    height: var(--cin-ctl);
+  /* residual: unmapped — MentionField's root, whose own utilities set these
+     same properties (34px, 200px, 16px, its 7px padding): the composer's
+     override stays out of the layers so it wins as it did. Passed as a
+     class, each would be a second utility for the property. The control
+     row sets the resting height so a single line sits on the buttons'
+     midline. */
+  [data-slot="composer-field"] > :global([data-slot="editor"]) {
     min-height: var(--cin-ctl);
-    /* No scrollbar is drawn, so the text wraps at the field's full width
-       in every state: a draft crossing the ceiling never re-wraps, and the
-       switch overlay and the autosize twin (a copy of the field) wrap where
-       it does. Wheel, touch, keys and the caret still scroll it; the fades
-       at its edges (`scrollCue`) say there is more. */
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-    max-height: 200px;
-    padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
-    min-width: 0;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: height var(--dur-control) var(--ease-out);
-
-      /* Folding and opening a long draft. */
-      &:global(.folding) {
-        transition-duration: var(--dur-morph);
-      }
-    }
+    max-height: var(--field-max-h);
+    font-size: var(--field-size);
+    padding: var(--field-pad) 0;
   }
-  /* A pick taken off the recall wheel fits the field as the wheel folds
-     away: the fold's clock and curve (RecallWheel). */
+  /* residual: unmapped — a pick taken off the recall wheel fits the field
+     as the wheel folds away: the fold's clock and curve (RecallWheel). It
+     wins over the folding duration, as it did; Tailwind would order
+     data-folding: after group-data-settling: at equal specificity. */
   @media (prefers-reduced-motion: no-preference) {
-    .settling .field > :global(.editor) {
+    [data-slot="cin"][data-settling]
+      [data-slot="composer-field"]
+      > :global([data-slot="editor"]) {
       transition-duration: var(--dur-grow-exit);
       transition-timing-function: var(--ease-drawer);
     }
   }
-  /* The draft as the recall wheel's first row: its text, and what a folded
-     one says is out of sight, roll down off the field's line as the wheel
-     rolls up, leaving as every row leaves, cut at the line's foot. The
-     wheel writes `--roll-y` and `--roll-o` on the field's box while the
-     roll is off the draft; with neither, nothing here applies. */
-  .field > :is(:global(.editor), .more) {
+  /* residual: unmapped — the draft as the recall wheel's first row: its
+     text, and what a folded one says is out of sight, roll down off the
+     field's line as the wheel rolls up, leaving as every row leaves, cut at
+     the line's foot. The wheel writes `--roll-y` and `--roll-o` on the
+     field's box while the roll is off the draft; with neither, nothing here
+     applies (translate: 0 var(--roll-y) computes to none unset, where
+     translate-y-(--roll-y) would compute to 0px). */
+  [data-slot="composer-field"]
+    > :is(:global([data-slot="editor"]), [data-slot="more"]) {
     translate: 0 var(--roll-y);
-    opacity: var(--roll-o);
-    clip-path: inset(-100vh -100vw var(--roll-y));
+    clip-path: inset(var(--roll-reach-y) var(--roll-reach-x) var(--roll-y));
   }
-  /* One line, always: the field is sized from its value, so a hint that
-     wrapped would be clipped to its first line. The hint shown is one the
-     field's width holds (fitHint, which measures with this tracking). The
-     title's tracking, so the short hint fits the narrowest phone's field:
-     at 320px the field is 149px and the hint 150px at the field's own. It
-     stands out of the text's flow, so the caret stands at the line's start
-     under it. */
-  .field > :global(.editor) {
-    --hint-track: -0.01em;
-    --hint-ink: var(--ink-muted);
-  }
-  .field > :global(.editor.empty::before) {
+
+  /* residual: pseudo — the field's hint (MentionField's ::before) and what
+     sets its ink and fade. One line, always: the field is sized from its
+     value, so a hint that wrapped would be clipped to its first line. The
+     hint shown is one the field's width holds (fitHint, which measures with
+     this tracking). The title's tracking, so the short hint fits the
+     narrowest phone's field: at 320px the field is 149px and the hint 150px
+     at the field's own. It stands out of the text's flow, so the caret
+     stands at the line's start under it. */
+  [data-slot="composer-field"]
+    > :global([data-slot="editor"][data-mention-field-empty]::before) {
     position: absolute;
     color: var(--hint-ink);
     letter-spacing: var(--hint-track);
     white-space: nowrap;
     transition: var(--hint-fade, none);
   }
-  /* The scroll cue: the edge with text out of sight fades over about a
-     line. A folded draft has no cue: it keeps its own fade (below). */
-  .field > :global(.editor.cue-top) {
-    mask-image: linear-gradient(to bottom, transparent, #000 1lh);
+  /* While another draft's words fly in over it, or an ask's card stands
+     over it, the field's hint is clear. The hint is not drawn from the
+     moment the wheel comes up until it has folded away: an empty draft's
+     row on the line stands for it, and the two would read doubled. It fades
+     back in once the rows are gone. */
+  [data-slot="composer-field"] > :global([data-slot="editor"][data-flying]),
+  [data-asking] [data-slot="composer-field"] > :global([data-slot="editor"]),
+  [data-slot="cin"][data-recalling]
+    [data-slot="composer-field"]
+    > :global([data-slot="editor"]) {
+    --hint-ink: transparent;
   }
-  .field > :global(.editor.cue-bottom) {
-    mask-image: linear-gradient(to top, transparent, #000 1lh);
+  [data-slot="cin"][data-hint-back]
+    [data-slot="composer-field"]
+    > :global([data-slot="editor"]) {
+    --hint-fade: color var(--dur-fade) var(--ease-out);
   }
-  .field > :global(.editor.cue-top.cue-bottom) {
+
+  /* residual: foreign-dom — the mention chips, which MentionField's script
+     makes: clear while another draft's words fly in, hidden while an ask's
+     card stands over the field */
+  [data-slot="composer-field"]
+    > :global([data-slot="editor"][data-flying] [data-slot="mention-chip"]) {
+    opacity: 0;
+  }
+  [data-asking]
+    [data-slot="composer-field"]
+    > :global([data-slot="editor"] [data-slot="mention-chip"]) {
+    visibility: hidden;
+  }
+
+  /* residual: unmapped — mask-image on a real element. The scroll cue: the
+     edge with text out of sight fades over about a line. A folded draft has
+     no cue: it keeps its own fade, its first line fading out where the line
+     ends and clear under the "+N lines" standing there. */
+  [data-slot="composer-field"] > :global([data-slot="editor"][data-cue-top]) {
     mask-image: linear-gradient(
       to bottom,
       transparent,
-      #000 1lh,
-      #000 calc(100% - 1lh),
+      var(--mask-opaque) var(--cue-run)
+    );
+  }
+  [data-slot="composer-field"]
+    > :global([data-slot="editor"][data-cue-bottom]) {
+    mask-image: linear-gradient(
+      to top,
+      transparent,
+      var(--mask-opaque) var(--cue-run)
+    );
+  }
+  [data-slot="composer-field"]
+    > :global([data-slot="editor"][data-cue-top][data-cue-bottom]) {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      var(--mask-opaque) var(--cue-run),
+      var(--mask-opaque) calc(100% - var(--cue-run)),
       transparent
     );
   }
-  /* While another draft's words fly in over it, the field draws none of its
-     own: text, chips, caret and hint clear. */
-  .field > :global(.editor.flying) {
-    --hint-ink: transparent;
-    color: transparent;
-    caret-color: transparent;
-
-    & :global(.mention-chip) {
-      opacity: 0;
-    }
-  }
-  /* A folded draft shows its first line, fading out where the line ends
-     and clear under the "+N lines" standing there, and never a scrollbar. */
-  .folded > :global(.editor),
-  .folded .flight {
+  [data-slot="composer-field"][data-folded] > :global([data-slot="editor"]),
+  [data-slot="composer-field"][data-folded] [data-slot="flight"] {
     mask-image: linear-gradient(
       to right,
-      #000 calc(100% - var(--more-room) - var(--space-8)),
+      var(--mask-opaque) calc(100% - var(--more-room) - var(--space-8)),
       transparent calc(100% - var(--more-room))
     );
   }
-  .folded > :global(.editor) {
-    overflow: hidden;
+  /* The flight's alignment (`unsafe end`, which no utility writes) and its
+     clip: clipped to the field's box as it glides, as the field clips its
+     own text, and sideways only as far as the pill's inset on the left and
+     the gap to the controls on the right, so nothing paints outside the
+     pill or over its buttons. */
+  [data-slot="flight"] {
+    align-content: unsafe end;
+    align-items: unsafe end;
+    clip-path: inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)));
   }
-  .field {
-    /* The folded line's end the "+N lines" stands on. */
-    --more-room: 4.5rem;
-  }
-  /* How much of a folded draft is out of sight, on the folded line's end. */
-  .more {
-    position: absolute;
-    inset-inline-end: 0;
-    inset-block-end: 0;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    inline-size: var(--more-room);
-    block-size: var(--cin-ctl);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-  /* The `/` and `@` menu, above the pill and matched to its width. */
-  /* A kit floating surface (app.css `.kit-pop`): it rises out of the field
-     below it, growing from its bottom edge, the side the caret is on. The
-     list inside carries its own inset. */
-  .menu {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: calc(100% + var(--space-2));
-    max-height: 320px;
-    overflow: hidden;
-    padding: 0;
-    transform-origin: bottom;
-  }
+  /* justify-self-start writes flex-start */
+  [data-slot="flight-text"] {
+    justify-self: start;
 
-  /* The Command primitive is shadcn's; its parts are addressed by slot so the
-     menu wears Quiet Ledger tokens rather than the stock ladder. The list is the
-     one thing that scrolls; the shell stays put. Under this composer's own
-     `.menu`: global all through, they reached any `.menu` on the page. */
-  .menu :global([data-slot="command"]) {
+    /* residual: pseudo — drawn clear after the layer's text, the rest of
+       the text it will be, so it lays out whole */
+    &::after {
+      content: attr(data-rest);
+      color: transparent;
+    }
+  }
+  /* residual: unmapped — shadcn's Command parts (Root, List, Group, Item),
+     whose own utilities set these same properties: passed as a class, each
+     would be a second utility for the property. The Command primitive is
+     shadcn's; its parts are addressed by slot so the menu wears Quiet Ledger
+     tokens rather than the stock ladder. The list is the one thing that
+     scrolls; the shell stays put. Under this composer's own menu: global
+     all through, they reached any `.menu` on the page. Each family is a
+     titled section, ruled off from the one above so "Skills" and "Commands"
+     read as two kinds of thing rather than one long list. */
+  [data-slot="menu"] :global([data-slot="command"]) {
     background: transparent;
   }
-  .menu :global([data-slot="command-list"]) {
-    max-height: 320px;
+  [data-slot="menu"] :global([data-slot="command-list"]) {
+    max-height: var(--menu-max-h);
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: var(--space-1);
   }
-
-  /* Each family is a titled section, ruled off from the one above so "Skills"
-     and "Commands" read as two kinds of thing rather than one long list. */
-  .menu :global([data-slot="command-group"]) {
+  [data-slot="menu"] :global([data-slot="command-group"]) {
     padding: var(--space-1) 0;
   }
-  .menu :global([data-slot="command-group"] + [data-slot="command-group"]) {
+  [data-slot="menu"]
+    :global([data-slot="command-group"] + [data-slot="command-group"]) {
     border-top: 1px solid var(--border-hairline);
   }
-  .menu :global([data-slot="command-group"] [data-command-group-heading]) {
+  /* residual: foreign-dom — the group's heading, which bits-ui renders */
+  [data-slot="menu"]
+    :global([data-slot="command-group"] [data-command-group-heading]) {
     padding: var(--space-1) var(--space-2) var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -3940,83 +3950,52 @@
     text-transform: uppercase;
     color: var(--ink-muted);
   }
-
-  /* One row: the name, its prose, and where it came from — on a single
-     line. The highlighted row stands on the kit's ghost (Command.List),
-     which glides from row to row under the arrow keys and the pointer. */
-  .menu :global([data-slot="command-item"]) {
+  /* residual: unmapped — one row (shadcn's Command.Item): the name, its
+     prose, and where it came from — on a single line. The highlighted row
+     stands on the kit's ghost (Command.List), which glides from row to row
+     under the arrow keys and the pointer. */
+  [data-slot="menu"] :global([data-slot="command-item"]) {
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    min-height: 30px;
+    min-height: var(--menu-row-h);
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--ink-strong);
   }
   @media (pointer: coarse) {
-    .menu :global([data-slot="command-item"]) {
-      min-height: 44px;
+    [data-slot="menu"] :global([data-slot="command-item"]) {
+      min-height: var(--menu-row-h-coarse);
     }
   }
 
-  /* A command, in the code face. */
-  .e-label {
-    font-family: var(--font-mono);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    flex: 0 0 auto;
-  }
-  .e-detail {
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    flex: 1 1 auto;
-  }
-
-  /* Attach + send, together and bottom-aligned, so they hold their box as the
-     text above them runs on. On a coarse pointer the gap opens to 10px, so
-     each 34px control's touch area reaches 44px before meeting its
-     neighbour's. */
-  .ctrls {
+  /* residual: unmapped — the touch areas' gap between the controls (app.css
+     .touch-hit reads --hit-gap-x), switching with the pointer: a custom
+     property under a media query, which neither style: nor a utility sets */
+  [data-slot="ctrls"] {
     --hit-gap-x: var(--space-2);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex: 0 0 auto;
-    transition: var(--step-aside);
 
     @media (pointer: coarse) {
-      --hit-gap-x: 10px;
-      gap: 10px;
+      --hit-gap-x: var(--ctrls-gap-coarse);
     }
   }
-  /* Send is the kit's (app.css `.kit-send`); Attach (AttachButton) takes
-     the same box. In the recall wheel's deck every button behind Send is a card: its
-     face, its edge at the outline button's 3:1 (the control edge, 1.37:1,
-     is lost at a 4px peek) and a little shadow, so each one's edge reads
-     behind the one in front. */
-  .ctrls[inert] :global(.att-btn) {
+  /* residual: foreign-dom — AttachButton's button, which takes no class;
+     Attach takes Send's box. In the recall wheel's deck every button behind
+     Send is a card: its face, its edge at the outline button's 3:1 (the
+     control edge, 1.37:1, is lost at a 4px peek) and a little shadow, so
+     each one's edge reads behind the one in front. */
+  [data-slot="ctrls"][inert]
+    :global(:is([data-slot="att-btn"], [data-att-btn])) {
     box-shadow: var(--shadow-xs);
     border-color: var(--border-button-outline);
   }
-  /* The glyph carrier, not the button: it is content-sized and centred, so
-     scaling it in cannot change the control's box. */
-  .stop .swap {
-    /* The one cell of the button's grid: an outgoing glyph and its
-       replacement overlap there while they cross-fade. */
-    grid-area: 1 / 1;
-    display: grid;
-    place-items: center;
+  /* residual: keyframes — the glyph swapping in; reduced motion keeps the
+     fade: no scale, no blur */
+  [data-slot="swap"] {
     @media (prefers-reduced-motion: no-preference) {
       animation: icon-swap var(--dur-control) var(--ease-out) both;
     }
-    /* Reduced motion keeps the fade: no scale, no blur. */
     @media (prefers-reduced-motion: reduce) {
       animation: icon-swap-still var(--dur-control) var(--ease-out) both;
     }
@@ -4033,7 +4012,7 @@
     from {
       opacity: 0;
       transform: scale(0.25);
-      filter: blur(4px);
+      filter: blur(var(--swap-blur));
     }
     to {
       opacity: 1;
@@ -4041,117 +4020,13 @@
       filter: blur(0);
     }
   }
-  .send-error,
-  .send-note {
-    padding-inline: var(--space-3);
-    color: var(--status-fail-ink);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-  /* The way back stands on the line that says what failed, after its words. */
-  .send-error {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: var(--space-2);
 
-    & p {
-      min-inline-size: 0;
-    }
-  }
-  .send-note {
-    color: var(--ink-muted);
-  }
-
-  /* Optical centring: the send plane's mass sits low-left of its box, so the
-     glyph is nudged up and right to look centred rather than measure centred.
-     The stop square is symmetric and needs none of it. */
-  .stop:not(:disabled) :global(svg) {
-    transform: translate(0.5px, -0.5px);
-  }
-
-  /* Mobile: the composer goes full-width, edge to edge. It stays absolute
-     (docked at the bottom of the transcript pane) rather than viewport-fixed,
-     so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
-     owns the safe-area inset. */
-  @media (max-width: 900px) {
-    /* Clear the home indicator / gesture bar — the resting gap plus the safe
-       area inset, so the composer never sits under the rounded-screen chrome. */
-    .dock {
-      bottom: calc(var(--space-2) + var(--safe-bottom));
-    }
-    /* The tray and the parked cards keep the composer's edges. */
-    .composer,
-    .lift,
-    .prompts {
-      align-self: stretch;
-      margin-inline: var(--space-3);
-      width: auto;
-    }
-    /* The cards keep the desktop's step off the panel. */
-    .prompts {
-      margin-bottom: calc(var(--space-4) - var(--space-2));
-    }
-  }
-
-  /* An ask's card stands over the field: its own text, caret and hint are
-     clear meanwhile. While the wheel is up the field's text is the draft's
-     row (RecallWheel), with no caret. */
-  .asking .field > :global(.editor) {
-    --hint-ink: transparent;
-    color: transparent;
-    caret-color: transparent;
-
-    & :global(.mention-chip) {
-      visibility: hidden;
-    }
-  }
-  .wheeling .field > :global(.editor) {
-    caret-color: transparent;
-  }
-  /* The field's hint is not drawn from the moment the wheel comes up until
-     it has folded away: an empty draft's row on the line stands for it, and
-     the two would read doubled. It fades back in once the rows are gone. */
-  .recalling .field > :global(.editor) {
-    --hint-ink: transparent;
-  }
-  .hint-back .field > :global(.editor) {
-    --hint-fade: color var(--dur-fade) var(--ease-out);
-  }
-  .asking .more {
-    visibility: hidden;
-  }
-  /* While the composer is grown into an ask, everything in it that does not
-     act on the ask steps aside: the offer column, the tray row with its
-     chips and the plan's ring, a perch, the attachments, and the pill's own
-     controls (attach, history, Stop/Send). They fade out and are
-     gone, out of the tab order with them, and come back the same way
-     (`--step-aside`) as the ask folds. */
-  .dock.asking :is(.prompts, .lift, .perch, .ctrls),
-  .dock.asking :global(.atts),
-  .dock.drawing :is(.prompts, .lift, .perch) {
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      opacity var(--dur-fade) var(--ease-out),
-      visibility 0s linear var(--dur-fade);
-  }
-  /* The ask's card, on the shell's foot across the composer's width: over
-     the pill, as the wheel's rows and the editing row are, so the pill's row
-     is the card's own and no empty band stands under it. */
-  .ask {
-    position: absolute;
-    z-index: 3;
-    inset-inline: 0;
-    bottom: 0;
-  }
-
-  /* The grown shape (grown.ts), made as it grows, behind the pill. Its
-     drop (a copy of the outline under it, its shadow --shadow-drop and
-     --shadow-drop-near drawn into it) comes in by its opacity once it
-     stands still, and folds with it by its own motion (transform and
-     opacity), its foot on the pill's. */
-  .shell :global(:is(.grown-halo, .grown-drop)) {
+  /* residual: foreign-dom — the grown shape (grown.ts), made as it grows,
+     behind the pill. Its drop (a copy of the outline under it, its shadow
+     --shadow-drop and --shadow-drop-near drawn into it) comes in by its
+     opacity once it stands still, and folds with it by its own motion
+     (transform and opacity), its foot on the pill's. */
+  [data-slot="shell"] :global(:is(.grown-halo, .grown-drop)) {
     position: absolute;
     z-index: 1;
     inset-inline: 0;
@@ -4167,12 +4042,12 @@
   }
   /* Not standing, the drop is not drawn at all: a clear layer's shadow
      still cost a frame in six on WebKit as the shape moved under it. */
-  .shell :global(.grown-drop) {
+  [data-slot="shell"] :global(.grown-drop) {
     opacity: 0;
     visibility: hidden;
     transform-origin: 50% 100%;
   }
-  .shell :global(.grown-drop.settled) {
+  [data-slot="shell"] :global(.grown-drop.settled) {
     opacity: 1;
     visibility: visible;
     transition:
@@ -4181,37 +4056,32 @@
   }
   /* While the wheel is up the grown shape is part of the composer: its
      margins take a press (rolling the wheel) and never pan the page. */
-  .shell.rolling :global(.grown-halo) {
+  [data-slot="shell"][data-rolling] :global(.grown-halo) {
     pointer-events: auto;
     touch-action: none;
   }
 
-  /* The row the composer grows while a queued message is edited: what is
-     happening, and the two ways out. Inset past the shoulders' curve, and
-     clear of the fade at the grown top. */
-  .edit-row {
-    position: absolute;
-    z-index: 3;
-    inset-inline: var(--edit-inset);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-strong);
-    color: var(--ink-muted);
-    pointer-events: none;
+  /* residual: unmapped — needs transition token: opacity var(--dur-fade)
+     var(--ease-out), translate var(--dur-panel) var(--ease-drawer). The
+     label and the hints come up with the shape one after the other, by
+     opacity and translate alone, and sink back as it folds; the hints and
+     Keep it a stagger after the label. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="what"],
+    [data-slot="hint"] {
+      transition:
+        opacity var(--dur-fade) var(--ease-out),
+        translate var(--dur-panel) var(--ease-drawer);
+    }
   }
-  /* The label and the hints come up with the shape one after the other, by
-     opacity and translate alone, and sink back as it folds. No filter: a
-     blur transitioning here hung WebKit's web process for good as the row
-     came up (Playwright WebKit 2359 at an iPhone's size, probe-kit
-     safari-blurs), as the ask card's parts did on the owner's iPhone. */
-  .what,
-  .hint,
-  .edit-row :global(.keep) {
+  /* The edit row's Keep it, the kit's Button, whose own utilities set its
+     display and transition: hidden but on a touch screen, which has no Esc
+     (a button keeps the message as it was). */
+  [data-slot="edit-row"] :global([data-keep]) {
     opacity: 0;
     transition: opacity var(--dur-fade) var(--ease-out);
+    display: none;
+    pointer-events: auto;
 
     @media (prefers-reduced-motion: no-preference) {
       translate: 0 var(--pop-rise);
@@ -4219,61 +4089,32 @@
         opacity var(--dur-fade) var(--ease-out),
         translate var(--dur-panel) var(--ease-drawer);
     }
-  }
-  .what {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-inline-end: auto;
-    color: var(--ink-row);
-
-    /* A dot, not a pill: a rounded tag beside the curved shoulder reads as
-       a second, clashing curve. */
-    &::before {
-      content: "";
-      inline-size: var(--status-dot-size);
-      block-size: var(--status-dot-size);
-      border-radius: 50%;
-      background: var(--selected-icon);
-    }
-  }
-  .hint {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    white-space: nowrap;
-  }
-  .shown .what,
-  .shown .hint,
-  .shown :global(.keep) {
-    opacity: 1;
-    translate: none;
-  }
-  .shown .hint,
-  .shown :global(.keep) {
-    transition-delay: var(--dur-stagger);
-  }
-  /* A touch screen has no Esc: a button keeps the message as it was. */
-  .edit-row :global(.keep) {
-    display: none;
-    pointer-events: auto;
-  }
-  @media (pointer: coarse) {
-    .hint {
-      display: none;
-    }
-    .edit-row :global(.keep) {
+    @media (pointer: coarse) {
       display: inline-flex;
     }
   }
-  @media (width < 640px) {
-    .hint {
-      display: none;
-    }
+  [data-slot="edit-row"][data-composer-shown] :global([data-keep]) {
+    opacity: 1;
+    translate: none;
+  }
+  [data-slot="edit-row"][data-composer-shown] [data-slot="hint"],
+  [data-slot="edit-row"][data-composer-shown] :global([data-keep]) {
+    transition-delay: var(--dur-stagger);
   }
 
-  /* The words in flight between a queued bubble and the field
-     (lift.svelte.ts): fixed over the page, cut to each end's box. */
+  /* residual: pseudo — a dot, not a pill: a rounded tag beside the curved
+     shoulder reads as a second, clashing curve */
+  [data-slot="what"]::before {
+    content: "";
+    inline-size: var(--status-dot-size);
+    block-size: var(--status-dot-size);
+    border-radius: 50%;
+    background: var(--selected-icon);
+  }
+
+  /* residual: foreign-dom — the words in flight between a queued bubble and
+     the field (lift.svelte.ts makes them): fixed over the page, cut to each
+     end's box. */
   :global(.lift-copy) {
     position: fixed;
     z-index: 50;

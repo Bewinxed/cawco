@@ -871,11 +871,16 @@
 </script>
 
 <!-- The field keeps focus and points at the row on the line
-     (aria-activedescendant): the list and its rows are never focused. -->
+     (aria-activedescendant): the list and its rows are never focused. The
+     rows stand on the field's line and above it to the shape's top, across
+     the shape, each one row tall, set as the field sets its text. Each one
+     blurs and fades out on its own through the band at the shape's top
+     (`place`), so none is cut through, in every engine. Each row's inline
+     edges are the roll's. -->
 <div
   data-slot="ghosts"
   aria-label="What you sent here"
-  class="ghosts"
+  class="absolute z-3 start-0 bottom-(--ghosts-bottom) h-(--ghosts-h) w-(--ghosts-w) overflow-hidden perspective-(--ghosts-depth) perspective-origin-bottom touch-none select-none cursor-ns-resize"
   {id}
   onpointercancel={onup}
   onpointerdown={ondown}
@@ -885,30 +890,39 @@
   role="listbox"
   tabindex="-1"
   bind:this={ghosts}
-  style:bottom="{box.bottom}px"
-  style:height="{box.height}px"
-  style:perspective="{DEPTH}px"
-  style:width="{box.width}px"
+  style:--ghosts-bottom="{box.bottom}px"
+  style:--ghosts-h="{box.height}px"
+  style:--ghosts-depth="{DEPTH}px"
+  style:--ghosts-w="{box.width}px"
 >
   {#each mounted as { entry, k } (entry.key)}
     <!-- The keys are the field's (↑ ↓ Enter); a click is the pointer's way
-         to the same pick. -->
+         to the same pick. Drawn where the roll puts it, once it has a place
+         (invisible until then). A draft of your own is drawn by the field
+         itself (its row is read out, not drawn twice). The pick: what sits
+         on the field's line, what Enter or a tap takes, its words and its
+         time in the selected ink; the reader's own draft on the line is not
+         a pick and keeps the field's ink. -->
+    <!-- literal: 16px, the two-column track -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys for every row (aria-activedescendant) -->
     <div
       data-slot="ghost"
       aria-selected={k === pick}
-      class="ghost"
+      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-body text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible cursor-pointer transition-[color] dur-control ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
       data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}
       role="option"
       tabindex="-1"
-      class:draft={entry.kind === "draft"}
-      class:none={entry.kind === "none"}
-      class:own={entry.kind === "draft" && ownText}
+      data-draft={entry.kind === "draft" || undefined}
+      data-none={entry.kind === "none" || undefined}
+      data-own={(entry.kind === "draft" && ownText) || undefined}
+      style:--ghost-pad="calc((var(--c-composer-field) - 1lh) / 2)"
+      style:--ghost-cols="minmax(0, 1fr) auto"
+      style:--ghost-size="16px"
     >
-      <span class="t">
+      <span class="min-w-0 truncate group-data-none/ghost:text-ink-muted">
         {#if entry.kind === "none"}
           {query.trim()
             ? "Nothing you sent here matches"
@@ -917,12 +931,14 @@
           {#if draft}
             {oneLine(draft)}
           {:else}
-            <span class="hint">Your draft · type to search</span>
+            <span class="text-ink-subtle">Your draft · type to search</span>
           {/if}
         {:else if entry.parts}
           {#each entry.parts as part, p (p)}
             {#if part.mark}
-              <mark>{part.text}</mark>
+              <mark class="bg-selection text-inherit rounded-hair"
+                >{part.text}</mark
+              >
             {:else}
               {part.text}
             {/if}
@@ -931,22 +947,37 @@
           {oneLine(entry.entry?.text ?? "")}
         {/if}
       </span>
-      <span data-slot="num" class="m num">{meta(entry.entry)}</span>
+      <span
+        data-slot="num"
+        class="num text-size-meta font-normal text-ink-muted whitespace-nowrap transition-[color] dur-control ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-selected-ink"
+        >{meta(entry.entry)}</span
+      >
     </div>
   {/each}
 </div>
 {#if query.trim()}
+  <!-- The query, on the field's line at its end, wherever the rows roll. -->
   <div
-    class="chip-line"
-    style:bottom="{box.bottom}px"
-    style:height="{row}px"
-    style:left="{measured.line.left}px"
-    style:width="{measured.line.width}px"
+    class="absolute z-4 flex items-center justify-end pointer-events-none bottom-(--chip-line-bottom) h-(--chip-line-h) left-(--chip-line-left) w-(--chip-line-w)"
+    style:--chip-line-bottom="{box.bottom}px"
+    style:--chip-line-h="{row}px"
+    style:--chip-line-left="{measured.line.left}px"
+    style:--chip-line-w="{measured.line.width}px"
   >
-    <span class="qchip mark-line" bind:offsetWidth={chipWidth}>
-      <IconSearch aria-hidden="true" />
-      <span class="q">{query}</span>
-      <span data-slot="num" class="n num"
+    <!-- literal: 45%, the hairline ring -->
+    <span
+      class="mark-line inline-flex items-center gap-space-1 max-w-(--qchip-max-w) py-(--qchip-pad-y) px-space-2 rounded-pill bg-surface-recess shadow-(--qchip-ring) text-size-meta font-medium text-ink-strong whitespace-nowrap"
+      bind:offsetWidth={chipWidth}
+      style:--qchip-max-w="45%"
+      style:--qchip-pad-y="calc(var(--space-1) / 2)"
+      style:--qchip-ring="inset 0 0 0 1px var(--border-hairline)"
+    >
+      <IconSearch
+        aria-hidden="true"
+        class="flex-none size-icon-sm text-ink-muted"
+      />
+      <span class="min-w-0 overflow-clip text-ellipsis">{query}</span>
+      <span data-slot="num" class="num text-ink-muted"
         >{rows[0]?.kind === "none" ? 0 : pickable}</span
       >
     </span>
@@ -954,114 +985,8 @@
 {/if}
 
 <style>
-  /* The rows stand on the field's line and above it to the shape's top,
-     across the shape, each one row tall, set as the field sets its text.
-     Each one blurs and fades out on its own through the band at the
-     shape's top (`place`), so none is cut through, in every engine. Each
-     row's inline edges are the roll's. */
-  .ghosts {
-    position: absolute;
-    z-index: 3;
-    inset-inline-start: 0;
-    overflow: hidden;
-    perspective-origin: 50% 100%;
-    touch-action: none;
-    user-select: none;
-    cursor: ns-resize;
-  }
-  .ghost {
-    position: absolute;
-    bottom: 0;
-    height: var(--c-composer-field);
-    padding-block: calc((var(--c-composer-field) - 1lh) / 2);
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: var(--space-3);
-    align-items: baseline;
-    font-family: var(--font-body);
-    font-size: 16px;
-    line-height: var(--leading-ui);
-    color: var(--ink-strong);
-    transform-origin: 50% 100%;
+  /* residual: unmapped */
+  [data-slot="ghost"] {
     will-change: translate, rotate, scale, opacity;
-    /* Drawn where the roll puts it, once it has a place. */
-    visibility: hidden;
-    cursor: pointer;
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  .t {
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .m {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    white-space: nowrap;
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  /* A draft of your own is drawn by the field itself (its row is read
-     out, not drawn twice). */
-  .own,
-  .own .m {
-    color: transparent;
-  }
-  /* The pick: what sits on the field's line, what Enter or a tap takes,
-     its words and its time in the selected ink. The reader's own draft on
-     the line is not a pick and keeps the field's ink. */
-  .ghost[aria-selected="true"]:not(.draft, .none),
-  .ghost[aria-selected="true"]:not(.draft) .m {
-    color: var(--selected-ink);
-  }
-  .hint {
-    color: var(--ink-subtle);
-  }
-  .none .t {
-    color: var(--ink-muted);
-  }
-  mark {
-    background: var(--selection);
-    color: inherit;
-    border-radius: var(--radius-hair);
-  }
-  /* The query, on the field's line at its end, wherever the rows roll. */
-  .chip-line {
-    position: absolute;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    pointer-events: none;
-  }
-  .qchip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    max-width: 45%;
-    padding: calc(var(--space-1) / 2) var(--space-2);
-    border-radius: var(--radius-pill);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-    white-space: nowrap;
-
-    & :global(svg) {
-      flex: none;
-      inline-size: var(--icon-sm);
-      block-size: var(--icon-sm);
-      color: var(--ink-muted);
-    }
-  }
-  .q {
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  .n {
-    color: var(--ink-muted);
   }
 </style>

@@ -29,43 +29,44 @@
   import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
 </script>
 
-<div data-slot="head-fade" aria-hidden="true" class="head-fade">
+<div
+  data-slot="head-fade"
+  aria-hidden="true"
+  class="absolute inset-x-0 top-0 z-1 h-c-head-fade pointer-events-none"
+>
+  <!-- Each layer clear while nothing is under it: at rest, and whenever the
+       transcript does not scroll (its timeline is inactive). -->
   {#each PROGRESSIVE_BLUR as layer, k (k)}
     <div
       data-slot="layer"
-      class="layer"
-      style="-webkit-backdrop-filter: {layerBlur(
-        layer
-      )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
+      class="absolute inset-0 opacity-0"
+      style:--layer-blur={layerBlur(layer)}
+      style:--layer-mask={layerMask(layer)}
     ></div>
   {/each}
-  <div data-slot="layer" class="layer tint"></div>
+  <!-- The chosen tab's sheet, over the blur, on the ramp. -->
+  <div
+    data-slot="layer"
+    class="absolute inset-0 opacity-0 bg-tab-sheet"
+    style:--layer-mask="var(--head-tint-ramp)"
+  ></div>
 </div>
 
 <style>
-  .head-fade {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: 0;
-    z-index: 1;
-    block-size: var(--c-head-fade);
-    pointer-events: none;
-  }
-  .layer {
-    position: absolute;
-    inset: 0;
-    /* Clear while nothing is under it: at rest, and whenever the transcript
-       does not scroll (its timeline is inactive). */
-    opacity: 0;
+  [data-slot="layer"] {
+    /* residual: keyframes */
     animation: head-fade linear both;
+    /* residual: unmapped — the scroll timeline and its range, after the
+       shorthand that resets them, in the same rule */
     animation-timeline: --transcript-head;
     animation-range: 0 var(--c-head-fade);
+    /* The layer's blur and its slice (progressive-blur.ts); the tint's ramp.
+       The tint sets no blur, so it draws none. */
+    -webkit-backdrop-filter: var(--layer-blur);
+    backdrop-filter: var(--layer-blur);
+    mask-image: var(--layer-mask);
   }
-  /* The chosen tab's sheet, over the blur, on the ramp. */
-  .tint {
-    background: var(--tab-sheet);
-    mask-image: var(--head-tint-ramp);
-  }
+  /* residual: keyframes */
   @keyframes head-fade {
     to {
       opacity: 1;

@@ -163,11 +163,12 @@
      clock and the last words and nothing else. -->
 {#snippet body(live: Live | Said, phase: Phase)}
   {#if phase === "answer"}
+    <!-- MessageRow's turn spacing; grouped, MessageRow's grouped turn, so
+         the answer settles without moving. -->
     <section
       data-slot="turn"
       data-grouped={live.grouped || undefined}
-      class="turn"
-      class:grouped={live.grouped}
+      class="mt-space-4 data-grouped:flow-root data-grouped:mt-space-2"
     >
       <Who
         grouped={live.grouped}
@@ -188,8 +189,7 @@
     <section
       data-slot="turn"
       data-grouped={live.grouped || undefined}
-      class="turn"
-      class:grouped={live.grouped}
+      class="mt-space-4 data-grouped:flow-root data-grouped:mt-space-2"
     >
       <Who grouped={live.grouped} live name={agentName} />
       {@render thinking(live)}
@@ -211,16 +211,25 @@
   />
 {/snippet}
 
-<div data-slot="live" class={["live", { tweening }]} bind:this={box}>
+<div
+  data-slot="live"
+  data-tweening={tweening || undefined}
+  class="relative data-tweening:overflow-hidden"
+  bind:this={box}
+>
   {#each faces as face (face.id)}
+    <!-- A face contains its content's top margin (flow-root), so the row's
+         height is the same whichever face draws it — and the same as the
+         settled row it becomes. Its style is the rail it keeps (railNow):
+         only --rail-gap and --rail-head, one string the script builds. -->
     <div
       aria-hidden={face.leaving ? true : undefined}
-      class="face"
+      class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none"
+      data-entering={face.entering || undefined}
+      data-leaving={face.leaving !== null || undefined}
       inert={face.leaving !== null}
       onanimationend={(event) => settle(face, event)}
-      style={face.rail}
-      class:entering={face.entering}
-      class:leaving={face.leaving !== null}
+      style={face.rail /* eslint-disable-line shadcn/no-inline-styles -- railNow's string: --rail-gap and --rail-head only */}
     >
       {@render body(face.leaving ?? row, face.phase)}
     </div>
@@ -228,32 +237,12 @@
 </div>
 
 <style>
-  .live {
-    position: relative;
-
-    &.tweening {
-      overflow: hidden;
-    }
-  }
-  /* A face contains its content's top margin, so the row's height is the
-     same whichever face draws it — and the same as the settled row it
-     becomes. */
-  .face {
-    display: flow-root;
-    min-inline-size: 0;
-
-    &.leaving {
-      position: absolute;
-      inset-block-start: 0;
-      inset-inline: 0;
-      pointer-events: none;
-    }
-  }
+  /* residual: keyframes */
   @media (prefers-reduced-motion: no-preference) {
-    .face.leaving {
+    [data-leaving] {
       animation: face-out var(--dur-exit) var(--ease-out) forwards;
     }
-    .face.entering {
+    [data-entering] {
       animation: face-in var(--dur-menu) var(--ease-out) backwards;
     }
   }
@@ -265,15 +254,6 @@
   @keyframes face-in {
     from {
       opacity: 0;
-    }
-  }
-  .turn {
-    margin-block-start: var(--space-4);
-
-    /* MessageRow's grouped turn, so the answer settles without moving. */
-    &.grouped {
-      display: flow-root;
-      margin-block-start: var(--space-2);
     }
   }
 </style>
