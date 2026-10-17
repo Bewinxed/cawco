@@ -720,7 +720,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let finished = board.finished
         counts = board.counts
         #if DEBUG
-        Self.probeLog.notice("home counts: working=\(counts.working) finished=\(counts.finished) failed=\(counts.finishedFailed)")
+        Self.probeLog.notice("home counts: working=\(self.counts.working) finished=\(self.counts.finished) failed=\(self.counts.finishedFailed)")
         #endif
         rows = [:]
         groups = [:]
