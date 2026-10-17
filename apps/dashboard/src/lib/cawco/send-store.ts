@@ -5,7 +5,8 @@
  * waits for the hub (its socket dropped, or its ack never came) sends it
  * again under that id as it starts (client.svelte.ts `resumeKeptSends`),
  * and the hub, which takes a repeat of an id as the same send, posts it
- * once. A record goes as its send settles: the hub took it, or refused it.
+ * once. A record goes once the hub takes its send; one the hub refused is
+ * kept with its words for Try again or Edit, for as long as those stand.
  */
 import type { SendExtras } from "./client.svelte";
 import { database, done, result, SENDS } from "./idb";
@@ -18,6 +19,11 @@ export interface KeptSend {
   extras: SendExtras;
   instanceId: string;
   machineId: string;
+  /**
+   * The hub refused it, in these words, at this time: drawn again after a
+   * reload as refused, with Try again and Edit, and never sent by itself.
+   */
+  refused?: { at: number; reason: string };
   /** The failed send it retries, when it does. */
   replaces?: string;
   text: string;
@@ -41,7 +47,25 @@ export async function keepSend(send: KeptSend): Promise<void> {
   return done(transaction);
 }
 
-/** The send settled: it is no longer this browser's to send. */
+/** The hub refused the send: it is kept, with the hub's words, for Try again or Edit. */
+export async function refuseSend(
+  commandId: string,
+  reason: string
+): Promise<void> {
+  const db = await database();
+  const transaction = db.transaction(SENDS, "readwrite");
+  const store = transaction.objectStore(SENDS);
+  const kept = store.get(commandId);
+  kept.onsuccess = () => {
+    const send = kept.result as KeptSend | undefined;
+    if (send) {
+      store.put({ ...send, refused: { at: Date.now(), reason } });
+    }
+  };
+  return done(transaction);
+}
+
+/** The send was taken, or let go: it is no longer this browser's to send. */
 export async function forgetSend(commandId: string): Promise<void> {
   const db = await database();
   const transaction = db.transaction(SENDS, "readwrite");

@@ -156,7 +156,7 @@ import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
-import { forgetSend, keepSend, keptSends } from "./send-store";
+import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild } from "./served-build.svelte";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
@@ -4065,11 +4065,45 @@ export function restoreDraft(commandId: string): void {
  * (send-store.ts), sent again under their own ids, oldest first, as this
  * page starts: each draws its row again and waits, as any send does, for
  * the socket (`resumePendingSends`). The hub takes a repeat of an id as
- * the same send.
+ * the same send. One the hub refused is drawn refused again, in its words,
+ * with Try again and Edit, and goes only when the person sends it; past
+ * the time those stand (the ledger's own), it is let go.
  */
 async function resumeKeptSends(): Promise<void> {
   for (const kept of await keptSends()) {
     if (streamState.commands[kept.commandId]) {
+      continue;
+    }
+    if (kept.refused) {
+      if (Date.now() - kept.refused.at >= SETTLED_COMMAND_TTL_MS) {
+        forgetSend(kept.commandId).catch(() => undefined);
+        continue;
+      }
+      rememberSend(
+        kept.commandId,
+        kept.instanceId,
+        kept.machineId,
+        kept.text,
+        kept.extras
+      );
+      noteSendSubmitted(
+        kept.instanceId,
+        kept.text,
+        kept.extras,
+        kept.commandId,
+        kept.replaces
+      );
+      failLocally(
+        streamState,
+        streamHost,
+        {
+          commandId: kept.commandId,
+          sessionId: kept.instanceId,
+          kind: "send",
+          settlesAt: SETTLES_AT.send,
+        },
+        kept.refused.reason
+      );
       continue;
     }
     submitCommand(
@@ -4327,9 +4361,13 @@ function streamEffectsFor<K extends CommandKind>(
             commandId,
             replaces
           ),
-        // Taken or refused by the hub: no reload sends it again.
-        settled: () => {
-          forgetSend(commandId).catch(() => undefined);
+        // Taken: no reload sends it again. Refused: kept with the hub's
+        // words, so a reload draws it refused, Try again and Edit standing.
+        settled: (stage, reason) => {
+          (stage === "failed"
+            ? refuseSend(commandId, reason ?? "The hub refused it.")
+            : forgetSend(commandId)
+          ).catch(() => undefined);
         },
       };
     }
