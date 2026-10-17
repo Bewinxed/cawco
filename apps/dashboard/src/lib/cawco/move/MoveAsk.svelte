@@ -14,79 +14,30 @@
   let open = $state(false);
 </script>
 
-<div class="move-ask">
+<div class="grid gap-space-2 min-w-0" style:--details-min-h="26px">
   {#each ask.lines as line, i (i)}
-    <p class="line">{line}</p>
+    <p
+      class="m-0 type-body text-ink-strong text-pretty data-follows:text-ink-muted"
+      data-follows={i > 0 || undefined}
+    >{line}</p>
   {/each}
   <Collapsible.Root bind:open>
-    <Collapsible.Trigger class="move-details-trigger mark-line press-tint">
+    <!-- literal: 26px -->
+    <Collapsible.Trigger
+      class="mark-line press-tint inline-flex items-center gap-space-1 justify-self-start min-h-(--details-min-h) p-0 border-0 rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong"
+    >
       <span>Details</span>
-      <span data-slot="chev" aria-hidden="true" class="chev" class:open data-box
-        ><IconChevronRight /></span
+      <span
+        data-slot="chev"
+        aria-hidden="true"
+        class="inline-grid motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out data-open:rotate-90"
+        data-open={open || undefined}
+        data-box><IconChevronRight class="size-icon-sm" /></span
       >
     </Collapsible.Trigger>
     <Collapsible.Content reveal>
-      <pre class="details">{ask.details.join("\n")}</pre>
+      <pre
+        class="mx-0 mb-0 mt-space-1 p-space-3 rounded-sm bg-surface-recess type-code text-ink-strong whitespace-pre-wrap wrap-anywhere">{ask.details.join("\n")}</pre>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>
-
-<style>
-  .move-ask {
-    display: grid;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  .line {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    text-wrap: pretty;
-  }
-  .line + .line {
-    color: var(--ink-muted);
-  }
-  :global(.move-details-trigger) {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    justify-self: start;
-    min-block-size: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: var(--type-label);
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    :global(.move-details-trigger:hover) {
-      color: var(--ink-strong);
-    }
-  }
-  .chev {
-    display: inline-grid;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    &.open {
-      transform: rotate(90deg);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  .details {
-    margin: var(--space-1) 0 0;
-    padding: var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    font: var(--type-code);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-</style>
