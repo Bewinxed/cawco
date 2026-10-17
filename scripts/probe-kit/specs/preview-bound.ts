@@ -152,10 +152,7 @@ const SETTLE_MS = 5000;
  * again (`cawco:capture`, as the pane does on a load) and reads its thread
  * from the ask to the answer plus `AFTER_MS`.
  */
-async function captureAlone(
-  page: Page,
-  by: "tasks" | "gaps"
-): Promise<Span> {
+async function captureAlone(page: Page, by: "tasks" | "gaps"): Promise<Span> {
   await page.waitForTimeout(SETTLE_MS);
   const asked = await page.evaluate(() => {
     const cost = (window as unknown as { __cost: Cost }).__cost;
