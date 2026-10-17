@@ -57,7 +57,6 @@
       style:--pad-x="8px"
       tabindex="-1"
       type="button"
-      class:active={i === index}
     >
       <span
         data-slot="tile"
