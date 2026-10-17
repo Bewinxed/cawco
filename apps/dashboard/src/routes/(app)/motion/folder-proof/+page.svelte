@@ -221,14 +221,14 @@
    */
   const benchClick = (group: LeafNode) => (event: MouseEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    const tab = target?.closest<HTMLElement>(".tab");
+    const tab = target?.closest<HTMLElement>('[data-slot="tab"]');
     const id = tab
       ?.querySelector<HTMLElement>("[data-session-tab]")
       ?.getAttribute("data-session-tab");
     if (!(tab && id)) {
       return;
     }
-    if (target?.closest(".tclose")) {
+    if (target?.closest('[data-slot="tclose"]')) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -247,7 +247,9 @@
   /** Chooses Working or Finished as a click on its tab does. */
   function chooseWork(id: string) {
     const at = WORK_IDS.indexOf(id as (typeof WORK_IDS)[number]);
-    workEl?.querySelectorAll<HTMLElement>(".ff-tab > .hit")[at]?.click();
+    workEl
+      ?.querySelectorAll<HTMLElement>('[data-slot="ff-tab"] > [data-slot="hit"]')
+      [at]?.click();
   }
 
   onMount(() => {

@@ -1162,10 +1162,16 @@
     text-transform: uppercase;
     color: var(--ink-muted);
   }
-  [data-slot="ledger"] :global(th.col-status) {
+  [data-slot="ledger"] :global(th[data-slot="actions-table-col-status"]) {
     inline-size: var(--c-routine-time-w);
   }
-  [data-slot="ledger"] :global(th.col-when) {
+  [data-slot="ledger"]
+    :global(
+      th:is(
+          [data-slot="actions-table-col-when"],
+          [data-slot="routine-detail-col-when"]
+        )
+    ) {
     inline-size: var(--col-when);
   }
   /* A mark in the lead column: a glyph, or a provider's logo (ProviderLogo

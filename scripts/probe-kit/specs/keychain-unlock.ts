@@ -313,9 +313,9 @@ interface AgentRow {
 /** The unlock step under the machine's row, read from the DOM once its motion has landed. */
 const stepState = (page: Page, machineId: string) =>
   page.evaluate((id) => {
-    const section = document.querySelector("section.unlock");
+    const section = document.querySelector('section[data-slot="unlock"]');
     const item = document.querySelector(`li[data-machine="${id}"]`);
-    const row = item?.querySelector(".row") ?? null;
+    const row = item?.querySelector('[data-slot="row"]') ?? null;
     const input = section?.querySelector('input[type="password"]');
     const rect = input?.getBoundingClientRect();
     return {
@@ -542,7 +542,7 @@ const spec: Spec = {
         return;
       }
       await page.getByRole("menuitem", { name: UNLOCK_ITEM }).click();
-      await page.locator("section.unlock").waitFor();
+      await page.locator('section[data-slot="unlock"]').waitFor();
       await settle(page);
       const opened = await stepState(page, MACHINE);
       kit.check(
@@ -554,14 +554,14 @@ const spec: Spec = {
         JSON.stringify(opened)
       );
 
-      const field = page.locator('section.unlock input[type="password"]');
+      const field = page.locator('section[data-slot="unlock"]input[type="password"]');
       const submit = page
-        .locator("section.unlock")
+        .locator('section[data-slot="unlock"]')
         .getByRole("button", { name: UNLOCK_BUTTON });
       await field.fill(randomUUID());
       await submit.click();
       await page
-        .locator('section.unlock [role="alert"]')
+        .locator('section[data-slot="unlock"][role="alert"]')
         .waitFor({ timeout: 60_000 });
       await settle(page);
       const refused = await stepState(page, MACHINE);
@@ -600,14 +600,14 @@ const spec: Spec = {
       await page.waitForFunction(
         (finals) =>
           Array.from(
-            document.querySelectorAll('section.unlock [id$="-title"]')
+            document.querySelectorAll('section[data-slot="unlock"][id$="-title"]')
           ).some((title) =>
             finals.includes(
               title.textContent?.replace(/\s+/g, " ").trim() ?? ""
             )
           ) ||
           Array.from(
-            document.querySelectorAll('section.unlock [role="alert"]')
+            document.querySelectorAll('section[data-slot="unlock"][role="alert"]')
           ).some((alert) => alert.closest("[inert]") === null),
         answers,
         { timeout: 60_000 }
@@ -649,13 +649,13 @@ const spec: Spec = {
       // The step put away (Done, or Close while it still works), so the
       // row and its own menu are what is read.
       await page
-        .locator("section.unlock")
+        .locator('section[data-slot="unlock"]')
         .getByRole("button", { name: PUT_AWAY })
         .first()
         .click()
         .catch(() => undefined);
       await page
-        .locator("section.unlock")
+        .locator('section[data-slot="unlock"]')
         .waitFor({ state: "detached", timeout: 10_000 })
         .catch(() => undefined);
       let lastMenu: string[] = [];

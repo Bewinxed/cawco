@@ -138,31 +138,3 @@
     </ul>
   {/if}
 </li>
-
-<style>
-  /* residual: foreign-dom — the tree's recipe as the other lists draw it:
-     WorkTabs and HomeRecent write `ul.session-tree` themselves, and WorkTabs
-     its leaving rows with `.tree-node`, `.tree-line` and `.tree-branch`;
-     this file's own tree takes the same as utilities. A list's trees, and
-     each parent's rows under it: lists of rows, --tree-gap apart, the gap
-     every tree in the app keeps (app.css; the rail's projects list reads
-     the same one). */
-  /* css-scope .session-tree .tree-branch .tree-node .tree-line: the tree's recipe; WorkTabs and HomeRecent draw its container and leaving rows with it */
-  :global(.session-tree),
-  :global(.tree-branch) {
-    display: flex;
-    flex-direction: column;
-    gap: var(--tree-gap);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  :global(.tree-branch) {
-    padding-block-start: var(--tree-gap);
-    padding-inline-start: var(--nest-pad);
-  }
-  :global(.tree-node),
-  :global(.tree-line) {
-    position: relative;
-  }
-</style>

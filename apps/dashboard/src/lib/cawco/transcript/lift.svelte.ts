@@ -173,12 +173,16 @@ export function asBubble(words: HTMLElement): Node {
   const clone = words.cloneNode(true) as HTMLElement;
   // The bubble hides its own words while they fly; the copy is them.
   clone.style.visibility = "visible";
-  for (const control of clone.querySelectorAll(".turn-actions, .reason")) {
+  for (const control of clone.querySelectorAll(
+    '[data-slot="actions"], [data-slot="reason"]'
+  )) {
     control.remove();
   }
   // The well lets its words run to its edge; out of it they would stop at
   // the prose measure and wrap elsewhere.
-  for (const prose of clone.querySelectorAll<HTMLElement>(".msg")) {
+  for (const prose of clone.querySelectorAll<HTMLElement>(
+    '[data-slot="msg"]'
+  )) {
     prose.style.maxInlineSize = "none";
   }
   return clone;

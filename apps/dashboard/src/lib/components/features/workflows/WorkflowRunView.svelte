@@ -497,7 +497,7 @@
 <style>
   /* residual: foreign-dom — the run's block is RunBlock's own root; it draws
      its own rail-row gap, and the column's gap stands for it. */
-  [data-run-view] > :global(.run-block) {
+  [data-run-view] > :global([data-run-block]) {
     --rail-gap: var(--rail-none);
   }
 </style>

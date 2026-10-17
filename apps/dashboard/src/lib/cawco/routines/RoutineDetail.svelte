@@ -285,7 +285,7 @@
 
 <style>
   /* residual: foreign-dom — the Markdown's own first block */
-  [data-slot="instruction"] :global(.md > :first-child) {
+  [data-slot="instruction"] :global([data-slot="md"] > :first-child) {
     margin-block-start: 0;
   }
 

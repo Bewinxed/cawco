@@ -109,15 +109,16 @@
 {#snippet outcome(machineId: string)}
   {@const result = results.get(machineId)}
   {#if result?.ok}
-    <span class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"><Check /><span>{words.sent}</span></span>
+    <span data-slot="ok" class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"><Check /><span>{words.sent}</span></span>
   {:else if result}
-    <span class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
+    <span data-slot="bad" class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
       ><IconWarningTriangle aria-hidden="true" class="size-icon-sm flex-none" /><span>{result.why}</span></span
     >
   {/if}
 {/snippet}
 
 <form
+  data-slot="keys"
   class="flex min-w-0 flex-col gap-space-3"
   onsubmit={(event) => {
     event.preventDefault();
@@ -213,6 +214,6 @@
     {/if}
   </div>
   {#if problem}
-    <p class="type-meta inline-flex items-center gap-space-1 text-status-fail-ink" role="alert">{problem}</p>
+    <p data-slot="bad" class="type-meta inline-flex items-center gap-space-1 text-status-fail-ink" role="alert">{problem}</p>
   {/if}
 </form>

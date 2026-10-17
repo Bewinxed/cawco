@@ -230,6 +230,7 @@
        (app.css `--c-suggest-room`), so coming and going moves nothing. -->
   {#if shown.length > 0 || slow || failure}
     <fieldset
+      data-slot="track"
       style:--hit-gap-x="var(--space-2)"
       style:--hit-gap-y="var(--space-2)"
       class="relative min-w-0 m-0 border-none border-current flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"

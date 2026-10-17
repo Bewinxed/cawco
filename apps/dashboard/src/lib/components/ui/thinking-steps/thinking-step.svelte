@@ -95,6 +95,7 @@
       style:--icon-col="15px"
     >
       <span
+        data-slot="thinking-step-icon"
         class="grid h-lh min-h-(--icon-box) w-icon-md place-items-center status-ahead:text-ink-subtle"
         data-status={status}
         style:--icon-box="16px"

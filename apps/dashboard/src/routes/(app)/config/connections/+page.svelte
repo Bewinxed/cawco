@@ -378,7 +378,7 @@
         .querySelectorAll<HTMLElement>(
           'ul[aria-label="Connections"] > [data-row-name]'
         )
-        [at]?.querySelector<HTMLElement>(".controls") ?? null;
+        [at]?.querySelector<HTMLElement>('[data-slot="controls"]') ?? null;
     choosing = row;
   }
   async function toggle(row: ConnectionView, project: string, on: boolean) {

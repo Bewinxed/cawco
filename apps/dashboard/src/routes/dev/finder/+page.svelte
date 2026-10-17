@@ -223,7 +223,7 @@
 
 <style>
   /* residual: foreign-dom */
-  [data-slot="sheet"] > :global(.finder) {
+  [data-slot="sheet"] > :global([data-slot="finder"]) {
     flex: 1;
   }
 </style>

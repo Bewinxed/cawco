@@ -101,8 +101,8 @@
  *
  *   {#if open}
  *     <ul class="kit-nest" data-flip-anchor
- *         in:branch={{ glyph: ".tree-mark" }} out:branch={{ glyph: ".tree-mark" }}
- *         {@attach nestFrom(".tree-mark")}>
+ *         in:branch={{ glyph: '[data-slot="tree-mark"]' }} out:branch={{ glyph: '[data-slot="tree-mark"]' }}
+ *         {@attach nestFrom('[data-slot="tree-mark"]')}>
  */
 import type { Attachment } from "svelte/attachments";
 import type { TransitionConfig } from "svelte/transition";
@@ -215,7 +215,7 @@ function parentGlyph(group: HTMLElement, selector: string) {
  * first `glyph` in the nearest list item around the list (or the box marked
  * `data-nest-host`); a child's is the first `child` in the first row.
  *
- *   <ul class="kit-nest" {@attach nestFrom(".tree-mark")}>
+ *   <ul class="kit-nest" {@attach nestFrom('[data-slot="tree-mark"]')}>
  *
  * Measured in layout, transforms ignored: first just before motion/rows
  * reads where the rows are, after the update that drew the list

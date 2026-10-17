@@ -573,7 +573,7 @@ const openDashboard = async () => {
 /** The web transcript's text, as drawn. */
 const listingText = async (): Promise<string> =>
   (await page
-    ?.locator(".listing")
+    ?.locator('[data-slot="listing"]')
     .first()
     .textContent({ timeout: 2000 })
     .catch(() => "")) ?? "";
@@ -789,7 +789,7 @@ const sayScratchLogs = async (): Promise<void> => {
 
 const banner = async () =>
   (await page
-    ?.locator(".banner")
+    ?.locator('[data-slot="shell-banner"]')
     .first()
     .textContent({ timeout: 1000 })
     .catch(() => null)) ?? null;
@@ -907,7 +907,11 @@ try {
     const said =
       (await page
         ?.evaluate(() =>
-          [...document.querySelectorAll(".behind, [data-sonner-toast]")].map(
+          [
+            ...document.querySelectorAll(
+              '[data-slot="layer"][data-behind], [data-sonner-toast]'
+            ),
+          ].map(
             (node) => node.textContent?.trim().replace(/\s+/g, " ") ?? ""
           )
         )

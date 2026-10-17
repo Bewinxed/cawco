@@ -566,7 +566,7 @@ const pinWith = async (
   await settle(on.page, 400);
   const b = await screenBox(on, frame, selector);
   await on.page.mouse.click(b.x + b.w * 0.3, b.y + b.h / 2);
-  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
   await card.waitFor({ timeout: 10_000 });
   await card.getByRole("textbox").fill(words);
   await card.getByRole("button", { name: "Reply" }).click();
@@ -845,7 +845,7 @@ const run = async (kit: Kit) => {
   const builder = builderOf(t1);
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
-  await open(page, `${base}/session/${builder}`, ".artifact-trigger");
+  await open(page, `${base}/session/${builder}`, "[data-artifact-trigger]");
   const cdp = await page.context().newCDPSession(page);
   const on: On = {
     call: () => Promise.reject(new Error("no calls")),

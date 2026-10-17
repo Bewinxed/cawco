@@ -118,12 +118,12 @@
 
   /* residual: foreign-dom */
   /* The words run to the well's edge, not the prose measure. */
-  [data-slot="well"] :global(.msg) {
+  [data-slot="well"] :global([data-slot="msg"]) {
     max-inline-size: none;
   }
   /* The well is the deepest step, so a code span lifts to the raised
      surface instead of vanishing into it. */
-  [data-slot="well"] :global(.msg code) {
+  [data-slot="well"] :global([data-slot="msg"] code) {
     background: var(--surface-raised);
   }
 </style>

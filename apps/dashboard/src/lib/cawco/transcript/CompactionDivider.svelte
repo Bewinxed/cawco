@@ -458,12 +458,12 @@
 
   /* residual: foreign-dom: MessageBody's message and its prose, which take
      no class; the brief reads in the muted ink of a note, not a turn's. */
-  [data-slot="body"] :global(.msg),
-  [data-slot="body"] :global(.msg .prose),
-  [data-slot="body"] :global(.msg .prose :is(h1, h2, h3, h4, h5, h6)) {
+  [data-slot="body"] :global([data-slot="msg"]),
+  [data-slot="body"] :global([data-slot="msg"] .prose),
+  [data-slot="body"] :global([data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6)) {
     color: var(--ink-muted);
   }
-  [data-slot="body"] :global(.msg .prose) {
+  [data-slot="body"] :global([data-slot="msg"] .prose) {
     --tw-prose-body: var(--ink-muted);
     --tw-prose-headings: var(--ink-muted);
     --tw-prose-bold: var(--ink-muted);

@@ -511,7 +511,9 @@
     lastLeft = at;
     row.departed = true;
     const node = items.get(row.s.id);
-    const tile = node?.querySelector<HTMLElement>(":scope > .rin .tile");
+    const tile = node?.querySelector<HTMLElement>(
+      ':scope > [data-slot="rin"] .tile'
+    );
     const moving = motionOk.current && node && tile;
     if (moving) {
       departBox(`${uid}-stop:${row.s.id}`, tile, false);
@@ -524,7 +526,7 @@
         () => gone(row)
       );
       node
-        .querySelector(":scope > .rin")
+        .querySelector(':scope > [data-slot="rin"]')
         ?.animate([{ opacity: 1 }, { opacity: 0 }], {
           duration: dur("--dur-exit"),
           easing: CURVE.out,
@@ -776,6 +778,7 @@
       })}
     <li class="relative" data-row={row.s.id} {@attach item(row.s.id)}>
       <div
+        data-slot="rin"
         class="min-w-0"
         style:--fault-end="var(--row-compact-pad-end)"
         style:--fault-indent="calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px))"
@@ -859,7 +862,7 @@
       {#if kids.length > 0}
         <ul
           class="kit-nest m-0 list-none p-0"
-          {@attach nestFrom(".tree-mark")}
+          {@attach nestFrom('[data-slot="tree-mark"]')}
         >
           {@render branch(row.s.id)}
         </ul>

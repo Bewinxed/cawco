@@ -371,7 +371,11 @@ try {
   await page.goto(`${site}/session/${b.parent}`, {
     waitUntil: "domcontentloaded",
   });
-  const chip = page.locator(".kit-tray-chip.failed").first();
+  const chip = page
+    .locator(
+      '.kit-tray-chip:is([data-delegate-tray-tone="failed"], [data-key="failed"])'
+    )
+    .first();
   await chip.waitFor({ timeout: 60_000 });
   await chip.hover();
   const note = page.locator(".row.fail .text").first();

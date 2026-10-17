@@ -646,7 +646,7 @@
     root?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
   /** The room over the tray, up to the top of the composer's dock. */
   const roomOver = (tray: HTMLElement): number => {
-    const dock = tray.closest(".dock") ?? document.documentElement;
+    const dock = tray.closest('[data-slot="dock"]') ?? document.documentElement;
     // In the layout's px: the panel may still be rising out of its scale.
     const over =
       tray.getBoundingClientRect().top - dock.getBoundingClientRect().top;

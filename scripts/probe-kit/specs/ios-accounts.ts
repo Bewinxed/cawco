@@ -521,19 +521,28 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
       .first()
       .click();
     await button(words.signin.openLink).click();
-    if (await linkOrRefusal("the account's row", ".panel .error")) {
+    if (
+      await linkOrRefusal(
+        "the account's row",
+        '[data-slot="panel"] [data-slot="error"]'
+      )
+    ) {
       await capture("signin-link");
       await page.getByLabel(words.signin.codeLabel).fill("not-a-real-code");
       await button(words.signin.done).click();
       // Refused at once (the machine's login would wait on a part of a code
       // for a minute), in core's words, under the field.
-      const answered = page.locator(".panel .error, .panel .warn, .panel .got");
+      const answered = page.locator(
+        '[data-slot="panel"] :is([data-slot="error"], [data-slot="warn"], [data-slot="got"])'
+      );
       await answered.first().waitFor({ timeout: 30_000 });
       const refusal = (await answered.first().innerText()).trim();
       kit.check(
         label("a code that is not one is refused under the field, in words"),
         refusal === words.signin.notWhole &&
-          (await page.locator(".panel .error").count()) > 0,
+          (await page
+            .locator('[data-slot="panel"] [data-slot="error"]')
+            .count()) > 0,
         refusal
       );
       await capture("signin-refused");
@@ -581,12 +590,16 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     checkPicker(
       kit,
       label,
-      await page.locator("h3.ghead, .choices .plabel").allTextContents(),
+      await page
+        .locator(
+          'h3[data-slot="ghead"], [data-slot="choices"] [data-slot="plabel"]'
+        )
+        .allTextContents(),
       await pickerRows(fleet.base)
     );
     await button(words.claude).click();
     await button(words.setup.signIn).first().click();
-    await linkOrRefusal("the setup's row", ".row-problem");
+    await linkOrRefusal("the setup's row", '[data-slot="row-problem"]');
     await capture("setup-signin");
     await button(configureWords.cancel).click();
     await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
@@ -597,7 +610,7 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     const keys = page
       .locator("section", { hasText: words.setup.pickKeys })
       .locator(
-        'ul[aria-labelledby="pick-keys"] .choice:not([aria-disabled="true"])'
+        'ul[aria-labelledby="pick-keys"] [data-choice]:not([aria-disabled="true"])'
       );
     if ((await keys.count()) > 0) {
       await keys.first().click();
@@ -606,7 +619,7 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
         .fill("sk-probe-not-a-key");
       await button(words.key.send).click();
       await page
-        .locator(".keys .ok, .keys .bad")
+        .locator('[data-slot="keys"] :is([data-slot="ok"], [data-slot="bad"])')
         .first()
         .waitFor({ timeout: 60_000 });
       await capture("setup-key");

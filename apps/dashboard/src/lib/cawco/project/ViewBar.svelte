@@ -226,7 +226,7 @@
     white-space: nowrap;
   }
   /* The filter's glyph and count, at the bar's control height. */
-  [data-slot="view-bar"] > :global(.filter-trigger) {
+  [data-slot="view-bar"] > :global([data-filter-trigger]) {
     flex: none;
     min-inline-size: var(--c-composer-field);
     inline-size: auto;

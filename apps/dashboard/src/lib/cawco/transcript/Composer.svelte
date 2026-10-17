@@ -1544,7 +1544,9 @@
     }
     const at = document.activeElement;
     const ours =
-      !at || at === document.body || !!dockEl.closest(".leaf")?.contains(at);
+      !at ||
+      at === document.body ||
+      !!dockEl.closest('[data-slot="leaf"]')?.contains(at);
     if (!ours || at === field) {
       return;
     }

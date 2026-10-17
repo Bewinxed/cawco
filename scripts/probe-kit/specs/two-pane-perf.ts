@@ -729,11 +729,11 @@ const LAYOUT_PARTS = [
   ],
   [
     "the panes' stack's layout its own (contain: layout)",
-    ".stack[data-drop-leaf] { contain: layout !important; }",
+    '[data-slot="stack"][data-drop-leaf] { contain: layout !important; }',
   ],
   [
     "every tab's contents taken out, its box kept",
-    ".session-tabs .ff-tab > * { display: none !important; }",
+    '.session-tabs [data-slot="ff-tab"] > * { display: none !important; }',
   ],
 ] as const;
 async function switchLayoutParts(

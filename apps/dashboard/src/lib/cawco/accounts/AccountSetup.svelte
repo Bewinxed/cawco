@@ -402,7 +402,7 @@
    * other step hands over at once.
    */
   function stepOut(node: HTMLElement): TransitionConfig {
-    if (!(node.classList.contains("picker") && toward === 1)) {
+    if (!(node.hasAttribute("data-picker") && toward === 1)) {
       return { duration: 0 };
     }
     return lifting(node, pinned(node), {
@@ -563,6 +563,7 @@
     {/if}
     {#each pickGroups as group (group.label)}
       <h3
+        data-slot="ghead"
         class="type-label px-space-3 pt-space-4 pb-space-1 text-ink-muted first-of-type:pt-0"
         id="pick-{group.id}"
       >{group.label}</h3>
@@ -577,6 +578,7 @@
 
 {#snippet choiceRows(rows: ProviderChoice[], group: string)}
   <ul
+    data-slot="choices"
     aria-labelledby="pick-{group}"
     class="m-0 flex list-none flex-col p-0"
     {@attach highlight({ rows: "[data-choice]:not([aria-disabled='true'])" })}
@@ -612,6 +614,7 @@
             ><ProviderMark provider={row.provider} /></span
           >
           <span
+            data-slot="plabel"
             class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-row"
             >{label}</span
           >
@@ -828,6 +831,7 @@
               {/if}
               {#if paste.problem}
                 <p
+                  data-slot="row-problem"
                   class="type-meta text-status-fail-ink"
                   role="alert"
                   in:appear
@@ -837,6 +841,7 @@
                 </p>
               {:else if paste.phase === "mismatch"}
                 <p
+                  data-slot="row-warn"
                   class="type-meta text-status-attn-ink"
                   role="alert"
                   in:appear

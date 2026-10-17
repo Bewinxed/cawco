@@ -42,7 +42,7 @@
    */
   const onSeat = (target: EventTarget | null) =>
     target instanceof Element &&
-    target.closest(".caw-seat, [data-caw-asks]") !== null;
+    target.closest('[data-slot="caw-seat"], [data-caw-asks]') !== null;
 </script>
 
 {#if phone.current}

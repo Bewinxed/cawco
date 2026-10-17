@@ -102,7 +102,7 @@
   } as const satisfies Record<Card, string>;
   /** Where each one puts the focus as it comes in. */
   const FOCUS = {
-    caw: "a.cover, button, .empty",
+    caw: 'a[data-slot="cover"], button, [data-slot="caw-panel-empty"]',
     machines: ".row",
     jump: "input",
   } as const satisfies Record<Card, string>;

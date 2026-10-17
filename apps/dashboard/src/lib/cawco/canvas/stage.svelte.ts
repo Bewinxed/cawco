@@ -450,7 +450,7 @@ export class Stage {
     set("height", box.height);
     el.classList.toggle(
       "over-sheet",
-      this.at === "panel" && !!this.slots.panel?.closest(".preview-sheet")
+      this.at === "panel" && !!this.slots.panel?.closest("[data-preview-sheet]")
     );
   }
 

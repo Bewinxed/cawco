@@ -30,7 +30,7 @@
   const codeId = $props.id();
 </script>
 
-<div class="flex flex-col gap-space-3">
+<div data-slot="panel" class="flex flex-col gap-space-3">
   {#if !online}
     <p class="type-meta text-ink-muted">{words.offline(machine)}</p>
   {/if}
@@ -90,12 +90,14 @@
   </form>
   {#if flow.problem}
     <p
+      data-slot="error"
       class="type-meta flex items-start gap-space-2 text-status-fail-ink"
       id="{codeId}-problem" role="alert" in:appear>
       {flow.problem}
     </p>
   {:else if flow.phase === "signed-in"}
     <p
+      data-slot="got"
       class="type-meta flex items-start gap-space-2 text-ink-muted"
       role="status"
     >
@@ -107,6 +109,7 @@
     </p>
   {:else if flow.phase === "mismatch"}
     <p
+      data-slot="warn"
       class="mark-line type-meta flex items-start gap-space-2 text-status-attn-ink"
       role="alert"
       in:appear

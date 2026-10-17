@@ -52,8 +52,14 @@
    * over the delegate chips on a phone. Drawn is what has a box and paints:
    * neither `visibility: hidden` nor faded to nothing.
    */
-  const COMPOSER_PARTS =
-    ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+  const COMPOSER_PARTS = [
+    ':scope > [data-slot="composer"]',
+    '[data-slot="ask"]',
+    '[data-slot="lift"] .kit-tray-chip',
+    '[data-slot="suggest"]:has([data-slot="track"])',
+    '[data-slot="progress-slot"] > *',
+    '[data-slot="perch"]',
+  ].join(", ");
   /**
    * The sheet folded to its tab: as tall as its grabber's touch area
    * (`[data-vaul-handle-hitarea]`, below), the one part of it a finger
@@ -223,15 +229,17 @@
     // cannot be written to has none, and the floor is the pane's own foot,
     // less the step the composer would have stood on.
     const composer = node
-      .closest(".leaf")
-      ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
+      .closest('[data-slot="leaf"]')
+      ?.querySelector<HTMLElement>(
+        ':scope > [data-slot="dock"] [data-slot="lift"]'
+      )?.parentElement;
     const measure = () => {
       const box = node.getBoundingClientRect();
       const offset = Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--space-4")
       );
       const composerTop = composer ? drawnTop(composer) : box.bottom - offset;
-      asking = composer?.classList.contains("asking") ?? false;
+      asking = composer?.hasAttribute("data-asking") ?? false;
       const viewport = window.visualViewport;
       // A keyboard that resizes the web view (Brave) reports the new visible
       // area a frame before the page is laid out in it, with the composer

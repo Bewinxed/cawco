@@ -1222,7 +1222,7 @@
   function closeToRow(pane: HTMLElement, id: string) {
     const row = [
       ...document.querySelectorAll<HTMLElement>(
-        `.preview-tool[data-share="preview:${CSS.escape(instanceId)}"][data-artifact="${CSS.escape(id)}"]`
+        `[data-slot="preview-tool"][data-share="preview:${CSS.escape(instanceId)}"][data-artifact="${CSS.escape(id)}"]`
       ),
     ].at(-1);
     if (!row) {
@@ -1904,18 +1904,18 @@
   /* The well is the card's (SideSurface). Comment and Draw turn the well's
      own border the accent, 2px, inside its box: never a second ring round
      it. Interact leaves it as the page's own. */
-  :global(.preview-pane .side-well) {
+  :global(.preview-pane [data-slot="side-well"]) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
     transition: outline-color var(--dur-control) var(--ease-in-out);
   }
-  :global(.preview-pane:is(.mode-comment, .mode-draw) .side-well) {
+  :global(.preview-pane:is(.mode-comment, .mode-draw) [data-slot="side-well"]) {
     outline-color: var(--accent);
     cursor: crosshair;
   }
   /* The mode's segmented control keeps its segments to their glyphs: each
      name stays its accessible name and its title, never drawn. */
-  [data-slot="modes"] :global(.ff-tab .label) {
+  [data-slot="modes"] :global([data-slot="ff-tab"] [data-slot="tab-item-label"]) {
     position: absolute;
     width: 1px;
     height: 1px;

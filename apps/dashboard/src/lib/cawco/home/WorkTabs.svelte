@@ -672,15 +672,15 @@
   {@const older = olderOf(line.tab, line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
-  <li data-slot="tree-node" style={leaveLine(line.key)}>
-    <div data-slot="tree-line" style={leaveAnim(line.key)}>
+  <li data-slot="tree-node" class="relative" style={leaveLine(line.key)}>
+    <div data-slot="tree-line" class="relative" style={leaveAnim(line.key)}>
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
       <ul
         data-slot="tree-branch"
-        class="kit-nest"
-        {@attach nestFrom(".tree-mark")}
+        class="kit-nest m-0 flex list-none flex-col gap-(--tree-gap) pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0"
+        {@attach nestFrom('[data-slot="tree-mark"]')}
       >
         {#each kids as kid (kid.key)}
           {@render leavingTree(kid, lines)}
@@ -719,7 +719,10 @@
     data-reflow
     inert
   >
-    <ul data-slot="work-tabs-session-tree">
+    <ul
+      data-slot="work-tabs-session-tree"
+      class="m-0 flex list-none flex-col gap-(--tree-gap) p-0"
+    >
       {#each lines.filter((line) => line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? "")) as line (line.key)}
         {@render leavingTree(line, lines)}
       {/each}
@@ -900,7 +903,10 @@
                 {#snippet line(row: InstanceRow)}
                   {@render sessionRow(row, shown, id)}
                 {/snippet}
-                <ul data-slot="work-tabs-session-tree">
+                <ul
+                  data-slot="work-tabs-session-tree"
+                  class="m-0 flex list-none flex-col gap-(--tree-gap) p-0"
+                >
                   {#each under(shown, entry.rows, null) as row (`${swap.gen}:${row.id}`)}
                     <SessionTree
                       {current}
@@ -1029,12 +1035,12 @@
     --tab-fill: var(--surface-recess);
   }
   /* A label to its count (the kit's --gap + 4px), closer on a narrow rail. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .ff-tab) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]) {
     --gap: max(0px, 2px - var(--tight) * 0.06);
   }
   /* A tab is as wide as its label and its count together: the count never
      stands outside the tab, whatever the row's width. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .ff-tab) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]) {
     min-inline-size: max-content;
   }
   /* A tab after the first tucks its start under its neighbour by the
@@ -1042,11 +1048,16 @@
      "Finished": its label starts past the overlap, as PaneTabs' titles do,
      on either choice, so a choice never resizes a tab. The first tab's
      overlap is the track's leading pad. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .ff-tab ~ .ff-tab) {
+  :global(
+    [data-work-tabs][data-slot="tabs"]
+      .ff-tabs-list
+      [data-slot="ff-tab"]
+      ~ [data-slot="ff-tab"]
+  ) {
     --px-start: calc(var(--overlap) + var(--px));
   }
   /* A label never gives way: the header's spacing does. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .hit) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="hit"]) {
     flex-shrink: 0;
   }
   /* residual: pseudo — the trees' own measures are the shared tree's

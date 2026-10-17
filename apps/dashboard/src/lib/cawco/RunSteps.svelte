@@ -100,7 +100,7 @@
   };
 
   /** A step's status glyph: where its rail ends, and what its result opens off. */
-  const STEP_GLYPH = ".session-status .glyph";
+  const STEP_GLYPH = '[data-slot="session-status"] [data-slot="glyph"]';
   /** A result opens under its step as a tree's rows do (motion/branch). */
   const RESULT: BranchOptions = { glyph: STEP_GLYPH };
 

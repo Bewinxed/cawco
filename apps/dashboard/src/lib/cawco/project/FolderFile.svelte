@@ -97,7 +97,7 @@
   /* residual: foreign-dom */
   /* css-scope: .folder-file is this card's own class (SideSurface `class`).
      The path in the head is set as its chip sets it, in the mono face. */
-  :global(.folder-file > .side-head .title) {
+  :global(.folder-file > [data-slot="side-head"] [data-slot="title"]) {
     font-family: var(--font-mono);
     font-size: var(--text-code);
   }

@@ -392,6 +392,7 @@
             <!-- literal: 440px -->
             <!-- literal: 80px -->
             <div
+              data-slot="preview-tool"
               class="relative flex items-center gap-space-2 max-w-(--card-max) min-h-(--card-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile data-closed:opacity-50 not-has-[[data-slot=artifact-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
@@ -754,7 +755,7 @@
 
   /* residual: foreign-dom */
   /* The thumbnail is Shot's own box and image, which take no class. */
-  [data-slot="artifact-thumb"] :global(.box) {
+  [data-slot="artifact-thumb"] :global([data-slot="shot-box"]) {
     block-size: var(--thumb-h);
     min-block-size: 0;
   }

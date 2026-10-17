@@ -948,20 +948,20 @@
     gap: var(--space-1);
     height: var(--chip-h);
   }
-  [data-slot="model-pop"] :global(.picker) {
+  [data-slot="model-pop"] :global([data-slot="picker"]) {
     border: 0;
     box-shadow: none;
     background: transparent;
   }
   /* The search is as wide as what is typed in it (motion/autosize.svelte.ts
      autowidth), and tweens there a character at a time. */
-  [data-slot="model-pop"] :global(.search input) {
+  [data-slot="model-pop"] :global([data-slot="search"] input) {
     --autowidth: 1;
     @media (prefers-reduced-motion: no-preference) {
       transition: width var(--dur-control) var(--ease-out);
     }
   }
-  [data-slot="model-pop"] :global(.list) {
+  [data-slot="model-pop"] :global([data-slot="list"]) {
     height: auto;
     max-height: var(--list-max);
     overflow: hidden auto;
@@ -969,7 +969,7 @@
     /* The 2px row gap, so a snapped row's neighbour shows none of itself. */
     scroll-padding: 2px;
   }
-  [data-slot="model-pop"] :global(.row) {
+  [data-slot="model-pop"] :global([data-slot="row"]) {
     scroll-snap-align: start;
   }
   @media (max-width: 640px) {

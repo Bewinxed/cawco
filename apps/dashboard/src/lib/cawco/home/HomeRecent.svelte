@@ -173,7 +173,12 @@
             trail={!context && at ? formatAgeShort(at, clock.now) : ""}
           />
         {/snippet}
-        <ul data-slot="home-recent-session-tree">
+        <!-- A list of trees: rows --tree-gap apart, the gap every tree in
+             the app keeps (SessionTree's own branches take the same). -->
+        <ul
+          data-slot="home-recent-session-tree"
+          class="m-0 flex list-none flex-col gap-(--tree-gap) p-0"
+        >
           {#each recentMatches.slice(0, recentListed) as item (item.key)}
             {#if item.instance}
               <SessionTree

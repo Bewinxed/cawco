@@ -231,12 +231,12 @@
   /* residual: foreign-dom: MessageBody's message and its prose, which take
      no class; the summary reads in the muted ink of a note. */
   .brief {
-    & :global(.msg),
-    & :global(.msg .prose),
-    & :global(.msg .prose :is(h1, h2, h3, h4, h5, h6)) {
+    & :global([data-slot="msg"]),
+    & :global([data-slot="msg"] .prose),
+    & :global([data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6)) {
       color: var(--ink-muted);
     }
-    & :global(.msg .prose) {
+    & :global([data-slot="msg"] .prose) {
       --tw-prose-body: var(--ink-muted);
       --tw-prose-headings: var(--ink-muted);
       --tw-prose-bold: var(--ink-muted);

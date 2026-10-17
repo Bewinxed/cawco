@@ -144,9 +144,9 @@
   }
 
   function placeActions(node: HTMLElement): () => void {
-    const turn = node.closest(".turn");
+    const turn = node.closest('[data-slot="turn"]');
     function place(): void {
-      const well = node.closest(".well");
+      const well = node.closest('[data-slot="well"]');
       const inset = Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--space-2")
       );
@@ -172,7 +172,7 @@
     if (!(actionsShown && words)) {
       return;
     }
-    const turn = words.closest(".turn");
+    const turn = words.closest('[data-slot="turn"]');
     function dismiss(event: Event): void {
       if (
         event.type === "scroll" ||
@@ -953,12 +953,12 @@
      and queued, it stands at reduced presence with the words. Not colour
      alone: the note text and the missing clock carry the state too. */
   /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-  :global(.turn[data-ghost] > .who) {
+  :global([data-slot="turn"][data-ghost] > [data-slot="who"]) {
     opacity: var(--ghost-presence);
   }
   @media (prefers-reduced-motion: no-preference) {
     /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-    :global(.turn.you > .who) {
+    :global([data-slot="turn"][data-you] > [data-slot="who"]) {
       transition: opacity var(--dur-menu) var(--ease-out);
     }
   }
