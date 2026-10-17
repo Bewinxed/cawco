@@ -175,6 +175,17 @@
 
   /** The cell a relay band stands for, while the band is hovered or open. */
   let lit = $state<string | null>(null);
+  /** The ground a cell's reserve notch takes: the hover wash while lit,
+      else the limit wash at its limit (lit wins, as its background does). */
+  function groundOf(ring: RingAccount): string | undefined {
+    if (ring.id === lit) {
+      return "var(--surface-hover)";
+    }
+    if (ring.state === "limit") {
+      return "var(--meter-wash-over)";
+    }
+    return undefined;
+  }
   /** Where a cell's tooltips open. */
   type TipSide = "top" | "right";
   /**
@@ -516,7 +527,7 @@
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
+                  class="absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
                   style:--slot-at={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
@@ -533,7 +544,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center font-body text-size-meta leading-(--more-lh) font-normal num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
+                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center font-body text-size-meta leading-(--more-lh) font-normal num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:--more-lh="16px"
                   style:--slot-at={slotAt(
@@ -571,7 +582,7 @@
                it end in an ellipsis. -->
           <!-- literal: 15px -->
           <span
-            class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
             data-next={claude.next?.id}
             data-strip-caption
             style:--cap-lh="15px"
@@ -619,7 +630,7 @@
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
               data-strip-go-week
               style:--cap-lh="15px"
               ><WeekMark ring={openCode} />
@@ -790,7 +801,7 @@
     data-slot="cell-d"
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-none"
+    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -801,11 +812,7 @@
     role="group"
     style:--cell-rows="auto auto"
     style:--cell-span="span 5"
-    style:--ring-ground={ring.id === lit
-      ? "var(--surface-hover)"
-      : ring.state === "limit"
-        ? "var(--meter-wash-over)"
-        : undefined}
+    style:--ring-ground={groundOf(ring)}
   >
     {@render dial(ring, c, shown, side)}
     <!-- The first line, from the time's x to the share's end, so the name
@@ -1129,8 +1136,9 @@
 
 <!-- Its ground is the surface it stands on: the rail's by default, the phone
      home's raised card. A reserve notch is cut in the same paint. One
-     control, one height whatever it says (`strip-hit`, which the
-     usage-relay bench finds it by). -->
+     control, one height whatever it says (`data-strip-hit`, which the
+     usage-relay bench finds it by); under the pointer or open it paints its
+     own ground, and the dials' reserve notch takes it (`ring-ground-*`). -->
 <!-- literal: 44px, 56px -->
 <div
   data-slot="strip"
@@ -1148,7 +1156,8 @@
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        class="press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        data-strip-hit
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1165,7 +1174,8 @@
     <Popover.Root bind:open>
       <Popover.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
+        class="press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        data-strip-hit
         onkeydown={keyed}
         onpointerdown={pressed}
       >
@@ -1174,9 +1184,12 @@
       <!-- literal: 100vw, 16px -->
       <Popover.Content
         align="start"
-        class="w-(--usage-pop-w) gap-0 rounded-lg p-0 shadow-lg"
+        class="w-(--usage-pop-w)"
         collisionPadding={8}
+        frame="panel"
+        gap="none"
         onOpenAutoFocus={keepFocus}
+        pad="none"
         side="top"
         sideOffset={6}
         style="--usage-pop-w: min(var(--c-panel-w), calc(100vw - 16px));"
@@ -1186,25 +1199,3 @@
     </Popover.Root>
   {/if}
 </div>
-
-<style>
-  /* css-scope .strip-hit: the strip's own control; the usage-relay motion bench draws the strip with it */
-  /* residual: unmapped — the strip's control under the pointer or open
-     paints its own ground, and the dials' reserve notch takes it
-     (--ring-ground: a custom property no utility sets yet); the strip's
-     caption clamps by the standard property too (needs shared: K2's
-     ring-ground-* and line-clamp-std-*). */
-  @media (hover: hover) and (pointer: fine) {
-    :global(.strip-hit:hover) {
-      --ring-ground: var(--surface-hover);
-    }
-  }
-  :global(.strip-hit[aria-expanded="true"]),
-  :global(.strip-hit[data-state="open"]) {
-    --ring-ground: var(--surface-hover);
-  }
-  [data-strip-caption],
-  [data-strip-go-week] {
-    line-clamp: 1;
-  }
-</style>

@@ -32,6 +32,11 @@
     exact: "Exact match",
     regex: "Regular expression",
   };
+  const KIND_TONE = {
+    all: "muted-edge",
+    exact: "success-edge",
+    regex: "warning-edge",
+  } as const satisfies Record<HookMatcherKind, string>;
   const KIND_HOW: Record<HookMatcherKind, string> = {
     all: "An empty matcher or a bare * runs on every value this event carries.",
     exact:
@@ -47,14 +52,8 @@
 
 <div class="flex flex-col gap-2 rounded-md bg-surface-recess p-3">
   <div class="flex flex-wrap items-center gap-2">
-    <Badge
-      class={[
-        "shrink-0",
-        kind === "exact" && "border-success-9 text-success-9",
-        kind === "regex" && "border-warning-9 text-warning-9",
-        kind !== "exact" && kind !== "regex" && "border-border text-ink-muted",
-      ]}
-      variant="outline"><span>{KIND_LABEL[kind]}</span></Badge
+    <Badge class="shrink-0" tone={KIND_TONE[kind]} variant="outline"
+      ><span>{KIND_LABEL[kind]}</span></Badge
     >
     <span class="text-meta text-ink-muted">{KIND_HOW[kind]}</span>
   </div>
@@ -81,9 +80,10 @@
     Try it — {info?.filters ?? "the value this event carries"}
     <Input
       autocomplete="off"
-      class="font-mono text-label"
+      face="mono"
       placeholder={info?.suggests?.[0] ?? "a sample value"}
       spellcheck="false"
+      text="label"
       bind:value={sample}
     />
   </label>

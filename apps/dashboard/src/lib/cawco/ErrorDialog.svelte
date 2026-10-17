@@ -33,17 +33,17 @@
 </script>
 
 <Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content class="phone:max-w-168">
+  <Dialog.Content width="report">
     <div class="flex flex-col gap-6">
       <Dialog.Header>
-        <Dialog.Title class="mark-line flex items-center gap-2">
+        <Dialog.Title class="mark-line flex items-center" gap="glyph">
           <IconAlert class="size-icon-md shrink-0 text-error-9" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-(--error-max) overflow-auto break-words whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
+        class="m-0 max-h-(--error-max) overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
         data-error-text
         style:--error-max="60vh">{message}</pre>
 
