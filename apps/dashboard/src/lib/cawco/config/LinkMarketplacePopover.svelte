@@ -147,10 +147,16 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-[380px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    class="w-(--pop-w) max-w-(--pop-max) gap-3 p-3"
+    style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
-    <form class="form" onsubmit={link}>
+    <!-- literal: 12px -->
+    <form
+      class="flex flex-col gap-(--form-gap)"
+      onsubmit={link}
+      style:--form-gap="12px"
+    >
       <Field id="market-source" label="Source" problem={unread}>
         {#snippet hint()}
           A GitHub <span class="font-mono">owner/repo</span>, a git URL, or a
@@ -192,7 +198,7 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert" transition:unfold>{failed}</p>
+        <p class="type-meta text-status-fail-ink" role="alert" transition:unfold>{failed}</p>
       {/if}
       <Button
         class="self-end"
@@ -208,14 +214,3 @@
   </Popover.Content>
 </Popover.Root>
 
-<style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

@@ -55,41 +55,51 @@
   }
 </script>
 
+<!-- literal: 232px -->
 <nav
   data-slot="rail"
   aria-label={words.title}
-  class="rail"
+  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-(--rail-w) variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
   data-variant={variant}
-  {@attach highlight({ rows: ".row", selected: '[aria-current="page"]' })}
+  style:--rail-w="232px"
+  {@attach highlight({ rows: '[data-slot="row"]', selected: '[aria-current="page"]' })}
 >
   {#each GROUPS as { group, sections } (group)}
-    <div data-slot="group" class="group">
-      <h2 data-slot="config-rail-label" class="label">{group}</h2>
-      <ul data-slot="list" class="list">
+    <div data-slot="group" class="flex flex-col">
+      <h2 data-slot="config-rail-label" class="pt-space-4 px-space-3 pb-space-2 type-body text-ink-muted">{group}</h2>
+      <ul data-slot="list" class="flex flex-col m-0 p-0 list-none">
         {#each sections as section (section.slug)}
           {@const count = countOf(store, section.slug)}
           {@const waiting = section.badge === "updates-waiting"}
           {@const faults = badgeOf(store, section)}
           <li>
+            <!-- literal: 48px, 22px, 6px, 50%, 5px, 18px, 3ch -->
             <a
               data-slot="row"
               aria-current={current === section.slug ? "page" : undefined}
-              class="row focus-inset press-tint"
+              class="group/row relative flex items-center gap-space-3 h-c-rail-row-h pl-space-2 pr-space-3 rounded-sm text-ink-row no-underline transition-control aria-current-page:text-selected-ink group-variant-list/rail:h-(--list-row-h) focus-inset press-tint"
               href="/config/{section.slug}"
+              style:--list-row-h="48px"
+              style:--tile="22px"
+              style:--dot="6px"
+              style:--dot-r="50%"
+              style:--fault-pad="5px"
+              style:--fault-h="18px"
+              style:--count-min="3ch"
             >
-              <span data-slot="tile" class="tile" style="color:{section.hue}"
+              <span data-slot="tile" class="inline-flex items-center justify-center flex-none size-(--tile) rounded-xs bg-surface-tile shadow-tile text-(--tile-ink)" style:--tile-ink={section.hue}
                 ><section.icon /></span
               >
-              <span data-slot="name" class="name">{section.label}</span>
+              <span data-slot="name" class="flex-auto min-w-0 type-label truncate">{section.label}</span>
               {#if unsavedIn(store, section.slug)}
-                <span class="unsaved" title={words.unsaved}
+                <span class="flex-none size-(--dot) rounded-(--dot-r) bg-ink-strong motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out motion-safe:starting:opacity-0" title={words.unsaved}
                   ><span class="sr-only">{words.unsaved}</span></span
                 >
               {/if}
               {#if faults > 0}
                 <span
                   data-slot="num"
-                  class="fault num"
+                  class="flex-none min-w-space-5 h-space-5 px-(--fault-pad) rounded-xs bg-status-attn-bg font-body text-size-meta font-normal leading-(--fault-h) text-center text-status-attn-ink num"
                   title={waiting
                     ? words.badgeWaiting(faults)
                     : words.badgeFailing(faults)}
@@ -106,9 +116,9 @@
                 <!-- The figure is its own element, not the dash's text
                      rewritten: it arrives in place rather than moving in. -->
                 {#if count === null}
-                  <span data-slot="count" class="count">—</span>
+                  <span data-slot="count" class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">—</span>
                 {:else}
-                  <span data-slot="count" class="count">{count}</span>
+                  <span data-slot="count" class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">{count}</span>
                 {/if}
               {/if}
             </a>
@@ -120,123 +130,9 @@
 </nav>
 
 <style>
-  .rail {
-    display: flex;
-    flex-direction: column;
-    padding: 0 var(--space-2) var(--space-5);
-  }
-  /* An inset panel standing in the Configure page's gutter, in the page
-     card's own recipe (raised, radius-lg, no line, no shadow): the recess
-     around both panels is the seam. Raised, not recessed: in light the fill
-     a chosen row takes is the recess's own step (n-3), so on the recess the
-     selection would not show at all. */
-  .rail[data-variant="rail"] {
-    position: relative;
-    width: 232px;
-    flex: none;
-    overflow-y: auto;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-  }
-  .rail[data-variant="list"] {
-    padding: 0 var(--space-2) var(--space-2);
-  }
-  .group {
-    display: flex;
-    flex-direction: column;
-  }
-  .label {
-    padding: var(--space-4) var(--space-3) var(--space-2);
-    font: var(--type-body);
-    color: var(--ink-muted);
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    height: var(--c-rail-row-h);
-    padding: 0 var(--space-3) 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    color: var(--ink-row);
-    text-decoration: none;
-    transition: var(--transition-control);
-  }
-  /* The chosen row's ink; the apricot wash under it is the highlight's pill. */
-  .row[aria-current="page"] {
-    color: var(--selected-ink);
-  }
-  [data-variant="list"] .row {
-    height: 48px;
-  }
-  .tile {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-tile);
-    box-shadow: var(--shadow-tile);
-  }
-  .tile :global(svg) {
-    width: 14px;
-    height: 14px;
-  }
-  .name {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    font: var(--type-label);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* Three digits wide from the first paint, the figure set to its end, so
-     the dash that stands in until the count is read and the count that
-     replaces it hold the same box. */
-  .count {
-    flex: none;
-    min-inline-size: 3ch;
-    text-align: end;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-  }
-  [aria-current="page"] .count {
-    color: var(--selected-ink);
-  }
-  /* An editor in this section holds edits not saved yet. */
-  .unsaved {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ink-strong);
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-control) var(--ease-out);
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
-  .fault {
-    flex: none;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: var(--radius-xs);
-    background: var(--status-attn-bg);
-    font: var(--type-meta);
-    line-height: 18px;
-    text-align: center;
-    color: var(--status-attn-ink);
+  /* residual: foreign-dom */
+  [data-slot="tile"] :global(svg) {
+    width: var(--space-4);
+    height: var(--space-4);
   }
 </style>

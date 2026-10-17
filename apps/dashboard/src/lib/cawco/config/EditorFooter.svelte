@@ -107,15 +107,26 @@
   $effect(() => () => clearTimeout(savedTimer));
 </script>
 
-<footer class="footer" data-safe-bottom {@attach aboveKeyboard(() => body)}>
+<!-- literal: 10px, 12px, 8px, 980px, 96px -->
+<footer
+  class="flex-none pt-(--foot-pt) pb-(--foot-pb) px-space-6 bg-surface-recess max-desk:px-space-2 max-phone:sticky max-phone:bottom-0 max-phone:pb-(--foot-pb-phone)"
+  data-safe-bottom
+  style:--foot-pt="10px"
+  style:--foot-pb="12px"
+  style:--foot-pb-phone="calc(12px + var(--safe-bottom))"
+  style:--inner-gap="8px"
+  style:--inner-max="980px"
+  style:--save-min="96px"
+  {@attach aboveKeyboard(() => body)}
+>
   {#if question}
-    <AskHere asker={question.asker} at="editor" class="editor-ask" />
+    <AskHere asker={question.asker} at="editor" class="max-w-(--inner-max)" />
   {/if}
-  <div data-slot="inner" class="inner">
+  <div data-slot="inner" class="flex items-center gap-(--inner-gap) max-w-(--inner-max) max-phone:flex-wrap max-phone:justify-end">
     {#if ondelete && deleteLabel}
       <Button
         data-delete
-        class="delete"
+        class="text-ink-muted max-phone:hidden"
         disabled={down !== null || saving}
         {failed}
         icon={IconTrash}
@@ -128,12 +139,11 @@
         variant="ghost"
       />
     {/if}
-    <span class="spacer"></span>
+    <span class="flex-auto max-phone:hidden"></span>
     {#if result}
-      <span data-slot="result" class="result">{@render result()}</span>
+      <span data-slot="result" class="inline-flex items-center gap-space-2 min-w-0 type-meta text-ink-muted">{@render result()}</span>
     {/if}
     <Button
-      class="footer-btn"
       disabled={saving}
       onclick={oncancel}
       type="button"
@@ -142,7 +152,7 @@
       {configureWords.cancel}
     </Button>
     <Button
-      class="footer-btn save"
+      class="min-w-(--save-min)"
       disabled={down !== null || deleting || !canSave}
       {failed}
       label={saved ? configureWords.saved : saveLabel}
@@ -154,57 +164,3 @@
   </div>
 </footer>
 
-<style>
-  .footer {
-    flex: none;
-    padding: 10px 21px 12px;
-    background: var(--surface-recess);
-  }
-  .inner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 980px;
-  }
-  .spacer {
-    flex: 1 1 auto;
-  }
-  /* The question stands over the commit row, as wide as it. */
-  .footer > :global(.editor-ask) {
-    max-width: 980px;
-  }
-  .result {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .inner :global(.save) {
-    min-width: 96px;
-  }
-  .inner :global(.delete) {
-    color: var(--ink-muted);
-  }
-  @media (max-width: 900px) {
-    .footer {
-      padding-inline: 7px;
-    }
-  }
-  @media (max-width: 640px) {
-    .footer {
-      position: sticky;
-      bottom: 0;
-      padding-bottom: calc(12px + var(--safe-bottom));
-    }
-    .inner {
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-    .inner :global(.delete),
-    .spacer {
-      display: none;
-    }
-  }
-</style>

@@ -97,9 +97,15 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-[360px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    class="w-(--pop-w) max-w-(--pop-max) gap-3 p-3"
+    style="--pop-w: 360px; --pop-max: calc(100vw - 2rem)"
   >
-    <form class="form" onsubmit={create}>
+    <!-- literal: 12px -->
+    <form
+      class="flex flex-col gap-(--form-gap)"
+      onsubmit={create}
+      style:--form-gap="12px"
+    >
       <Field
         id="memory-path"
         label="Path under {userLayerLabel('memories')}/"
@@ -120,7 +126,7 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert" transition:unfold>{failed}</p>
+        <p class="type-meta text-status-fail-ink" role="alert" transition:unfold>{failed}</p>
       {/if}
       <Button
         class="self-end"
@@ -136,14 +142,3 @@
   </Popover.Content>
 </Popover.Root>
 
-<style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>

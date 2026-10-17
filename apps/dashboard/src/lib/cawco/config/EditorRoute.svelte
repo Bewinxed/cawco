@@ -59,29 +59,16 @@
   }
 </script>
 
-<div class="route">
+<div class="relative flex flex-auto flex-col min-w-0 min-h-0">
   {#if !loaded}
-    <div class="stand" out:leave>
+    <div class="flex flex-auto flex-col min-w-0 min-h-0" out:leave>
       <EditorSkeleton {problem} {saveLabel} {section} />
     </div>
   {:else if !found}
-    <div class="stand" in:crossIn><Missing {section} {what} /></div>
+    <div class="flex flex-auto flex-col min-w-0 min-h-0" in:crossIn><Missing {section} {what} /></div>
   {:else}
     <!-- Every editor here keeps its unsaved fields (`keepDraft`). -->
-    <div class="stand" data-keeps-draft in:crossIn>{@render children()}</div>
+    <div class="flex flex-auto flex-col min-w-0 min-h-0" data-keeps-draft in:crossIn>{@render children()}</div>
   {/if}
 </div>
 
-<style>
-  .route,
-  .stand {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-  .route {
-    position: relative;
-  }
-</style>

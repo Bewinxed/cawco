@@ -38,7 +38,7 @@
 >
   {#snippet header()}
     <!-- The title field's 29px line. -->
-    <Skeleton class="h-[29px] w-2/5" />
+    <Skeleton class="h-(--title-h) w-2/5" style="--title-h: 29px" />
   {/snippet}
   {#if problem}
     <Alert.Root variant="destructive">

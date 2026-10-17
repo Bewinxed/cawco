@@ -125,11 +125,14 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-[380px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    class="w-(--pop-w) max-w-(--pop-max) gap-3 p-3"
+    style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
+    <!-- literal: 12px -->
     <form
-      class="form"
+      class="flex flex-col gap-(--form-gap)"
+      style:--form-gap="12px"
       onsubmit={(event) => {
         event.preventDefault();
         if (ready && !busy) {
@@ -209,14 +212,20 @@
         />
       </div>
       {#if choices.length > 0}
-        <div class="choices" transition:unfold>
-          <span data-slot="note" class="note"
+        <!-- literal: 13rem, 10px -->
+        <div
+          class="flex flex-col max-h-(--choices-max) overflow-y-auto"
+          style:--choices-max="13rem"
+          style:--choice-pad="10px"
+          transition:unfold
+        >
+          <span data-slot="note" class="type-meta text-ink-muted"
             >That repo holds several skills. Pick the one to fetch.</span
           >
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
-              class="kit-item choice focus-inset"
+              class="kit-item px-(--choice-pad) text-left font-mono text-size-meta text-ink-strong focus-inset"
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"
@@ -227,7 +236,7 @@
         </div>
       {/if}
       {#if failed}
-        <p class="problem" role="alert" transition:unfold>{failed}</p>
+        <p class="type-meta text-status-fail-ink" role="alert" transition:unfold>{failed}</p>
       {/if}
       <Button
         class="self-end"
@@ -243,31 +252,3 @@
   </Popover.Content>
 </Popover.Root>
 
-<style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-  .choices {
-    display: flex;
-    flex-direction: column;
-    max-height: 13rem;
-    overflow-y: auto;
-  }
-  .choice {
-    padding: 0 10px;
-    text-align: left;
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-  }
-</style>
