@@ -474,8 +474,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.add(WeakHandler(self), name: "cawco")
         #if DEBUG
+        // At the document's start, before the page's own scripts: a probe may hold the document there.
         if PreviewProbe.on, let report = PreviewProbe.report {
-            configuration.userContentController.addUserScript(WKUserScript(source: report, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            configuration.userContentController.addUserScript(WKUserScript(source: report, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
         configuration.allowsInlineMediaPlayback = true

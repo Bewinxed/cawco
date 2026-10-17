@@ -989,7 +989,17 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     // Expanded, Esc is the pane's (SideSplit.svelte `escapeExpanded`): it
     // takes the keyboard unless something in the preview has it, whose own
     // Esc reaches it up the chain, or from the page through `onEscapeLeft`.
-    override var canBecomeFirstResponder: Bool { expanded }
+    // A question card standing, it takes the keyboard too, for the card's keys.
+    override var canBecomeFirstResponder: Bool { expanded || composerBinding.standsQuestion }
+
+    /// A question card standing and nothing holding the keyboard: the pane
+    /// takes it, so the card's digits and Return reach it (UIKit gathers key
+    /// commands from the first responder up, WWDC20 10109).
+    private func claimCardKeys() {
+        guard composerBinding.standsQuestion, view.window != nil, !isFirstResponder,
+              UIResponder.current == nil else { return }
+        becomeFirstResponder()
+    }
 
     private func takeKeys() {
         guard view.window != nil, preview?.holdsKeys != true, !isFirstResponder else { return }
@@ -1111,6 +1121,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             ordered.append(card)
         }
         composerBinding.prompts = ordered
+        claimCardKeys()
         #if DEBUG
         approveForProbe(standing.first)
         openCommandForProbe(standing.first)
@@ -1591,14 +1602,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override var keyCommands: [UIKeyCommand]? {
         var keys = [UIKeyCommand(title: "Stop", action: #selector(stopKey), input: ".", modifierFlags: .command),
                     UIKeyCommand(title: "Steer", action: #selector(steerKey), input: "l", modifierFlags: .command)]
-        // The first question card owns the digits and Return while the field is not being written in.
-        // Never Escape: a question is put down only by its own Dismiss button.
-        if !composerBinding.isWriting, cards.values.contains(where: \.ask.isQuestion) {
-            for digit in 1 ... 9 {
-                keys.append(UIKeyCommand(input: "\(digit)", modifierFlags: [], action: #selector(cardKey(_:))))
-            }
-            keys.append(UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(cardKey(_:))))
-        }
+        // The question card's digits and Return, unless a field or the preview's page holds the keyboard: what is typed in keeps its keys.
+        if !UIResponder.isTyping, !PreviewKeys.pageHolds { keys += composerBinding.cardKeys(#selector(cardKey(_:))) }
         // Expanded, Esc gives the conversation back, after the preview's own
         // card and Comment mode; the composer, and its cards, are put away.
         if expanded {
@@ -1612,10 +1617,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     @objc private func stopKey() { stopTurn() }
     @objc private func steerKey() { focusComposer() }
-    @objc private func cardKey(_ command: UIKeyCommand) {
-        let owner = composerBinding.prompts.compactMap { $0 as? PromptCardView }.first { $0.ask.isQuestion }
-        if let input = command.input { owner?.key(input) }
-    }
+    @objc private func cardKey(_ command: UIKeyCommand) { composerBinding.cardKey(command) }
 
     static func activity(_ id: String) -> NSUserActivity {
         let activity = NSUserActivity(activityType: "dev.cawco.session")

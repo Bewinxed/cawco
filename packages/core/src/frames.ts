@@ -63,7 +63,8 @@ export interface PreviewFrame {
   revision: string;
   source?: PreviewSource;
   /**
-   * A sheet's stage as its doc keeps it (`meta.stage`), the frame published
+   * A sheet's stage, or a workspace preview's server (`serve`), as its doc
+   * keeps it (`meta.stage`), the frame published
    * again at the same revision on each change: for a panel that holds no doc
    * of its own (the app's), as the dashboard's pane reads it from the doc.
    */

@@ -112,8 +112,6 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         didSet { if held != oldValue { renderAction(animated: window != nil) } }
     }
 
-    public var isWriting: Bool { field.isFirstResponder }
-
     /// The row standing on the composer, outside its box (Composer.svelte
     /// `.lift`): the delegate tray's fixed row. Prompts stand on top of it.
     /// Its host puts the row in and says whether it is wanted (`trayWanted`);
