@@ -112,7 +112,7 @@
 {#snippet running(ring: RingAccount)}
   <div class="flex flex-col gap-space-1">
     {#if ring.sessions.length > 0}
-      <span class="text-meta font-medium text-ink-muted"
+      <span class="font-body text-meta font-medium text-ink-muted"
         >Running
         <span data-slot="count" class="mono-figure ms-space-1"
           >{ring.sessions.length}</span
