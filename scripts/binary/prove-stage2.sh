@@ -963,11 +963,11 @@ install_hub() {
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
   # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
-  # machine has it (the socket names it there alone).
-  as_user "$hubc" curl -fsS http://127.0.0.1:3455/ | grep -q _app/immutable \
+  # machine has it (the socket names it there alone). `/` answers 307 to /session, the page with the app's markup.
+  as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
     || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
   if has_ipv6_loopback "$hubc"; then
-    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/' | grep -q _app/immutable \
+    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
       || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
   fi
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
@@ -1423,12 +1423,12 @@ units_carried() {
   as_user "$hubc" cat "$u/cawco-dashboard.socket"
   as_user "$hubc" grep -qx 'ListenStream=127\.0\.0\.1:3455' "$u/cawco-dashboard.socket" \
     || { echo "ASSERTION FAILED: the socket names no 127.0.0.1:3455"; return 1; }
-  wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/ | grep -q _app/immutable'
+  wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
   # [::1]:3455 exactly where the machine has an IPv6 loopback (cli service.ts `hasIpv6Loopback`).
   if has_ipv6_loopback "$hubc"; then
     as_user "$hubc" grep -qx 'ListenStream=\[::1\]:3455' "$u/cawco-dashboard.socket" \
       || { echo "ASSERTION FAILED: the machine has ::1, and the socket names no [::1]:3455"; return 1; }
-    as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/' | grep -q _app/immutable \
+    as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/session' | grep -q _app/immutable \
       || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
   elif as_user "$hubc" grep -q '^ListenStream=\[::1\]' "$u/cawco-dashboard.socket"; then
     echo "ASSERTION FAILED: the machine has no ::1, and the socket names one"
