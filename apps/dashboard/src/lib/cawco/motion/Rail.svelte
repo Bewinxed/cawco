@@ -175,7 +175,7 @@
   data-rail-class={className}
   data-slot="rail"
   aria-label={label}
-  class="rail {className}"
+  class="group/rail relative {className}"
   data-axis={axis}
   onfocusout={() => {
     tip = -1;
@@ -192,19 +192,19 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="thumb"
+    class="pointer-events-none absolute top-0 left-0 h-(--thumb-h) w-(--thumb-w) transform-(--thumb-move) rounded-sm bg-surface-lift opacity-(--thumb-opacity) shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:dur-morph motion-safe:data-placed:ease-in-out"
     data-placed={placed || undefined}
-    style:height={thumbBox ? `${thumbBox.h}px` : undefined}
-    style:opacity={thumbBox ? 1 : 0}
-    style:transform={translate(thumbBox, "both")}
-    style:width={thumbBox ? `${thumbBox.w}px` : undefined}
+    style:--thumb-h={thumbBox ? `${thumbBox.h}px` : undefined}
+    style:--thumb-move={translate(thumbBox, "both")}
+    style:--thumb-opacity={thumbBox ? 1 : 0}
+    style:--thumb-w={thumbBox ? `${thumbBox.w}px` : undefined}
   ></span>
   {#each items as entry, i (entry.id)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a designed radio group; a native radio cannot carry the mark, thumb and travelling label -->
     <button
       aria-checked={entry.id === value}
       aria-label={entry.label}
-      class="rail-item {itemClass}"
+      class="relative cursor-pointer rounded-sm border-0 bg-transparent p-0 text-ink-muted transition-[background-color] dur-control ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45 aria-checked:text-ink-strong {itemClass}"
       data-rail-item-class={itemClass}
       data-rail-item={entry.id}
       disabled={entry.disabled}
@@ -218,22 +218,34 @@
       style={itemStyle?.(i)}
       tabindex={entry.id === value ? 0 : -1}
       type="button"
-      class:on={entry.id === value}
     >
       {@render item(entry, i)}
     </button>
   {/each}
   {#if !labelled}
+    <!-- One label for the whole rail: beside a vertical rail, under a
+         horizontal one. -->
+    <!-- literal: calc(100% + 6px) -->
     <span
+      data-slot="tip"
       aria-hidden="true"
-      class="tip"
-      style:height={tipBox ? `${tipBox.h}px` : undefined}
-      style:opacity={tip >= 0 ? 1 : 0}
-      style:transform={translate(tipBox, axis)}
-      style:width="{tipWidth}px"
+      class="pointer-events-none absolute top-0 left-0 z-5 flex h-(--tip-h) w-(--tip-w) transform-(--tip-move) items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 opacity-(--tip-opacity) shadow-raised transition-[opacity] dur-control ease-out group-axis-x/rail:top-(--tip-top) group-axis-y/rail:left-(--tip-left)"
+      style:--tip-h={tipBox ? `${tipBox.h}px` : undefined}
+      style:--tip-left="calc(100% + 6px)"
+      style:--tip-move={translate(tipBox, axis)}
+      style:--tip-opacity={tip >= 0 ? 1 : 0}
+      style:--tip-top="calc(100% + 6px)"
+      style:--tip-w="{tipWidth}px"
     >
       {#key shownTip}
-        <span class="tip-text" bind:offsetWidth={tipWidth}
+        <!-- literal: 6px -->
+        <!-- literal: 10px -->
+        <span
+          data-slot="tip-text"
+          class="inline-flex items-center gap-(--gap) px-(--pad) font-body text-size-meta leading-none font-normal whitespace-nowrap"
+          bind:offsetWidth={tipWidth}
+          style:--gap="6px"
+          style:--pad="10px"
           >{items[shownTip]?.label}
           {#if tipExtra && items[shownTip]}
             {@render tipExtra(items[shownTip])}
@@ -245,85 +257,19 @@
 </div>
 
 <style>
-  .rail {
-    position: relative;
-  }
-  .thumb {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: var(--surface-lift);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-  }
+  /* residual: unmapped — the tip's three properties glide over different durations (needs transition token: transform/width var(--dur-morph) var(--ease-in-out), opacity var(--dur-control) var(--ease-out)) */
   @media (prefers-reduced-motion: no-preference) {
-    .thumb[data-placed] {
-      transition:
-        transform var(--dur-morph) var(--ease-in-out),
-        width var(--dur-morph) var(--ease-in-out),
-        height var(--dur-morph) var(--ease-in-out);
-    }
-  }
-  .rail-item {
-    position: relative;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--ink-muted);
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .rail-item.on {
-    color: var(--ink-strong);
-  }
-  @media (hover: hover) {
-    .rail-item:not(.on):not(:disabled):hover {
-      background: var(--surface-hover);
-    }
-  }
-  .rail-item:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-  /* One label for the whole rail: beside a vertical rail, under a
-     horizontal one. */
-  .tip {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    overflow: hidden;
-    background: var(--ink-strong);
-    color: var(--neutral-2, #fff);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
+    [data-slot="tip"] {
       transition:
         transform var(--dur-morph) var(--ease-in-out),
         width var(--dur-morph) var(--ease-in-out),
         opacity var(--dur-control) var(--ease-out);
     }
   }
-  .rail[data-axis="y"] > .tip {
-    left: calc(100% + 6px);
-  }
-  .rail[data-axis="x"] > .tip {
-    top: calc(100% + 6px);
-  }
-  .tip-text {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 10px;
-    font: var(--weight-body) var(--text-meta) / 1 var(--font-body);
-    white-space: nowrap;
-    @media (prefers-reduced-motion: no-preference) {
+
+  /* residual: keyframes */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="tip-text"] {
       animation: rail-label-in var(--dur-exit) var(--ease-out) both;
     }
   }
