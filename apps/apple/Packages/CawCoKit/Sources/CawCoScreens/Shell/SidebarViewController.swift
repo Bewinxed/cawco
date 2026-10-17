@@ -445,7 +445,7 @@ final class SidebarViewController: ObservedViewController {
         #if DEBUG
         recent.onProbe = { [weak self, weak recent] in
             guard let self else { return }
-            recent?.probeLog(rail: view, projects: projectsGroup)
+            recent?.probeLog(rail: view, projects: projectsGroup, scroll: scroll)
         }
         #endif
         // A docked keyboard covers the rail's foot: the list scrolls on under it, so Recent's search and results stay in reach.
