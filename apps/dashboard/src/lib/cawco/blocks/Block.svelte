@@ -214,7 +214,7 @@
   <div
     data-card={card || undefined}
     data-slot="block-body"
-    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-c-block-body-max group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden group-not-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-tile"
+    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-c-block-body-max group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden not-group-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-tile"
   >
     {@render children()}
   </div>
