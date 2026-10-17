@@ -1219,7 +1219,8 @@ rig_install() {
 held_loopback_install() {
   local version=$1
   as_user "$hubc" systemd-run --user --unit=cawco-proof-holder socat TCP-LISTEN:3455,bind=127.0.0.1,reuseaddr,fork SYSTEM:'echo held'
-  wait_until 20 '[[ "$(as_user "$hubc" curl -s --max-time 2 http://127.0.0.1:3455/ || true)" == *held* ]]'
+  # The holder answers a bare line with no HTTP headers, which curl reads only with --http0.9.
+  wait_until 20 '[[ "$(as_user "$hubc" curl -s --http0.9 --max-time 2 http://127.0.0.1:3455/ || true)" == *held* ]]'
   as_user "$hubc" sh /shared/installer.sh
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3000/session | grep -q _app/immutable \
