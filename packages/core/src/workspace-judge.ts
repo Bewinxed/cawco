@@ -427,7 +427,7 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * what the hub does to the file on the session's behalf. Read: the hub
  * reads it and hands it to the person or a service, never back to the
  * session — `show_image`'s `path` (the dashboard renders it from disk),
- * `send_to_user`'s `attachments` (sent to Telegram), `artifact_create`'s
+ * `send_to_user`'s `attachments` (shown in the transcript), `artifact_create`'s
  * `dir` (a preview's folder served, or a page's page.html read) and
  * `generate_image`'s `reference_images` (uploaded with the prompt). Write:
  * `generate_image`'s `output_path`, the new PNG. Each is judged against the

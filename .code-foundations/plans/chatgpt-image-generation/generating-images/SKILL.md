@@ -43,7 +43,7 @@ promise that prompting will preserve every pixel.
 4. Call the tool once per requested image. Size and quality are requests to the
    backend; use the returned dimensions as the actual result.
 5. Show the returned `path` with CawCo's `show_image` tool. Use `send_to_user`
-   with an attachment when the user needs delivery to Telegram.
+   with an attachment when the user needs it pushed to their phone.
 
 The tool uses the owner's configured ChatGPT OAuth account. Never supply an API
 key, select a different provider, or delegate generation to another model.

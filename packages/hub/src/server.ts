@@ -444,6 +444,7 @@ import {
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
+import { dashboardUrl, secureDashboardUrl } from "./dashboard-url";
 import type {
   AgentAuth,
   BoardInstanceRow,
@@ -561,7 +562,9 @@ import { createNoticesSeen } from "./notices";
 import {
   askCollapseId,
   createNotifications,
+  messageCollapseId,
   notificationRoutes,
+  runCollapseId,
   turnCollapseId,
 } from "./notifications";
 import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
@@ -678,12 +681,6 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import {
-  dashboardUrl,
-  type MediaReader,
-  secureDashboardUrl,
-  type TelegramBridge,
-} from "./telegram";
 import { createThreadRepair } from "./thread-repair";
 import {
   createTranscripts,
@@ -1348,8 +1345,6 @@ export interface HubServices {
   readonly lifetime: HubLifetimeShape;
   readonly pending: PendingShape;
   readonly registry: RegistryShape;
-  /** Absent unless the hub was given a bot token; every call site guards for it. */
-  readonly telegram?: TelegramBridge;
 }
 
 const isEnvelope = (value: unknown): value is Envelope =>
@@ -2526,7 +2521,7 @@ export interface ServerOptions {
 }
 
 export const createServer = (
-  { build: hubBuild, registry, db, pending, telegram, lifetime }: HubServices,
+  { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { background = true }: ServerOptions = {}
 ) => {
   // Honest ground, before anything is served. A fresh process holds no agent
@@ -2677,7 +2672,7 @@ export const createServer = (
   };
 
   // An ask that leaves the hub's pending list is over on every screen: one
-  // frame, whichever path settled it (an answer from any device, Telegram, a
+  // frame, whichever path settled it (an answer from any device, a
   // parent session or a workflow; a harness settling it itself; a timeout; its
   // process ending). Without it every other client kept a card nobody could
   // answer until it reconnected. An answer in flight carries what it says and
@@ -2693,7 +2688,6 @@ export const createServer = (
   // client had the session in front since it landed, cleared on every device
   // once it is over.
   const notifications = createNotifications({ db, lifetime, registry });
-  telegram?.setNotifications(notifications);
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
     db,
@@ -2704,7 +2698,7 @@ export const createServer = (
   /**
    * An ask the hub itself raises for the person — a workflow's question, an
    * admin write — parked like a session's own: on the pending ledger, to every
-   * dashboard, and to Telegram and push the first time.
+   * dashboard, and to push the first time.
    */
   const parkForPerson = (envelope: Envelope, outlivesHub = false): void => {
     if (!envelope.requestId) {
@@ -2721,7 +2715,6 @@ export const createServer = (
           !existed &&
           (envelope.payload as { routedTo?: string }).routedTo !== "parent"
         ) {
-          telegram?.onAsk(envelope);
           push.onAsk(envelope);
         }
       }
@@ -2971,7 +2964,7 @@ export const createServer = (
     const answer =
       outcome === "answered" ? (answering?.answer ?? said?.answer) : undefined;
     push.onSettled(parked.requestId);
-    // Over on every device: its push taken down, its Telegram message deleted.
+    // Over on every device: its push taken down.
     notifications.clear([askCollapseId(parked.requestId)], "settled");
     // An admin write whose ask left unanswered (its session ended) is refused.
     if (outcome === "cancelled") {
@@ -4177,8 +4170,8 @@ export const createServer = (
 
   /**
    * Drops a dead process's parked questions, telling whoever carried them
-   * elsewhere that they are over — a Telegram message whose buttons still work
-   * after the session behind them is gone is a message that lies.
+   * elsewhere that they are over — a push whose buttons still work after the
+   * session behind them is gone is a notification that lies.
    */
   const forgetPending = (
     instanceId: string,
@@ -4356,8 +4349,8 @@ export const createServer = (
   /**
    * A session just died — a parent, or a project's lead — while an ask routed
    * to it was still parked. The user is the fallback: re-broadcast the ask
-   * untagged so it returns to the attention queue, and let Telegram and push
-   * hear it like any other. A routed ask must never sit unanswerable and
+   * untagged so it returns to the attention queue, and let push hear it like
+   * any other. A routed ask must never sit unanswerable and
    * invisible.
    */
   const escalateRoutedAsks = (recipientId: string): void => {
@@ -4372,7 +4365,6 @@ export const createServer = (
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
       registry.broadcast(clientCopy(parked));
-      telegram?.onAsk(parked);
       push.onAsk(parked);
     }
   };
@@ -10800,7 +10792,7 @@ export const createServer = (
 
   /**
    * Every summariser session this hub has started, its rows' kind: internal
-   * workers no rule, fleet watch, usage count, hand-back or Telegram hears, and
+   * workers no rule, fleet watch, usage count or hand-back hears, and
    * no board lists. Seeded from the rows, so a hub restart still knows them.
    */
   const summarisers = new Set(
@@ -13948,8 +13940,6 @@ export const createServer = (
   };
 
   hubAuth.setHooks({
-    asked: (request) => telegram?.askPairing(request),
-    settled: (code, verdict) => telegram?.settlePairing(code, verdict),
     changed: (frame) =>
       registry.broadcast({
         verb: "frames",
@@ -13996,10 +13986,6 @@ export const createServer = (
       }
     },
   });
-  // The pinned chat approves a pairing as a paired device does.
-  telegram?.setPairingAnswer((code, approve) =>
-    hubAuth.answer(code, approve, "via Telegram")
-  );
   // A hub that requires paired devices keys its own machine at every start,
   // so its agent never waits for a click.
   const keyAtStart = () => {
@@ -14560,8 +14546,6 @@ export const createServer = (
       behavior === "deny" ? "denied" : "answered"
     );
   };
-  // Telegram's replies use the same recorded send path as every other device.
-  telegram?.setSender((envelope) => deliverSend(envelope)?.state !== "failed");
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
     for (const install of pendingInstalls.values()) {
@@ -15086,18 +15070,26 @@ export const createServer = (
 
   /**
    * One picture or video off a machine's disk, read the moment someone looks
-   * at it: the transcript card and the Telegram bridge both point at the path
-   * an agent named, and nothing is copied anywhere in between. A file the
+   * at it: the transcript card points at the path an agent named, and
+   * nothing is copied anywhere in between. A file the
    * machine will not hand over (moved, not a picture or video, over the size
    * limit) answers with the machine's own reason.
    */
-  const readMachineMedia: MediaReader = async (machineId, path) => {
+  const readMachineMedia = async (
+    machineId: string,
+    path: string
+  ): Promise<
+    | { bytes: Uint8Array<ArrayBuffer>; mediaType: string }
+    | "offline"
+    | "timeout"
+    | { refused: string }
+  > => {
     const agent = registry.agent(machineId);
     if (!agent) {
       return "offline";
     }
     const answer = await callFs(machineId, agent, { op: "media", path });
-    // MediaReader's own words for no answer (telegram.ts): "offline", "timeout".
+    // Its own words for no answer: "offline", "timeout".
     switch (answer.kind) {
       case "unanswered":
         return answer.reason === "dead" ? "offline" : "timeout";
@@ -15117,9 +15109,6 @@ export const createServer = (
     const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
     return { bytes, mediaType };
   };
-
-  // Registered here, after the reader exists — same shape as the answer recorder.
-  telegram?.setMediaReader(readMachineMedia);
 
   /**
    * Writes every fleet subagent into the user layer's `agents/` on one machine
@@ -15690,7 +15679,7 @@ export const createServer = (
    * would report the same outcome twice in two dialects.
    */
   /**
-   * One answer transaction for dashboards, Telegram and parent tools. The
+   * One answer transaction for dashboards, the app and parent tools. The
    * machine's receipt and the ledger's settlement must both precede success.
    * `from` is where it was given, said to every screen with the ask's end.
    */
@@ -17788,14 +17777,7 @@ export const createServer = (
         workflowId,
         resolveWorkflow: db.getWorkflow,
       }),
-    notifyUser: (text) => {
-      telegram?.onUserMessage({
-        verb: "frames",
-        machineId: "hub",
-        instanceId: "workflow",
-        payload: { kind: "user_message", instanceId: "workflow", text },
-      });
-    },
+    notifyPerson: (runId, text) => push.workflowNote(runId, text),
     supervisor: async (type, cwd, machineId, title, prompt) => {
       const preset = delegateTypes.list().find((entry) => entry.name === type);
       if (!preset) {
@@ -19082,10 +19064,7 @@ export const createServer = (
     triageTools: (actor) => watch?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
       adminAsks.ask(actor, name, input, toolUseId),
-    sendToUser: telegram
-      ? (actor, message, attachments) =>
-          telegram.deliver(actor.machineId, actor.id, message, attachments)
-      : undefined,
+    sendToUser: (actor, message) => push.userMessage(actor.id, message),
     shownRefusal: (actor, tool, paths) =>
       shownRefusal(shownDeps, {
         instanceId: actor.id,
@@ -20055,7 +20034,8 @@ export const createServer = (
    * its parent told why, as every row in `error` takes its item
    * (work-items `followSessions`, on this publish) — and what it was sent
    * and never read waits, owed, for the session's next start, or fails with
-   * it when its conversation is gone.
+   * it when its conversation is gone. The owner's own session pushes that
+   * it failed (push.ts `sessionFailed`).
    */
   const processFailed = (
     machineId: string,
@@ -20068,9 +20048,7 @@ export const createServer = (
     workflowRuntime.observe(instanceId, reason);
     losePending(instanceId, reason !== CLAUDE_CONVERSATION_GONE, reason);
     escalateRoutedAsks(instanceId);
-    if (!summarisers.has(instanceId)) {
-      telegram?.onError(instanceId, reason);
-    }
+    push.sessionFailed(instanceId, reason);
     publishInstances(machineId);
   };
 
@@ -21451,10 +21429,10 @@ export const createServer = (
       )
       // The hub's own build rides along (NEW.md §12), so a machine's can be read
       // against something rather than taken on faith. `dashboard` is where the
-      // web dashboard is reached (the one a Telegram link opens): the app
-      // takes a person there for what it has no screen of its own for yet.
-      // `secureDashboard` is its https address, or null: where the app's
-      // OpenRouter sign-in returns (telegram.ts `secureDashboardUrl`).
+      // web dashboard is reached: the app takes a person there for what it
+      // has no screen of its own for yet. `secureDashboard` is its https
+      // address, or null: where the app's OpenRouter sign-in returns
+      // (dashboard-url.ts `secureDashboardUrl`).
       .get("/health", hidden, async () => ({
         ok: true,
         version: HUB_VERSION,
@@ -22536,12 +22514,15 @@ export const createServer = (
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, runIds, at);
           if (body.kind === "look") {
-            // Looked at: its finished turn and its asks are read, so their
+            // Looked at: a session's finished turn or failure, its message
+            // and its asks, and a run's note, are read, so their
             // notifications come down.
             const looked = new Set(instanceIds);
             notifications.clear(
               [
                 ...instanceIds.map((id) => turnCollapseId(id)),
+                ...instanceIds.map((id) => messageCollapseId(id)),
+                ...runIds.map((id) => runCollapseId(id)),
                 ...pending
                   .list()
                   .flatMap((parked) =>
@@ -27105,7 +27086,7 @@ export const createServer = (
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after
                 // every register) refreshes the parked copy without a second
-                // Telegram message or a second routing decision.
+                // push or a second routing decision.
                 const parkedBefore = pending.get(message.requestId);
                 const alreadyParked = parkedBefore !== undefined;
                 // A project lead's question, or a call of his on your card,
@@ -27204,7 +27185,6 @@ export const createServer = (
                     "parent";
                   deliverDelegateAsk(sender, parent, clientCopy(message));
                 } else if (!internal) {
-                  telegram?.onAsk(message);
                   push.onAsk(message);
                 }
               }
@@ -27218,7 +27198,7 @@ export const createServer = (
               // goes no further.
               if (kind === "permission_settled") {
                 // Most of these echo an answer the hub relayed and has already
-                // settled; only one still parked is news to Telegram.
+                // settled; only one still parked is news here.
                 const parked = message.requestId
                   ? pending.get(message.requestId)
                   : undefined;
@@ -27702,11 +27682,6 @@ export const createServer = (
                     `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`
                 );
               }
-              // A session's message to the owner, pushed without an ask: straight
-              // to the bridge, tracked so a reply reaches the session that wrote it.
-              if (kind === "user_message" && !internal) {
-                telegram?.onUserMessage(message);
-              }
               // An install answering, whoever asked for it: the cell is the hub's
               // to keep, and the reply still goes wherever it was going.
               const install = message.requestId
@@ -28074,7 +28049,7 @@ export const createServer = (
           }
           registry.addDashboard(ws, older);
           // The one moment the hub learns a URL that reaches its own dashboard:
-          // this browser just used one. See `dashboardUrl` in telegram.ts.
+          // this browser just used one. See `dashboardUrl` in dashboard-url.ts.
           registry.noteDashboardOrigin(page);
           // Its previews may be framed from it, and from no other origin.
           noteParent(page);

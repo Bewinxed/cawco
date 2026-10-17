@@ -1134,7 +1134,7 @@ public final class HubConnection {
     }
 
     /// Where the web dashboard is reached, as the hub says (`/health`
-    /// `dashboard`, the address its Telegram links open): where a project's
+    /// `dashboard`, the address its links open): where a project's
     /// custom views load from.
     public func dashboardAddress() async throws -> URL {
         guard let address else { throw URLError(.notConnectedToInternet) }

@@ -52,8 +52,7 @@
  *   newest background push for a device, and Apple asks for "two or three
  *   per hour".
  *
- * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run —
- * the Telegram bridge's `CAWCO_TELEGRAM_API` precedent.
+ * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
 import {
   DESIGN_PROPOSAL_TOOL,
@@ -75,8 +74,10 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   askCollapseId,
+  messageCollapseId,
   type Notifications,
   needsCollapseId,
+  runCollapseId,
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
@@ -137,6 +138,12 @@ const MAX_INLINE_OPTIONS = 3;
 const LOOK_GRACE_MS = 5000;
 /** A finished turn's visible body: the reply itself goes sealed. */
 const TURN_ENDED = "Finished its turn";
+/** A session's `send_to_user`'s visible body: the message itself goes sealed. */
+const SENT_YOU = "Sent you a message";
+/** A failed session's visible body: the reason goes sealed. */
+const FAILED = "Failed";
+/** A workflow run's note's visible body: the note itself goes sealed. */
+const NOTE = "Note";
 /** A memory proposal's visible title (memory.ts): what it is, its project under it. */
 const MEMORY_PROPOSAL_NAME = "Memory proposal";
 /** A design proposal's visible title (design-system.ts): what it is, its project under it. */
@@ -224,6 +231,14 @@ export type PushData =
       kind: "action";
       actionId: string;
       projectId: string;
+    }
+  | {
+      /**
+       * A workflow run with no supervisor left a note (`notify`): opens the
+       * run. The app opens the board for a kind it does not know.
+       */
+      kind: "run";
+      runId: string;
     }
   | {
       /** Several things need you at once (a burst): opens Needs you. */
@@ -1001,7 +1016,6 @@ export const createPush = ({
         over ||
         shown.has(id) ||
         notifications.passes({
-          outlet: "push",
           collapseId: id,
           instanceId: item.instanceId,
           landedAt: item.landedAt.getTime(),
@@ -1191,8 +1205,8 @@ export const createPush = ({
   return {
     /**
      * A session (or a workflow) is blocked on you: a permission or a question.
-     * Call wherever the ask reaches the operator (beside the Telegram
-     * bridge's `onAsk`); a request is pushed once however often it is called.
+     * Call wherever the ask reaches the operator; a request is pushed once
+     * however often it is called.
      */
     onAsk(envelope: Envelope): void {
       const payload = envelope.payload as Partial<PermissionRequestFrame> & {
@@ -1567,6 +1581,140 @@ export const createPush = ({
         },
       });
       console.log(`[push] fleet watch ${notice.instanceId}: needs you`);
+    },
+
+    /**
+     * A session's `send_to_user`: the words are in its transcript, and this
+     * tells the person they are there. The session push's shape (opens the
+     * session, Reply writes to it); the visible words say who and "Sent you
+     * a message", the sealed ones the message's first line. A newer message
+     * from the same session replaces the older; a look at the session takes
+     * it down.
+     */
+    userMessage(instanceId: string, text: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      const project = projectName(row.projectId);
+      arrive(
+        {
+          ask: false,
+          instanceId,
+          landedAt: new Date(),
+          still: () => true,
+          notification: {
+            shown: alertOf(
+              sessionName(instanceId) ?? "A session",
+              project,
+              SENT_YOU
+            ),
+            sealed: alertOf(
+              boardTitle(row),
+              project,
+              firstLine(text) ?? SENT_YOU
+            ),
+            category: PUSH_CATEGORIES.turn,
+            collapseId: messageCollapseId(instanceId),
+            threadId: row.projectId ?? instanceId,
+            data: {
+              kind: "turn",
+              instanceId,
+              machineId: row.machineId,
+              projectId: row.projectId ?? null,
+            },
+          },
+        },
+        false
+      );
+      console.log(`[push] message from ${instanceId}`);
+    },
+
+    /**
+     * A session failed to start, or its process died (server.ts
+     * `processFailed`). Pushes for the sessions {@link turnEnded} pushes for,
+     * the ones the owner started: a delegate's failure is its parent's to
+     * hear. Under the session's turn collapse id, so it replaces a finished
+     * turn's push and a look at the session takes it down. The visible words
+     * say who and "Failed", the sealed ones the reason's first line.
+     */
+    sessionFailed(instanceId: string, reason: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (
+        !row ||
+        row.parentInstanceId ||
+        row.workflowStepId ||
+        row.workItemId ||
+        row.kind === "summariser" ||
+        row.role === "lead"
+      ) {
+        return;
+      }
+      const project = projectName(row.projectId);
+      arrive(
+        {
+          ask: false,
+          instanceId,
+          landedAt: new Date(),
+          still: () => true,
+          notification: {
+            shown: alertOf(
+              sessionName(instanceId) ?? "A session",
+              project,
+              FAILED
+            ),
+            sealed: alertOf(
+              boardTitle(row),
+              project,
+              firstLine(reason) ?? FAILED
+            ),
+            category: PUSH_CATEGORIES.turn,
+            collapseId: turnCollapseId(instanceId),
+            threadId: row.projectId ?? instanceId,
+            data: {
+              kind: "turn",
+              instanceId,
+              machineId: row.machineId,
+              projectId: row.projectId ?? null,
+            },
+          },
+        },
+        false
+      );
+      console.log(`[push] session ${instanceId}: failed`);
+    },
+
+    /**
+     * A workflow run with no supervisor said `notify` (workflows/runtime.ts):
+     * its words are in the run's log, and this tells the person they are
+     * there. Open only, to the run. The visible words say the workflow's name
+     * and "Note", the sealed ones the note's first line. A newer note from
+     * the same run replaces the older; a look at the run takes it down.
+     */
+    workflowNote(runId: string, text: string): void {
+      const run = db.getWorkflowRun(runId);
+      if (!run) {
+        return;
+      }
+      const name = db.getWorkflow(run.workflowId)?.name ?? "A workflow";
+      arrive(
+        {
+          ask: false,
+          instanceId: null,
+          landedAt: new Date(),
+          still: () => true,
+          notification: {
+            shown: alertOf(name, null, NOTE),
+            sealed: alertOf(name, null, firstLine(text) ?? NOTE),
+            category: PUSH_CATEGORIES.taskOpenOnly,
+            collapseId: runCollapseId(runId),
+            threadId: runId,
+            data: { kind: "run", runId },
+          },
+        },
+        false
+      );
+      console.log(`[push] workflow run ${runId}: note`);
     },
 
     /**

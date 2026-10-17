@@ -1,7 +1,7 @@
 /**
  * What a permission prompt says, in plain words, on every surface: the
- * dashboard's composer card, the iOS parked prompt, the Telegram message and
- * the attention rails. The hub reads each ask once, as it parks it, and stamps
+ * dashboard's composer card, the iOS parked prompt, the push and the
+ * attention rails. The hub reads each ask once, as it parks it, and stamps
  * the result on the `permission_request` frame ({@link PermissionPresentation});
  * every surface renders that and reads nothing of the tool's input itself, so
  * no two of them can word the same ask two ways.
@@ -183,13 +183,6 @@ function statWords(stat: LineStat): string {
     ? `${amount} across ${plural(sections.length, "section")}`
     : amount;
 }
-
-/** The short form Telegram carries: "+3 −1". */
-export const changeStat = (changes: PermissionChange[]): string => {
-  const added = changes.reduce((sum, each) => sum + each.added, 0);
-  const removed = changes.reduce((sum, each) => sum + each.removed, 0);
-  return `+${added} −${removed}`;
-};
 
 const changeOf = (
   path: string,

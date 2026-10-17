@@ -881,7 +881,7 @@
     <!-- What will happen and why, then the command or the change itself: a
          grant is made on what runs, never on a sentence about it alone. The
          words are the hub's (core permission-presentation.ts), the same on
-         iOS and Telegram; secrets in the fields are already hidden. -->
+         iOS; secrets in the fields are already hidden. -->
     <div data-slot="body" class="body part" style:--part="1">
       <p data-slot="lede" class="lede summary">{presentation.summary}</p>
       {#if presentation.detail}

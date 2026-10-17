@@ -6,7 +6,7 @@
  *
  * The log line is built from the error's name and message only. A fetch error
  * carries the request URL in its other fields (Bun's `path`), and a URL can
- * hold a credential, as Telegram's bot URLs do.
+ * hold a credential.
  */
 export function detach(work: Promise<unknown>, what: string): void {
   work.catch((error: unknown) => {

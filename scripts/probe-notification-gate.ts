@@ -9,8 +9,8 @@
  *
  * Run from the repo root after `bunx vite build` in apps/dashboard. A scratch
  * fleet (scratch-fleet.ts) runs a real hub, agent and Claude Code session;
- * Cawrier and the Telegram Bot API are local stand-ins that record every
- * request (`CAWCO_CAWRIER_ORIGIN`, `CAWCO_TELEGRAM_API`). One registered
+ * Cawrier is a local stand-in that records every request
+ * (`CAWCO_CAWRIER_ORIGIN`). One registered
  * device; a built dashboard served by `vite preview` with the session open in
  * Chromium (playwright-core); a second raw dashboard socket; a scripted iOS
  * client that beats through the API and never posts a look.
@@ -22,13 +22,12 @@
  *
  *  (b) a turn ending while the tab is active on the session: never pushed,
  *      before or after the blur;
- *  (a) an ask while the tab is active: no push, no Telegram, and none after
- *      the blur either; the hub logs it dropped on both outlets;
- *  (s) an ask while nobody is in front: push and Telegram at once;
+ *  (a) an ask while the tab is active: no push, and none after the blur
+ *      either; the hub logs it dropped;
+ *  (s) an ask while nobody is in front: pushed at once;
  *  (c) dismissing it through the API: the `notificationsCleared` frame on the
  *      second socket, one background push with the whole set, the next
  *      visible push carrying the id, a second clear coalesced;
- *  (d) Telegram: the ask's message deleted on the clear;
  *  (f) a late dismissal (`deliveredAt`): one delivered before the id's latest
  *      send leaves it standing (a pending ask, and the turn id re-pushed by
  *      the next turn), one delivered after clears it, and one without
@@ -75,7 +74,7 @@ const pause = (ms: number) => Bun.sleep(ms);
 const t0 = Date.now();
 const clock = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
 
-// ── The stand-ins: Cawrier and the Bot API, recording every request ─────
+// ── The stand-in: Cawrier, recording every request ──────────────────────
 interface PushSent {
   at: number;
   body: {
@@ -104,58 +103,6 @@ const cawrier = Bun.serve({
   },
 });
 
-interface BotCall {
-  at: number;
-  body: Record<string, unknown>;
-  /** The id a sendMessage was answered with. */
-  messageId?: number;
-  method: string;
-}
-const bot: BotCall[] = [];
-let nextMessage = 100;
-let pinned = false;
-const telegram = Bun.serve({
-  hostname: "127.0.0.1",
-  port: 0,
-  idleTimeout: 0,
-  async fetch(request) {
-    const method = new URL(request.url).pathname.split("/").pop() ?? "";
-    const body = (await request.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
-    if (method === "getUpdates") {
-      if (!pinned) {
-        pinned = true;
-        return Response.json({
-          ok: true,
-          result: [
-            {
-              update_id: 1,
-              message: { message_id: 1, chat: { id: 42 }, text: "hello" },
-            },
-          ],
-        });
-      }
-      await pause(5000);
-      return Response.json({ ok: true, result: [] });
-    }
-    bot.push({ at: Date.now(), method, body });
-    console.log(
-      `  ${clock()} telegram ← ${method} ${method === "sendMessage" ? JSON.stringify(String(body.text).slice(0, 60)) : JSON.stringify(body.message_id ?? "")}`
-    );
-    if (method === "sendMessage") {
-      nextMessage += 1;
-      (bot.at(-1) as BotCall).messageId = nextMessage;
-      return Response.json({
-        ok: true,
-        result: { message_id: nextMessage, chat: { id: 42 } },
-      });
-    }
-    return Response.json({ ok: true, result: true });
-  },
-});
-
 // ── The fleet ──────────────────────────────────────────────────────────
 // An ASK- prompt calls Bash once, which parks for the owner; its result ends the turn.
 const respond = (request: Seen): Reply => {
@@ -173,8 +120,6 @@ const respond = (request: Seen): Reply => {
 };
 const fleet = await scratchFleet({ name: "probe-notification-gate", respond });
 fleet.env.CAWCO_CAWRIER_ORIGIN = `http://127.0.0.1:${cawrier.port}`;
-fleet.env.CAWCO_TELEGRAM_API = `http://127.0.0.1:${telegram.port}`;
-fleet.env.CAWCO_TELEGRAM_TOKEN = "123456:gate-probe-fake";
 
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
@@ -188,11 +133,6 @@ const pushesFor = (collapseId: string) =>
   pushes.filter((push) => push.body.collapseId === collapseId);
 const backgrounds = () =>
   pushes.filter((push) => push.body.pushType === "background");
-const askMessages = () =>
-  bot.filter(
-    (call) =>
-      call.method === "sendMessage" && call.body.reply_markup !== undefined
-  );
 
 /** The tab's own blur or focus: `hasFocus()` answers it and the window hears the event. */
 const setFocus = (page: Page, focused: boolean) =>
@@ -238,12 +178,6 @@ try {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  await until(
-    "the Telegram chat pinned",
-    () => bot.find((call) => call.method === "sendMessage"),
-    Boolean,
-    60_000
-  );
   const pairingId = crypto.randomUUID();
   await fleet.api("/api/push/register", {
     pairingId,
@@ -393,7 +327,6 @@ try {
   );
 
   // ── (a) An ask while the tab is active: never sent ───────────────────
-  const telegramBefore = askMessages().length;
   await fleet.send(session, "ASK-1: run the command");
   const ask1 = await found("the ask parked", () => askOf(session), 120_000);
   const ask1Id = `ask-${ask1}`;
@@ -403,24 +336,18 @@ try {
     pushesFor(ask1Id).length === 0,
     `${pushesFor(ask1Id).length} pushes under ${ask1Id} 8s after it parked`
   );
-  check(
-    "(a) no Telegram message while active",
-    askMessages().length === telegramBefore,
-    `${askMessages().length - telegramBefore} ask messages sent`
-  );
   const dropped1 = await logged(ask1Id, "dropped");
   check(
-    "(a) dropped by the gate on push and Telegram",
-    dropped1.some((line) => line.includes("push")) &&
-      dropped1.some((line) => line.includes("telegram")),
+    "(a) dropped by the gate",
+    dropped1.some((line) => line.includes("push")),
     dropped1.join(" | ")
   );
   await setFocus(page, false);
   await pause(12_000);
   check(
     "(a) nothing sent once the tab blurred",
-    pushesFor(ask1Id).length === 0 && askMessages().length === telegramBefore,
-    `${pushesFor(ask1Id).length} pushes, ${askMessages().length - telegramBefore} ask messages 12s after the blur (last beat ${JSON.stringify(lastBeat())})`
+    pushesFor(ask1Id).length === 0,
+    `${pushesFor(ask1Id).length} pushes 12s after the blur (last beat ${JSON.stringify(lastBeat())})`
   );
 
   // The tab leaves (a real pagehide); the ask is answered and the turn
@@ -446,7 +373,6 @@ try {
   );
 
   // ── (s) An ask while nobody is in front goes at once ─────────────────
-  const telegramBefore2 = askMessages().length;
   const ask2Start = Date.now();
   await fleet.send(session, "ASK-2: run it again");
   const ask2 = await found(
@@ -461,16 +387,10 @@ try {
     Boolean,
     30_000
   );
-  const askTelegram = await until(
-    "the second ask's Telegram message",
-    () => askMessages()[telegramBefore2],
-    Boolean,
-    30_000
-  );
   check(
-    "(s) push and Telegram at once",
-    ask2Push.at - ask2Start < 60_000 && askTelegram.at - ask2Start < 60_000,
-    `push ${ask2Push.at - ask2Start}ms, Telegram ${askTelegram.at - ask2Start}ms after the prompt`
+    "(s) pushed at once",
+    ask2Push.at - ask2Start < 60_000,
+    `push ${ask2Push.at - ask2Start}ms after the prompt`
   );
 
   // ── (c) Dismissed through the API ────────────────────────────────────
@@ -502,17 +422,6 @@ try {
       (firstBackground.body.payload.cawco?.cleared ?? []).includes(ask2Id) &&
       firstBackground.body.collapseId === undefined,
     JSON.stringify(firstBackground.body)
-  );
-  const askMessageId = askTelegram.messageId;
-  const deleted = await found(
-    "the ask's Telegram message deleted",
-    () => bot.find((call) => call.method === "deleteMessage"),
-    10_000
-  );
-  check(
-    "(d) Telegram message deleted on the clear",
-    deleted.body.message_id === askMessageId,
-    `deleteMessage ${JSON.stringify(deleted.body)} (the ask was message ${askMessageId})`
   );
 
   // The next visible push carries the id: the ask is answered and its turn,
@@ -682,7 +591,6 @@ try {
   // An ask while it is active; then it stops beating and lapses.
   await ios(true);
   const beatAt = Date.now();
-  const telegramBefore5 = askMessages().length;
   await fleet.send(session, "ASK-5: and again");
   const ask5 = await found(
     "the fifth ask parked",
@@ -703,14 +611,13 @@ try {
   check(
     "(e) an ask while iOS was active is never sent, through its lapse",
     pushesFor(ask5Id).length === 0 &&
-      askMessages().length === telegramBefore5 &&
-      (await logged(ask5Id, "dropped")).length === 2,
-    `${pushesFor(ask5Id).length} pushes, ${askMessages().length - telegramBefore5} ask messages ${Math.round((Date.now() - beatAt) / 1000)}s after its only beat; ${lapsed}`
+      (await logged(ask5Id, "dropped")).length === 1,
+    `${pushesFor(ask5Id).length} pushes ${Math.round((Date.now() - beatAt) / 1000)}s after its only beat; ${lapsed}`
   );
 
   await writeFile(
     join(out, "captures.json"),
-    JSON.stringify({ pushes, bot, frames, presence }, null, 2)
+    JSON.stringify({ pushes, frames, presence }, null, 2)
   );
   console.log(`  captures: ${join(out, "captures.json")}`);
   const notify = (await hubLog())
@@ -730,7 +637,6 @@ try {
   await fleet.close();
   await fleet.clean(keep);
   cawrier.stop(true);
-  telegram.stop(true);
 }
 console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

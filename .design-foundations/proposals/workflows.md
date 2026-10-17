@@ -164,7 +164,7 @@ says so in the step prompt.
 
 Parks a question in the hub's pending ledger (`pending.ts`) with `requestKind: "question"`
 — the shape `AskUserQuestion` parks — so it appears in the board's needs-you count, under
-the run in the rail, and on Telegram via `telegram.onAsk`. The run is `waiting`. The answer
+the run in the rail, and on the phone via `push.onAsk`. The run is `waiting`. The answer
 `{ choice, note? }` is the node's result. `answeredBy: "operator" | "supervisor"` (default
 operator); `supervisor` on an unsupervised run is a launch-time refusal. `waitFor` (hours)
 optional; expiry fails the run `ask-timeout`. Dismissal cancels the run.
@@ -478,7 +478,7 @@ Left: collapsible **Steps** list in schedule order — the narrow-width primary 
 **Answer** (when `waiting`, inline options), **Cancel run** (destructive, leading, confirm
 names live sessions), **Re-run from step** (drawer), **Supervisor** link when one exists.
 **States:** Loading Tier 3. Running = Tier 4 by definition — the Steps list is the
-step-and-count, Telegram is out-of-band, **Cancel run** is the interrupt. Waiting: `needs
+step-and-count, push is out-of-band, **Cancel run** is the interrupt. Waiting: `needs
 you` on the ask node + **Answer**. Terminal: header chip; End node auto-selected with the
 run result. Unknown (machine unreachable): step chip reads `unknown`, nothing claims running.
 **Narrow:** Steps list first; canvas a secondary tab; drawer a sheet.
@@ -527,7 +527,7 @@ bumps land with the code that exercises them.
    cancel and cycle validation. Verify with curl: create the §10 graph
    (minus `command` rules), launch on a live machine → `distill` `running` with a live
    instance → `passed` after `submit_result`; a step that never submits retries on the same
-   session then fails `no-result`; an `ask` shows in `/api/pending` and Telegram and resumes
+   session then fails `no-result`; an `ask` shows in `/api/pending` and the push and resumes
    on answer; cancel stops the live session; a parent workflow whose `workflow` node calls
    the summarise workflow reaches `done` with the child's outputs on the node, the child run
    row carries `parentRunId`, cancelling the parent cancels the child, and saving A→B→A is
@@ -602,7 +602,7 @@ worker exposes only `w`, `z`, and the language.
 | `w.state(name, schema)` → `{ get, set, update }` | Onyx's shared store: named, zod-typed, persisted per run in `workflow_runs.state`; step sessions get `workflow_state_read(name)` / `workflow_state_write(name, value)` tools validated against the schema | new |
 | `await w.checkpoint(label, data?)` | progress marker: a `workflow` frame, a line to the supervisor, visible in the run view | new |
 | `await w.sleep(ms)` · `w.now()` | durable timer; journaled clock | new |
-| `w.notify(text)` | message to supervisor if any, else operator (Telegram) | §3.7 |
+| `w.notify(text)` | message to supervisor if any, else operator (push) | §3.7 |
 | `w.log(text)` | run log line | new |
 
 Failures are typed: `run`/`spawn` reject with `StepError { kind: "no-result" \| "attempt-timeout" \| "harness-error" \| "cancelled", stepId, attempts }`; `ask` with `AskError { kind: "timeout" \| "dismissed" }`; `workflow` with `ChildError`. An uncaught error fails the run with that error as `failure`; `try/catch` is the `fail` port. Supervisor verbs (§3.7) are unchanged; `note` is delivered as `w.notes()` (drained on read) and appended to the next `run` prompt suffix as before.

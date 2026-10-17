@@ -103,6 +103,10 @@ public struct PushNote: Sendable {
         case "turn":
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
             return .board
+        // A workflow run's note: the run's conversation.
+        case "run":
+            if let runId = fields["runId"], !runId.isEmpty { return .session(BoardRun.prefix + runId) }
+            return .board
         case "task", "attempt":
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }

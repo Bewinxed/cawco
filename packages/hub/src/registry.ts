@@ -154,7 +154,7 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
   /**
    * The last origin a dashboard reached this hub from. Kept rather than derived
    * because the hub has no other way to learn it — see `dashboardUrl` in
-   * `telegram.ts`. Newest wins: an operator who has moved to a new hostname is
+   * `dashboard-url.ts`. Newest wins: an operator who has moved to a new hostname is
    * telling the hub so by opening the dashboard there.
    */
   let lastDashboardOrigin: string | undefined;

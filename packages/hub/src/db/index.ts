@@ -127,7 +127,6 @@ import {
   connectionProjects,
   connectorPolls,
   continuations,
-  credentials,
   delegateEvents,
   eventRoutes,
   fleetAgents,
@@ -852,7 +851,6 @@ export interface DbShape {
   readonly formerIds: () => Record<string, string>;
   /** When a session last started again fresh; null when it never did. */
   readonly freshStartOf: (id: string) => number | null;
-  readonly getCredential: (id: string) => Record<string, unknown> | undefined;
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () =>
@@ -1286,7 +1284,7 @@ export interface DbShape {
   readonly noteTurnEnded: (id: string, at: Date) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
-  /** What a device or Telegram was shown and what has been cleared, by collapse id (notifications.ts). */
+  /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
   readonly notifications: {
     /** Shown under this collapse id: outstanding again, and no longer cleared. */
     readonly sent: (collapseId: string, at: Date) => void;
@@ -1533,7 +1531,6 @@ export interface DbShape {
     /** What Cawrier said to the last push for a device: taken (no error) or refused with a reason. */
     readonly noteResult: (pairingId: string, error: string | null) => void;
   };
-  readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
     name: string;
@@ -8317,17 +8314,6 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(projects).where(eq(projects.id, dupId)).run();
         return { places, sessions, threads, workItems: items.length };
       }),
-    getCredential: (id) =>
-      db.select().from(credentials).where(eq(credentials.id, id)).get()?.blob,
-    putCredential: (id, blob) => {
-      db.insert(credentials)
-        .values({ id, blob })
-        .onConflictDoUpdate({
-          target: credentials.id,
-          set: { blob, updatedAt: new Date() },
-        })
-        .run();
-    },
     recordSend: (send) =>
       db.insert(sentMessages).values(send).returning().get(),
     sendRecord: (uuid) =>

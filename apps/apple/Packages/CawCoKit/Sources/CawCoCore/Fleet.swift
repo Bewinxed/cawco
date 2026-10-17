@@ -680,7 +680,7 @@ public struct ParkedAsk: Sendable {
     public let toolName: String
     let input: OpenAPIObjectContainer
     /// What the ask says, as the hub read it parking it (core
-    /// permission-presentation.ts): the same words the web card and Telegram use.
+    /// permission-presentation.ts): the same words the web card and the push use.
     public let presentation: Components.Schemas.PermissionPresentation
     /// When the hub first parked it, ms epoch: one clock for every device.
     public let raisedAt: Double?

@@ -5,7 +5,7 @@
  * GitHub door, its git door; a GitHub connection's write tool here) and
  * raised here as the session's ask: a `permission_request` naming exactly
  * what would be posted, where, and as whom, through the same pending
- * ledger, Needs you, Telegram and push as any permission ask, drawn by the
+ * ledger, Needs you and push as any permission ask, drawn by the
  * same card (permission-presentation.ts `UPSTREAM_POST_TOOL`).
  *
  * The session is answered at once, that it waits for the person, and goes

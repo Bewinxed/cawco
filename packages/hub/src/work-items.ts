@@ -1092,8 +1092,8 @@ const messageOf = (
 });
 
 /**
- * Who may give finished work another turn: the reader (dashboard or
- * Telegram, their words or their Send on its artifact: core `byPerson`), the
+ * Who may give finished work another turn: the reader (dashboard or app,
+ * their words or their Send on its artifact: core `byPerson`), the
  * session that delegated it, or its project's lead (a co-parent of every
  * item of its project).
  */

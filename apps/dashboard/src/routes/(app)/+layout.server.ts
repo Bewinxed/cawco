@@ -174,7 +174,7 @@ export const load: LayoutServerLoad = async ({
   // Who this browser is to the hub (hub-auth.svelte.ts): one that must pair
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
-  // (Telegram's) too.
+  // too.
   const authRead = await readHub<HubAuthState>(fetch, "/api/auth");
   const auth = authRead.ok ? authRead.value : null;
   const stored = Number(pref(RAIL_KEY));

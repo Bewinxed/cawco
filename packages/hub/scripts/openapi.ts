@@ -93,7 +93,6 @@ const { hub, lifetime } = await Effect.runPromise(
             registry: yield* Registry,
             db: yield* Db,
             pending: yield* Pending,
-            telegram: undefined,
             lifetime: life,
           },
           // Built only to be read: nothing starts off the boot path to reach

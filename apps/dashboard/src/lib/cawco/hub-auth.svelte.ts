@@ -8,7 +8,7 @@
  *
  * A browser that must pair shows the pairing screen instead of the app: it
  * asks the hub for a code (RFC 8628 §3.1), shows it, and polls (§3.4). The
- * person approves it on a paired device or in Telegram; the answer sets this
+ * person approves it on a paired device; the answer sets this
  * browser's cookie (HttpOnly, so no script here ever holds the token), and
  * the app opens.
  */

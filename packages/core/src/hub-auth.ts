@@ -117,7 +117,7 @@ export const OWNER_SCHEME = "Owner";
  * used. Both start `cawco-`, which every previewed app's request is
  * stripped of (core frames.ts `DASHBOARD_COOKIE`).
  *
- * Lax, not Strict: a link from another site (Telegram's, a push's) opens
+ * Lax, not Strict: a link from another site (a push's, a chat's) opens
  * the dashboard as this device, where Strict drew the pairing screen first.
  * OWASP Session Management: "`SameSite=Lax` permits top-level cross-site
  * navigations that use safe HTTP methods. Treat `SameSite` as defense in
@@ -137,7 +137,7 @@ export const MACHINE_PROOF_SKEW_MS = 120_000;
 
 /** Why the hub refuses a request in pairing mode: one sentence each client shows. */
 export const PAIRING_REQUIRED =
-  "This hub requires paired devices. Pair this device: it shows a code to approve from a paired device or from Telegram.";
+  "This hub requires paired devices. Pair this device: it shows a code to approve from a paired device.";
 
 /** The token, from `Authorization: Owner <token>` or the browser's cookie. */
 export const ownerTokenOf = (

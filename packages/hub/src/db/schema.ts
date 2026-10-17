@@ -2012,19 +2012,6 @@ export const fleetMemoryHistory = sqliteTable("fleet_memory_history", {
     .$defaultFn(() => new Date()),
 });
 
-/** Small settings the hub keeps by id: the Telegram bridge's chat. */
-export const credentials = sqliteTable("credentials", {
-  id: text("id").primaryKey(),
-  /** The setting, as JSON. */
-  blob: text("blob", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .notNull(),
-  expiresAt: timestamp("expires_at"),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
 /**
  * One (session, model, quarter hour) bucket of usage the agent reports
  * (USAGE-SPEC.md §6.1). The id is the full `${machineId}:${harness}:
@@ -3090,7 +3077,7 @@ export const machineKeys = sqliteTable("machine_keys", {
 });
 
 /**
- * Notifications a device or Telegram was shown and nobody has cleared yet
+ * Notifications a device was shown and nobody has cleared yet
  * (notifications.ts), by collapse id: a look or a settle clears only what
  * was sent, so looking at a session no notification named sends nothing.
  * Pruned after three days.

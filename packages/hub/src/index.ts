@@ -16,7 +16,6 @@ import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
 import { Registry, RegistryLayer } from "./registry";
 import { createServer } from "./server";
-import { createTelegramBridge } from "./telegram";
 import { backfillUsage } from "./usage-count";
 
 const main = Effect.gen(function* () {
@@ -24,8 +23,6 @@ const main = Effect.gen(function* () {
   const db = yield* Db;
   const pending = yield* Pending;
   const lifetime = yield* HubLifetime;
-  const telegram =
-    createTelegramBridge({ registry, db, pending, lifetime }) ?? undefined;
   // `idleTimeout` past Bun's 10s default: a request that waits on a machine
   // (an adopt reads its skill with a 10s timeout of its own) is silent that
   // whole time. No download from the internet is one of these: a skill,
@@ -39,7 +36,6 @@ const main = Effect.gen(function* () {
     registry,
     db,
     pending,
-    telegram,
     lifetime,
   });
   server.listen({
@@ -52,9 +48,6 @@ const main = Effect.gen(function* () {
   server.previews.start();
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
-  // After `listen`, so the first ask the bridge can be handed is one this hub
-  // is already able to receive.
-  telegram?.start();
   // Off the boot path: a month of transcripts is read once, then never again.
   detach(backfillUsage(db), "usage backfill");
 });

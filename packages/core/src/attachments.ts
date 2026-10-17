@@ -136,7 +136,7 @@ export const sidecarOf = (path: string): string =>
   path.replace(VIDEO_FILE, ".vtt");
 
 /**
- * What a `send_to_user` call shows, on the dashboard and in Telegram alike:
+ * What a `send_to_user` call shows under its row in the transcript:
  * its attachments less each `.vtt` sent beside its video, which belongs to
  * that video rather than standing as a file of its own.
  */

@@ -328,7 +328,6 @@ public enum OpenEnums {
         case harness
         case page
         case session
-        case telegram
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -338,7 +337,6 @@ public enum OpenEnums {
             case "harness": self = .harness
             case "page": self = .page
             case "session": self = .session
-            case "telegram": self = .telegram
             default: self = .unrecognized(rawValue)
             }
         }
@@ -349,7 +347,6 @@ public enum OpenEnums {
             case .harness: "harness"
             case .page: "page"
             case .session: "session"
-            case .telegram: "telegram"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -358,7 +355,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.app, .harness, .page, .session, .telegram]
+        public static let allCases: [Self] = [.app, .harness, .page, .session]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

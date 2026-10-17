@@ -16,7 +16,7 @@
  *   (Tailscale's device approval: "a new device that accesses your network
  *   displays a notification that the device is awaiting approval",
  *   https://tailscale.com/kb/1099/device-approval). Each owner client pairs
- *   once, approved from a paired device or from Telegram, in RFC 8628's
+ *   once, approved from a paired device, in RFC 8628's
  *   shape ("instructs the user to review the authorization request on a
  *   secondary device", https://www.rfc-editor.org/rfc/rfc8628 §1); the card
  *   shows the code the client shows, so a remote ask is told apart (§5.4).
@@ -213,8 +213,6 @@ interface Waiting extends WaitingMachine {
 
 /** What the server does as the person changes the mode or a device. */
 export interface HubAuthHooks {
-  /** A pairing waits: Telegram's message, the app's push. */
-  readonly asked: (request: PairingRequest) => void;
   /** Whatever every paired screen shows changed: the mode, a pairing, a waiting machine. */
   readonly changed: (frame: HubAuthFrame) => void;
   /** A device was removed: its open sockets close. */
@@ -225,8 +223,6 @@ export interface HubAuthHooks {
    * it opens again as what it is.
    */
   readonly pairingOn: () => void;
-  /** A pairing was settled: its Telegram message says how. */
-  readonly settled: (userCode: string, verdict: string) => void;
 }
 
 export interface HubAuthDeps {
@@ -557,7 +553,6 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
     console.log(
       `[hub-auth] ${kind} "${name}" at ${address ?? "an unknown address"} asks to pair: ${code}`
     );
-    hooks?.asked(pairing);
     changed();
     return {
       deviceCode,
@@ -568,7 +563,7 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
   };
 
   /** The person's answer to the pairing showing `code`: whether one was waiting. */
-  const answer = (code: string, approve: boolean, by: string): boolean => {
+  const answer = (code: string, approve: boolean): boolean => {
     sweep();
     const pairing = [...pairings.values()].find(
       (one) => one.userCode === code && !(one.approved || one.denied)
@@ -581,7 +576,6 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
     } else {
       pairing.denied = true;
     }
-    hooks?.settled(code, approve ? `✅ Approved ${by}` : `⛔ Denied ${by}`);
     changed();
     return true;
   };
@@ -782,7 +776,7 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
       )
       .get("/api/pair/requests", () => frame().requests)
       .post("/api/pair/requests/:userCode/approve", ({ params, status }) =>
-        answer(params.userCode, true, "from a paired device")
+        answer(params.userCode, true)
           ? { ok: true }
           : status(
               404,
@@ -790,7 +784,7 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
             )
       )
       .post("/api/pair/requests/:userCode/deny", ({ params, status }) =>
-        answer(params.userCode, false, "from a paired device")
+        answer(params.userCode, false)
           ? { ok: true }
           : status(
               404,
@@ -895,7 +889,6 @@ export const createHubAuth = ({ db, hubId, session }: HubAuthDeps) => {
       );
 
   return {
-    answer,
     allows,
     callerOf,
     classify,

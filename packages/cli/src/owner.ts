@@ -3,8 +3,8 @@
  * jev`) acting as the person (hub hub-auth.ts). A hub that trusts its
  * network takes them as they are. One that requires paired devices refuses
  * them, and the command asks once per run, in RFC 8628's shape: it prints a
- * code, the person approves it on a paired device (Needs you) or in Telegram,
- * and the command goes on with the token it was handed.
+ * code, the person approves it on a paired device (Needs you), and the
+ * command goes on with the token it was handed.
  *
  * The token is held in this process alone and dies with it: never written to
  * disk, where any process running as this user, a session's among them,
@@ -69,7 +69,7 @@ const approve = async (origin: string, command: string): Promise<string> => {
     }
   }
   console.error(
-    `This hub requires paired devices. Approve code ${pairing.userCode} on a paired device (Needs you) or in Telegram to run ${command}. Waiting…`
+    `This hub requires paired devices. Approve code ${pairing.userCode} on a paired device (Needs you) to run ${command}. Waiting…`
   );
   let interval = pairing.interval * 1000;
   const deadline = Date.now() + pairing.expiresIn * 1000;

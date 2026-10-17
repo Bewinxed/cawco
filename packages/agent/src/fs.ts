@@ -126,7 +126,7 @@ const media = async (path: string): Promise<FsMedia> => {
   }
   if (file.size > MEDIA_LIMIT_BYTES) {
     throw new Error(
-      `${path} is ${megabytes(file.size)}; the Telegram Bot API takes files up to ${megabytes(MEDIA_LIMIT_BYTES)}`
+      `${path} is ${megabytes(file.size)}; a picture or video is shown up to ${megabytes(MEDIA_LIMIT_BYTES)}`
     );
   }
   return {

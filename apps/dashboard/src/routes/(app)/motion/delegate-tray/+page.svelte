@@ -53,7 +53,7 @@
     },
     { title: "Sweep stale workspaces", state: "running" },
     {
-      title: "Check the Telegram bridge auth",
+      title: "Check the push device auth",
       state: "running",
       slot: true,
     },

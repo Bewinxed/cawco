@@ -4,7 +4,7 @@
    * the hub requires paired devices (hub-auth.svelte.ts). In the shape of
    * the empty fleet (MachinesEmpty): Caw at 80px over a title and one line,
    * then the code, set large in a well, for the person to match on a paired
-   * device or in Telegram (RFC 8628 §5.4: the code on both screens is what
+   * device (RFC 8628 §5.4: the code on both screens is what
    * tells this browser's ask apart from anyone else's).
    *
    * It asks for a code as it opens. Approved, the page reloads as this
@@ -45,7 +45,7 @@
           <h1 data-slot="title" class="title">Pair this browser</h1>
           <p class="line">
             This hub requires paired devices. Approve this code on a paired
-            device, in Needs you or Configure › Devices, or in Telegram.
+            device, in Needs you or Configure › Devices.
           </p>
           <p data-num data-slot="code" class="code num">
             <span class="sr-only">Pairing code </span>{stage.userCode}

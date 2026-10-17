@@ -86,8 +86,8 @@
   const SEND_TO_USER = /(^|_)send_to_user$/;
 
   /**
-   * What a `send_to_user` call attached, shown under its row as the owner got
-   * it (core `shownAttachments`, as Telegram gets it).
+   * What a `send_to_user` call attached, shown under its row as the owner
+   * gets it (core `shownAttachments`).
    */
   const sentAttachments = (m: Message): string[] => {
     const name = (m.metadata?.toolName ?? "").toLowerCase();

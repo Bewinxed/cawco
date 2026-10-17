@@ -14,7 +14,8 @@ incoming screenshots, ui-observer for rendered-layout ground truth.
 Caw&Co (UI wordmark "Caw&Co", set in the landing's Nunito Variable face) is a self-hosted fleet control plane for AI coding agents. A
 `cawco` daemon runs on each machine, joins a hub over tailnet/LAN via mDNS, and a browser
 dashboard gives one board across every machine, project, and running agent session. Harnesses:
-Claude Code, OpenCode, pi. A Telegram bridge lets the operator approve permissions from a phone.
+Claude Code, OpenCode, pi. The iOS app is the operator's phone channel: its push answers
+permissions and questions from the lock screen.
 
 ## Design Context
 

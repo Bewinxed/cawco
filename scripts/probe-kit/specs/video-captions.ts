@@ -1,18 +1,17 @@
 /**
  * A captions file belongs to its video, on a scratch fleet (real hub, agent
  * and sessiond; Claude Code against the mock model, which calls
- * `send_to_user` as each PROBE-SEND says; a fake Telegram that takes every
- * upload) and the built dashboard at the desk. Read from the engine
- * (`HTMLVideoElement.textTracks`, the transcript's elements) and from what
- * Telegram was sent:
+ * `send_to_user` as each PROBE-SEND says) and the built dashboard at the
+ * desk. Read from the engine (`HTMLVideoElement.textTracks`, the
+ * transcript's elements) and from the tool results the model was handed:
  *
  * 1. `film.mp4` sent with `film.vtt` beside it plays with one track, kind
  *    "captions", mode "showing"; the `.vtt` is not a row of its own.
  * 2. `bare.mp4`, with no `.vtt` beside it, has no tracks.
  * 3. `alone.vtt`, sent with no video, is a file row (DocThumb), not a
  *    picture card.
- * 4. Telegram got `film.mp4` as exactly one sendVideo, and `film.vtt` not
- *    at all (sendVideo takes no subtitles).
+ * 4. Each `send_to_user` succeeded: its result says it was shown in the
+ *    transcript, on a hub with nothing but the transcript and push to send it.
  *
  *   bun scripts/probe-kit/run.ts video-captions
  */
@@ -22,6 +21,8 @@ import { COMPOSER, open, type Spec } from "../kit";
 
 const SEND = "mcp__cawco__send_to_user";
 const MARK = /PROBE-SEND:(\d)/;
+/** What a `send_to_user` that went answers (delegation-actions.ts `sendToUser`). */
+const SHOWN = "Shown to the user in this session's transcript";
 const VTT = "WEBVTT\n\n00:00.000 --> 00:01.000\nA caption.\n";
 
 /** Each send's attachments, by its PROBE-SEND number. */
@@ -70,12 +71,6 @@ interface Read {
   tracks: number;
 }
 
-/** An upload Telegram was sent: its method and its file's name. */
-interface Upload {
-  file: string;
-  method: string;
-}
-
 const spec: Spec = {
   name: "video-captions",
   async run(kit) {
@@ -95,51 +90,6 @@ const spec: Spec = {
     await Bun.write(gone, VTT);
     sends.set("2", [alone, gone]);
 
-    // A Telegram that pins chat 42 and takes every upload: `send_to_user`
-    // succeeds as on a hub with its bridge, so its row shows what it sent.
-    let pinned = false;
-    const uploads: Upload[] = [];
-    const telegram = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      idleTimeout: 0,
-      async fetch(request) {
-        const method = new URL(request.url).pathname.split("/").pop() ?? "";
-        if (method === "getUpdates") {
-          if (!pinned) {
-            pinned = true;
-            return Response.json({
-              ok: true,
-              result: [
-                {
-                  update_id: 1,
-                  message: { message_id: 1, chat: { id: 42 }, text: "hello" },
-                },
-              ],
-            });
-          }
-          await Bun.sleep(5000);
-          return Response.json({ ok: true, result: [] });
-        }
-        if (
-          request.headers.get("content-type")?.startsWith("multipart/form-data")
-        ) {
-          const form = await request.formData();
-          for (const value of form.values() as Iterable<unknown>) {
-            if (value instanceof Blob && "name" in value) {
-              uploads.push({ method, file: String(value.name) });
-            }
-          }
-        }
-        return Response.json({
-          ok: true,
-          result: { message_id: 100, chat: { id: 42 } },
-        });
-      },
-    });
-    fleet.env.CAWCO_TELEGRAM_API = `http://127.0.0.1:${telegram.port}`;
-    fleet.env.CAWCO_TELEGRAM_TOKEN = "123456:captions-probe-fake";
-
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");
@@ -148,24 +98,23 @@ const spec: Spec = {
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    await until("Telegram's chat pinned", () => pinned, Boolean, 30_000);
     const session = await fleet.spawn("claude", "Captions", fleet.repo);
+    /** Each send's tool result, as the model was handed it. */
+    const results = new Map<string, string>();
     for (const mark of ["1", "2"]) {
       const before = fleet.seen.filter((s) => s.afterTool).length;
       // biome-ignore lint/performance/noAwaitInLoops: one send's turn ends before the next starts
       await fleet.send(session, `PROBE-SEND:${mark}`);
       await until(`send ${mark}`, () => called.has(mark), Boolean, 180_000);
-      await until(
+      const result = await until(
         `send ${mark}'s result`,
-        () => fleet.seen.filter((s) => s.afterTool).length > before,
+        () => fleet.seen.filter((s) => s.afterTool)[before],
         Boolean,
         120_000
       );
+      results.set(mark, result.body);
     }
     await Bun.file(gone).delete();
-    const firstUploads = uploads.filter(
-      (upload) => upload.file === "film.mp4" || upload.file === "film.vtt"
-    );
 
     const base = await fleet.dashboard();
     const desk = await kit.page("desk");
@@ -254,22 +203,17 @@ const spec: Spec = {
       lone.doc && !lone.picture && !lone.missing,
       JSON.stringify(lone)
     );
-    check(
-      "4: Telegram got film.mp4 as one sendVideo and film.vtt not at all",
-      firstUploads.length === 1 &&
-        firstUploads[0]?.method === "sendVideo" &&
-        firstUploads[0]?.file === "film.mp4",
-      JSON.stringify(uploads)
-    );
-    check(
-      "3: Telegram got alone.vtt as a document, not a photo",
-      uploads.some(
-        (upload) =>
-          upload.file === "alone.vtt" && upload.method === "sendDocument"
-      ) && !uploads.some((upload) => upload.method === "sendPhoto"),
-      JSON.stringify(uploads)
-    );
-    telegram.stop(true);
+    for (const mark of ["1", "2"]) {
+      const body = results.get(mark) ?? "";
+      const at = body.indexOf(SHOWN);
+      check(
+        `4: send ${mark} succeeded, shown in the transcript`,
+        at >= 0,
+        at >= 0
+          ? body.slice(at, at + 160)
+          : `no "${SHOWN}" in its result: ${body.slice(-400)}`
+      );
+    }
   },
 };
 

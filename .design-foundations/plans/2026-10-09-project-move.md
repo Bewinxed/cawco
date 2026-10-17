@@ -223,7 +223,7 @@ Caw above the column at the detail area's phone size; the column takes the full 
 - B2: no bar; the step's subline carries git's own phrase in mono ("Receiving objects: 42% (3812/9071), 140 MB"). Fewer parts, but a mono line counting objects is the terminal's progress, not the product's.
 
 **C. Where the git-init approval stands**
-- C1 (recommended): stage 0 in the pane, as an approval card, so it rides the same channel as every approval (Telegram included) and the column shows what follows a yes.
+- C1 (recommended): stage 0 in the pane, as an approval card, so it rides the same channel as every approval (push included) and the column shows what follows a yes.
 - C2: in the modal before Start, as an inline card under the chips. Earlier, but it blocks Start on a question only the hub can act on, and it never reaches the phone.
 
 ## 5. Checks the orchestrator should dispatch before the build spec

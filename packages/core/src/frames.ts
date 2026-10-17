@@ -368,10 +368,10 @@ export interface AskAnswer {
   name?: string;
   /**
    * Where it was answered: a dashboard page; the app (a client that is no
-   * page: the iOS and Mac app); Telegram; another session; or the harness
-   * itself, in its own interface.
+   * page: the iOS and Mac app); another session; or the harness itself, in
+   * its own interface.
    */
-  via: "page" | "app" | "telegram" | "session" | "harness";
+  via: "page" | "app" | "session" | "harness";
 }
 
 export interface PermissionSettledFrame {
@@ -485,15 +485,6 @@ export interface ScratchWorktreeFrame {
   kind: "scratch_worktree";
   processGeneration: string;
   worktree: import("./index").ScratchWorktree;
-}
-
-export interface UserMessageFrame {
-  /** Absolute paths of images on the session's machine to send alongside. */
-  attachments?: string[];
-  instanceId: string;
-  /** Daemon-originated: a session pushing text straight to the owner's Telegram. */
-  kind: "user_message";
-  text: string;
 }
 
 export interface PulseFrame {

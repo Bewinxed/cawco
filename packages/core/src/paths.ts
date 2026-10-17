@@ -1093,7 +1093,7 @@ export const workspaceCacheEnv = (): Record<string, string> => {
 
 /**
  * The name of a file that holds secrets wherever it lies: `.env`,
- * `.env.local`, `.envrc`, `tunnel.env`, `telegram.env.bak`. A basename
+ * `.env.local`, `.envrc`, `tunnel.env`, `hub.env.bak`. A basename
  * pattern without anchors, in the syntax JavaScript, Perl and POSIX extended
  * regexes share: Seatbelt matches it as `/(…)$` on a path. No workspace reads
  * one outside its own clone; its own repository's are copied into its clone
@@ -1132,7 +1132,7 @@ export const credentialStores = (): string[] => {
     accountsRoot(),
     // Session credentials, OpenCode's bridge credentials, redaction values.
     sessionIdentityDir(),
-    // The hub's env file (its Telegram token), the release signing key, the
+    // The hub's env file, the release signing key, the
     // machine's key the hub admitted it with (machine-key.ts).
     cawcoConfigDir(),
     // The hub's database (fleet MCP OAuth tokens, API keys, push device

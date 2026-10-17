@@ -2917,7 +2917,7 @@ function handleFrame(frame: FramePayload): void {
       );
     }
     // Answered somewhere else while this tab held the card (another tab, the
-    // app, Telegram, a session, the harness): it says what won and where.
+    // app, a session, the harness): it says what won and where.
     // With an answer of this tab's still out, the winner may be that answer
     // or another device's: the line waits for the hub's word on ours, said
     // if it was refused (`streamEffectsFor`, `permission.answer`).

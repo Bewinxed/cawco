@@ -127,7 +127,7 @@
       checked={confirming === null ? required : confirming === "on"}
       disabled={saving || confirming !== null}
       hint={required
-        ? "On: the fleet answers paired devices, admitted machines and your Telegram chat. Anything else sees a code to approve."
+        ? "On: the fleet answers paired devices and admitted machines. Anything else sees a code to approve."
         : "Off: every device on your network reaches the fleet, as it does now."}
       id="require-paired-devices"
       label="Require paired devices"
@@ -147,9 +147,8 @@
             sessions.
           </li>
           <li>
-            Every other browser shows a code until you approve it here, in Needs
-            you, or in Telegram. Each address it opens the dashboard at pairs
-            once.
+            Every other browser shows a code until you approve it here or in
+            Needs you. Each address it opens the dashboard at pairs once.
           </li>
           <li>A new machine waits until you admit it on the Machines list.</li>
           <li>
@@ -160,7 +159,7 @@
             Each run of <code>cawco connections</code>, <code>relay</code> or
             <code>jev</code> asks you to approve it once.
           </li>
-          <li>Sessions keep their tools. Telegram keeps working as it does.</li>
+          <li>Sessions keep their tools.</li>
         </ul>
         <div class="buttons">
           <Button

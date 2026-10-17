@@ -38,7 +38,7 @@
     "",
     "### Fixed",
     "",
-    "- Telegram approvals arrive once",
+    "- Push approvals arrive once",
     "- Install state survives a restart",
     "- Rollbacks name the build they undid",
     "- A `cawco update` started twice no longer installs twice",
@@ -47,7 +47,7 @@
   const PLAIN_NOTES = [
     "- Sessions reopen where you left them",
     "- Long transcripts load faster",
-    "- Telegram approvals arrive once",
+    "- Push approvals arrive once",
     "- Install state survives a restart",
     "- Rollbacks name the build they undid",
   ].join("\n");
