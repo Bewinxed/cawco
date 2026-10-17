@@ -32,6 +32,29 @@ Residual totals over the lane: keyframes 0, foreign-dom 2, pseudo 3, svg-paint 0
 - flex: 1 1 0 on History `.slot` is written as flex-1 (1 1 0%).
 - shadcn variant: none.
 
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:452
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:460
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:464
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:467
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:474
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:479
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:480
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:483
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:504
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:516
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:522
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:525
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:535
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:540
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:541
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:544
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:548
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:552
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:553
+R2 fixed: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:556
+R3 fixed: none (no mono family in the lane). shadow kept residual: none.
+
 ## no-restyle hits
 shadcn/no-restyle: usage/History.svelte:299 Skeleton h-24
 shadcn/no-restyle: usage/LimitsBlock.svelte:220 Skeleton h-7
@@ -75,7 +98,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:452 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell border-border-hairline
@@ -83,7 +107,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:460 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell border-border-hairline
@@ -91,7 +116,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:464 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell border-border-hairline
@@ -99,7 +125,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:467 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:473 TableRow max-phone:gap-x-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:473 TableRow max-phone:gap-y-space-1
@@ -111,7 +138,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:474 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell border-border-hairline
@@ -119,7 +147,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:479 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell border-border-hairline
@@ -127,7 +156,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:480 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell border-border-hairline
@@ -135,7 +165,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:483 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:490 TableRow border-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:490 TableRow bg-surface-band
@@ -169,7 +200,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:504 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell border-border-hairline
@@ -177,7 +209,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:516 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell border-border-hairline
@@ -185,7 +218,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:522 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell border-border-hairline
@@ -193,7 +227,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:525 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:534 TableRow max-phone:gap-x-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:534 TableRow max-phone:gap-y-space-1
@@ -205,7 +240,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:535 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell border-border-hairline
@@ -213,7 +249,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:540 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell border-border-hairline
@@ -221,7 +258,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:541 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell border-border-hairline
@@ -229,7 +267,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:544 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:547 TableRow max-phone:gap-x-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:547 TableRow max-phone:gap-y-space-1
@@ -241,7 +280,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:548 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell border-border-hairline
@@ -249,7 +289,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:552 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell border-border-hairline
@@ -257,7 +298,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:553 TableCell max-phone:p-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell border-b
 shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell border-border-hairline
@@ -265,7 +307,8 @@ shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell px-space-3
 shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell py-0
 shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell type-meta
 shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell text-ink-muted
-shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell max-phone:border-0
+shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell max-phone:border-current
+shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell max-phone:border-none
 shadcn/no-restyle: usage/ProjectSpend.svelte:556 TableCell max-phone:p-0
 shadcn/no-restyle: usage/SessionsChip.svelte:180 PopoverTrigger pressable
 shadcn/no-restyle: usage/SessionsChip.svelte:180 PopoverTrigger px-space-1
