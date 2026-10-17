@@ -81,6 +81,47 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         // The composer's canvas: it stands in this pane's column and docks into its artifact panel.
         composerBinding.canvasHost = CanvasHost(hub: hub, column: { [weak self] in self?.canvasColumn() },
                                                 panel: { [weak self] id in self?.canvasPanel(showing: id) })
+        // Its plan, as the hub keeps it, for as long as the tab is open (SessionPane.svelte's PlanRing).
+        hub.plans.follow(id)
+        planRing.addAction(UIAction { [weak self] _ in self?.openPlan() }, for: .touchUpInside)
+    }
+
+    // MARK: Its plan
+
+    private let planRing = PlanRingButton()
+    private weak var planSheet: UIViewController?
+
+    /// The ring on the composer while the plan has something to show: how far it has got (PlanPane.svelte `planProgress`).
+    private func syncPlan() {
+        guard let plan = hub.plans.plans[sessionId], plan.shows else {
+            composerBinding.ring = nil
+            return
+        }
+        planRing.configure(done: plan.progress.done, total: plan.progress.total)
+        planRing.open = planSheet != nil
+        composerBinding.ring = planRing
+        #if DEBUG
+        if PreviewProbe.openPlanAtLaunch, !planOpenedAtLaunch, view.window != nil {
+            planOpenedAtLaunch = true
+            openPlan()
+        }
+        #endif
+    }
+
+    #if DEBUG
+    private var planOpenedAtLaunch = false
+    #endif
+
+    /// The plan whole, in the house sheet (PlanPane.svelte in SideSplit's sheet).
+    private func openPlan() {
+        let sheet = PlanSheetController(hub: hub, instanceId: sessionId)
+        let house = HouseSheetController(sheet, title: PlanSheetController.title(hub.plans.plans[sessionId]), scroller: sheet.scroll)
+        planSheet = house
+        present(house, animated: true)
+        planRing.open = true
+        #if DEBUG
+        PreviewProbe.say("plan opened \(sessionId)")
+        #endif
     }
 
     // MARK: The composer's canvas
@@ -230,6 +271,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     func close() {
         guard opened else { return }; opened = false
         hub.sessions.close(sessionId)
+        hub.plans.unfollow(sessionId)
         onClose()
     }
 
@@ -282,6 +324,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.sendError = editNote ?? (command?.refusedByHub == true ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
         composerBinding.sendBlock = sendBlock(hub)
         syncCards()
+        syncPlan()
         composerBinding.publish()
         syncPreview()
         #if DEBUG

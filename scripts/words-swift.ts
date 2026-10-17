@@ -88,6 +88,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/preview.ts", export: "previewWords", as: "" }],
   },
   {
+    // A session's plan: its ring and its panel.
+    swift: "Plan",
+    members: [{ file: "words/plan.ts", export: "planWords", as: "" }],
+  },
+  {
     // The artifact panel: its title menu, a sheet's stage, a sheet's inspector.
     swift: "Artifacts",
     members: [{ file: "words/artifacts.ts", export: "artifactWords", as: "" }],

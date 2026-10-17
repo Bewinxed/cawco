@@ -886,6 +886,8 @@ enum PreviewProbe {
         let pair = arguments[flag + 1].split(separator: "=", maxSplits: 1).map(String.init)
         return pair.count == 2 ? (pair[0], pair[1]) : nil
     }()
+    /// `-open-plan`: the session's plan opens in its sheet the first time its ring shows (scripts/probe-kit/specs/ios-plan.ts).
+    static let openPlanAtLaunch = ProcessInfo.processInfo.arguments.contains("-open-plan")
     /// `-menu-remove <name>`: once the page is ready, the title menu opens and its row `name` is removed.
     static let menuRemove: String? = {
         let arguments = ProcessInfo.processInfo.arguments

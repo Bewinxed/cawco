@@ -160,7 +160,7 @@ final class PlanRingButton: UIControl {
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
-        word.text = "Plan"
+        word.text = Words.Plan.plan
         figure.tabular = true
         let line = UIStackView(arrangedSubviews: [ring, glyph, word, figure])
         line.spacing = Space.space2
@@ -181,110 +181,69 @@ final class PlanRingButton: UIControl {
         glyph.isHidden = counted
         figure.isHidden = !counted
         if counted { ring.configure(done: done, total: total) }
-        figure.text = "\(done)/\(total)"
-        accessibilityLabel = counted ? "Plan, \(done) of \(total) done" : "Plan"
+        figure.text = Words.Plan.figure(done: done, total: total)
+        accessibilityLabel = Words.Plan.ringLabel(done: done, total: total)
+    }
+
+    /// The plan is on show beside the conversation (PlanRing.svelte `aria-pressed`): the strong ink.
+    var open = false {
+        didSet {
+            for label in [word, figure] { label.ink = open ? Palette.inkStrong : Palette.inkMuted }
+            glyph.tintColor = open ? Palette.inkStrong : Palette.inkMuted
+            accessibilityTraits = open ? [.button, .selected] : .button
+            paintFill()
+        }
     }
 
     override var isHighlighted: Bool {
-        didSet { backgroundColor = isHighlighted ? Palette.surfaceFill : .clear }
+        didSet { paintFill() }
+    }
+
+    private func paintFill() {
+        backgroundColor = isHighlighted || open ? Palette.surfaceFill : .clear
     }
 }
 
-/// A session's plan, whole (plan/PlanPane.svelte): its steps, each with
-/// where it stands, nested as written, then its spec. It follows the plan
-/// as the hub keeps it.
+/// A session's plan, whole (plan/PlanPane.svelte in the phone's sheet): its
+/// steps nested as written, its spec, an attempt's to-dos (Peek/TaskPanel.swift
+/// `PlanView`), in one column that scrolls, under the sheet's title. It
+/// follows the plan as the hub keeps it; whoever opens it follows the session.
 final class PlanSheetController: ObservedViewController {
     let scroll = UIScrollView()
-    private let hub: HubConnection
-    private let instanceId: String
-    private let steps = UIStackView()
-    private let spec = MarkdownDocumentView()
-    private let empty = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+    private let plan: PlanView
 
     init(hub: HubConnection, instanceId: String) {
-        self.hub = hub
-        self.instanceId = instanceId
+        plan = PlanView(hub: hub, instanceId: instanceId)
         super.init(nibName: nil, bundle: nil)
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
+    /// The sheet's title for `plan` (PlanPane.svelte `cardTitle`): an attempt's to-dos alone are titled by them, their task beside.
+    static func title(_ plan: SessionPlan?) -> String {
+        guard let plan, plan.onlyTodos else { return Words.Plan.plan }
+        return plan.taskId.map { "\(Words.Plan.todos) \($0)" } ?? Words.Plan.todos
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRaised
-        let column = UIStackView(arrangedSubviews: [empty, steps, spec])
-        column.axis = .vertical
-        column.spacing = Space.space5
-        steps.axis = .vertical
-        steps.spacing = Space.space2
-        empty.text = "No steps yet."
         scroll.alwaysBounceVertical = true
         view.hold(scroll)
-        column.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(column)
+        scroll.addSubview(plan)
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),
-            column.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -Space.space5),
-            column.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space4),
-            column.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space6),
-            column.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * Space.space5),
+            plan.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),
+            plan.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -Space.space5),
+            // `.body.sheet`: `space-3` under the header's seam, `space-4` at its foot.
+            plan.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space3),
+            plan.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space4),
+            plan.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * Space.space5),
         ])
     }
 
     override func refreshContent() {
-        let plan = hub.plans.plans[instanceId]
-        steps.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for step in plan?.steps ?? [] {
-            steps.addArrangedSubview(Self.row(step))
-        }
-        empty.isHidden = !(plan?.steps.isEmpty ?? true) || plan?.spec != nil
-        spec.isHidden = plan?.spec == nil
-        if let markdown = plan?.spec { spec.setSource(markdown) }
-    }
-
-    private static func row(_ step: PlanStep) -> UIView {
-        let mark: UIView
-        switch step.status {
-        case "completed":
-            mark = GlyphView(.tick, size: Size.iconSm, tint: Palette.statusDoneInk)
-        case "in_progress":
-            let dot = UIView()
-            dot.backgroundColor = Palette.statusLiveGlyph
-            dot.layer.cornerRadius = 4
-            dot.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 8), dot.heightAnchor.constraint(equalToConstant: 8)])
-            mark = dot
-        default:
-            let ring = UIView()
-            ring.layer.borderWidth = 1.5
-            ring.layer.borderColor = Palette.borderControl.cgColor
-            ring.layer.cornerRadius = 5
-            ring.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([ring.widthAnchor.constraint(equalToConstant: 10), ring.heightAnchor.constraint(equalToConstant: 10)])
-            mark = ring
-        }
-        let cell = UIView()
-        cell.translatesAutoresizingMaskIntoConstraints = false
-        mark.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(mark)
-        NSLayoutConstraint.activate([
-            cell.widthAnchor.constraint(equalToConstant: Size.iconSm),
-            cell.heightAnchor.constraint(equalToConstant: TypeScale.textBody * TypeScale.leadingBody),
-            mark.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-            mark.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-        ])
-        let words = KitLabel(TypeScale.typeBody, ink: step.status == "completed" ? Palette.inkMuted : Palette.inkStrong, lines: 0)
-        words.text = step.content
-        let line = UIStackView(arrangedSubviews: [cell, words])
-        line.spacing = Space.space2
-        line.alignment = .top
-        line.isLayoutMarginsRelativeArrangement = true
-        line.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Double(step.depth) * Space.space5, bottom: 0, trailing: 0)
-        line.isAccessibilityElement = true
-        let state = ["completed": "done", "in_progress": "in progress"][step.status] ?? "to do"
-        line.accessibilityLabel = "\(step.content), \(state)"
-        return line
+        plan.refresh()
     }
 }
 

@@ -62,7 +62,7 @@
     !!plan &&
     (plan.steps.length > 0 || !!plan.spec || (plan.todos?.length ?? 0) > 0);
 
-  import type { SessionPlan } from "@cawco/core";
+  import { planWords, type SessionPlan } from "@cawco/core";
 </script>
 
 <script lang="ts">
@@ -137,7 +137,7 @@
   const onlyTodos = $derived(
     steps.length === 0 && !plan?.spec && todos.length > 0
   );
-  const cardTitle = $derived(onlyTodos ? "To-dos" : "Plan");
+  const cardTitle = $derived(onlyTodos ? planWords.todos : planWords.plan);
   const projectId = $derived(
     cawco.instanceIndex.byId.get(instanceId)?.projectId ?? null
   );
@@ -195,19 +195,21 @@
   >
     {#if steps.length > 0}
       {#if stepsHeaded}
-        <h3 class="part-head">Steps</h3>
+        <h3 class="part-head">{planWords.steps}</h3>
       {/if}
       {@render tree(steps, false)}
     {/if}
 
     {#if plan?.spec}
-      <h3 class="part-head">Spec</h3>
+      <h3 class="part-head">{planWords.spec}</h3>
       <MessageBody source={plan.spec.markdown} />
     {/if}
 
     {#if showsTodos && plan?.taskId}
       {#if !onlyTodos}
-        <h3 class="part-head">To-dos <span class="ref">{plan.taskId}</span></h3>
+        <h3 class="part-head">
+          {planWords.todos} <span class="ref">{plan.taskId}</span>
+        </h3>
       {/if}
       {@render tree(todos, false)}
       {#if projectId}
@@ -217,7 +219,7 @@
           href="/project/{encodeURIComponent(
             projectId
           )}?view=canvas&task={encodeURIComponent(plan.taskId)}"
-          label="Open in canvas"
+          label={planWords.openInCanvas}
           size="sm"
           variant="link"
         />
@@ -240,7 +242,7 @@
 {:else}
   <SideSurface
     class="plan-pane"
-    label="Plan"
+    label={planWords.plan}
     {onclose}
     recessed={false}
     subtitle={onlyTodos ? (plan?.taskId ?? undefined) : undefined}

@@ -411,7 +411,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private func syncPlan() {
         let plan = followed.flatMap { hub.plans.plans[$0] }
         if let plan, plan.shows {
-            planRing.configure(done: plan.done, total: plan.steps.count)
+            planRing.configure(done: plan.progress.done, total: plan.progress.total)
             composerBinding.ring = planRing
         } else {
             composerBinding.ring = nil
@@ -421,7 +421,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private func openPlan() {
         guard let lead = followed else { return }
         let sheet = PlanSheetController(hub: hub, instanceId: lead)
-        present(HouseSheetController(sheet, title: "Plan", scroller: sheet.scroll), animated: true)
+        present(HouseSheetController(sheet, title: PlanSheetController.title(hub.plans.plans[lead]), scroller: sheet.scroll), animated: true)
     }
 
     // MARK: His asks, on the composer

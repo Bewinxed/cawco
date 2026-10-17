@@ -770,6 +770,31 @@ public enum Words {
         public static let reloading = "Reloading…"
     }
 
+    public enum Plan {
+        // packages/core/src/words/plan.ts `planWords`
+        /// The ring's word, and the panel's title over steps or a spec.
+        public static let plan = "Plan"
+
+        /// The ring, for a screen reader: how far the plan has got.
+        public static func ringLabel(done: Int, total: Int) -> String {
+            total > 0 ? "Plan, \(done) of \(total) done" : "Plan"
+        }
+
+        /// The ring's figure.
+        public static func figure(done: Int, total: Int) -> String {
+            "\(done)/\(total)"
+        }
+
+        /// The panel's title when it holds a task's to-dos alone, and their part's heading.
+        public static let todos = "To-dos"
+
+        public static let steps = "Steps"
+
+        public static let spec = "Spec"
+
+        public static let openInCanvas = "Open in canvas"
+    }
+
     public enum Artifacts {
         // packages/core/src/words/artifacts.ts `artifactWords`
         /// A row's Remove, for a screen reader: its trailing glyph says it.
