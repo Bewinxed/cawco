@@ -1248,6 +1248,30 @@ export async function seedScene(
     JSON.stringify(POST, null, 2)
   );
   await put(project.id, `assets/${review.id}/audit.md`, AUDIT);
+  // A task with every part its sheet draws (labels, fields, a blocker that has
+  // not landed, nested and proposed to-dos, criteria, notes, an output), and an
+  // archived one, so the board has its Archived rail.
+  const rich = await fleet.api<{ id: string; path: string }>(
+    `/api/projects/${project.id}/tasks`,
+    { title: "Lay out the stage strip" }
+  );
+  const richStage = (
+    await fleet.api<{ stage: string }>(
+      `/api/projects/${project.id}/tasks/${rich.id}`
+    )
+  ).stage;
+  const blocker = (tasks[2] as string).replace("tsk-", "");
+  await put(
+    project.id,
+    rich.path,
+    `---\nstage: ${richStage}\nafter: [${blocker}]\noutputs: [notes.md]\nlabels: [ui, phone]\npriority: high\ndue: 2026-11-01\n---\n# Lay out the stage strip\n\nThe strip's stages stand in one row on a desk and wrap on a phone.\n\n## Acceptance criteria\n\nEvery stage's name reads whole at 390px.\n\n## To-dos\n\n- [x] [td-1] Measure the strip at 390px\n- [ ] [td-2] Let the names wrap\n  - [ ] [td-3] Keep the count beside its name\n- [ ] [td-4] (proposed) Cover a stage with no tasks\n\n## Notes\n\nThe strip shares its row with the filter.\n`
+  );
+  await put(project.id, `assets/${rich.id}/notes.md`, AUDIT);
+  const gone = await fleet.api<{ id: string }>(
+    `/api/projects/${project.id}/tasks`,
+    { title: "Retire the old tray" }
+  );
+  await fleet.api(`/api/projects/${project.id}/tasks/${gone.id}/archive`, {});
   const attempt = (title: string) =>
     fleet.spawn("claude", title, fleet.repo, { projectId: project.id });
   const reviewDone = await attempt("Attempt 2");
@@ -2025,6 +2049,7 @@ export async function seedScene(
     project: project.id,
     task: tasks[0] as string,
     review: review.id,
+    rich: rich.id,
     failed: tokenTask,
     workflow: workflow.id,
     graph: graph.id,
