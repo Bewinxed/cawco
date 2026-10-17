@@ -161,12 +161,15 @@
       >
     </form>
   {:else}
+    <!-- Add field's glyph on the heading's edge: the button gives back its
+         padding (`xs`: px-2) and its border (--hit-edge, its width). -->
     <Button
-      class="self-start text-ink-muted"
+      class="self-start ms-(--add-edge) text-ink-muted"
       onclick={() => {
         adding = true;
       }}
       size="xs"
+      style="--add-edge: calc((var(--spacing) * 2 + var(--hit-edge)) * -1)"
       variant="ghost"><IconPlus /><span>Add field</span></Button
     >
   {/if}

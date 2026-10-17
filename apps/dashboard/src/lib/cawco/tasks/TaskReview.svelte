@@ -258,9 +258,11 @@
     <button
       data-slot="attachment"
       aria-label="Open {task.id}: {nameOf(one)}"
-      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) coarse:my-(--attach-my-coarse) press-tint focus-inset"
       onclick={() => onopen?.(task.id)}
       style:--hit="44px"
+      style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
+      style:--attach-my-coarse="calc((1lh - var(--hit)) / 2)"
       title={titleOf(one)}
       type="button"
     >
@@ -273,10 +275,12 @@
     <!-- literal: 44px -->
     <a
       data-slot="attachment"
-      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) coarse:my-(--attach-my-coarse) press-tint focus-inset"
       href={hrefOf(one)}
       rel="noopener"
       style:--hit="44px"
+      style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
+      style:--attach-my-coarse="calc((1lh - var(--hit)) / 2)"
       target="_blank"
       title={titleOf(one)}
     >
@@ -418,7 +422,7 @@
     {/if}
     {#if listed.length > 0}
       <div
-        class="flex flex-wrap gap-x-space-3 gap-y-space-1"
+        class="flex flex-wrap gap-space-3"
         data-band-part="attachments"
       >
         {#each listed as one, index (index)}
