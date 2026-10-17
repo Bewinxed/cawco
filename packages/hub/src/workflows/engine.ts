@@ -433,15 +433,26 @@ class RunDriver {
         return (await this.#io.clockFired(`${seq}:sleep`))
           ? { seq, via: "clock" }
           : undefined;
-      default: {
-        // A child's reply is stored only after it wakes this run, so its
-        // outcome is read off its row and kept in this record.
-        const outcome = call.childRunId
-          ? this.#host.childOutcome(call.childRunId)
-          : undefined;
-        return outcome ? { seq, via: "child", outcome } : undefined;
-      }
+      case "checkpoint":
+      case "exec":
+      case "exists":
+      case "jev":
+      case "log":
+      case "notes":
+      case "notify":
+      case "now":
+      case "state-get":
+      case "state-set":
+      case "trace":
+      case "workflow":
+        break;
     }
+    // A child's reply is stored only after it wakes this run, so its
+    // outcome is read off its row and kept in this record.
+    const outcome = call.childRunId
+      ? this.#host.childOutcome(call.childRunId)
+      : undefined;
+    return outcome ? { seq, via: "child", outcome } : undefined;
   }
 
   /**
@@ -525,17 +536,20 @@ class RunDriver {
         return;
       case "idle":
         this.#idle = message.answered;
-        break;
+        this.#poke();
+        return;
       case "done":
         this.#end = { outcome: { result: message.result } };
-        break;
+        this.#poke();
+        return;
       case "failed":
         this.#end = { outcome: { failure: message.failure } };
-        break;
-      default:
+        this.#poke();
+        return;
+      case "inputs":
+      case "ready":
         return;
     }
-    this.#poke();
   }
 
   #onCall(message: Extract<WorkerOut, { type: "effect" }>) {

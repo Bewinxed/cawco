@@ -22202,9 +22202,10 @@ export const createServer = (
               return status(404, page.message);
             case "timeout":
               return status(504, page.message);
-            default:
-              return status(500, page.message);
+            case "failed":
+              break;
           }
+          return status(500, page.message);
         }
       )
       .patch(
@@ -25358,6 +25359,11 @@ export const createServer = (
             return;
           }
 
+          const refuseVerb = () => {
+            const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
+            console.warn(`[hub] ${fault}, from ${message.machineId}`);
+            sendFrame(ws, refusalFrame(message, fault));
+          };
           switch (message.verb) {
             case "register": {
               // A machine that re-joins under a new id takes its rows, its
@@ -27693,11 +27699,19 @@ export const createServer = (
               }
               break;
             }
-            default: {
-              const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
-              console.warn(`[hub] ${fault}, from ${message.machineId}`);
-              sendFrame(ws, refusalFrame(message, fault));
-            }
+            // A dashboard's verbs on a machine's socket.
+            case "admission":
+            case "control":
+            case "fs":
+            case "send":
+            case "spawn":
+            case "stop":
+              refuseVerb();
+              break;
+            // A verb outside the union: an older or newer agent's. The wire's
+            // `verb` is checked only to be a string (`envelopeFault`).
+            default:
+              refuseVerb();
           }
         }),
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
@@ -27921,6 +27935,15 @@ export const createServer = (
             return;
           }
 
+          // The client is named: a verb no build sends any more comes
+          // from a page or app still running an older one.
+          const refuseVerb = () => {
+            const fault = `unknown verb "${message.verb}": a dashboard sends spawn, stop, control or fs`;
+            console.warn(
+              `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
+            );
+            sendFrame(ws, refusalFrame(message, fault));
+          };
           switch (message.verb) {
             case "spawn": {
               // A resume by a former id resumes its session by its id now.
@@ -28007,15 +28030,20 @@ export const createServer = (
               // Answered on `control_result` too, so the same requester map routes it.
               forward(message, ws);
               break;
-            default: {
-              // The client is named: a verb no build sends any more comes
-              // from a page or app still running an older one.
-              const fault = `unknown verb "${message.verb}": a dashboard sends spawn, stop, control or fs`;
-              console.warn(
-                `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
-              );
-              sendFrame(ws, refusalFrame(message, fault));
-            }
+            // A machine's verbs on a dashboard's socket.
+            case "admission":
+            case "frames":
+            case "heartbeat":
+            case "launch":
+            case "register":
+            case "send":
+            case "usage":
+              refuseVerb();
+              break;
+            // A verb outside the union: an older or newer client's. The wire's
+            // `verb` is checked only to be a string (`envelopeFault`).
+            default:
+              refuseVerb();
           }
         }),
         close(ws) {

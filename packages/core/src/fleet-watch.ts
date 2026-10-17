@@ -66,9 +66,10 @@ export const signalLine = (kind: FleetWatchSignal, detail?: string): string => {
       return `Same ${detail ?? "tool"} call ${FLEET_WATCH_LIMITS.sameCall} times in a row`;
     case "quiet":
       return `No file changed in ${FLEET_WATCH_LIMITS.quietTurns} turns`;
-    default:
-      return `No output for ${FLEET_WATCH_LIMITS.stallMinutes} min in a running turn`;
+    case "stall":
+      break;
   }
+  return `No output for ${FLEET_WATCH_LIMITS.stallMinutes} min in a running turn`;
 };
 
 /** What a decision did, as the tail of a fleet-watch line: "nudged Caw", "told you". */
@@ -87,9 +88,10 @@ export const decisionWords = (
       return "stopped it";
     case "tell":
       return "told you";
-    default:
-      return "left it";
+    case "leave":
+      break;
   }
+  return "left it";
 };
 
 /**

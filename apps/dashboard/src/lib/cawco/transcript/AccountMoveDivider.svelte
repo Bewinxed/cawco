@@ -49,9 +49,13 @@
       case "moved":
       case "stopped":
         return row.move.resetsAt;
-      default:
-        return null;
+      case "continued":
+      case "ended":
+      case "signed-out":
+      case "unmoved":
+        break;
     }
+    return null;
   });
 
   $effect(() => {
@@ -81,9 +85,11 @@
       // A stop names no account: drawn in the neutral ink, never a failure's.
       case "ended":
         return null;
-      default:
-        return row.move.to?.hue ?? null;
+      case "continued":
+      case "moved":
+        break;
     }
+    return row.move.to?.hue ?? null;
   });
 </script>
 

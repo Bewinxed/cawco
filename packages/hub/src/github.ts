@@ -244,9 +244,10 @@ const issueEvents = (
           at: only.at,
         },
       ];
-    default:
-      return [opened, ...closed];
+    case undefined:
+      break;
   }
+  return [opened, ...closed];
 };
 
 const commentEvent = (one: z.infer<typeof comment>): InboundEvent[] => {
@@ -384,10 +385,11 @@ const pathOf = (
       return `/repos/${repo}/issues?state=all&${list}&since=${after}`;
     case "comments":
       return `/repos/${repo}/issues/comments?${list}&since=${after}`;
-    default:
-      // Newest first, by when each happened; no `since`, so its URL (and ETag) holds.
-      return `/repos/${repo}/issues/events?per_page=${PER_PAGE}`;
+    case "issueEvents":
+      break;
   }
+  // Newest first, by when each happened; no `since`, so its URL (and ETag) holds.
+  return `/repos/${repo}/issues/events?per_page=${PER_PAGE}`;
 };
 
 const KIND_OF: Record<GitHubResource, GitHubKind> = {

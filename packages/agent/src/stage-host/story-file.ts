@@ -120,7 +120,7 @@ function literal(node: Node | null): { value: unknown } | undefined {
       return arrayLiteral(at);
     case "ObjectExpression":
       return objectLiteral(at);
-    default:
+    case undefined:
       return;
   }
 }

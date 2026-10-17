@@ -100,7 +100,7 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
       return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits, the hub pushes your branch and opens a pull request against the base branch (or updates the open one).${back}${outputs}${close}`;
     case "none":
       return `Finish your work item. Nothing is pushed.${proof} The hub collects your outputs into the project's folder; a missing one comes back to you.${close}`;
-    default:
+    case "main":
       return `Finish your work item. Commit and do not push.${proof} Then the hub rebases your commits onto the base branch, runs ${gate} on the result and pushes.${back}${outputs}${close}`;
   }
 };

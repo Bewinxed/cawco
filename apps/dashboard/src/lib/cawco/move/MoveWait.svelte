@@ -126,9 +126,10 @@
         return "Downloading large files";
       case "install":
         return "Installing dependencies";
-      default:
-        return `Starting the session on ${target}`;
+      case "start":
+        break;
     }
+    return `Starting the session on ${target}`;
   }
 
   /** What a step says once it is done; the last one is the ready line. */
@@ -152,11 +153,12 @@
           : "Large files";
       case "install":
         return "Dependencies installed";
-      default:
-        return job.moved
-          ? [job.moved, job.stayed].filter(Boolean).join(" · ")
-          : `Ready on ${target}`;
+      case "start":
+        break;
     }
+    return job.moved
+      ? [job.moved, job.stayed].filter(Boolean).join(" · ")
+      : `Ready on ${target}`;
   }
 
   function labelOf(step: MoveStep, phase: Phase): string {
@@ -180,9 +182,10 @@
         return job.ask?.gitInit
           ? `${job.projectName} isn't a git repository yet`
           : `${job.projectName} has ${plural(big.length, "big file")} to send separately`;
-      default:
-        return running(step);
+      case "active":
+        break;
     }
+    return running(step);
   }
 
   const GLYPHS: Record<Phase, Component | "dot"> = {

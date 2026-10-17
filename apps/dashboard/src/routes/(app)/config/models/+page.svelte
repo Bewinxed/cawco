@@ -127,9 +127,11 @@
         return "Jev goes to TypeSafe directly with the key held here.";
       case "openrouter":
         return "Jev goes through OpenRouter. A key saved here takes over from it.";
-      default:
-        return "Jev is off. Save a TypeSafe key here, or connect OpenRouter above.";
+      case null:
+      case undefined:
+        break;
     }
+    return "Jev is off. Save a TypeSafe key here, or connect OpenRouter above.";
   });
   let keyHeight = $state(0);
 

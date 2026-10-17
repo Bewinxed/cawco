@@ -622,7 +622,7 @@ const fieldAnswer = (
       const option = field.options?.find((choice) => choice.label === one);
       return option ? option.value : one;
     }
-    default:
+    case "external":
       return;
   }
 };
@@ -1414,7 +1414,70 @@ export class OpencodeSession implements HarnessSession {
           event.type === "form.cancelled" ? "cancelled" : "answered"
         );
         break;
-      default:
+      case "agent.updated":
+      case "command.updated":
+      case "config.updated":
+      case "credential.switched":
+      case "credential.updated":
+      case "filesystem.changed":
+      case "installation.update-available":
+      case "installation.updated":
+      case "integration.updated":
+      case "location.shutdown":
+      case "mcp.resources.changed":
+      case "mcp.status.changed":
+      case "model.updated":
+      case "models-dev.refreshed":
+      case "persistent-pty.added":
+      case "persistent-pty.removed":
+      case "plugin.updated":
+      case "project.updated":
+      case "provider.updated":
+      case "pty.created":
+      case "pty.deleted":
+      case "pty.exited":
+      case "pty.updated":
+      case "reference.updated":
+      case "server.connected":
+      case "session.agent.selected":
+      case "session.compaction.delta":
+      case "session.created":
+      case "session.deleted":
+      case "session.forked":
+      case "session.idle":
+      case "session.inbox.cancelled":
+      case "session.inbox.delivery.changed":
+      case "session.instructions.updated":
+      case "session.metadata.updated":
+      case "session.model.selected":
+      case "session.moved":
+      case "session.permissions":
+      case "session.renamed":
+      case "session.revert.cleared":
+      case "session.revert.committed":
+      case "session.revert.staged":
+      case "session.shell.ended":
+      case "session.shell.started":
+      case "session.skill.activated":
+      case "session.status":
+      case "session.step.streamed":
+      case "session.synthetic":
+      case "session.tool.input.delta":
+      case "session.tool.input.ended":
+      case "session.usage.updated":
+      case "session.viewed":
+      case "shell.created":
+      case "shell.deleted":
+      case "shell.exited":
+      case "skill.updated":
+      case "tui.command.execute":
+      case "tui.prompt.append":
+      case "tui.session.select":
+      case "tui.toast.show":
+      case "vcs.branch.updated":
+      case "websearch.updated":
+      case "worktree.resolved":
+      case "worktree.updated":
         break;
     }
   }
@@ -2186,9 +2249,93 @@ export class OpencodeSession implements HarnessSession {
         state.toolsEmitted.set(id, "resolved");
         break;
       }
-      default:
-        // The child's turn ending needs no frame: the parent's `subagent`
-        // result closes its branch.
+      // The child's turn ending needs no frame: the parent's `subagent`
+      // result closes its branch.
+      case "agent.updated":
+      case "command.updated":
+      case "config.updated":
+      case "credential.switched":
+      case "credential.updated":
+      case "filesystem.changed":
+      case "form.cancelled":
+      case "form.created":
+      case "form.replied":
+      case "installation.update-available":
+      case "installation.updated":
+      case "integration.updated":
+      case "location.shutdown":
+      case "mcp.resources.changed":
+      case "mcp.status.changed":
+      case "model.updated":
+      case "models-dev.refreshed":
+      case "permission.asked":
+      case "permission.replied":
+      case "persistent-pty.added":
+      case "persistent-pty.removed":
+      case "plugin.updated":
+      case "project.updated":
+      case "provider.updated":
+      case "pty.created":
+      case "pty.deleted":
+      case "pty.exited":
+      case "pty.updated":
+      case "reference.updated":
+      case "server.connected":
+      case "session.agent.selected":
+      case "session.compaction.delta":
+      case "session.compaction.ended":
+      case "session.compaction.failed":
+      case "session.compaction.started":
+      case "session.created":
+      case "session.deleted":
+      case "session.execution.failed":
+      case "session.execution.interrupted":
+      case "session.execution.started":
+      case "session.execution.succeeded":
+      case "session.forked":
+      case "session.idle":
+      case "session.inbox.cancelled":
+      case "session.inbox.delivered":
+      case "session.inbox.delivery.changed":
+      case "session.inbox.enqueued":
+      case "session.instructions.updated":
+      case "session.metadata.updated":
+      case "session.model.selected":
+      case "session.moved":
+      case "session.permissions":
+      case "session.reasoning.delta":
+      case "session.reasoning.started":
+      case "session.renamed":
+      case "session.retry.scheduled":
+      case "session.revert.cleared":
+      case "session.revert.committed":
+      case "session.revert.staged":
+      case "session.shell.ended":
+      case "session.shell.started":
+      case "session.skill.activated":
+      case "session.status":
+      case "session.step.ended":
+      case "session.step.failed":
+      case "session.step.started":
+      case "session.step.streamed":
+      case "session.synthetic":
+      case "session.tool.input.delta":
+      case "session.tool.input.ended":
+      case "session.tool.progress":
+      case "session.usage.updated":
+      case "session.viewed":
+      case "shell.created":
+      case "shell.deleted":
+      case "shell.exited":
+      case "skill.updated":
+      case "tui.command.execute":
+      case "tui.prompt.append":
+      case "tui.session.select":
+      case "tui.toast.show":
+      case "vcs.branch.updated":
+      case "websearch.updated":
+      case "worktree.resolved":
+      case "worktree.updated":
         break;
     }
   }

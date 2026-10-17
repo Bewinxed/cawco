@@ -123,9 +123,11 @@
         return "deleted its file";
       case "edited":
         return `edited the file by hand${why}`;
-      default:
-        return `${done(event.what)}${why}`;
+      case "changed":
+      case "commented":
+        break;
     }
+    return `${done(event.what)}${why}`;
   }
 
   /** History runs longer than three fold; comments always stand. */
