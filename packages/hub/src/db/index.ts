@@ -2274,7 +2274,7 @@ export interface DbShape {
       >
     >
   ) => WorkItemRow | undefined;
-  /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its last item landed. */
+  /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its clone's HEAD was when it retired. */
   readonly updateWorkspace: (
     id: string,
     change: Partial<
@@ -2284,9 +2284,9 @@ export interface DbShape {
         | "boundaryPid"
         | "branch"
         | "carry"
+        | "head"
         | "heldAt"
         | "holding"
-        | "landed"
         | "state"
         | "tmp"
       >

@@ -1703,9 +1703,12 @@ export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 
 /**
  * Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s
- * `at`): the commit its last item landed, on `origin`'s branch `branch`
- * (the default branch for work that landed there, the item's own branch for
- * one that landed as a branch or a pull request), fetched as the clone is.
+ * `at`): the commit its clone's HEAD was on when it retired, on `origin`'s
+ * branch `branch` that held it then (its base when the base held it), read
+ * by its machine's archive ({@link WorkspaceArchived} `head`) and fetched as
+ * the clone is. Never the base's tip: a landing stopped while queued leaves
+ * commits no landing recorded, and a cut at the tip left them behind
+ * (2026-10-17).
  */
 export interface WorkspaceCut {
   branch: string;
@@ -1876,8 +1879,9 @@ export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
  */
 export type WorkspaceUnlanded = "keep" | "check" | "unmade";
 
-/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip`, its items' handed-over outputs, `git status` passes over. */
+/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip`, its items' handed-over outputs, `git status` passes over; `base`, the branch it lands on, named first as the branch its `head` is on when that branch holds it. */
 export interface WorkspaceArchive {
+  base?: string;
   id: string;
   path?: string;
   skip?: string[];
@@ -1888,19 +1892,23 @@ export interface WorkspaceArchive {
  * What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD}
  * answer: the carry's folder on the machine, when one was written; or, for a
  * `keep` whose clone holds work that is nowhere else, `held`, what it holds,
- * with nothing deleted and its boundary closed.
+ * with nothing deleted and its boundary closed. `head`, for a git clone it
+ * read and deleted: its HEAD and the `origin` branch that holds it, where a
+ * cut again starts ({@link WorkspaceCut}).
  */
 export interface WorkspaceArchived {
   carry: string | null;
+  head?: WorkspaceCut;
   held?: WorkspaceHolding;
 }
 
 /**
  * What a workspace holds that is nowhere else, read with git on its machine's
  * host once its boundary is closed (agent workspace.ts `closeClone`): commits
- * on HEAD or any local branch that no remote-tracking ref has (`git rev-list
- * --count HEAD --branches --not --remotes`: landed work was pushed, whether
- * onto the base or to a branch of its own), entries of `git status
+ * on HEAD or any local branch that no remote-tracking ref of `origin` has
+ * (`git rev-list --count HEAD --branches --not --remotes=origin`: landed work
+ * was pushed, whether onto the base or to a branch of its own, and a cut
+ * again fetches it from `origin`), entries of `git status
  * --porcelain` (untracked files included; the paths `skip` names, the outputs
  * its items handed over, left out), and stash entries. Files git ignores are
  * none of it: they go with the clone, and a delegate keeps one by handing it

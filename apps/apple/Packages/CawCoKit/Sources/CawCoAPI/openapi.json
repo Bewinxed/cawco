@@ -28664,7 +28664,7 @@
             "type": "string",
             "format": "date-time"
           },
-          "landed": {
+          "head": {
             "$ref": "#/components/schemas/WorkspaceCut"
           },
           "path": {
@@ -45857,7 +45857,7 @@
         ]
       },
       "WorkspaceHolding": {
-        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref has (`git rev-list\n--count HEAD --branches --not --remotes`: landed work was pushed, whether\nonto the base or to a branch of its own), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
+        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
         "type": "object",
         "properties": {
           "ahead": {
@@ -45885,7 +45885,7 @@
         ]
       },
       "WorkspaceCut": {
-        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its last item landed, on `origin`'s branch `branch`\n(the default branch for work that landed there, the item's own branch for\none that landed as a branch or a pull request), fetched as the clone is.",
+        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its clone's HEAD was on when it retired, on `origin`'s\nbranch `branch` that held it then (its base when the base held it), read\nby its machine's archive ({@link WorkspaceArchived} `head`) and fetched as\nthe clone is. Never the base's tip: a landing stopped while queued leaves\ncommits no landing recorded, and a cut at the tip left them behind\n(2026-10-17).",
         "type": "object",
         "properties": {
           "branch": {

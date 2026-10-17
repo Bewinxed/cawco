@@ -622,7 +622,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * take it, so it waits for a sign-in or a free account (`signin`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or an
  * interrupt holds its work item and only its parent, its lead or the person
- * wakes it (`held`); or its workspace retired when its work landed and the
+ * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
  * `recut`).
  */
@@ -659,7 +659,7 @@ export interface SendDelivery {
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
-    "Its workspace retired when its work landed, so the hub is cutting its clone again at the same path, at the commit it landed; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
+    "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
   update:
     "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
   build:

@@ -12,9 +12,10 @@
  *
  * A finished delegate stays continuable without its folder: a handoff or a
  * follow-up to a retired one cuts its clone again at the same path, at the
- * commit it landed, and it goes on in the same session (work-items.ts
- * `recut`). Files git ignores go with the clone; a delegate keeps one by
- * handing it in as an output.
+ * commit its clone's HEAD was on as its machine deleted it (never its base's
+ * tip), and it goes on in the same session (work-items.ts `recut`). Files
+ * git ignores go with the clone; a delegate keeps one by handing it in as an
+ * output.
  *
  * Settling follows the events that end a hold: an item's end, its session
  * asleep or ended, an artifact removed. This sweep is the look that catches

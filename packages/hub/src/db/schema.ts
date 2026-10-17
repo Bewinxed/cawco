@@ -1283,11 +1283,13 @@ export const workspaces = sqliteTable("workspaces", {
   /** When {@link workspaces.holding} was read. */
   heldAt: timestamp("held_at"),
   /**
-   * The commit its last item landed, on `origin`'s branch that holds it: a
-   * retired workspace is cut again there for its delegate to go on. Null
-   * until an item lands a commit.
+   * The commit its clone's HEAD was on when it retired, on `origin`'s branch
+   * that held it then, as its machine read it right before deleting the
+   * clone (agent workspace.ts `headOnOrigin`): a retired workspace is cut
+   * again there for its delegate to go on, and one with none is not cut
+   * again (work-items.ts `recuttable`). Null until it retires.
    */
-  landed: text("landed", { mode: "json" }).$type<WorkspaceCut>(),
+  head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
    * The carry its discard wrote on its machine, the person letting its
    * unlanded work go: such a workspace is never cut again.
