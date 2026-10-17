@@ -432,6 +432,14 @@ export type NeedsItem =
   | AdmissionItem
   | TaskItem;
 
+/**
+ * Where an ask opens, its card's and a wide screen's landing alike: the
+ * thread a project's Caw asked in, else the session whose pane draws it,
+ * else the session that asked. His lead session is never where one opens.
+ */
+export const askView = (item: AskItem): string =>
+  item.thread ?? item.origin ?? item.instanceId;
+
 export interface RecentItem {
   at: number;
   href: string;
@@ -1409,14 +1417,15 @@ class Home {
   );
 
   /**
-   * What a wide screen opens with nothing open: the longest wait, else the
-   * latest work. Never a session whose move was just cancelled: its tab
-   * closed for the fleet page (move design §2c), and its row is on its way out.
+   * What a wide screen opens with nothing open: the longest wait, where it
+   * opens (`askView`), else the latest work. Never a session whose move was
+   * just cancelled: its tab closed for the fleet page (move design §2c), and
+   * its row is on its way out.
    */
   readonly landing = $derived.by<string | null>(() => {
     const ask = this.needs.find((item) => item.kind === "ask");
     if (ask?.kind === "ask") {
-      return ask.instanceId;
+      return askView(ask);
     }
     const cancelled = new Set(
       cawco.moves

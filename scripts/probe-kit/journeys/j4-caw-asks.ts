@@ -26,7 +26,6 @@ const TONE = "Which tone for the replies?";
 const PLAIN = "Plain";
 const WARM = "Warm";
 const TWO_NEED = /^Needs you, 2(\D|$)/;
-const OPEN_ROW = /^Open /;
 const QUESTION = /^Question from Caw/;
 const FIRST_OF_TWO = /1 of 2/;
 const SECOND_OF_TWO = /2 of 2/;
@@ -78,11 +77,13 @@ async function walk(leg: Leg): Promise<void> {
   const { fleet, page, base } = leg;
   const { projectId } = leg.seeded as Seeded;
   const token = `${ASKED} ${leg.id}`;
-  const opened = await fleet.api<{ thread: { id: string } }>(
+  const opened = await fleet.api<{ thread: { id: string; title: string } }>(
     `/api/projects/${projectId}/threads`,
     { body: `${token}: ${leg.title("draft the launch post")}` }
   );
   const thread = opened.thread.id;
+  /** His asks' row in what needs you, named for the thread they stand in. */
+  const row = `Open ${opened.thread.title}`;
   const asksHere = async () =>
     (await pendingAsks(fleet)).filter((one) => one.threadId === thread);
   await eventually(
@@ -107,7 +108,11 @@ async function walk(leg: Leg): Promise<void> {
     "Open what needs you, then Caw's question",
     async () => {
       await caw(page).click();
-      await page.getByLabel(OPEN_ROW).filter({ visible: true }).first().click();
+      await page
+        .getByLabel(row, { exact: true })
+        .filter({ visible: true })
+        .first()
+        .click();
     },
     async () => {
       await eventually(
@@ -182,10 +187,13 @@ const journey: Journey = {
     if (!seen.tools) {
       return say("Launch post");
     }
+    // The person's words reach Caw as a turn of their own, or, while a turn
+    // of his is still running (an earlier leg's), read mid-turn after a
+    // tool's result (MID_TURN): he asks on either.
     if (
       seen.all.includes(CAW) &&
       seen.last.includes(ASKED) &&
-      !seen.afterTool
+      (!seen.afterTool || seen.lastMidTurn)
     ) {
       return {
         everyMs: 20,
