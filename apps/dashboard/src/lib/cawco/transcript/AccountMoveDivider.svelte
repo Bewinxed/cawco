@@ -121,28 +121,37 @@
 
 <div
   data-account-move-divider-live={live || undefined}
-  class="move"
-  class:live
-  class:open
-  class:settled={watched && !live}
+  data-live={live || undefined}
+  data-open={open || undefined}
+  data-settled={(watched && !live) || undefined}
+  class="group/move @container mt-space-3 mb-space-1"
 >
   <!-- A button, so a keyboard and a finger can bring in the second line, as
        a pointer does by hovering. -->
+  <!-- literal: minmax(0, 1fr) auto minmax(0, 1fr) -->
   <button
     aria-expanded={live ? undefined : open}
-    class="line focus-inset touch-hit"
+    class="peer/line grid grid-cols-(--cols) items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-0 rounded-xs bg-transparent type-meta text-ink-muted cursor-pointer disabled:cursor-default focus-inset touch-hit"
     disabled={live}
     onclick={() => {
       open = !open;
     }}
     type="button"
     style:--account={hue ? hueVar(hue) : "var(--ink-muted)"}
+    style:--cols="minmax(0, 1fr) auto minmax(0, 1fr)"
   >
-    <span class="arm"></span>
-    <span class="mid mark-line"
+    <span
+      class="arm h-px bg-border-control group-data-live/move:opacity-0 motion-safe:origin-right motion-reduce:group-data-settled/move:transition-[opacity] motion-reduce:group-data-settled/move:dur-fade motion-reduce:group-data-settled/move:ease-out"
+    ></span>
+    <span
+      class="inline-flex items-center gap-space-2 min-w-0 whitespace-nowrap mark-line"
       >{#if working}
-        <span class="caw" data-box
-          ><span class="stand"
+        <span
+          class="relative inline-block flex-none align-middle w-(--tx-compacting-caw) h-(--tx-compact-caw)"
+          data-box
+          ><!-- literal: 0 --><span
+            style:--stand-leading="0"
+            class="absolute top-1/2 left-1/2 block leading-(--stand-leading) -translate-1/2"
             ><Caw
               ongone={() => {
                 working = false;
@@ -157,18 +166,25 @@
       {#if !live}
         <span
           data-slot="mark"
-          class="mark"
+          class="inline-flex items-center gap-space-2"
           data-box
           in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
           ><IconTransfer
             data-account-move-divider-glyph
             aria-hidden="true"
-            class="glyph"
+            class="flex-none size-space-4"
           />
-          <span data-slot="dot" aria-hidden="true" class="dot"></span></span
+          <!-- literal: 8px, 50% -->
+          <span
+            data-slot="dot"
+            aria-hidden="true"
+            style:--dot="8px"
+            style:--dot-r="50%"
+            class="flex-none size-(--dot) rounded-(--dot-r) bg-(--account)"
+          ></span></span
         >
       {/if}
-      <span data-slot="words" class="words"
+      <span data-slot="words" class="min-w-0 overflow-clip text-ellipsis num"
         >{#if watched}
           <MorphText text={words.line} />
         {:else}
@@ -176,16 +192,33 @@
         {/if}</span
       >
       {#if row.brief !== null}
-        <span data-slot="chev" class="chev" data-box
-          ><IconChevron aria-hidden="true" /></span
+        <span data-slot="chev" class="inline-flex flex-none" data-box
+          ><IconChevron
+            aria-hidden="true"
+            class="size-icon-sm group-data-open/move:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-toggle motion-safe:ease-in-out"
+          /></span
         >
       {/if}</span
     >
-    <span class="arm"></span>
+    <span
+      class="arm h-px bg-border-control group-data-live/move:opacity-0 motion-safe:origin-left motion-reduce:group-data-settled/move:transition-[opacity] motion-reduce:group-data-settled/move:dur-fade motion-reduce:group-data-settled/move:ease-out"
+    ></span>
   </button>
-  <p data-slot="detail" class="detail"><span>{words.detail}</span></p>
+  <!-- literal: 0fr, 1fr -->
+  <p
+    data-slot="detail"
+    style:--rows-shut="0fr"
+    style:--rows-open="1fr"
+    class="grid grid-rows-(--rows-shut) opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-(--rows-open) group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-(--rows-open) peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-(--rows-open) group-hover/move:opacity-100 @phone:grid-rows-(--rows-open) @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:dur-toggle motion-safe:ease-out"
+  >
+    <span class="overflow-hidden">{words.detail}</span>
+  </p>
   {#if open && row.brief !== null}
-    <div class="brief" data-state="open" transition:unfold>
+    <div
+      class="brief ms-(--x-text) pt-space-1"
+      data-state="open"
+      transition:unfold
+    >
       <MessageBody source={row.brief} />
     </div>
   {/if}
@@ -195,138 +228,9 @@
 {/if}
 
 <style>
-  /* The container the wide rule is measured against: the transcript column. */
-  .move {
-    container-type: inline-size;
-    margin-block: var(--space-3) var(--space-1);
-  }
-  .line {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--space-3);
-    inline-size: 100%;
-    min-block-size: var(--c-btn-h-sm);
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    cursor: pointer;
-
-    &:disabled {
-      cursor: default;
-    }
-  }
-  .arm {
-    block-size: 1px;
-    background: var(--border-control);
-
-    /* While the summary is written there is no line. */
-    .live & {
-      opacity: 0;
-    }
-  }
-  .mid {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-inline-size: 0;
-    white-space: nowrap;
-  }
-  .mark {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .words {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    font-variant-numeric: tabular-nums;
-  }
-  .mid :global(.glyph) {
-    flex: none;
-    inline-size: 14px;
-    block-size: 14px;
-  }
-  .dot {
-    flex: none;
-    inline-size: 8px;
-    block-size: 8px;
-    border-radius: 50%;
-    background: var(--account);
-  }
-  /* Caw at work's slot, the compaction row's while it compacts: as wide as
-     he stands, taking no height, so the row never changes height. */
-  .caw {
-    position: relative;
-    display: inline-block;
-    flex: none;
-    vertical-align: middle;
-    inline-size: var(--tx-compacting-caw);
-    block-size: var(--tx-compact-caw);
-  }
-  .stand {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    display: block;
-    line-height: 0;
-    translate: -50% -50%;
-  }
-  /* The summary opens under the line: the chevron says so, turned down
-     while it is open. */
-  .chev {
-    display: inline-flex;
-    flex: none;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-    .open & :global(svg) {
-      rotate: 90deg;
-    }
-  }
-  /* The second line: shut to nothing until it is shown, so a narrow
-     column keeps one line per move. */
-  .detail {
-    display: grid;
-    grid-template-rows: 0fr;
-    opacity: 0;
-    text-align: center;
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-
-    & > span {
-      overflow: hidden;
-    }
-  }
-  .open .detail,
-  .line:focus-visible + .detail {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .move:hover .detail {
-      grid-template-rows: 1fr;
-      opacity: 1;
-    }
-  }
-  @container (min-width: 640px) {
-    .detail {
-      grid-template-rows: 1fr;
-      opacity: 1;
-    }
-  }
-  /* The summary, at the text column, where a compaction's brief opens, in
-     the muted ink of a note. */
+  /* residual: foreign-dom: MessageBody's message and its prose, which take
+     no class; the summary reads in the muted ink of a note. */
   .brief {
-    margin-inline-start: var(--x-text);
-    padding-block-start: var(--space-1);
-
     & :global(.msg),
     & :global(.msg .prose),
     & :global(.msg .prose :is(h1, h2, h3, h4, h5, h6)) {
@@ -338,30 +242,10 @@
       --tw-prose-bold: var(--ink-muted);
     }
   }
+  /* residual: keyframes: the line draws out from the words as the row settles. */
   @media (prefers-reduced-motion: no-preference) {
-    .detail {
-      transition:
-        grid-template-rows var(--dur-toggle) var(--ease-out),
-        opacity var(--dur-toggle) var(--ease-out);
-    }
-    .chev :global(svg) {
-      transition: rotate var(--dur-toggle) var(--ease-in-out);
-    }
-    /* The line draws out from the words as the row settles. */
-    .settled .arm {
+    [data-settled] .arm {
       animation: arm-draw var(--dur-pop) var(--ease-out) backwards;
-    }
-    .arm:first-child {
-      transform-origin: right;
-    }
-    .arm:last-child {
-      transform-origin: left;
-    }
-  }
-  /* With less motion the line is not drawn: it fades in where it stands. */
-  @media (prefers-reduced-motion: reduce) {
-    .settled .arm {
-      transition: opacity var(--dur-fade) var(--ease-out);
     }
   }
   @keyframes arm-draw {
