@@ -98,4 +98,92 @@ Proof for each is `bun .cutover/i2-exact.ts` (Chromium, T's page against now's; 
 7. **`bun run lint`'s style greps: CompactionDivider's chevron put `filter` in a transition list** (`motion-safe:transition-[translate,scale,filter,rotate]`, set 1's form of T's own four-line `transition:`, which the line-based grep never read). The hub's gate runs the whole lint. `safari-blurs.ts` already drives this mark on the pinned WebKit (`compactionChevron`), so it follows 1a's rule for the folds and pending content (resolved.md, "style-greps"): the source's own value under a name that says why. A root token cannot hold it (`--chev-dur` and `--chev-ease` are set per state on the divider, and would resolve at `:root`), so it is app.css's `divider-chevron-turn` beside `divider-chevron`, worn as `motion-safe:divider-chevron-turn`; the mark's `--chev-durs`/`--chev-eases` are gone. Proof: `same … [rest|focus-visible|open|hovered|reduced motion] mark: 480 properties`, rest `transition-duration 0.12s, 0.12s, 0.12s, 0.16s`, focused or open `0.16s` ×4 on `cubic-bezier(0.2, 0, 0, 1)` with the turn's `cubic-bezier(0.77, 0, 0.175, 1)`, reduced motion `all 0s`.
 8. **Root typecheck: `tsc tsconfig.json` read 41 errors in the `.cutover` harnesses** (1a's include, `.cutover/*.ts`, on ESNext alone; `document`, `getComputedStyle`, `CSSTransition` inside `page.evaluate`): i2-bare, i2-exact, K1's group guard and modifiers, K2's looks. Each now opens with `/// <reference lib="dom" />`. `bunx tsc -p tsconfig.json`: exit 0; `bun run typecheck`: `1 of 24 checks failed … packages/hub openapi:check` (the wire drift the brief names).
 
-   **tokens `--check` is sound here.** With `--focus-ring-offset` changed in tokens.css it reads `tokens: 1 output(s) unlike the committed files … src/lib/tokens/tokens.css: unlike the committed file` and exits 1, leaving the file as it was.
+   **tokens `--check` is sound here.** With `--focus-ring-offset` changed in tokens.css it reads `tokens: 1 output(s) unlike the committed files … src/lib/tokens/tokens.css: unlike the committed file` and exits 1, leaving the file as it was. (Step 2 below rebuilt the check to compare bytes; this held only for differences its normaliser kept.)
+
+## Step 2: main at a7e27322c (M)
+
+`git merge --no-ff a7e27322c` on 2a's head (d8c49e69f) and type-roles' final head (ce177f8d4, merge 63dd70709; K2's c7999de2b was already in). 260 files main changed since T, 55 of them the dashboard's; 18 conflicted.
+
+### Type-roles' `site-map.tsv` against the four 7c files
+
+ce177f8d4 brought `site-map.tsv` (README: "all 577 role sites … the element(s) at head with their full class string"). The four files' 15 rows, each role on its element here: UsageMeter's eight (`.noline`, `.slot.more`, `.kpi`, `.pop-empty` ×3, `.provider`, `.org`, `.nm`, `.line` ×2), MentionField's editor (`type-body`), tip (`type-meta`) and handle (`type-code`), its chip's `css` verdict (the residual `.mention-chip { font: var(--type-label) }`, chips made in script), ViewTable's cell link (`type-label text-ink-row no-underline`) and its two `unmapped` ledger rows (the head's `variant="caps"`, the cells' `view`/`view-lead`, each `type-label`). SystemLine has no font site (its conflict was the `data-code` background).
+
+### Every dashboard file main changed since T, and how it is carried
+
+| file | main | carried |
+|---|---|---|
+| scripts/build-tokens.ts | `--check` that runs `bun run tokens` and puts the outputs back | one check, rebuilt (below) |
+| accounts/AtLimitBlock.svelte | 9bd22d971 | set 8's form; `.work` is `flex flex-col gap-space-2 pt-space-3 pb-space-2 text-pretty text-ink-row`, as set 8 wrote its siblings; main's script and markup as main |
+| client.svelte.ts | cf4691154, 80a4d51fd, 807b06c7c, 7469f85d6 | as main; the frame switch names `taken_send` (main's new kind, which its `default` took) and no longer `user_message` (gone from main's union) |
+| config/deletes.ts, config/undo.ts | 647518da7 (new) | as main |
+| config/holders.ts, config/rule-delete.ts | 647518da7 (deleted) | deleted |
+| config/editors/{DelegateType,Hook,Mcp,Memory,Rule,Subagent}Editor.svelte | 647518da7 (Rule also 76faafab2) | set 8's form; EditorQuestion and Asker gone as on main; no class or style change |
+| delegate-types.ts, fleet.ts, hooks.ts, rules.ts, hub-auth.svelte.ts, home/home-state.svelte.ts, transcript/local.ts, workspace/warm.svelte.ts, routes/(app)/+layout.server.ts | logic | as main |
+| GlassCard.svelte | 76faafab2 | `strategy="fixed"`, as main |
+| home/NeedsCard.svelte | 80a4d51fd | set 5's stacked peers; the three answers by `#each UPSTREAM_POSTS`, each `edge="none"` (set 5's form of `class="peer"`) |
+| home/WorkTabs.svelte | 846cf4b46, 7083786c0 | the count of top-level sessions (`topOf`) as main; the pill on set 5's span: `bg-count-fill-live data-[tab=finished]:not-data-failed:bg-count-fill-done data-failed:bg-count-fill-fail text-count-fill-ink`, `{count}` alone. `data-failed:` sorts before `data-[tab=finished]:` (getClassOrder 2, 3) where M's `.count[data-failed]` comes after `[data-tab]`, so the finished fill takes the failure's negation (V.md). Set 5's wash form (`countTone`, `--wash`, `--ink`, `--count-pick`, the `.loud` copy) is deleted |
+| PairingScreen.svelte | 807b06c7c | as main |
+| project/ProjectHead.svelte | 76faafab2, 80a4d51fd | set 5's form; `.places`'s `padding-inline: 0` is `px-0` (set 5's `p-0` took the mark line's block padding, as T's `padding: 0` did) |
+| project/UpstreamMenu.svelte | 80a4d51fd | as main (types) |
+| tasks/TaskActivity, TaskFields, TaskReview.svelte | a8ec5bf7c | set 3's files whole: set 3 carries every hunk (the dock's safe-bottom, `ms-(--add-edge)`, the chips' `gap-space-3` and target margins) |
+| ThreadPane.svelte | 76faafab2 | `<AlertAction>` plain: main deleted the rule set 5 had made `place="full-height"` and `flex items-center` |
+| ToolMatrix.svelte | 76faafab2 | `hover-hover:opacity-0`: main's `[@media(hover:hover)]:`, the house variant of the same query; specificity (0,1,0) under the group variants' (0,2,0), as M |
+| transcript/Prompt.svelte | 807b06c7c | the comment as main, on set 1's form |
+| transcript/Shot.svelte | 603d9fdbd, 318df44fc | set 1's boxes and video class; main's captions script, `captionsReady`, the conditional `<track>`, its reason comments and `missing` |
+| transcript/SystemLine.svelte | 288b8b542 | `{responses.lead}` on set 1's span |
+| transcript/ToolGroup.svelte | 603d9fdbd, 318df44fc, 807b06c7c | merged cleanly onto set 1's form (props, the `.vtt` row's DocThumb) |
+| transcript/Transcript.svelte | 735f5aea0 | merged cleanly onto set 1's form (script) |
+| workspace/PaneTabs.svelte | b8b16770b | `group-data-lifted/tab:opacity-100` on both cast boxes (set 5's c63ca4a1c form); the comment as main |
+| ui/alert/alert.svelte, alert-action.svelte | 76faafab2 | main's grid on K2's form (`size-icon-md`); AlertAction is main's file: K2's `place` variant's one consumer (ThreadPane) is gone, so the variant goes |
+| ui/fluid-tabs/TabItem.svelte | 5fcd46907 | `[[data-variant=folder]_[data-ride]_&]:transition-off`, main's selector in its order. The brief's `in-data-ride:in-variant-folder:transition-off` compiles to (0,1,0), the folder transition's own weight, and sorts first, so the folder transition ran on under a swipe: with it in place the case read `DIFFER … [riding] … transition-property none → color, --pick`. M's rule wins by its weight, (0,4,0) over (0,3,0); this one does too, (0,3,0) over (0,1,0) |
+| tokens.css, tokens.ts (with theme.css, the Apple colour sets, the decision-page kit) | 7083786c0 | regenerated by `bun run tokens`, never hand-merged |
+| routes config/connections | 647518da7 | set 9's form; the row's confirm fieldset goes (removals win) |
+| routes config/{delegate-types,hooks,mcp,memory,rules,skills,subagents} | 647518da7 (rules also 76faafab2) | merged cleanly on set 9's form; no class change |
+| routes config/devices, motion/delegate-tray, motion/updates | 807b06c7c | the words as main |
+| design/tokens/*.json | 7083786c0 | both sides' entries (merged cleanly), outputs regenerated |
+
+Removals checked whole: the files importing AskHere, and those naming EditorQuestion, `holders` or `rule-delete`, are the same set as main's; no `telegram` is left in the dashboard (main: none).
+
+Outside the dashboard, main's files are as main, but for: `packages/core/src/upstream-post.ts` and `packages/agent/src/upstream-posts.ts` (`case "mcp"` for `default`, the switch branch's rule, `states-lint`), and three of main's new probe specs, which read classes the cutover made hooks (as 1a's 787ed7ec0 did for strip-layout): folder-ride (`[data-slot="stack"][data-swipe]`), home-counts (TabItem's `ff-tab`, `hit`, `fold`/`sheet` hooks and `data-tab-item-selected`), config-undo (`section[data-ask]`).
+
+### The token check, rebuilt
+
+Both sides had a `--check`. Ours built in memory and held each output to the committed file through a normaliser (whitespace, trailing zeros, hex case and quotes set aside), since the formatter ran after the build; it passed a change it should not: with tokens.css's `inset 0 0 0 1px` edited to `inset 0 0 01px` (three lengths, a different shadow), it read `the token source conforms and every output matches the committed files (242 files)`, exit 0. Main's ran the whole `bun run tokens` over the tree and wrote the old bytes back, exact but writing the tree mid-check and blind to theme.css. Now the build formats every output in memory as `bun fmt` writes that file (`scripts/fmt.ts` `formatText`: the pinned canary on standard input under the file's path, so its options and ignores hold; a file with no parser comes back as given), so what it writes is final: `bun run tokens` is the build alone, and `--check` compares bytes. Style Dictionary only makes the Apple module's text; the colour sets go through the same `emit`, and a set no token makes is removed (check: reported). Proof:
+- the new build against the old pipeline (the old build and `fmt.ts`, in a scratch worktree at 63dd70709) over the same merged sources: `same` for tokens.css, tokens.ts, theme.css, the decision-page kit, Tokens.swift, Tokens.xcassets and design/tokens (`diff -r`);
+- clean: `tokens: the token source conforms and every output is byte for byte the committed file (242 files)`, exit 0, the outputs' checksum the same before and after;
+- `inset 0 0 01px`: exit 1, `tokens: 1 output(s) unlike the committed files`;
+- a stray `zz-stale.colorset`: the check reports `… zz-stale.colorset: committed, and no token makes it` (exit 1), the build removes it, the check reads clean again.
+
+### Proofs: each carried style against its own rule at M
+
+`bun .cutover/i2-exact.ts` takes a case's `at` (i2-tree's M) for its source side: that sha's build, its components' compiled `<style>`. Every property of each element compares; the values shown are the ones each case is about.
+- ToolMatrix's cell actions: rest `opacity 0`, cell hovered `1`, focus within `1`.
+- AtLimitBlock's work block: `padding-top 11px; padding-bottom 7px; row-gap 7px`, its label in the move switch's ink and font (the spec's own check).
+- WorkTabs' pill, light and dark: live `oklch(0.5 0.15 252)`, done `oklch(0.52 0.14 140)`, failed `oklch(0.53 0.19 22)`, numeral `oklch(0.993 0.004 85)`; dark `oklch(0.74 0.12 245)`, `oklch(0.76 0.15 135)`, `oklch(0.71 0.16 20)` on `oklch(0.184 0.004 70)`.
+- ProjectHead's places: `padding-top 4.96131px; padding-bottom 4.96131px; padding-left 0px`, at rest and hovered.
+- PaneTabs' cast on the strip's first tab: at rest the leading box `opacity 0`; lifted `1` both; lifted and chosen in dark, `rgba(0, 0, 0, 0)` casts.
+- TabItem's folder tab: rest `color, --pick` at `0.08s, 0.4s`; riding `none`; riding under reduced motion `none`.
+- ThreadPane's can't-start card: the alert's columns `577.578px 106.422px` at the desk and `197.578px 106.422px` on a phone, the words in column -2, the action in -1, `column-gap 10px`.
+
+Whole run on the merged tree: `i2-exact: 61 cases, 146 element states, 0 differ`. The codemod's: `i2-codemod: 356 hunks; 145 distinct rewrites, 253 states, 0 differ; 4 dropped twins; 0 unexplained`.
+
+### variants.css had drifted from its generator
+
+The same build-then-format split, and nothing compared the committed file with what `bun run variants` makes: it lacked two variants the components' selectors now read (`slot-cell-d`, `slot-work-tabs-rows`; no markup names either, so nothing drew differently). build-variants.ts now formats its file in memory (`formatText`) and writes it final; `--check` compares bytes and names each variant it would add or drop, and `bun run lint` runs it beside the token check. Proof: the new build and the old pipeline write the same bytes (`cmp`); `variants: 466 named variants, byte for byte the committed file`; on the stale file, exit 1 with `+ @custom-variant slot-cell-d (&[data-slot="cell-d"]);` and `+ @custom-variant slot-work-tabs-rows (&[data-slot="work-tabs-rows"]);`.
+
+### main's new specs that read the carried UI, run on this tree
+
+`bun scripts/probe-kit/run.ts <spec>` on a scratch fleet (real hub, agent, sessiond) and the built dashboard, with the three retargeted ones among them:
+- folder-ride: `ALL PASS`, 3 checks: at rest every folder tab carries `color, --pick / 0.08s, 0.4s`, mid-swipe `ride=true; none / 0s`, after it lands `--pick` again (a real touch drag through CDP);
+- home-counts: `ALL PASS`, 47 checks: every Working count reads 2 with the delegates on or off, and each pill in every state (chosen or not, at rest, hovered, pressed, Finished failed) holds 3:1 on its ground and its numeral 4.5:1, light and dark, from the engine and from the pixels drawn;
+- config-undo: `ALL PASS`, 44 checks: every config page and editor deletes at once with Undo in the toast, connections included;
+- delegate-work-control: `ALL PASS`, 4 checks, the label `x 543`, in the move switch's font and ink;
+- video-captions: `ALL PASS`, 7 checks: a sidecar `.vtt` captions its video, a lone one is a file row, a removed one says "Captions file not available".
+
+### Gates on the merged tree
+
+Before the carries (the merge as it stood): `bun run lint` stopped at states-lint (`3 switch(es) leave a case unhandled`: client.svelte.ts `taken_send`, upstream-posts.ts and upstream-post.ts `mcp`), then svelte-check `621 files, 1 errors, 0 warnings` (the switch's stale `user_message`). After:
+- `bun run lint`: exit 0. `svelte-unused-css: 610 file(s), no style rule pruned`; `spacing-ratchet: 414 numeric spacing utilities (baseline 518)`; `tokens: the token source conforms and every output is byte for byte the committed file (242 files)`; `variants: 466 named variants, byte for byte the committed file`; `Checked 2110 files in 3s. No fixes applied.`; eslint clean; `134 files with a <style> of 610; declarations by kind: keyframes 134, foreign-dom 929, pseudo 229, svg-paint 44, unmapped 0; 0 violations`; `style greps: no transition-all, no filter in a transition list, no has-[.class]`; `token contrast: all 90 pairs DESIGN.md names hold`; `switch exhaustiveness: every switch over a union or enum is whole (1420 files)`.
+- `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings` (main's captions fix in); `packages/hub openapi:check · … · ok`; `typecheck: 24 checks passed`.
+- vite build: `✔ done`.
+- `git grep -l '<style' -- 'apps/dashboard/src/**/*.svelte' | wc -l`: 134.

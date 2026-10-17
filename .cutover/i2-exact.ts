@@ -2,11 +2,12 @@
 /**
  * `bun .cutover/i2-exact.ts [name filter]`: integration 2's exactness proof.
  * Each case in i2-cases.ts is an element (with the ancestors its states need)
- * written twice: as ac7b79de8 rendered it and as the converted tree does.
- * Each side is its own page in Chromium:
- * - T: T's Tailwind build (T's src/app.css, from `git archive ac7b79de8`)
+ * written twice: as its source of record rendered it (ac7b79de8, or for a
+ * change main made after T, a7e27322c: the case's `at`) and as the
+ * converted tree does. Each side is its own page in Chromium:
+ * - source: that sha's Tailwind build (its src/app.css, from `git archive`)
  *   for exactly the classes on the page, then the case's components' own
- *   `<style>` as Svelte compiled it at T;
+ *   `<style>` as Svelte compiled it there;
  * - now: this tree's build and its components' residual `<style>`, the same
  *   way.
  * A component's scoped class (`svelte-<hash>`, read from its compiled CSS)
@@ -19,9 +20,9 @@
  * tokens, and what they feed is read through the standard properties. A
  * component's own @keyframes name is read without its scope hash, and the
  * compare's three equality rules hold (`equalised`). Before reading,
- * transitions are finished and animations held at their start. The T page
- * also loads the sheets components imported themselves at T (ns-theme.css,
- * workflows.css), as Vite did.
+ * transitions are finished and animations held at their start. The source
+ * page also loads the sheets components imported themselves there
+ * (ns-theme.css, workflows.css), as Vite did.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
@@ -31,7 +32,7 @@ import { pathToFileURL } from "node:url";
 import { plugin } from "bun";
 import { chromium, type Page } from "playwright-core";
 import type { Case, State } from "./i2-cases";
-import { T, T_DIR } from "./i2-tree";
+import { M, T, treeDir } from "./i2-tree";
 
 const MODULE_SCRIPT = /<script lang="ts" module>([\s\S]*?)<\/script>/;
 const SVELTE = /\.svelte$/;
@@ -71,23 +72,24 @@ const SHEETS = [
 const CLASS_ATTR = /class="([^"]*)"/g;
 const SPACE = /\s+/;
 
-/** ac7b79de8's apps/dashboard, with this tree's dependencies beside it. */
-function tTree(): string {
-  const dash = join(T_DIR, "apps/dashboard");
+/** A sha's apps/dashboard, with this tree's dependencies beside it. */
+function sourceTree(sha: string): string {
+  const dir = treeDir(sha);
+  const dash = join(dir, "apps/dashboard");
   if (!existsSync(join(dash, "src/app.css"))) {
-    mkdirSync(T_DIR, { recursive: true });
+    mkdirSync(dir, { recursive: true });
     execFileSync(
       "sh",
       [
         "-c",
-        `git -C "$0" archive ${T} apps/dashboard | tar -x -C "$1"`,
+        `git -C "$0" archive ${sha} apps/dashboard | tar -x -C "$1"`,
         root,
-        T_DIR,
+        dir,
       ],
       { stdio: "inherit" }
     );
     symlinkSync(join(app, "node_modules"), join(dash, "node_modules"));
-    symlinkSync(join(root, "node_modules"), join(T_DIR, "node_modules"));
+    symlinkSync(join(root, "node_modules"), join(dir, "node_modules"));
   }
   return dash;
 }
@@ -304,7 +306,8 @@ function read(page: Page): Promise<Record<string, Record<string, string>>> {
   });
 }
 
-const tDash = tTree();
+// Both trees first: the cases call their kit recipes from them.
+const dashes = new Map([T, M].map((sha) => [sha, sourceTree(sha)]));
 const { CASES } = await import("./i2-cases");
 const filter = process.argv[2] ?? "";
 const cases = CASES.filter((c) => c.name.includes(filter));
@@ -315,12 +318,13 @@ let differ = 0;
 // pages, then both are read, before the next.
 for (const c of cases as Case[]) {
   const files = c.files ?? [];
+  const at = c.at ?? T;
   // biome-ignore lint/performance/noAwaitInLoops: one case's pages at a time
   const built = await Promise.all([
     side(
-      tDash,
+      dashes.get(at) ?? sourceTree(at),
       (f) =>
-        execFileSync("git", ["-C", root, "show", `${T}:apps/dashboard/${f}`], {
+        execFileSync("git", ["-C", root, "show", `${at}:apps/dashboard/${f}`], {
           encoding: "utf8",
           maxBuffer: MAX_BUFFER,
         }),

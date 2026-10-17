@@ -1,16 +1,17 @@
 /**
- * The cases i2-exact.ts renders twice, at ac7b79de8 and now. `t` is the
- * element as T's markup wrote it (with `{S0}` … where its component's own
- * scoped class went), `now` as the converted tree writes it. A kit part's
- * class is its own `cn(…)` over its recipe, called from that tree, and a
- * component's element is read from its own source (`element`) with the
- * ancestors and custom properties it renders under, so every computed
- * property compares.
+ * The cases i2-exact.ts renders twice, at their source of record and now.
+ * `t` is the element as the source's markup wrote it (ac7b79de8; for a
+ * change main made after T, a7e27322c, the case's `at`), with `{S0}` …
+ * where its component's own scoped class went; `now` as the converted tree
+ * writes it. A kit part's class is its own `cn(…)` over its recipe, called
+ * from that tree, and a component's element is read from its own source
+ * (`element`) with the ancestors and custom properties it renders under, so
+ * every computed property compares.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { T, T_DIR } from "./i2-tree";
+import { M, M_DIR, T, T_DIR } from "./i2-tree";
 
 export interface State {
   attrs?: { sel: string; name: string; value: string | null }[];
@@ -21,6 +22,8 @@ export interface State {
   width?: number;
 }
 export interface Case {
+  /** The sha `t` is written at: T unless main changed it after T (M). */
+  at?: string;
   files?: string[];
   name: string;
   now: string;
@@ -39,6 +42,7 @@ const CN_BASE = /class=\{cn\(\s*"([^"]*)"/;
 
 const app = resolve(import.meta.dir, "../apps/dashboard/src");
 const tApp = join(T_DIR, "apps/dashboard/src");
+const mApp = join(M_DIR, "apps/dashboard/src");
 const ui = (root: string, part: string) =>
   join(root, "lib/components/ui", part);
 
@@ -61,25 +65,33 @@ const { inputVariants } = await import(ui(app, "input/input.svelte"));
 const { sidebarMenuBadgeVariants } = await import(
   ui(app, "sidebar/sidebar-menu-badge.svelte")
 );
+const { alertVariants } = await import(ui(app, "alert/alert.svelte"));
+const { alertVariants: mAlertVariants } = await import(
+  ui(mApp, "alert/alert.svelte")
+);
+
+/** Where a source is read: at T, at M (`git show`), or as it stands. */
+type At = "t" | "m" | "now";
+const SHAS = { t: T, m: M } as const;
 
 const repo = resolve(import.meta.dir, "..");
 const sources = new Map<string, string>();
-/** A component's text: at T (`git show`) or as it stands. */
-function source(file: string, at: "t" | "now"): string {
+/** A component's text: at T or M (`git show`), or as it stands. */
+function source(file: string, at: At): string {
   const key = `${at}:${file}`;
   if (!sources.has(key)) {
     sources.set(
       key,
-      at === "t"
-        ? execFileSync(
+      at === "now"
+        ? readFileSync(join(repo, "apps/dashboard", file), "utf8")
+        : execFileSync(
             "git",
-            ["-C", repo, "show", `${T}:apps/dashboard/${file}`],
+            ["-C", repo, "show", `${SHAS[at]}:apps/dashboard/${file}`],
             {
               encoding: "utf8",
               maxBuffer: MAX_BUFFER,
             }
           )
-        : readFileSync(join(repo, "apps/dashboard", file), "utf8")
     );
   }
   return sources.get(key) as string;
@@ -116,7 +128,7 @@ function startTag(text: string, anchor: string): string {
  * attribute's text, or the first string of a `class={[…]}`) and its
  * literal custom properties as an inline style.
  */
-export function element(file: string, at: "t" | "now", anchor: string) {
+export function element(file: string, at: At, anchor: string) {
   const tag = startTag(source(file, at), anchor);
   const cls = tag.match(CLASS_TEXT)?.[1] ?? tag.match(CLASS_ARRAY)?.[1] ?? "";
   const vars = [...tag.matchAll(STYLE_VAR)]
@@ -127,12 +139,7 @@ export function element(file: string, at: "t" | "now", anchor: string) {
 }
 
 /** `class="…" style="…"` for an element, with extra classes before it. */
-function attrs(
-  file: string,
-  at: "t" | "now",
-  anchor: string,
-  extra = ""
-): string {
+function attrs(file: string, at: At, anchor: string, extra = ""): string {
   const e = element(file, at, anchor);
   return `class="${`${extra} ${e.cls}`.trim()}" style="${e.style}"`;
 }
@@ -164,6 +171,19 @@ const CHEVRON_SVG = `aria-hidden="true" width="1.2em" height="1.2em" viewBox="0 
 const BADGE = "sidebar/sidebar-menu-badge.svelte";
 /** The rail's menu button a badge follows: the peer its states read. */
 const MENU_BUTTON = `<a href="#x" class="peer/menu-button" data-sidebar="menu-button" data-size="default">Fleet</a>`;
+const TOOL_MATRIX = "src/lib/cawco/ToolMatrix.svelte";
+const AT_LIMIT = "src/lib/cawco/accounts/AtLimitBlock.svelte";
+const WORK_TABS = "src/lib/cawco/home/WorkTabs.svelte";
+const PROJECT_HEAD = "src/lib/cawco/project/ProjectHead.svelte";
+const PANE_TABS = "src/lib/cawco/workspace/PaneTabs.svelte";
+const TAB_ITEM = "lib/components/ui/fluid-tabs/TabItem.svelte";
+const THREAD_PANE = "src/lib/cawco/ThreadPane.svelte";
+/** What the fluid-tabs kit sets round a pane tab's cast, on both trees. */
+const TAB_KIT =
+  "--flare:8px;--slope-start:1px;--slope-end:1px;--radius:8px;--choose-dur:160ms;--choose-ease:ease";
+/** The folder root and its list, round a folder tab, with the choice's clock the list sets (TabsList). */
+const folder = (tab: string) =>
+  `<div data-variant="folder"><div data-slot="ff-tabs-list" data-list style="--choose-dur:var(--dur-settle);--choose-ease:var(--ease-crossfade)">${tab}</div></div>`;
 
 const CN_CALL = /class=\{cn\(([\s\S]*?)className/;
 const STRING = /"([^"]*)"/g;
@@ -650,6 +670,129 @@ export const CASES: Case[] = [
         force: [{ sel: '[data-slot="divider"]', pseudo: ["hover"] }],
       },
       { name: "reduced motion", motion: "reduce" },
+    ],
+  },
+
+  // ------- main's changes after T, carried onto the converted form (at M)
+  {
+    name: "ToolMatrix.svelte:121 a cell's actions, shown under a resting pointer",
+    at: M,
+    files: [TOOL_MATRIX],
+    t: `<div data-cell class="group/cell"><span data-check="actions" class="${element(TOOL_MATRIX, "m", "[@media(hover:hover)]:opacity-0").cls}">x</span></div>`,
+    now: `<div data-cell class="group/cell"><span data-check="actions" class="${element(TOOL_MATRIX, "now", "hover-hover:opacity-0").cls}">x</span></div>`,
+    show: ["opacity"],
+    states: [
+      REST,
+      {
+        name: "cell hovered",
+        force: [{ sel: "[data-cell]", pseudo: ["hover"] }],
+      },
+      {
+        name: "focus within the cell",
+        force: [{ sel: "[data-cell]", pseudo: ["focus-within"] }],
+      },
+    ],
+  },
+  {
+    name: "AtLimitBlock.svelte:130 what a delegate's work does at its limit",
+    at: M,
+    files: [AT_LIMIT],
+    t: `<div class="{S0} lim"><div class="{S0} switch-line"><label data-check="move" class="{S0}" for="m">Move</label></div><div data-check="work" class="{S0} work"><p data-check="label" class="{S0}">What a delegate's work does</p></div></div>`,
+    now: `<div class="@container flex flex-col"><div ${attrs(AT_LIMIT, "now", "justify-between gap-space-4")}><label data-check="move" class="cursor-pointer" for="m">Move</label></div><div data-check="work" ${attrs(AT_LIMIT, "now", "pt-space-3 pb-space-2 text-pretty")}><p data-check="label">What a delegate's work does</p></div></div>`,
+    show: ["padding-top", "padding-bottom", "row-gap", "color"],
+  },
+  {
+    name: "WorkTabs.svelte:812 the count pill, live, finished and failed",
+    at: M,
+    files: [WORK_TABS],
+    t: `<div style="--tight:20">${[
+      ["live", "working", ""],
+      ["done", "finished", ""],
+      ["fail", "finished", "data-failed"],
+    ]
+      .map(
+        ([check, tab, failed]) =>
+          `<span data-check="${check}" data-num data-slot="count" class="{S0} num count" ${failed} data-flip="pop" data-tab="${tab}">3</span>`
+      )
+      .join("")}</div>`,
+    now: `<div style="--tight:20">${[
+      ["live", "working", ""],
+      ["done", "finished", ""],
+      ["fail", "finished", "data-failed"],
+    ]
+      .map(
+        ([check, tab, failed]) =>
+          `<span data-check="${check}" data-num data-slot="count" ${attrs(WORK_TABS, "now", 'data-slot="count"')} ${failed} data-flip="pop" data-tab="${tab}">3</span>`
+      )
+      .join("")}</div>`,
+    show: ["background-color", "color"],
+    states: [REST, { name: "dark", dark: true }],
+  },
+  {
+    name: "ProjectHead.svelte:476 · N places keeps the mark line's block padding",
+    at: M,
+    files: [PROJECT_HEAD],
+    t: `<p class="{S0} line mark-line"><button data-check="places" class="{S0} places" data-places-line type="button">· 2 places</button></p>`,
+    now: `<p ${attrs(PROJECT_HEAD, "now", "mark-line type-label flex min-w-0")}><button data-check="places" ${attrs(PROJECT_HEAD, "now", "data-places-line")} data-places-line type="button">· 2 places</button></p>`,
+    show: ["padding-top", "padding-bottom", "padding-left"],
+    states: [
+      REST,
+      {
+        name: "hovered",
+        force: [{ sel: "[data-check]", pseudo: ["hover"] }],
+      },
+    ],
+  },
+  {
+    name: "PaneTabs.svelte:1517 a lifted tab casts both its edges, the strip's first too",
+    at: M,
+    files: [PANE_TABS],
+    t: `<div style="${TAB_KIT}"><div data-tab class="{S0} tab" style="--lone-start:1;--lone-end:0"><span data-slot="shade" aria-hidden="true" class="{S0} shade"><span data-check="start" class="{S0} s"></span><span data-check="end" class="{S0} e"></span></span></div></div>`,
+    now: `<div style="${TAB_KIT}"><div data-tab data-slot="tab" ${attrs(PANE_TABS, "now", "group/tab pane-tab-pads", "{S0}").replace('style="', 'style="--lone-start:1;--lone-end:0;')}><span data-slot="shade" aria-hidden="true" ${attrs(PANE_TABS, "now", 'data-slot="shade"', "{S0}")}><span data-check="start" ${attrs(PANE_TABS, "now", "shadow-tab-start group-data-chosen", "{S0}")}></span><span data-check="end" ${attrs(PANE_TABS, "now", "shadow-tab-end group-data-chosen", "{S0}")}></span></span></div></div>`,
+    show: ["opacity", "box-shadow"],
+    states: [
+      { name: "first in the strip, at rest" },
+      {
+        name: "lifted",
+        attrs: [{ sel: "[data-tab]", name: "data-lifted", value: "" }],
+      },
+      {
+        name: "lifted and chosen",
+        attrs: [{ sel: "[data-tab]", name: "data-chosen", value: "" }],
+      },
+      { name: "lifted and chosen, dark", dark: true },
+    ],
+  },
+  {
+    name: "TabItem.svelte:290 a folder tab under a swipe takes no transition",
+    at: M,
+    files: [`src/${TAB_ITEM}`],
+    t: folder(
+      `<span data-check="tab" data-slot="ff-tab" class="{S0} ff-tab">Fleet</span>`
+    ),
+    now: folder(
+      `<span data-check="tab" data-slot="ff-tab" class="{S0} ${cn(cnStrings(join(app, TAB_ITEM)))}">Fleet</span>`
+    ),
+    show: ["transition-property", "transition-duration"],
+    states: [
+      REST,
+      {
+        name: "riding",
+        attrs: [{ sel: "[data-list]", name: "data-ride", value: "" }],
+      },
+      { name: "riding, reduced motion", motion: "reduce" },
+    ],
+  },
+  {
+    name: "ThreadPane.svelte:1084 the can't-start card's action in its own column",
+    at: M,
+    files: [THREAD_PANE],
+    t: `<div class="{S0} off"><div data-check="alert" data-slot="alert" role="status" class="${tcn(mAlertVariants({ variant: "default" }), "off-line")}"><div data-check="description" data-slot="alert-description" class="${tcn(cnStrings(ui(mApp, "alert/alert-description.svelte")))}">No machine can start Caw here.</div><div data-check="action" data-slot="alert-action" class="col-start-[-1] row-start-1 self-center"><button>Check machines</button></div></div></div>`,
+    now: `<div ${attrs(THREAD_PANE, "now", "inset-x-0 bottom-(--off-bottom)")}><div data-check="alert" data-slot="alert" role="status" class="${cn(alertVariants({ variant: "default", surface: "card" }), "items-center")}"><div data-check="description" data-slot="alert-description" class="${cn(cnStrings(ui(app, "alert/alert-description.svelte")))}">No machine can start Caw here.</div><div data-check="action" data-slot="alert-action" class="col-start-[-1] row-start-1 self-center"><button>Check machines</button></div></div></div>`,
+    show: ["grid-template-columns", "grid-column-start", "column-gap"],
+    states: [
+      { name: "desk", width: 1280 },
+      { name: "phone", width: 390 },
     ],
   },
 
