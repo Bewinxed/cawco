@@ -13,7 +13,7 @@ Every screen is real code from the first one. Look at the repository before step
 
 - **No code yet** (no `package.json`, no app): the project starts as code now. Take the stack the person or the brief named; when none is named, ask once with `AskUserQuestion` (SvelteKit, Vite with React or Vue, Astro, Nuxt), then scaffold it with that framework's own creator in the repository root: `npx sv create`, `npm create vite@latest`, `npm create astro@latest`, `npx nuxi@latest init`, `npx create-next-app@latest`. Install, commit the scaffold on its own, then build the screen as step 4 says. Done when the project's dev command starts and the scaffold is committed.
 - **A Vite, Astro or Nuxt project:** the screen and its states are a sheet (step 4), mounted live by the stage.
-- **Any other toolchain** (Next.js for now, Angular CLI, plain webpack, a custom server), **or an Astro component (`.astro`)**: the stage mounts none of these and refuses the sheet by name. Show the states as a `page` artifact instead: run the project's build, then write one HTML page that links the built CSS it emits and lays out one section per state, with the markup the component renders; pins on it carry no `file:line`.
+- **Any other stack** (Next.js, Angular CLI, plain webpack, a custom server, Flutter, SwiftUI, Compose), **or an Astro component (`.astro`)**: these have no stage, and the stage refuses their sheet by name. Show the states as a `page` artifact, the way a design tool shows components: one HTML page, one section per state, drawn in HTML on the project's CSS. A web project's CSS is what its build emits: run the build and link it. Flutter, SwiftUI and Compose have no CSS: write it from the project's design tokens. Pins on the page carry no `file:line`.
 
 ## Steps
 

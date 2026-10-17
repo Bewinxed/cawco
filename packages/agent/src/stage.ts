@@ -141,10 +141,13 @@ const TOOLCHAIN_NAME: Record<StageToolchain, string> = {
 const ASTRO_MAJOR = 7;
 /** The first Nuxt whose Vite has the Environment API the stage runs on (Nuxt 4 ships Vite 7 on). */
 const NUXT_MAJOR = 4;
-/** Toolchains a sheet does not run on yet, by the file that names them. Next.js waits on the owner: its dev compiler compiles only routes. */
-const LATER: [RegExp, string][] = [[/^next\.config\.[cm]?[jt]s$/, "Next.js"]];
-/** Toolchains that take no plugin, by the file that names them (spec §2). */
+/**
+ * Toolchains a sheet does not run on, by the file that names them (spec §2):
+ * their components are shown as a page. Next.js is one: its dev compiler
+ * compiles only route entries.
+ */
 const NO_PLUGIN: [RegExp, string][] = [
+  [/^next\.config\.[cm]?[jt]s$/, "Next.js"],
   [/^angular\.json$/, "Angular CLI"],
   [/^webpack\.config\.[cm]?[jt]s$/, "webpack"],
 ];
@@ -350,12 +353,6 @@ function stageFor(
     if (toolchain) {
       root = at;
       break;
-    }
-    const later = namedIn(at, LATER);
-    if (later) {
-      throw new StageRefusal(
-        `Live components run on Vite, Astro and Nuxt projects for now, and this project uses ${later}, which comes later. ${AS_PAGE}`
-      );
     }
     const none = namedIn(at, NO_PLUGIN);
     if (none) {
