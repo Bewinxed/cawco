@@ -65,7 +65,13 @@ import {
 import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
 import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
-import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
+import {
+  hubGitEnv,
+  hubGitLogin,
+  isHubRemote,
+  LFS_FILTERS,
+  withoutCredential,
+} from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
 import { raiseUpstreamAsk } from "./upstream-posts";
@@ -410,10 +416,11 @@ const isGithubHttps = (url: string): boolean => {
 /**
  * What git-lfs would otherwise learn from a server and write into the
  * clone's `.git/config` (`git config --replace-all`, a lock and a rename),
- * given env-only to every git the door runs: whether to ask the server about
- * locks before a push (`lfs.locksverify`, git-lfs lockverifier.go
- * `disableFor`), for whatever endpoint the repository names, through the
- * URL-less key git-lfs falls back to (config/url_config.go `Get`). The
+ * given env-only to every git the door runs for a GitHub origin: whether to
+ * ask the server about locks before a push (`lfs.locksverify`, git-lfs
+ * lockverifier.go `disableFor`), for whatever endpoint the repository names,
+ * through the URL-less key git-lfs falls back to (config/url_config.go
+ * `Get`). A hub origin's git is held to its own LFS ({@link hubGitEnv}). The
  * rename drops the read-only bind the workspace's sandbox holds on that
  * file, so the sandbox is stopped with everything in it (boundary-host.ts
  * `guard`): on 2026-10-17 a landing's push to a guarded GitHub origin set
@@ -528,8 +535,10 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
     }
     const { asked, github, held } = doorTarget(ref, url);
+    // Not GitHub's, the door's url is the clone's own origin on the hub
+    // (doorTarget): its credential and its LFS alone.
     const env =
-      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv(DOOR_LFS);
+      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv(url);
     const scheme = new URL(url).protocol === "https:" ? "https" : "http";
     const child = spawn(
       "git",
@@ -697,6 +706,7 @@ export const guardedGitParameters = (clone: string): string | undefined => {
  * srt's own over the request, which carries a `GIT_CONFIG_PARAMETERS` of its
  * own: the hub's `/git/` URLs rewritten to the `cawco::` helper, and that
  * transport allowed. When the clone at `clone`'s origin is the hub, also
+ * git-lfs's filters ({@link LFS_FILTERS}), and
  * `GIT_LFS_SKIP_PUSH=1` (git-lfs: "Do nothing on pre-push"): any git-lfs
  * command installs a pre-push hook, which inside the boundary reaches no
  * hub; the door sends a push's large files from the host ({@link pushLfs}).
@@ -713,16 +723,21 @@ export const gitDoorEnv = (
   const url = new URL(hub);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
   const prefix = `${url.origin}/git/`;
-  const origin = originOf(clone);
+  const hubOrigin = originOf(clone).startsWith(prefix);
   return {
     CAWCO_GIT_SOCKET: gitDoorOf(id),
     CAWCO_GIT_PARAMETERS: [
       [`url.cawco::${prefix}.insteadOf`, prefix],
       ["protocol.cawco.allow", "always"],
+      // The filters the hub branch's checkout ran with (workspace.ts
+      // `createWorkspace`): without the clean one, git inside reads every
+      // large file it smudged as changed, and a landing hands the item back
+      // as uncommitted work.
+      ...(hubOrigin ? LFS_FILTERS : []),
     ]
       .map(([key, value]) => `${shellWord(key)}=${shellWord(value)}`)
       .join(" "),
-    ...(origin.startsWith(prefix) ? { GIT_LFS_SKIP_PUSH: "1" } : {}),
+    ...(hubOrigin ? { GIT_LFS_SKIP_PUSH: "1" } : {}),
   };
 };
 

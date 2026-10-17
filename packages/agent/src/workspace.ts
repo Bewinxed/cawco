@@ -239,14 +239,16 @@ const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> => {
  * {@link inSource}: its `origin` (the hub's remote of `projectId` when it has
  * none), the hub's credential helper in its config when that is the hub and
  * `source` (another workspace's clone, whose config is that workspace's) is
- * none, and the branch the workspace starts from ({@link hubBase}).
+ * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
+ * that origin's URL when it is the hub's, which every git that reaches it
+ * runs under ({@link hubGitEnv}).
  */
 const readySource = (
   repoRoot: string,
   projectId: unknown,
   fromClone: boolean,
   deadline: number
-): Promise<{ hub: boolean; known: string | undefined }> =>
+): Promise<{ hub: string | undefined; known: string | undefined }> =>
   inSource(repoRoot, async () => {
     const plain = gitUntil(deadline);
     // A workspace starts from origin's default branch and lands there.
@@ -266,12 +268,12 @@ const readySource = (
       );
     }
     // A clone of a workspace's clone reaches the hub as that workspace does.
-    const hub = isHubRemote(origin);
+    const hub = isHubRemote(origin) ? origin : undefined;
     if (hub && !fromClone) {
       useHubCredentialHelper(repoRoot);
     }
     const known = hub
-      ? await hubBase(gitUntil(deadline, hubGitEnv()), repoRoot)
+      ? await hubBase(gitUntil(deadline, hubGitEnv(hub)), repoRoot)
       : undefined;
     return { hub, known };
   });
@@ -330,7 +332,7 @@ export const createWorkspace = async (
     Boolean(source),
     deadline
   );
-  const authed = hub ? gitUntil(deadline, hubGitEnv()) : plain;
+  const authed = hub ? gitUntil(deadline, hubGitEnv(hub)) : plain;
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
@@ -354,11 +356,12 @@ export const createWorkspace = async (
       await fetchCut(path, id, base, cut, authed);
     }
     const start = cut ? cut.commit : `origin/${base}`;
-    // A hub branch's large files come down with the checkout, from the
-    // hub's LFS, whatever filters this machine's own config names.
+    // A hub branch's large files come down with the checkout, from its own
+    // repository's LFS on the hub, whatever filters this machine's own
+    // config names and whatever the branch's `.lfsconfig` says.
     const checkout =
       hub && (await marksLfs(authed, path, start))
-        ? gitUntil(deadline, hubGitEnv(LFS_FILTERS))
+        ? gitUntil(deadline, hubGitEnv(hub, LFS_FILTERS))
         : authed;
     await checkout(path, "checkout", "--quiet", "-b", branch, start);
     if (cut) {

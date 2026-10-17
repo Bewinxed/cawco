@@ -114,7 +114,7 @@ export const placePush = async (
     );
   }
   useHubCredentialHelper(root);
-  await gitUntil(deadline, hubGitEnv())(
+  await gitUntil(deadline, hubGitEnv(origin || hubRepo(projectId)))(
     root,
     "push",
     "--quiet",
