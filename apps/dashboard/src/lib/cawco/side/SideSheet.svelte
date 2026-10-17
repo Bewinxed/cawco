@@ -335,7 +335,6 @@
   >
     <Drawer.Content
       data-preview-sheet
-      class="preview-sheet"
       hosted
       modal={false}
       onCloseAutoFocus={(event) => event.preventDefault()}
@@ -386,7 +385,6 @@
 
 <style>
   /* residual: foreign-dom */
-  /* css-scope .preview-sheet: the canvas stage finds this sheet by it */
   /* The sheet fills its host (the space above the composer) edge to edge,
      so the kit content's inset card, its top margin, its height cap, its
      padding and its drawn grab bar give way to the sheet div, which draws

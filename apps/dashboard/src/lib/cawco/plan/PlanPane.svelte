@@ -217,7 +217,7 @@
     style:--measure="72ch"
     style:--more-px="0"
     style:--sheet-fade={sheet
-      ? "linear-gradient(to bottom, var(--ink-strong) calc(100% - var(--fade-end)), transparent)"
+      ? "linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--fade-end)), transparent)"
       : undefined}
   >
     {#if steps.length > 0}
