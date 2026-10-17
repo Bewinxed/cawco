@@ -176,6 +176,13 @@ const slideOf = (
   return { x, y };
 };
 
+/** Whether a box is anywhere else at all: a follow places the layer exactly. */
+const moved = (a: Box, b: Box) =>
+  Math.abs(a.x - b.x) > 0.001 ||
+  Math.abs(a.y - b.y) > 0.001 ||
+  Math.abs(a.w - b.w) > 0.001 ||
+  Math.abs(a.h - b.h) > 0.001;
+
 const same = (a: Box | null, b: Box | null) =>
   a !== null &&
   b !== null &&
@@ -317,6 +324,7 @@ export function highlight(options: HighlightOptions) {
       }
       const box = row && boxOf(row);
       if (!(row && box)) {
+        cancelAnimationFrame(following);
         row?.removeAttribute("data-ghosted");
         show(ghost, false);
         ghostRow = null;
@@ -329,6 +337,42 @@ export function highlight(options: HighlightOptions) {
       ghostBox = box;
       ghostRow = row;
       showOrCover();
+      follow();
+    };
+    /**
+     * A placement taken while the list was moving (its content shifting
+     * under a still pointer, a panel above it folding) is the list's place
+     * at that moment, and a list that moves on without resizing sets nothing
+     * measuring it again: the ghost stood off its row by however far the
+     * list went on (the spawn sheet's model list, 0.45px). So the ghost
+     * follows its row, without a glide, until the row has stood still for
+     * `STILL` frames. On a list that is not moving the first check finds the
+     * box the ghost already has. A scroll is `aimScrolling`'s: the rows do
+     * not move in the list's own space while it scrolls.
+     */
+    let following = 0;
+    const follow = () => {
+      cancelAnimationFrame(following);
+      let still = 0;
+      const check = () => {
+        const row = ghostRow;
+        if (!(row?.isConnected && ghostBox) || scrolling || skipped) {
+          return;
+        }
+        const box = boxOf(row);
+        if (box && moved(box, ghostBox)) {
+          setGlide(ghost, false);
+          place(ghost, box);
+          ghostBox = box;
+          still = 0;
+        } else {
+          still += 1;
+        }
+        if (still < STILL) {
+          following = requestAnimationFrame(check);
+        }
+      };
+      following = requestAnimationFrame(check);
     };
 
     /** The pill onto the selected row: from the ghost, or gliding. */
@@ -856,6 +900,7 @@ export function highlight(options: HighlightOptions) {
       cancelAnimationFrame(pendingHide);
       cancelAnimationFrame(pendingSync);
       cancelAnimationFrame(settling);
+      cancelAnimationFrame(following);
       container.removeEventListener("pointermove", onPointer);
       container.removeEventListener("pointerover", onOver);
       container.removeEventListener("pointerleave", onLeave);
