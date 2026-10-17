@@ -36,3 +36,4 @@
 - MovedLogins: `aria-expanded:bg-transparent` + `hover:aria-expanded:bg-surface-hover` replace `.toggle[aria-expanded=true]:not(:hover)`; hover specificity to confirm in compare. Reduced-motion fold-inner transition-duration under open kept via `motion-reduce:group-data-open:dur-panel`.
 - StatusLine foreign-dom rule uses `var(--icon-sm)` (=12px) selected by `[role="status"]`.
 - cross-file hook: CawFace root .face → [data-slot="caw-face"]; selected by NeedsCaw.svelte:775 (O6) and CawMark.svelte:116,120
+- cross-file hook: CawMark.svelte:42 .mark → [data-slot="mark"] (existing); selected by NeedsCard.svelte:902 and TranscriptSkeleton.svelte:146

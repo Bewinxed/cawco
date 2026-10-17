@@ -92,7 +92,7 @@
 <span
   data-slot="mark"
   aria-hidden="true"
-  class="mark relative inline-block size-(--side) pointer-events-none select-none"
+  class="relative inline-block size-(--side) pointer-events-none select-none"
   data-box
   style:--bleed="{CAW_STILL_BLEED}px"
   style:--side="{size}px"
@@ -111,11 +111,11 @@
 
 <style>
   /* residual: foreign-dom */
-  .mark > :global([data-slot="caw-face"]) {
+  [data-slot="mark"] > :global([data-slot="caw-face"]) {
     display: block;
   }
   /* His face is drawn and ready under the clip, unseen until it lands. */
-  .mark.playing > :global([data-slot="caw-face"]) {
+  [data-slot="mark"].playing > :global([data-slot="caw-face"]) {
     visibility: hidden;
   }
 </style>
