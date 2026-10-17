@@ -121,11 +121,17 @@ const FILL_FIRST = /^Fill first/;
 const MORE_FOR_CAWCO = /More for cawco/;
 /** A session row's Peek (a wide layout's; the phone has none). */
 const PEEK = "[data-session-row-peek]";
-/** The picture riding on your words in Caw's thread (MessageRow's Shot). */
-const THREAD_PICTURE = "Attachment 1 sent with this message";
+/** The note pasted beside your words in Caw's thread: its DocThumb's open. */
+const THREAD_NOTE = "Open phone-notes.txt";
 
 /** The fleet memory's row menu (RowMenu's "More for ~/.claude/CLAUDE.md"). */
 const MORE_FOR_MEMORY = /^More for .*CLAUDE\.md$/;
+/** What runs in a project, which its forget reads first (client.svelte.ts `projectRunning`). */
+const PROJECT_RUNNING = "**/api/projects/*/running";
+/** An artifact's read, which a task's presented page finds its session by (ArtifactStage `findArtifact`). */
+const ARTIFACT_READ = "**/api/artifacts/*";
+/** The decision page the cawco project's session made (its artifact's name). */
+const CHIP_DECISION = "chip-decision";
 /** The dashboard's one socket, on the dashboard's own origin. */
 const DASHBOARD_SOCKET = /\/ws\/dashboard/;
 
@@ -141,6 +147,16 @@ const unanswered =
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => window.kitHydrated === true);
   };
+
+/** Jump: the phone's and tablet's from the rail, the desk's on ⌘K. */
+const openJump = async (page: Page) => {
+  if (await page.getByRole("button", { name: "Open navigation" }).isVisible()) {
+    await openRail(page);
+    await press(JUMP_BUTTON)(page);
+    return;
+  }
+  await page.keyboard.press("Control+k");
+};
 
 /** The project's ⋯ menu, then its row named `item`. */
 const fromMore = (item: string) => async (page: Page) => {
@@ -402,9 +418,13 @@ export const SURFACES: Surface[] = [
         widths: ["desk", "tablet"],
         act: async (page) => {
           await openRail(page);
-          const peek = page.locator(PEEK).filter({ visible: true }).first();
-          await peek.hover();
-          await peek.click();
+          // Its own click: a pointer hover on it timed out at desk and
+          // tablet alike (the record of 2026-10-17).
+          await page
+            .locator(PEEK)
+            .filter({ visible: true })
+            .first()
+            .dispatchEvent("click");
         },
         root: "body",
       },
@@ -570,6 +590,12 @@ export const SURFACES: Surface[] = [
         hostOnly: true,
       },
       {
+        // A rule's reply in the transcript (the rule fired on its TODO).
+        name: "rule",
+        route: (s) => `/session/${s.todo}`,
+        root: MAIN,
+      },
+      {
         // The workflow run it started: the RunBlock and its steps.
         name: "run-block",
         route: (s) => `/session/${s.runner}`,
@@ -601,12 +627,10 @@ export const SURFACES: Surface[] = [
       { name: "more-menu", act: press(MORE_FOR_CAWCO), root: LAYER },
       // Caw's seat: his thread beside the board.
       { name: "caw", act: press(CAW_SEAT), root: "body" },
-      // His thread's picture, opened in the lightbox.
+      // The note pasted in his thread, opened in the lightbox's document view.
       {
-        name: "caw-picture",
-        act: inCawThread((page) =>
-          page.getByAltText(THREAD_PICTURE).first().click()
-        ),
+        name: "caw-note",
+        act: inCawThread(press(THREAD_NOTE)),
         root: "body",
       },
       // The file he wrote in the folder, opened from his message.
@@ -626,6 +650,16 @@ export const SURFACES: Surface[] = [
         name: "new",
         route: () => "/project/new",
         root: MAIN,
+      },
+      {
+        // The forget pressed while what runs in the project is still being
+        // read: the tray's reading line. Last (its route stays).
+        name: "forget-reading",
+        act: async (page) => {
+          await page.route(PROJECT_RUNNING, () => undefined);
+          await fromMore("Forget project…")(page);
+        },
+        root: "body",
       },
     ],
   },
@@ -673,6 +707,13 @@ export const SURFACES: Surface[] = [
         route: (s) => `/project/${s.project}?task=${s.failed}`,
         root: "body",
       },
+      {
+        // In review, its page not found yet: the stage's cover. Last (its route stays).
+        name: "review-opening",
+        route: (s) => `/project/${s.project}?task=${s.review}`,
+        act: unanswered((page) => page.route(ARTIFACT_READ, () => undefined)),
+        root: "body",
+      },
     ],
   },
   {
@@ -699,12 +740,21 @@ export const SURFACES: Surface[] = [
           root: MAIN,
         })
       )
-      .concat({
-        // The made view on its own page, as a link to it opens it (a bare route).
-        name: "week-page",
-        route: (s) => `/project/${s.project}/view/week`,
-        root: "body",
-      }),
+      .concat(
+        {
+          // The made view on its own page, as a link to it opens it (a bare route).
+          name: "week-page",
+          route: (s) => `/project/${s.project}/view/week`,
+          root: "body",
+        },
+        {
+          // The decision page its session made, still open for picks: the page in its frame.
+          name: "decision-page",
+          route: (s) =>
+            `/project/${s.project}?view=decisions&page=${CHIP_DECISION}`,
+          root: MAIN,
+        }
+      ),
   },
   {
     // Three linked decision pages: the list, one page, and their graph.
@@ -734,6 +784,12 @@ export const SURFACES: Surface[] = [
     states: [
       { name: "rest", root: "body" },
       { name: "panel", act: press(CAW_SEAT), root: "body" },
+      // No decision page yet: Caw in the view, his starters under him.
+      {
+        name: "decisions",
+        route: (s) => `/project/${s.tray}?view=decisions`,
+        root: MAIN,
+      },
     ],
   },
   ...CONFIG.map((section): Surface => ({
@@ -801,19 +857,15 @@ export const SURFACES: Surface[] = [
     serve: "built",
     route: () => "/",
     states: [
+      { name: "open", act: openJump, root: LAYER },
       {
-        name: "open",
+        // A word typed, then → on the active row: its peek in place.
+        name: "peek",
         act: async (page) => {
-          if (
-            await page
-              .getByRole("button", { name: "Open navigation" })
-              .isVisible()
-          ) {
-            await openRail(page);
-            await press(JUMP_BUTTON)(page);
-            return;
-          }
-          await page.keyboard.press("Control+k");
+          await openJump(page);
+          await page.keyboard.type("chip");
+          await page.keyboard.press("ArrowDown");
+          await page.keyboard.press("ArrowRight");
         },
         root: LAYER,
       },

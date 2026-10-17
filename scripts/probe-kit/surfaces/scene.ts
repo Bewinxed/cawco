@@ -49,14 +49,15 @@ import type { Kit, KitFleet } from "../kit";
 
 const DAY = 24 * 60 * 60 * 1000;
 const MINUTE = 60_000;
-/** A made view (views spec's good draft): figures, a table, the board by stage and a month, over the view tools. */
-const WEEK_VIEW = `root = Column([title, figures, table, board, month])
+/** A made view (views spec's good draft): figures, a table, the board by stage, each task's card and a month, over the view tools. */
+const WEEK_VIEW = `root = Column([title, figures, table, board, cards, month])
 tasks = Query("tasks", {}, {rows: []})
 stages = Query("stages", {}, {stages: [], byKind: {you: 0, done: 0}, total: 0})
 title = Text("Chip week", "title")
 figures = Row([StatTile("All tasks", stages.total), StatTile("Waiting on you", stages.byKind.you, "attn")])
 table = Table(tasks.rows, [{label: "Task", field: "title"}, {label: "Stage", field: "stage"}])
 board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")
+cards = Column(@Each(tasks.rows, "t", TaskCard(t)))
 month = Calendar(tasks.rows, "dates.createdAt", "month")
 `;
 /** The second account, signed in after every session started (the spawn sheet's account chip, the routing's two). */
@@ -98,6 +99,8 @@ const REVIEW_REPORT =
   "I read the push probe's last six runs. It never reads a push sent while the phone is locked, and it counts a burst of three as one. The post says what changed for the tray; the notes list each miss with its run.";
 const FAILED_WHY =
   "The attempt's session ended before it handed anything in: the token sheet's build failed on a missing font.";
+/** The words the scene's rule watches for, which only the "todo" session says. */
+const TODO_PHRASE = "TODO:";
 /** The fleet's memory, saved twice: the second keeps the first as a version. */
 const MEMORY_V1 = "# Fleet\n\nSay what changed and how it was proven.\n";
 const MEMORY_V2 =
@@ -285,6 +288,11 @@ const plans = (repo: string): Record<string, Step[]> => ({
     { words: REPLY },
   ],
   sub: [{ words: "The label never shrinks, so the badge is cut first." }],
+  todo: [
+    {
+      words: `The chip's label shrinks now. ${TODO_PHRASE} measure it on a phone.`,
+    },
+  ],
   named: [
     {
       tool: {
@@ -686,6 +694,25 @@ export async function seedScene(
     answered,
     "Ask me what the hang card's states are called. PROBE-STEP:named"
   );
+  // A rule, and a session whose every turn ends on a TODO: the rule fires
+  // once and its reply is the session's next message (a rule's row), and,
+  // the next turn ending on it again, it stays waiting on an answer (the
+  // rules page's count). Its phrase is in no other session's words.
+  const rule = await send("/api/rules", "POST", {
+    name: "Finish the TODO",
+    enabled: true,
+    matchKind: "phrase",
+    pattern: TODO_PHRASE,
+    caseSensitive: true,
+    wholeWord: false,
+    repeat: false,
+    reply: "Finish the TODO before you stop.",
+    scope: {},
+    timing: "turn",
+    watch: "text",
+  });
+  const todo = await fleet.spawn("claude", "Leave the TODO", fleet.repo);
+  await fleet.send(todo, "Say what is left on the chip. PROBE-STEP:todo");
   // A delegate it starts, which reports back: its card, transcript inline.
   const split = delegate
     ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
@@ -736,10 +763,10 @@ export async function seedScene(
     labels: ["tray", "ui"],
     checks: ["bun run lint"],
   });
-  for (const todo of ["Let the label shrink", "Keep the badge whole"]) {
+  for (const text of ["Let the label shrink", "Keep the badge whole"]) {
     // biome-ignore lint/performance/noAwaitInLoops: the list's order is the order they are added
     await fleet.api(`/api/projects/${project.id}/tasks/${chipTask}/todos`, {
-      text: todo,
+      text,
     });
   }
   for (const [from, edge, to] of [
@@ -780,7 +807,8 @@ export async function seedScene(
         `${method} ${path}: ${response.status} ${await response.text()}`
       );
     }
-    return response.json() as Promise<{ id?: string }>;
+    // A create answers with the row it made (its `id`); a save, with what it saved.
+    return response.json() as Promise<{ id: string }>;
   }
   const put = async (projectId: string, path: string, content: string) => {
     const response = await fetch(
@@ -921,6 +949,26 @@ export async function seedScene(
       180_000
     );
   }
+  // The TODO session's rule fired and still waiting on an answer, and the
+  // turn its reply started (ending on the TODO again) at rest.
+  await until(
+    "the TODO session's rule waiting on an answer",
+    () =>
+      fleet.query<{ status: string }>(
+        "SELECT status FROM rule_state WHERE rule_id = ? AND instance_id = ?",
+        rule.id,
+        todo
+      )[0]?.status,
+    (status) => status === "pending",
+    180_000
+  );
+  await Bun.sleep(3000);
+  await until(
+    "the TODO session's answer to its rule done",
+    () => fleet.instance(todo),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
   const artifact = await until(
     "the art session's artifact filed",
     () =>
@@ -1214,6 +1262,28 @@ export async function seedScene(
     180_000
   );
 
+  // The TODO session moved by hand onto the second account, as its row's
+  // account menu moves it: the hub's line in its transcript, and its row's
+  // account dot (two Claude accounts, it on the second).
+  await send(`/api/instances/${todo}/account`, "POST", {
+    accountId: SECOND_ACCOUNT,
+  });
+  await until(
+    "the TODO session on the second account",
+    () =>
+      fleet.query<{ account_id: string | null }>(
+        "SELECT account_id FROM instances WHERE id = ?",
+        todo
+      )[0]?.account_id,
+    (account) => account === SECOND_ACCOUNT,
+    180_000
+  );
+  await until(
+    "the moved TODO session at rest",
+    () => fleet.instance(todo),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
   // The delegate done and its report heard: the parent's turns at rest.
   if (split) {
     await until(
@@ -1272,19 +1342,6 @@ export async function seedScene(
       handler: { type: "command", command },
     });
   }
-  const rule = await send("/api/rules", "POST", {
-    name: "Finish the TODO",
-    enabled: true,
-    matchKind: "phrase",
-    pattern: "TODO",
-    caseSensitive: false,
-    wholeWord: true,
-    repeat: false,
-    reply: "Finish the TODO before you stop.",
-    scope: {},
-    timing: "turn",
-    watch: "text",
-  });
   // A second machine, a Mac, offline since its last report: its keychain
   // locked Claude Code's login (`unreadable-credentials`, the machine
   // menu's Unlock keychain…), and its last converge failed to write the
@@ -1340,7 +1397,8 @@ export async function seedScene(
     tray: tray.id,
     account: ACCOUNT,
     second: SECOND_ACCOUNT,
-    rule: rule.id as string,
+    rule: rule.id,
+    todo,
     hook: HOOK_ID,
     memoryDoc: MODEL_DOC,
   };
