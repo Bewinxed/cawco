@@ -37,8 +37,10 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   RoutineMadeEvent,
+  Rule,
   RuleMatchKind,
   RuleScope,
+  RuleState,
   RuleTiming,
   RuleWatch,
   SendAttachment,
@@ -2550,6 +2552,22 @@ export const ruleState = sqliteTable(
     index("rule_state_instance_idx").on(table.instanceId),
   ]
 );
+
+/**
+ * A deleted rule, kept whole for its undo window (rules-trash.ts): the rule
+ * and every session's standing with it, as they stood. Out of `rules` and
+ * `rule_state`, so nothing that reads them sees it while it waits. It goes
+ * with its project, as the rule itself does.
+ */
+export const ruleTrash = sqliteTable("rule_trash", {
+  ruleId: text("rule_id").primaryKey(),
+  scopeProjectId: text("scope_project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  rule: text("rule", { mode: "json" }).$type<Rule>().notNull(),
+  states: text("states", { mode: "json" }).$type<RuleState[]>().notNull(),
+  deletedAt: timestamp("deleted_at").notNull(),
+});
 
 /**
  * Hooks the fleet keeps (NEW.md §11): one row per hook, registered on every

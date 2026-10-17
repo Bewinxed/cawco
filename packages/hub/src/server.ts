@@ -449,7 +449,13 @@ import type {
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
-import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
+import {
+  checkoutOf,
+  hashHookMaterial,
+  listedAt,
+  RULE_UNDO_MS,
+  TURN_UNRECORDED,
+} from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
@@ -20697,6 +20703,47 @@ export const createServer = (
   };
 
   /**
+   * Rules as the list reads them: each with what it has been doing, and, when
+   * it is scoped to a machine the fleet no longer has, that it matches
+   * nothing, with what the machine was called and when the person removed
+   * it (null for a machine this hub has no record of). Its scope stands as
+   * it was written.
+   */
+  const ruleRowsOf = (list: Rule[]) => {
+    const stats = new Map(db.ruleStats().map((row) => [row.ruleId, row]));
+    const fleet = new Set(db.listAgents().map((agent) => agent.machineId));
+    const removed = new Map(
+      db.removedMachines().map((row) => [row.machineId, row])
+    );
+    const orphanOf = (
+      rule: Rule
+    ):
+      | { machineId: string; name: string | null; removedAt: number | null }
+      | undefined => {
+      const { machineId } = rule.scope;
+      if (!machineId || fleet.has(machineId)) {
+        return undefined;
+      }
+      const gone = removed.get(machineId);
+      return {
+        machineId,
+        name: gone?.hostname ?? null,
+        removedAt: gone?.removedAt.getTime() ?? null,
+      };
+    };
+    return list.map((rule) => ({
+      ...rule,
+      stats: stats.get(rule.id) ?? {
+        ruleId: rule.id,
+        pending: 0,
+        totalFires: 0,
+        lastFiredAt: null,
+      },
+      orphaned: orphanOf(rule),
+    }));
+  };
+
+  /**
    * A dashboard's start, from its permission mode on: launch directory,
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
@@ -22585,48 +22632,10 @@ export const createServer = (
        * the same validator the editor refuses with — one set of sentences, so the
        * form and the hub never disagree about what is wrong.
        */
-      .get("/api/rules", () => {
-        const stats = new Map(db.ruleStats().map((row) => [row.ruleId, row]));
-        const fleet = new Set(db.listAgents().map((agent) => agent.machineId));
-        const removed = new Map(
-          db.removedMachines().map((row) => [row.machineId, row])
-        );
-        /**
-         * A rule scoped to a machine the fleet no longer has matches nothing:
-         * it says so, with what the machine was called and when the person
-         * removed it (null for a machine this hub has no record of). Its
-         * scope stands as it was written.
-         */
-        const orphanOf = (
-          rule: Rule
-        ):
-          | { machineId: string; name: string | null; removedAt: number | null }
-          | undefined => {
-          const { machineId } = rule.scope;
-          if (!machineId || fleet.has(machineId)) {
-            return undefined;
-          }
-          const gone = removed.get(machineId);
-          return {
-            machineId,
-            name: gone?.hostname ?? null,
-            removedAt: gone?.removedAt.getTime() ?? null,
-          };
-        };
-        return {
-          rules: db.listRules().map((rule) => ({
-            ...rule,
-            stats: stats.get(rule.id) ?? {
-              ruleId: rule.id,
-              pending: 0,
-              totalFires: 0,
-              lastFiredAt: null,
-            },
-            orphaned: orphanOf(rule),
-          })),
-          templates: RULE_TEMPLATES,
-        };
-      })
+      .get("/api/rules", () => ({
+        rules: ruleRowsOf(db.listRules()),
+        templates: RULE_TEMPLATES,
+      }))
       .post("/api/rules", { body: ruleBody }, ({ body, status }) => {
         const draft = body as unknown as RuleDraft;
         const wrong = ruleProblem(draft);
@@ -22672,10 +22681,29 @@ export const createServer = (
         ruleEngine.reload();
         return rule;
       })
+      /**
+       * A delete is undone, not confirmed (JOURNEY.md Flow 5: "an undo
+       * affordance after the fact rather than a confirm dialog before it"):
+       * the rule stops at once and waits whole in the trash for
+       * `restorableForMs`, the window the dashboard's Undo stands for.
+       */
       .delete("/api/rules/:id", ({ params }) => {
-        db.deleteRule(params.id);
+        const trashed = db.trashRule(params.id, Date.now());
         ruleEngine.reload();
-        return { ok: true };
+        return { ok: true, restorableForMs: trashed ? RULE_UNDO_MS : 0 };
+      })
+      /** Undo: the deleted rule back whole, as the list reads it. */
+      .post("/api/rules/:id/restore", ({ params, status }) => {
+        const rule = db.restoreRule(params.id, Date.now());
+        if (!rule) {
+          return status(
+            404,
+            "That rule can no longer be brought back: its undo has run out."
+          );
+        }
+        ruleEngine.reload();
+        const [row] = ruleRowsOf([rule]);
+        return row;
       })
       /**
        * What a rule has actually been doing, per session: fires, and whether

@@ -19366,6 +19366,43 @@
         }
       }
     },
+    "/api/rules/{id}/restore": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiRulesByIdRestore",
+        "responses": {
+          "200": {
+            "description": "postApiRulesByIdRestore 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiRulesByIdRestore200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiRulesByIdRestore 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/rules/{id}/activity": {
       "get": {
         "parameters": [
@@ -26777,10 +26814,107 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          },
+          "restorableForMs": {
+            "type": "number"
           }
         },
         "required": [
-          "ok"
+          "ok",
+          "restorableForMs"
+        ]
+      },
+      "postApiRulesByIdRestore200": {
+        "type": "object",
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/RuleStats"
+          },
+          "orphaned": {
+            "type": "object",
+            "properties": {
+              "machineId": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "removedAt": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "machineId",
+              "name",
+              "removedAt"
+            ]
+          },
+          "caseSensitive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "matchKind": {
+            "$ref": "#/components/schemas/RuleMatchKind"
+          },
+          "name": {
+            "description": "What the rule is called in the list, and in the reply the session reads.",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
+            "type": "string"
+          },
+          "repeat": {
+            "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
+            "type": "boolean"
+          },
+          "reply": {
+            "description": "What the session is sent when the rule fires.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RuleScope"
+          },
+          "timing": {
+            "$ref": "#/components/schemas/RuleTiming"
+          },
+          "watch": {
+            "$ref": "#/components/schemas/RuleWatch"
+          },
+          "wholeWord": {
+            "description": "Phrase mode only: refuse matches that sit inside a longer word.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "caseSensitive",
+          "createdAt",
+          "enabled",
+          "id",
+          "matchKind",
+          "name",
+          "pattern",
+          "repeat",
+          "reply",
+          "scope",
+          "stats",
+          "timing",
+          "watch",
+          "wholeWord"
         ]
       },
       "getApiRulesByIdActivity200": {

@@ -190,6 +190,7 @@ import {
   routines,
   ruleState,
   rules,
+  ruleTrash,
   type SessionLineKind,
   sentMessages,
   sessionIdentities,
@@ -763,8 +764,6 @@ export interface DbShape {
   readonly deletePlugin: (id: string) => void;
   /** The project and its places; the sessions started from it stay, unattached. */
   readonly deleteProject: (id: string) => void;
-  /** Removes the rule and every session's standing with it. */
-  readonly deleteRule: (id: string) => void;
   readonly deleteSkill: (name: string) => void;
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
@@ -1854,6 +1853,12 @@ export interface DbShape {
     held: string[],
     complete: boolean
   ) => void;
+  /**
+   * Brings a rule deleted at `at` − {@link RULE_UNDO_MS} or later back
+   * whole, with every session's standing as it stood; undefined once its
+   * window has passed, or its project went meanwhile.
+   */
+  readonly restoreRule: (id: string, at: number) => Rule | undefined;
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
@@ -2153,6 +2158,12 @@ export interface DbShape {
   readonly touchInstanceActivity: (id: string) => void;
   /** A fleet MCP relay session was used now. */
   readonly touchMcpSession: (id: string) => void;
+  /**
+   * Deletes the rule and every session's standing with it, kept whole in the
+   * trash for {@link RULE_UNDO_MS} (`restoreRule`); what waited there longer
+   * goes for good. False when there is no such rule.
+   */
+  readonly trashRule: (id: string, at: number) => boolean;
   /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated and the items of the projects in `ledProjectIds` (it
@@ -2460,6 +2471,36 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   },
   createdAt: row.createdAt.getTime(),
 });
+
+/** A rule as its stored row: its own `createdAt`, written now. */
+const ruleValues = (rule: Rule): typeof rules.$inferInsert => ({
+  id: rule.id,
+  name: rule.name,
+  enabled: rule.enabled,
+  pattern: rule.pattern,
+  matchKind: rule.matchKind,
+  caseSensitive: rule.caseSensitive,
+  wholeWord: rule.wholeWord,
+  watch: rule.watch,
+  reply: rule.reply,
+  timing: rule.timing,
+  repeat: rule.repeat,
+  scopeMachineId: rule.scope.machineId || null,
+  scopeProjectId: rule.scope.projectId || null,
+  scopeHarness: rule.scope.harness || null,
+  scopeModel: rule.scope.model || null,
+  scopeRole: rule.scope.role || null,
+  scopeDelegateType: rule.scope.delegateType || null,
+  createdAt: new Date(rule.createdAt),
+  updatedAt: new Date(),
+});
+
+/**
+ * How long a deleted rule can be brought back whole: past the life of the
+ * dashboard's Undo toast (sonner's 4 s, paused while a pointer rests on it
+ * or the tab is hidden), which closes when this runs out.
+ */
+export const RULE_UNDO_MS = 60_000;
 
 /** And a standing row, with the dates flattened to the numbers the wire carries. */
 const ruleStateOf = (row: typeof ruleState.$inferSelect): RuleState => ({
@@ -9664,27 +9705,7 @@ const make = async (path: string): Promise<DbShape> => {
     },
 
     putRule: (rule) => {
-      const values = {
-        id: rule.id,
-        name: rule.name,
-        enabled: rule.enabled,
-        pattern: rule.pattern,
-        matchKind: rule.matchKind,
-        caseSensitive: rule.caseSensitive,
-        wholeWord: rule.wholeWord,
-        watch: rule.watch,
-        reply: rule.reply,
-        timing: rule.timing,
-        repeat: rule.repeat,
-        scopeMachineId: rule.scope.machineId || null,
-        scopeProjectId: rule.scope.projectId || null,
-        scopeHarness: rule.scope.harness || null,
-        scopeModel: rule.scope.model || null,
-        scopeRole: rule.scope.role || null,
-        scopeDelegateType: rule.scope.delegateType || null,
-        createdAt: new Date(rule.createdAt),
-        updatedAt: new Date(),
-      };
+      const values = ruleValues(rule);
       db.insert(rules)
         .values(values)
         // `createdAt` is deliberately absent from the update set: editing a rule
@@ -9715,10 +9736,78 @@ const make = async (path: string): Promise<DbShape> => {
       return rule;
     },
 
-    deleteRule: (id) => {
-      db.delete(rules).where(eq(rules.id, id)).run();
-      db.delete(ruleState).where(eq(ruleState.ruleId, id)).run();
-    },
+    trashRule: (id, at) =>
+      db.transaction((tx) => {
+        tx.delete(ruleTrash)
+          .where(lt(ruleTrash.deletedAt, new Date(at - RULE_UNDO_MS)))
+          .run();
+        const row = tx.select().from(rules).where(eq(rules.id, id)).get();
+        if (!row) {
+          return false;
+        }
+        const states = tx
+          .select()
+          .from(ruleState)
+          .where(eq(ruleState.ruleId, id))
+          .all()
+          .map(ruleStateOf);
+        tx.insert(ruleTrash)
+          .values({
+            ruleId: id,
+            scopeProjectId: row.scopeProjectId,
+            rule: ruleOf(row),
+            states,
+            deletedAt: new Date(at),
+          })
+          .onConflictDoUpdate({
+            target: ruleTrash.ruleId,
+            set: { rule: ruleOf(row), states, deletedAt: new Date(at) },
+          })
+          .run();
+        tx.delete(rules).where(eq(rules.id, id)).run();
+        tx.delete(ruleState).where(eq(ruleState.ruleId, id)).run();
+        return true;
+      }),
+
+    restoreRule: (id, at) =>
+      db.transaction((tx) => {
+        const kept = tx
+          .select()
+          .from(ruleTrash)
+          .where(
+            and(
+              eq(ruleTrash.ruleId, id),
+              gte(ruleTrash.deletedAt, new Date(at - RULE_UNDO_MS))
+            )
+          )
+          .get();
+        if (!kept) {
+          return;
+        }
+        tx.delete(ruleTrash).where(eq(ruleTrash.ruleId, id)).run();
+        tx.insert(rules).values(ruleValues(kept.rule)).run();
+        if (kept.states.length > 0) {
+          tx.insert(ruleState)
+            .values(
+              kept.states.map((state) => ({
+                id: `${state.ruleId}:${state.instanceId}`,
+                ruleId: state.ruleId,
+                instanceId: state.instanceId,
+                status: state.status,
+                fireCount: state.fireCount,
+                totalFires: state.totalFires,
+                lastFiredAt:
+                  state.lastFiredAt === null
+                    ? null
+                    : new Date(state.lastFiredAt),
+                ackedAt:
+                  state.ackedAt === null ? null : new Date(state.ackedAt),
+              }))
+            )
+            .run();
+        }
+        return kept.rule;
+      }),
 
     ruleStats: () => {
       const rows = db
