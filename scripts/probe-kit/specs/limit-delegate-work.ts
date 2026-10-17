@@ -10,7 +10,10 @@
  * organizations, A and B, each read with room, every model request saying
  * which account it ran on (`Seen.auth`). Routing pins every session to A, so
  * B takes one only by a move. Run it where a workspace boundary can start
- * (not inside another one): an orchestrator delegates once per leg.
+ * (not inside another one): an orchestrator in a project (Caw off, so only
+ * this spec's sessions take turns; its repository has no origin remote, so
+ * its workspaces are cut from the project's hub remote) delegates once per
+ * leg.
  *
  * In each leg the delegate answers its brief without finishing, so the hub
  * tells it its item is still open; A is at its limit from that answer on,
@@ -20,7 +23,7 @@
  *   for A's reset; nothing moves it; at the reset the word goes again, on
  *   A, and the item runs to done.
  * - move: it moves whole to B and carries on there, to done.
- * - leave: nothing holds or moves it, and nothing reaches it through the
+ * - leave: nothing holds it, and nothing reaches it through the
  *   reset and {@link QUIET_AFTER_MS} after; its item is still running.
  *
  *   bun scripts/probe-kit/run.ts limit-delegate-work
@@ -28,7 +31,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  ACCOUNT,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const B = "acct-scratch-fleet-b";
@@ -72,9 +81,13 @@ const played = Object.fromEntries(
   ])
 ) as unknown as Record<Leg, Played>;
 let repo = "";
+/** The project the repository is in, Caw off. */
+let projectId = "";
 
+/** What opens every word to the orchestrator: only its conversation holds it. */
+const ASK = "PROBE-DELEGATE-";
 /** Only the orchestrator's word to delegate `leg` carries this. */
-const askOf = (leg: Leg) => `PROBE-DELEGATE-${leg}`;
+const askOf = (leg: Leg) => `${ASK}${leg}`;
 /** Only `leg`'s delegate's brief carries this. */
 const briefOf = (leg: Leg) => `PROBE-CHILD-${leg}`;
 
@@ -122,9 +135,14 @@ const child = (request: Seen, leg: Leg): Reply => {
   return reply;
 };
 
+/**
+ * The orchestrator: delegates each leg its word asked for, once. Read from
+ * every word it was given, not the last: `delegate` is found through
+ * ToolSearch first, and the request after that answers ToolSearch.
+ */
 const orchestrator = (request: Seen): Reply => {
   const leg = LEGS.find(
-    (one) => !played[one].delegated && request.last.includes(askOf(one))
+    (one) => !played[one].delegated && request.all.includes(askOf(one))
   );
   if (!leg) {
     return text("ok");
@@ -145,8 +163,13 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
+  // The orchestrator's conversation alone holds the words that ask it to
+  // delegate; a delegate's report it reads may quote that delegate's brief.
+  if (request.all.includes(ASK)) {
+    return orchestrator(request);
+  }
   const leg = LEGS.find((one) => request.all.includes(briefOf(one)));
-  return leg ? child(request, leg) : orchestrator(request);
+  return leg ? child(request, leg) : text("ok");
 };
 
 /** Account B's Claude dir in `home`: signed in with its token, in another organization. */
@@ -179,7 +202,7 @@ const furnishB = async (home: string) => {
   );
 };
 
-/** The fleet stood up: A and B signed in and read with room, a repository to delegate in. */
+/** The fleet stood up: A and B signed in and read with room, a repository to delegate in, in its project. */
 const standUp = async (kit: Kit): Promise<KitFleet> => {
   const fleet = await kit.fleet(respond);
   await furnishB(fleet.home);
@@ -223,6 +246,12 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
     .cwd(repo)
     .env({ ...process.env, HOME: home })
     .quiet();
+  ({ id: projectId } = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Limits",
+    machineId: MACHINE,
+    cwd: repo,
+    caw: false,
+  }));
   return fleet;
 };
 
@@ -431,11 +460,12 @@ const leaveLeg = async (
   const watchUntil = limitedUntil + QUIET_AFTER_MS;
   await Bun.sleep(Math.max(0, watchUntil - Date.now()));
   const after = look.childSeen("leave", refused.at(-1) ?? 0);
+  // Not its account: rebalance may still carry an idle session off an
+  // account at its limit between turns, which starts no turn; the setting
+  // decides only what answers the refused word.
   kit.check(
-    `leave: nothing holds it, nothing moves it, and nothing reaches it through A's reset and ${QUIET_AFTER_MS / 1000} s after`,
-    look.heldWith(instance) === undefined &&
-      look.accountOf(instance) === ACCOUNT &&
-      after.length === 0,
+    `leave: nothing holds it, and nothing reaches it through A's reset and ${QUIET_AFTER_MS / 1000} s after`,
+    look.heldWith(instance) === undefined && after.length === 0,
     `held ${JSON.stringify(look.heldWith(instance) ?? null)}, account ${look.accountOf(instance)}, ${after.length} request(s) after`
   );
   kit.check(
@@ -457,7 +487,9 @@ const LEG_RUN: Record<
 const run = async (kit: Kit) => {
   const fleet = await standUp(kit);
   const look = looks(fleet);
-  const orch = await fleet.spawn("claude", "Orchestrator", repo);
+  const orch = await fleet.spawn("claude", "Orchestrator", repo, {
+    projectId,
+  });
   for (const leg of LEGS) {
     // A free again before the next delegate is placed: pinned to A, it
     // would otherwise start on B.
