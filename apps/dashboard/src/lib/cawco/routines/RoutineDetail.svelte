@@ -256,7 +256,7 @@
                     <!-- literal: 3px -->
                     <a
                       data-slot="result"
-                      class="block truncate text-ink-row no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-(--offset) hover:group-not-outcome-failed/run:text-link-ink"
+                      class="block truncate text-ink-row no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-(--offset) hover:not-group-outcome-failed/run:text-link-ink"
                       {href}
                       style:--offset="3px"
                       title={result || undefined}>{result || "Read the run"}</a
