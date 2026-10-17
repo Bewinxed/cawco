@@ -281,6 +281,7 @@ export const measureRoles = (): RoleSize[] => {
         caps: {} as never,
         // Caw reads back the turns his leads are in as he is made: none here.
         db: { leadTurns: () => [] } as never,
+        decisions: () => ({}) as never,
         end: () => undefined,
         inTurn: () => false,
         interrupt: () => undefined,

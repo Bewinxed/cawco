@@ -18337,6 +18337,8 @@ export const createServer = (
     inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
+    // The decisions are made further down; Caw's graph tools reach them only once a call runs.
+    decisions: () => decisions,
     interrupt: interruptTurn,
     online: (machineId) =>
       machineId === undefined
@@ -18616,9 +18618,9 @@ export const createServer = (
       return (await file.exists()) ? await file.text() : undefined;
     },
     changed: decisionsChanged,
-    commit: async (projectId, change, message) => {
+    commit: async (projectId, change, message, by) => {
       await changeFolderFiles(projectId, change, {
-        author: FOLDER_YOU,
+        author: by === "caw" ? { name: "Caw" } : FOLDER_YOU,
         message,
       });
     },
