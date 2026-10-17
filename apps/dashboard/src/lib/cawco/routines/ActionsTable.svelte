@@ -75,20 +75,38 @@
     action.proposerTitle;
 </script>
 
-<div class="actions-ledger">
-  <Table.Root data-actions aria-label={label} class="actions table-fixed">
+<!-- literal: 6rem -->
+<div
+  style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
+  style:--when-w="6rem"
+>
+  <Table.Root
+    data-actions
+    aria-label={label}
+    class="table-fixed border-separate"
+  >
     <Table.Header>
-      <Table.Row class="band border-0">
+      <Table.Row class="border-0 bg-surface-band">
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-mark" scope="col"
-          ><span class="sr-only">Service</span></Table.Head
+        <Table.Head
+          class="h-c-toolbar-ctl w-(--lead-w) px-space-3 pe-0 type-label tracking-caps text-ink-muted uppercase"
+          scope="col"><span class="sr-only">Service</span></Table.Head
         >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-action" scope="col">Action</Table.Head>
+        <Table.Head
+          class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
+          scope="col">Action</Table.Head
+        >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-status" scope="col">Status</Table.Head>
+        <Table.Head
+          class="h-c-toolbar-ctl w-c-routine-time-w px-space-3 type-label tracking-caps text-ink-muted uppercase"
+          scope="col">Status</Table.Head
+        >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-when" scope="col">When</Table.Head>
+        <Table.Head
+          class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase"
+          scope="col">When</Table.Head
+        >
       </Table.Row>
     </Table.Header>
     <Table.Body>
@@ -97,33 +115,51 @@
         {@const from = routineNames ? fromOf(action) : null}
         <Table.Row
           data-actions-table-action
-          class="action"
+          class="group/row"
           data-status={said.status}
         >
-          <Table.Cell class="col-mark"
-            ><span data-slot="mark" class="mark"
-              ><ProviderLogo provider={action.service.toLowerCase()} /></span
+          <Table.Cell
+            class="h-c-btn-h-lg px-space-3 py-space-2 pe-0 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            ><span
+              data-slot="mark"
+              class="grid w-c-row-lead place-items-center"
+              ><ProviderLogo
+                class="size-icon-md"
+                provider={action.service.toLowerCase()}
+              /></span
             ></Table.Cell
           >
-          <Table.Cell class="col-action">
+          <Table.Cell
+            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+          >
             <span
               data-slot="what"
-              class="what"
+              class="block truncate type-label text-ink-row"
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span data-slot="from" class="from">From {from}</span>
+              <span
+                data-slot="from"
+                class="block truncate type-meta text-ink-muted"
+                >From {from}</span
+              >
             {/if}
           </Table.Cell>
-          <Table.Cell class="col-status" data-cell="status">
+          <Table.Cell
+            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            data-cell="status"
+          >
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
-          <Table.Cell class="col-when" data-cell="when">
+          <Table.Cell
+            class="h-c-btn-h-lg px-space-3 py-space-2 type-meta text-ink-muted num align-middle group-not-first/row:border-t group-not-first/row:border-border-hairline"
+            data-cell="when"
+          >
             {#if said.at !== null}
               <time
                 data-when
                 data-slot="num"
-                class="when num"
+                class="num whitespace-nowrap"
                 title={exactOf(said.at)}>{since(said.at)}</time
               >
             {/if}
@@ -135,71 +171,8 @@
 </div>
 
 <style>
-  .actions-ledger :global(table.actions) {
-    border-collapse: separate;
+  /* residual: unmapped */
+  [data-actions] {
     border-spacing: 0;
-  }
-  .actions-ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  .actions-ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .actions-ledger :global(tr.action > td) {
-    block-size: var(--c-btn-h-lg);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-3);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-    vertical-align: middle;
-  }
-  .actions-ledger :global(tr.action + tr.action > td) {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .actions-ledger :global(th.col-mark) {
-    inline-size: calc(var(--c-row-lead) + var(--space-3));
-    padding-inline-end: 0;
-  }
-  .actions-ledger :global(td.col-mark) {
-    padding-inline-end: 0;
-  }
-  .actions-ledger :global(th.col-status) {
-    inline-size: var(--c-routine-time-w);
-  }
-  .actions-ledger :global(th.col-when) {
-    inline-size: 6rem;
-  }
-  .mark {
-    display: grid;
-    place-items: center;
-    inline-size: var(--c-row-lead);
-  }
-  .mark :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  .what,
-  .from {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .what {
-    font: var(--type-label);
-    color: var(--ink-row);
-  }
-  .from {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .when {
-    white-space: nowrap;
   }
 </style>
