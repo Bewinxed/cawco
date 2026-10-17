@@ -105,6 +105,7 @@ import {
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
   machineFaultWords,
+  machineLabel,
   questionsOf,
   RESOLVE_PERMISSION,
   relaunchOf,
@@ -6822,12 +6823,12 @@ export function readFaultOf(
   return { reason: "failed", message: failureReason(failure) };
 }
 
-/** A machine as the fleet list names it, else its id. */
+/** A machine as the fleet list names it (its label), else its id. */
 function machineName(machineId: string): string {
-  return (
-    state.machines.find((row) => row.machineId === machineId)?.hostname ||
-    machineId
-  );
+  const hostname = state.machines.find(
+    (row) => row.machineId === machineId
+  )?.hostname;
+  return hostname ? machineLabel(hostname) : machineId;
 }
 
 /**

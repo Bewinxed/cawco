@@ -1261,8 +1261,8 @@ public final class HubConnection {
     public func reloadCatalog(_ machineId: String) async throws {
         defer { fleet.catalogsTried.insert(machineId) }
         let listing = try await listSessions(machineId: machineId)
-        // The web's sentence names the machine as client.svelte.ts `machineName` does: its hostname, else its id.
-        let machine = fleet.machines.first { $0.machineId == machineId }.map(\.hostname).flatMap { $0.isEmpty ? nil : $0 } ?? machineId
+        // The web's sentence names the machine as client.svelte.ts `machineName` does: by its label, else its id.
+        let machine = fleet.machines.first { $0.machineId == machineId }.map(\.hostname).flatMap { $0.isEmpty ? nil : Naming.machineLabel($0) } ?? machineId
         let said = listing.unanswered.map {
             Words.Catalog.harnessDidntAnswer(harness: $0.harness.rawValue, machine: machine, seconds: Int(($0.after / 1000).rounded()))
         } + listing.failed.map {
