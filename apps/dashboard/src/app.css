@@ -97,6 +97,15 @@
   syntax: "*";
   inherits: false;
 }
+/* A pane's composer dock's width, the transcript's share of the pane
+   (PaneLeaf): read by the dock's own width alone, and changed as a tab or a
+   preview takes the pane, so none of it is handed down to the composer,
+   which would all be styled again for it (33 elements and their
+   pseudo-elements on a tab's return to its preview). */
+@property --dock-w {
+  syntax: "*";
+  inherits: false;
+}
 /* How far clear of each edge's fade a scrolling tab track brings a chosen
    tab (TabsList `inView`), registered so script reads it as one length
    whatever expression set it. */

@@ -262,6 +262,29 @@ The hooks moved 2a's press from 879 to 889 restyled: the rest was Tailwind's sha
 
 upstream-guard's leg g ("the session is told"): the spec reads the fake model's last request (`seen = request.all`, upstream-guard.ts:193), fed by the hub's `tellSession` (server.ts:2774, no diff against M); the parent ran it at M and it fails the same two ways there, so it is main's, fixed on main.
 
+### tab-return against M, paired
+
+Each pair is `bun scripts/probe-kit/run.ts tab-return` on a7e27322c and then this tree, back to back; `work.restyled` per leg (input to the frame that shows the pane):
+
+| tree | 1a | 1b | 2a | 2b | 2c | 2d |
+|---|---|---|---|---|---|---|
+| M (before step 9) | 1183 | 1688 | 478 | 472 | 467 | 450 |
+| here, before step 9 | 1742 | 2194 | 879 | 896 | 724 | 707 |
+| M | 1183 | 1673 | 478 | 472 | 443 | 476 |
+| here, the hooks only | 2941 | 2155 | 889 | 873 | 724 | 733 |
+| M | 1338 | 1667 | 478 | 449 | 443 | 450 |
+| here, hooks and group selectors | 3226 | 1808 | 548 | 496 | 487 | 494 |
+| M | 1264 | 1737 | 478 | 472 | 443 | 476 |
+| here, and the dock's width | 1335 | 1769 | 481 | 475 | 471 | 480 |
+| M | 1213 | 1701 | 478 | 472 | 467 | 476 |
+| here (traced again) | 1345 | 1836 | 481 | 475 | 471 | 480 |
+
+After the hooks and the group selectors the press itself named no whole-subtree invalidation, yet 2a's press pass still restyled 422 elements to M's 329. To see which, a temporary patch to the kit's `traceMain` (both trees, reverted) gave every element a `data-rid` and one rule `[data-rid="n"]{--rid:0}` before tracing, and turned on `disabled-by-default-blink.debug`: Blink's `SelectorStats` for the pass then say which rule matched, so which element was recalculated. Ours recalculated the composer dock's whole subtree (dock, composer, shell, field, editor, controls, their svgs and paths, 33 elements and their pseudo-elements); M none of it. M writes the dock's width inline (`style:width`, PaneLeaf); the converted dock writes `style:--dock-w` read by `w-(--dock-w)`, and a custom property is inherited, so each change of the transcript's share (a preview taking the pane) restyled everything under the dock. app.css now registers `--dock-w` with `inherits: false` (`syntax: "*"`, so its value computes as before), beside the track variables registered so for the same reason; nothing but the dock reads it (PaneLeaf.svelte:531, and the motion route's copy). 2a: 548 → 481.
+
+What is left: the preview legs sit 3 to 4 elements over M, the same to the element in all three pairs (481/475/471/480), while M's own run to run moves by more (2a 478–501, 2c 443–467, 2d 450–502). The press pass now recalculates fewer named elements than M (230 to 240) and more unnamed boxes (148 to 89); the pseudo-element rules that matched are the same on both trees (`.kit-skeleton::after` 46, the hit's `::before` 12, `.pointer-hit::after` 8, the `after:` utilities 2 each), so the unnamed ones are nodes the tagging could not reach. A MutationObserver over the same window found the elements added between tagging and the press: on both trees the busy tab's streamed text (92 markdown spans here, 78 at M) and the preview's iframe. The busy legs (1a, 1b) restyle that backlog as it lands, so they move with how much the busy session streamed before the return. Left open, for the orchestrator: which ~50 unnamed nodes the press restyles here (a shadow tree, or streamed nodes, the next probe would tag those too).
+
+A wider class, found on the way and not changed here: the conversion turned 239 of M's inline values into inline custom properties that change while mounted, because `shadcn/no-inline-styles` allows only custom properties (eslint.config.mjs:38). A custom property inherits, so each change restyles the element's whole subtree where M's standard property restyled the element. Read off the markup, 96 of them are read only by the element that sets them and sit on an element with children (Shell's `--shell-h`, PaneTabs' `--morph-h`, Composer's `--stack-h` and `--flight-*`, HoverPanel's `--held-*`, RecallWheel's eight, Rail's `--tip-*` …); 110 are read below their element, where inheriting is the point. Registering the 96 `inherits: false` as `--dock-w` is would give each M's cost back; it is the orchestrator's call, since every name is global and the reader search does not see typed forms such as `(color:--x)`.
+
 ### Gates (step 9)
 
 - `bun run lint`: exit 0 (`tokens: … byte for byte the committed file (242 files)`; `variants: 467 named variants, byte for byte the committed file`; `Checked 2113 files in 4s. No fixes applied.`; `style greps: no transition-all, no filter in a transition list, no has-[.class]`; `token contrast: all 90 pairs DESIGN.md names hold`).
