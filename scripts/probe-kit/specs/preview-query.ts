@@ -14,15 +14,23 @@
  * on a raw socket too, as a browser sends it, so nothing on either end
  * parses or rebuilds the URL. Needs no boundary: it runs anywhere.
  *
- * 1. For each query form a page sends (Vite's `?import&url`, a glob's
- *    `?url`, `?a&b=1`, vite-plugin-svelte's `?svelte&type=style&lang.css`),
- *    the request line the server reads names the path and query the client
- *    wrote, to the byte.
+ * For each query form a page sends (Vite's `?import&url`, a glob's `?url`,
+ * `?a&b=1`, vite-plugin-svelte's `?svelte&type=style&lang.css`), the request
+ * line the server reads names the path and query the client wrote, to the
+ * byte:
+ * 1. in port mode, through the session's own port;
+ * 2. in host mode, through the session's name on the first port, past its
+ *    lock with the pass a ticket gives (preview-access.ts).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one request at a time, each read off the wire before the next
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Socket } from "bun";
 import type { Kit, Spec } from "../kit";
 
+/** Host mode's listener: the first of the preview ports this spec gives its hub. Our pick, clear of a hub's default range. */
+const HOST_PORT = 47_460;
 const FORMS = [
   "/src/lib/assets/caw/idle.riv?import&url",
   "/src/lib/assets/caw/idle.riv?url",
@@ -58,8 +66,17 @@ const recorder = () =>
     },
   });
 
-/** One GET of `target` on `port`, its request line written as given; the response's status line. */
-const rawGet = (port: number, target: string): Promise<string> =>
+/**
+ * One GET of `target` on `port`, its request line written as given, under
+ * `host` (the port's own address unless named) with `headers`; the
+ * response's head, its status line first.
+ */
+const rawGet = (
+  port: number,
+  target: string,
+  host = `127.0.0.1:${port}`,
+  headers = ""
+): Promise<string[]> =>
   new Promise((done, fail) => {
     let got = "";
     Bun.connect({
@@ -68,14 +85,14 @@ const rawGet = (port: number, target: string): Promise<string> =>
       socket: {
         open(socket) {
           socket.write(
-            `GET ${target} HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\nconnection: close\r\n\r\n`
+            `GET ${target} HTTP/1.1\r\nhost: ${host}\r\n${headers}connection: close\r\n\r\n`
           );
         },
         data(_socket, chunk) {
           got += chunk.toString("latin1");
         },
         close() {
-          done(got.split("\r\n")[0] ?? "");
+          done(got.split("\r\n\r\n")[0]?.split("\r\n") ?? []);
         },
         error(_socket, error) {
           fail(error);
@@ -84,11 +101,26 @@ const rawGet = (port: number, target: string): Promise<string> =>
     }).catch(fail);
   });
 
+/** Host mode's names, `.localhost` so they resolve with no DNS (RFC 6761), on the range's first port. */
+const PATTERN = `http://p-{session}.localhost:${HOST_PORT}`;
+const NAME = `p-${INSTANCE}.localhost:${HOST_PORT}`;
+
+/** The pass host mode's lock gives for a ticket, as the browser sends it back: `name=value`. */
+const PASS = /^set-cookie:\s*([^;]+)/im;
+
 const run = async (kit: Kit) => {
+  // Before the hub's config is read: its secret key in scratch, its preview ports clear of any hub's.
+  const scratch = await mkdtemp(join(tmpdir(), "preview-query-"));
+  process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
+  process.env.CAWCO_PREVIEW_PORTS = `${HOST_PORT}-${HOST_PORT + 9}`;
   const { startPreview, stopPreview } =
     await import("../../../packages/agent/src/preview");
   const { createPreviewListeners, previewTargets } =
     await import("../../../packages/hub/src/preview");
+  const { mintTicket } =
+    await import("../../../packages/hub/src/preview-access");
+  const { PREVIEW_ENTER_PATH } =
+    await import("../../../packages/core/src/frames");
   type Deps = Parameters<typeof createPreviewListeners>[1];
   type Db = Parameters<typeof createPreviewListeners>[2];
   const server = recorder();
@@ -122,22 +154,58 @@ const run = async (kit: Kit) => {
     setSettings: () => undefined,
   } as unknown as Db;
   const listeners = createPreviewListeners("127.0.0.1", deps, db);
+  /** `target` through `port`, then what the server behind read: its check, numbered `leg`. */
+  const through = async (
+    leg: string,
+    port: number,
+    target: string,
+    host?: string,
+    headers?: string
+  ) => {
+    const before = arrived.length;
+    const [status = ""] = await rawGet(port, target, host, headers);
+    const got = arrived.length > before ? arrived.at(-1) : undefined;
+    kit.check(
+      `${leg}: ${target} reaches the server behind the hub and agent listeners byte-identical`,
+      status.startsWith("HTTP/1.1 200") && got === target,
+      `answered ${JSON.stringify(status)}; the server read ${JSON.stringify(got ?? null)}`
+    );
+  };
   try {
-    const hubPort = listeners.address(INSTANCE).port;
+    // 1. Port mode: the session's own port.
+    const sessionPort = listeners.address(INSTANCE).port;
     for (const target of FORMS) {
-      const status = await rawGet(hubPort, target);
-      const got = arrived.at(-1);
-      kit.check(
-        `1: ${target} reaches the server behind the hub and agent listeners byte-identical`,
-        status.startsWith("HTTP/1.1 200") && got === target,
-        `answered ${JSON.stringify(status)}; the server read ${JSON.stringify(got)}`
+      await through("1 (port mode)", sessionPort, target);
+    }
+    // 2. Host mode: the session's name on the first port, behind its lock.
+    await listeners.set({ mode: "host", pattern: PATTERN });
+    const entered = await rawGet(
+      HOST_PORT,
+      `${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(mintTicket(INSTANCE).ticket)}&next=%2F`,
+      NAME
+    );
+    const pass = entered.join("\n").match(PASS)?.[1];
+    kit.check(
+      "2: host mode's lock gives a pass for a ticket",
+      entered[0]?.startsWith("HTTP/1.1 302") === true && Boolean(pass),
+      `answered ${JSON.stringify(entered[0] ?? "")}`
+    );
+    for (const target of FORMS) {
+      await through(
+        "2 (host mode)",
+        HOST_PORT,
+        target,
+        NAME,
+        `cookie: ${pass}\r\n`
       );
     }
   } finally {
+    await listeners.set({ mode: "port" });
     listeners.release(INSTANCE);
     previewTargets.delete(INSTANCE);
     await stopPreview({ instanceId: INSTANCE });
     server.stop(true);
+    await rm(scratch, { recursive: true, force: true });
   }
 };
 
