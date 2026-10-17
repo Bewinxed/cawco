@@ -353,18 +353,9 @@ for (const c of cases as Case[]) {
     );
     for (const key of Object.keys(t)) {
       states += 1;
-      const directed = (c.directed ?? []).filter((d) => d.key === key);
-      const diffs = Object.keys(t[key]).filter((p) => {
-        const steer = directed.find((d) => d.prop === p);
-        return steer
-          ? now[key]?.[p] !== steer.now
-          : t[key][p] !== now[key]?.[p];
-      });
-      for (const d of directed) {
-        console.log(
-          `directed ${c.name} [${state.name}] ${key}: ${d.prop} ${t[key][d.prop]} → ${now[key]?.[d.prop]} (must be ${d.now}: ${d.why})`
-        );
-      }
+      const diffs = Object.keys(t[key]).filter(
+        (p) => t[key][p] !== now[key]?.[p]
+      );
       const shown = (c.show ?? [])
         .map((p) => `${p} ${now[key]?.[p]}`)
         .join("; ");

@@ -528,9 +528,9 @@
     <div
       data-slot="dock"
       data-pane-leaf-away={lent.transcriptShare === 0 || undefined}
-      class="pointer-events-none absolute inset-y-0 left-0 z-1 w-(--dock-w) data-pane-leaf-away:invisible"
+      class="pointer-events-none absolute inset-y-0 left-0 z-1 data-pane-leaf-away:invisible"
       inert={lent.transcriptShare === 0}
-      style:--dock-w="{lent.transcriptShare * 100}%"
+      style:width="{lent.transcriptShare * 100}%"
     >
       <RegionBoundary kept="Your draft is kept." region="composer">
         <Composer

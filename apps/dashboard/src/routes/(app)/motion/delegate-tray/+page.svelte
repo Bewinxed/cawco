@@ -270,8 +270,8 @@
     {#if lent}
       <div
         data-slot="dock"
-        class="pointer-events-none absolute inset-y-0 left-0 z-1 w-(--dock-w)"
-        style:--dock-w="{lent.transcriptShare * 100}%"
+        class="pointer-events-none absolute inset-y-0 left-0 z-1"
+        style:width="{lent.transcriptShare * 100}%"
       >
         <Composer
           agentName={lent.agentName}

@@ -24,12 +24,6 @@ export interface State {
 export interface Case {
   /** The sha `t` is written at: T unless main changed it after T (M). */
   at?: string;
-  /**
-   * A property an element (its `data-check` key) is directed to compute
-   * differently from its source: the value it must have now, and why. It is
-   * checked against that value instead of the source's.
-   */
-  directed?: { key: string; prop: string; now: string; why: string }[];
   files?: string[];
   name: string;
   now: string;
@@ -185,6 +179,7 @@ const PANE_TABS = "src/lib/cawco/workspace/PaneTabs.svelte";
 const TAB_ITEM = "lib/components/ui/fluid-tabs/TabItem.svelte";
 const THREAD_PANE = "src/lib/cawco/ThreadPane.svelte";
 const TOOL_GROUP = "src/lib/cawco/transcript/ToolGroup.svelte";
+const PANE_LEAF = "src/lib/cawco/workspace/PaneLeaf.svelte";
 /** What the fluid-tabs kit sets round a pane tab's cast, on both trees. */
 const TAB_KIT =
   "--flare:8px;--slope-start:1px;--slope-end:1px;--radius:8px;--choose-dur:160ms;--choose-ease:ease";
@@ -449,36 +444,25 @@ export const CASES: Case[] = [
       "DecisionNode.svelte:41 the dot",
       "src/lib/cawco/decisions/graph/DecisionNode.svelte",
       `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "t", 'data-slot="decision-node"', "{S0}")}><span class="{S0} name">Ship it</span><span aria-hidden="true" data-check="ring" class="{S0} ring"></span></div>`,
-      `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'data-slot="decision-node"')}><span class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong">Ship it</span><span aria-hidden="true" data-check="ring" ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'class="size-icon-sm flex-none rounded-(--ring-r)')}></span></div>`,
+      `<div ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'data-slot="decision-node"')}><span class="type-label line-clamp-2 min-w-0 flex-auto wrap-anywhere text-ink-strong">Ship it</span><span aria-hidden="true" data-check="ring" ${attrs("src/lib/cawco/decisions/graph/DecisionNode.svelte", "now", 'class="ring size-icon-sm')}></span></div>`,
     ],
     [
       "DocThumb.svelte:92 the progress ring",
       "src/lib/cawco/transcript/DocThumb.svelte",
       `<span class="{S0} glyph"><svg data-check="ring" class="{S0} ring" viewBox="0 0 24 24"></svg></span>`,
-      `<span data-slot="glyph" class="grid place-items-center flex-none text-ink-muted"><svg data-check="ring" data-slot="ring" class="size-icon-md m-space-1 -rotate-90" viewBox="0 0 24 24"></svg></span>`,
+      `<span data-slot="glyph" class="grid place-items-center flex-none text-ink-muted"><svg data-check="ring" data-slot="ring" class="ring size-icon-md m-space-1 -rotate-90" viewBox="0 0 24 24"></svg></span>`,
     ],
     [
       "TabsList.svelte:1154 the focus ring",
       "src/lib/components/ui/fluid-tabs/TabsList.svelte",
       `<div class="{S0} tabs-list"><div data-check="ring" aria-hidden="true" class="{S0} ring"></div></div>`,
-      `<div><div data-check="ring" aria-hidden="true" class="pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"></div></div>`,
+      `<div><div data-check="ring" aria-hidden="true" class="ring pointer-events-none absolute start-0 top-0 z-4 h-(--box-h) w-(--box-w) transform-(--box-at) rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring motion-safe:transition-[transform,width,height] motion-safe:dur-ghost motion-safe:ease-out"></div></div>`,
     ],
   ].map(([name, file, t, now]) => ({
     name,
     files: [file],
     t,
     now,
-    // The scoped class `ring` also made Tailwind write its `ring` utility,
-    // a 1px currentcolor shadow none of the three asked for; the class is
-    // gone and the element keeps its hook (the orchestrator, at 282054d12).
-    directed: [
-      {
-        key: "ring",
-        prop: "box-shadow",
-        now: "none",
-        why: "Tailwind's `ring` utility no longer drawn under the scoped class",
-      },
-    ],
   })),
   {
     name: "thinking-indicator.svelte:120 the word",
@@ -813,6 +797,16 @@ export const CASES: Case[] = [
       { name: "phone", width: 390 },
     ],
   },
+  ...[
+    ["at rest", "", ""],
+    ["put away", " away", " data-pane-leaf-away"],
+  ].map(([state, away, flag]) => ({
+    name: `PaneLeaf.svelte:528 the composer's dock, its width inline as at M (${state})`,
+    files: [PANE_LEAF],
+    t: `<div style="position:relative;width:600px;height:400px"><div data-check="dock" data-slot="dock"${flag} class="{S0} dock${away}" style="width:40%"></div></div>`,
+    now: `<div style="position:relative;width:600px;height:400px"><div data-check="dock" data-slot="dock"${flag} class="${element(PANE_LEAF, "now", 'data-slot="dock"').cls}" style="width:40%"></div></div>`,
+    show: ["width", "visibility", "pointer-events"],
+  })),
   {
     name: "ToolGroup.svelte:417 an artifact's card, drawn whole with its panel closed (main's 877fd14c4)",
     at: M,

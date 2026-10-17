@@ -127,4 +127,18 @@ export default defineConfig([
       "shadcn/no-inline-styles": ["error", { allow: ["pointer-events"] }],
     },
   },
+  // A pane's composer dock takes its width inline, as at main: the
+  // transcript's share of the pane, which changes as a preview takes it.
+  // Written as a custom property for a utility to read, it is inherited, and
+  // each change restyled the whole composer under the dock; `width` restyles
+  // the dock alone.
+  {
+    files: [
+      "src/lib/cawco/workspace/PaneLeaf.svelte",
+      "src/routes/**/motion/delegate-tray/+page.svelte",
+    ],
+    rules: {
+      "shadcn/no-inline-styles": ["error", { allow: ["width"] }],
+    },
+  },
 ]);
