@@ -246,7 +246,10 @@ async function acting(
   const clock = clockOf.get(page);
   const began = performance.now();
   await page.clock.resume();
-  await page.evaluate(() => window.__ssReader?.holding(true));
+  await page.evaluate(() => {
+    window.__ssReader?.pointerFrom();
+    window.__ssReader?.holding(true);
+  });
   try {
     await act(page);
   } finally {
@@ -270,6 +273,30 @@ async function acting(
       clock.now = mark;
     }
   }
+}
+/**
+ * A state's act, then the page at rest after it. What the act opened is
+ * drawn under the pointer the click left there, and the browser's own
+ * pointer-over for it sent (it sends one a beat after layout moves under a
+ * still pointer): then the pointer off the page, so nothing reads hovered
+ * and a hover's highlight is always placed, then hidden. An act that ends
+ * on a move is a hover, and what it shows is the state (a session row's
+ * hover card): its pointer stays. Measured again at rest, as on arrival.
+ */
+async function actAtRest(
+  page: Page,
+  act: (page: Page) => Promise<unknown>
+): Promise<void> {
+  await acting(page, act);
+  const rests = await page.evaluate(
+    () => window.__ssReader?.pointerRests() ?? false
+  );
+  await holdStill(page);
+  await page.waitForTimeout(POINTER_BEAT_MS);
+  if (!rests) {
+    await page.mouse.move(-1, -1);
+  }
+  await arrive(page);
 }
 /** Each stretch `settle` runs the clock on, and how many. */
 const SETTLE_STEP_MS = 1000;
@@ -475,17 +502,7 @@ export async function walk(
             );
             await arrive(page);
             if (state.act) {
-              await acting(page, state.act);
-              // What the act opened drawn under the pointer the click left
-              // there, and the browser's own pointer-over for it sent (it
-              // sends one a beat after layout moves under a still pointer):
-              // then the pointer off the page, so nothing reads hovered and a
-              // hover's highlight is always placed, then hidden. Measured
-              // again at rest, as on arrival.
-              await holdStill(page);
-              await page.waitForTimeout(POINTER_BEAT_MS);
-              await page.mouse.move(-1, -1);
-              await arrive(page);
+              await actAtRest(page, state.act);
             }
             await visit({ page, pass, state, surface });
           } catch (error) {

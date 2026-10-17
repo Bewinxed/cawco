@@ -264,6 +264,14 @@ interface PageReader {
    * measures it (highlight.svelte.ts measures rows as a sheet slides in).
    */
   holding: (on: boolean) => void;
+  /** Starts the count `pointerRests` reads, as an act begins. */
+  pointerFrom: () => void;
+  /**
+   * Whether the pointer's last move, press or release since `pointerFrom`
+   * was a move: an act that ends on one (a hover) leaves the pointer where
+   * it rests, one that ends on a press has done with it.
+   */
+  pointerRests: () => boolean;
   read: (root: string) => {
     count: number;
     /** Each interactive element's index in `nodes`. */
@@ -291,6 +299,17 @@ export function installReader(props: readonly string[]): void {
   // this script, walk.ts passPage) puts the page's requestAnimationFrame on
   // its paused time: each is a whole rendering update, observers included.
   const nativeFrame = window.requestAnimationFrame.bind(window);
+  /** The pointer's last move, press or release (`pointerRests`). */
+  let lastPointer = "";
+  for (const type of ["pointermove", "pointerdown", "pointerup"]) {
+    window.addEventListener(
+      type,
+      (event) => {
+        lastPointer = event.type;
+      },
+      { capture: true, passive: true }
+    );
+  }
   const ROUND = (v: number) => Math.round(v * 2) / 2;
   const SKIP = new Set([
     "SCRIPT",
@@ -487,6 +506,10 @@ export function installReader(props: readonly string[]): void {
         };
         nativeFrame(each);
       }),
+    pointerRests: () => lastPointer === "pointermove",
+    pointerFrom: () => {
+      lastPointer = "";
+    },
     holding: (on) => {
       cancelAnimationFrame(holdFrame);
       holdFrame = 0;
