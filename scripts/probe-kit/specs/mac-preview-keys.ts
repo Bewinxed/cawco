@@ -31,11 +31,11 @@
  * CawCo session's is the agent (`dev.cawco.agent`), an SSH shell's
  * sshd-keygen-wrapper. Nothing takes a picture, so the run needs no Screen
  * Recording: a field takes the keyboard by a background click on its element
- * in the snapshot of an AX-only `see` taken just before (`--on`,
+ * in the snapshot of an AX-only `see` of the app taken just before (`--on`,
  * `--snapshot`), which on a focusable text field "uses the field's writable
- * `AXFocused` attribute" (click.html); ⌘K is a background press on the app's exact
- * window ("Send a chord to one already-focused exact window without
- * activating it", peekaboo.sh/commands/press.html), as real key events
+ * `AXFocused` attribute" (click.html); ⌘K is a background press on the
+ * window that `see` pinned ("Send a chord to one already-focused exact
+ * window without activating it", peekaboo.sh/commands/press.html), as real key events
  * (`synthOnly`), since the page's claim on keys is what is proven; the menu
  * item is an Accessibility press. So the run asks Accessibility and Event
  * Synthesizing of its responsible process, and says which it lacks before
@@ -86,23 +86,29 @@ report();
 /**
  * What `see --json` says of its snapshot (peekaboo.sh/commands/see.html):
  * its reference, whether it may drive input, and `data.ui_elements` with
- * each one's opaque id and the AX words it is found by.
+ * each one's opaque id and the AX words it is found by; and the receipt of
+ * what it observed (`target_receipt`, Peekaboo 4.9.4
+ * DesktopActionTargetReceipt): the process and the CGWindowID of the AX
+ * window it pinned.
  */
 interface Seen {
-  mutation_targeting_available?: boolean;
-  semantic_scope?: string;
-  snapshot_id?: string | null;
-  snapshot_reusable?: boolean;
-  ui_elements?: {
-    description?: string | null;
-    id: string;
-    identifier?: string | null;
-    label?: string | null;
-    title?: string | null;
-  }[];
+  data?: {
+    mutation_targeting_available?: boolean;
+    semantic_scope?: string;
+    snapshot_id?: string | null;
+    snapshot_reusable?: boolean;
+    ui_elements?: {
+      description?: string | null;
+      id: string;
+      identifier?: string | null;
+      label?: string | null;
+      title?: string | null;
+    }[];
+  };
+  target_receipt?: { pid?: number; window_id?: number | null };
 }
 
-/** How long one Peekaboo or osascript call has before the run gives up on it. */
+/** How long one Peekaboo call has before the run gives up on it. */
 const CALL_MS = 60_000;
 
 /**
@@ -208,55 +214,6 @@ async function barrierRefused(): Promise<string | null> {
   }
 }
 
-/**
- * The window server's own list of on-screen windows
- * (`CGWindowListCopyWindowInfo`, on screen only, no desktop elements): each
- * one's owner, CGWindowID, layer and size. Read through JXA; it names no
- * window titles, so it needs no screen-recording grant.
- */
-const WINDOWS = `ObjC.import("CoreGraphics");
-const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0));
-const out = [];
-for (let i = 0; i < list.count; i++) {
-  const w = list.objectAtIndex(i);
-  const b = w.objectForKey("kCGWindowBounds");
-  out.push({ pid: ObjC.unwrap(w.objectForKey("kCGWindowOwnerPID")), id: ObjC.unwrap(w.objectForKey("kCGWindowNumber")), layer: ObjC.unwrap(w.objectForKey("kCGWindowLayer")), area: ObjC.unwrap(b.objectForKey("Width")) * ObjC.unwrap(b.objectForKey("Height")) });
-}
-JSON.stringify(out);`;
-
-/**
- * The app's window by its CGWindowID, the exact window Peekaboo's
- * `--window-id` takes ("An exact window selector enables receipt-pinned
- * background press", peekaboo.sh/commands/press.html), as the window
- * server lists it: the app's one on-screen window at the normal layer (0),
- * the largest when Catalyst stands helpers beside it.
- */
-async function windowOf(pid: number): Promise<string> {
-  const run = await bounded(["osascript", "-l", "JavaScript", "-e", WINDOWS]);
-  if (run.exitCode !== 0) {
-    throw new Error(
-      `the window server's list: osascript exited ${run.exitCode}: ${run.stderr.trim()}`
-    );
-  }
-  const windows = (
-    JSON.parse(run.stdout) as {
-      area: number;
-      id: number;
-      layer: number;
-      pid: number;
-    }[]
-  ).filter((one) => one.pid === pid);
-  const [main] = windows
-    .filter((one) => one.layer === 0)
-    .sort((a, b) => b.area - a.area);
-  if (!main) {
-    throw new Error(
-      `pid ${pid} has no on-screen window at layer 0: ${JSON.stringify(windows)}`
-    );
-  }
-  return String(main.id);
-}
-
 const run = async (kit: Kit) => {
   const { path: binary, problem } = macProbeApp(ROOT);
   if (
@@ -357,54 +314,62 @@ const keys = async (kit: Kit, binary: string) => {
     ) {
       return;
     }
+    /** The CGWindowID of the window the newest `see` pinned, the one ⌘K goes to. */
+    let window: string | undefined;
     /**
      * A background click on `field` (its aria-label): the field's
      * `AXFocused`, no pointer. Then its report with that focus. An AX-only
-     * `see` of the app's exact window (`--tree --no-screenshot`: the
-     * accessibility tree, no pixels) is taken first, and the click names its
-     * snapshot and the field's element in it (`--snapshot`, `--on`): every
-     * press, click and menu click before it advances the desktop-mutation
-     * watermark that hides the implicit latest snapshot, while explicit
-     * snapshots are kept (Peekaboo CHANGELOG: mutations "advance
-     * implicit-snapshot watermarks … and preserve explicit snapshot
-     * history"). A `see` with no reusable snapshot (`semantic_scope`
-     * `application_partial`: "`snapshot_id: null` … both authority booleans
-     * `false`", peekaboo.sh/commands/see.html) is said as it is. The click
-     * names the process, never the window: a window selector on a click is
-     * resolved among the windows eligible for capture
-     * (InteractionCoordinateResolver, Peekaboo 4.9.4), which a shell without
-     * Screen Recording is never shown.
+     * `see` of the app (`--pid --tree --no-screenshot`: the accessibility
+     * tree, no pixels) is taken first, and the click names its snapshot and
+     * the field's element in it (`--snapshot`, `--on`): every press, click
+     * and menu click before it advances the desktop-mutation watermark that
+     * hides the implicit latest snapshot, while explicit snapshots are kept
+     * (Peekaboo CHANGELOG: mutations "advance implicit-snapshot watermarks …
+     * and preserve explicit snapshot history"). The `see` names no window:
+     * Peekaboo then pins the app's focused AX window, else its main, else its
+     * first (DetachedAXObservationWorker `resolveWindow`, Peekaboo 4.9.4),
+     * and says its CGWindowID in `target_receipt.window_id`, the window ⌘K
+     * goes to. A `see --window-id` resolves the other way, to the AX window
+     * whose own id is the one given, and stood as `application_partial` with
+     * no snapshot when none was: the window server's largest window of the
+     * app is not the Catalyst window AX serves. A `see` with no reusable
+     * snapshot or no pinned window is said as it is. The click names the
+     * process, never the window: a window selector on a click is resolved
+     * among the windows eligible for capture (InteractionCoordinateResolver,
+     * Peekaboo 4.9.4), which a shell without Screen Recording is never shown.
      */
     const focus = async (field: string) => {
       const seen = JSON.parse(
         await peekaboo([
           "see",
-          "--window-id",
-          await windowOf(app.pid),
           "--pid",
           String(app.pid),
           "--tree",
           "--no-screenshot",
         ])
-      ) as { data?: Seen };
+      ) as Seen;
       const snapshot = seen.data?.snapshot_id;
+      const pinned = seen.target_receipt?.window_id;
       if (
         !snapshot ||
         seen.data?.snapshot_reusable !== true ||
-        seen.data?.mutation_targeting_available !== true
+        seen.data?.mutation_targeting_available !== true ||
+        !pinned
       ) {
         throw new Error(
-          `see of the app's window gave no reusable snapshot to click ${field} in: ${JSON.stringify(
+          `see of the app gave no reusable snapshot on a pinned window to click ${field} in: ${JSON.stringify(
             {
               mutation_targeting_available:
                 seen.data?.mutation_targeting_available,
               semantic_scope: seen.data?.semantic_scope,
               snapshot_id: snapshot,
               snapshot_reusable: seen.data?.snapshot_reusable,
+              target_receipt: seen.target_receipt,
             }
           )}`
         );
       }
+      window = String(pinned);
       const element = seen.data?.ui_elements?.find((one) =>
         [one.label, one.description, one.title, one.identifier].includes(field)
       );
@@ -426,13 +391,16 @@ const keys = async (kit: Kit, binary: string) => {
       ]);
       return report(0, (m) => m[3] === field, 15_000);
     };
-    /** ⌘K as key events to the app's exact window, in the background. */
+    /** ⌘K as key events, in the background, to the window the newest `see` pinned. */
     const commandK = async () => {
+      if (!window) {
+        throw new Error("⌘K before any see pinned the app's window");
+      }
       await peekaboo([
         "press",
         "cmd+k",
         "--window-id",
-        await windowOf(app.pid),
+        window,
         "--input-strategy",
         "synthOnly",
       ]);
