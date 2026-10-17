@@ -103,3 +103,12 @@ with `allow: ["pointer-events"]` for these 9 files. Then the 9 comment lines are
   hooks. Nothing selects them: `git grep` outside `.cutover/` finds only a Swift doc
   comment (apps/apple/…/JumpPalette.swift:984, prose). No other component-local class
   had rules moved in this lane.
+
+## Delta P
+
+- P1, a residual on a child component's root: none. No file in this lane has a
+  `<style>`, so there are no residual rules to prune. svelte-check's `Unused CSS selector`
+  count is quoted in the finish summary.
+- P2, shared-sheet classes (`ns-*`, `wf`/`wf-*`, `fai-*`): none in this lane's files
+  (grep: no hits).
+- P3, `important kept:` lines: none. `grep important` over the 55 files finds nothing.
