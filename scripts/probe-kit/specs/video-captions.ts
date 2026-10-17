@@ -15,6 +15,8 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { COMPOSER, open, type Spec } from "../kit";
 
 const SEND = "mcp__cawco__send_to_user";
+/** The fleet's log lines about the send, for a failed call to show. */
+const SEND_LINE = /send_to_user|telegram|attach/i;
 const VTT = "WEBVTT\n\n00:00.000 --> 00:01.000\nA caption.\n";
 
 let attachments: string[] = [];
@@ -130,7 +132,7 @@ const spec: Spec = {
       answered !== undefined,
       `${await fleet.logs("hub")}\n${await fleet.logs("agent")}`
         .split("\n")
-        .filter((line) => /send_to_user|telegram|attach/i.test(line))
+        .filter((line) => SEND_LINE.test(line))
         .slice(-15)
         .join("\n")
     );
@@ -140,8 +142,7 @@ const spec: Spec = {
     await open(desk, `${base}/session/${session}`, COMPOSER);
     await until(
       "the reply in the transcript",
-      () =>
-        desk.evaluate(() => document.body.innerText.includes("Sending.")),
+      () => desk.evaluate(() => document.body.innerText.includes("Sending.")),
       Boolean,
       60_000
     ).catch(() => false);
@@ -153,7 +154,7 @@ const spec: Spec = {
         if (!video) {
           return;
         }
-        const track = video.textTracks[0];
+        const [track] = Array.from(video.textTracks);
         return {
           tracks: video.textTracks.length,
           kind: track?.kind,
@@ -172,11 +173,10 @@ const spec: Spec = {
       Boolean,
       60_000
     ).catch(() => read("bare.mp4"));
-    const rows = await desk.evaluate(
-      () =>
-        [...document.querySelectorAll("figcaption [data-slot=path]")].map(
-          (path) => path.textContent ?? ""
-        )
+    const rows = await desk.evaluate(() =>
+      [...document.querySelectorAll("figcaption [data-slot=path]")].map(
+        (path) => path.textContent ?? ""
+      )
     );
 
     check(
