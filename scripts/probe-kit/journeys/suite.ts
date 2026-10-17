@@ -419,17 +419,20 @@ async function runLeg(
       );
     } catch (error) {
       // What the page held when the step failed, as text: its accessibility
-      // tree, for the reader of a failure. Never a picture.
-      await page
+      // tree, for the reader of a failure. Never a picture. A page that
+      // cannot give one (its web process hung) says so in its place: an
+      // empty folder read as no evidence at all.
+      const tree = await page
         .locator("body")
         .ariaSnapshot({ timeout: 5000 })
-        .then((tree) =>
-          writeFile(
-            join(out, `step-${number}.aria.yml`),
-            `# ${current}\n# ${page.url()}\n${tree}`
-          )
-        )
-        .catch(() => undefined);
+        .catch(
+          (refused: unknown) =>
+            `# the page gave no tree within 5 s: ${measuredBy(refused)}`
+        );
+      await writeFile(
+        join(out, `step-${number}.aria.yml`),
+        `# ${current}\n# ${page.url()}\n${tree}`
+      ).catch(() => undefined);
       throw error;
     } finally {
       said.length = 0;
