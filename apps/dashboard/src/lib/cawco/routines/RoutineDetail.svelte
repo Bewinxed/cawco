@@ -111,14 +111,26 @@
   });
 </script>
 
-<div data-slot="detail" class="detail">
-  <div data-slot="instruction-wrap" class="instruction-wrap">
+<!-- literal: 1lh -->
+<div
+  data-slot="detail"
+  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @routines-ledger-400px/routines-ledger:ps-(--detail-lead)"
+  style:--detail-lead="calc(var(--c-row-lead) + var(--space-3) * 2)"
+>
+  <!-- literal: 72ch -->
+  <div
+    data-slot="instruction-wrap"
+    class="flex max-w-(--measure) flex-col items-start gap-space-1"
+    style:--measure="72ch"
+  >
     <div
       data-slot="instruction"
       bind:this={body}
-      class="instruction"
+      class="type-body text-ink-strong data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden"
       data-clamped={whole ? undefined : ""}
       id="instruction-{routine.id}"
+      style:--clamp-h="calc(var(--lines) * 1lh)"
+      style:--lines="4"
     >
       <Markdown source={routine.prompt} />
     </div>
@@ -127,7 +139,7 @@
         data-more
         aria-controls="instruction-{routine.id}"
         aria-expanded={whole}
-        class="more"
+        class="-ms-space-2"
         onclick={() => {
           whole = !whole;
         }}
@@ -138,24 +150,54 @@
   </div>
 
   {#if recent.length > 0}
-    <section data-slot="runs" aria-labelledby="runs-{routine.id}" class="runs">
-      <h4 class="runs-head" id="runs-{routine.id}">Recent runs</h4>
-      <div class="runs-ledger">
+    <section
+      data-slot="runs"
+      aria-labelledby="runs-{routine.id}"
+      class="flex flex-col gap-space-2"
+    >
+      <h4 class="m-0 type-label text-ink-strong" id="runs-{routine.id}">
+        Recent runs
+      </h4>
+      <!-- literal: 6rem -->
+      <!-- literal: 4.5rem -->
+      <!-- literal: 11rem -->
+      <!-- literal: 8rem -->
+      <!-- literal: 5rem -->
+      <div
+        class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
+        style:--outcome-w="11rem"
+        style:--outcome-w-narrow="8rem"
+        style:--took-w="5rem"
+        style:--when-w="6rem"
+        style:--when-w-narrow="4.5rem"
+      >
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
-          class="runs table-fixed"
+          class="table-fixed border-separate"
         >
           <Table.Header>
-            <Table.Row class="band border-0">
+            <Table.Row class="border-0 bg-surface-band">
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-when" scope="col">When</Table.Head>
+              <Table.Head
+                class="h-c-toolbar-ctl w-(--when-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
+                scope="col">When</Table.Head
+              >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-outcome" scope="col">Outcome</Table.Head>
+              <Table.Head
+                class="h-c-toolbar-ctl w-(--outcome-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
+                scope="col">Outcome</Table.Head
+              >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-took" scope="col">Took</Table.Head>
+              <Table.Head
+                class="h-c-toolbar-ctl w-(--took-w) px-space-3 type-label tracking-caps text-ink-muted uppercase @max-routines-ledger-399px/routines-ledger:hidden"
+                scope="col">Took</Table.Head
+              >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-result" scope="col">Result</Table.Head>
+              <Table.Head
+                class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
+                scope="col">Result</Table.Head
+              >
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -163,8 +205,15 @@
               {@const outcome = outcomeOf(run)}
               {@const result = resultOf(run)}
               {@const href = runHref(run)}
-              <Table.Row data-run class="run" data-outcome={outcome.status}>
-                <Table.Cell class="col-when" data-cell="when">
+              <Table.Row
+                data-run
+                class="group/run"
+                data-outcome={outcome.status}
+              >
+                <Table.Cell
+                  class="h-c-btn-h-lg w-(--when-w) border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
+                  data-cell="when"
+                >
                   <time
                     data-slot="num"
                     class="num"
@@ -172,24 +221,35 @@
                     title={exactOf(run.startedAt)}>{since(run.startedAt)}</time
                   >
                 </Table.Cell>
-                <Table.Cell class="col-outcome" data-cell="outcome">
+                <Table.Cell
+                  class="h-c-btn-h-lg w-(--outcome-w) border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
+                  data-cell="outcome"
+                >
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
-                <Table.Cell class="col-took" data-cell="took">
+                <Table.Cell
+                  class="h-c-btn-h-lg w-(--took-w) border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num @max-routines-ledger-399px/routines-ledger:hidden"
+                  data-cell="took"
+                >
                   <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
-                <Table.Cell class="col-result" data-cell="result">
+                <Table.Cell
+                  class="h-c-btn-h-lg border-t border-border-hairline px-space-3 py-0 type-meta text-ink-muted num"
+                  data-cell="result"
+                >
                   {#if href}
+                    <!-- literal: 3px -->
                     <a
                       data-slot="result"
-                      class="result"
+                      class="block truncate text-ink-row no-underline underline-offset-(--offset) group-outcome-failed/run:text-status-fail-ink hover:text-link-ink hover:underline hover:group-outcome-failed/run:text-status-fail-ink"
                       {href}
+                      style:--offset="3px"
                       title={result || undefined}>{result || "Read the run"}</a
                     >
                   {:else}
                     <span
                       data-slot="result"
-                      class="result"
+                      class="block truncate text-ink-row group-outcome-failed/run:text-status-fail-ink"
                       title={result || undefined}>{result}</span
                     >
                   {/if}
@@ -206,10 +266,14 @@
     <section
       data-slot="runs"
       aria-labelledby="actions-{routine.id}"
-      class="runs"
+      class="flex flex-col gap-space-2"
     >
-      <h4 class="runs-head" id="actions-{routine.id}">Actions</h4>
-      <div class="runs-ledger">
+      <h4 class="m-0 type-label text-ink-strong" id="actions-{routine.id}">
+        Actions
+      </h4>
+      <div
+        class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
+      >
         <ActionsTable {actions} label="Actions" />
       </div>
     </section>
@@ -217,125 +281,16 @@
 </div>
 
 <style>
-  .detail {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    padding: 0 var(--space-3) var(--space-4);
-  }
-  /* On a ledger 400px wide or more, on the row's name column (the state
-     column, then the name cell's own inset). */
-  @container routines-ledger (min-width: 400px) {
-    .detail {
-      padding-inline-start: calc(var(--c-row-lead) + var(--space-3) * 2);
-    }
-  }
-
-  /* The instruction: markdown at body size, 72ch, four lines until More. */
-  .instruction-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-1);
-    max-inline-size: 72ch;
-  }
-  .instruction {
-    --lines: 4;
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .instruction[data-clamped] {
-    max-block-size: calc(var(--lines) * 1lh);
-    overflow: hidden;
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 1lh), transparent);
-  }
-  .instruction :global(.md > :first-child) {
+  /* residual: foreign-dom — the Markdown's own first block */
+  [data-slot="instruction"] :global(.md > :first-child) {
     margin-block-start: 0;
   }
-  .instruction-wrap :global(.more) {
-    margin-inline-start: calc(var(--space-2) * -1);
-  }
 
-  .runs {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .runs-head {
-    margin: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  /* The routines table's band and rows, on the well. */
-  .runs-ledger {
-    overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-  }
-  .runs-ledger :global(table.runs) {
-    border-collapse: separate;
+  /* residual: unmapped */
+  [data-runs] {
     border-spacing: 0;
   }
-  .runs-ledger :global(tr.band) {
-    background: var(--surface-band);
-  }
-  .runs-ledger :global(tr.band th) {
-    block-size: var(--c-toolbar-ctl);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-  .runs-ledger :global(tr.run td) {
-    block-size: var(--c-btn-h-lg);
-    padding-block: 0;
-    padding-inline: var(--space-3);
-    border-block-start: 1px solid var(--border-hairline);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-  }
-  .runs-ledger :global(.col-when) {
-    inline-size: 6rem;
-  }
-  .runs-ledger :global(.col-outcome) {
-    inline-size: 11rem;
-  }
-  .runs-ledger :global(.col-took) {
-    inline-size: 5rem;
-  }
-  .result {
-    display: block;
-    overflow: hidden;
-    color: var(--ink-row);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  a.result {
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    a.result:hover {
-      color: var(--link-ink);
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-  }
-  .runs-ledger :global(tr.run[data-outcome="failed"] .result) {
-    color: var(--status-fail-ink);
-  }
-  /* A phone: Took gives its room to the result. */
-  @container routines-ledger (max-width: 399px) {
-    .runs-ledger :global(.col-took) {
-      display: none;
-    }
-    .runs-ledger :global(.col-when) {
-      inline-size: 4.5rem;
-    }
-    .runs-ledger :global(.col-outcome) {
-      inline-size: 8rem;
-    }
+  [data-slot="instruction"][data-clamped] {
+    mask-image: linear-gradient(to bottom, canvas calc(100% - 1lh), transparent);
   }
 </style>
