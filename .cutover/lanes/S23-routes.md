@@ -33,8 +33,7 @@ None.
 - motion/overlays: `.openers :global([data-open])` became `rounded-sm border border-border-control px-space-3 py-space-2` passed as `class` on each trigger (and the context-menu div); twMerge resolves it against SelectTrigger's own px-3/rounded-md. Unused `.context` / `.body` / `.page` classes removed.
 - motion/caw-notices: `caw-pop` on `<HangCard>` became `data-slot="caw-pop"` (delta O2); `gap-0` stays.
 
-## shadcn/no-restyle hits (37)
-- (app)/motion/caw-notices/+page.svelte:363 <HangCard> caw-pop
+## shadcn/no-restyle hits (36)
 - (app)/motion/caw-notices/+page.svelte:363 <HangCard> gap-0
 - (app)/motion/overlays/+page.svelte:86 <SheetTrigger> rounded-sm
 - (app)/motion/overlays/+page.svelte:86 <SheetTrigger> border
