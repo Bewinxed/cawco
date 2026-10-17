@@ -182,7 +182,7 @@
           data-toggle
           aria-controls="{fid}-others"
           aria-expanded={open}
-          expanded="unfilled-at-rest"
+          expanded="unfilled"
           onclick={() => {
             open = !open;
           }}
