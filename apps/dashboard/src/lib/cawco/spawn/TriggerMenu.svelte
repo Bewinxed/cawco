@@ -41,7 +41,7 @@
     style:--o={items.length ? 1 : 0}
     style:--shift={`translateY(calc(${index} * 38px))`}
   ></span>
-  {#each items as item, i (item.key)}
+  {#each items as item (item.key)}
     {@const Icon = item.icon}
     <!-- literal: 9px gap, 36px height, 8px inline padding, 22px tile -->
     <button
