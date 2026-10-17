@@ -93,7 +93,13 @@
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph data-starter-glyph aria-hidden="true" class="starter-glyph" />
+          <span class="mark-cell"
+            ><Glyph
+              data-starter-glyph
+              aria-hidden="true"
+              class="starter-glyph"
+            /></span
+          >
           <span data-slot="starter-text" class="starter-text"
             >{starter.text}</span
           >
@@ -129,7 +135,7 @@
   }
   .starter {
     display: flex;
-    align-items: center;
+    align-items: start;
     gap: var(--space-2);
     inline-size: 100%;
     block-size: 100%;
