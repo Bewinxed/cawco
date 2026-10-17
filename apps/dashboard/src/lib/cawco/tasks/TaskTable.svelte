@@ -87,6 +87,16 @@
     "created",
     "updated",
   ]);
+  /** Each column's width, its head's and its cells' alike; the title takes the rest. */
+  const COL_W: Record<string, string> = {
+    pick: "calc(1rem + 2 * var(--space-3))",
+    id: "6.5rem",
+    stage: "12rem",
+    labels: "14rem",
+    todos: "6rem",
+    created: "7rem",
+    updated: "7rem",
+  };
   /** A column the ledger holds in its own order. */
   const fixed = { enableSorting: false } as const;
   /** A time column: sorted by its ms epoch, newest first on the first pick. */
@@ -244,15 +254,7 @@
               data-task-table-col={column.id}
               scope="col"
               variant="caps"
-              style="--col-w: {{
-                pick: 'calc(1rem + 2 * var(--space-3))',
-                id: '6.5rem',
-                stage: '12rem',
-                labels: '14rem',
-                todos: '6rem',
-                created: '7rem',
-                updated: '7rem',
-              }[column.id] ?? ''}"
+              style="--col-w: {COL_W[column.id] ?? ''}"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: the tag above -->
               {#if column.id === "pick"}
@@ -312,24 +314,22 @@
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
               class={cell.column.id === "created"
-                ? "h-c-btn-h-lg text-end @max-decisions-900px:hidden"
+                ? "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto"
                 : [
                     cell.column.id === "pick" &&
-                      "h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-(--pick-row) max-phone:col-start-1",
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-(--pick-row) max-phone:col-start-1",
                     cell.column.id === "title" &&
-                      "h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
                     cell.column.id === "labels" &&
-                      "h-c-btn-h-lg max-phone:hidden",
+                      "w-(--col-w) h-c-btn-h-lg max-phone:hidden max-phone:w-auto max-phone:h-auto",
                     cell.column.id === "updated" &&
-                      "h-c-btn-h-lg text-end max-phone:block max-phone:w-auto max-phone:h-auto max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
+                      "w-(--col-w) h-c-btn-h-lg text-end max-phone:block max-phone:w-auto max-phone:h-auto max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
                     !SPECIAL_CELLS.has(cell.column.id) &&
-                      "h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto",
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto",
                   ]}
               data-task-table-col={cell.column.id}
-              variant={cell.column.id === "labels" ||
-              cell.column.id === "created"
-                ? "ledger-picks"
-                : "ledger-picks-stacks"}
+              style="--col-w: {COL_W[cell.column.id] ?? ''}"
+              variant="ledger-picks-stacks"
             >
               {#if cell.column.id === "pick"}
                 <Checkbox

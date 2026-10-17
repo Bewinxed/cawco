@@ -224,7 +224,7 @@
     <!-- mark-line: the glyph heads words that may wrap: it stands in a mark cell, one line tall, on the first line -->
     <li
       data-slot="change"
-      class="grid grid-cols-(--cols) items-start gap-space-2 type-meta text-ink-muted"
+      class="grid grid-cols-(--cols) items-box-start gap-space-2 type-meta text-ink-muted"
       style:--cols="var(--icon-sm) minmax(0, 1fr) auto"
     >
       <span class="mark-cell"

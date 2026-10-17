@@ -51,6 +51,7 @@
       <Button
         data-text-section-count
         data-box
+        class="ms-auto"
         onclick={() => {
           draft = text;
         }}
