@@ -1,13 +1,22 @@
 <script lang="ts" module>
   /**
-   * Where the QR stands: asked for (the skeleton), scannable, dissolving
-   * (approved: it worked, it goes), or falling apart (a dead code).
+   * What the key is doing: asked for (the skeleton), arriving, waiting to
+   * be scanned, stepped back while the person checks, swallowed (approved),
+   * flown up to Caw (approved, the other take), burst (denied) or drained
+   * (expired).
    */
-  export type QrState = "loading" | "code" | "dissolve" | "fall";
-  /** How the code's dots come together as it arrives (the owner's pick). */
-  export type QrArrival = "scatter" | "flicker" | "bloom";
-  /** How the card says the code waits to be scanned (the owner's pick). */
-  export type QrPending = "edge" | "edge-pulse";
+  export type QrAct =
+    | "loading"
+    | "still"
+    | "arrive"
+    | "wait"
+    | "dim"
+    | "swallow"
+    | "fly"
+    | "burst"
+    | "drain";
+  /** How the waiting key shows life: a light round its edge, or ripples from Caw. */
+  export type QrWait = "sweep" | "ripple";
   /** The head on the code's middle: swapped by key, cross-faded. */
   export interface QrCentre {
     key: string;
@@ -16,40 +25,45 @@
 </script>
 
 <script lang="ts">
+  import type { TransitionConfig } from "svelte/transition";
   /**
-   * The pairing screen's picture: the code as a QR, for a paired iPhone or
-   * iPad to scan instead of reading it (round-2 design §1). A square card
-   * c-pair-w wide, the code's cells' width, so its edges stand on theirs.
+   * The key: the pairing code as a QR a paired iPhone or iPad scans. A
+   * square card c-pair-w wide, the width of the code's six boxes under it.
+   * uqr's matrix at error correction level H, so a head (`centre`, the app
+   * icon's Caw by default) stands in its middle: each dark module a dot,
+   * the three finder eyes a rounded ring round a dot, two modules of quiet
+   * zone inside the card's padding, dark on qr-paper in both schemes.
    *
-   * Drawn from uqr's module matrix at error correction level H, so a head
-   * (`centre`, the app icon's Caw by default) stands in its middle as
-   * Brave's lion does: each dark module a dot, the three finder eyes a
-   * rounded ring round a dot, two modules of quiet zone inside the card's
-   * padding. Dark modules on a light card in both schemes (qr-paper,
-   * qr-ink; round-2 design §6).
+   * ANIMATION STORYBOARD (each act a CSS animation on transform and
+   * opacity, on the page's clock; every dot carries its own seeded numbers)
    *
-   * Every dot is its own element with its own seeded numbers, so the code
-   * arrives as its dots come together (`arrival`: scattered and
-   * converging, flickering and locking row by row, or blooming out from the
-   * middle) and lands exactly on its modules: it reads the moment it
-   * settles. Approved, it dissolves (the arrival, run back at exit speed);
-   * dead, it falls apart, each dot dropping and fading on the house's
-   * gravity curve (ease-glide-in) out of the symbol's frame. Transform and
-   * opacity only, on CSS animations the page's clock can pause and seek.
-   * While the code waits (`pending`), a lit segment travels the card's own
-   * rounded edge once a breath, and in one take a ring breathes out from
-   * it. Without motion: the code fades, and the edge holds still, lit.
+   *   arrive   every dot from a scattered start, shuffling twice, then
+   *            locking on its module over dur-settle, its own share of
+   *            dur-panel late: the key reads the instant it settles
+   *   wait     sweep: a lit segment travels the card's rounded edge once a
+   *            breath, and one light rides the edge with it (a motion
+   *            path), screened over the key so the dots it crosses glint
+   *            ripple: the head breathes and one ring screens out from it
+   *            warm: the light takes the warn ink (the last minute)
+   *   dim      the code steps back to qr-dim-opacity, the edge gone
+   *   swallow  every dot pours into the head, inner first, over dur-pop
+   *            on ease-in-out, and the head gulps once
+   *   fly      the whole card rises toward Caw and shrinks away
+   *   burst    every dot bursts out from the head, then falls on the
+   *            gravity curve; the head squeezes and shakes once
+   *   drain    the dots go from the edges inward, each shrinking away
+   *
+   * Without motion every act is a fade, and the edge holds still, lit.
    */
   import { encode, QrCodeDataType } from "uqr";
-  import type { TransitionConfig } from "svelte/transition";
   import cawIcon from "#lib/assets/brand/caw-app-icon.png";
   import { dur, easeOut } from "../motion/curves.svelte";
 
   let {
     payload,
-    state,
-    arrival = "scatter",
-    pending = null,
+    act,
+    wait = "sweep",
+    warm = false,
     centre = { key: "caw", src: cawIcon },
   }: {
     /**
@@ -58,10 +72,10 @@
      * there is none.
      */
     payload: string | null;
-    state: QrState;
-    arrival?: QrArrival;
-    /** The waiting code's edge, or null once it no longer waits. */
-    pending?: QrPending | null;
+    act: QrAct;
+    wait?: QrWait;
+    /** The last minute: the waiting light warms. */
+    warm?: boolean;
     centre?: QrCentre;
   } = $props();
 
@@ -71,6 +85,8 @@
   const LOGO_SHARE = 0.22;
   /** How far a scattered dot starts from its module, in modules. */
   const SCATTER = 6;
+  /** How far a bursting dot flies before it falls, as a share of its way from the head. */
+  const BURST = 0.6;
   /** How far a falling dot drops before it is gone, in modules. */
   const FALL = 8;
 
@@ -84,35 +100,32 @@
     return near % 2 === 0 ? near + 1 : near;
   });
 
-  /** One dot: its module, and the numbers its motion reads. */
+  /**
+   * One dot: its module, and the numbers its acts read, written as one
+   * style (a write a dot, not one a number): --dx/--dy its scattered start
+   * and --bx/--by its way to the head (modules), --far its distance from
+   * the head and --r its own random number (0 to 1).
+   */
   interface Dot {
-    /** Toward the middle, in modules (bloom). */
-    bx: number;
-    by: number;
-    /** Its scattered start, in modules (scatter). */
-    dx: number;
-    dy: number;
-    /** Its distance from the middle, 0 to 1. */
-    far: number;
-    /** Its own random number, 0 to 1. */
-    r: number;
-    /** Its row, top to bottom, 0 to 1. */
-    row: number;
+    style: string;
     x: number;
     y: number;
   }
 
-  /** The same scatter for the same code: a small seeded generator (mulberry32). */
+  /**
+   * The same scatter for the same code: a linear congruential generator
+   * (Numerical Recipes' constants) seeded from the text, in plain
+   * arithmetic: every value stays an exact integer below 2^53.
+   */
+  const MODULUS = 2 ** 32;
   function seeded(text: string): () => number {
     let seed = 0;
     for (const char of text) {
-      seed = Math.imul(seed ^ char.charCodeAt(0), 2_654_435_761);
+      seed = (seed * 31 + (char.codePointAt(0) ?? 0)) % MODULUS;
     }
     return () => {
-      seed = (seed + 0x6d_2b_79_f5) | 0;
-      let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+      seed = (seed * 1_664_525 + 1_013_904_223) % MODULUS;
+      return seed / MODULUS;
     };
   }
 
@@ -147,13 +160,7 @@
         dots.push({
           x,
           y,
-          dx,
-          dy,
-          bx: middle - x,
-          by: middle - y,
-          far: Math.hypot(x - middle, y - middle) / reach,
-          r: random(),
-          row: y / Math.max(1, side - 1),
+          style: `--dx:${dx};--dy:${dy};--bx:${middle - x};--by:${middle - y};--far:${Math.hypot(x - middle, y - middle) / reach};--r:${random()}`,
         });
       }
     }
@@ -168,17 +175,6 @@
     };
   });
 
-  /** Mounted: a code that arrives comes together; the first one stands. */
-  let settled = false;
-  $effect(() => {
-    settled = true;
-  });
-  const arriving = (svg: SVGSVGElement) => {
-    if (settled) {
-      svg.setAttribute("data-arrive", "");
-    }
-  };
-
   /** The head's swap: the new one fades in over the old, in one place. */
   const swap = (_node: Element): TransitionConfig => ({
     duration: dur("--dur-fade"),
@@ -187,29 +183,29 @@
   });
 </script>
 
-<div data-slot="qr" class="qr" data-state={state}>
+<div
+  data-slot="qr"
+  class="qr"
+  data-act={act}
+  data-breathe={(act === "wait" && wait === "ripple") || undefined}
+  data-wait={wait}
+  data-warm={warm || undefined}
+>
   <div class="card">
     <div class="field">
       <span class="skeleton kit-skeleton"></span>
       {#if matrix}
         <svg
           style:--fall={FALL}
+          style:--burst={BURST}
           class="code"
           aria-label="Pairing QR code"
-          data-arrival={arrival}
           role="img"
           viewBox="{-QUIET} {-QUIET} {side + QUIET * 2} {side + QUIET * 2}"
-          {@attach arriving}
         >
           {#each drawing.dots as dot (`${dot.x},${dot.y}`)}
             <circle
-              style:--dx={dot.dx}
-              style:--dy={dot.dy}
-              style:--bx={dot.bx}
-              style:--by={dot.by}
-              style:--far={dot.far}
-              style:--r={dot.r}
-              style:--row={dot.row}
+              style={dot.style}
               class="dot"
               cx={dot.x + 0.5}
               cy={dot.y + 0.5}
@@ -217,7 +213,13 @@
             />
           {/each}
           {#each drawing.eyes as eye (`${eye.x},${eye.y}`)}
-            <g class="eye">
+            <g
+              style:--bx={(side - 1) / 2 - (eye.x + 3)}
+              style:--by={(side - 1) / 2 - (eye.y + 3)}
+              style:--far={1}
+              style:--r={0.5}
+              class="eye"
+            >
               <rect
                 fill="none"
                 height="6"
@@ -247,13 +249,15 @@
         {/key}
       </span>
     </div>
-    {#if pending}
+    {#if act === "wait" && wait === "sweep"}
       <svg aria-hidden="true" class="edge">
         <rect class="lit" height="100%" pathLength="100" width="100%" />
       </svg>
-      {#if pending === "edge-pulse"}
-        <span aria-hidden="true" class="pulse"></span>
-      {/if}
+      <!-- One light riding the edge with the segment: what it crosses glints. -->
+      <span aria-hidden="true" class="glint"></span>
+    {:else if act === "wait" && wait === "ripple"}
+      <!-- One ring out from the head: what it crosses glints. -->
+      <span aria-hidden="true" class="ripple"></span>
     {/if}
   </div>
 </div>
@@ -267,8 +271,6 @@
     justify-items: center;
     inline-size: 100%;
   }
-  /* Square, c-pair-w wide like the cells under it, its padding the outer
-     quiet zone. Dark modules on a light card in both schemes. */
   .card {
     position: relative;
     box-sizing: border-box;
@@ -303,12 +305,14 @@
   .code {
     display: block;
   }
-  .dot {
-    fill: currentColor;
+  .dot,
+  .eye {
     transform-box: fill-box;
     transform-origin: center;
   }
-  /* The head, centred on the symbol, its tile rounded as the app icon is. */
+  .dot {
+    fill: currentColor;
+  }
   .tile {
     display: grid;
     grid-area: 1 / 1;
@@ -323,104 +327,100 @@
     border-radius: 22%;
     object-fit: cover;
   }
-  [data-state="loading"] .code {
+  [data-act="loading"] .code {
     opacity: 0;
     filter: blur(var(--fold-blur));
   }
-  [data-state="code"] .skeleton,
-  [data-state="dissolve"] .skeleton,
-  [data-state="fall"] .skeleton {
+  .qr:not([data-act="loading"]) .skeleton {
     opacity: 0;
     filter: blur(var(--fold-blur));
+  }
+  [data-act="dim"] .code {
+    opacity: var(--qr-dim-opacity);
   }
 
-  /* The code's arrival (Skeleton reveal's content side), each take landing
-     on the modules: */
   @media (prefers-reduced-motion: no-preference) {
-    /* Scattered: every dot from its own start inside the symbol, home over
-       dur-settle, its own share of dur-panel late. */
-    .code:global([data-arrive])[data-arrival="scatter"] .dot {
-      animation: qr-scatter var(--dur-settle) var(--ease-out)
+    /* arrive: from a scattered start, shuffling twice, locking. */
+    [data-act="arrive"] .dot {
+      animation: qr-shuffle var(--dur-settle) var(--ease-in-out)
         calc(var(--r) * var(--dur-panel)) both;
     }
-    /* Flickering: each dot on and off at random, the rows locking top to
-       bottom across dur-cascade. */
-    .code:global([data-arrive])[data-arrival="flicker"] .dot {
-      animation: qr-flicker var(--dur-settle) step-end
-        calc(var(--row) * var(--dur-cascade) + var(--r) * var(--dur-ghost)) both;
+    [data-act="arrive"] .eye {
+      animation: qr-eye var(--dur-pop) var(--ease-out) var(--dur-settle) both;
     }
-    /* Blooming: from the middle outward, each dot out of the centre. */
-    .code:global([data-arrive])[data-arrival="bloom"] .dot {
-      animation: qr-bloom var(--dur-pop) var(--ease-out)
+    /* wait: the light rides the card's rounded edge with the segment (a
+       motion path, composited), lighting the dots it crosses. */
+    .glint {
+      animation: qr-ride var(--breath) linear infinite;
+    }
+    /* ripple: a ring out from the head, which breathes as it leaves. */
+    .ripple {
+      animation: qr-ring var(--breath) var(--ease-out) infinite;
+    }
+    [data-breathe] .tile {
+      animation: qr-breathe var(--breath) var(--ease-in-out) infinite;
+    }
+    /* swallow: the key pours into the head, inner dots first; the head gulps. */
+    [data-act="swallow"] .dot,
+    [data-act="swallow"] .eye {
+      animation: qr-swallow var(--dur-pop) var(--ease-in-out)
         calc(var(--far) * var(--dur-panel)) both;
     }
-    .code:global([data-arrive]) .eye {
-      transform-box: fill-box;
-      transform-origin: center;
-      animation: qr-eye var(--dur-pop) var(--ease-out) var(--dur-panel) both;
+    [data-act="swallow"] .tile {
+      animation: qr-gulp var(--dur-pop) var(--ease-out)
+        calc(var(--dur-panel) + var(--dur-pop)) both;
     }
-    /* Approved: the arrival run back, at exit speed. */
-    [data-state="dissolve"] .code[data-arrival="scatter"] .dot {
-      animation: qr-scatter var(--dur-exit) var(--ease-out)
-        calc(var(--r) * var(--dur-exit)) reverse both;
+    /* fly: the whole key rises toward Caw and shrinks away. */
+    [data-act="fly"] .card {
+      animation: qr-fly var(--dur-settle) var(--ease-in-out) both;
     }
-    [data-state="dissolve"] .code[data-arrival="flicker"] .dot {
-      animation: qr-flicker var(--dur-exit) step-end
-        calc(var(--row) * var(--dur-exit)) reverse both;
+    /* burst: out from the head, then down on the gravity curve. */
+    [data-act="burst"] .dot,
+    [data-act="burst"] .eye {
+      animation: qr-burst var(--dur-settle) linear
+        calc(var(--r) * var(--dur-ghost)) both;
     }
-    [data-state="dissolve"] .code[data-arrival="bloom"] .dot {
-      animation: qr-bloom var(--dur-exit) var(--ease-out)
-        calc(var(--far) * var(--dur-exit)) reverse both;
+    [data-act="burst"] .tile {
+      animation:
+        qr-squeeze var(--dur-panel) var(--ease-out) both,
+        qr-shake calc(var(--dur-ghost) * 2 + var(--dur-stagger) * 2) linear
+          var(--dur-panel);
     }
-    [data-state="dissolve"] .eye {
-      transform-box: fill-box;
-      transform-origin: center;
-      animation: qr-eye var(--dur-exit) var(--ease-out) reverse both;
+    /* drain: from the edges inward, each dot shrinking away. */
+    [data-act="drain"] .dot,
+    [data-act="drain"] .eye {
+      animation: qr-drain var(--dur-pop) var(--ease-out)
+        calc((1 - var(--far)) * var(--dur-panel)) both;
     }
-    /* Dead: every dot drops out of the symbol on the gravity curve, fading,
-       its own share of dur-panel late. */
-    [data-state="fall"] .dot,
-    [data-state="fall"] .eye {
-      animation: qr-fall var(--dur-settle) var(--ease-glide-in)
-        calc(var(--r, 0.5) * var(--dur-panel)) both;
+    [data-act="drain"] .tile {
+      animation: qr-drain var(--dur-pop) var(--ease-out) var(--dur-panel) both;
     }
   }
-  [data-state="dissolve"] .code,
-  [data-state="fall"] .code {
-    transition-duration: var(--dur-settle);
+  /* Without motion every leaving act is a fade. */
+  @media (prefers-reduced-motion: reduce) {
+    :is(
+        [data-act="swallow"],
+        [data-act="fly"],
+        [data-act="burst"],
+        [data-act="drain"]
+      )
+      .field {
+      opacity: 0;
+      transition: opacity var(--dur-fade) var(--ease-out);
+    }
   }
-  @keyframes qr-scatter {
-    from {
+  @keyframes qr-shuffle {
+    0% {
       opacity: 0;
       transform: translate(calc(var(--dx) * 1px), calc(var(--dy) * 1px));
     }
-  }
-  @keyframes qr-flicker {
-    0% {
-      opacity: 0;
-    }
-    20% {
-      opacity: 1;
-    }
     35% {
-      opacity: 0;
-    }
-    55% {
       opacity: 1;
+      transform: translate(calc(var(--dy) * -0.5px), calc(var(--dx) * 0.5px));
     }
     70% {
-      opacity: 0;
-    }
-    85%,
-    100% {
-      opacity: 1;
-    }
-  }
-  @keyframes qr-bloom {
-    from {
-      opacity: 0;
-      transform: translate(calc(var(--bx) * 1px), calc(var(--by) * 1px))
-        scale(var(--pop-scale));
+      opacity: 0.6;
+      transform: translate(calc(var(--dx) * -0.2px), calc(var(--dy) * 0.2px));
     }
   }
   @keyframes qr-eye {
@@ -429,22 +429,149 @@
       transform: scale(var(--pop-scale));
     }
   }
-  @keyframes qr-fall {
+  /* The glint and the ring: brand light screened over the key, so the dark
+     dots they cross light up and the paper stays paper. One element each,
+     transform and opacity only. */
+  .glint,
+  .ripple {
+    position: absolute;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: var(--qr-glint-opacity);
+  }
+  .glint {
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    inline-size: calc(var(--c-pair-w) * var(--qr-edge-share) * 2);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, var(--brand-solid), transparent);
+    offset-path: inset(0 round var(--radius-lg));
+    offset-rotate: 0deg;
+  }
+  [data-warm] .glint {
+    background: radial-gradient(closest-side, var(--data-warn), transparent);
+  }
+  .ripple {
+    inset: 0;
+    margin: auto;
+    inline-size: 100%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      transparent 72%,
+      var(--brand-solid) 86%,
+      transparent
+    );
+    transform: scale(0);
+  }
+  @keyframes qr-ride {
+    from {
+      offset-distance: 0%;
+    }
     to {
-      opacity: 0;
-      transform: translateY(calc(var(--fall) * 1px));
+      offset-distance: 100%;
     }
   }
-  /* Without motion the code only fades in and out. */
-  @media (prefers-reduced-motion: reduce) {
-    [data-state="dissolve"] .code,
-    [data-state="fall"] .code {
+  @keyframes qr-ring {
+    from {
+      opacity: var(--qr-glint-opacity);
+      transform: scale(var(--qr-shrink));
+    }
+    to {
       opacity: 0;
+      transform: scale(1);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .glint,
+    .ripple {
+      display: none;
+    }
+  }
+  @keyframes qr-breathe {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    8% {
+      transform: scale(var(--qr-pulse-scale));
+    }
+  }
+  @keyframes qr-swallow {
+    to {
+      opacity: 0;
+      transform: translate(calc(var(--bx) * 1px), calc(var(--by) * 1px))
+        scale(var(--pop-scale));
+    }
+  }
+  @keyframes qr-gulp {
+    50% {
+      transform: scale(var(--qr-pulse-scale));
+    }
+  }
+  @keyframes qr-fly {
+    to {
+      opacity: 0;
+      transform: translateY(-50%) scale(var(--qr-shrink));
+    }
+  }
+  @keyframes qr-burst {
+    0% {
+      animation-timing-function: var(--ease-out);
+    }
+    35% {
+      opacity: 1;
+      transform: translate(
+        calc(var(--bx) * var(--burst) * -1px),
+        calc(var(--by) * var(--burst) * -1px)
+      );
+      animation-timing-function: var(--ease-glide-in);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(
+        calc(var(--bx) * var(--burst) * -1px),
+        calc((var(--fall) - var(--by) * var(--burst)) * 1px)
+      );
+    }
+  }
+  @keyframes qr-squeeze {
+    40% {
+      transform: scale(calc(2 - var(--qr-squeeze)), var(--qr-squeeze));
+    }
+  }
+  @keyframes qr-shake {
+    0% {
+      transform: translateX(0);
+      animation-timing-function: var(--ease-out);
+    }
+    28.57% {
+      transform: translateX(var(--shake-distance));
+      animation-timing-function: var(--ease-out);
+    }
+    57.14% {
+      transform: translateX(calc(var(--shake-distance) * -1));
+      animation-timing-function: var(--ease-out);
+    }
+    78.57% {
+      transform: translateX(var(--shake-overshoot));
+      animation-timing-function: var(--ease-out);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+  @keyframes qr-drain {
+    to {
+      opacity: 0;
+      transform: scale(var(--qr-shrink));
     }
   }
 
   /* Waiting to be scanned: a lit segment travels the card's own rounded
-     edge (its radius, its box), once a breath. */
+     edge (its radius, its box), once a breath; warm in the last minute. */
   .edge {
     position: absolute;
     inset: 0;
@@ -460,21 +587,14 @@
     stroke-linecap: round;
     rx: var(--radius-lg);
     stroke-dasharray: calc(var(--qr-edge-share) * 100) 100;
+    transition: stroke var(--dur-panel) var(--ease-out);
   }
-  .pulse {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    box-shadow: 0 0 0 var(--c-corner-grip-stroke) var(--brand-solid);
-    opacity: 0;
-    pointer-events: none;
+  [data-warm] .lit {
+    stroke: var(--data-warn);
   }
   @media (prefers-reduced-motion: no-preference) {
     .lit {
       animation: qr-edge var(--breath) linear infinite;
-    }
-    .pulse {
-      animation: qr-pulse var(--breath) var(--ease-out) infinite;
     }
   }
   /* Without motion the whole edge holds, lit. */
@@ -486,16 +606,6 @@
   @keyframes qr-edge {
     to {
       stroke-dashoffset: -100;
-    }
-  }
-  @keyframes qr-pulse {
-    from {
-      opacity: 0.6;
-      transform: scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: scale(var(--qr-pulse-scale));
     }
   }
 </style>

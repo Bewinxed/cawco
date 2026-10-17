@@ -1,22 +1,16 @@
 /**
- * The pairing sheet's two open choices (round-2 design §5), shared by every
- * stop that plays them: what a scan does, and how a code's letters arrive.
- * Preview only; the build takes the owner's pick and this goes with the
- * sheet's harness.
+ * The pairing sheet's open choice the scanner plays (what a scan does),
+ * and its fixtures. Preview only; the build takes the owner's picks and
+ * this goes with the sheet's harness.
  */
-import type { OtpArrival } from "../OtpCells.svelte";
-
-export const picks = $state<{ arrive: OtpArrival; scan: "approve" | "ask" }>({
-  arrive: "pop",
-  scan: "approve",
-});
+export const picks = $state<{ scan: "approve" | "ask" }>({ scan: "approve" });
 
 /** The fixture: the hub, the code its waiting browser shows, and another fleet's. */
 export const FIXTURE = {
   hub: "7c1e9a52-4b3d-4f08-9d2e-61a0c8b5e3f4",
   otherHub: "e2b0d4c7-91fa-4c36-8a5d-3f7b19c0a6e2",
   code: "JWK-HDQ",
-  /** The code a Start pairing pressed again is given. */
+  /** The code a fresh start is given. */
   nextCode: "PLN-RVT",
   otherCode: "QXT-PLM",
   device: "CawCo on iPad",
