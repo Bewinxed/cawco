@@ -475,10 +475,8 @@
             <Table.Header class="max-phone:block">
               <Table.Row class="max-phone:flex" variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head
-                  class="h-c-toolbar-ctl"
-                  variant="caps"
-                  scope="col">Caw</Table.Head
+                <Table.Head class="h-c-toolbar-ctl" variant="caps" scope="col"
+                  >Caw</Table.Head
                 >
                 <Table.Head
                   class="h-c-toolbar-ctl w-(--col-count) max-phone:hidden"
@@ -577,10 +575,8 @@
             <Table.Header class="max-phone:block">
               <Table.Row class="max-phone:flex" variant="band">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                <Table.Head
-                  class="h-c-toolbar-ctl"
-                  variant="caps"
-                  scope="col">Attempts</Table.Head
+                <Table.Head class="h-c-toolbar-ctl" variant="caps" scope="col"
+                  >Attempts</Table.Head
                 >
                 <Table.Head
                   class="h-c-toolbar-ctl w-(--col-count) max-phone:hidden"
