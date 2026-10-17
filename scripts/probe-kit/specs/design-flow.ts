@@ -20,7 +20,8 @@
  * 6. A 307 KB asset reaches design/ whole: through `cawco tool design_write -`
  *    on stdin, and through `from`, a file where the session works.
  * 7. Not now on Caw's design-system offer (nightly 3944): the project's
- *    starters are asked again and suggest no design-system build after it
+ *    starters are written again for it (its set's trigger) and suggest no
+ *    design-system build after it
  *    (spec §5.7: "Not now is recorded and he does not ask that project
  *    again unless the person does").
  *
@@ -242,27 +243,31 @@ const run = async (kit: Kit) => {
     (now) => now.offer?.answer === "open" && buildStarter(now.starters),
     60_000
   ).catch(() => undefined);
-  const dismissedAt = Date.now();
   const dismissed = await fleet.api<{ answer: string }>(
     `/api/projects/${declined.id}/design-offer/dismiss`,
     {}
   );
-  const askedAfter = await until(
-    "a starters ask for ds-declined after Not now",
+  // The set the dismissal wrote, by its trigger: with the design subject
+  // gone and nothing else to ask, the hub writes an empty set without
+  // asking Jev (jev-placement.ts `jevStarters`: no subjects, no call).
+  const rewritten = await until(
+    "ds-declined's starters written for Not now",
     async () =>
-      jev.starterCalls("ds-declined").find((each) => each.at > dismissedAt),
-    (asked) => asked !== undefined,
+      fleet.query<{ trigger: string }>(
+        "SELECT trigger FROM project_starter_sets WHERE project_id = ? AND place = 'board'",
+        declined.id
+      )[0]?.trigger ?? "",
+    (trigger) => trigger.includes("design offer declined"),
     60_000
   ).catch(() => undefined);
-  await quietly(3000);
   const afterNotNow = await declinedStarters();
   kit.check(
-    "7: after Not now on Caw's design-system offer, the project's starters are asked again and no longer suggest building a design system",
+    "7: after Not now on Caw's design-system offer, the project's starters are written again for it and no longer suggest building a design system",
     offeredFirst !== undefined &&
       dismissed.answer === "dismissed" &&
-      askedAfter !== undefined &&
+      rewritten !== undefined &&
       !buildStarter(afterNotNow),
-    `before: offer ${JSON.stringify(offeredFirst?.offer)}, starters ${offeredFirst?.starters.join(" | ")}; dismissed ${dismissed.answer}; asked again ${askedAfter !== undefined}; after: ${afterNotNow.join(" | ")}`
+    `before: offer ${JSON.stringify(offeredFirst?.offer)}, starters ${offeredFirst?.starters.join(" | ")}; dismissed ${dismissed.answer}; written for Not now ${rewritten !== undefined}; after: [${afterNotNow.join(" | ")}]`
   );
 
   // A worker session in a project with a checkout: task_create and

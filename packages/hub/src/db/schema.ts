@@ -3307,7 +3307,7 @@ export const projectStarterSets = sqliteTable(
     generatedAt: timestamp("generated_at").notNull(),
     /** The hash of the inputs Jev was asked over. */
     inputHash: text("input_hash").notNull(),
-    /** What asked for it: `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `stale`. */
+    /** What asked for it, several joined by `, ` (project-starters.ts `StartersTrigger`): `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `design offer declined`, `stale`. */
     trigger: text("trigger").notNull(),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.place] })]

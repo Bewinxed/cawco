@@ -606,6 +606,7 @@ const PROPOSAL = "mcp__cawco__design_proposal";
 
 interface TaskRead {
   attempts: { state: string }[];
+  comments: { text: string }[];
   id: string;
   result: unknown;
   stage: string;
@@ -698,17 +699,29 @@ const sentBack = async (on: SendBackOn, t2: string): Promise<void> => {
       waiting === 0,
     `design_write answered “${rewrote.slice(0, 300)}”; specimen ${specimen === SPECIMEN_FIX ? "is the fix" : `“${specimen.slice(0, 80)}”`}; ${waiting} proposal(s) waiting`
   );
-  const said = JSON.stringify(after.task);
+  // The task's note comes from dispatch.ts `settle` after the item's row
+  // ends (`noteFollowUp`, its own commit): read once it is there.
+  const noted = (read: TaskRead) =>
+    read.comments.find(
+      (comment) =>
+        comment.text.includes("stays landed") &&
+        comment.text.includes(BLOCKED_ERROR)
+    );
+  const task = await until(
+    "T2's task noting the follow-up's block",
+    () => on.read(t2),
+    (now) => noted(now) !== undefined,
+    60_000
+  ).catch(() => after.task);
   const error = after.item?.error ?? "";
   kit.check(
     "3b: the follow-up ending blocked leaves the landed attempt done, the block as its error, and the task back in review with the block noted",
     after.item?.state === "done" &&
       error.startsWith("Blocked:") &&
-      after.task.stage === "review" &&
-      after.task.attempts[0]?.state === "done" &&
-      said.includes("stays landed") &&
-      said.includes(BLOCKED_ERROR),
-    `item ${after.item?.state} “${error.slice(0, 120)}”; task ${after.task.stage}, attempt ${after.task.attempts[0]?.state}; block noted ${said.includes("stays landed")}`
+      task.stage === "review" &&
+      task.attempts[0]?.state === "done" &&
+      noted(task) !== undefined,
+    `item ${after.item?.state} “${error.slice(0, 120)}”; task ${task.stage}, attempt ${task.attempts[0]?.state}; block noted ${noted(task) !== undefined}; last comment “${task.comments.at(-1)?.text.slice(0, 200) ?? "(none)"}”`
   );
 };
 
