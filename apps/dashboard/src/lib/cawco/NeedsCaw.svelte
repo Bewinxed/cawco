@@ -589,7 +589,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:dur-exit data-foot:ease-out"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:dur-exit data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:dur-pop group-data-instant/tools:data-foot:transition-off"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
@@ -667,7 +667,7 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0"
+      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none"
       data-needs-caw
       style:--caw-hit="44px"
       type="button"
@@ -740,20 +740,5 @@
     stroke-linecap: round;
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
-  }
-  /* residual: unmapped — the tap highlight has no utility; and the lower
-     half of his rim follows the card hanging from the glass, whose state is
-     on Shell's bar group (the rim's script, "While his panel hangs";
-     bar-glass), two attributes on one ancestor of another file, at run
-     time: no variant says it. */
-  [data-needs-caw] {
-    -webkit-tap-highlight-color: transparent;
-  }
-  :global([data-bar-group][data-joined]) [data-slot="rim"][data-foot] {
-    opacity: 0;
-    transition-duration: var(--dur-pop);
-  }
-  :global([data-bar-group][data-instant]) [data-slot="rim"][data-foot] {
-    transition: none;
   }
 </style>

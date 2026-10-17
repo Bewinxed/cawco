@@ -54,14 +54,14 @@
 {#if total > 0 || indeterminate}
   <svg
     aria-hidden="true"
-    class="task-ring shrink-0"
+    class="shrink-0"
     height={box}
     {style}
     viewBox="0 0 {box} {box}"
     width={box}
   >
     <g
-      class="origin-center transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
       data-shown={!finished}
     >
       <circle
@@ -72,8 +72,9 @@
         r={radius}
         stroke-width={stroke}
       />
+      <!-- Wound from the top, as a clock is read. -->
       <circle
-        class="arc origin-center -rotate-90 transition-[stroke-dasharray] dur-pop ease-out motion-reduce:dur-control"
+        class="transform-view origin-center -rotate-90 transition-[stroke-dasharray] dur-pop ease-out motion-reduce:dur-control"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -85,7 +86,7 @@
       />
     </g>
     <g
-      class="origin-center text-success-9 transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center text-success-9 transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
       data-shown={finished}
     >
       <polyline
@@ -100,15 +101,3 @@
     </g>
   </svg>
 {/if}
-
-<style>
-  /* residual: unmapped */
-  /* Wound from the top, as a clock is read. */
-  .task-ring .arc {
-    transform-box: view-box;
-  }
-
-  .task-ring g {
-    transform-box: fill-box;
-  }
-</style>

@@ -369,8 +369,9 @@
           >
           <span
             aria-label={WORD[tone]}
-            class="grid size-icon-md flex-none place-items-center text-ink-muted"
+            class="grid size-icon-md flex-none place-items-center text-ink-muted status-needs:text-status-attn-ink status-done:text-status-done-ink status-failed:text-status-fail-ink"
             data-session-hover-tone={tone}
+            data-status={tone}
             data-box
             role="img"
           >
@@ -435,16 +436,5 @@
   [data-session-hover-tone] :global(svg) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-  }
-  /* residual: unmapped — needs variant: data-session-hover-tone=needs,
-     =done, =failed (the hook already carries the tone). */
-  [data-session-hover-tone="needs"] {
-    color: var(--status-attn-ink);
-  }
-  [data-session-hover-tone="done"] {
-    color: var(--status-done-ink);
-  }
-  [data-session-hover-tone="failed"] {
-    color: var(--status-fail-ink);
   }
 </style>

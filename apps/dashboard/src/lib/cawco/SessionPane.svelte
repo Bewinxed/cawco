@@ -126,8 +126,7 @@
    * title and line centred in it, as the board's empty state stands: never
    * a start-aligned block set in the middle.
    */
-  const STATEFUL =
-    "m-auto max-w-(--stateful-measure) items-center px-space-6 text-center";
+  const STATEFUL = "m-auto max-w-(--stateful-measure) items-center text-center";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):
@@ -1089,6 +1088,7 @@
 {#snippet faultState(fault: ReadFault)}
   <EmptyState
     class={STATEFUL}
+    pad="pane"
     icon={fault.reason === "offline" ? IconLaptop : IconAlert}
     line={faultLine}
     role="alert"
@@ -1123,6 +1123,7 @@
 {#snippet missingState()}
   <EmptyState
     class={STATEFUL}
+    pad="pane"
     icon={IconAlert}
     title="This session isn't reachable from here"
   >
@@ -1168,7 +1169,7 @@
            the surface a swipe carries, not the thing that carries it. -->
         <div
           data-slot="transcript-slide"
-          class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden"
+          class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden timeline-scope-transcript-head"
         >
           <!-- A named state, not an empty pane: what happened, in one line,
                    and the one thing that can be done about it. -->
@@ -1184,6 +1185,7 @@
             <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
               <EmptyState
                 class={STATEFUL}
+                pad="pane"
                 icon={IconChat}
                 line="Write the first message below."
                 title="Nothing has been said here yet"
@@ -1278,11 +1280,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: unmapped */
-  /* The transcript's scroll, in reach of its head blur (HeadFade). */
-  [data-slot="transcript-slide"] {
-    timeline-scope: --transcript-head;
-  }
-</style>

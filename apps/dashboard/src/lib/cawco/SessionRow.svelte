@@ -415,7 +415,13 @@
        for nothing outside the row. The row is compact at a desk; a finger
        keeps its 44px. How far under its mark the mark's switch may reach
        (--mark-hit-room): the room a two-line row leaves under it (44px less
-       the 18px mark, halved). -->
+       the 18px mark, halved). On the row itself, per size, read by
+       TreeMark: how far under its mark the switch reaches (--mark-hit-max:
+       the room the row leaves under it, and the gap to the next row) and
+       how far sideways under a finger (--mark-hit-gap: to the row's words);
+       one line in a tree in the rail takes the tight gaps, wide enough that
+       the mark's status dot (3px out of the tile) clears the name. The note
+       under the row starts where its title does, per size. -->
   <!-- literal: 28px, 44px, 13px -->
   <div
     data-slot="item"
@@ -450,8 +456,14 @@
            name settles or Escape puts it back. -->
       <form
         data-slot="row"
-        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-(--row-touch-h) py-space-1 pl-space-3 pr-space-3 text-inherit no-underline group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x)"
+        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-(--row-touch-h) py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
         data-rail-row
+        style:--mark-hit-max={compact
+          ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
+          : "calc(var(--mark-hit-room) + var(--tree-gap))"}
+        style:--mark-hit-gap={compact
+          ? "var(--row-compact-gap)"
+          : "var(--space-2)"}
         onsubmit={(event) => {
           event.preventDefault();
           commitTitle();
@@ -466,13 +478,19 @@
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
         class={cn(
-          "press-tint focus-inset flex coarse:min-h-(--row-touch-h) min-h-space-8 min-w-0 flex-auto items-center gap-space-2 py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
+          "press-tint focus-inset flex coarse:min-h-(--row-touch-h) min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
           trigger.class as string | undefined
         )}
         data-hover-session={instance?.id}
         data-rail-row
         data-share="session:{sessionId}"
         {href}
+        style:--mark-hit-max={compact
+          ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
+          : "calc(var(--mark-hit-room) + var(--tree-gap))"}
+        style:--mark-hit-gap={compact
+          ? "var(--row-compact-gap)"
+          : "var(--space-2)"}
         use:dragSession={{
           sessionId,
           ctx: () =>
@@ -493,14 +511,18 @@
            own hover is the step past it. The row's corner is --radius-sm;
            they stand further in from its edges than that, so they keep the
            small control's own radius. Archive rises beside Peek, a step left
-           of it. A finger swipes the row away instead: no button for it. -->
+           of it. A finger swipes the row away instead: no button for it.
+           Their hover is the hover fill by day and the plain fill at night
+           (as light-dark() picks it, by the root's scheme), not on the row in
+           front, whose buttons keep the selection's fill; the row and its
+           buttons slide back at the exit's pace once the finger lets go. -->
       <Tip label="Archive">
         {#snippet children(tip)}
           <button
             data-archive
             {...tip}
             aria-label="Archive {title}"
-            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:group-not-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) can-hover:group-data-peek/session-row:right-(--archive-end) no-hover:hidden"
+            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) can-hover:group-data-peek/session-row:right-(--archive-end) no-hover:hidden light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide"
             onclick={onarchive}
             style:--archive-end={"calc(var(--action-end) + var(--action-size) + var(--space-1))"}
             type="button"
@@ -528,7 +550,7 @@
             data-session-row-peek
             {...tip}
             aria-label="Peek {title}"
-            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:group-not-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-[900px]:hidden"
+            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-[900px]:hidden light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide"
             onclick={() => openPeek({ viewId: live.id, href, title })}
             type="button"
           >
@@ -587,6 +609,12 @@
     data-slot="session-row-note"
     class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
     data-compact={compact || undefined}
+    style:--fault-indent={compact
+      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
+      : "calc(var(--space-3) + var(--space-5) + var(--space-2))"}
+    style:--fault-end={compact
+      ? "var(--row-compact-pad-end)"
+      : "var(--space-3)"}
     transition:unfold
   >
     {act.note.text}
@@ -604,11 +632,17 @@
     data-slot="session-row-note"
     class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
     data-compact={compact || undefined}
+    style:--fault-indent={compact
+      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
+      : "calc(var(--space-3) + var(--space-5) + var(--space-2))"}
+    style:--fault-end={compact
+      ? "var(--row-compact-pad-end)"
+      : "var(--space-3)"}
     transition:unfold
   >
     {act.pending}
     <button
-      class="cursor-pointer border-none border-current bg-transparent p-0 text-ink-strong underline underline-offset-2"
+      class="cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
       onclick={stopPending}
       type="button">{act.stop.label}</button
     >
@@ -616,57 +650,6 @@
 {/if}
 
 <style>
-  /* residual: unmapped — the row's corner is its item's (`border-radius:
-     inherit`, no utility). How far under its mark the mark's switch may
-     reach (--mark-hit-max: the room the row leaves under it, and the gap to
-     the next row) and how far sideways under a finger (--mark-hit-gap: to
-     the row's words), read by TreeMark: set per size, so by a rule. */
-  [data-rail-row] {
-    --mark-hit-max: calc(var(--mark-hit-room) + var(--tree-gap));
-    --mark-hit-gap: var(--space-2);
-    border-radius: inherit;
-  }
-  /* One line, in a tree in the rail: the gaps between its three parts
-     (mark, name, age) are the tight ones, wide enough that the mark's
-     status dot (3px out of the tile) clears the name. Its mark's switch
-     reaches as far under it as the row leaves room. */
-  [data-slot="item"][data-compact] [data-rail-row] {
-    --mark-hit-max: calc(
-      (var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 +
-        var(--tree-gap)
-    );
-    --mark-hit-gap: var(--row-compact-gap);
-  }
-  /* The buttons' own hover, the step past the row's ghost they stand on:
-     the hover fill by day, the plain fill at night (light-dark(), no
-     utility; an inline value is refused as a raw colour). Not on the row in
-     front, whose buttons keep the selection's fill. */
-  @media (hover: hover) and (pointer: fine) {
-    [data-slot="item"]:not([data-current])
-      :is([data-archive], [data-session-row-peek]):hover {
-      background: light-dark(var(--surface-fill-strong), var(--surface-fill));
-    }
-  }
-  /* The row and its buttons slide back at the exit's pace once the finger
-     lets go: two clocks in one transition (needs a transition token). */
-  [data-slot="item"]:not([data-swiping])
-    :is([data-rail-row], [data-archive], [data-session-row-peek]) {
-    transition:
-      var(--transition-control),
-      translate var(--dur-exit) var(--ease-out);
-  }
-  /* The note under the row starts where its title does, per size. */
-  [data-slot="session-row-note"] {
-    --fault-indent: calc(var(--space-3) + var(--space-5) + var(--space-2));
-    --fault-end: var(--space-3);
-  }
-  [data-slot="session-row-note"][data-compact] {
-    --fault-indent: calc(
-      var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5))
-    );
-    --fault-end: var(--row-compact-pad-end);
-  }
-
   /* residual: foreign-dom — RowFault's and AskHere's roots under the row
      (`class="session-fault"`, `class="session-ask"`, this file's names):
      a row's fault and question start where its title does, past the row's
@@ -686,11 +669,5 @@
   :global(.session-ask) {
     --ask-indent: var(--fault-indent);
     --ask-end: var(--fault-end);
-  }
-
-  /* residual: unmapped — the Stop under a pending row takes the note's own
-     type (`font: inherit`, no utility). */
-  [data-slot="session-row-note"] button {
-    font: inherit;
   }
 </style>
