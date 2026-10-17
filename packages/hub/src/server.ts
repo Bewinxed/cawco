@@ -298,6 +298,7 @@ import {
   toolSpec,
   transcriptUserText,
   UPDATE_CAWCO,
+  UPSTREAM_ORIGIN,
   undeliveredNotice,
   unshownAskMessage,
   validateWorkflow,
@@ -2869,7 +2870,7 @@ export const createServer = (
         .trim();
       return { ok: called.result.isError !== true, said };
     },
-    tell: (instanceId, text) => tellSession(instanceId, text, "upstream"),
+    tell: (instanceId, text) => tellSession(instanceId, text, UPSTREAM_ORIGIN),
     threadOf: (actor) => lead?.askThread(actor),
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
@@ -3428,7 +3429,8 @@ export const createServer = (
    * Whether a send from `origin` may start a turn in `row` when its process
    * is gone ({@link wakesForSend}). A stopped or stopping session, ended by
    * its person, its parent or the hub, is woken only by a person (their
-   * words, or their Send on one of its artifacts: core `byPerson`) or by its
+   * words, their Send on one of its artifacts, or their answer to its held
+   * upstream post: core `byPerson`) or by its
    * own parent:
    * a delegate's report, another session's hand-off and every hub notice
    * wait for one of them. A sleeping or failed one is woken by anything but
