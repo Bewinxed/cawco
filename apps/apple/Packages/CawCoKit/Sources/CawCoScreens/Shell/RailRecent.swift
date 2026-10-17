@@ -57,12 +57,16 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
     }
 
     #if DEBUG
-    /// The list laid out: the rail's probe reads where it stands.
-    var onLaidOut: () -> Void = {}
+    /// Once a second while it stands (`-rail-recent-probe`): the rail's probe reads where it settled.
+    var onProbe: () -> Void = {}
+    private var probeTimer: Timer?
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        onLaidOut()
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe") else { return }
+        probeTimer = probeTimer ?? Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onProbe() }
+        }
     }
     #endif
 
@@ -220,13 +224,17 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
         guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe"), let dataSource, view.window != nil else { return }
         let frame = view.convert(view.bounds, to: rail)
         let above = projects.convert(projects.bounds, to: rail)
+        // Each row where the list laid it, and whether its cell stands there.
+        var drawn = 0
         let rows = dataSource.snapshot().itemIdentifiers.compactMap { entry -> String? in
             guard case let .line(.row(id)) = entry, let path = dataSource.indexPath(for: entry),
-                  let cell = collectionView.cellForItem(at: path), let item = recent.all.first(where: { $0.id == id }) else { return nil }
-            let at = cell.convert(cell.bounds, to: rail)
+                  let laid = collectionView.layoutAttributesForItem(at: path), let item = recent.all.first(where: { $0.id == id }) else { return nil }
+            if collectionView.cellForItem(at: path) != nil { drawn += 1 }
+            let at = collectionView.convert(laid.frame, to: rail)
             return "\(item.title)@\(Int(at.minY))+\(Int(at.height))\(item.instance == nil ? "[stored]" : "")"
         }
-        let line = "rail recent frame=\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)) projects.maxY=\(Int(above.maxY)) under=\(frame.minY >= above.maxY) open=\(home.recentOpen) folded=\(empty.isActive) fits=\(Int(fits?.constant ?? -1)) all=\(recent.all.count) stored=\(recent.all.filter { $0.instance == nil }.count) rows=\(rows.count) style=\(traitCollection.userInterfaceStyle == .dark ? "dark" : "light") | \(rows.joined(separator: " | "))"
+        func box(_ r: CGRect) -> String { "\(Int(r.minX)),\(Int(r.minY)),\(Int(r.width))x\(Int(r.height))" }
+        let line = "rail recent frame=\(box(frame)) projects=\(box(above)) rail=\(Int(rail.bounds.width)) under=\(frame.minY >= above.maxY) open=\(home.recentOpen) folded=\(empty.isActive) fits=\(Int(fits?.constant ?? -1)) all=\(recent.all.count) stored=\(recent.all.filter { $0.instance == nil }.count) rows=\(rows.count) drawn=\(drawn) style=\(traitCollection.userInterfaceStyle == .dark ? "dark" : "light") | \(rows.joined(separator: " | "))"
         guard line != probed else { return }
         probed = line
         Self.probe.notice("\(line, privacy: .public)")

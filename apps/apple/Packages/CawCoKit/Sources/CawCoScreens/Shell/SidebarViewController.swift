@@ -443,7 +443,7 @@ final class SidebarViewController: ObservedViewController {
         recent.didMove(toParent: self)
         self.recent = recent
         #if DEBUG
-        recent.onLaidOut = { [weak self, weak recent] in
+        recent.onProbe = { [weak self, weak recent] in
             guard let self else { return }
             recent?.probeLog(rail: view, projects: projectsGroup)
         }
