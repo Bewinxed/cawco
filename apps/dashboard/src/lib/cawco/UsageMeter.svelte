@@ -189,7 +189,7 @@
       const cell = document.querySelector<HTMLElement>(
         `.cell-d[data-account="${CSS.escape(id)}"]`
       );
-      const grid = cell?.closest<HTMLElement>(".wall");
+      const grid = cell?.closest<HTMLElement>('[data-slot="wall"]');
       if (!(cell && grid)) {
         return new DOMRect();
       }
@@ -470,26 +470,54 @@
 
 {#snippet face()}
   {#if !shown}
-    <span class="noline">{gap?.short ?? empty}</span>
+    <span class="truncate type-meta text-ink-muted">{gap?.short ?? empty}</span>
   {:else}
-    <span class="cells">
+    <!-- Claude's cell asks for its whole first line and caption, and never
+         takes less than its marks and digits; opencode's is as wide as it
+         says. Where the rail is too narrow for both, opencode's cell wraps
+         onto a second row the strip does not show (it stays in the strip's
+         label and the popover), rather than Claude's answer being cut: one
+         row of cells, 34px (the first line, 3px, the caption). -->
+    <!-- literal: 34px; 3px; 6px; 14px, 3px -->
+    <span
+      class="flex h-(--strip-row) min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip group-variant-home/strip:gap-x-space-6"
+      style:--cell-gap="3px"
+      style:--l1-gap="6px"
+      style:--mark-r="3px"
+      style:--mark-side="14px"
+      style:--strip-row="34px"
+    >
       {#if claude}
-        <span class="cell" data-cell="claude">
-          <span class="l1">
-            <span data-slot="mark" aria-hidden="true" class="mark"
+        <span
+          class="flex h-(--strip-row) flex-auto flex-col justify-center gap-(--cell-gap)"
+          data-cell="claude"
+        >
+          <span
+            class="flex h-icon-md min-w-0 items-center gap-(--l1-gap) whitespace-nowrap"
+          >
+            <span
+              data-slot="mark"
+              aria-hidden="true"
+              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
               ><ClaudeIcon /></span
             >
+            <!-- The marks are the part of line 1 that gives: they ask for a
+                 slot each and shrink to one mark's width, the marks closing
+                 up inside (slotAt), so the Claude mark and the digits always
+                 stand whole inside the cells' clip. -->
+            <!-- literal: 16px -->
             <span
-              class="marks"
+              class="relative h-icon-md min-w-(--mark-min) shrink grow-0 basis-(--marks-basis)"
               data-strip-marks
-              style:flex-basis="{claude.accounts.length * SLOT - 4}px"
+              style:--mark-min="16px"
+              style:--marks-basis="{claude.accounts.length * SLOT - 4}px"
               {@attach roomFor}
             >
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="slot"
-                  style:inset-inline-start={slotAt(
+                  class="absolute start-(--slot-at) top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
+                  style:--slot-at={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
                   )}
@@ -499,13 +527,16 @@
                 </span>
               {/each}
               {#if stripMore > 0}
-                <!-- The rest, counted: the popover shows every one. -->
+                <!-- The rest, counted: the popover shows every one. "+N":
+                     the accounts past what stands a slot apart, in meta. -->
+                <!-- literal: 16px -->
                 <span
                   data-slot="slot"
                   data-more
-                  class="slot more"
+                  class="absolute start-(--slot-at) top-0 grid h-icon-md min-w-(--mark-min) place-items-center font-body text-size-meta leading-(--more-lh) font-normal num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-none"
                   data-strip-more
-                  style:inset-inline-start={slotAt(
+                  style:--more-lh="16px"
+                  style:--slot-at={slotAt(
                     stripMarks.length,
                     stripMarks.length + 1
                   )}>+{stripMore}</span
@@ -515,38 +546,67 @@
             <!-- Nothing can carry you now: when an account is back, after
                  the refresh mark, as Go's cell beside it says its own. -->
             {#if stop?.back}
-              <span aria-hidden="true" class="strip-glyph" data-strip-back
-                ><IconRefresh /></span
+              <span
+                aria-hidden="true"
+                class="inline-grid flex-none text-ink-muted"
+                data-strip-back><IconRefresh class="size-icon-sm" /></span
               >
             {/if}
+            <!-- The strip's time: its line here, the figure face on its own
+                 span (`mono-figure`). -->
+            <!-- literal: 16px -->
             <span
-              class="digits"
+              class="flex-none font-body text-size-label leading-(--digits-lh) font-medium num text-ink-strong data-muted:text-ink-muted"
+              data-muted={claude.stale !== null || undefined}
               data-strip-digits
-              class:muted={claude.stale !== null}
+              style:--digits-lh="16px"
               ><span class="mono-figure"
                 ><Figure text={stop?.figure ?? ""} /></span
               ></span
             >
           </span>
-          <span class="cap" data-next={claude.next?.id} data-strip-caption
+          <!-- One line. Its whole width is what the cell asks for, but it
+               may break anywhere, so it never holds the cell wider than the
+               marks and digits: only when the rail cannot fit it at all does
+               it end in an ellipsis. -->
+          <!-- literal: 15px -->
+          <span
+            class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+            data-next={claude.next?.id}
+            data-strip-caption
+            style:--cap-lh="15px"
             ><Words parts={caption(claude, now, nameOf)} /></span
           >
         </span>
       {/if}
       {#if openCode}
-        <span class="cell oc" data-cell="opencode">
-          <span class="l1">
-            <span data-slot="mark" aria-hidden="true" class="mark"
+        <span
+          class="flex h-(--strip-row) flex-none flex-col justify-center gap-(--cell-gap)"
+          data-cell="opencode"
+        >
+          <span
+            class="flex h-icon-md min-w-0 items-center gap-(--l1-gap) whitespace-nowrap"
+          >
+            <span
+              data-slot="mark"
+              aria-hidden="true"
+              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
               ><OpenCodeLogo /></span
             >
             <Rings reveal ring={openCode} size={16} />
             <!-- As its popover cell says it: how long it lasts, or at its
-                 limit the refresh mark and when it's back. -->
+                 limit the refresh mark and when it's back: 12px, Solar
+                 duotone, muted. -->
             {#if goTime?.kind === "back"}
-              <span aria-hidden="true" class="strip-glyph"><IconRefresh /></span
+              <span aria-hidden="true" class="inline-grid flex-none text-ink-muted"
+                ><IconRefresh class="size-icon-sm" /></span
               >
             {/if}
-            <span class="digits" data-strip-go-time
+            <!-- literal: 16px -->
+            <span
+              class="flex-none font-body text-size-label leading-(--digits-lh) font-medium num text-ink-strong"
+              data-strip-go-time
+              style:--digits-lh="16px"
               ><span class="mono-figure"
                 ><Figure text={goTime?.figure ?? ""} /></span
               ></span
@@ -555,7 +615,11 @@
           {#if goWeek !== null}
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
-            <span class="cap" data-strip-go-week
+            <!-- literal: 15px -->
+            <span
+              class="line-clamp-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+              data-strip-go-week
+              style:--cap-lh="15px"
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
             >
@@ -576,13 +640,19 @@
        its own key: resting on it or a tap says whose it is and what each
        limit has left, opening to the side that covers the fewest cells. -->
   {@const tip = dialTip(ring, c, now)}
-  <span class="dial">
+  <!-- The dial, centred on the two lines, the wall's space-1 gap before the
+       status slot: the slot's marks still stand clear of the ring's ink, the
+       ring curving away from its box at the second line's height. Every
+       dial is its tooltip's trigger: a bare button, the ring itself. -->
+  <span class="col-1 row-span-2 row-start-1 grid self-center">
     <Tip anchor={rowOf(ring.id)} label={tip} {side} tap title={shown}>
       {#snippet children(props)}
+        <!-- literal: 50% -->
         <button
           {...props}
           aria-label="{shown}: {tip}"
-          class="ring-tip"
+          class="grid cursor-help rounded-(--tip-round) border-none border-current bg-transparent p-0"
+          style:--tip-round="50%"
           data-dial-tip
           data-stale-ring={ring.state === "stale" ? "" : undefined}
           type="button"
@@ -605,41 +675,64 @@
         : `At its limit. Back in ${time.figure}.`}
     <Tip anchor={rowOf(ring.id)} label={tip} {side} tap>
       {#snippet children(props)}
+        <!-- The status slot, before every time: a guess's tilde against the
+             time, or at its limit the refresh mark (12px, Solar duotone,
+             muted); empty otherwise. -->
         <span
           data-usage-meter-glyph
           {...props}
           aria-label={tip}
-          class="status glyph"
+          class="col-2 row-2 inline-grid self-center justify-self-end text-ink-muted"
           data-status-slot
-          role="img"><IconRefresh aria-hidden="true" /></span
+          role="img"
+          ><IconRefresh aria-hidden="true" class="size-icon-sm" /></span
         >
       {/snippet}
     </Tip>
   {:else if time.guess}
-    <span class="status tilde mono-figure" data-status-slot>~</span>
+    <span
+      class="mono-figure col-2 row-2 self-center justify-self-end text-size-meta leading-meta text-ink-muted"
+      data-status-slot>~</span
+    >
   {/if}
+  <!-- The second line: the time, then the week's share, each a figure alone
+       in the figure face (mono-figure), never wrapping; the time a step
+       stronger than the week; a guess stays muted. -->
   <span
     data-slot="time"
-    class="line time"
+    class="col-3 row-2 type-meta whitespace-nowrap text-ink-row data-guess:text-ink-muted"
+    data-guess={(time.kind === "stop" && time.guess) || undefined}
     data-time
-    class:guess={time.kind === "stop" && time.guess}
   >
     {#if time.figure}
-      <span class="fig mono-figure">{time.figure}</span>
+      <span class="mono-figure">{time.figure}</span>
     {/if}
   </span>
   {@const week = weekLeft(ring)}
   {#if week !== null}
-    <span class="week-slot" data-week-mark><WeekMark {ring} /></span>
-    <span class="line wk" data-week
-      ><span class="fig pct mono-figure">{week}%</span></span
+    <!-- The week's mark at its slot's start, centred on the line; the share
+         end-aligned on a width that holds "100%". -->
+    <span class="col-4 row-2 grid self-center" data-week-mark
+      ><WeekMark {ring} /></span
+    >
+    <!-- literal: 4ch -->
+    <span
+      class="col-5 row-2 justify-self-end type-meta whitespace-nowrap text-ink-muted"
+      data-week
+      ><span
+        class="mono-figure inline-block min-w-(--pct-min) text-end"
+        style:--pct-min="4ch">{week}%</span
+      ></span
     >
   {/if}
 {/snippet}
 
 {#snippet sessionsChip(ring: RingAccount, shown: string)}
   {#if ring.sessions.length > 0}
-    <span class="cell-chip">
+    <!-- The count, 16px. Its touch area reaches the full 44px up and down,
+         and space-5 / 2 to either side: a count in the last column stays
+         inside the wall's padding, so the accounts never scroll sideways. -->
+    <span class="ms-auto grid" style:--hit-gap-x="var(--space-5)">
       <SessionsChip
         account={ring.name}
         name={shown}
@@ -683,30 +776,56 @@
     : (names.get(ring.id) ?? { local: ring.name, domain: "" })}
   {@const shown = `${name.local}${name.domain}`}
   <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
+  <!-- A cell: one row on its column's five tracks (subgrid), space-1 in on
+       every side, in meta. The carrier wears a ring in the outline button's
+       edge (3:1 on the raised surface); an account at its limit the limit
+       wash, which the dial's reserve notch takes as its ground; the cell a
+       relay band stands for, while that band is hovered or open, the hover
+       wash. (`cell-d` is the class rowOf reads and the states' hook.) -->
+  <!-- literal: span 5; auto auto -->
   <div
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="cell-d"
+    class="cell-d relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out motion-reduce:transition-none"
     data-account={ring.id}
     data-bind={ring.bind}
+    data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
     data-flip
     data-flyover-anchor
+    data-limit={ring.state === "limit" || undefined}
+    data-lit={ring.id === lit || undefined}
     role="group"
-    class:carrying={c !== null && ring.id === c.carry?.id}
-    class:limit={ring.state === "limit"}
-    class:lit={ring.id === lit}
+    style:--cell-rows="auto auto"
+    style:--cell-span="span 5"
   >
     {@render dial(ring, c, shown, side)}
-    <span class="l1">
+    <!-- The first line, from the time's x to the share's end, so the name
+         and the time start on one x and the status slot stands before both:
+         the name (the Go plan's after its mark), then the session count at
+         the line's end, on the share's end x. A name that wraps makes this
+         line taller, the time's line stays beneath it. -->
+    <span
+      class="col-span-3 col-start-3 row-1 flex h-auto min-w-0 items-center gap-space-1 whitespace-normal"
+    >
       {#if go}
-        <span data-slot="mark" aria-hidden="true" class="mark"
-          ><OpenCodeLogo /></span
+        <!-- literal: 3px -->
+        <span
+          data-slot="mark"
+          aria-hidden="true"
+          class="inline-flex size-icon-md flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
+          style:--mark-r="3px"><OpenCodeLogo /></span
         >
       {/if}
-      <span class="nm" data-name>
-        <span class="nm-local">{name.local}</span>
+      <!-- The name strong, the domain's stem (where it is needed) quiet
+           right after it, going under it only when the two don't fit. A
+           name never ends in an ellipsis; one longer than the cell wraps. -->
+      <span
+        class="flex min-w-0 flex-wrap type-meta wrap-anywhere"
+        data-name
+      >
+        <span class="min-w-0 font-medium text-ink-strong">{name.local}</span>
         {#if name.domain}
-          <span class="nm-domain">{name.domain}</span>
+          <span class="text-ink-muted">{name.domain}</span>
         {/if}
       </span>
       {#if c && ring.id === c.delegate?.id}
@@ -716,11 +835,11 @@
             <span
               {...tipProps}
               aria-label={tip}
-              class="delegates-mark"
+              class="inline-grid flex-none text-ink-row"
               data-delegates
               role="img"
             >
-              <IconSubagents aria-hidden="true" />
+              <IconSubagents aria-hidden="true" class="size-icon-sm" />
             </span>
           {/snippet}
         </Tip>
@@ -735,16 +854,49 @@
   <!-- Its size follows what it lists (a provider arriving, a note going).
        In the popover and in the sheet alike the head and the foot stand
        still and the accounts between them scroll. -->
-  <div class="pop-body" {@attach morph()}>
+  <!-- Never taller than the room bits-ui measures beside the strip (inside
+       its collision padding), less the popover's 1px edge above and below:
+       the head and the foot stand still, and the accounts between them
+       scroll. The sheet: as the popover, the controls at the touch floor. -->
+  <!-- literal: 12px 14px 10px; 4px 18px 12px; 10px 12px; 6px; 8px, 10px, 12px; 40px -->
+  <div
+    class={[
+      "flex flex-col",
+      sheet ? "max-h-none min-h-0 flex-auto" : "max-h-(--pop-max)",
+    ]}
+    style:--mark-r="3px"
+    style:--mark-side="14px"
+    style:--note-gap="6px"
+    style:--pop-max="calc(var(--bits-popover-content-available-height) - 2px)"
+    style:--ring-ground="var(--surface-raised)"
+    style:--pop-edge="12px"
+    style:--pop-step="10px"
+    {@attach morph()}
+  >
     {#if !(shown || gap) && notes.length === 0}
-      <p class="pop-empty">{empty}</p>
+      <p class="px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+        >{empty}</p
+      >
     {/if}
     {#if claude}
-      <header class="pop-head" data-pop-head>
-        <div class="head-line">
-          <h3 class="provider mark-line">
-            <span data-slot="mark" aria-hidden="true" class="mark" data-box
-              ><ClaudeIcon /></span
+      <header
+        class={[
+          "flex flex-none flex-col gap-space-2",
+          sheet
+            ? "px-space-5 pt-space-1 pb-(--pop-edge)"
+            : "px-space-4 pt-(--pop-edge) pb-(--pop-step)",
+        ]}
+        data-pop-head
+      >
+        <div class="flex items-center justify-between gap-space-2">
+          <h3
+            class="mark-line flex items-center gap-space-2 p-0 type-label text-ink-strong"
+          >
+            <span
+              data-slot="mark"
+              aria-hidden="true"
+              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
+              data-box><ClaudeIcon /></span
             >
             <span>Claude</span>
           </h3>
@@ -753,17 +905,27 @@
                account is back; said whole on a rest or a tap. -->
           <Tip label={stop?.tip ?? ""} side="bottom" tap>
             {#snippet children(props)}
+              <!-- Nothing can carry you now: the refresh mark before when an
+                   account is back, as the Usage page's lead draws it: Solar
+                   duotone, at the figure's cap height, muted. -->
+              <!-- literal: 0.25em; -0.1em; 0.8em -->
               <span
                 data-num
                 {...props}
                 aria-label={stop?.said}
-                class="kpi num"
+                class="type-kpi num whitespace-nowrap text-ink-stat data-muted:text-ink-muted"
+                data-muted={claude.stale !== null || undefined}
                 data-stop-kpi
                 role="img"
-                class:muted={claude.stale !== null}
+                style:--kpi-glyph="0.8em"
+                style:--kpi-glyph-drop="-0.1em"
+                style:--kpi-glyph-gap="0.25em"
                 >{#if stop?.back}
-                  <span aria-hidden="true" class="kpi-glyph" data-stop-back
-                    ><IconRefresh /></span
+                  <span
+                    aria-hidden="true"
+                    class="me-(--kpi-glyph-gap) inline-grid align-(--kpi-glyph-drop) text-ink-muted"
+                    data-stop-back
+                    ><IconRefresh class="size-(--kpi-glyph)" /></span
                   >
                 {/if}
                 <Figure text={stop?.figure ?? ""} /></span
@@ -786,34 +948,68 @@
     <!-- A sessions list hangs from its cell's row, as wide as the wall
          (SessionsChip). The house edge fade shows where more is above or
          below; a re-ranking reflows the cells. -->
+    <!-- The house edge fade at its full length on every width, as Caw's
+         panel has it: the phone's short one reads as no fade at all. Under
+         the head, a hairline. -->
     <div
-      class={["accounts kit-edge-fade-block", sheet && "kit-sheet-scroll"]}
+      class={[
+        "kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain",
+        sheet && "kit-sheet-scroll",
+        claude && "border-t border-t-border-hairline",
+      ]}
       data-accounts
       data-flyover-scope
+      style:--fade-len="40px"
       {@attach reflow()}
       {@attach wholeRows}
     >
       {#if claude}
+        <!-- Claude's accounts: the wall, space-3 under the head's
+             hairline. -->
+        <!-- literal: 8px; 10px, 12px -->
         <div
           data-slot="group"
-          class="group orgs"
+          class="group flex flex-col gap-space-3 px-(--group-pad-x) pt-space-3 pb-(--group-pad-y)"
           data-burn={claude.burn}
           data-burn-week={claude.burnWeek}
+          style:--group-pad-x={sheet ? "12px" : "10px"}
+          style:--group-pad-y="8px"
         >
           <!-- One grid for the whole wall, so every dial, every text start
                and every week's end stands on one x down it. An organization
                of more than two accounts is a group under its name; the rest
                follow, ungrouped, on rows of their own: a head spans the
                wall, so the next block starts a row. -->
-          <div class="wall" data-flyover-span>
+          <!-- The dial wall: one grid, two columns of cells, each column five
+               tracks: the dial, the status slot (12px, a glyph's size), the
+               time, the week's mark (10px) and the week's share (as wide as
+               "100%" in the figure face), so every dial, every time, every
+               mark and every share's end stands on one x down the wall,
+               whatever the figures. A block is no box of its own: its head
+               and cells stand on the wall's grid. An organization's name
+               over its accounts: meta, no chrome of its own, across the
+               wall, starting on the dials' start edge. Every block after the
+               first stands the same space-3 from the one before. -->
+          <!-- literal: repeat(2, auto 12px minmax(0, 1fr) 10px auto) -->
+          <div
+            data-slot="wall"
+            class="grid grid-cols-(--wall-cols) gap-space-1 [&>[data-slot=block]+[data-slot=block]>h4]:mt-(--org-gap)"
+            data-flyover-span
+            style:--org-gap="calc(var(--space-3) - var(--space-1))"
+            style:--wall-cols="repeat(2, auto 12px minmax(0, 1fr) 10px auto)"
+          >
             {#each wall as block (block.org ?? "")}
               <div
                 data-slot="block"
-                class="block"
+                class="contents"
                 data-org-group={block.org ?? ""}
               >
                 {#if block.head}
-                  <h4 class="org" data-flyover-edge data-org-head>
+                  <h4
+                    class="col-span-full px-space-1 pt-0 pb-space-row type-meta text-ink-muted"
+                    data-flyover-edge
+                    data-org-head
+                  >
                     {block.head}
                   </h4>
                 {/if}
@@ -827,8 +1023,14 @@
                    Claude's x's: a cell of the same recipe on the first
                    column, named by its provider, after the hairline that
                    parts the providers, drawn edge to edge. -->
-              <div data-slot="block" class="block" data-org-group="opencode">
-                <hr class="seam" />
+              <div data-slot="block" class="contents" data-org-group="opencode">
+                <!-- The providers' hairline, inside the wall's grid: across
+                     the whole popover, edge to edge, as a section's edge
+                     is. -->
+                <hr
+                  class="col-span-full mx-(--seam-pull) my-space-1"
+                  style:--seam-pull="calc(-1 * var(--group-pad-x))"
+                />
                 {@render cell(openCode, null, sideFor())}
               </div>
             {/if}
@@ -839,8 +1041,20 @@
         <!-- The Go plan: a cell of the same recipe on the wall's first
              column, named by its provider; the hairline before it parts it
              from Claude's. -->
-        <section data-slot="group" class="group go">
-          <div class="wall" data-flyover-span>
+        <!-- literal: 6px; 8px; 10px, 12px -->
+        <section
+          data-slot="group"
+          class="group flex flex-col gap-(--note-gap) px-(--group-pad-x) py-(--group-pad-y)"
+          style:--group-pad-x={sheet ? "12px" : "10px"}
+          style:--group-pad-y="8px"
+        >
+          <!-- literal: repeat(2, auto 12px minmax(0, 1fr) 10px auto) -->
+          <div
+            data-slot="wall"
+            class="grid grid-cols-(--wall-cols) gap-space-1"
+            data-flyover-span
+            style:--wall-cols="repeat(2, auto 12px minmax(0, 1fr) 10px auto)"
+          >
             {@render cell(openCode, null, sideFor())}
           </div>
         </section>
@@ -848,10 +1062,15 @@
       {#if gap}
         <!-- Claude's gap: the whole why the strip's line stands for, and
              the sign-in that fixes it when one does. -->
-        <div class="pop-empty pop-gap">
-          <p class="pop-note mark-line">
-            <span data-slot="mark" aria-hidden="true" class="mark" data-box
-              ><ClaudeIcon /></span
+        <div
+          class="pop-gap flex flex-col items-start gap-space-2 px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+        >
+          <p class="pop-note mark-line flex items-center gap-(--note-gap)">
+            <span
+              data-slot="mark"
+              aria-hidden="true"
+              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
+              data-box><ClaudeIcon /></span
             >
             <span>{gap.reason}</span>
           </p>
@@ -869,34 +1088,63 @@
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
         <!-- A provider with nothing to draw: why, and what to do about it. -->
-        <p class="pop-empty pop-note mark-line">
-          <span data-slot="mark" aria-hidden="true" class="mark" data-box
-            ><Mark /></span
+        <p
+          class="pop-note mark-line flex items-center gap-(--note-gap) px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+        >
+          <span
+            data-slot="mark"
+            aria-hidden="true"
+            class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
+            data-box><Mark /></span
           >
           <span>{note.text}</span>
         </p>
       {/each}
     </div>
-    <div data-slot="foot" class="foot" data-pop-foot>
-      <Button href="/usage" label="Open usage" size="sm" variant="outline" />
+    <!-- literal: 10px (--pop-step); 44px -->
+    <div
+      data-slot="foot"
+      class="flex-none border-t border-t-border-hairline px-space-4 py-(--pop-step)"
+      data-pop-foot
+    >
+      <Button
+        class={sheet ? "h-(--foot-touch) w-full" : undefined}
+        href="/usage"
+        label="Open usage"
+        size="sm"
+        style={sheet ? "--foot-touch: 44px;" : undefined}
+        variant="outline"
+      />
     </div>
   </div>
 {/snippet}
 
-<div data-slot="strip" class="strip" data-variant={variant}>
+<!-- Its ground is the surface it stands on: the rail's by default, the phone
+     home's raised card. A reserve notch is cut in the same paint. One
+     control, one height whatever it says (`strip-hit`, which the
+     usage-relay bench finds it by). -->
+<!-- literal: 44px, 56px -->
+<div
+  data-slot="strip"
+  class="group/strip relative w-full min-w-0 rounded-sm bg-(--ring-ground) variant-home:rounded-md"
+  data-variant={variant}
+  style:--ring-ground="var(--strip-ground, var(--sidebar))"
+  style:--strip-ground={variant === "home" ? "var(--surface-raised)" : undefined}
+  style:--strip-hit-h={variant === "home" ? "56px" : "44px"}
+>
   {#if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint touch-hit"
+        class="strip-hit press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
         onkeydown={keyed}
         onpointerdown={pressed}
       >
         {@render face()}
       </Drawer.Trigger>
-      <Drawer.Content class="usage-sheet" onOpenAutoFocus={keepFocus}>
+      <Drawer.Content onOpenAutoFocus={keepFocus}>
         <Drawer.Header>
           <Drawer.Title>Usage limits</Drawer.Title>
         </Drawer.Header>
@@ -907,19 +1155,21 @@
     <Popover.Root bind:open>
       <Popover.Trigger
         aria-label={triggerLabel}
-        class="strip-hit press-tint"
+        class="strip-hit press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover aria-expanded:bg-surface-hover state-open:bg-surface-hover"
         onkeydown={keyed}
         onpointerdown={pressed}
       >
         {@render face()}
       </Popover.Trigger>
+      <!-- literal: 100vw, 16px -->
       <Popover.Content
         align="start"
-        class="usage-pop w-[min(var(--c-panel-w),calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
+        class="w-(--usage-pop-w) gap-0 rounded-lg p-0 shadow-lg"
         collisionPadding={8}
         onOpenAutoFocus={keepFocus}
         side="top"
         sideOffset={6}
+        style="--usage-pop-w: min(var(--c-panel-w), calc(100vw - 16px));"
       >
         {@render limits(false)}
       </Popover.Content>
@@ -928,503 +1178,47 @@
 </div>
 
 <style>
-  /* css-scope .strip-hit: the usage-relay bench finds the strip's control by it */
-  /* Its ground is the surface it stands on: the rail's by default, the
-     phone home's raised card. A reserve notch is cut in the same paint. */
-  .strip {
-    --ring-ground: var(--strip-ground, var(--sidebar));
-    position: relative;
-    inline-size: 100%;
-    min-inline-size: 0;
-    border-radius: var(--radius-sm);
-    background: var(--ring-ground);
-  }
-  .strip[data-variant="home"] {
-    --strip-ground: var(--surface-raised);
-    border-radius: var(--radius-md);
-  }
-  /* One control, one height whatever it says. */
-  :global(.strip-hit) {
-    display: flex;
-    align-items: center;
-    inline-size: 100%;
-    block-size: 44px;
-    padding: 0 var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    text-align: start;
-    color: var(--ink-strong);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background: var(--surface-hover);
-        --ring-ground: var(--surface-hover);
-      }
-    }
-    &[aria-expanded="true"],
-    &[data-state="open"] {
-      background: var(--surface-hover);
+  /* residual: unmapped — the strip's control under the pointer or open
+     paints its own ground, and the dials' reserve notch takes it
+     (--ring-ground: a custom property no utility sets); the strip's caption
+     clamps by the standard property too; a cell's states (the carrier's
+     inset ring, the limit wash and the lit wash, each a ground the notch
+     takes); and the hairline between the popover's sections (a sibling
+     rule). */
+  @media (hover: hover) and (pointer: fine) {
+    :global(.strip-hit:hover) {
       --ring-ground: var(--surface-hover);
     }
   }
-  .strip[data-variant="home"] :global(.strip-hit) {
-    block-size: 56px;
-    padding: 0 var(--space-4);
-    border-radius: var(--radius-md);
+  :global(.strip-hit[aria-expanded="true"]),
+  :global(.strip-hit[data-state="open"]) {
+    --ring-ground: var(--surface-hover);
   }
-  .noline {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* Claude's cell asks for its whole first line and caption, and never takes
-     less than its marks and digits; opencode's is as wide as it says. Where
-     the rail is too narrow for both, opencode's cell wraps onto a second row
-     the strip does not show (it stays in the strip's label and the popover),
-     rather than Claude's answer being cut: one row of cells, 34px (the first
-     line, 3px, the caption). */
-  .cells {
-    display: flex;
-    flex: 1;
-    flex-wrap: wrap;
-    column-gap: var(--space-2);
-    block-size: 34px;
-    min-inline-size: 0;
-    overflow: clip;
-  }
-  .strip[data-variant="home"] .cells {
-    column-gap: var(--space-6);
-  }
-  .cell {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    justify-content: center;
-    gap: 3px;
-    block-size: 34px;
-  }
-  .cell[data-cell="claude"] {
-    flex: 1 1 auto;
-  }
-  .l1 {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    block-size: 16px;
-    min-inline-size: 0;
-    white-space: nowrap;
-  }
-  .mark {
-    display: inline-flex;
-    flex: none;
-    inline-size: 14px;
-    block-size: 14px;
-    overflow: hidden;
-    border-radius: 3px;
-
-    & :global(svg) {
-      inline-size: 100%;
-      block-size: 100%;
-    }
-  }
-  .group .mark {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  /* The marks are the part of line 1 that gives: they ask for a slot each
-     and shrink to one mark's width, the marks closing up inside (slotAt),
-     so the Claude mark and the digits always stand whole inside the cells'
-     clip. */
-  .marks {
-    position: relative;
-    flex-grow: 0;
-    flex-shrink: 1;
-    min-inline-size: 16px;
-    block-size: 16px;
-  }
-  .slot {
-    position: absolute;
-    inset-block-start: 0;
-    display: grid;
-    transition: inset-inline-start var(--dur-reveal) var(--ease-in-out);
-  }
-  /* "+N": the accounts past what stands a slot apart, in meta. */
-  .slot.more {
-    place-items: center;
-    min-inline-size: 16px;
-    block-size: 16px;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    line-height: 16px;
-    color: var(--ink-muted);
-  }
-  /* The strip's time: its line here, the figure face on its own span
-     (`mono-figure`), since this shorthand resets the face. */
-  .digits {
-    flex: none;
-    font: var(--weight-strong) var(--text-label) / 16px var(--font-body);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-strong);
-  }
-  .digits.muted {
-    color: var(--ink-muted);
-  }
-  /* The Go plan's refresh mark at its limit: 12px, Solar duotone, muted. */
-  .strip-glyph {
-    display: inline-grid;
-    flex: none;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-  /* One line. Its whole width is what the cell asks for, but it may break
-     anywhere, so it never holds the cell wider than the marks and digits:
-     only when the rail cannot fit it at all does it end in an ellipsis. */
-  .cap {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
+  [data-strip-caption],
+  [data-strip-go-week] {
     line-clamp: 1;
-    min-inline-size: 0;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    font: var(--weight-body) var(--text-meta) / 15px var(--font-body);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-
-    & :global(b) {
-      color: var(--ink-row);
-    }
   }
-
-  /* ── the popover and the sheet ── */
-  /* Never taller than the room bits-ui measures beside the strip (inside
-     its collision padding), less the popover's 1px edge above and below:
-     the head and the foot stand still, and the accounts between them
-     scroll. */
-  .pop-body {
-    --ring-ground: var(--surface-raised);
-    display: flex;
-    flex-direction: column;
-    max-block-size: calc(var(--bits-popover-content-available-height) - 2px);
-  }
-  .pop-head {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: 12px 14px 10px;
-  }
-  .head-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-  .kpi {
-    font: var(--type-kpi);
-    white-space: nowrap;
-    color: var(--ink-stat);
-  }
-  .kpi.muted {
-    color: var(--ink-muted);
-  }
-  /* Nothing can carry you now: the refresh mark before when an account is
-     back, as the Usage page's lead draws it: Solar duotone, at the figure's
-     cap height, muted. */
-  .kpi-glyph {
-    display: inline-grid;
-    margin-inline-end: 0.25em;
-    vertical-align: -0.1em;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 0.8em;
-      block-size: 0.8em;
-    }
-  }
-  /* The house edge fade at its full length on every width, as Caw's panel
-     has it: the phone's short one reads as no fade at all. */
-  .accounts {
-    --fade-len: 40px;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .pop-head + .accounts {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .pop-empty {
-    padding: 10px 12px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .pop-note {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .group {
-    --group-pad-x: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px var(--group-pad-x);
-  }
-  /* The providers' hairline, inside the wall's grid: across the whole
-     popover, edge to edge, as a section's edge is. */
-  .seam {
-    grid-column: 1 / -1;
-    margin-block: var(--space-1);
-    margin-inline: calc(-1 * var(--group-pad-x));
-    border: 0;
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  .pop-gap {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-  .group + .group,
-  .group + .pop-note,
-  .pop-gap + .pop-note,
-  .pop-note + .pop-note {
-    border-block-start: 1px solid var(--border-hairline);
-  }
-  /* Claude's accounts: the wall, space-3 under the head's hairline. */
-  .orgs {
-    gap: var(--space-3);
-    padding-block-start: var(--space-3);
-  }
-  .provider {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 var(--space-1) 2px;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .pop-head .provider {
-    padding: 0;
-  }
-  /* An organization's name over its accounts: meta, no chrome of its own,
-     across the wall, starting on the dials' start edge. Every block after
-     the first stands the same space-3 from the one before. */
-  .org {
-    grid-column: 1 / -1;
-    padding: 0 var(--space-1) 2px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .block + .block > .org {
-    margin-block-start: calc(var(--space-3) - var(--space-1));
-  }
-  /* Every dial is its tooltip's trigger: a bare button, the ring itself. */
-  .ring-tip {
-    display: grid;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: transparent;
-    cursor: help;
-  }
-  /* The dial wall: one grid, two columns of cells, each column five
-     tracks: the dial, the status slot (12px, a glyph's size), the time, the
-     week's mark (10px) and the week's share (as wide as "100%" in the
-     figure face), so every dial, every time, every mark and every share's
-     end stands on one x down the wall, whatever the figures. A block is no
-     box of its own: its head and cells stand on the wall's grid. */
-  .wall {
-    display: grid;
-    grid-template-columns: repeat(2, auto 12px minmax(0, 1fr) 10px auto);
-    gap: var(--space-1);
-  }
-  .block {
-    display: contents;
-  }
-  /* A cell: one row on its column's five tracks (subgrid), space-1 in on
-     every side, in meta. The carrier wears a ring in the outline button's
-     edge (3:1 on the raised surface); an account at its limit the limit
-     wash, which the dial's reserve notch takes as its ground; the cell a
-     relay band stands for, while that band is hovered or open, the hover
-     wash. */
-  .cell-d {
-    position: relative;
-    display: grid;
-    grid-column: span 5;
-    grid-template-columns: subgrid;
-    grid-template-rows: auto auto;
-    align-content: start;
-    align-items: start;
-    min-inline-size: 0;
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-    transition: background-color var(--dur-fade) var(--ease-out);
-  }
-  .cell-d.carrying {
+  .cell-d[data-carrying] {
     box-shadow: inset 0 0 0 1px var(--border-button-outline);
   }
-  .cell-d.limit {
+  .cell-d[data-limit] {
     background: var(--meter-wash-over);
     --ring-ground: var(--meter-wash-over);
   }
-  .cell-d.lit {
+  .cell-d[data-lit] {
     background: var(--surface-hover);
     --ring-ground: var(--surface-hover);
   }
-  /* The dial, centred on the two lines, the wall's space-1 gap before the
-     status slot: the slot's marks still stand clear of the ring's ink, the
-     ring curving away from its box at the second line's height. */
-  .dial {
-    display: grid;
-    grid-row: 1 / span 2;
-    grid-column: 1;
-    align-self: center;
-  }
-  /* The first line, from the time's x to the share's end, so the name and
-     the time start on one x and the status slot stands before both: the
-     name (the Go plan's after its mark), then the session count at the
-     line's end,
-     on the share's end x. */
-  .cell-d .l1 {
-    display: flex;
-    grid-row: 1;
-    grid-column: 3 / span 3;
-    align-items: center;
-    gap: var(--space-1);
-    /* Not the strip's .l1 (a 16px, unwrapping line): a name that wraps
-       makes this line taller, the time's line stays beneath it. */
-    block-size: auto;
-    min-inline-size: 0;
-    white-space: normal;
-  }
-  /* The name strong, the domain's stem (where it is needed) quiet right
-     after it, going under it only when the two don't fit. A name never
-     ends in an ellipsis; one longer than the cell wraps. */
-  .nm {
-    display: flex;
-    flex-wrap: wrap;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    font: var(--type-meta);
-  }
-  .nm-local {
-    min-inline-size: 0;
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .nm-domain {
-    color: var(--ink-muted);
-  }
-  /* The count, 16px. Its touch area reaches the full 44px up and down,
-     and space-5 / 2 to either side: a count in the last column stays
-     inside the wall's padding, so the accounts never scroll sideways. */
-  .cell-chip {
-    --hit-gap-x: var(--space-5);
-    display: grid;
-    margin-inline-start: auto;
-  }
-  /* The second line: the time, then the week's share, each a figure alone
-     in the figure face (mono-figure), never wrapping. */
-  .line {
-    grid-row: 2;
-    white-space: nowrap;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* The time a step stronger than the week; a guess stays muted. */
-  .time {
-    grid-column: 3;
-    color: var(--ink-row);
-  }
-  .time.guess {
-    color: var(--ink-muted);
-  }
-  /* The status slot, before every time: a guess's tilde against the time,
-     or at its limit the refresh mark; empty otherwise. */
-  .status {
-    grid-row: 2;
-    grid-column: 2;
-    align-self: center;
-    justify-self: end;
-    color: var(--ink-muted);
-  }
-  .tilde {
-    font-size: var(--text-meta);
-    line-height: var(--leading-meta);
-  }
-  /* The week's mark at its slot's start, centred on the line; the share
-     end-aligned on a width that holds "100%". */
-  .week-slot {
-    display: grid;
-    grid-row: 2;
-    grid-column: 4;
-    align-self: center;
-  }
-  .wk {
-    grid-column: 5;
-    justify-self: end;
-  }
-  .pct {
-    display: inline-block;
-    min-inline-size: 4ch;
-    text-align: end;
-  }
-  /* The marks a figure or a name carries: 12px, Solar duotone; the
-     delegates' mark in the row's ink, the refresh mark muted. */
-  .glyph,
-  .delegates-mark {
-    display: inline-grid;
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-  .delegates-mark {
-    flex: none;
-    color: var(--ink-row);
-  }
-  .foot {
-    flex: none;
-    padding: 10px 14px;
+  /* The providers' hairline: `border: 0` then its top edge, which
+     `border-none` would leave unstyled (delta R2). */
+  [data-slot="wall"] hr {
+    border: 0;
     border-block-start: 1px solid var(--border-hairline);
   }
-  /* The sheet: as the popover, the head and the foot stand still and the
-     accounts between them scroll, the controls at the touch floor. */
-  :global(.usage-sheet) .pop-body {
-    flex: 1 1 auto;
-    min-block-size: 0;
-    max-block-size: none;
-  }
-  :global(.usage-sheet) .pop-head {
-    padding: 4px 18px 12px;
-  }
-  :global(.usage-sheet) .group {
-    --group-pad-x: 12px;
-  }
-  :global(.usage-sheet) .orgs {
-    padding-block-start: var(--space-3);
-  }
-  :global(.usage-sheet) .foot :global(a) {
-    inline-size: 100%;
-    block-size: 44px;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .slot,
-    .cell-d {
-      transition: none;
-    }
+  [data-slot="group"] + [data-slot="group"],
+  [data-slot="group"] + .pop-note,
+  .pop-gap + .pop-note,
+  .pop-note + .pop-note {
+    border-block-start: 1px solid var(--border-hairline);
   }
 </style>

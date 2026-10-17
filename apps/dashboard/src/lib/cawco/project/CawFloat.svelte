@@ -47,9 +47,17 @@
 
 {#if phone.current}
   <Drawer.Root onOpenChange={setOpen} {open}>
-    <Drawer.Content class="caw-float-sheet">
+    <!-- literal: 85dvh -->
+    <!-- The views bar's place (ViewBar): --space-3 in from each side,
+         --space-4 over the foot and its safe area. -->
+    <Drawer.Content
+      class="h-(--sheet-h) inset-x-space-3 p-0 pb-(--sheet-foot) vaul-drawer-direction-bottom:inset-x-space-3 vaul-drawer-direction-bottom:pb-(--sheet-foot)"
+      data-caw-float-sheet
+      style="--drawer-max-height: 85dvh; --sheet-h: 85dvh; --sheet-foot: calc(var(--space-4) + var(--safe-bottom));"
+    >
       <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
-      <div class="sheet-body">
+      <!-- The panel inside the shell, under the grab, clipped by its radius. -->
+      <div class="flex min-h-0 flex-auto flex-col overflow-hidden rounded-b-lg">
         {#key projectId}
           <CawThread {lead} {projectId} {projectName} />
         {/key}
@@ -58,10 +66,15 @@
   </Drawer.Root>
 {:else}
   <Popover.Root onOpenChange={setOpen} {open}>
+    <!-- A conversation's width, as tall as the room under his seat allows up
+         to the panel's height; its content runs edge to edge, the well
+         clipped by the popover's radius. -->
+    <!-- literal: 85dvh -->
     <Popover.Content
       align="start"
       aria-label="Caw, lead of {projectName}"
-      class="caw-float-pop"
+      class="flex h-(--pop-h) w-c-panel-w overflow-hidden p-0"
+      style="--pop-h: min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px));"
       collisionPadding={12}
       customAnchor={lead.anchor}
       onCloseAutoFocus={(event) => {
@@ -95,32 +108,10 @@
 {/if}
 
 <style>
-  /* css-scope .caw-float-pop: the kit popover this component opens */
-  /* A conversation's width, as tall as the room under his seat allows up to
-     the panel's height; its content runs edge to edge, the well clipped by
-     the popover's radius. */
-  :global(.kit-pop.caw-float-pop) {
-    display: flex;
-    inline-size: var(--c-panel-w);
-    block-size: min(
-      var(--c-caw-panel-h),
-      calc(var(--bits-popover-content-available-height, 85dvh) - 2px)
-    );
-    padding: 0;
-    overflow: hidden;
-  }
-  /* css-scope .caw-float-sheet: the kit sheet this component opens */
-  /* The views bar's place (ViewBar `.view-dock`): --space-3 in from each
-     side, --space-4 over the foot and its safe area. The sheet's surface
-     (its ::before) is the composer's shell: the panel's glass, the control
-     edge all round, the 12px radius and the tile shadow. */
-  :global([data-slot="drawer-content"].caw-float-sheet) {
-    --drawer-max-height: 85dvh;
-    inset-inline: var(--space-3);
-    block-size: 85dvh;
-    padding: 0 0 calc(var(--space-4) + var(--safe-bottom));
-  }
-  :global([data-slot="drawer-content"].caw-float-sheet)::before {
+  /* residual: pseudo — the kit sheet's surface (its ::before) is the
+     composer's shell: the panel's glass, the control edge all round, the
+     12px radius and the tile shadow. */
+  :global([data-slot="drawer-content"][data-caw-float-sheet])::before {
     inset: 0 0 calc(var(--space-4) + var(--safe-bottom));
     border: 1px solid var(--border-control);
     border-radius: var(--radius-lg);
@@ -136,14 +127,5 @@
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
     }
-  }
-  /* The panel inside the shell, under the grab, clipped by its radius. */
-  .sheet-body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    overflow: hidden;
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   }
 </style>

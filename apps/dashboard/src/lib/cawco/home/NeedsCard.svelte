@@ -367,29 +367,48 @@
 
 <!-- mark-line: a grid whose first row is the mark line; its words take
      .mark-text, centred on the lead (the rows under it hold other things) -->
+<!-- The session's mark leading on the title's line; the title and its wait;
+     what it wants, two lines at most; then the kind and where; a
+     permission's peers under them. Its machine is offline: it stands,
+     dimmed as every stale row is. -->
+<!-- literal: auto minmax(0, 1fr) auto; 44px; 24px -->
 <div
   data-slot="row"
-  class="row"
+  class="group/row relative grid min-h-(--row-min) grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"
   data-flip
   data-kind={item.kind}
   data-peek={peeks || undefined}
   data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
   data-stale={held || undefined}
+  style:--peek-ink="calc((24px - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
+  style:--peek-room="calc(24px - var(--peek-ink) + var(--space-2))"
+  style:--row-cols="auto minmax(0, 1fr) auto"
+  style:--row-min="44px"
 >
   <!-- The whole row opens it; the panel closes. A choice opens nothing:
-       it is answered here. -->
+       it is answered here. Everything over the cover takes no pointer, so
+       a press anywhere that is not a control opens it; the peers take
+       theirs back. -->
   {#if href !== undefined}
     <a
       data-slot="cover"
       aria-label="Open {item.title}"
-      class="cover press-tint focus-inset"
+      class="press-tint focus-inset absolute inset-0"
       {href}
       onclick={onchoose}
       {onkeydown}><span class="sr-only">Open {item.title}</span></a
     >
   {/if}
-  <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
-  <span data-slot="lead" class="lead">
+  <!-- The session's own mark, as the rail draws it; a run and a budget their
+       glyphs; centred in the panel's one leading column, a notice's tile
+       wide (NoticeRow), so both groups' words start on one line. -->
+  <!-- literal: 28px, 18px -->
+  <span
+    data-slot="lead"
+    class="pointer-events-none relative col-1 row-1 grid h-(--lead-h) w-(--lead-w) place-items-center self-center text-ink-muted [&>svg]:size-icon-md"
+    style:--lead-h="18px"
+    style:--lead-w="28px"
+  >
     {#if item.kind === "ask" || item.kind === "watch"}
       <SessionMark
         caw={cawOf(item.instanceId)}
@@ -423,131 +442,277 @@
       <IconDollar aria-hidden="true" />
     {/if}
   </span>
-  <span data-slot="name" class="name mark-text">{item.title}</span>
+  <!-- The first row's words stand on the lead's middle (.mark-text,
+       app.css). Peek, the title line's trailing cell, as a notice's ✕ is
+       (NoticeRow): the wait and, with no wait, the title keep its room clear
+       (`--peek-room`), `space-2` short of its box. -->
+  <span
+    data-slot="name"
+    class={[
+      "mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong",
+      item.raisedAt === undefined && "group-data-peek/row:pe-(--peek-room)",
+    ]}>{item.title}</span
+  >
   {#if item.raisedAt !== undefined}
-    <span data-slot="wait" class="wait mark-text"
+    <span
+      data-slot="wait"
+      class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted group-data-peek/row:me-(--peek-room)"
       >{span(clock.now - item.raisedAt)}</span
     >
   {/if}
   {#if peeks}
-    <!-- Glance → peek → dive: read what led here before answering. -->
-    <span data-slot="end" class="end">
+    <!-- Glance → peek → dive: read what led here before answering. A 24px
+         box round the 16px glyph, centred on the label line, hanging past
+         the trailing edge by `--peek-ink` (the box's padding round the
+         glyph plus the glyph's side bearing: Maximize's arrow ends at 22.75
+         of 24), so its ink ends on the panel's one trailing edge, where a
+         wait's figures and Approve's fill end. -->
+    <!-- literal: 24px -->
+    <span
+      data-slot="end"
+      class="absolute end-(--end-x) top-(--end-top) flex type-label"
+      style:--end-top="calc(var(--space-2) + (1lh - 24px) / 2)"
+      style:--end-x="calc(var(--space-3) - var(--peek-ink))"
+    >
       <Tip disabled={peekTipOff()} label="Peek">
         {#snippet children(tip)}
+          <!-- An iPad's finger gets the house's 44px area (`touch-hit`),
+               whole and centred where the box stood before it hung: moved
+               back inboard by `--peek-ink`, so the list never grows a
+               sideways scroll for it. -->
+          <!-- literal: 24px; 44px -->
           <button
             data-needs-card-peek
             {...tip}
             aria-label="Peek {item.title}"
-            class="peek touch-hit pointer-hit focus-inset"
+            class="touch-hit pointer-hit focus-inset grid size-(--peek-box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press)"
             onclick={peekAsk}
             {onkeydown}
+            style:--peek-box="24px"
+            style:--peek-hit-end="calc((24px - 44px) / 2 + var(--peek-ink))"
+            style:--peek-hit-start="calc((24px - 44px) / 2 - var(--peek-ink))"
+            style:--peek-press="scale(var(--press-scale))"
             type="button"
           >
-            <IconMaximize aria-hidden="true" />
+            <IconMaximize aria-hidden="true" class="size-(--peek-glyph)" />
           </button>
         {/snippet}
       </Tip>
     </span>
   {/if}
-  <span data-slot="want" class="want">{want}</span>
+  <span
+    data-slot="want"
+    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block"
+    >{want}</span
+  >
   {#if item.kind === "ask" && item.request.presentation.command}
     <!-- What runs, under why: its first line, so Approve here is made on
-         the command as much as on the card. -->
-    <code class="cmd"
+         the command as much as on the card. A shell ask's command: one line
+         under its reason, in the transcript's command rule, cut with an
+         ellipsis; its place and the peers move down one row. -->
+    <code
+      class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
       >{item.request.presentation.command.trim().split("\n")[0]}</code
     >
   {/if}
   {#if item.kind === "ask"}
     <!-- Where it came from: the project first, in its mark and strong ink;
-         then what it asks for; then the machine, by its OS mark. -->
-    <span data-where data-slot="meta" class="meta where mark-line">
+         then what it asks for; then the machine, by its OS mark. The meta
+         line of an ask: the project leads, its name a name (label role,
+         strong ink) beside its folder in the project's hue; the machine
+         follows by its OS mark; the machine's name gives way first. Both
+         marks stand at the house's 16px icon size (`icon-md`), the box
+         OsMark is drawn on: at 14px its marks were scaled off their pixel
+         grid and read as a smudge at 1x. -->
+    <span
+      data-where
+      data-slot="meta"
+      class={[
+        "mark-line pointer-events-none relative col-start-2 col-end-4 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+        item.request.presentation.command ? "row-4" : "row-3",
+      ]}
+    >
       {#if item.project}
-        <span data-slot="project" class="project mark-line" data-box>
+        <span
+          data-slot="project"
+          class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+          data-box
+        >
           <IconFolder
             data-needs-card-mark
             aria-hidden="true"
-            class="mark"
-            style="color: var(--mark-{item.project.hue})"
+            class="size-icon-md flex-none text-(--folder-ink)"
+            style="--folder-ink: var(--mark-{item.project.hue})"
           />
-          <span data-slot="project-name" class="project-name"
+          <span data-slot="project-name" class="type-label text-ink-strong"
             >{item.project.name}</span
           >
         </span>
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none text-ink-muted">·</span
+        >
       {/if}
-      <span>{item.isQuestion ? "Question" : "Permission"}</span>
-      <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      <span data-slot="machine" class="machine mark-line" data-box>
-        <OsMark class="mark" os={item.machine.os} />
-        <span class="machine-name">{item.machine.name}</span>
+      <span class="flex-none"
+        >{item.isQuestion ? "Question" : "Permission"}</span
+      >
+      <span
+        data-slot="dot"
+        aria-hidden="true"
+        class="flex-none text-ink-muted">·</span
+      >
+      <span
+        data-slot="machine"
+        class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
+        data-box
+      >
+        <OsMark class="size-icon-md flex-none" os={item.machine.os} />
+        <span class="min-w-0 overflow-clip text-ellipsis"
+          >{item.machine.name}</span
+        >
       </span>
       {#if item.stale}
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-        <span>machine offline</span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none text-ink-muted">·</span
+        >
+        <span class="flex-none">machine offline</span>
       {/if}
     </span>
   {:else if item.kind === "action" && call}
     <!-- The exact call: when, through which account, the tool, the arguments. -->
-    <dl data-slot="call" class="call">
-      <dt>Runs</dt>
-      <dd>{call.when}</dd>
-      <dt>Through</dt>
-      <dd>{call.through}</dd>
-      <dt>Tool</dt>
-      <dd data-slot="tool" class="tool">{call.tool}</dd>
+    <!-- An approved action: its reason, then the call (when, through, tool)
+         as label and value pairs on the meta type, then the arguments in a
+         content well that scrolls, then where it is from, then the peers.
+         Everything the call says is read before the choice is made, in the
+         order it is made: when, as whom, what, with what. -->
+    <!-- literal: auto minmax(0, 1fr) -->
+    <dl
+      data-slot="call"
+      class="pointer-events-none relative col-start-2 col-end-4 row-3 mx-0 mt-space-2 mb-0 grid grid-cols-(--call-cols) gap-x-space-3 type-meta"
+      style:--call-cols="auto minmax(0, 1fr)"
+    >
+      <dt class="text-ink-muted">Runs</dt>
+      <dd class="m-0 wrap-anywhere text-ink-strong">{call.when}</dd>
+      <dt class="text-ink-muted">Through</dt>
+      <dd class="m-0 wrap-anywhere text-ink-strong">{call.through}</dd>
+      <dt class="text-ink-muted">Tool</dt>
+      <dd
+        data-slot="tool"
+        class="m-0 font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+        >{call.tool}</dd
+      >
     </dl>
     <!-- A scroller with no focusable child is itself in the tab order
-         (keyboard-focusable scrollers), so a keyboard scrolls it too. -->
-    <pre data-slot="args" class="args focus-inset">{call.args}</pre>
-    <span data-where data-slot="meta" class="meta where mark-line">
+         (keyboard-focusable scrollers), so a keyboard scrolls it too. The
+         arguments as the hub will send them, pretty-printed: a well the
+         pointer and the keyboard can scroll, over the row's cover. -->
+    <!-- literal: 12rem -->
+    <pre
+      data-slot="args"
+      class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-(--args-max) overflow-auto overscroll-contain rounded-xs border border-border-well bg-surface-well px-space-3 py-space-2 type-code whitespace-pre text-ink-strong"
+      style:--args-max="12rem">{call.args}</pre>
+    <span
+      data-where
+      data-slot="meta"
+      class="mark-line pointer-events-none relative col-start-2 col-end-4 row-5 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+    >
       {#if item.project}
-        <span data-slot="project" class="project mark-line" data-box>
+        <span
+          data-slot="project"
+          class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+          data-box
+        >
           <IconFolder
             data-needs-card-mark
             aria-hidden="true"
-            class="mark"
-            style="color: var(--mark-{item.project.hue})"
+            class="size-icon-md flex-none text-(--folder-ink)"
+            style="--folder-ink: var(--mark-{item.project.hue})"
           />
-          <span data-slot="project-name" class="project-name"
+          <span data-slot="project-name" class="type-label text-ink-strong"
             >{item.project.name}</span
           >
         </span>
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none text-ink-muted">·</span
+        >
       {/if}
-      <span>Approved action</span>
+      <span class="flex-none">Approved action</span>
       {#if item.action.taskId}
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-        <span class="task">{item.action.taskId}</span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none text-ink-muted">·</span
+        >
+        <span class="flex-none num">{item.action.taskId}</span>
       {/if}
     </span>
   {:else if item.kind === "task"}
-    <span data-where data-slot="meta" class="meta where mark-line">
+    <span
+      data-where
+      data-slot="meta"
+      class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+    >
       {#if item.project}
-        <span data-slot="project" class="project mark-line" data-box>
+        <span
+          data-slot="project"
+          class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+          data-box
+        >
           <IconFolder
             data-needs-card-mark
             aria-hidden="true"
-            class="mark"
-            style="color: var(--mark-{item.project.hue})"
+            class="size-icon-md flex-none text-(--folder-ink)"
+            style="--folder-ink: var(--mark-{item.project.hue})"
           />
-          <span data-slot="project-name" class="project-name"
+          <span data-slot="project-name" class="type-label text-ink-strong"
             >{item.project.name}</span
           >
         </span>
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+        <span
+          data-slot="dot"
+          aria-hidden="true"
+          class="flex-none text-ink-muted">·</span
+        >
       {/if}
-      <span>Task</span>
-      <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      <span class="task">{item.taskId}</span>
+      <span class="flex-none">Task</span>
+      <span
+        data-slot="dot"
+        aria-hidden="true"
+        class="flex-none text-ink-muted">·</span
+      >
+      <span class="flex-none num">{item.taskId}</span>
     </span>
   {:else}
-    <span data-slot="meta" class="meta">{meta}</span>
+    <span
+      data-slot="meta"
+      class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+      >{meta}</span
+    >
   {/if}
   {#if item.kind === "ask" && answerable}
-    <div data-slot="peers" class="peers">
+    <!-- Deny then Approve together at the trailing edge, the same size, each
+         tinted by what it does: Deny in the fail status's fill and ink,
+         Approve in the done status's, the house's success pair (go, not
+         "working"). Both pairs are their hue's 3-step mixed 24% toward its
+         9-step, so they are equal in salience (The Peer Rule): the same fill
+         strength, and neither changes under the pointer, as the grant
+         variant holds still, so neither is made the more inviting. On a
+         finger the gap opens (The 44 Touch Rule), the separation the rule's
+         opposite ends gave a rushed thumb. -->
+    <div
+      data-slot="peers"
+      class={[
+        "relative col-start-2 col-end-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4",
+        item.request.presentation.command ? "row-5" : "row-4",
+      ]}
+    >
       {#if answerRefused}
         <ErrorText
-          class="refusal"
           message={answerRefused}
           title="The hub refused that answer"
         />
@@ -555,7 +720,7 @@
       <Button
         data-deny
         aria-label="Deny {item.ask} on {item.title}"
-        class="peer deny"
+        class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
         disabled={held || (answering && pressed !== "deny")}
         failed={answerRefused !== null && pressed === "deny"}
         icon={IconClose}
@@ -570,7 +735,7 @@
       <Button
         data-approve
         aria-label="Approve {item.ask} on {item.title}"
-        class="peer approve"
+        class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
         disabled={held || (answering && pressed !== "allow")}
         failed={answerRefused !== null && pressed === "allow"}
         icon={IconTick}
@@ -585,17 +750,22 @@
     </div>
   {:else if item.kind === "choice"}
     <!-- Its two options as the peers: same size, type and fill (The Peer
-         Rule); keeping agents off comes first, as the recommended one. -->
-    <div data-slot="peers" class="peers">
+         Rule); keeping agents off comes first, as the recommended one. Its
+         options are its words, longer than Deny and Approve, too long to
+         stand side by side in the panel: they stack, each the text
+         column's width, so the two stay peers in size. -->
+    <div
+      data-slot="peers"
+      class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-col items-stretch justify-end gap-space-2 coarse:gap-space-4"
+    >
       {#if choiceRefusal}
         <ErrorText
-          class="refusal"
           message={choiceRefusal}
           title="The hub refused that answer"
         />
       {/if}
       <Button
-        class="peer"
+        class="border-transparent"
         disabled={stale || choosing === true}
         failed={choiceRefusal !== null}
         label={UPSTREAM_WORDS.keepOff}
@@ -606,7 +776,7 @@
         variant="secondary"
       />
       <Button
-        class="peer"
+        class="border-transparent"
         disabled={stale || choosing === false}
         label={UPSTREAM_WORDS.allow}
         onclick={() => choose(true)}
@@ -621,10 +791,12 @@
       item.kind === "pairing"
         ? `${item.title}, code ${item.request.userCode}`
         : item.title}
-    <div data-slot="peers" class="peers">
+    <div
+      data-slot="peers"
+      class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
+    >
       {#if refusal}
         <ErrorText
-          class="refusal"
           message={refusal}
           title="The hub refused that answer"
         />
@@ -632,7 +804,7 @@
       <Button
         data-deny
         aria-label="Deny {who}"
-        class="peer deny"
+        class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
         disabled={held || admitting === true}
         icon={IconClose}
         label="Deny"
@@ -645,7 +817,7 @@
       <Button
         data-approve
         aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
-        class="peer approve"
+        class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
         disabled={held || admitting === false}
         icon={IconTick}
         label={item.kind === "pairing" ? "Approve" : "Admit"}
@@ -657,10 +829,12 @@
       />
     </div>
   {:else if item.kind === "action"}
-    <div data-slot="peers" class="peers">
+    <div
+      data-slot="peers"
+      class="relative col-start-2 col-end-4 row-6 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
+    >
       {#if refusal}
         <ErrorText
-          class="refusal"
           message={refusal}
           title="The hub refused that decision"
         />
@@ -669,7 +843,7 @@
         <Button
           data-deny
           aria-label="Deny {item.action.tool} on {item.action.connection}"
-          class="peer deny"
+          class="border-transparent bg-status-fail-bg text-status-fail-ink hover:bg-status-fail-bg hover:text-status-fail-ink"
           disabled={held || deciding}
           onclick={() => decide("deny")}
           {onkeydown}
@@ -682,7 +856,7 @@
         <Button
           data-approve
           aria-label="Approve {item.action.tool} on {item.action.connection}"
-          class="peer approve"
+          class="border-transparent bg-status-done-bg text-status-done-ink hover:bg-status-done-bg hover:text-status-done-ink"
           disabled={held || deciding}
           onclick={() => decide("approve")}
           {onkeydown}
@@ -713,342 +887,48 @@
   /* The session's mark leading on the title's line; the title and its wait;
      what it wants, two lines at most; then the kind and where; a
      permission's peers under them. */
-  .row {
+  /* residual: pseudo — under a finger the peek's 44px area (touch-hit's
+     ::after), moved back inboard by --peek-ink. */
+  @media (pointer: coarse) {
+    [data-needs-card-peek]::after {
+      inset-inline-start: var(--peek-hit-start);
+      inset-inline-end: var(--peek-hit-end);
+    }
+  }
+  /* residual: unmapped — the peek's glyph is a custom property that
+     switches under a finger (the house's touch size, `icon-lg`), and
+     --peek-ink and --peek-room follow it; a row lights while its cover is
+     under the pointer (a run-time :has); the cover takes the row's radius
+     (`inherit`); the peek's three transitions run at two durations (needs
+     transition token); and the clamp's standard property, which a choice's
+     risk drops: read whole, never cut. */
+  [data-slot="row"] {
     --peek-glyph: var(--icon-md);
-    --peek-ink: calc(
-      (24px - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24
-    );
-    --peek-room: calc(24px - var(--peek-ink) + var(--space-2));
-    position: relative;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: var(--space-3);
-    align-items: baseline;
-    min-block-size: 44px;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
   }
-  /* Its machine is offline: it stands, dimmed as every stale row is. */
-  .row[data-stale] {
-    opacity: 0.55;
-  }
-  /* Everything over the cover takes no pointer, so a press anywhere that is
-     not a control opens it; the peers take theirs back. */
-  .cover {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
+  @media (pointer: coarse) {
+    [data-slot="row"] {
+      --peek-glyph: var(--icon-lg);
+    }
   }
   @media (hover: hover) and (pointer: fine) {
-    .row:has(.cover:hover) {
+    [data-slot="row"]:has([data-slot="cover"]:hover) {
       background: var(--surface-hover);
     }
   }
-  .lead,
-  .name,
-  .wait,
-  .want,
-  .meta {
-    position: relative;
-    pointer-events: none;
+  [data-slot="cover"] {
+    border-radius: inherit;
   }
-  /* The mark centred in the panel's one leading column, a notice's tile
-     wide (NoticeRow), so both groups' words start on one line. */
-  .lead {
-    grid-row: 1;
-    grid-column: 1;
-    align-self: center;
-    display: grid;
-    place-items: center;
-    inline-size: 28px;
-    block-size: 18px;
-    color: var(--ink-muted);
-  }
-  .lead > :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  /* The first row's words stand on the lead's middle (.mark-text, app.css). */
-  .name {
-    grid-row: 1;
-    grid-column: 2;
-    align-self: center;
-    min-inline-size: 0;
-    overflow: clip;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .wait {
-    grid-row: 1;
-    grid-column: 3;
-    align-self: center;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Peek, the title line's trailing cell, as a notice's ✕ is (NoticeRow):
-     a 24px box round the 16px glyph, centred on the label line, hanging past
-     the trailing edge by `--peek-ink` (the box's padding round the glyph
-     plus the glyph's side bearing: Maximize's arrow ends at 22.75 of 24), so
-     its ink ends on the panel's one trailing edge, where a wait's figures and
-     Approve's fill end. The wait and, with no wait, the title keep its room
-     clear (`--peek-room`), `space-2` short of its box. */
-  .row[data-peek] > .wait {
-    margin-inline-end: var(--peek-room);
-  }
-  .row[data-peek]:not(:has(> .wait)) > .name {
-    padding-inline-end: var(--peek-room);
-  }
-  .end {
-    position: absolute;
-    inset-block-start: calc(var(--space-2) + (1lh - 24px) / 2);
-    inset-inline-end: calc(var(--space-3) - var(--peek-ink));
-    display: flex;
-    font: var(--type-label);
-  }
-  .peek {
-    display: grid;
-    place-items: center;
-    inline-size: 24px;
-    block-size: 24px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
+  [data-needs-card-peek] {
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
       transform var(--dur-toggle) var(--ease-out);
   }
-  .peek > :global(svg) {
-    inline-size: var(--peek-glyph);
-    block-size: var(--peek-glyph);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .peek:active {
-      transform: scale(var(--press-scale));
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .peek:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  /* An iPad's finger gets the house's 44px area (`touch-hit`), whole and
-     centred where the box stood before it hung: moved back inboard by
-     `--peek-ink`, so the list never grows a sideways scroll for it. */
-  @media (pointer: coarse) {
-    /* Under a finger the glyph is the house's touch size (`icon-lg`); its
-       ink still ends on the trailing edge (`--peek-ink` follows it). */
-    .row {
-      --peek-glyph: var(--icon-lg);
-    }
-    .peek::after {
-      inset-inline-start: calc((24px - 44px) / 2 - var(--peek-ink));
-      inset-inline-end: calc((24px - 44px) / 2 + var(--peek-ink));
-    }
-  }
-  .want {
-    grid-row: 2;
-    grid-column: 2 / 4;
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+  [data-slot="want"] {
     line-clamp: 2;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
   }
-  .meta {
-    grid-row: 3;
-    grid-column: 2 / 4;
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The meta line of an ask: the project leads, its name a name (label role,
-     strong ink) beside its folder in the project's hue; the machine follows
-     by its OS mark; the machine's name gives way first. Both marks stand at
-     the house's 16px icon size (`icon-md`), the box OsMark is drawn on: at
-     14px its marks were scaled off their pixel grid and read as a smudge at
-     1x. */
-  .where {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-inline-size: 0;
-  }
-  .where > * {
-    flex: none;
-  }
-  .project,
-  .machine {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-inline-size: 0;
-  }
-  .machine {
-    flex: 0 1 auto;
-  }
-  .where :global(.mark) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    flex: none;
-  }
-  .project-name {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .machine-name {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-  }
-  .dot {
-    color: var(--ink-muted);
-  }
-  /* Deny then Approve together at the trailing edge, the same size, each
-     tinted by what it does: Deny in the fail status's fill and ink, Approve
-     in the done status's, the house's success pair (go, not "working"). Both
-     pairs are their hue's 3-step mixed 24% toward its 9-step, so they are
-     equal in salience (The Peer Rule): the same fill strength, and neither
-     changes under the pointer, as the grant variant
-     holds still, so neither is made the more inviting. On a finger the gap
-     opens (The 44 Touch Rule), the separation the rule's opposite ends
-     gave a rushed thumb. */
-  .peers {
-    position: relative;
-    grid-row: 4;
-    grid-column: 2 / 4;
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
-  }
-  @media (pointer: coarse) {
-    .peers {
-      gap: var(--space-4);
-    }
-  }
-  .peers > :global(.peer) {
-    border-color: transparent;
-  }
-  /* A choice's risk is the whole of what it asks: read whole, never cut. */
-  .row[data-kind="choice"] > .want {
-    display: block;
+  [data-slot="row"][data-kind="choice"] > [data-slot="want"] {
     -webkit-line-clamp: unset;
     line-clamp: none;
-  }
-  /* A choice's options are its words, longer than Deny and Approve, too
-     long to stand side by side in the panel: they stack, each the text
-     column's width, so the two stay peers in size (The Peer Rule). */
-  .row[data-kind="choice"] > .peers {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .peers > :global(.deny),
-  .peers > :global(.deny:hover) {
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
-  }
-  .peers > :global(.approve),
-  .peers > :global(.approve:hover) {
-    background: var(--status-done-bg);
-    color: var(--status-done-ink);
-  }
-
-  /* An approved action: its reason, then the call (when, through, tool) as
-     label and value pairs on the meta type, then the arguments in a content
-     well that scrolls, then where it is from, then the peers. Everything
-     the call says is read before the choice is made, in the order it is
-     made: when, as whom, what, with what. */
-  /* A shell ask's command: one line under its reason, in the transcript's
-     command rule, cut with an ellipsis; its place and the peers move down
-     one row. */
-  .cmd {
-    position: relative;
-    pointer-events: none;
-    grid-row: 3;
-    grid-column: 2 / 4;
-    min-inline-size: 0;
-    margin-block: 2px var(--space-1);
-    padding-inline-start: var(--space-2);
-    border-inline-start: 2px solid var(--border-hairline);
-    overflow: hidden;
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: pre;
-  }
-  .row:has(> .cmd) > .meta {
-    grid-row: 4;
-  }
-  .row:has(> .cmd) > .peers {
-    grid-row: 5;
-  }
-  .row[data-kind="action"] > .meta {
-    grid-row: 5;
-  }
-  .row[data-kind="action"] > .peers {
-    grid-row: 6;
-  }
-  .call {
-    position: relative;
-    pointer-events: none;
-    grid-row: 3;
-    grid-column: 2 / 4;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: var(--space-3);
-    margin: var(--space-2) 0 0;
-    font: var(--type-meta);
-  }
-  .call dt {
-    color: var(--ink-muted);
-  }
-  .call dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-    color: var(--ink-strong);
-  }
-  .call .tool {
-    font-family: var(--font-mono);
-  }
-  /* The arguments as the hub will send them, pretty-printed: a well the
-     pointer and the keyboard can scroll, over the row's cover. */
-  .args {
-    position: relative;
-    grid-row: 4;
-    grid-column: 2 / 4;
-    max-block-size: 12rem;
-    margin: var(--space-2) 0;
-    padding: var(--space-2) var(--space-3);
-    overflow: auto;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-xs);
-    background: var(--surface-well);
-    color: var(--ink-strong);
-    font: var(--type-code);
-    white-space: pre;
-    overscroll-behavior: contain;
-  }
-  .task {
-    font-variant-numeric: tabular-nums;
-  }
-  .peers > :global(.refusal) {
-    flex: 1 1 auto;
-    align-self: center;
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
   }
 </style>

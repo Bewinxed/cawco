@@ -613,25 +613,31 @@
 {#snippet header(group: Group, style: string)}
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
+  <!-- literal: 22px -->
   <h3
     data-slot="machine"
-    class="machine mark-line"
+    class="mark-line mx-0 mt-space-2 mb-space-1 flex min-h-(--machine-min) items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted"
     data-key="head:{group.machineId}"
     {style}
+    style:--machine-min="22px"
   >
     <OsMark class="size-space-4" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
       <!-- Everything this machine has finished, failures too, off the list
-           in one go. -->
+           in one go: "Archive all", at the header's end. -->
+      <!-- literal: 22px -->
       <button
         aria-label="Archive all finished on {group.name}"
-        class="archive-all mark-line focus-inset touch-hit press-tint"
+        class="mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-(--archive-h) cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
         data-box
         onclick={() => archive(finished)}
+        style:--archive-h="22px"
         type="button"
       >
-        <IconArchive aria-hidden="true" /><span>Archive all</span>
+        <IconArchive aria-hidden="true" class="size-space-4" /><span
+          >Archive all</span
+        >
       </button>
     {/if}
   </h3>
@@ -666,14 +672,14 @@
   {@const older = olderOf(line.tab, line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
-  <li data-slot="tree-node" class="tree-node" style={leaveLine(line.key)}>
-    <div data-slot="tree-line" class="tree-line" style={leaveAnim(line.key)}>
+  <li data-slot="tree-node" style={leaveLine(line.key)}>
+    <div data-slot="tree-line" style={leaveAnim(line.key)}>
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
       <ul
         data-slot="tree-branch"
-        class="kit-nest tree-branch"
+        class="kit-nest"
         {@attach nestFrom(".tree-mark")}
       >
         {#each kids as kid (kid.key)}
@@ -698,15 +704,22 @@
 
 {#snippet leaving(lines: Line[], layer: boolean)}
   {@const keys = new Set(lines.map((line) => line.key))}
+  <!-- The old rows, out of the layout either way: the group's own height is
+       only what stays, so the height drive holds it while they leave and
+       then closes it. Its own reflow boundary (data-reflow): the list's
+       reflow neither enters these copies nor ghosts them when they go. With
+       no successor (a group that goes, "Show fewer"), where they stood:
+       under what stays. Layered, over the rows' top, each old row in the
+       place its successor takes. -->
   <div
     data-layer={layer || undefined}
     aria-hidden="true"
-    class={layer ? "leaving layer" : "leaving"}
+    class="pointer-events-none absolute inset-x-0 top-0 bottom-auto not-data-layer:top-full"
     data-leaving
     data-reflow
     inert
   >
-    <ul class="session-tree">
+    <ul data-slot="work-tabs-session-tree">
       {#each lines.filter((line) => line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? "")) as line (line.key)}
         {@render leavingTree(line, lines)}
       {/each}
@@ -717,17 +730,37 @@
 {#if waiting || home.working.length + home.finished.length > 0}
   <section
     aria-label="Sessions"
-    class="work"
+    class="@container flex flex-col"
     data-flip={plan ? undefined : "box"}
   >
-    <div data-slot="head" class="head">
+    <!-- The tabs on no shelf of their own (PaneTabs' hosted bar): the chosen
+         sheet is the only mark, the section's seam runs under the row, and
+         the delegates button stands at its end, centred on the tabs. --tight
+         is how far the row is under a 260px rail's: none there and wider,
+         33px at the narrowest rail (227px). Read off the row's own width,
+         not the desktop rail's (`--rail-w`), so the phone's sheet, which is
+         its own width whatever the rail was dragged to, is told as it is.
+         The header's own spacing gives that room back (the gap to the
+         Delegates switch, a tab's inset, the room round a count), so both
+         labels stand whole beside their counts at any width: at 227px
+         "Working" and "Finished" were each cut by a pixel beside two-digit
+         counts. -->
+    <!-- literal: 0px, 260px, 100cqw, 33px; 6px; 32px -->
+    <div
+      data-slot="head"
+      class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-seam pt-space-1 pr-space-2 pb-0 pl-0"
+      style:--head-gap="calc(var(--space-2) - var(--tight) * 0.09)"
+      style:--tight="clamp(0px, calc(260px - 100cqw - var(--space-4)), 33px)"
+      style:--work-tab-item="32px"
+      style:--work-tab-px="6px"
+    >
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
            sheet the only mark, the section's seam under the row. -->
       <Tabs
         data-work-tabs
         boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
           .foldBoxes}
-        class="work-tabs"
+        class="bg-transparent p-0"
         onValueChange={(id: string) => choose(id as WorkTab)}
         value={workTab.current}
         values={TAB_IDS}
@@ -741,15 +774,31 @@
                 <!-- No count until it is read: a 0 here would be a claim. -->
                 {#if !waiting}
                   {#key count}
+                    <!-- The count, washed in its tab's status ink (the usage
+                         tints' strength), on the chosen tab only; the
+                         other's is a plain numeral, muted unless it says
+                         something failed. The wash and the ink come and go
+                         with the choice, as the tab's own sheet and title do,
+                         on its clock (ui/fluid-tabs, `--pick`): the wash as
+                         its background, the ink as the numeral again in it
+                         over the muted one, faded in. A press on the count is
+                         a press on its tab: it reaches the hit. -->
+                    <!-- literal: 18px; 3px -->
                     <span
                       data-num
                       data-slot="count"
-                      class="num count"
+                      class="pointer-events-none ms-space-1 me-(--count-end) inline-grid h-(--count-side) min-w-(--count-side) place-items-center rounded-xs px-(--count-pad) type-meta num text-ink-muted data-failed:text-(--ink)"
                       data-failed={(tab.id === "finished" && finishedFailed) ||
                         undefined}
                       data-flip="pop"
                       data-tab={tab.id}
-                      ><span>{count}</span><span aria-hidden="true" class="loud"
+                      style:--count-end="max(0px, 2px - var(--tight) * 0.06)"
+                      style:--count-pad="calc(3px - var(--tight) * 0.03)"
+                      style:--count-side="18px"
+                      ><span class="col-start-1 row-start-1">{count}</span
+                      ><span
+                        aria-hidden="true"
+                        class="col-start-1 row-start-1 text-(--ink) opacity-(--pick)"
                         >{count}</span
                       ></span
                     >
@@ -765,19 +814,24 @@
           <!-- A switch with no count of its own, at a fixed size, so
                nothing in the header moves when it is pressed. On, its
                glyph turns solid in strong ink; off, the duotone, muted. -->
+          <!-- The corner actions' icon button (Sidebar .head-action), at one
+               size whatever it shows. Pressed, its glyph turns solid in
+               strong ink: no fill, nothing that moves. -->
+          <!-- literal: 28px -->
           <button
             {...tip}
             aria-label="Delegates"
             aria-pressed={rail.delegates}
-            class="delegates focus-inset touch-hit"
+            class="focus-inset touch-hit mb-space-row inline-grid size-(--delegates-side) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
             data-on={rail.delegates || undefined}
             onclick={() => rail.setDelegates(!rail.delegates)}
+            style:--delegates-side="28px"
             type="button"
           >
             {#if rail.delegates}
-              <StructureOn aria-hidden="true" />
+              <StructureOn aria-hidden="true" class="size-icon-md" />
             {:else}
-              <Structure aria-hidden="true" />
+              <Structure aria-hidden="true" class="size-icon-md" />
             {/if}
           </button>
         {/snippet}
@@ -789,7 +843,7 @@
       <div
         aria-busy="true"
         aria-label="Reading the fleet"
-        class="waiting"
+        class="flex flex-col gap-(--tree-gap)"
         role="status"
         out:crossOut
       >
@@ -802,10 +856,10 @@
            cell, as tall as the taller of the two. Changing to or from an
            empty tab, the panel goes from one height to the other in one
            move, never through nothing. -->
-      <div class="panel" in:crossIn>
+      <div class="grid" in:crossIn>
         <div
           data-slot="list"
-          class="list"
+          class="col-start-1 row-start-1 flex min-w-0 flex-col overflow-x-clip"
           bind:this={listEl}
           {@attach reflow()}
           {@attach highlight(ROW_PILL)}
@@ -815,17 +869,27 @@
         >
           {#each drawn as entry (entry.group.machineId)}
             {@const id = entry.group.machineId}
+            <!-- A flex column, so its header's margin stays inside it: closed
+                 to nothing, a group takes no room at all. Every group keeps
+                 the room a seam would take; the seam itself is drawn in it,
+                 only after a group with rows, so groups coming and going
+                 never move one. (`group` is the relay's box: the swap reads
+                 it, `onScreen(list, ".group")`.) -->
             <div
               data-slot="group"
-              class="group"
+              class="group relative flex flex-col"
+              data-filled={entry.rows.length > 0 ||
+                entry.kind === "gone" ||
+                undefined}
               data-flip={plan ? undefined : "box"}
               data-kind={entry.kind}
               data-machine={id}
-              class:filled={entry.rows.length > 0 || entry.kind === "gone"}
             >
-              <hr class="kit-seam" />
+              <hr
+                class="kit-seam absolute inset-x-0 top-0 bottom-auto opacity-0 transition-[opacity] dur-fade ease-out"
+              />
               {@render header(entry.group, headStyle(entry.kind, id))}
-              <div class="rows">
+              <div class="rows relative">
                 {#if plan?.layered.has(id) && entry.gone.length}
                   <!-- The rows this machine had, leaving in the places the new
                    ones take, each new one arriving as its place clears. -->
@@ -836,7 +900,7 @@
                 {#snippet line(row: InstanceRow)}
                   {@render sessionRow(row, shown, id)}
                 {/snippet}
-                <ul class="session-tree">
+                <ul data-slot="work-tabs-session-tree">
                   {#each under(shown, entry.rows, null) as row (`${swap.gen}:${row.id}`)}
                     <SessionTree
                       {current}
@@ -860,27 +924,34 @@
                 {@const line = more.get(id) as More}
                 <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
+                <!-- literal: 28px; 0.3em -->
                 <button
                   data-slot="more"
-                  class="more focus-inset touch-hit press-tint"
+                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
                   data-flip={plan ? undefined : ""}
                   data-key={moreKey(id)}
                   data-rail-row
                   onclick={() => fold(id)}
                   style={enterAnim(moreKey(id))}
+                  style:--more-min="28px"
                   type="button"
                 >
                   {line.words}
                   {#if line.failed > 0}
-                    <span class="more-failed">{failedWords(line.failed)}</span>
+                    <span
+                      class="ms-(--more-gap) text-status-fail-ink"
+                      style:--more-gap="0.3em">{failedWords(line.failed)}</span
+                    >
                   {/if}
                 </button>
               {:else if plan?.more.get(id)}
+                <!-- literal: 28px -->
                 <span
                   data-slot="more"
                   aria-hidden="true"
-                  class="more"
-                  style={leaveAnim(moreKey(id))}>{plan.more.get(id)}</span
+                  class="mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
+                  style={leaveAnim(moreKey(id))}
+                  style:--more-min="28px">{plan.more.get(id)}</span
                 >
               {/if}
             </div>
@@ -891,16 +962,18 @@
              were as they leave, and out as rows arrive under it. Working
              names the next thing to do; with the hub lost nothing is
              claimed about now, only what was last known. -->
+          <!-- A tab with nothing in it: its line on the rows' own text
+               column, and under it, on Working, the one thing to do next. -->
           <div
-            class="vacant"
+            class="col-start-1 row-start-1 flex min-w-0 flex-col items-start gap-space-2 self-start px-space-3 py-space-2 type-meta text-ink-muted data-stale:opacity-55"
             data-stale={stale || undefined}
             transition:crossIn
           >
             {#if stale}
-              <p>None listed when the hub was last reached.</p>
+              <p class="m-0">None listed when the hub was last reached.</p>
             {:else if allOf(shown).length > 0}
               <!-- Not empty: only delegates, which the switch leaves out. -->
-              <p>{unlisted(shown)}</p>
+              <p class="m-0">{unlisted(shown)}</p>
               <Button
                 onclick={() => rail.setDelegates(true)}
                 size="xs"
@@ -909,13 +982,13 @@
                 Show delegates
               </Button>
             {:else if shown === "working"}
-              <p>Nothing is working right now.</p>
+              <p class="m-0">Nothing is working right now.</p>
               <Button onclick={onstart} size="xs" variant="outline">
                 <IconPlus />
                 <span>Start session</span>
               </Button>
             {:else}
-              <p>Finished sessions land here.</p>
+              <p class="m-0">Finished sessions land here.</p>
             {/if}
           </div>
         {/if}
@@ -925,45 +998,19 @@
 {/if}
 
 <style>
-  .work {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-  }
-  /* The tabs on no shelf of their own (PaneTabs' hosted bar): the chosen
-     sheet is the only mark, the section's seam runs under the row, and the
-     delegates button stands at its end, centred on the tabs. */
-  .head {
-    /* How far the row is under a 260px rail's: none there and wider, 33px
-       at the narrowest rail (227px). Read off the row's own width, not the
-       desktop rail's (`--rail-w`), so the phone's sheet, which is its own
-       width whatever the rail was dragged to, is told as it is. The header's
-       own spacing gives that room back (the gap to the Delegates switch, a
-       tab's inset, the room round a count), so both labels stand whole
-       beside their counts at any width: at 227px "Working" and "Finished"
-       were each cut by a pixel beside two-digit counts. */
-    --tight: clamp(0px, calc(260px - 100cqw - var(--space-4)), 33px);
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: calc(var(--space-2) - var(--tight) * 0.09);
-    padding: var(--space-1) var(--space-2) 0 0;
-    margin-bottom: var(--space-1);
-    border-bottom: 1px solid var(--seam);
-  }
-  :global(.work-tabs[data-slot="tabs"]) {
-    padding: 0;
-    background: none;
-  }
+  /* residual: foreign-dom — the kit's fluid tabs (ui/fluid-tabs), hosted:
+     their sizes and sheets are custom properties the kit sets on its own
+     list and tabs, so they are set there, at the specificity the class
+     selector had. */
   /* The session tabs' sizes (PaneTabs): sized to their content plus --px.
      The chosen sheet stands off the rail in both themes (raised on the light
      rail, lit on the dark one). Hovering an unchosen tab is the hover step
      by day, as on the rows below it, and by night a lighter tint than
      choosing it. */
-  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list) {
-    --px: calc(6px - var(--tight) * 0.09);
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list) {
+    --px: calc(var(--work-tab-px) - var(--tight) * 0.09);
     --text: var(--text-label);
-    --item: 32px;
+    --item: var(--work-tab-item);
     --sheet: light-dark(var(--surface-raised), var(--surface-hover));
     --tab-hover: light-dark(
       var(--surface-hover),
@@ -982,12 +1029,12 @@
     --tab-fill: var(--surface-recess);
   }
   /* A label to its count (the kit's --gap + 4px), closer on a narrow rail. */
-  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .ff-tab) {
     --gap: max(0px, 2px - var(--tight) * 0.06);
   }
   /* A tab is as wide as its label and its count together: the count never
      stands outside the tab, whatever the row's width. */
-  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .ff-tab) {
     min-inline-size: max-content;
   }
   /* A tab after the first tucks its start under its neighbour by the
@@ -995,231 +1042,50 @@
      "Finished": its label starts past the overlap, as PaneTabs' titles do,
      on either choice, so a choice never resizes a tab. The first tab's
      overlap is the track's leading pad. */
-  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab ~ .ff-tab) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .ff-tab ~ .ff-tab) {
     --px-start: calc(var(--overlap) + var(--px));
   }
   /* A label never gives way: the header's spacing does. */
-  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .hit) {
+  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list .hit) {
     flex-shrink: 0;
   }
-  /* The count, washed in its tab's status ink (the usage tints' strength),
-     on the chosen tab only; the other's is a plain numeral, muted unless
-     it says something failed. The wash and the ink come and go with the
-     choice, as the tab's own sheet and title do, on its clock
-     (ui/fluid-tabs, `--pick`, typed and carried by the choice itself): the
-     wash as its background, the ink as the numeral again in it over the
-     muted one, faded in. */
-  .count {
+  /* residual: pseudo — the trees' own measures are the shared tree's
+     (SessionTree). A leaving row's nesting line (the list item's
+     pseudo-elements, app.css .kit-nest) goes out on the row's own exit
+     (`leaveLine`). */
+  [data-leaving] :global([data-slot="tree-node"])::before,
+  [data-leaving] :global([data-slot="tree-node"])::after {
+    animation: var(--leave, none);
+  }
+  /* residual: unmapped — the count's ink and wash switch with its tab and
+     with a failure (custom properties: no utility sets one), and its wash
+     is a mix by the tab's own clock (--pick); a group's seam shows only
+     after an earlier group with rows (a sibling rule); and leaving rows
+     with no successor stand a tree-gap under what stays when anything
+     stays (a run-time :has). */
+  [data-slot="count"] {
     --ink: var(--status-live-ink);
     --wash: var(--count-wash-live);
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 18px;
-    block-size: 18px;
-    padding-inline: calc(3px - var(--tight) * 0.03);
-    margin-inline-start: var(--space-1);
-    /* A press on the count is a press on its tab: it reaches the hit. */
-    pointer-events: none;
-    margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
-    border-radius: var(--radius-xs);
     background: color-mix(
       in oklab,
       var(--wash) calc(var(--pick) * 100%),
       transparent
     );
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-
-    & > span {
-      grid-area: 1 / 1;
-    }
   }
-  .loud {
-    color: var(--ink);
-    opacity: var(--pick);
-  }
-  .count[data-tab="finished"] {
+  [data-slot="count"][data-tab="finished"] {
     --ink: var(--status-done-ink);
     --wash: var(--count-wash-done);
   }
   /* Something listed as finished failed: the numeral says so, chosen or
      not. */
-  .count[data-failed] {
+  [data-slot="count"][data-failed] {
     --ink: var(--status-fail-ink);
     --wash: var(--count-wash-fail);
-    color: var(--ink);
   }
-  /* The corner actions' icon button (Sidebar .head-action), at one size
-     whatever it shows. Pressed, its glyph turns solid in strong ink: no
-     fill, nothing that moves. */
-  .delegates {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    inline-size: 28px;
-    block-size: 28px;
-    margin-block-end: 2px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-  .delegates :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .delegates[data-on] {
-    color: var(--ink-strong);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .delegates:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  /* One cell for the list and the empty tab's line: the panel is as tall as
-     the taller of them. */
-  .panel {
-    display: grid;
-  }
-  .panel > * {
-    grid-area: 1 / 1;
-    min-inline-size: 0;
-  }
-  .list {
-    display: flex;
-    flex-direction: column;
-    overflow-x: clip;
-  }
-  /* The rows that wait: a session row's height each, as far apart as the
-     rows they stand for. */
-  .waiting {
-    display: flex;
-    flex-direction: column;
-    gap: var(--tree-gap);
-  }
-  /* A tab with nothing in it: its line on the rows' own text column, and
-     under it, on Working, the one thing to do next. */
-  .vacant {
-    display: flex;
-    flex-direction: column;
-    align-self: start;
-    align-items: flex-start;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .vacant p {
-    margin: 0;
-  }
-  .vacant[data-stale] {
-    opacity: 0.55;
-  }
-  /* Every group keeps the room a seam would take; the seam itself is drawn
-     in it, only after a group with rows, so groups coming and going never
-     move one. */
-  /* A flex column, so its header's margin stays inside it: closed to
-     nothing, a group takes no room at all. */
-  .group {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  .group > :global(.kit-seam) {
-    position: absolute;
-    inset: 0 0 auto;
-    opacity: 0;
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  .group.filled ~ .group.filled > :global(.kit-seam) {
+  [data-slot="group"][data-filled] ~ [data-slot="group"][data-filled] > hr {
     opacity: 1;
   }
-  .rows {
-    position: relative;
-  }
-  /* The trees' own measures are the shared tree's (SessionTree). A leaving
-     row's line goes out on the row's own exit (`leaveLine`). */
-  .leaving :global(.tree-node)::before,
-  .leaving :global(.tree-node)::after {
-    animation: var(--leave, none);
-  }
-  /* The old rows, out of the layout either way: the group's own height is
-     only what stays, so the height drive holds it while they leave and then
-     closes it. Its own reflow boundary (data-reflow): the list's reflow
-     neither enters these copies nor ghosts them when they go. */
-  .leaving {
-    position: absolute;
-    inset: 0 0 auto;
-    pointer-events: none;
-  }
-  /* With no successor (a group that goes, "Show fewer"), where they stood:
-     under what stays. Layered, over the rows' top, each old row in the
-     place its successor takes. */
-  .leaving:not(.layer) {
-    top: 100%;
-  }
-  .rows:has(:global([data-key])) > .leaving:not(.layer) {
+  .rows:has(:global([data-key])) > [data-leaving]:not([data-layer]) {
     top: calc(100% + var(--tree-gap));
-  }
-  .machine {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: var(--space-2) 0 var(--space-1);
-    padding: 0 var(--space-3);
-    min-height: 22px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* "Archive all", at the header's end. */
-  .archive-all {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    block-size: 22px;
-    margin-inline: auto calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    cursor: pointer;
-    transition: var(--transition-control);
-
-    & :global(svg) {
-      inline-size: 14px;
-      block-size: 14px;
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .archive-all:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  .more-failed {
-    margin-inline-start: 0.3em;
-    color: var(--status-fail-ink);
-  }
-  .more {
-    display: flex;
-    align-items: center;
-    min-height: 28px;
-    margin-top: 2px;
-    padding: 0 var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-align: start;
-    cursor: pointer;
   }
 </style>

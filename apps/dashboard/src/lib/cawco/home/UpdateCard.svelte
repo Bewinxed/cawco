@@ -224,19 +224,23 @@
 </script>
 
 {#snippet lines(n: Notice)}
-  <div data-slot="body" class="body">
+  <div data-slot="body" class="grid gap-space-row type-meta">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
-        <div class="ink busy mark-line">
+        <!-- literal: 6px -->
+        <div
+          class="mark-line flex items-center gap-(--busy-gap) text-ink-strong"
+          style:--busy-gap="6px"
+        >
           <Spinner class="size-space-4 shrink-0 text-ink-muted" />
           <span>{line.text}</span>
         </div>
       {:else}
-        <div class="ink">{line.text}</div>
+        <div class="text-ink-strong">{line.text}</div>
       {/if}
     {/each}
     {#if n.closing && !n.failed}
-      <span class="closing">{n.closing}</span>
+      <span class="text-ink-muted">{n.closing}</span>
     {/if}
   </div>
 {/snippet}
@@ -259,33 +263,76 @@
       />
     {/if}
   {/snippet}
-  <div data-slot="update-card-card" class="card" bind:this={card}>
+  <div
+    data-slot="update-card-card"
+    class="relative flex min-w-0 flex-col gap-space-row"
+    bind:this={card}
+  >
     <!-- What the row showed, copied where it stood, leaving. -->
-    <div aria-hidden="true" class="leaving" inert bind:this={layer}></div>
+    <div
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-0"
+      inert
+      bind:this={layer}
+    ></div>
     {#if leaving}
-      <span class="line" {@attach arrive}>{GOODBYE}</span>
+      <!-- The goodbye's one line, beside his waiting mark and centred on it. -->
+      <!-- literal: 28px -->
+      <span
+        class="flex min-h-(--line-min) items-center type-label text-ink-strong"
+        style:--line-min="28px"
+        {@attach arrive}>{GOODBYE}</span
+      >
     {:else if notice}
-      <h2 data-slot="title" class="title mark-line">
+      <!-- literal: 6px -->
+      <h2
+        data-slot="title"
+        class="mark-line m-0 flex items-center gap-(--title-gap) pe-(--x-room) type-label wrap-anywhere text-ink-strong"
+        style:--title-gap="6px"
+      >
         {#if notice.failed}
-          <IconError aria-hidden="true" class="fail size-icon-md shrink-0" />
+          <IconError
+            aria-hidden="true"
+            class="size-icon-md shrink-0 text-status-fail-ink"
+          />
         {/if}
         <span>{notice.title}</span>
       </h2>
       {#if meta}
-        <p data-slot="meta" class="meta">{meta}</p>
+        <p data-slot="meta" class="m-0 type-meta text-ink-muted">{meta}</p>
       {/if}
       {#if notes}
+        <!-- The notes' fold (transitions-dev Accordion expand): the grid row
+             is the track, 0fr shut and 1fr open, so any height of notes
+             folds with no measuring; the inner box clips, fades and
+             cross-blurs. The shut fold gives the column's 2px gap back, and
+             its air is the inner box's own padding, never the track's, so it
+             closes to nothing. Shutting is quicker than opening. With less
+             motion nothing travels: the notes only fade. -->
+        <!-- literal: 0fr, 1fr; -2px -->
         <div
           data-slot="fold"
-          class="fold"
+          class="group/fold mt-(--fold-pull) grid grid-rows-(--fold-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--fold-open) data-open:dur-panel motion-reduce:transition-none"
           data-open={open || undefined}
           id="update-notes"
           inert={!open}
           ontransitionend={settled}
+          style:--fold-open="1fr"
+          style:--fold-pull="-2px"
+          style:--fold-shut="0fr"
         >
-          <div data-slot="fold-inner" class="fold-inner">
-            <div class="fold-body">
-              <div class="notes"><ReleaseNotes source={notes.full} /></div>
+          <!-- Open, no filter at all: a blur(0) is still a filter, and WebKit
+               drew the whole of the notes through one on every paint of the
+               panel. It interpolates with the shut blur as blur(0) would. -->
+          <div
+            data-slot="fold-inner"
+            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-[opacity,filter] dur-exit ease-out group-data-open/fold:opacity-100 group-data-open/fold:filter-none group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+          >
+            <div
+              class="flex flex-col gap-space-1 pt-(--fold-air)"
+              style:--fold-air="calc(2px + var(--space-1))"
+            >
+              <div class="type-body text-ink-row"><ReleaseNotes source={notes.full} /></div>
               {#if said}
                 {@render lines(notice)}
               {/if}
@@ -296,40 +343,78 @@
         {@render lines(notice)}
       {/if}
       {#if footer}
-        <div data-slot="actions" class="actions" {@attach held}>
+        <!-- The footer: one row packed to the row's trailing edge, the way to
+             the settings at its leading edge while the notes stand open. It
+             holds at the panel's foot while the notes run past it, on the
+             panel's own surface, with the house edge fade (`--fade-len`)
+             above it so the notes pass under it while it is held (`held`).
+             The footer's last control ends its ink on the panel's trailing
+             edge, its box kept whole. Every kit button has a 1px transparent
+             border: the act's fill stops inside it (the kit clips its fill
+             to the padding box), so it hangs past by that pixel; the way to
+             the settings, standing alone, by it and its 11px. With the notes
+             open the way to the settings takes the footer's leading edge,
+             its words on the text column with the title's: it hangs into the
+             gutter by what stands before its first letter (the kit's 1px
+             transparent border and the sm size's 11px padding), its box kept
+             whole. On a phone the buttons wrap under it, still at the
+             trailing edge. -->
+        <div
+          data-slot="actions"
+          class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised"
+          {@attach held}
+        >
           {#if showConfigure}
+            <!-- literal: 11px -->
             <Button
               data-settings
-              class={["settings", notes !== null && "leading"]}
+              class={[
+                "min-w-0 shrink",
+                notes !== null && "ms-(--settings-hang) me-auto",
+                notes === null && "last:me-(--settings-hang)",
+              ]}
               href="/config/updates"
               label="Configure update behaviour"
               size="sm"
+              style="--settings-hang: calc(-1 * (1px + 11px));"
               variant="link"
             />
           {/if}
           {#if notes}
+            <!-- Show changes, when last, would hang by its 1px border, its
+                 8px end padding and the 16px chevron's side bearing (its
+                 stroke ends at 19.75 of 24), past the row's own `space-3`
+                 and out of the list, which then scrolled sideways: so it
+                 hangs by `space-3` exactly, and what its end padding gives
+                 up for that its start padding takes, so its box is the sm
+                 size's as ever (11px and 8px padding). The chevron flips
+                 from ⌄ to ⌃ with the fold (scaleY through a flat line), its
+                 stroke kept even through the flip. -->
+            <!-- literal: 1px, 16px * 4.25 / 24; 11px + 8px; scaleY(-1) -->
             <Button
               data-toggle
               aria-controls="update-notes"
               aria-expanded={open}
-              class="toggle"
               onclick={toggle}
+              class="last:-me-space-3"
               size="sm"
+              style="--end: calc(var(--space-3) - 1px - 16px * 4.25 / 24); --toggle-start: calc(11px + 8px - var(--end));"
               variant="ghost"
             >
               <span>{open ? "Hide changes" : "Show changes"}</span>
               <IconChevronDown
                 data-chev
                 aria-hidden="true"
-                class="chev"
+                class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-none"
                 data-icon="inline-end"
+                style="--chev-flip: scaleY(-1);"
               />
             </Button>
           {/if}
           {#if notice.action}
             {@const action = notice.action}
             <Button
-              class="act"
+              class="-me-px"
               label={ACTS[action]}
               onclick={() => act(action)}
               size="sm"
@@ -342,113 +427,9 @@
 </NoticeRow>
 
 <style>
-  .card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .leaving {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  .title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 0;
-    padding-inline-end: var(--x-room);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .title :global(.fail) {
-    color: var(--status-fail-ink);
-  }
-  .meta {
-    margin: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* The notes' fold (transitions-dev Accordion expand): the grid row is the
-     track, 0fr shut and 1fr open, so any height of notes folds with no
-     measuring; the inner box clips, fades and cross-blurs. The shut fold
-     gives the column's 2px gap back, and its air is the inner box's own
-     padding, never the track's, so it closes to nothing. Shutting is
-     quicker than opening. */
-  .fold {
-    display: grid;
-    grid-template-rows: 0fr;
-    margin-block-start: -2px;
-    transition: grid-template-rows var(--dur-exit) var(--ease-out);
-  }
-  .fold[data-open] {
-    grid-template-rows: 1fr;
-    transition-duration: var(--dur-panel);
-  }
-  .fold-inner {
-    min-block-size: 0;
-    overflow: hidden;
-    opacity: 0;
-    filter: blur(var(--fold-blur));
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      filter var(--dur-exit) var(--ease-out);
-  }
-  /* Open, no filter at all: a blur(0) is still a filter, and WebKit drew the
-     whole of the notes through one on every paint of the panel. It
-     interpolates with the shut blur as blur(0) would. */
-  .fold[data-open] > .fold-inner {
-    opacity: 1;
-    filter: none;
-    transition-duration: var(--dur-panel);
-  }
-  .fold-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-block-start: calc(2px + var(--space-1));
-  }
-  .notes {
-    font: var(--type-body);
-    color: var(--ink-row);
-  }
-  .body {
-    display: grid;
-    gap: 2px;
-    font: var(--type-meta);
-  }
-  .ink {
-    color: var(--ink-strong);
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .closing {
-    color: var(--ink-muted);
-  }
-  /* The footer: one row packed to the row's trailing edge, the way to the
-     settings at its leading edge while the notes stand open. It holds at
-     the panel's foot while the notes run past it, on the panel's own
-     surface, with the house edge fade (`--fade-len`) above it so the notes
-     pass under it while it is held (`held`). */
-  .actions {
-    position: sticky;
-    inset-block-end: 0;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-1);
-    margin-top: var(--space-1);
-    background: var(--surface-raised);
-  }
-  .actions::before {
+  /* residual: pseudo — the house edge fade above the footer, shown while it
+     is held at the panel's foot (`held` sets data-stuck). */
+  [data-slot="actions"]::before {
     content: "";
     position: absolute;
     inset-inline: 0;
@@ -459,77 +440,28 @@
     opacity: 0;
     transition: opacity var(--dur-control) var(--ease-out);
   }
-  .actions:global([data-stuck])::before {
+  [data-slot="actions"]:global([data-stuck])::before {
     opacity: 1;
   }
-  .actions > :global(.settings) {
-    min-inline-size: 0;
-    flex-shrink: 1;
-  }
-  /* With the notes open it takes the footer's leading edge, its words on the
-     text column with the title's: it hangs into the gutter by what stands
-     before its first letter (the kit's 1px transparent border and the sm
-     size's 11px padding), its box kept whole. On a phone the buttons wrap
-     under it, still at the trailing edge. */
-  .actions > :global(.leading) {
-    margin-inline: calc(-1 * (1px + 11px)) auto;
-  }
-  /* The footer's last control ends its ink on the panel's trailing edge,
-     its box kept whole. Every kit button has a 1px transparent border: the
-     act's fill stops inside it (the kit clips its fill to the padding box),
-     so it hangs past by that pixel; the way to the settings, standing alone,
-     by it and its 11px. Show changes, when last, would hang by it, its 8px
-     end padding and the 16px chevron's side bearing (its stroke ends at
-     19.75 of 24), past the row's own `space-3` and out of the list, which
-     then scrolled sideways: so it hangs by `space-3` exactly, and what its
-     end padding gives up for that its start padding takes, so its box is
-     the sm size's as ever (11px and 8px padding). */
-  .actions > :global(.act) {
-    margin-inline-end: -1px;
-  }
-  .actions > :global(.toggle:last-child) {
-    --end: calc(var(--space-3) - 1px - 16px * 4.25 / 24);
-    padding-inline: calc(11px + 8px - var(--end)) var(--end);
-    margin-inline-end: calc(-1 * var(--space-3));
-  }
-  /* Open, the toggle says so in its words and its flipped chevron, not in
-     the kit ghost's expanded fill: a fill standing while the notes are open
-     would be its ink, its edge hung past the trailing edge. Under the
-     pointer it takes the hover fill as ever. */
-  .actions > :global(.toggle[aria-expanded="true"]:not(:hover)) {
-    background-color: transparent;
-  }
-  .actions > :global(.settings:not(.leading):last-child) {
-    margin-inline-end: calc(-1 * (1px + 11px));
-  }
-  /* The chevron flips from ⌄ to ⌃ with the fold (scaleY through a flat
-     line), its stroke kept even through the flip. */
-  .actions :global(.chev) {
-    transition: transform var(--dur-panel) var(--ease-out);
-  }
-  .actions :global(.chev path) {
+  /* residual: svg-paint — the chevron's stroke kept even through its flip
+     (its paths are the icon's). */
+  [data-slot="actions"] :global([data-chev] path) {
     vector-effect: non-scaling-stroke;
   }
-  .actions :global(.toggle[aria-expanded="true"] .chev) {
-    transform: scaleY(-1);
+  /* residual: unmapped — two rules over the kit Button's own recipe, which
+     a utility passed in `class` cannot outrank: its sm padding is
+     `px-[11px]` with `has-data-[icon=inline-end]:pr-2` (a later variant),
+     and its ghost fill is `aria-expanded:bg-…`. Show changes, when last,
+     moves its end padding to its start (--toggle-start, --end); open, it
+     says so in its words and its flipped chevron, not in the ghost's
+     expanded fill (a fill standing while the notes are open would be its
+     ink, its edge hung past the trailing edge); under the pointer it takes
+     the hover fill as ever. */
+  [data-slot="actions"] > :global([data-toggle]:last-child) {
+    padding-inline: var(--toggle-start) var(--end);
   }
-  /* With less motion nothing travels: the notes only fade. */
-  @media (prefers-reduced-motion: reduce) {
-    .fold,
-    .actions :global(.chev) {
-      transition: none;
-    }
-    .fold-inner {
-      filter: none;
-      transition: opacity var(--dur-fade) var(--ease-out);
-    }
-  }
-  /* The goodbye's one line, beside his waiting mark and centred on it. */
-  .line {
-    display: flex;
-    align-items: center;
-    min-block-size: 28px;
-    font: var(--type-label);
-    color: var(--ink-strong);
+  [data-slot="actions"]
+    > :global([data-toggle][aria-expanded="true"]:not(:hover)) {
+    background-color: transparent;
   }
 </style>

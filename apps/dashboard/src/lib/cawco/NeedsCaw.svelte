@@ -576,38 +576,47 @@
      below). One half of it: the upper, or the lower that fades while his
      panel hangs. -->
 {#snippet rim(low: boolean)}
+  <!-- What waits, on his circle's rim: his circle's box round his item's
+       centre, the arcs a 2px round-capped attention stroke (the second lap,
+       and the closed ring past it, the fail glyph's ink), each with a path
+       length of 1 so it draws in and out along itself. (Not `.ring`: that is
+       Tailwind's ring utility, a box-shadow round the box.) The lower half
+       gives way to whichever card hangs from the glass: it fades out as the
+       card grows and back as it folds, on the card's own clock. The phone's
+       glass is the standing outline (Shell), the wide bar's the group's
+       round end. -->
   <svg
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class={["rim", low && "foot"]}
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:dur-exit data-foot:ease-out"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
-    <g class="round">
+    <g class="max-desk:hidden">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
-        <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
+        <path class="fill-none stroke-status-attn-glyph" d={arcPath(k)} pathLength="1" transition:drawn />
       {/each}
       {#each lapSlots.filter((k) => roundLow(k) === low) as k (k)}
-        <path class="arc lap" d={arcPath(k)} pathLength="1" transition:drawn />
+        <path class="fill-none stroke-status-fail-glyph" d={arcPath(k)} pathLength="1" transition:drawn />
       {/each}
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="arc lap whole"
+          class="fill-none stroke-status-fail-glyph"
           d={low ? ROUND_HALF.low : ROUND_HALF.high}
           pathLength="1"
           transition:drawn
         />
       {/if}
     </g>
-    <g data-slot="standing" class="standing">
+    <g data-slot="standing" class="hidden max-desk:inline">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
-        <path class="arc" d={outlinePath(k)} pathLength="1" transition:drawn />
+        <path class="fill-none stroke-status-attn-glyph" d={outlinePath(k)} pathLength="1" transition:drawn />
       {/each}
       {#each lapSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="arc lap"
+          class="fill-none stroke-status-fail-glyph"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -616,7 +625,7 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="arc lap whole"
+          class="fill-none stroke-status-fail-glyph"
           d={low ? STAND_HALF.low : STAND_HALF.high}
           pathLength="1"
           transition:drawn
@@ -628,6 +637,10 @@
 
 <Tip label={tipText}>
   {#snippet children(tip)}
+    <!-- An item of the bar's group (Shell's bar-item recipe, on
+         [data-bar-item], draws its box, hover and focus); a circle whatever
+         the strips' boxes: the beat's reaches past it. -->
+    <!-- literal: 44px -->
     <button
       data-bar-item
       {...mergeProps(tip, {
@@ -639,23 +652,48 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="capsule bar-item touch-hit press-tint"
+      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0"
       data-needs-caw
+      style:--caw-hit="44px"
       type="button"
     >
-      <span class={["mug", { pressed }]}>
+      <!-- His head: his face and the clip playing over it in one cell,
+           squashed once under a press (DESIGN.md, The Press Rule) with
+           motion allowed, on his own layer from the start: made by his first
+           press's squash, it was work in the frame that press was waiting
+           on. -->
+      <span
+        class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
+        data-pressed={pressed || undefined}
+        style:--mug-squash="scale(var(--press-scale))"
+      >
+        <!-- His head's optical centre at the centre, not his box
+             (CAW_HEAD_CENTRE): moved in layout, not by a transform, so his
+             picture stays on whole pixels. A clip's first frame is drawn
+             over him: it stands in for his face, which is drawn and ready
+             under it for the frame the clip lands. -->
         <span
           data-needs-caw-covered={covering || undefined}
-          class="face"
+          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid data-needs-caw-covered:[&>[data-slot=caw-face]]:invisible"
           data-caw-phase={phase}
           style:--bleed="{CAW_STILL_BLEED}px"
           style:--dx={0.5 - CAW_HEAD_CENTRE.x}
           style:--dy={0.5 - CAW_HEAD_CENTRE.y}
+          style:--face-x="calc(var(--dx) * var(--side))"
+          style:--face-y="calc(var(--dy) * var(--side))"
           style:--side="{head}px"
-          class:covered={covering}
         >
           <CawFace size={head} status={face} />
-          <canvas aria-hidden="true" bind:this={clipCanvas}></canvas>
+          <!-- The clip, on his face's own canvas box: his box and its
+               bleed. Shown only while a clip's frame is drawn on it: between
+               clips it holds the last one's. -->
+          <canvas
+            aria-hidden="true"
+            class="invisible absolute inset-(--clip-inset) size-(--clip-side) group-data-needs-caw-covered/face:visible"
+            style:--clip-inset="calc(var(--bleed) * -1)"
+            style:--clip-side="calc(var(--side) + 2 * var(--bleed))"
+            bind:this={clipCanvas}
+          ></canvas>
         </span>
       </span>
       {@render rim(false)}
@@ -665,127 +703,42 @@
 </Tip>
 
 <style>
-  /* An item of the bar's group (Shell's `.bar-item` recipe draws its box,
-     hover and focus). */
-  .capsule {
-    position: relative;
-    display: grid;
-    place-items: center;
-    /* A circle whatever the strips' boxes: the beat's reaches past it. */
-    inline-size: var(--c-bar-item);
-    flex: none;
-    padding: 0;
-    -webkit-tap-highlight-color: transparent;
-  }
-  /* The panel's own frame (`.caw-pop`) is CawPanel's. The lower half of his
-     rim gives way to whichever card hangs from the glass (the rim's script,
-     "While his panel hangs"; bar-glass): it fades out as the card grows and
-     back as it folds, on the card's own clock. */
-  .rim.foot {
-    transition: opacity var(--dur-exit) var(--ease-out);
-  }
-  :global([data-bar-group][data-joined]) .rim.foot {
-    opacity: 0;
-    transition-duration: var(--dur-pop);
-  }
-  :global([data-bar-group][data-instant]) .rim.foot {
-    transition: none;
-  }
-  /* On a phone his box is his own glass's (Shell). His touch area is a 44px
-     square (Apple HIG, Buttons: "a hit region of at least 44x44 pt") at the
-     screen's edge, centred on his glass, so none of it falls off the screen
-     or under the transcript. */
+  /* residual: pseudo — on a phone his box is his own glass's (Shell). His
+     touch area (touch-hit's ::after) is a 44px square (Apple HIG, Buttons:
+     "a hit region of at least 44x44 pt") at the screen's edge, centred on
+     his glass, so none of it falls off the screen or under the transcript. */
   @media (max-width: 899px) and (pointer: coarse) {
-    .capsule::after {
+    [data-needs-caw]::after {
       inset: auto;
       inset-inline-end: 0;
-      inset-block-start: calc((var(--c-bar-caw-glass-phone) - 44px) / 2);
-      inline-size: 44px;
-      block-size: 44px;
+      inset-block-start: calc(
+        (var(--c-bar-caw-glass-phone) - var(--caw-hit)) / 2
+      );
+      inline-size: var(--caw-hit);
+      block-size: var(--caw-hit);
     }
   }
-  /* What waits, on his circle's rim: his circle's box round his item's
-     centre, the arcs a 2px round-capped attention stroke, each with a path
-     length of 1 so it draws in and out along itself. (Not `.ring`: that is
-     Tailwind's ring utility, a box-shadow round the box.) */
-  .rim {
-    position: absolute;
-    inset-block-start: 50%;
-    inset-inline-start: 50%;
-    inline-size: var(--c-btn-h);
-    block-size: var(--c-btn-h);
-    overflow: visible;
-    translate: -50% -50%;
-    pointer-events: none;
-  }
-  .arc {
-    fill: none;
-    stroke: var(--status-attn-glyph);
+  /* residual: svg-paint — the arcs: a 2px round-capped stroke, each with a
+     path length of 1 so it draws in and out along itself. */
+  [data-slot="rim"] path {
     stroke-width: var(--c-caw-ring);
     stroke-linecap: round;
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
   }
-  /* The second lap, and the closed ring past it: the fail glyph's ink. */
-  .arc.lap {
-    stroke: var(--status-fail-glyph);
+  /* residual: unmapped — the tap highlight has no utility; and the lower
+     half of his rim follows the card hanging from the glass, whose state is
+     on Shell's bar group (the rim's script, "While his panel hangs";
+     bar-glass), two attributes on one ancestor of another file, at run
+     time: no variant says it. */
+  [data-needs-caw] {
+    -webkit-tap-highlight-color: transparent;
   }
-  /* The phone's glass is the standing outline (Shell), the wide bar's the
-     group's round end. */
-  .standing {
-    display: none;
+  :global([data-bar-group][data-joined]) [data-slot="rim"][data-foot] {
+    opacity: 0;
+    transition-duration: var(--dur-pop);
   }
-  @media (max-width: 899px) {
-    .round {
-      display: none;
-    }
-    .standing {
-      display: inline;
-    }
-  }
-  /* His head: his face and the clip playing over it in one cell, squashed
-     once under a press (DESIGN.md, The Press Rule) with motion allowed. */
-  .mug {
-    display: grid;
-    place-items: center;
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-toggle) var(--ease-out);
-      /* His own layer from the start: made by his first press's squash, it
-         was work in the frame that press was waiting on. */
-      will-change: transform;
-    }
-  }
-  .mug.pressed {
-    @media (prefers-reduced-motion: no-preference) {
-      transform: scale(var(--press-scale));
-    }
-  }
-  /* His head's optical centre at the centre, not his box (CAW_HEAD_CENTRE): moved
-     in layout, not by a transform, so his picture stays on whole pixels. */
-  .face {
-    position: relative;
-    grid-area: 1 / 1;
-    inset-inline-start: calc(var(--dx) * var(--side));
-    inset-block-start: calc(var(--dy) * var(--side));
-    display: grid;
-  }
-  /* A clip's first frame is drawn over him: it stands in for his face, which
-     is drawn and ready under it for the frame the clip lands. */
-  .face.covered > :global(.face) {
-    visibility: hidden;
-  }
-  /* The clip, on his face's own canvas box: his box and its bleed. */
-  .face canvas {
-    position: absolute;
-    inset: calc(var(--bleed) * -1);
-    inline-size: calc(var(--side) + 2 * var(--bleed));
-    block-size: calc(var(--side) + 2 * var(--bleed));
-    visibility: hidden;
-  }
-  /* Shown only while a clip's frame is drawn on it: between clips it holds
-     the last one's. */
-  .face.covered canvas {
-    visibility: visible;
+  :global([data-bar-group][data-instant]) [data-slot="rim"][data-foot] {
+    transition: none;
   }
 </style>
