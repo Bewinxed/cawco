@@ -814,14 +814,16 @@ export interface Scene {
  * done, in this order (each leaves the fleet in it): composer suggestions
  * switched on; `written`, the hub as states that write to it leave it (an
  * account made, a key sent), kept apart so no other state reads what they
- * wrote; every machine offline; every machine removed; paired devices
- * required. A state that
+ * wrote; `moving`, a move nobody said yes to parked on its approval (the
+ * scene's `moving`: its session); every machine offline; every machine
+ * removed; paired devices required. A state that
  * reads one names it (catalogue `hub`); the tape keeps each on its own
  * (hub-tape.ts `variants`).
  */
 export const VARIANTS = [
   "suggesting",
   "written",
+  "moving",
   "machineless",
   "unregistered",
   "pairing",
@@ -849,6 +851,10 @@ export async function enterVariant(
   }
   if (variant === "written") {
     // Nothing moves: its states' own acts write to the hub.
+    return;
+  }
+  if (variant === "moving") {
+    await startMove(fleet);
     return;
   }
   if (variant === "machineless") {
@@ -898,6 +904,74 @@ export async function enterVariant(
 
 /** The scene's second online machine (no checkout of any project on it), once `seedScene` launches it. */
 let bench: Machine | null = null;
+
+/** What `seedScene` made: the tape's `scene`, which a variant adds to before the tape is written. */
+let seeded: Scene | null = null;
+
+/** The moving session's title: its row on the board from the move's start. */
+const MOVE_TITLE = "Move the sketches";
+/** How long a move takes to park on its ask. */
+const MOVE_ASK_MS = 120_000;
+
+/**
+ * A project whose folder is no git repository, moved to the second online
+ * machine as a delegate's or the API's move is, with no yes from New
+ * session: the move's first step asks for it (`git init` first), on its
+ * session's row (moves.ts `askId`), and waits there. Its session is the
+ * scene's `moving`.
+ */
+async function startMove(fleet: KitFleet): Promise<void> {
+  if (!seeded) {
+    throw new Error("no scene to move from: seedScene first");
+  }
+  const place = join(fleet.sandbox, "sketches");
+  await mkdir(place, { recursive: true });
+  await writeFile(
+    join(place, "README.md"),
+    "# Sketches\n\nThe tray's sketches, before any of them is a branch.\n"
+  );
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "sketches",
+    machineId: MACHINE,
+    cwd: place,
+    caw: false,
+  });
+  const response = await fetch(
+    `${fleet.base}/api/projects/${project.id}/moves`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        machineId: BENCH_MACHINE,
+        spawn: { harness: "claude", title: MOVE_TITLE },
+        prompt: "Read the sketches' README.",
+      }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      `POST /api/projects/${project.id}/moves: ${response.status} ${await response.text()}`
+    );
+  }
+  const { id, targetInstanceId } = (await response.json()) as {
+    id: string;
+    targetInstanceId: string;
+  };
+  type Job = { askId?: string; id: string; stage: string };
+  const job = () =>
+    fleet.api<Job[]>("/api/moves").then((jobs) => jobs.find((j) => j.id === id));
+  await until(
+    "the sketches' move asking for its yes",
+    job,
+    (one) => one.stage === "approval" && Boolean(one.askId),
+    MOVE_ASK_MS
+  ).catch(async (error) => {
+    throw new Error(
+      `${error}: the job stands as ${JSON.stringify(await job())}`
+    );
+  });
+  seeded.moving = targetInstanceId;
+}
 
 /** The MCP server behind OAuth the scene signs the hub in to, standing while the scene's hub does (`sceneHub`). */
 let trayDocs: McpOauthMock | null = null;
@@ -1939,7 +2013,7 @@ export async function seedScene(
   kit.note(
     `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
-  return {
+  seeded = {
     chips,
     ask,
     permission,
@@ -1974,4 +2048,5 @@ export async function seedScene(
     hook: HOOK_ID,
     memoryDoc: MODEL_DOC,
   };
+  return seeded;
 }

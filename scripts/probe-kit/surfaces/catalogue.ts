@@ -401,6 +401,29 @@ const browseTo = async (page: Page) => {
       .waitFor();
   }
 };
+/** The DEBUG fault a page reads once as it loads (debug-fault.ts), and the region of it that throws: the composer's `/` menu. */
+const DEBUG_FAULT = "cawco-debug-fault";
+const MENU_FAULT = "composer-menu";
+
+/**
+ * The composer's `/` menu throwing while it renders, on a page loaded with
+ * the DEBUG fault named: the composer's boundary holds it, and the composer
+ * stands as its failure line (RegionBoundary). The page reads the key once,
+ * as it loads; it is forgotten again at once, so no later load reads it.
+ */
+const composerFails = async (page: Page) => {
+  await reloadedWith((p) =>
+    p.evaluate(([key, region]) => localStorage.setItem(key, region), [
+      DEBUG_FAULT,
+      MENU_FAULT,
+    ] as const)
+  )(page);
+  await page.evaluate((key) => localStorage.removeItem(key), DEBUG_FAULT);
+  await page.locator(COMPOSER_FIELD).first().click();
+  await page.keyboard.type("/");
+  await page.locator("[data-region-failed=composer]").first().waitFor();
+};
+
 const BENCHES: [string, string][] = [
   ["caw", "/motion/caw"],
   ["caw-notices", "/motion/caw-notices?fixture=full"],
@@ -837,6 +860,15 @@ export const SURFACES: Surface[] = [
       {
         name: "permission",
         route: (s) => `/session/${s.permission}`,
+        root: MAIN,
+      },
+      {
+        // A move nobody said yes to (the tray project to the second online
+        // machine): its session's pane is the staged wait, the approval
+        // asked in its first step.
+        name: "move-ask",
+        hub: "moving",
+        route: (s) => `/session/${s.moving}`,
         root: MAIN,
       },
       {
@@ -1292,6 +1324,14 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
       },
     ],
+  },
+  {
+    // A part of the page that throws while it renders: the composer, its
+    // `/` menu failing, stands as its failure line and the rest works on.
+    name: "region-failed",
+    serve: "built",
+    route: (s) => `/session/${s.chips}`,
+    states: [{ name: "composer", act: composerFails, root: "body" }],
   },
   {
     name: "not-found",
