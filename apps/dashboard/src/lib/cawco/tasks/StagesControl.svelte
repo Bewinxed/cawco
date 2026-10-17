@@ -158,8 +158,8 @@
       again={applying === null && lastAsked
         ? () => apply(lastAsked as StagesTemplateView)
         : undefined}
+      data-stages-fault
       reason={problem}
-      style="--fault-indent: var(--space-2); --fault-end: var(--space-2)"
     />
     <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
       {#if templates}
@@ -192,11 +192,7 @@
                   .join(" → ")}
               </span>
             </button>
-            <AskHere
-              asker={asks}
-              at={template.name}
-              style="--ask-indent: var(--space-2); --ask-end: var(--space-2)"
-            />
+            <AskHere asker={asks} at={template.name} />
           </li>
         {/each}
       {:else if !problem}
@@ -210,3 +206,15 @@
     </ul>
   </Popover.Content>
 </Popover.Root>
+
+<style>
+  /* residual: foreign-dom — RowFault and AskHere take their insets as custom properties, and no style prop. */
+  :global([data-stages-fault]) {
+    --fault-indent: var(--space-2);
+    --fault-end: var(--space-2);
+  }
+  [data-slot="list"] > li > :global([data-ask]) {
+    --ask-indent: var(--space-2);
+    --ask-end: var(--space-2);
+  }
+</style>

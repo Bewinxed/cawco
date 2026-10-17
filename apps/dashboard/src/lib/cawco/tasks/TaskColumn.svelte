@@ -171,7 +171,6 @@
         <RowFault
           again={fault?.again}
           reason={fault?.reason}
-          style="--fault-indent: var(--space-2); --fault-end: var(--space-2)"
         />
       </li>
     {/each}
@@ -194,6 +193,10 @@
   }
   li[data-picked] > :global([data-slot="task-card"]) {
     background: var(--selected-bg);
+  }
+  li > :global([data-slot="row-fault"]) {
+    --fault-indent: var(--space-2);
+    --fault-end: var(--space-2);
   }
   /* residual: foreign-dom — the board's New task button, from NewTaskForm. */
   [data-slot="foot"] > :global([data-slot="button"]) {
