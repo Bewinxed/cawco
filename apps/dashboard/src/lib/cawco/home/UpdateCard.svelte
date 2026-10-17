@@ -34,7 +34,8 @@
    *
    * The notes fold in the row with what it says machine by machine and its
    * closing line: transitions-dev's Accordion expand, a grid row going 0fr
-   * to 1fr while the notes cross-blur in (`--fold-blur`), open over
+   * to 1fr while the notes fade in, with no blur (WebKit's web process hangs
+   * on a transitioned blur, as the owner's iPhone Safari does), open over
    * --dur-panel and shut over --dur-exit (exits faster than entrances), on
    * --ease-out, the chevron flipping from ⌄ to ⌃. They stand open from the
    * start when the notice is all the panel holds (`alone`), until the reader
@@ -374,7 +375,7 @@
   }
   /* The notes' fold (transitions-dev Accordion expand): the grid row is the
      track, 0fr shut and 1fr open, so any height of notes folds with no
-     measuring; the inner box clips, fades and cross-blurs. The shut fold
+     measuring; the inner box clips and fades. The shut fold
      gives the column's 2px gap back, and its air is the inner box's own
      padding, never the track's, so it closes to nothing. Shutting is
      quicker than opening. */
@@ -392,17 +393,13 @@
     min-block-size: 0;
     overflow: hidden;
     opacity: 0;
-    filter: blur(var(--fold-blur));
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      filter var(--dur-exit) var(--ease-out);
+    transition: opacity var(--dur-exit) var(--ease-out);
   }
-  /* Open, no filter at all: a blur(0) is still a filter, and WebKit drew the
-     whole of the notes through one on every paint of the panel. It
-     interpolates with the shut blur as blur(0) would. */
+  /* No filter, shut or open: a transitioned blur hung WebKit 2359's web
+     process here (safari-blurs), and open, even a blur(0) drew the whole of
+     the notes through a filter on every paint of the panel. */
   .fold[data-open] > .fold-inner {
     opacity: 1;
-    filter: none;
     transition-duration: var(--dur-panel);
   }
   .fold-body {
@@ -520,7 +517,6 @@
       transition: none;
     }
     .fold-inner {
-      filter: none;
       transition: opacity var(--dur-fade) var(--ease-out);
     }
   }

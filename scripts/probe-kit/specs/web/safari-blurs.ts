@@ -8,8 +8,9 @@
  *
  *  - the recall wheel's rows, blurred by depth as they roll, and the pick's
  *    cross-blur as it lands in the field (RecallWheel, recall bench);
- *  - the update notice's notes and the moved logins, folding open and shut
- *    out of `--fold-blur` (UpdateCard, MovedLogins, Caw's notices bench);
+ *  - the update notice's notes (UpdateCard) and the moved logins
+ *    (MovedLogins, out of `--fold-blur`), folding open and shut, Caw's
+ *    notices bench;
  *  - the compaction divider's chevron, out of a 4px blur as its summary
  *    opens (CompactionDivider, traffic bench);
  *  - the send and stop glyphs' swap, a turn starting and ending (Composer
@@ -23,8 +24,10 @@
  *  - the keychain unlock's result mark (MachineAuthStatus `mark-in`);
  *  - a decision record's fold (RecordCard).
  *
- * The queued edit's row hung it (its blur is gone, Composer `.edit-row`);
- * every other one draws.
+ * The queued edit's row hung it (its blur is gone, Composer `.edit-row`),
+ * and the update notes' fold did, in 2 of 12 runs, on a page's first
+ * presses (its blur is gone, UpdateCard `.fold-inner`); every other one
+ * draws.
  *
  * Each case on a page of its own: its motion happened (read from the DOM),
  * and the page answered a script within {@link ANSWERS_MS} the whole way.
