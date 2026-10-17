@@ -1,0 +1,4 @@
+/* The app's own stylesheet, and this page's folder as a Tailwind source:
+   app.css scans src alone (`source(".")`), so the folder is named. */
+@import "../../src/app.css";
+@source "./";
