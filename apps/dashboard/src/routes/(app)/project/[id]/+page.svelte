@@ -2239,10 +2239,10 @@
   .state {
     max-inline-size: 72ch;
   }
-  /* As wide as four starters across, so a desk shows them in one row. */
+  /* As wide as four starters across, so a desk shows them in one row; from
+     the board's start edge, as its columns would stand. */
   .caw-empty {
     inline-size: 100%;
-    margin-inline: auto;
     max-inline-size: var(--c-starters-w);
   }
   .caw-empty :global(.kit-empty-action) {

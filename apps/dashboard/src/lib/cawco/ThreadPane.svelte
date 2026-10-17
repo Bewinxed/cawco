@@ -1126,12 +1126,20 @@
     flex-direction: column;
     background: var(--surface-recess);
   }
+  /* Why the thread couldn't be read, where its first row would stand: from
+     the room's top, on the composer's start edge (its column, or --space-3
+     where the composer goes edge to edge, Composer's max-width 900px). */
   .problem {
-    margin: auto;
-    max-inline-size: 46ch;
-    padding: var(--space-6);
+    max-inline-size: 60ch;
+    margin: 0;
+    margin-inline-start: calc((100% - var(--c-composer-w)) / 2);
+    padding-block: var(--space-6);
     font: var(--type-body);
     color: var(--ink-muted);
+
+    @media (max-width: 900px) {
+      margin-inline-start: var(--space-3);
+    }
   }
   /* Where the composer stands when there is one, as it stands (Composer
      .dock and .cin): over the pane's foot, in its column and at its lift,
@@ -1155,9 +1163,9 @@
     inline-size: var(--seat);
   }
   /* The hero: the empty board's (project page `.caw-empty`), from the
-     room's top on the composer's own column, so Caw, the title, the line
-     and the starters share the composer's start edge. It clears the
-     composer as the transcript does. */
+     room's top, its inline padding the composer's own column, so Caw, the
+     title, the line and the starters share the composer's start edge. It
+     clears the composer as the transcript does. */
   .hero {
     display: flex;
     flex: 1 1 auto;
@@ -1165,19 +1173,15 @@
     min-block-size: 0;
     /* The empty state's own --space-6 is the room above it. */
     padding-block-end: var(--composer-clearance);
+    padding-inline: calc((100% - var(--c-composer-w)) / 2);
     overflow-y: auto;
     /* Its own stacking: what is raised inside it (an Earlier row's mark)
        stays under the foot fade as it scrolls past the composer. */
     isolation: isolate;
-  }
-  .hero :global(.kit-empty) {
-    inline-size: var(--c-composer-w);
-    margin-inline: auto;
 
     /* Where the composer goes edge to edge (Composer, max-width 900px). */
     @media (max-width: 900px) {
-      inline-size: auto;
-      margin-inline: var(--space-3);
+      padding-inline: var(--space-3);
     }
   }
   .hero :global(.kit-empty-action) {

@@ -122,12 +122,12 @@
   } = $props();
 
   /**
-   * A named state stands in the middle of the transcript area, its mark,
-   * title and line centred in it, as the board's empty state stands: never
-   * a start-aligned block set in the middle.
+   * A named state stands where the transcript's first row would: from the
+   * area's top, on the transcript's start edge (Transcript `.tr`: --space-7,
+   * --space-5 up to 900px wide). The owner: "I didn't say center the whole
+   * block! No sane ui developer does this".
    */
-  const STATEFUL =
-    "m-auto max-w-[46ch] items-center px-[var(--space-6)] text-center";
+  const STATEFUL = "px-(--space-7) [@media(width<=900px)]:px-(--space-5)";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):
