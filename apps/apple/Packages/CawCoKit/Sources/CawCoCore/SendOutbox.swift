@@ -16,7 +16,8 @@ import OSLog
 /// One per process: every connection to a hub (each window's, a push's
 /// Reply) reads and writes the same messages. A message leaves when the hub
 /// takes it (its `accepted`, or its row for it read), when a push's Reply
-/// says the hub refused it, or when the person sends a refused one again.
+/// says the hub refused it, when the person sends a refused one again, or
+/// when the device is moved to another hub (`leave`).
 @MainActor
 final class SendOutbox {
     static let shared = SendOutbox()
@@ -97,6 +98,16 @@ final class SendOutbox {
         entries.removeAll { $0.uuid == uuid }
         try? FileManager.default.removeItem(at: file(uuid))
         log.notice("outbox: \(uuid.prefix(8), privacy: .public) gone, \(self.entries.count) left")
+    }
+
+    /// The device was moved to another hub (`HubConnection.connect(to:)`):
+    /// the sends kept for the one it left go, as everything it held of that
+    /// hub does, never sent to a hub whose sessions they are not.
+    func leave(_ hub: String) {
+        let left = entries.filter { $0.hub == hub }
+        guard !left.isEmpty else { return }
+        log.notice("outbox: left \(hub, privacy: .public), \(left.count) unsent let go: \(left.map { String($0.uuid.prefix(8)) }.joined(separator: ", "), privacy: .public)")
+        for entry in left { remove(entry.uuid) }
     }
 
     private func file(_ uuid: String) -> URL { folder.appending(path: "\(uuid).json") }

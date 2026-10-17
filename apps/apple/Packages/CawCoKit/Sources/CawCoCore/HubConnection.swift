@@ -314,6 +314,8 @@ public final class HubConnection {
         if let old = self.address, old != address {
             // The hub this device leaves stops pushing to it.
             PushRegistry.shared.leave(old)
+            // Its sessions are no longer this device's to write to: what was kept for them goes with them.
+            SendOutbox.shared.leave(old.absoluteString)
         }
         self.address = address
         UserDefaults.standard.set(address.absoluteString, forKey: Self.addressKey)
