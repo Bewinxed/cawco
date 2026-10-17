@@ -101,7 +101,7 @@ export async function eventually<T>(
     if (Date.now() >= deadline) {
       unmet(
         `${what}, not within ${ms / 1000}s: last read ${(error === undefined
-          ? JSON.stringify(last)
+          ? String(JSON.stringify(last))
           : `an error, ${error instanceof Error ? error.message : String(error)}`
         ).slice(0, 600)}`
       );

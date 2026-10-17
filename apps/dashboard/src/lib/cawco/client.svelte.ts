@@ -149,6 +149,7 @@ import {
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { type HeldPlan, handlePlanMessage } from "./plan";
+import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
@@ -3715,8 +3716,13 @@ export function submitCommand<K extends CommandKind>(
     // CommandEnvelope.payload is already `unknown` on the wire, so this needs no
     // protocol change, and the hub's `command()` spreads it straight through to
     // `relaySend` untouched. No `viewId` here — it would just repeat the
-    // envelope's own `instanceId`; `clientId` is the only fact provenance adds.
-    const provenance = { clientId: currentClientId() };
+    // envelope's own `instanceId`. `clientId` is this page's; `presenceId` is
+    // the tab's presence (presence.ts), whose log says what it had in front,
+    // so a send is read against what its own tab showed.
+    const provenance = {
+      clientId: currentClientId(),
+      presenceId: presenceClientId(),
+    };
     payload = {
       ...(wirePayload(kind, instanceId, commandId, intent) as object),
       provenance,

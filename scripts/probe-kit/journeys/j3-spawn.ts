@@ -12,11 +12,22 @@
  * new one, and that process must have been launched in it. Read from the
  * hub and the machine (sessiond's PID, the process's own command line),
  * never from the page's words alone.
+ *
+ * Then two conversations: the session starts one of its own
+ * (`start_session`), and the person writes to each in turn, moving between
+ * them by the new one's card, Back and its tab. Each message is on the hub
+ * under the conversation on screen when it was sent, and on no other, and
+ * shows there. On screen is read off the page's geometry (whose words are in
+ * the viewport), never off what the app holds in front: a send that went
+ * where the app pointed while the person read another conversation (owner,
+ * 2026-10-17: “That was a message to that session not to you”) fails here.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Page } from "playwright-core";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
+import { callsInOrder, say } from "./mock";
 import {
   type Data,
   eventually,
@@ -43,6 +54,18 @@ const SPACES = /\s+/;
 const REGEX_SIGNS = /[.*+?^${}()|[\]\\]/g;
 /** What the new session says to its first message. */
 const READING = "Reading the README now, then I'll summarise it.";
+/** The words that have the session start one of its own (`start_session`). */
+const CHILD = "JOURNEY-CHILD";
+/** The started session's first message, which its page shows. */
+const CHILD_BRIEF = "Draft the release checklist.";
+/** The composer's field, named by its hint. */
+const COMPOSER = /^Message/;
+
+/**
+ * The session the leg's session starts with `start_session`: where and
+ * under what title, read by the mock as it makes the call.
+ */
+let child: { cwd: string; title: string } | null = null;
 
 interface Seeded {
   /** Its checkout: the folder its sessions start in. */
@@ -297,6 +320,203 @@ async function walk(leg: Leg): Promise<void> {
       );
     }
   );
+
+  // Two conversations, and the person moving between them: every message
+  // goes to the conversation on screen as it is sent, however the person
+  // got there (a card's link, Back, a tab), and shows there. On screen is
+  // read off the page's geometry, never off what the app thinks is in front.
+  // Within start_session's 48 characters, stretched too.
+  const childTitle = leg.title("Checklist");
+  child = { cwd: project.dir, title: childTitle };
+  const field = page
+    .getByRole("combobox", { name: COMPOSER })
+    .filter({ visible: true })
+    .first();
+  const sendButton = page
+    .getByRole("button", { name: "Send message" })
+    .filter({ visible: true })
+    .first();
+  const childLink = page.getByRole("link", {
+    name: `Open ${childTitle} in its own view`,
+  });
+  let childId = "";
+  const toA = `${CHILD} ${leg.id} Start a session for the checklist.`;
+  await leg.step(
+    "Ask the session to start a session of its own",
+    async () => {
+      await page.keyboard.press("Escape");
+      await field.click();
+      await page.keyboard.type(toA);
+      await sendButton.click();
+    },
+    async () => {
+      await landed(fleet, page, toA, () => id, "the first session");
+      const row = await eventually(
+        "the hub runs a session the first one started",
+        () =>
+          fleet.query<{ id: string; status: string }>(
+            "SELECT id, status FROM instances WHERE parent_instance_id = ?",
+            id
+          )[0],
+        (one) => one?.status === "running",
+        120_000
+      );
+      childId = (row as { id: string }).id;
+      await shows(
+        childLink,
+        `the new session's card on the page, with “Open ${childTitle} in its own view”`,
+        60_000
+      );
+    }
+  );
+
+  /** Writes `words` in the composer and sends them, as the person does. */
+  const write = async (words: string) => {
+    await field.click();
+    await page.keyboard.type(words);
+    await sendButton.click();
+  };
+  const childTab = page
+    .getByRole("tablist", { name: SESSION_TABS })
+    .getByRole("tab", { name: new RegExp(literal(childTitle)) })
+    .filter({ visible: true })
+    .first();
+  const toB = `${leg.id} First to the checklist.`;
+  const backToA = `${leg.id} Back to the README.`;
+  const againToB = `${leg.id} Again to the checklist.`;
+
+  await leg.step(
+    "Open the session it started from its card",
+    () => childLink.filter({ visible: true }).first().click(),
+    async () => {
+      await eventually(
+        "the started session's page is open",
+        () => new URL(page.url()).pathname,
+        (path) => path === `/session/${childId}`,
+        60_000
+      );
+      await onScreen(page, CHILD_BRIEF, "the started session");
+    }
+  );
+
+  await leg.step(
+    "Write to it",
+    () => write(toB),
+    async () => {
+      await landed(fleet, page, toB, () => childId, "the started session");
+      await eventually(
+        "the started session's model was given the words, in its own conversation",
+        () =>
+          fleet.seen.some(
+            (one) =>
+              one.tools && one.last.includes(toB) && !one.all.includes(SPAWN)
+          ),
+        Boolean,
+        60_000
+      );
+    }
+  );
+
+  await leg.step(
+    "Go back to the first session",
+    () => page.goBack({ waitUntil: "commit" }),
+    () => onScreen(page, toA, "the first session")
+  );
+
+  await leg.step(
+    "Write to it again",
+    () => write(backToA),
+    () => landed(fleet, page, backToA, () => id, "the first session")
+  );
+
+  await leg.step(
+    "Switch to the started session by its tab",
+    () => childTab.click(),
+    () => onScreen(page, toB, "the started session")
+  );
+
+  await leg.step(
+    "Write to it again",
+    () => write(againToB),
+    () => landed(fleet, page, againToB, () => childId, "the started session")
+  );
+}
+
+/**
+ * Whether `text` is drawn inside the window: a match whose box's middle is
+ * in the viewport and that is painted (not in a pane put away). A
+ * conversation parked beside the one in front is drawn a width off screen,
+ * so its words are not in view.
+ */
+async function inView(page: Page, text: string): Promise<boolean> {
+  const view = page.viewportSize();
+  if (!view) {
+    return false;
+  }
+  const boxes = await page.getByText(text).evaluateAll((els) =>
+    els
+      .filter((el) =>
+        el.checkVisibility({
+          contentVisibilityAuto: true,
+          visibilityProperty: true,
+        })
+      )
+      .map((el) => {
+        const box = el.getBoundingClientRect();
+        return {
+          x: box.x + box.width / 2,
+          y: box.y + box.height / 2,
+          area: box.width * box.height,
+        };
+      })
+  );
+  return boxes.some(
+    (box) =>
+      box.area > 0 &&
+      box.x >= 0 &&
+      box.x <= view.width &&
+      box.y >= 0 &&
+      box.y <= view.height
+  );
+}
+
+/** The conversation `name` is the one on screen: its `words` are in view. */
+const onScreen = (page: Page, words: string, name: string) =>
+  eventually(
+    `${name} on screen (“${words}” in view)`,
+    () => inView(page, words),
+    Boolean
+  );
+
+/**
+ * What was just written went to `to()`, the conversation `name` on screen,
+ * and to no other session (the hub's record of the send), and shows in the
+ * conversation on screen.
+ */
+async function landed(
+  fleet: KitFleet,
+  page: Page,
+  words: string,
+  to: () => string,
+  name: string
+): Promise<void> {
+  const sent = await eventually(
+    "the hub has the message",
+    () =>
+      fleet
+        .query<{ instance_id: string }>(
+          "SELECT instance_id FROM sent_messages WHERE body LIKE ?",
+          `%${words}%`
+        )
+        .map((row) => row.instance_id),
+    (rows) => rows.length > 0
+  );
+  expect(
+    `the message went to ${name}, the conversation on screen, and to no other`,
+    sent.length === 1 && sent[0] === to(),
+    `sent to ${sent.join(", ")}; ${name} is ${to()}`
+  );
+  await onScreen(page, words, name);
 }
 
 /** `words` matched as they are, inside a pattern. */
@@ -305,10 +525,25 @@ const literal = (words: string) => words.replace(REGEX_SIGNS, "\\$&");
 const journey: Journey = {
   name: "j3-spawn",
   flow: "Flow 4: spawn a session against a project",
-  respond: (seen: Seen) =>
-    seen.tools && seen.last.includes(SPAWN)
+  respond: (seen: Seen) => {
+    if (seen.tools && child && seen.all.includes(CHILD)) {
+      return (
+        callsInOrder(seen, [
+          {
+            name: "start_session",
+            input: {
+              cwd: child.cwd,
+              title: child.title,
+              prompt: CHILD_BRIEF,
+            },
+          },
+        ]) ?? say("Started it.")
+      );
+    }
+    return seen.tools && seen.last.includes(SPAWN)
       ? { everyMs: 40, words: READING.split(" ").map((word) => `${word} `) }
-      : { everyMs: 20, words: ["Ready."] },
+      : say("Ready.");
+  },
   seed,
   leg: walk,
 };

@@ -540,6 +540,20 @@ export function createSwipe(
       });
       sizes.observe(node);
 
+      // The panes stand where their transforms put them; the stack itself
+      // never scrolls. Its overflow is hidden, not clipped, so a reveal of
+      // something in a parked neighbour (a `scrollIntoView`, an anchor)
+      // still scrolls it, up to a third of a width in WebKit, and drew that
+      // neighbour over the tab in front while the composer wrote to the tab
+      // in front. Put back as it happens, before the frame paints.
+      const unscroll = () => {
+        if (node.scrollLeft !== 0 || node.scrollTop !== 0) {
+          node.scrollLeft = 0;
+          node.scrollTop = 0;
+        }
+      };
+      node.addEventListener("scroll", unscroll, { passive: true });
+
       /** Stand down: whatever was under the finger goes back to its place. */
       const standDown = () => {
         if (phase === "decided") {
@@ -683,6 +697,7 @@ export function createSwipe(
         destroy() {
           stopSettle();
           sizes.disconnect();
+          node.removeEventListener("scroll", unscroll);
           root = null;
           node.removeEventListener("touchstart", onStart);
           node.removeEventListener("touchmove", onMove);

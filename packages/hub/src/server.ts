@@ -15554,13 +15554,17 @@ export const createServer = (
     // believed it was sending from. It is the one thing that makes "a send
     // landed on the wrong session" provable after the fact instead of merely
     // suspected.
+    // `presenceId` is the tab's presence, cut as the `[presence]` lines cut
+    // it: the send reads against what that tab said it had in front.
     const { provenance } = message.payload as {
-      provenance?: { clientId?: string };
+      provenance?: { clientId?: string; presenceId?: string };
     };
     const record = deliverSend(message);
     console.log(
       `[hub] send -> ${message.payload.instanceId} (${record?.state ?? "to Caw's thread"})${
-        provenance ? ` client ${provenance.clientId ?? "?"}` : ""
+        provenance
+          ? ` client ${provenance.clientId ?? "?"} presence ${provenance.presenceId?.slice(0, 8) ?? "?"}`
+          : ""
       }`
     );
   };
