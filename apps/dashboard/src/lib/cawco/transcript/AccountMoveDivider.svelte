@@ -50,7 +50,6 @@
       case "stopped":
         return row.move.resetsAt;
       case "continued":
-      case "continuing":
       case "ended":
       case "signed-out":
       case "unmoved":
@@ -87,7 +86,6 @@
       case "ended":
         return null;
       case "continued":
-      case "continuing":
       case "moved":
         break;
     }

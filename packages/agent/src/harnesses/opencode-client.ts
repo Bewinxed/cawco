@@ -288,8 +288,9 @@ export const waitForMcp = async (
           ];
         case "connected":
         case "disabled":
-          return [];
+          break;
       }
+      return [];
     });
   const cawcoOf = (listed: Listed) =>
     listed.find((server) => server.name === CAWCO_MCP_SERVER)?.status;

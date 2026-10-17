@@ -148,7 +148,6 @@
               lead: "Hand-off from",
               name: meta.peerName ?? "",
             };
-      case "result.error":
       case "result.success":
       case "send.ref":
       case "tool.progress":

@@ -164,9 +164,11 @@ const artifactsOf = (
         }
         case "link":
           return `- link ${each.url}`;
-        default:
-          return `- ${each.kind} ${each.path}`;
+        case "file":
+        case "post":
+          break;
       }
+      return `- ${each.kind} ${each.path}`;
     })
     .join("\n");
 };

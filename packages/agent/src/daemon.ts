@@ -2184,7 +2184,17 @@ const attach = (
               supervisor.failCustody(epoch, problem)
             );
             return;
-          default:
+          case "announce":
+          case "arm-listed":
+          case "arm-read":
+          case "arm":
+          case "fail-owed":
+          case "park":
+          case "publish":
+          case "register-lapsed":
+          case "register":
+          case "release-owed":
+          case "send-verdict":
             return;
         }
       };

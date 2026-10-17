@@ -1273,7 +1273,8 @@ const compactedMoveWords = (
         line: `Moved to ${to}, then compacted · re-read ${tokens} once${cost}`,
         detail: `Its open items were filed first and listed after · ${hit}`,
       };
-    default:
+    case "stopped":
+    case undefined:
       return {
         line: `Moved to ${to} · compaction stopped, ${tokens} kept`,
         detail: `It goes on with its whole conversation · ${hit}`,
