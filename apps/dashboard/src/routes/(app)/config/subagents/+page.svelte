@@ -246,15 +246,30 @@
   {/if}
   {#each Object.entries(unpushable) as [machineId, why] (machineId)}
     {@const machine = machines.find((row) => row.machineId === machineId)}
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       {machine ? machineLabel(machine.hostname) : machineId}
       — {why}.
     </p>
   {/each}
 
-  <div data-slot="group" class="group">
+  <!-- literal: 8px -->
+  <div
+    data-slot="group"
+    class="flex flex-col gap-(--gap) border-t border-border-hairline pt-space-5"
+    style:--gap="8px"
+  >
     <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
-    <p data-slot="note" class="note">
+    <!-- literal: 72ch -->
+    <p
+      data-slot="note"
+      class="type-meta max-w-(--measure) text-ink-muted"
+      style:--measure="72ch"
+    >
       The definition files each machine really has, read live off its disk. One
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
@@ -263,14 +278,33 @@
          in any order, and one listed above another would push the rows
          already drawn down the page. -->
     {#if online.length === 0}
-      <p data-slot="note" class="note">No machine is online to ask.</p>
+      <!-- literal: 72ch -->
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >
+        No machine is online to ask.
+      </p>
     {:else if Object.keys(reading).length > 0}
-      <p data-slot="note" class="note busy mark-line" role="status">
+      <!-- literal: 72ch, 8px -->
+      <p
+        data-slot="note"
+        class="mark-line type-meta flex max-w-(--measure) items-center gap-(--gap) text-ink-muted"
+        role="status"
+        style:--measure="72ch"
+        style:--gap="8px"
+      >
         <Spinner class="size-icon-md shrink-0" />
         <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
-      <p data-slot="note" class="note">
+      <!-- literal: 72ch -->
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--measure) text-ink-muted"
+        style:--measure="72ch"
+      >
         No machine has any subagent files yet.
       </p>
     {:else}
@@ -291,10 +325,10 @@
             {/snippet}
             {#snippet trailing()}
               {#if same}
-                <span class="state">Managed · in sync</span>
+                <span class="type-meta whitespace-nowrap text-ink-muted">Managed · in sync</span>
               {:else}
                 {#if stored}
-                  <span class="state differs">Managed · differs</span>
+                  <span class="type-meta whitespace-nowrap text-status-attn-ink">Managed · differs</span>
                 {/if}
                 <Button
                   failed={key in adoptFailed}
@@ -317,31 +351,3 @@
     {/if}
   </div>
 </SectionFrame>
-
-<style>
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-hairline);
-  }
-  .note {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .busy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .state {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    white-space: nowrap;
-  }
-  .differs {
-    color: var(--status-attn-ink);
-  }
-</style>

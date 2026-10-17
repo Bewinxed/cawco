@@ -239,10 +239,23 @@
 
 <svelte:head><title>Delegate tray | CawCo</title></svelte:head>
 
-<div class="bench" data-delegate-tray>
-  <div data-slot="leaf" class="leaf">
-    <div data-slot="stack" class="stack">
-      <div data-slot="pane" class="pane">
+<!-- Over the shell: a conversation's group as the workspace lays one out
+     (PaneLeaf `.leaf`, `.stack`, `.dock`), over the whole window. -->
+<!-- literal: 2147483000 -->
+<div
+  class="fixed inset-0 z-(--bench-z) flex flex-col text-ink-strong"
+  data-delegate-tray
+  style:--bench-z="2147483000"
+>
+  <div
+    data-slot="leaf"
+    class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
+  >
+    <div
+      data-slot="stack"
+      class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden"
+    >
+      <div data-slot="pane" class="absolute inset-0 flex">
         <SessionPane
           active
           browsing={null}
@@ -257,8 +270,8 @@
     {#if lent}
       <div
         data-slot="dock"
-        class="dock"
-        style:width="{lent.transcriptShare * 100}%"
+        class="pointer-events-none absolute inset-y-0 left-0 z-1 w-(--dock-w)"
+        style:--dock-w="{lent.transcriptShare * 100}%"
       >
         <Composer
           agentName={lent.agentName}
@@ -290,46 +303,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* Over the shell: a conversation's group as the workspace lays one out
-     (PaneLeaf `.leaf`, `.stack`, `.dock`), over the whole window. */
-  .bench {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    display: flex;
-    flex-direction: column;
-    color: var(--ink-strong);
-  }
-  .leaf {
-    container: leaf / inline-size;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    background: var(--surface-recess);
-  }
-  .stack {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    min-width: 0;
-    overflow: hidden;
-  }
-  .pane {
-    position: absolute;
-    inset: 0;
-    display: flex;
-  }
-  .dock {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 1;
-    pointer-events: none;
-  }
-</style>

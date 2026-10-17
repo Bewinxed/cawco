@@ -27,16 +27,24 @@
 
 <svelte:head><title>Echo bench · CawCo</title></svelte:head>
 
-<main>
-  <ul {@attach echoBeat()}>
+<!-- literal: 100vh -->
+<main
+  class="type-body grid min-h-(--page-h) place-items-center bg-surface-recess p-space-7 text-ink-muted"
+  style:--page-h="100vh"
+>
+  <ul class="m-0 grid list-none gap-space-5 p-0" {@attach echoBeat()}>
     {#each marks as status, row (row)}
-      <li data-renders={renders} data-row={row}>
+      <li
+      class="flex items-center gap-space-5"
+      data-renders={renders}
+      data-row={row}
+    >
         <TreeMark fill="var(--mark-{row + 1})" {status}>
           {#snippet face()}
             <span></span>
           {/snippet}
         </TreeMark>
-        <span data-slot="controls" class="controls">
+        <span data-slot="controls" class="flex gap-space-2">
           {#each STATUSES as s (s)}
             <button
               aria-pressed={status === s}
@@ -52,7 +60,7 @@
   </ul>
   <!-- A working mark in no beat: it never echoes, and stands still on its
        live dot. -->
-  <p class="mark-line" data-unbeaten>
+  <p class="mark-line flex items-center gap-space-5" data-unbeaten>
     <TreeMark fill="var(--mark-8)" status="live">
       {#snippet face()}
         <span></span>
@@ -61,32 +69,3 @@
     <span>no beat</span>
   </p>
 </main>
-
-<style>
-  main {
-    display: grid;
-    place-items: center;
-    min-height: 100vh;
-    padding: var(--space-7);
-    background: var(--surface-recess);
-    color: var(--ink-muted);
-    font: var(--type-body);
-  }
-  ul {
-    display: grid;
-    gap: var(--space-5);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  li,
-  [data-unbeaten] {
-    display: flex;
-    align-items: center;
-    gap: var(--space-5);
-  }
-  .controls {
-    display: flex;
-    gap: var(--space-2);
-  }
-</style>
