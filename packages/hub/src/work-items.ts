@@ -77,6 +77,7 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
   DEPS_INSTALLING,
+  DEPS_STALE,
   depsScript,
   handoffMarker,
   holdingWords,
@@ -1481,6 +1482,8 @@ interface InstallOutcome {
   result: CommandResult;
   /** What it said it ran: `bun install (bun.lock changed …)`. */
   said: string;
+  /** The lockfile it refused because package.json disagrees with it ({@link DEPS_STALE}): `bun.lock`. */
+  stale?: string;
   /** Where it ran, when on another machine's gate workspace. */
   where?: string;
 }
@@ -1592,11 +1595,15 @@ const installLines = (run: GateRun, withStderr = false): string =>
 const failedRun = (run: GateRun): { head: string; lines: string } => {
   const failing = run.outcomes.filter((outcome) => !outcome.passed);
   const passing = run.outcomes.filter((outcome) => outcome.passed);
+  const stale = run.installs.find((install) => install.stale)?.stale;
+  let head = `${failing.map((each) => each.step.name).join(" and ")} failed`;
+  if (stale) {
+    head = `package.json and ${stale} disagree, so the dependency install refused and no other step ran: run \`bun install\` in the workspace and commit ${stale}`;
+  } else if (run.outcomes.length === 0) {
+    head = "the dependency install failed, so no other step ran";
+  }
   return {
-    head:
-      run.outcomes.length === 0
-        ? "the dependency install failed, so no other step ran"
-        : `${failing.map((each) => each.step.name).join(" and ")} failed`,
+    head,
     lines:
       `${installLines(run, true)}${[...failing, ...passing].map(stepResultLine).join("\n")}`.trimEnd(),
   };
@@ -5147,8 +5154,13 @@ export const createWorkItems = ({
       const said = complete.stdout.startsWith(DEPS_INSTALLING)
         ? (complete.stdout.split("\n")[0] ?? "").slice(DEPS_INSTALLING.length)
         : "the dependency install";
+      const stale = complete.stdout
+        .split("\n")
+        .find((line) => line.startsWith(DEPS_STALE))
+        ?.slice(DEPS_STALE.length);
       installs.push({
         said,
+        ...(stale ? { stale } : {}),
         result: gateTails(complete),
         where,
         durationMs: Date.now() - started,

@@ -21,6 +21,12 @@
  *   for L on Linux, the agent's seed of the cut (seed-deps.ts) with no
  *   install line.
  *
+ * Then S, with a bun.lock: its delegate adds a dependency to package.json
+ * and leaves bun.lock as it was. The gate's frozen install refuses it, and
+ * finish_item's first sentence says package.json and bun.lock disagree and
+ * to run `bun install` in the workspace and commit bun.lock; the
+ * workspace's bun.lock is unchanged, the item still runs, nothing lands.
+ *
  *   bun scripts/probe-kit/run.ts landing-recut
  */
 import { existsSync } from "node:fs";
@@ -31,8 +37,20 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-RECUT-GATE-([LN])/;
-type Tag = "L" | "N";
+const TAG = /PROBE-RECUT-GATE-([LNS])/;
+type Tag = "L" | "N" | "S";
+/** The projects that land, retire and land again; S's gate refuses its stale lockfile. */
+type LegTag = Exclude<Tag, "S">;
+/** S's package.json: the project's, with a dependency bun.lock does not hold. */
+const STALE_MANIFEST = {
+  name: "landing-recut-probe",
+  private: true,
+  scripts: { typecheck: "tsc --noEmit -p ." },
+  devDependencies: { typescript: "5.9.3", "is-number": "7.0.0" },
+};
+/** How finish_item names a stale lockfile, in its first sentence (work-items.ts `failedRun`). */
+const STALE_WORDS =
+  "package.json and bun.lock disagree, so the dependency install refused and no other step ran: run `bun install` in the workspace and commit bun.lock. Fix it, commit, and call finish_item again.";
 /** The parent's handoff to a retired delegate, and the mark of its reopened turn. */
 const again = (tag: Tag) => `PROBE-RECUT-AGAIN-${tag}`;
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
@@ -124,7 +142,15 @@ const respond = (request: Seen): Reply => {
   }
   if (!request.all.includes(`DONE-COMMIT-${tag}`)) {
     return tool("Bash", {
-      command: commitCommand(`first_${tag}`, `DONE-COMMIT-${tag}`),
+      command:
+        tag === "S"
+          ? [
+              `printf '%s\\n' '${JSON.stringify(STALE_MANIFEST)}' > package.json`,
+              "git add package.json",
+              `${COMMIT} 'Delegate commit stale'`,
+              "echo DONE-COMMIT-S",
+            ].join(" && ")
+          : commitCommand(`first_${tag}`, `DONE-COMMIT-${tag}`),
       description: "Commit",
     });
   }
@@ -134,7 +160,9 @@ const respond = (request: Seen): Reply => {
     (key) => {
       step[key === "finished" ? "finish" : "searched"] = true;
     },
-    `Committed src/first_${tag}.ts.`
+    tag === "S"
+      ? "Added is-number to package.json."
+      : `Committed src/first_${tag}.ts.`
   );
 };
 
@@ -182,12 +210,8 @@ const makeRepo = async (
     .quiet();
 };
 
-/** What each project's gate installs from, and the install it runs (core move.ts `depsScript`). */
-const LOCK: Record<Tag, string> = { L: "bun.lock", N: "package.json" };
-const INSTALL: Record<Tag, string> = {
-  L: "bun install",
-  N: "bun install --frozen-lockfile",
-};
+/** What each project's gate installs from (core move.ts `depsScript`), by bun's frozen install either way. */
+const LOCK: Record<LegTag, string> = { L: "bun.lock", N: "package.json" };
 
 /**
  * Whether a report names where its clone's dependencies came from: the
@@ -195,30 +219,55 @@ const INSTALL: Record<Tag, string> = {
  * lockfile (or manifest), or, for L, the cut's seed (`seeded` lines in the
  * agent's log) with no install line.
  */
-const depsNamed = (result: string, tag: Tag, seeded: number): boolean =>
+const depsNamed = (result: string, tag: LegTag, seeded: number): boolean =>
   result.includes(
-    `- installed dependencies: ${INSTALL[tag]} (no dependencies installed from ${LOCK[tag]})`
+    `- installed dependencies: bun install --frozen-lockfile (no dependencies installed from ${LOCK[tag]})`
   ) ||
   (tag === "L" &&
     seeded === 1 &&
     !result.includes("- installed dependencies:"));
 
-/** One project's leg: land, retire, hand off, land again on the first try. */
-const leg = async (
-  kit: Kit,
-  fleet: Fleet,
-  tag: Tag,
-  callAsParent: (
-    parent: string,
-    name: string,
-    args: object
-  ) => Promise<{ status: number; text: string }>
-): Promise<void> => {
-  const { check } = kit;
-  const label = tag === "L" ? "L (bun.lock)" : "N (no lockfile)";
-  const home = fleet.env.HOME as string;
+const itemRow = (fleet: Fleet, id: string) =>
+  fleet.query<ItemRow>(
+    "SELECT state, error, result FROM work_items WHERE id = ?",
+    id
+  )[0];
+
+const workspaceRow = (fleet: Fleet, id: string) =>
+  fleet.query<{ id: string; path: string; state: string }>(
+    "SELECT id, path, state FROM workspaces WHERE id = ?",
+    id
+  )[0];
+
+/** The first model request under `mark` that read a "Not landed" answer: its words. */
+const notLandedSeen = (fleet: Fleet, mark: string) =>
+  fleet.seen.find(
+    (one) =>
+      one.afterTool && one.all.includes(mark) && one.all.includes(NOT_LANDED)
+  )?.all;
+
+/** A "Not landed" answer from its first words, for a check's detail. */
+const refusal = (said: string | undefined) =>
+  said ? said.slice(said.lastIndexOf(NOT_LANDED)).slice(0, 1500) : "";
+
+/** The item once it ended, or a "Not landed" answer under `mark` (a failed gate leaves the item running). */
+const settled = (fleet: Fleet, label: string, id: string, mark: string) =>
+  until(
+    `${label}'s item ended or its gate failed`,
+    () => ({ row: itemRow(fleet, id), refused: notLandedSeen(fleet, mark) }),
+    ({ row, refused }) =>
+      refused !== undefined ||
+      ["done", "failed", "cancelled"].includes(row?.state ?? ""),
+    600_000
+  ).catch(() => ({
+    row: itemRow(fleet, id),
+    refused: notLandedSeen(fleet, mark),
+  }));
+
+/** A project of its own for `tag` (with or without its bun.lock), its parent, and the delegate it started. */
+const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
   const repo = join(fleet.sandbox, `code-${tag}`);
-  await makeRepo(repo, home, tag === "L");
+  await makeRepo(repo, fleet.env.HOME as string, lockfile);
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: `Landing recut ${tag}`,
     machineId: MACHINE,
@@ -227,34 +276,6 @@ const leg = async (
   const parent = await fleet.spawn("claude", `Parent ${tag}`, repo, {
     projectId: project.id,
   });
-  const itemOf = (id: string) =>
-    fleet.query<ItemRow>(
-      "SELECT state, error, result FROM work_items WHERE id = ?",
-      id
-    )[0];
-  const workspaceOf = (id: string) =>
-    fleet.query<{ id: string; path: string; state: string }>(
-      "SELECT id, path, state FROM workspaces WHERE id = ?",
-      id
-    )[0];
-  const notLanded = (mark: string) =>
-    fleet.seen.find(
-      (one) =>
-        one.afterTool && one.all.includes(mark) && one.all.includes(NOT_LANDED)
-    )?.all;
-  /** The item once it ended, or a "Not landed" answer under `mark` (a failed gate leaves the item running). */
-  const settled = (id: string, mark: string) =>
-    until(
-      `${label}'s item ended or its gate failed`,
-      () => ({ row: itemOf(id), refused: notLanded(mark) }),
-      ({ row, refused }) =>
-        refused !== undefined ||
-        ["done", "failed", "cancelled"].includes(row?.state ?? ""),
-      600_000
-    ).catch(() => ({ row: itemOf(id), refused: notLanded(mark) }));
-  const refusal = (said: string | undefined) =>
-    said ? said.slice(said.lastIndexOf(NOT_LANDED)).slice(0, 1500) : "";
-
   const started = await fleet.api<{
     instanceId: string;
     workItemId: string;
@@ -267,7 +288,83 @@ const leg = async (
     model: "claude-haiku-4-5",
     cwd: repo,
   });
-  const first = await settled(started.workItemId, `PROBE-RECUT-GATE-${tag}`);
+  return { project, parent, started };
+};
+
+/**
+ * S: package.json gains a dependency and bun.lock is not updated. The gate's
+ * frozen install refuses it, finish_item says in its first sentence to run
+ * `bun install` and commit bun.lock, the workspace's bun.lock is as
+ * committed, the item still runs, and nothing lands.
+ */
+const staleLeg = async (kit: Kit, fleet: Fleet): Promise<void> => {
+  const { check } = kit;
+  const { project, started } = await delegated(fleet, "S", true);
+  const answer = await settled(
+    fleet,
+    "S (stale bun.lock)",
+    started.workItemId,
+    "PROBE-RECUT-GATE-S"
+  );
+  const said = refusal(answer.refused);
+  check(
+    "S (stale bun.lock): finish_item comes back not landed, saying package.json and bun.lock disagree and to run bun install and commit bun.lock",
+    said.includes(STALE_WORDS) &&
+      said.includes(
+        "- dependencies didn't install: bun install --frozen-lockfile (a package.json or bun.lock changed since the dependencies were installed)"
+      ) &&
+      said.includes("error: lockfile had changes, but lockfile is frozen"),
+    said || `no answer read; ${JSON.stringify(answer.row)}`
+  );
+  const path = workspaceRow(fleet, started.workspaceId)?.path ?? "";
+  const git = (args: string[]) =>
+    Bun.$`git -C ${path} ${args}`.quiet().nothrow().text();
+  const status = await git(["status", "--porcelain", "--", "bun.lock"]);
+  const diff = await git(["diff", "HEAD", "--", "bun.lock"]);
+  const manifest = await git(["show", "HEAD:package.json"]);
+  check(
+    "S: the workspace's bun.lock is as committed (no change, staged or not), and its commit carries is-number in package.json",
+    status.trim() === "" &&
+      diff.trim() === "" &&
+      manifest.includes("is-number"),
+    `status: ${status.trim() || "clean"}; diff: ${diff.slice(0, 400) || "none"}; HEAD package.json: ${manifest.trim()}`
+  );
+  const bare = join(fleet.sandbox, "hub", "git", `${project.id}.git`);
+  const main = await Bun.$`git log --format=%s main`
+    .cwd(bare)
+    .quiet()
+    .nothrow()
+    .text();
+  check(
+    "S: its item still runs, and its commit is not on main",
+    answer.row?.state === "running" && !main.includes("Delegate commit stale"),
+    `${JSON.stringify(answer.row)}; main: ${main.trim().split("\n").join(" | ")}`
+  );
+};
+
+/** One project's leg: land, retire, hand off, land again on the first try. */
+const leg = async (
+  kit: Kit,
+  fleet: Fleet,
+  tag: LegTag,
+  callAsParent: (
+    parent: string,
+    name: string,
+    args: object
+  ) => Promise<{ status: number; text: string }>
+): Promise<void> => {
+  const { check } = kit;
+  const label = tag === "L" ? "L (bun.lock)" : "N (no lockfile)";
+  const { parent, started } = await delegated(fleet, tag, tag === "L");
+  const itemOf = (id: string) => itemRow(fleet, id);
+  const workspaceOf = (id: string) => workspaceRow(fleet, id);
+  const notLanded = (mark: string) => notLandedSeen(fleet, mark);
+  const first = await settled(
+    fleet,
+    label,
+    started.workItemId,
+    `PROBE-RECUT-GATE-${tag}`
+  );
   const firstResult = first.row?.result ?? "";
   check(
     `${label}: the first hand-in lands on its first try, bun run typecheck passing`,
@@ -418,6 +515,7 @@ const run = async (kit: Kit) => {
   };
   await leg(kit, fleet, "N", callAsParent);
   await leg(kit, fleet, "L", callAsParent);
+  await staleLeg(kit, fleet);
 };
 
 export default { name: "landing-recut", run } satisfies Spec;
