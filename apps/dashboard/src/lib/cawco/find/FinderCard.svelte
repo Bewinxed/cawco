@@ -152,7 +152,6 @@
 />
 
 <style>
-  /* residual: foreign-dom */
   /* css-scope .jump-pop: GlassCard names its Jump face with it; the finder draws that face's frame */
   /* The glass's card showing Find: `c-find-w` wide, right-aligned under the
      bar, its foot clear of the screen's (the wireframe's desk card). */
