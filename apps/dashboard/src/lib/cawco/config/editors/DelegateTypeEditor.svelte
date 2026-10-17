@@ -283,13 +283,14 @@
     />
     <Field id="type-model" label="Model" problem={problemFor("model")}>
       <ModelCombobox
-        class="w-full min-w-0 max-w-112"
+        class="w-full"
         harness={draft.harness}
         onchoose={(model) => {
           draft.model = model;
           touched.model = true;
         }}
         size="default"
+        width="capped"
         value={draft.model}
       />
     </Field>
