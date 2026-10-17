@@ -64,11 +64,19 @@
   /** The clips the machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
   const VIDEO_FILE = /\.(mp4|mov|webm)$/i;
   const isVideo = (path: string): boolean => VIDEO_FILE.test(path);
+  /** A video's captions: the `.vtt` of the same name beside it. */
+  const sidecar = (path: string): string => path.replace(VIDEO_FILE, ".vtt");
+  /** Where a video's captions would be served from; nothing for a picture. */
+  const captionsOf = (machineId: string, path: string): string | undefined =>
+    isVideo(path) ? machineMedia(machineId, sidecar(path)) : undefined;
 
   /** `send_to_user` under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
   const SEND_TO_USER = /(^|_)send_to_user$/;
 
-  /** What a `send_to_user` call attached, shown under its row as the owner got it. */
+  /**
+   * What a `send_to_user` call attached, shown under its row as the owner got
+   * it. A `.vtt` sent beside its video captions that video, not a row of its own.
+   */
   const sentAttachments = (m: Message): string[] => {
     const name = (m.metadata?.toolName ?? "").toLowerCase();
     if (!SEND_TO_USER.test(name)) {
@@ -76,9 +84,14 @@
     }
     const attached = (m.metadata?.toolInput as { attachments?: unknown })
       ?.attachments;
-    return Array.isArray(attached)
-      ? attached.filter((path): path is string => typeof path === "string")
-      : [];
+    if (!Array.isArray(attached)) {
+      return [];
+    }
+    const paths = attached.filter(
+      (path): path is string => typeof path === "string"
+    );
+    const captions = new Set(paths.filter(isVideo).map(sidecar));
+    return paths.filter((path) => !captions.has(path));
   };
 
   let { messages }: { messages: Message[] } = $props();
@@ -527,6 +540,7 @@
             <div class="shots">
               <Shot
                 alt={input.caption ?? pathLeaf(input.path)}
+                captions={captionsOf(machine(), input.path)}
                 caption={input.caption}
                 path={input.path}
                 size="card"
@@ -540,6 +554,7 @@
               {#each sentAttachments(m) as path (path)}
                 <Shot
                   alt={pathLeaf(path)}
+                  captions={captionsOf(machine(), path)}
                   {path}
                   size="card"
                   src={machineMedia(machine(), path)}

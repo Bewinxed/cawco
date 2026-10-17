@@ -94,6 +94,7 @@ const read = async (path: string): Promise<string> => {
  * render. No SVG: opened as a document it is script on the dashboard's origin.
  * A picture or a video is the one file the tunnel does carry whole: a
  * screenshot or a screen recording an agent made is worth nothing as a path.
+ * A video's captions travel the same way: the `.vtt` beside it.
  */
 const MEDIA_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -106,6 +107,7 @@ const MEDIA_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".mov": "video/quicktime",
   ".webm": "video/webm",
+  ".vtt": "text/vtt",
 };
 
 const megabytes = (bytes: number): string =>
@@ -115,7 +117,7 @@ const media = async (path: string): Promise<FsMedia> => {
   const mediaType = MEDIA_TYPES[extname(path).toLowerCase()];
   if (!mediaType) {
     throw new Error(
-      `${path} is not an image or video (${Object.keys(MEDIA_TYPES).join(", ")})`
+      `${path} is not an image, video or captions file (${Object.keys(MEDIA_TYPES).join(", ")})`
     );
   }
   const file = Bun.file(path);
