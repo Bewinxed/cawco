@@ -486,15 +486,25 @@ const socketAddress = async (id: string, socket: string): Promise<string> => {
 };
 
 /**
- * The runtime the boundary's plain Bun scripts run on: `BUN_BE_BUN=1 <binary
- * root>/run` in a binary install, bun in a checkout. Refuses the workspace
- * when it is not there, rather than writing a hook that refuses every
- * command.
+ * The bun the agent's plain Bun scripts run on, the boundary's and a stage's
+ * host (stage.ts): `<binary root>/run` with {@link BUN_SCRIPT_ENV} in a
+ * binary install, bun in a checkout.
+ */
+export const bunScriptRuntime = (): string =>
+  standalone ? join(binaryRoot(), "run") : (Bun.which("bun") ?? "bun");
+
+/** What {@link bunScriptRuntime} needs in its environment: a binary install's runs as bun only with `BUN_BE_BUN=1`. */
+export const BUN_SCRIPT_ENV: Readonly<Record<string, string>> = standalone
+  ? { BUN_BE_BUN: "1" }
+  : {};
+
+/**
+ * {@link bunScriptRuntime} for workspace `id`'s boundary scripts. Refuses the
+ * workspace when it is not there, rather than writing a hook that refuses
+ * every command.
  */
 const bunRuntime = async (id: string): Promise<string> => {
-  const runtime = standalone
-    ? join(binaryRoot(), "run")
-    : (Bun.which("bun") ?? "bun");
+  const runtime = bunScriptRuntime();
   await access(runtime, constants.X_OK).catch(() => {
     throw refusal(
       id,
@@ -665,7 +675,7 @@ const judgeFor = async (
         // which nothing inside the boundary writes.
         cwd: stateDir(id),
         env: {
-          ...(standalone ? { BUN_BE_BUN: "1" } : {}),
+          ...BUN_SCRIPT_ENV,
           PATH: SYSTEM_PATH,
         },
       });
