@@ -9,6 +9,8 @@ public typealias MachineRow = Components.Schemas.AgentRow
 public typealias StoredSession = Components.Schemas.NeutralSessionInfo
 public typealias SessionPulse = Components.Schemas.SessionPulse
 public typealias BuildInfo = Components.Schemas.BuildInfo
+/// One approved action as the hub answers it (hub actions.ts `ApprovedActionView`).
+public typealias ApprovedAction = Components.Schemas.ApprovedActionView
 
 extension Components.Schemas.InstanceRow: TreeRow {}
 
@@ -38,6 +40,16 @@ public extension Components.Schemas.FleetChoicesUpstream {
         default: Words.Upstream.allow
         }
     }
+}
+
+/// What one load of a machine's stored sessions left out: a sentence per
+/// harness that didn't answer in time or whose listing threw, none when it
+/// left nothing out. `load` tells each load from the last, so a screen says
+/// every load's sentences once (the web's one toast per machine, changed in
+/// place by each load and dismissed once a load leaves none out).
+public struct CatalogLeftOut: Equatable, Sendable {
+    public let sentences: [String]
+    public let load: Int
 }
 
 public extension Components.Schemas.AgentRow {
@@ -270,6 +282,9 @@ public final class FleetStore {
     /// its session is read or pulses, so a reader that found none hears the first.
     @ObservationIgnored private var pulseCells: [String: PulseCell] = [:]
     public internal(set) var catalogs: [String: [StoredSession]] = [:]
+    /// Per machine, the harnesses its last listing left out, said in
+    /// `Words.Catalog`'s sentences (client.svelte.ts `catalogLeftOut`).
+    public internal(set) var catalogLeftOut: [String: CatalogLeftOut] = [:]
 
     /// Every machine's latest Claude and opencode Go limit readings, by machine.
     /// The fleet's spend as the hub reckons it (`/api/usage/spend`, and every
@@ -322,6 +337,15 @@ public final class FleetStore {
     /// holds them now: read on connect, then whole on each
     /// `fleet_watch.notices` frame (client.svelte.ts `watchNotices`).
     public internal(set) var watchNotices: [Components.Schemas.FleetWatchNotice] = []
+    /// The approved actions waiting on you (proposed, or failed or of unknown
+    /// outcome until you put them away), as the hub holds them now: read on
+    /// connect, then whole on each `actions` frame (client.svelte.ts `actions`).
+    public internal(set) var actions: [ApprovedAction] = []
+
+    /// The actions filed for one task (needs.svelte.ts `actionsOf`).
+    public func actions(projectId: String, taskId: String) -> [ApprovedAction] {
+        actions.filter { $0.projectId == projectId && $0.taskId == taskId }
+    }
     /// Every system law the hub caught broken since it started (core
     /// invariant.ts), whole on each `laws.broken` frame; none until one
     /// breaks (client.svelte.ts `lawsBroken`).

@@ -1804,6 +1804,7 @@ export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
+export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/helpers";
 export * from "./words/sidebar";

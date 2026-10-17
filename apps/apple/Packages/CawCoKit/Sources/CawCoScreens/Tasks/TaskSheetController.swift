@@ -81,6 +81,13 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private var edgeProblem: String?
     private var todoProblem: String?
     private var decided: String?
+    /// The decision page's artifact, which "Decided on" opens; nil while it is read, or when the hub no longer holds it.
+    private var decidedArtifact: String?
+    private var decidedProblem: String?
+    /// The approved action whose decision is out: every peer holds still until the hub answers.
+    private var deciding: String?
+    /// Why an action's decision was refused, by action, under it.
+    private var actionProblem: [String: String] = [:]
     private var moving = false
     /// Ticks shown before the hub has written them, by ref.
     private var ticking: [String: Bool] = [:]
@@ -103,6 +110,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private let titleField = KitField()
     private let titleProblemLabel = TaskSheetController.problemLabel()
     private let decidedLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    private let decidedProblemLabel = TaskSheetController.problemLabel()
     private let stageProblemLabel = TaskSheetController.problemLabel()
     private let viewSwitch = KitSegmented(["Review", "Details"], selected: 0)
     private var closeButton: UIButton!
@@ -251,6 +259,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         }
         wireFields()
         render()
+        watchNeeds()
         Task { await load() }
     }
 
@@ -296,6 +305,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         stagePicker.accessibilityLabel = "Stage"
         decidedLabel.accessibilityIdentifier = "task-decided"
         decidedLabel.isHidden = true
+        decidedLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(decidedPressed)))
+        decidedProblemLabel.accessibilityIdentifier = "task-decided-problem"
         viewSwitch.accessibilityLabel = "Review or details"
         viewSwitch.accessibilityIdentifier = "task-view-switch"
         viewSwitch.addAction(UIAction { [weak self] _ in
@@ -303,11 +314,13 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             picked = viewSwitch.selectedIndex
             render()
         }, for: .valueChanged)
-        for part in [top, meta, titleButton, titleField, titleProblemLabel, decidedLabel, stageProblemLabel, Self.leading(viewSwitch)] as [UIView] {
+        for part in [top, meta, titleButton, titleField, titleProblemLabel, decidedLabel, decidedProblemLabel, stageProblemLabel, Self.leading(viewSwitch)] as [UIView] {
             head.addArrangedSubview(part)
         }
         head.setCustomSpacing(Space.space1, after: top)
     }
+
+    @objc private func decidedPressed() { openDecided() }
 
     private func wireFields() {
         titleField.addAction(UIAction { [weak self] _ in self?.saveTitle() }, for: .editingDidEnd)
@@ -415,11 +428,36 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     /// The decision this task was made from: the page's title and the card's question, as its record has them.
     private func readDecided() async {
         decided = nil
+        decidedArtifact = nil
+        decidedProblem = nil
         guard let task, let named = TaskWords.decided(task) else { return render() }
         guard let found = try? await api().decision(named.page), task.id == taskId else { return }
         let question = found.record?.cards.first { $0.id == named.card }?.question
-        decided = "Decided on " + (question.map { "\(found.title) › \($0)" } ?? found.title)
+        decided = question.map { "\(found.title) › \($0)" } ?? found.title
+        decidedArtifact = found.artifactId
         render()
+    }
+
+    /// "Decided on …" opens its decision page as the app opens any artifact
+    /// (TaskReview's artifact): brought to the front of the panel of the
+    /// session that made it, and that session opened, the sheet put away.
+    private func openDecided() {
+        guard let id = decidedArtifact else { return }
+        decidedProblem = nil
+        render()
+        Task {
+            do {
+                let found = try await hub.findArtifact(id)
+                if !found.shown { hub.openArtifact(id, in: found.instanceId) }
+                #if DEBUG
+                Logger(subsystem: "dev.cawco.app", category: "TaskSheet").notice("decided opens artifact \(id, privacy: .public) in \(found.instanceId, privacy: .public) shown=\(found.shown)")
+                #endif
+                openSession(found.instanceId)
+            } catch {
+                decidedProblem = error.localizedDescription
+                render()
+            }
+        }
     }
 
     /// Every write answers with the task as the hub wrote it, and is a commit in its history.
@@ -438,6 +476,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         history = nil
         picked = nil
         decided = nil
+        decidedArtifact = nil
+        decidedProblem = nil
         titleProblem = nil
         stageProblem = nil
         edgeProblem = nil
@@ -470,7 +510,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             parts = [(.state, [.readProblem])]
         } else if let task {
             if !onReview {
-                if !needsAsks(task).isEmpty || !task.blockedBy.isEmpty { parts.append((.needs, [.needs])) }
+                if !needsAsks(task).isEmpty || !needsActions(task).isEmpty || !task.blockedBy.isEmpty { parts.append((.needs, [.needs])) }
                 if !task.problems.isEmpty { parts.append((.state, [.warnings])) }
                 descriptionPart.text = task.description
                 acceptancePart.text = task.acceptance
@@ -540,6 +580,27 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         return sessions.flatMap { hub.needs.parked[$0] ?? [] }.filter { $0.routedTo == nil }
     }
 
+    /// The approved actions filed for it (needs.svelte.ts `actionsOf`).
+    private func needsActions(_ task: TaskView) -> [ApprovedAction] {
+        hub.fleet.actions(projectId: projectId, taskId: task.id)
+    }
+
+    /// What it needs from you moves without the task changing (an action
+    /// filed or decided, an ask raised or answered): the sheet draws again
+    /// on each, and the card leaves only when the hub says so.
+    private func watchNeeds() {
+        withObservationTracking {
+            _ = hub.fleet.actions
+            _ = hub.needs.parked
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.render()
+                self.watchNeeds()
+            }
+        }
+    }
+
     private func renderHead() {
         let shown = task
         idLabel.text = taskId
@@ -548,8 +609,19 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         titleButton.accessibilityLabel = shown?.title
         show(titleProblem, in: titleProblemLabel)
         show(stageProblem, in: stageProblemLabel)
-        decidedLabel.text = decided
+        // "Decided on" in muted meta, the page and its card in the link's ink when it can be opened.
+        if let decided {
+            let words = NSMutableAttributedString(string: "Decided on ", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted))
+            words.append(NSAttributedString(string: decided, attributes: TypeScale.typeMeta.attributes(color: decidedArtifact == nil ? Palette.inkMuted : Palette.linkInk)))
+            decidedLabel.attributedText = words
+        } else {
+            decidedLabel.attributedText = nil
+        }
         decidedLabel.isHidden = decided == nil
+        decidedLabel.isUserInteractionEnabled = decidedArtifact != nil
+        decidedLabel.accessibilityTraits = decidedArtifact == nil ? .staticText : .link
+        decidedLabel.accessibilityHint = decidedArtifact == nil ? nil : "Open the decision"
+        show(decidedProblem, in: decidedProblemLabel)
 
         // The facts line: the stage (a picker), Working or Queued, its dates, its labels at the end.
         meta.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -662,8 +734,10 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     // MARK: What else it needs from you (tasks/TaskNeeds.svelte)
 
     /// Its session asks you something, with Answer, which opens the session
-    /// where the ask stands; it waits on tasks that have not landed, quiet,
-    /// each with Open. (Its failed session is the review's to say.)
+    /// where the ask stands; an approved action filed for it waits on your
+    /// decision, with Deny and Approve as peers (one that failed or whose
+    /// outcome is unknown says so, with Remove); it waits on tasks that have
+    /// not landed, quiet, each with Open. (Its failed session is the review's to say.)
     private func needsView(_ task: TaskView) -> UIView {
         let stack = UIStackView()
         stack.axis = .vertical
@@ -677,6 +751,9 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             stack.addArrangedSubview(needsCard(glyph: .attention, tint: Palette.statusAttnGlyph, title: "Its session asks you", when: when,
                                                body: [line, Self.leading(answer)], quiet: false))
         }
+        for action in needsActions(task) {
+            stack.addArrangedSubview(actionCard(action))
+        }
         if !task.blockedBy.isEmpty {
             let rows = task.blockedBy.map { id -> UIView in
                 let open = KitButton.make("Open", variant: .ghost, height: .xs) { [weak self] in self?.show(task: id) }
@@ -688,10 +765,98 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         return stack
     }
 
+    /// An approved action filed for the task (TaskNeeds.svelte's second
+    /// reason): proposed, the call and why, its arguments in a well, Deny and
+    /// Approve as peers; failed or of unknown outcome, what became of it, and
+    /// Remove. Every button holds still while one decision is out.
+    private func actionCard(_ action: ApprovedAction) -> UIView {
+        let proposed = action.state == .proposed
+        let title = proposed ? "Approve \(action.tool) on \(action.connection)"
+            : action.state == .unknown ? "\(action.tool) may or may not have happened" : "\(action.tool) failed"
+        let line = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
+        line.text = switch action.state {
+        case .unknown: "Check \(action.service)."
+        case .failed: action.error ?? "\(action.service) did not take it."
+        default: action.reason
+        }
+        var body: [UIView] = [line]
+        if proposed { body.append(argsWell(action.args)) }
+        if let problem = actionProblem[action.id] {
+            let fault = Self.problemLabel(problem)
+            fault.accessibilityIdentifier = "task-action-problem-\(action.id)"
+            body.append(fault)
+        }
+        let busy = deciding != nil
+        let peers: [UIButton]
+        if proposed {
+            let deny = KitButton.make("Deny", glyph: .close, variant: .fail, height: .sm) { [weak self] in self?.decide(action, .deny) }
+            deny.accessibilityLabel = "Deny \(action.tool) on \(action.connection)"
+            deny.accessibilityIdentifier = "task-action-deny-\(action.id)"
+            let approve = KitButton.make("Approve", glyph: .tick, variant: .done, height: .sm) { [weak self] in self?.decide(action, .approve) }
+            approve.accessibilityLabel = "Approve \(action.tool) on \(action.connection)"
+            approve.accessibilityIdentifier = "task-action-approve-\(action.id)"
+            peers = [deny, approve]
+        } else {
+            let remove = KitButton.make("Remove", glyph: .check, variant: .secondary, height: .sm) { [weak self] in self?.decide(action, .checked) }
+            remove.accessibilityIdentifier = "task-action-remove-\(action.id)"
+            peers = [remove]
+        }
+        for peer in peers { peer.isEnabled = !busy }
+        let acts = UIStackView(arrangedSubviews: peers + [UIView()])
+        acts.alignment = .center
+        // A finger's peers stand a `space-4` apart, a pointer's `space-2` (`@media (pointer: coarse)`).
+        acts.spacing = traitCollection.userInterfaceIdiom == .mac ? Space.space2 : Space.space4
+        body.append(acts)
+        let card = needsCard(glyph: proposed ? .attention : .failed, tint: proposed ? Palette.statusAttnGlyph : Palette.statusFailGlyph,
+                             title: title, when: RailAge.ago(action.endedAt ?? action.createdAt, now: now), body: body, quiet: false)
+        card.accessibilityIdentifier = "task-action-\(action.id)"
+        return card
+    }
+
+    /// The call's arguments as they will be sent: mono meta type in the well, up to 12rem tall, then it scrolls.
+    private func argsWell(_ args: String) -> UIView {
+        let text = KitLabel(Self.mono, ink: Palette.inkStrong, lines: 0)
+        text.text = args
+        text.lineBreakMode = .byCharWrapping
+        text.translatesAutoresizingMaskIntoConstraints = false
+        let well = UIScrollView()
+        well.backgroundColor = Palette.surfaceWell
+        well.layer.cornerRadius = Radius.radiusSm
+        well.layer.cornerCurve = .continuous
+        well.layer.borderWidth = 1
+        well.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
+        well.addSubview(text)
+        let inset = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space2, trailing: Space.space3)
+        let fits = well.heightAnchor.constraint(equalTo: text.heightAnchor, constant: inset.top + inset.bottom)
+        fits.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            text.topAnchor.constraint(equalTo: well.contentLayoutGuide.topAnchor, constant: inset.top),
+            text.bottomAnchor.constraint(equalTo: well.contentLayoutGuide.bottomAnchor, constant: -inset.bottom),
+            text.leadingAnchor.constraint(equalTo: well.contentLayoutGuide.leadingAnchor, constant: inset.leading),
+            text.trailingAnchor.constraint(equalTo: well.contentLayoutGuide.trailingAnchor, constant: -inset.trailing),
+            text.widthAnchor.constraint(equalTo: well.frameLayoutGuide.widthAnchor, constant: -(inset.leading + inset.trailing)),
+            well.heightAnchor.constraint(lessThanOrEqualToConstant: 192),
+            fits,
+        ])
+        return well
+    }
+
+    /// Your decision on an action; a refusal stays under it, in the hub's words.
+    private func decide(_ action: ApprovedAction, _ decision: HubConnection.ActionDecision) {
+        deciding = action.id
+        actionProblem[action.id] = nil
+        render()
+        Task {
+            do { try await hub.decide(action, decision) } catch { actionProblem[action.id] = error.localizedDescription }
+            deciding = nil
+            render()
+        }
+    }
+
     /// `.needs`: the needs-you wash and edge; `.quiet`: the recess and a hairline.
     private func needsCard(glyph: Glyph, tint: UIColor, title: String, when: String, body: [UIView], quiet: Bool) -> UIView {
-        let mark = GlyphView(glyph, size: Size.iconSm, tint: tint)
-        let heading = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+        let mark = GlyphView(glyph, size: Size.iconMd, tint: tint)
+        let heading = KitLabel(TypeScale.typeLabel, ink: quiet ? Palette.inkStrong : Palette.statusAttnInk, lines: 0)
         heading.text = title
         let time = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
         time.text = when

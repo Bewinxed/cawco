@@ -373,6 +373,7 @@ public final class HubConnection {
         fleet.projects = []
         fleet.resetPulses()
         fleet.catalogs = [:]
+        fleet.catalogLeftOut = [:]
         fleet.catalogsTried = []
         fleet.fleetRead = false
         fleet.liveRead = false
@@ -1001,6 +1002,8 @@ public final class HubConnection {
         async let watched = try? await client.getApiFleetWatchNotices().ok.body.json.notices
         // The fleet's upstream answer: Needs you asks it while nobody has.
         async let choices = try? await client.getApiFleetChoices().ok.body.json
+        // The approved actions waiting on you: frames keep them from here.
+        async let waiting = try? await client.getApiActionsWaiting().ok.body.json.actions
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -1010,6 +1013,7 @@ public final class HubConnection {
         let readMoves = await moving
         let readWatched = await watched
         let readUpstream = await choices.map { UpstreamAnswer($0.upstream) }
+        let readWaiting = await waiting
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -1080,6 +1084,9 @@ public final class HubConnection {
             }
             if let readUpstream {
                 hub.fleet.upstream = readUpstream
+            }
+            if let readWaiting {
+                hub.fleet.actions = readWaiting
             }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
@@ -1208,16 +1215,25 @@ public final class HubConnection {
     public func reloadCatalog(_ machineId: String) async throws {
         defer { fleet.catalogsTried.insert(machineId) }
         let listing = try await listSessions(machineId: machineId)
-        for left in listing.unanswered {
-            log.notice("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) did not answer within \(left.after, privacy: .public) ms; its sessions are kept")
+        // The web's sentence names the machine as client.svelte.ts `machineName` does: its hostname, else its id.
+        let machine = fleet.machines.first { $0.machineId == machineId }.map(\.hostname).flatMap { $0.isEmpty ? nil : $0 } ?? machineId
+        let said = listing.unanswered.map {
+            Words.Catalog.harnessDidntAnswer(harness: $0.harness.rawValue, machine: machine, seconds: Int(($0.after / 1000).rounded()))
+        } + listing.failed.map {
+            Words.Catalog.harnessCouldntList(harness: $0.harness.rawValue, machine: machine, error: $0.error)
         }
-        for left in listing.failed {
-            log.error("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) failed: \(left.error, privacy: .public); its sessions are kept")
+        for sentence in said {
+            log.notice("listSessions on \(machineId, privacy: .public): \(sentence, privacy: .public)")
         }
         let kept = Set(listing.unanswered.map(\.harness) + listing.failed.map(\.harness))
         let held = kept.isEmpty ? [] : (fleet.catalogs[machineId] ?? []).filter { kept.contains($0.harness) }
         fleet.catalogs[machineId] = listing.sessions + held
+        catalogLoads += 1
+        fleet.catalogLeftOut[machineId] = CatalogLeftOut(sentences: said, load: catalogLoads)
     }
+
+    /// Counts the catalog loads that answered, so each one's `CatalogLeftOut` is told from the last.
+    @ObservationIgnored private var catalogLoads = 0
 
     /// The background path reports a failed read without throwing out of its task.
     private func readCatalog(_ machineId: String) {
@@ -1421,6 +1437,8 @@ public final class HubConnection {
             for listener in projectStopListeners.values { listener(frame) }
         case let .watchNotices(notices):
             fleet.watchNotices = notices
+        case let .actions(actions):
+            fleet.actions = actions
         case let .lawsBroken(broken):
             fleet.lawsBroken = broken
         case let .fleetUpstream(answer):

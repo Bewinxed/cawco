@@ -100,6 +100,7 @@ import {
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,
+  catalogWords,
   classifyCommand,
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
@@ -6558,7 +6559,11 @@ export function harnessDidntAnswer(
   machineId: string,
   { harness, after }: HarnessUnanswered
 ): string {
-  return `${harness} on ${machineName(machineId)} didn't answer within ${Math.round(after / 1000)} s, so its stored sessions are the ones it listed last.`;
+  return catalogWords.harnessDidntAnswer(
+    harness,
+    machineName(machineId),
+    Math.round(after / 1000)
+  );
 }
 
 /**
@@ -6569,7 +6574,11 @@ export function harnessCouldntList(
   machineId: string,
   { harness, error }: HarnessFailed
 ): string {
-  return `${harness} on ${machineName(machineId)} couldn't list its stored sessions (${error}), so they are the ones it listed last.`;
+  return catalogWords.harnessCouldntList(
+    harness,
+    machineName(machineId),
+    error
+  );
 }
 
 /** A `listSessions` answer's harnesses it left out: not answered in time, or their listing threw. */

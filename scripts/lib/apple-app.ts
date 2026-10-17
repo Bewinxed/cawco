@@ -80,10 +80,32 @@ export function staleApp(
 
 /**
  * The checkout's simulator app, or `PROBE_IOS_APP` when a run names
- * another; either way only when it was built from this tree.
+ * another; either way only when it was built from this tree. A checkout
+ * whose own app is missing or was built from another tree builds it first
+ * (`build-both.sh ios`): a host check runs an ios-* spec in a fresh
+ * checkout of its own, where only the compile check would have built it,
+ * and a compile check that passed earlier is not run again. An app a run
+ * names is never built over; its problem is said.
  */
 export function freshApp(top: string): { path: string; problem?: string } {
-  const path = process.env.PROBE_IOS_APP ?? simulatorApp(top);
+  const named = process.env.PROBE_IOS_APP;
+  const path = named ?? simulatorApp(top);
+  const problem = staleApp(top, path);
+  if (!problem || named) {
+    return { path, problem };
+  }
+  const root = top.replace(TRAILING_SLASH, "");
+  console.log(`${problem}: building it`);
+  const build = Bun.spawnSync(
+    ["bash", "apps/apple/scripts/build-both.sh", "ios"],
+    { cwd: root, stdout: "inherit", stderr: "inherit" }
+  );
+  if (build.exitCode !== 0) {
+    return {
+      path,
+      problem: `bash apps/apple/scripts/build-both.sh ios exited ${build.exitCode} in ${root}`,
+    };
+  }
   return { path, problem: staleApp(top, path) };
 }
 

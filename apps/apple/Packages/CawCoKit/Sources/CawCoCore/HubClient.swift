@@ -37,6 +37,7 @@ private struct LossyReads: ClientMiddleware {
         Operations.GetApiContinuations.id: prune(Components.Schemas.GetApiContinuations200.self),
         Operations.GetApiMoves.id: prune(Components.Schemas.GetApiMoves200.self),
         Operations.GetApiFleetWatchNotices.id: prune(Components.Schemas.GetApiFleetWatchNotices200.self),
+        Operations.GetApiActionsWaiting.id: prune(Components.Schemas.GetApiActionsWaiting200.self),
         Operations.GetApiUsageLimits.id: prune(Components.Schemas.UsageLimitsResponse.self),
         Operations.GetApiUsageSpend.id: prune(Components.Schemas.UsageSpend.self),
         // A transcript's page: the read again an unreadable stream event asks

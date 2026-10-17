@@ -692,4 +692,17 @@ public enum Words {
         /// A project's settings: the fleet's answer stands until the project picks its own.
         public static let inherit = "Same as the fleet"
     }
+
+    public enum Catalog {
+        // packages/core/src/words/catalog.ts `catalogWords`
+        /// One harness on `machine` didn't list in time: its sessions are the ones it listed last.
+        public static func harnessDidntAnswer(harness: String, machine: String, seconds: Int) -> String {
+            "\(harness) on \(machine) didn't answer within \(seconds) s, so its stored sessions are the ones it listed last."
+        }
+
+        /// One harness on `machine` couldn't list (its listing threw), in harnessDidntAnswer's voice.
+        public static func harnessCouldntList(harness: String, machine: String, error: String) -> String {
+            "\(harness) on \(machine) couldn't list its stored sessions (\(error)), so they are the ones it listed last."
+        }
+    }
 }

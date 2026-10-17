@@ -254,6 +254,8 @@ enum Frame {
     case projectStop(Components.Schemas.ProjectStopFrame)
     /// Every open fleet-watch notice, whole, on each change: a session fleet watch tells you about.
     case watchNotices([Components.Schemas.FleetWatchNotice])
+    /// Every approved action waiting on you, whole, on each change.
+    case actions([Components.Schemas.ApprovedActionView])
     /// Every system law the hub caught broken since it started, whole, on each break (core invariant.ts).
     case lawsBroken([Components.Schemas.LawBroken])
     /// The fleet's upstream answer was given or changed, anywhere: Needs you stops asking.
@@ -305,6 +307,8 @@ enum Frame {
             self = .projectStop(frame)
         case .fleetWatch_notices(let frame):
             self = .watchNotices(frame.notices)
+        case .actions(let frame):
+            self = .actions(frame.actions)
         case .laws_broken(let frame):
             self = .lawsBroken(frame.broken)
         case .fleet_upstream(let frame):
