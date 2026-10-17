@@ -42,3 +42,8 @@ none.
 - `scale-100` stands for `scale: 1`; `col-start-1 row-start-1` for `grid-area: 1 / 1`; `shrink-0`, `grow`, `shrink`, `basis-full`, `list-none`, `touch-pan-y`, `cursor-crosshair` are Tailwind structural utilities outside the map's list.
 - `text-right` kept (not `text-end`) where the source said `right`.
 - cross-file hooks (delta O2): none. colour tokens (delta O1): none.
+
+## Delta P
+- svelte-check: 0 errors, 1 warning (Shot.svelte:212, the foundation's own). No `Unused CSS selector` in this lane; every residual subject is an element of its own file, or `:global(…)` under one.
+- important kept: apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte:67 `stroke: var(--focus-ring) !important` stays as the foreign-dom residual (xyflow's path).
+- wf-* and nodrag/nopan left as written (delta P2).
