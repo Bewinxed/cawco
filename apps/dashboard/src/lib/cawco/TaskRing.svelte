@@ -114,7 +114,7 @@
 
   .task-ring g[data-shown="false"] {
     opacity: 0;
-    scale: 0.6;
+    scale: var(--check-scale);
   }
 
   /* Clamped, never zeroed, and the travel goes — the swap still reads as one
