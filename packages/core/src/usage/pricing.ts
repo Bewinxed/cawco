@@ -1,3 +1,4 @@
+import type { ModelTurnUsage } from "../harness";
 import snapshot from "./pricing-snapshot.json";
 import type { UsageTokens } from "./types";
 
@@ -10,6 +11,10 @@ import type { UsageTokens } from "./types";
  * (https://platform.claude.com/docs/en/about-claude/pricing), which
  * models.dev does not publish. A cache read the source omits is derived as
  * `input * 0.1` (ccusage pricing.rs:916-922).
+ *
+ * `tiers` are the model's long-context prices, sorted by `above` ascending: a
+ * request whose prompt is over `above` tokens pays that tier's rates for all
+ * of it. Empty for a model priced the same at every prompt length.
  */
 export interface ModelRates {
   cacheRead: number;
@@ -17,9 +22,10 @@ export interface ModelRates {
   cacheWrite1h: number;
   input: number;
   output: number;
+  tiers: { above: number; rates: Omit<ModelRates, "tiers"> }[];
 }
 
-interface SnapshotModel {
+interface SnapshotRates {
   cacheRead?: number;
   cacheWrite?: number;
   cacheWrite1h?: number;
@@ -27,10 +33,17 @@ interface SnapshotModel {
   output: number;
 }
 
+interface SnapshotModel extends SnapshotRates {
+  /** models.dev's `cost.tiers` of type `context`: `above` is its `tier.size`. */
+  tiers?: (SnapshotRates & { above: number })[];
+}
+
 export interface PricingSnapshot {
   generatedAt?: string;
   /** Rates by `provider/model`, per million tokens. */
   models: Record<string, SnapshotModel>;
+  /** `provider/model: type` for each models.dev tier of a type not read. */
+  skippedTiers?: string[];
   source?: string;
 }
 
@@ -155,21 +168,38 @@ function loadFromSnapshot(json: PricingSnapshot): void {
   fingerprint = hashRates();
 }
 
+/** Per-million rates as per-token ones, by the rules on {@link ModelRates}. */
+const perToken = (
+  m: SnapshotRates,
+  anthropic: boolean
+): Omit<ModelRates, "tiers"> => {
+  const input = m.input / PER_MILLION;
+  const documented1h = anthropic ? input * 2 : 0;
+  return {
+    input,
+    output: m.output / PER_MILLION,
+    cacheWrite: (m.cacheWrite ?? 0) / PER_MILLION,
+    cacheWrite1h:
+      m.cacheWrite1h === undefined
+        ? documented1h
+        : m.cacheWrite1h / PER_MILLION,
+    cacheRead:
+      m.cacheRead === undefined ? input * 0.1 : m.cacheRead / PER_MILLION,
+  };
+};
+
 function loadRates(json: PricingSnapshot): void {
   RATES.clear();
   for (const [id, m] of Object.entries(json.models)) {
-    const input = m.input / PER_MILLION;
-    const documented1h = id.startsWith(`${BARE_PROVIDER}/`) ? input * 2 : 0;
+    const anthropic = id.startsWith(`${BARE_PROVIDER}/`);
     RATES.set(id, {
-      input,
-      output: m.output / PER_MILLION,
-      cacheWrite: (m.cacheWrite ?? 0) / PER_MILLION,
-      cacheWrite1h:
-        m.cacheWrite1h === undefined
-          ? documented1h
-          : m.cacheWrite1h / PER_MILLION,
-      cacheRead:
-        m.cacheRead === undefined ? input * 0.1 : m.cacheRead / PER_MILLION,
+      ...perToken(m, anthropic),
+      tiers: (m.tiers ?? [])
+        .map((tier) => ({
+          above: tier.above,
+          rates: perToken(tier, anthropic),
+        }))
+        .sort((a, b) => a.above - b.above),
     });
   }
 }
@@ -243,9 +273,11 @@ const listed = (provider: string, model: string): ModelRates | undefined => {
  * `provider/model`, or a bare Claude id, Anthropic's. Only that provider's
  * catalog prices it, with its clock applied ({@link clockFactor}); null when
  * the provider lists no price for it. Claude Code's context suffix
- * (`claude-opus-5-5[1m]`) is dropped first: "Claude 4.6 and later models …
- * include the full 1M token context window at standard pricing"
- * (https://platform.claude.com/docs/en/about-claude/pricing).
+ * (`claude-opus-5-5[1m]`) is dropped first: in Anthropic's own catalog,
+ * "Claude 4.6 and later models (except Claude Haiku 5.5) … include the full
+ * 1M token context window at standard pricing"
+ * (https://platform.claude.com/docs/en/about-claude/pricing); Haiku 5.5's
+ * long-context price is its tier, which {@link costForUsage} picks.
  */
 export function resolveRates(id: string, at: number): ModelRates | null {
   const { provider, model } = split(id);
@@ -254,68 +286,92 @@ export function resolveRates(id: string, at: number): ModelRates | null {
     return null;
   }
   const factor = clockFactor(id, at);
+  const scale = (r: Omit<ModelRates, "tiers">): Omit<ModelRates, "tiers"> => ({
+    input: r.input * factor,
+    output: r.output * factor,
+    cacheRead: r.cacheRead * factor,
+    cacheWrite: r.cacheWrite * factor,
+    cacheWrite1h: r.cacheWrite1h * factor,
+  });
   return factor === 1
     ? rates
     : {
-        input: rates.input * factor,
-        output: rates.output * factor,
-        cacheRead: rates.cacheRead * factor,
-        cacheWrite: rates.cacheWrite * factor,
-        cacheWrite1h: rates.cacheWrite1h * factor,
+        ...scale(rates),
+        tiers: rates.tiers.map((tier) => ({
+          above: tier.above,
+          rates: scale(tier.rates),
+        })),
       };
 }
 
 /**
- * `cost = input*rIn + output*rOut + cacheCreation*rCacheWrite + cacheRead*rCacheRead`
- * at the rates of `at`. No long-context tier. A miss returns 0 and records
- * the id in {@link missingPricing}.
+ * One request's cost at the rates of `at`:
+ * `input*rIn + output*rOut + cacheWrite5m*rCacheWrite + cacheWrite1h*rCacheWrite1h + cacheRead*rCacheRead`,
+ * where the 1-hour writes are `cacheCreation1h` and the rest of
+ * `cacheCreation` are 5-minute ones.
+ *
+ * The rates are those of the model's highest tier whose `above` the prompt is
+ * over, else its base rates. The prompt is `input + cacheCreation + cacheRead`;
+ * output never counts. "A request's prompt length counts all of its input
+ * tokens, including cache reads and cache writes. Each request is priced on
+ * its own: a request over the threshold pays the higher prices even when part
+ * of its prompt is a cache hit"
+ * (https://platform.claude.com/docs/en/about-claude/pricing). So only one
+ * request's tokens are ever priced together, never a turn's sum.
+ *
+ * Null when the provider lists no price for the model; the id is recorded in
+ * {@link missingPricing}.
  */
 export function costForUsage(
   modelId: string,
   tokens: UsageTokens,
   at: number
-): number {
-  const rates = resolveRates(modelId, at);
-  if (!rates) {
+): number | null {
+  const listedRates = resolveRates(modelId, at);
+  if (!listedRates) {
     missingPricing.add(modelId);
-    return 0;
+    return null;
   }
+  const prompt = tokens.input + tokens.cacheCreation + tokens.cacheRead;
+  const rates =
+    listedRates.tiers.findLast((tier) => prompt > tier.above)?.rates ??
+    listedRates;
+  const write1h = tokens.cacheCreation1h ?? 0;
   return (
     tokens.input * rates.input +
     tokens.output * rates.output +
-    tokens.cacheCreation * rates.cacheWrite +
+    (tokens.cacheCreation - write1h) * rates.cacheWrite +
+    write1h * rates.cacheWrite1h +
     tokens.cacheRead * rates.cacheRead
   );
 }
 
-/** One turn's tokens, cache writes split by their lifetime. */
-export interface TurnTokens {
-  cacheRead: number;
-  cacheWrite1h: number;
-  cacheWrite5m: number;
-  input: number;
-  output: number;
-}
-
-/** A turn at its provider's rates when it ran (`at`); null when the provider lists none for the model. */
-export function costForTurn(
-  modelId: string,
-  tokens: TurnTokens,
+/**
+ * One request's usage on `model` (`provider/model`) at `at` (epoch ms), priced
+ * on its own by {@link costForUsage}: the unit a turn's usage is summed from.
+ */
+export const pricedRequest = (
+  model: string,
+  usage: Omit<ModelTurnUsage, "costUsd" | "model">,
   at: number
-): number | null {
-  const rates = resolveRates(modelId, at);
-  if (!rates) {
-    missingPricing.add(modelId);
-    return null;
-  }
-  return (
-    tokens.input * rates.input +
-    tokens.output * rates.output +
-    tokens.cacheRead * rates.cacheRead +
-    tokens.cacheWrite5m * rates.cacheWrite +
-    tokens.cacheWrite1h * rates.cacheWrite1h
-  );
-}
+): ModelTurnUsage => ({
+  model,
+  ...usage,
+  costUsd: costForUsage(
+    model,
+    {
+      input: usage.input,
+      output: usage.output,
+      cacheRead: usage.cacheRead,
+      cacheCreation: usage.cacheWrite,
+      ...(usage.cacheWrite1h === undefined
+        ? {}
+        : { cacheCreation1h: usage.cacheWrite1h }),
+      reasoning: 0,
+    },
+    at
+  ),
+});
 
 /**
  * Refresh the in-memory rates from models.dev, at most once per 24h. On failure
@@ -353,48 +409,92 @@ export async function refreshPricing(): Promise<number> {
   return RATES.size;
 }
 
+/** One models.dev `cost` (or one of its `tiers`), per million tokens. */
+interface ModelsDevCost {
+  cache_read?: number;
+  cache_write?: number;
+  cache_write_1h?: number;
+  input?: number;
+  output?: number;
+}
+
+type ModelsDevTier = ModelsDevCost & {
+  tier?: { size?: number; type?: string };
+};
+
+/** A models.dev cost as snapshot rates; undefined without input and output prices. */
+const ratesOf = (cost: ModelsDevCost): SnapshotRates | undefined => {
+  if (cost.input === undefined || cost.output === undefined) {
+    return undefined;
+  }
+  const rates: SnapshotRates = { input: cost.input, output: cost.output };
+  if (cost.cache_write_1h !== undefined) {
+    rates.cacheWrite1h = cost.cache_write_1h;
+  }
+  if (cost.cache_write !== undefined) {
+    rates.cacheWrite = cost.cache_write;
+  }
+  if (cost.cache_read !== undefined) {
+    rates.cacheRead = cost.cache_read;
+  }
+  return rates;
+};
+
+/**
+ * A model's `context` tiers, each above its `tier.size`; every other tier is
+ * named (`key: type`) in `skipped`.
+ */
+const contextTiers = (
+  key: string,
+  tiers: ModelsDevTier[],
+  skipped: string[]
+): NonNullable<SnapshotModel["tiers"]> =>
+  tiers.flatMap((tier) => {
+    const rates = ratesOf(tier);
+    if (
+      tier.tier?.type !== "context" ||
+      tier.tier.size === undefined ||
+      !rates
+    ) {
+      skipped.push(`${key}: ${tier.tier?.type ?? "untyped"}`);
+      return [];
+    }
+    return [{ above: tier.tier.size, ...rates }];
+  });
+
 /**
  * models.dev's {@link CATALOGS} as rates keyed `provider/model`. The bundled
  * snapshot is this function's output (`bun run pricing` in packages/core).
+ * A `cost.tiers` entry of type `context` is a long-context tier above its
+ * `tier.size`; a tier of any other type is left out and named in
+ * `skippedTiers`.
  */
 export function filterModelsDev(raw: unknown): PricingSnapshot {
   interface Provider {
     models?: Record<
       string,
-      {
-        cost?: {
-          input?: number;
-          output?: number;
-          cache_write?: number;
-          cache_write_1h?: number;
-          cache_read?: number;
-        };
-      }
+      { cost?: ModelsDevCost & { tiers?: ModelsDevTier[] } }
     >;
   }
   const models: Record<string, SnapshotModel> = {};
+  const skippedTiers: string[] = [];
   for (const provider of CATALOGS) {
     const catalog = (raw as Record<string, Provider>)[provider];
     if (!catalog?.models) {
       continue;
     }
-    for (const [id, m] of Object.entries(catalog.models)) {
-      const { cost } = m;
-      if (!cost || cost.input === undefined || cost.output === undefined) {
+    for (const [id, { cost }] of Object.entries(catalog.models)) {
+      const entry: SnapshotModel | undefined = cost && ratesOf(cost);
+      if (!entry) {
         continue;
       }
-      const entry: SnapshotModel = { input: cost.input, output: cost.output };
-      if (cost.cache_write_1h !== undefined) {
-        entry.cacheWrite1h = cost.cache_write_1h;
+      const key = `${provider}/${id}`;
+      const tiers = contextTiers(key, cost?.tiers ?? [], skippedTiers);
+      if (tiers.length > 0) {
+        entry.tiers = tiers;
       }
-      if (cost.cache_write !== undefined) {
-        entry.cacheWrite = cost.cache_write;
-      }
-      if (cost.cache_read !== undefined) {
-        entry.cacheRead = cost.cache_read;
-      }
-      models[`${provider}/${id}`] = entry;
+      models[key] = entry;
     }
   }
-  return { source: MODELS_DEV_URL, models };
+  return { source: MODELS_DEV_URL, models, skippedTiers };
 }

@@ -1001,12 +1001,15 @@ export interface NeutralStreamMessage {
 /**
  * What one model spent in one turn. `cacheWrite` is every cache write;
  * `cacheWrite1h` the part of it written with a 1-hour lifetime, absent when
- * the harness does not split it.
+ * the harness does not split it. `costUsd` is the sum of each request's own
+ * price (`pricedRequest`, at its prompt's tier and its time), null when
+ * the model's provider lists no price for it; a summed turn is never priced.
  */
 export interface ModelTurnUsage {
   cacheRead: number;
   cacheWrite: number;
   cacheWrite1h?: number;
+  costUsd: number | null;
   input: number;
   model: string;
   output: number;
@@ -1024,7 +1027,11 @@ export interface ClaudeModelUsage {
   outputTokens: number;
 }
 
-/** A turn's requests summed by model; a model that spent nothing is left out. */
+/**
+ * A turn's priced requests summed by model, their costs with them (null once
+ * any request of the model went unpriced); a model that spent nothing is left
+ * out.
+ */
 export const usageByModel = (
   requests: Iterable<ModelTurnUsage>
 ): ModelTurnUsage[] => {
@@ -1039,6 +1046,10 @@ export const usageByModel = (
     held.output += usage.output;
     held.cacheRead += usage.cacheRead;
     held.cacheWrite += usage.cacheWrite;
+    held.costUsd =
+      held.costUsd === null || usage.costUsd === null
+        ? null
+        : held.costUsd + usage.costUsd;
     if (usage.cacheWrite1h !== undefined) {
       held.cacheWrite1h = (held.cacheWrite1h ?? 0) + usage.cacheWrite1h;
     }

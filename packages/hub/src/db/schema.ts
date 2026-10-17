@@ -2436,7 +2436,9 @@ export const turnUsage = sqliteTable(
     outputTokens: integer("output_tokens").notNull(),
     /**
      * Claude: the change in its `modelUsage[model].costUSD`, Claude Code's own
-     * price. OpenCode and pi: the model's list rates. Null when unpriced.
+     * price. OpenCode and pi: the sum of each request's own price at the
+     * model's list rates and its prompt's tier, as the agent sent it. Null
+     * when unpriced.
      */
     costUsd: real("cost_usd"),
     keepAlive: integer("keep_alive", { mode: "boolean" }).notNull(),

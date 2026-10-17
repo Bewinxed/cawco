@@ -65,6 +65,7 @@ import {
   mcpNotConnectedLine,
   PROVIDER_LIMIT,
   PROVIDER_RETRY,
+  pricedRequest,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   SERVER_STOPPED_MID_TURN,
@@ -544,8 +545,12 @@ interface ChildState {
   toolsEmitted: Map<string, "called" | "resolved">;
 }
 
-/** What a turn's assistant messages spent, by message id. */
+/**
+ * What a turn's assistant messages spent, by message id: OpenCode's own
+ * `cost`, and the tokens priced on their own at the step's start (`at`).
+ */
 interface StepUsage {
+  at: number;
   cost: number;
   tokens: ModelTurnUsage;
 }
@@ -1130,10 +1135,12 @@ export class OpencodeSession implements HarnessSession {
       case "session.step.started": {
         this.#turnProvider = event.data.model.providerID;
         const id = event.data.assistantMessageID;
-        const timestamp = new Date(event.data.started).toISOString();
+        const started = new Date(event.data.started);
+        const timestamp = started.toISOString();
         this.#created.set(id, timestamp);
         this.#completion = { uuid: id, timestamp };
         this.#steps.set(id, {
+          at: started.getTime(),
           cost: 0,
           tokens: {
             model: `${event.data.model.providerID}/${event.data.model.id}`,
@@ -1141,6 +1148,7 @@ export class OpencodeSession implements HarnessSession {
             output: 0,
             cacheRead: 0,
             cacheWrite: 0,
+            costUsd: 0,
           },
         });
         break;
@@ -1153,13 +1161,16 @@ export class OpencodeSession implements HarnessSession {
           step.cost = cost ?? 0;
           // 2.0's `input` leaves out the cached tokens, which are added back
           // for what the request sent; a request that failed sent none.
-          step.tokens = {
-            ...step.tokens,
-            input: tokens.input,
-            output: tokens.output,
-            cacheRead: tokens.cache.read,
-            cacheWrite: tokens.cache.write,
-          };
+          step.tokens = pricedRequest(
+            step.tokens.model,
+            {
+              input: tokens.input,
+              output: tokens.output,
+              cacheRead: tokens.cache.read,
+              cacheWrite: tokens.cache.write,
+            },
+            step.at
+          );
           this.#lastTokens = tokens;
           const sent = tokens.input + tokens.cache.read + tokens.cache.write;
           if (sent > 0) {
@@ -2356,14 +2367,18 @@ export class OpencodeSession implements HarnessSession {
     this.#completion = { uuid: message.id, timestamp };
     if (message.tokens) {
       this.#steps.set(message.id, {
+        at: message.time.created,
         cost: message.cost ?? 0,
-        tokens: {
-          model: `${message.model.providerID}/${message.model.id}`,
-          input: message.tokens.input,
-          output: message.tokens.output,
-          cacheRead: message.tokens.cache.read,
-          cacheWrite: message.tokens.cache.write,
-        },
+        tokens: pricedRequest(
+          `${message.model.providerID}/${message.model.id}`,
+          {
+            input: message.tokens.input,
+            output: message.tokens.output,
+            cacheRead: message.tokens.cache.read,
+            cacheWrite: message.tokens.cache.write,
+          },
+          message.time.created
+        ),
       });
     }
     const ordinals = { text: 0, reasoning: 0 };

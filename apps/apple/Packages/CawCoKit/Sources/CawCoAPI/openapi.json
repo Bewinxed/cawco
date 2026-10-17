@@ -48639,7 +48639,7 @@
         ]
       },
       "ModelTurnUsage": {
-        "description": "What one model spent in one turn. `cacheWrite` is every cache write;\n`cacheWrite1h` the part of it written with a 1-hour lifetime, absent when\nthe harness does not split it.",
+        "description": "What one model spent in one turn. `cacheWrite` is every cache write;\n`cacheWrite1h` the part of it written with a 1-hour lifetime, absent when\nthe harness does not split it. `costUsd` is the sum of each request's own\nprice (`pricedRequest`, at its prompt's tier and its time), null when\nthe model's provider lists no price for it; a summed turn is never priced.",
         "type": "object",
         "properties": {
           "cacheRead": {
@@ -48650,6 +48650,12 @@
           },
           "cacheWrite1h": {
             "type": "number"
+          },
+          "costUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
           },
           "input": {
             "type": "number"
@@ -48664,6 +48670,7 @@
         "required": [
           "cacheRead",
           "cacheWrite",
+          "costUsd",
           "input",
           "model",
           "output"

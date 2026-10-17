@@ -7,6 +7,12 @@ export type UsageHarness = "claude" | "opencode";
 
 export interface UsageTokens {
   cacheCreation: number; // Claude: see cacheCreationCount() rule in tokens.ts
+  /**
+   * The part of `cacheCreation` written with a 1-hour lifetime, priced at its
+   * own rate; absent when the source does not split it, so every write is
+   * priced as a 5-minute one.
+   */
+  cacheCreation1h?: number;
   cacheRead: number;
   input: number;
   output: number;

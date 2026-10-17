@@ -105,7 +105,7 @@ const recordOf = (
   // off-peak ones for DeepSeek), so the provider's clock is applied to it.
   const costUsd =
     own === 0
-      ? costForUsage(priced, tokens, ts)
+      ? (costForUsage(priced, tokens, ts) ?? 0)
       : own * clockFactor(priced, ts);
   return {
     harness: "opencode",
