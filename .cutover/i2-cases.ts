@@ -57,6 +57,10 @@ const { buttonVariants: tButtonVariants } = await import(
   ui(tApp, "button/button.svelte")
 );
 const { textareaVariants } = await import(ui(app, "textarea/textarea.svelte"));
+const { inputVariants } = await import(ui(app, "input/input.svelte"));
+const { sidebarMenuBadgeVariants } = await import(
+  ui(app, "sidebar/sidebar-menu-badge.svelte")
+);
 
 const repo = resolve(import.meta.dir, "..");
 const sources = new Map<string, string>();
@@ -153,6 +157,21 @@ const SESSION_DIALOG = "src/lib/cawco/spawn/NewSessionDialog.svelte";
 const PROJECT_CHIP = "src/lib/cawco/spawn/ProjectChip.svelte";
 const PROMPT_EDITOR = "src/lib/cawco/spawn/PromptEditor.svelte";
 const COMPOSER = "src/lib/cawco/transcript/Composer.svelte";
+const SHOT = "src/lib/cawco/transcript/Shot.svelte";
+const BADGE = "sidebar/sidebar-menu-badge.svelte";
+/** The rail's menu button a badge follows: the peer its states read. */
+const MENU_BUTTON = `<a href="#x" class="peer/menu-button" data-sidebar="menu-button" data-size="default">Fleet</a>`;
+
+const CN_CALL = /class=\{cn\(([\s\S]*?)className/;
+const STRING = /"([^"]*)"/g;
+/** Every string a kit part's `class={cn(…)}` lists before the caller's class. */
+function cnStrings(path: string): string {
+  const call = readFileSync(path, "utf8").match(CN_CALL)?.[1];
+  if (!call) {
+    throw new Error(`no cn call in ${path}`);
+  }
+  return [...call.matchAll(STRING)].map((m) => m[1]).join(" ");
+}
 
 /** A kit part's own classes: the first string of its `class={cn(…)}`. */
 function cnBase(path: string): string {
@@ -549,5 +568,90 @@ export const CASES: Case[] = [
     files: [file],
     t,
     now,
+  })),
+
+  // ------------- lane rewrites whose value is read through their context
+  {
+    name: "Shot.svelte:241 the skeleton's radius, inherited at T through .frame from .box",
+    files: [SHOT],
+    t: `<figure class="{S0}"><button aria-label="Open x" class="{S0} box" type="button"><span class="{S0} frame"><span data-check="skeleton" aria-hidden="true" class="kit-skeleton absolute inset-0 rounded-[inherit]"></span></span></button></figure>`,
+    now: `<figure ${attrs(SHOT, "now", "group/shot m-0")}><button data-slot="shot-box" aria-label="Open x" ${attrs(SHOT, "now", "onclick={open}")} type="button"><span ${attrs(SHOT, "now", "data-sized={intrinsic")}><span data-check="skeleton" aria-hidden="true" ${attrs(SHOT, "now", '"kit-skeleton absolute')}></span></span></button></figure>`,
+    show: ["border-top-left-radius", "border-bottom-right-radius"],
+  },
+  {
+    name: "Sidebar.svelte:907 the fleet count's badge, blocked and live",
+    files: ["src/lib/cawco/Sidebar.svelte"],
+    t: [
+      ["attn", "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"],
+      ["live", "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!"],
+    ]
+      .map(
+        ([tone, cls]) =>
+          `<li class="relative">${MENU_BUTTON}<div data-check="${tone}" data-num data-flip="pop box" data-sidebar="menu-badge" data-slot="sidebar-menu-badge" class="${tcn(cnStrings(ui(tApp, BADGE)), cls)}">3</div></li>`
+      )
+      .join(""),
+    now: ["attn", "live"]
+      .map(
+        (tone) =>
+          `<li class="relative">${MENU_BUTTON}<div data-check="${tone}" ${tone === "attn" ? "data-blocked" : ""} data-num data-flip="pop box" data-sidebar="menu-badge" data-slot="sidebar-menu-badge" class="${cn(cnStrings(ui(app, BADGE)), sidebarMenuBadgeVariants({ tone: "live" }))}">3</div></li>`
+      )
+      .join(""),
+    show: ["background-color", "color"],
+    states: [
+      REST,
+      {
+        name: "row hovered",
+        force: [{ sel: '[data-sidebar="menu-button"]', pseudo: ["hover"] }],
+      },
+      {
+        name: "row active",
+        attrs: [
+          {
+            sel: '[data-sidebar="menu-button"]',
+            name: "data-active",
+            value: "",
+          },
+        ],
+      },
+      { name: "dark", dark: true },
+    ],
+  },
+
+  // ----- the codemod's dropped `md:` twins, as the kit fields stand now
+  ...[
+    [
+      "HookTester.svelte:81 the sample field (md:text-label dropped)",
+      "src/lib/cawco/HookTester.svelte",
+      `<input data-check="m" class="${tcn(cnStrings(ui(tApp, "input/input.svelte")), "font-mono text-label md:text-label")}" placeholder="a sample value">`,
+      `<input data-check="m" class="${cn(cnStrings(ui(app, "input/input.svelte")), inputVariants({ face: "mono", text: "label" }))}" placeholder="a sample value">`,
+    ],
+    [
+      "KeyValueRows.svelte:40 the name field (md:text-meta dropped)",
+      "src/lib/cawco/KeyValueRows.svelte",
+      `<div class="flex"><input data-check="m" class="${tcn(cnStrings(ui(tApp, "input/input.svelte")), "h-8 flex-1 font-mono text-meta md:text-meta")}" placeholder="NAME"></div>`,
+      `<div class="flex"><input data-check="m" class="${cn(cnStrings(ui(app, "input/input.svelte")), inputVariants({ face: "mono", text: "meta" }), "h-space-8 flex-1")}" placeholder="NAME"></div>`,
+    ],
+    [
+      "KeyValueRows.svelte:51 the value field (md:text-meta dropped)",
+      "src/lib/cawco/KeyValueRows.svelte",
+      `<div class="flex"><input data-check="m" class="${tcn(cnStrings(ui(tApp, "input/input.svelte")), "h-8 flex-[2] font-mono text-meta md:text-meta")}" placeholder="value"></div>`,
+      `<div class="flex"><input data-check="m" class="${cn(cnStrings(ui(app, "input/input.svelte")), inputVariants({ face: "mono", text: "meta" }), "h-space-8 grow-(--value-grow) basis-(--value-basis)")}" style="--value-basis: 0%; --value-grow: 2" placeholder="value"></div>`,
+    ],
+    [
+      "RuleTester.svelte:78 the sample (md:text-label dropped)",
+      "src/lib/cawco/RuleTester.svelte",
+      `<textarea data-check="m" class="${tcn(cnStrings(ui(tApp, "textarea/textarea.svelte")), "resize-y bg-background font-mono text-label md:text-label")}"></textarea>`,
+      `<textarea data-check="m" class="${cn(cnStrings(ui(app, "textarea/textarea.svelte")), textareaVariants({ face: "mono", fill: "page", text: "label" }), "resize-y")}"></textarea>`,
+    ],
+  ].map(([name, file, t, now]) => ({
+    name,
+    files: [file],
+    t,
+    now,
+    states: [
+      { name: "under md", width: 700 },
+      { name: "over md", width: 900 },
+      focus("[data-check]"),
+    ],
   })),
 ];
