@@ -5804,6 +5804,8 @@ export const createServer = (
   // Who may call the hub: the mode, the person's devices, machines' keys
   // (hub-auth.ts). Its hooks are set once the sockets they reach exist.
   const hubAuth = createHubAuth({
+    // Where a pairing's code and QR send the person: https once a dashboard reached the hub over it.
+    dashboard: () => secureDashboardUrl(registry) ?? dashboardUrl(registry),
     db: db.hubAuth,
     hubId,
     session: (authorization) => identities.resolve(authorization),

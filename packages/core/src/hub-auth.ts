@@ -51,13 +51,25 @@ export interface OwnerDevice {
 /**
  * A client waiting to be paired (RFC 8628 §3.2's device authorization
  * response): what it shows (`userCode`), what it polls with (`deviceCode`,
- * kept by that client alone), how often, and for how long.
+ * kept by that client alone), how often, and for how long, and where the
+ * person approves it.
  */
 export interface PairingStart {
   deviceCode: string;
   expiresIn: number;
+  /** The hub asked (its `/health` `hubId`): a device that scans the code knows it is its own hub's. */
+  hubId: string;
   interval: number;
   userCode: string;
+  /** Where the person approves it (§3.2 `verification_uri`): the dashboard's Configure › Devices. */
+  verificationUri: string;
+  /**
+   * The same with the code and the hub in its query (§3.2
+   * `verification_uri_complete`: "includes the user_code ... designed for
+   * non-textual transmission"): what a QR beside the code carries, so a
+   * paired device's camera names the hub and the pairing in one scan.
+   */
+  verificationUriComplete: string;
 }
 
 /**

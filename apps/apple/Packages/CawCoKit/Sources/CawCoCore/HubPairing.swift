@@ -32,8 +32,11 @@ extension HubConnection {
     public enum DevicePairing: Sendable, Equatable {
         /// Asking the hub for a code.
         case asking
-        /// The code to approve on a paired device, until the hub forgets the ask.
-        case waiting(userCode: String, expiresAt: Date)
+        /// The code to approve on a paired device, until the hub forgets the
+        /// ask, and what a QR beside it carries (RFC 8628 §3.2
+        /// `verification_uri_complete`: the hub's Configure › Devices with
+        /// the code and the hub's id), which a paired device scans.
+        case waiting(userCode: String, expiresAt: Date, verificationUriComplete: String)
         /// The person denied it.
         case denied
         /// The hub no longer holds the ask: it waited past its time, or newer asks pushed it out.
@@ -114,7 +117,8 @@ extension HubConnection {
             return
         }
         guard !Task.isCancelled else { return }
-        stage(.waiting(userCode: started.userCode, expiresAt: .now.addingTimeInterval(started.expiresIn)))
+        stage(.waiting(userCode: started.userCode, expiresAt: .now.addingTimeInterval(started.expiresIn),
+                       verificationUriComplete: started.verificationUriComplete))
         var interval = Duration.seconds(started.interval)
         while !Task.isCancelled {
             try? await Task.sleep(for: interval)
@@ -168,8 +172,8 @@ extension HubConnection {
         pairing = next
         switch next {
         case .asking: pairingLog.notice("pairing stage asking")
-        case let .waiting(code, expiresAt):
-            pairingLog.notice("pairing stage waiting \(code, privacy: .public) for \(Int(expiresAt.timeIntervalSinceNow.rounded())) s")
+        case let .waiting(code, expiresAt, scanned):
+            pairingLog.notice("pairing stage waiting \(code, privacy: .public) for \(Int(expiresAt.timeIntervalSinceNow.rounded())) s, its QR \(scanned, privacy: .public)")
         case .denied: pairingLog.notice("pairing stage denied")
         case .expired: pairingLog.notice("pairing stage expired")
         case let .failed(message): pairingLog.notice("pairing stage failed: \(message, privacy: .public)")

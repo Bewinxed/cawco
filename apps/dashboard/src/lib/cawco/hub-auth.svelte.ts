@@ -29,7 +29,13 @@ import { leaveThePage } from "./leaving";
 export type PairingStage =
   | { kind: "idle" }
   | { kind: "asking" }
-  | { kind: "waiting"; expiresAt: number; userCode: string }
+  | {
+      kind: "waiting";
+      expiresAt: number;
+      userCode: string;
+      /** What a QR beside the code carries (core `PairingStart`). */
+      verificationUriComplete: string;
+    }
   | { kind: "denied" | "expired" }
   | { kind: "failed"; message: string };
 
@@ -115,6 +121,7 @@ export async function startPairing(): Promise<void> {
     kind: "waiting",
     userCode: started.userCode,
     expiresAt: Date.now() + started.expiresIn * 1000,
+    verificationUriComplete: started.verificationUriComplete,
   };
   let interval = started.interval * 1000;
   const poll = async () => {

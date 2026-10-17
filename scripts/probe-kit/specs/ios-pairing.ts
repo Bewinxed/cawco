@@ -11,7 +11,8 @@
  * (category `Pairing`, and `Hub`'s "fleet read"), in order:
  *
  * (a) the app is refused, reads that it must pair, and waits with a code
- *     the hub lists as an app's;
+ *     the hub lists as an app's, and with what a QR beside it carries
+ *     (RFC 8628's `verification_uri_complete`: the hub and the code);
  * (b) the probe approves that code as a paired client: the app keeps its
  *     pass, its socket opens, and its fleet read lands (`/api/agents` 200);
  * (c) relaunched, it connects on the kept pass with no new pairing;
@@ -54,6 +55,8 @@ const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 /** A pairing code (RFC 8628 §6.1's base-20 alphabet). */
 const CODE = /[B-Z]{3}-[B-Z]{3}/;
 const WAITING = /pairing stage waiting ([B-Z]{3}-[B-Z]{3})/;
+/** The waiting stage's QR (HubPairing.swift `stage`). */
+const QR = /pairing stage waiting [B-Z]{3}-[B-Z]{3} for \d+ s, its QR (\S+)/;
 /** The app's own lines (HubPairing.swift, HubConnection.swift, PushProbe.swift). */
 const NEEDED = /pairing needed: .* requires paired devices/;
 const KEPT = /pairing approved as .*: pass kept/;
@@ -261,6 +264,20 @@ async function run(kit: Kit): Promise<void> {
         .filter((one) => one.includes("airing"))
         .join(" | ")
         .slice(0, 600)}`
+    );
+    // What a QR beside the code carries: RFC 8628's verification_uri_complete,
+    // naming this hub (its /health hubId) and the code, on Configure › Devices.
+    const { hubId } = JSON.parse((await ask("/health")).text) as {
+      hubId: string;
+    };
+    const qr = QR.exec(since(first))?.[1];
+    const scanned = qr ? new URL(qr) : undefined;
+    check(
+      "(a) the app holds what a QR needs: Configure › Devices with the code and the hub's id",
+      scanned?.pathname === "/config/devices" &&
+        scanned.searchParams.get("code") === code &&
+        scanned.searchParams.get("hub") === hubId,
+      `${qr ?? "no QR in the waiting stage"}; hub ${hubId}`
     );
 
     // ── (b) Approved by a paired client: the pass kept, the fleet read ───
