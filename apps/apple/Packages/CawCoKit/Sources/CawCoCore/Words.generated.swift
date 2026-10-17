@@ -858,6 +858,20 @@ public enum Words {
         public static let openInCanvas = "Open in canvas"
     }
 
+    public enum Side {
+        // packages/core/src/words/side.ts `sideWords`
+        /// The switch, for a screen reader.
+        public static let label = "Beside the conversation"
+
+        public static let plan = "Plan"
+
+        public static let preview = "Preview"
+
+        public static let task = "Task"
+
+        public static let file = "File"
+    }
+
     public enum Artifacts {
         // packages/core/src/words/artifacts.ts `artifactWords`
         /// A row's Remove, for a screen reader: its trailing glyph says it.

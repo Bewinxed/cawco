@@ -21,6 +21,7 @@
    * pane closes its own content; with nothing left the split collapses. Its
    * width and expansion are the conversation's own, kept across visits.
    */
+  import { sideWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -188,10 +189,10 @@
   });
 
   const LABEL: Record<Shown, string> = {
-    plan: "Plan",
-    preview: "Preview",
-    task: "Task",
-    file: "File",
+    plan: sideWords.plan,
+    preview: sideWords.preview,
+    task: sideWords.task,
+    file: sideWords.file,
   };
 </script>
 
@@ -204,7 +205,7 @@
     size="compact"
     value={shown}
   >
-    <TabsList aria-label="Beside the conversation">
+    <TabsList aria-label={sideWords.label}>
       {#each opened as each (each)}
         <TabItem label={LABEL[each]} value={each} />
       {/each}

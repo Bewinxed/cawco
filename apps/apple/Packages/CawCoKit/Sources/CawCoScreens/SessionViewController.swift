@@ -94,6 +94,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     private let planRing = PlanRingButton()
     private weak var planSheet: UIViewController?
+    /// The reader asked for the plan beside the conversation (its ring) and has not closed it (SideSplit.svelte `planAsked`).
+    private var planAsked = false
+    private var planSide: PlanSideController?
 
     /// The ring on the composer while the plan has something to show: how far it has got (PlanPane.svelte `planProgress`).
     private func syncPlan() {
@@ -102,7 +105,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             return
         }
         planRing.configure(done: plan.progress.done, total: plan.progress.total)
-        planRing.open = planSheet != nil
+        // Pressed while the plan is on show: in its sheet on a compact width, on the side's front beside the transcript.
+        planRing.open = planSheet != nil || (beside != nil && beside === planSide)
         composerBinding.ring = planRing
         #if DEBUG
         if PreviewProbe.openPlanAtLaunch, !planOpenedAtLaunch, view.window != nil {
@@ -116,8 +120,20 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     private var planOpenedAtLaunch = false
     #endif
 
-    /// The plan whole, in the house sheet (PlanPane.svelte in SideSplit's sheet).
+    /// The plan whole: beside the transcript on a regular width, on the
+    /// side's front (SideSplit.svelte `openPlan`); on a compact one, in the
+    /// house sheet (PlanPane.svelte in SideSplit's sheet).
     private func openPlan() {
+        if traitCollection.horizontalSizeClass == .regular {
+            planAsked = true
+            sideTab = .plan
+            syncSide()
+            syncPlan()
+            #if DEBUG
+            PreviewProbe.say("plan opened \(sessionId) beside")
+            #endif
+            return
+        }
         let sheet = PlanSheetController(hub: hub, instanceId: sessionId)
         let house = HouseSheetController(sheet, title: PlanSheetController.title(hub.plans.plans[sessionId]), scroller: sheet.scroll)
         planSheet = house
@@ -266,7 +282,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         super.viewDidAppear(animated)
         shownOnce = true
         // An open preview whose sheet could not be shown off screen is shown now.
-        syncPreview()
+        syncSide()
         // Laid out expanded before it had a window (a relaunch): Esc is the pane's now.
         if expanded { takeKeys() }
     }
@@ -328,9 +344,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.sendError = editNote ?? (command?.refusedByHub == true ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
         composerBinding.sendBlock = sendBlock(hub)
         syncCards()
+        syncSide()
         syncPlan()
         composerBinding.publish()
-        syncPreview()
         #if DEBUG
         sendForProbe()
         #endif
@@ -496,10 +512,33 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         reveal(preview)
     }
 
-    /// The preview as the hub says it: open, beside the transcript on a
-    /// regular width (the web's split) or in a drawer above the composer on a
-    /// compact one (its phone sheet); closed, gone.
-    private func syncPreview() {
+    /// What stands beside the conversation (SideSplit.svelte `Shown`): the plan or the preview.
+    private enum SideTab { case plan, preview }
+    /// The one chosen; on show while it is open, else the newest there is.
+    private var sideTab = SideTab.plan
+    /// The preview was open at the last sync: one opening now takes the front.
+    private var previewWasOpen = false
+    /// The switch, while both are open (SideSplit.svelte `switcher`), in the head of the one on show.
+    private lazy var sideSwitch: KitSegmented = {
+        let made = KitSegmented([Words.Side.plan, Words.Side.preview], selected: 0)
+        made.accessibilityLabel = Words.Side.label
+        made.addAction(UIAction { [weak self, weak made] _ in
+            guard let self, let index = made?.selectedIndex else { return }
+            sideTab = index == 0 ? .plan : .preview
+            syncSide()
+            syncPlan()
+        }, for: .valueChanged)
+        return made
+    }()
+
+    /// What the side holds, as the hub and the reader say (SideSplit.svelte
+    /// `opened`, `shown`): the preview while the hub has it open, beside the
+    /// transcript on a regular width (the web's split) or in a drawer above
+    /// the composer on a compact one (its phone sheet); the plan beside the
+    /// transcript while asked for and it has something to show (on a compact
+    /// width it is the house sheet, `openPlan`). Both open, the switch stands
+    /// in the head of the one on show; closed, each goes.
+    private func syncSide() {
         let frame = hub.previews.byInstance[sessionId]
         let key = frame?.state == .open ? frame.flatMap(PreviewKey.of) : nil
         if key != drawnPreview {
@@ -507,19 +546,80 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             // The transcript's cards stand at full presence for the page now shown.
             transcriptView.previewChanged()
         }
-        guard frame?.state == .open else {
-            removePreview()
-            return
+        let previewOpen = frame?.state == .open
+        // An agent showing a preview brings it to the front.
+        if previewOpen, !previewWasOpen { sideTab = .preview }
+        previewWasOpen = previewOpen
+        let regular = traitCollection.horizontalSizeClass == .regular
+        let planOpen = regular && planAsked && hub.plans.plans[sessionId]?.shows == true
+        let opened = (planOpen ? [SideTab.plan] : []) + (previewOpen ? [.preview] : [])
+        let shown = opened.contains(sideTab) ? sideTab : opened.last
+        // Closing the last of them ends the expansion: what opens next opens
+        // beside the conversation. Only a close counts: before the hub's
+        // first word after a launch there was nothing to close.
+        let closing = (preview != nil || planSide != nil) && shown == nil
+        if !previewOpen { removePreview() }
+        if !planOpen, let planSide {
+            self.planSide = nil
+            if planSide.parent === self { unembed(planSide) }
         }
-        let controller = preview ?? makePreview()
-        let side = traitCollection.horizontalSizeClass == .regular
-        if controller.parent === self, drawer != !side {
-            unembed(controller)
+        if closing, expandAsked { keepExpanded(false) }
+        #if DEBUG
+        probeSide(shown: shown, opened: opened, regular: regular)
+        #endif
+        guard let shown else { return }
+        let card: SideCard = shown == .plan ? (planSide ?? makePlanSide()) : (preview ?? makePreview())
+        let asDrawer = shown == .preview && !regular
+        for other in [preview as SideCard?, planSide as SideCard?].compactMap(\.self)
+            where other !== card && other.parent === self {
+            unembed(other)
         }
-        if controller.parent !== self {
-            embed(controller, drawer: !side)
+        if card.parent === self, drawer != asDrawer {
+            unembed(card)
         }
-        controller.show()
+        if card.parent !== self {
+            embed(card, drawer: asDrawer)
+        }
+        if opened.count > 1 {
+            sideSwitch.select(shown == .plan ? 0 : 1, animated: false)
+            card.showSwitcher(sideSwitch)
+        } else {
+            card.showSwitcher(nil)
+        }
+        preview?.show()
+    }
+
+    #if DEBUG
+    private var probedSide = ""
+    private var sideSwitched = false
+
+    /// What the side holds as a simulator pass reads it, logged when it
+    /// changed; with `-side-switch`, the switch pressed once both stand there.
+    private func probeSide(shown: SideTab?, opened: [SideTab], regular: Bool) {
+        guard PreviewProbe.on else { return }
+        let line = "side \(sessionId) shown=\(shown.map { "\($0)" } ?? "none") opened=\(opened.map { "\($0)" }.joined(separator: ",")) regular=\(regular)"
+        if line != probedSide {
+            probedSide = line
+            PreviewProbe.say(line)
+        }
+        guard PreviewProbe.sideSwitch, opened.count > 1, !sideSwitched, let shown else { return }
+        sideSwitched = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.sideSwitch.choose(shown == .plan ? 1 : 0)
+        }
+    }
+    #endif
+
+    private func makePlanSide() -> PlanSideController {
+        let controller = PlanSideController(hub: hub, instanceId: sessionId)
+        controller.onClose = { [weak self] in
+            guard let self else { return }
+            planAsked = false
+            syncSide()
+            syncPlan()
+        }
+        planSide = controller
+        return controller
     }
 
     /// The preview stands as the phone's drawer (over the transcript, above
@@ -543,10 +643,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         // A docked canvas stands over the panel's page: it follows it as it moves.
         composerBinding.panelMoved()
         // The group's composer stands over this share of the pane: all of it,
-        // unless the preview stands beside the transcript.
+        // unless the plan or the preview stands beside the transcript.
         var share: CGFloat = 1
-        if !drawer, let preview, preview.parent === self, view.bounds.width > 0 {
-            share = min(1, max(0, (preview.view.frame.minX - Space.space2) / view.bounds.width))
+        if let beside, beside.parent === self, view.bounds.width > 0 {
+            share = min(1, max(0, (beside.view.frame.minX - Space.space2) / view.bounds.width))
         }
         if abs(share - transcriptShare) > 0.001 {
             transcriptShare = share
@@ -700,16 +800,16 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// phone's drawer (PreviewSheet): over the transcript, its floor the top
     /// of the composer, so the conversation's composer stays there to write
     /// and send in; 60% of the room above the composer, or all of it.
-    private func embed(_ controller: PreviewController, drawer: Bool) {
-        addChild(controller)
-        controller.view.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(controller.view)
-        controller.view.layer.cornerRadius = Radius.radiusLg
-        controller.view.layer.cornerCurve = .continuous
-        controller.view.boxShadow = Shadow.shadowDrawer
+    private func embed(_ card: SideCard, drawer: Bool) {
+        addChild(card)
+        card.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(card.view)
+        card.view.layer.cornerRadius = Radius.radiusLg
+        card.view.layer.cornerCurve = .continuous
+        card.view.boxShadow = Shadow.shadowDrawer
         self.drawer = drawer
-        controller.standsAsDrawer(drawer)
-        if drawer {
+        (card as? PreviewController)?.standsAsDrawer(drawer)
+        if drawer, let controller = card as? PreviewController {
             drawerFull = false
             let height = controller.view.heightAnchor.constraint(equalToConstant: drawerRoom * 0.6)
             let floor = controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -composerInset)
@@ -741,39 +841,44 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         view.addSubview(divider)
         let split = Split(
             transcriptWidth: transcriptHost.view.widthAnchor.constraint(equalToConstant: 0),
-            previewLeading: controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            previewTrailing: controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            previewTop: controller.view.topAnchor.constraint(equalTo: view.topAnchor),
-            previewBottom: controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            previewLeading: card.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            previewTrailing: card.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            previewTop: card.view.topAnchor.constraint(equalTo: view.topAnchor),
+            previewBottom: card.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             dividerCentre: divider.centerXAnchor.constraint(equalTo: view.leadingAnchor),
             dividerWidth: divider.widthAnchor.constraint(equalToConstant: Size.cSideDividerHit)
         )
         self.split = split
+        beside = card
         NSLayoutConstraint.activate(split.all + [
-            divider.topAnchor.constraint(equalTo: controller.view.topAnchor),
-            divider.bottomAnchor.constraint(equalTo: controller.view.bottomAnchor),
+            divider.topAnchor.constraint(equalTo: card.view.topAnchor),
+            divider.bottomAnchor.constraint(equalTo: card.view.bottomAnchor),
         ])
         divider.onDrag = { [weak self] pan in self?.dragSplit(pan) }
         divider.onStep = { [weak self] step in self?.stepSplit(step) }
-        controller.onExpand = { [weak self] in self?.toggleExpanded() }
-        controller.onEscapeLeft = { [weak self] in self?.collapse() }
+        card.onExpand = { [weak self] in self?.toggleExpanded() }
+        card.onEscapeLeft = { [weak self] in self?.collapse() }
         applySplit(sliding: false)
-        controller.didMove(toParent: self)
+        card.didMove(toParent: self)
     }
 
-    private func unembed(_ controller: PreviewController) {
-        controller.willMove(toParent: nil)
-        controller.view.removeFromSuperview()
-        controller.removeFromParent()
+    private func unembed(_ card: SideCard) {
+        card.willMove(toParent: nil)
+        card.view.removeFromSuperview()
+        card.removeFromParent()
+        if beside === card { beside = nil }
+        card.showSwitcher(nil)
         // The drawer's handles go with it: an embed beside the transcript has none.
-        for handle in [controller.dragArea!, controller.grabArea] as [UIView] {
-            handle.gestureRecognizers?.filter { $0 is UIPanGestureRecognizer }.forEach(handle.removeGestureRecognizer)
+        if let controller = card as? PreviewController {
+            for handle in [controller.dragArea!, controller.grabArea] as [UIView] {
+                handle.gestureRecognizers?.filter { $0 is UIPanGestureRecognizer }.forEach(handle.removeGestureRecognizer)
+            }
+            controller.grabArea.removeTarget(self, action: #selector(cycleDrawer), for: .primaryActionTriggered)
         }
-        controller.grabArea.removeTarget(self, action: #selector(cycleDrawer), for: .primaryActionTriggered)
         drawerSettle?.stopAnimation(true)
         drawerSettle = nil
         drawerLeaving = false
-        controller.view.transform = .identity
+        card.view.transform = .identity
         drawerHeight = nil
         drawerFloor = nil
         if let split {
@@ -783,9 +888,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             NSLayoutConstraint.deactivate(split.all)
             self.split = nil
             divider.removeFromSuperview()
-            controller.onExpand = {}
-            controller.onEscapeLeft = {}
-            controller.standsExpanded(false)
+            card.onExpand = {}
+            card.onEscapeLeft = {}
+            card.standsExpanded(false)
             putTranscript(away: false)
             transcriptHost.view.clipsToBounds = false
             transcriptTrailing.isActive = true
@@ -810,8 +915,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
     }
 
-    /// The preview beside the transcript: nil in the phone's drawer or with no preview.
+    /// The card beside the transcript: nil in the phone's drawer or with nothing beside.
     private var split: Split?
+    /// What stands in the split: the plan or the preview.
+    private weak var beside: SideCard?
     private let divider = SplitDivider()
     /// Expand or Back sliding on the panel's clock.
     private var slide: UIViewPropertyAnimator?
@@ -922,14 +1029,14 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// web's `.sliding`) when the reader watches it change by Expand, Back or
     /// Esc; at once under a drag, when the split is made, and with Reduce Motion.
     private func applySplit(sliding: Bool) {
-        guard let preview, split != nil else { return }
+        guard let card = beside, split != nil else { return }
         let whole = expanded
         slide?.stopAnimation(true)
         slide = nil
         divider.expanded = whole
         putTranscript(away: whole)
         // The card's shadow would fall outside the pane once it meets the edges.
-        preview.view.boxShadow = whole ? [] : Shadow.shadowDrawer
+        card.view.boxShadow = whole ? [] : Shadow.shadowDrawer
         placeSplit()
         if whole {
             takeKeys()
@@ -937,8 +1044,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             resignFirstResponder()
         }
         let lay = { [self] in
-            preview.standsExpanded(whole)
-            preview.view.layer.cornerRadius = whole ? 0 : Radius.radiusLg
+            card.standsExpanded(whole)
+            card.view.layer.cornerRadius = whole ? 0 : Radius.radiusLg
             view.layoutIfNeeded()
         }
         guard sliding, view.window != nil, !UIAccessibility.isReduceMotionEnabled else {
@@ -1049,13 +1156,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     private func takeKeys() {
-        guard view.window != nil, preview?.holdsKeys != true, !isFirstResponder else { return }
+        guard view.window != nil, beside?.holdsKeys != true, !isFirstResponder else { return }
         becomeFirstResponder()
     }
 
-    /// Esc, expanded: an open pin's card first, then Comment mode, then the conversation comes back.
+    /// Esc, expanded: the preview's open pin card first, then its Comment mode, then the conversation comes back.
     @objc private func escapeKey() {
-        if preview?.escape() == true { return }
+        if beside?.escape() == true { return }
         collapse()
     }
 
@@ -1066,9 +1173,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// pane's bounds, the preview's frame, the transcript's width, the kept
     /// and shown shares, the state, and the composer's share.
     private func probeSplit() {
-        guard PreviewProbe.on, let preview, split != nil, view.window != nil else { return }
+        guard PreviewProbe.on, let card = beside, split != nil, view.window != nil else { return }
         let width = view.bounds.width
-        let line = "split pane=\(Self.probeRect(view.bounds)) preview=\(Self.probeRect(preview.view.frame)) transcript=\(Int(transcriptHost.view.frame.width.rounded())) divider=\(Int(divider.center.x.rounded())),\(Int(divider.bounds.width.rounded())) kept=\(String(format: "%.3f", sideShare)) shown=\(String(format: "%.3f", shownShare(width))) expanded=\(expanded) away=\(!transcriptHost.view.isUserInteractionEnabled) composerShare=\(String(format: "%.3f", transcriptShare)) keys=\(isFirstResponder) \(preview.probeExpand) dividerAt=\(PreviewProbe.centre(divider))"
+        let side = (card as? PreviewController)?.probeExpand ?? "card=plan"
+        let line = "split pane=\(Self.probeRect(view.bounds)) preview=\(Self.probeRect(card.view.frame)) transcript=\(Int(transcriptHost.view.frame.width.rounded())) divider=\(Int(divider.center.x.rounded())),\(Int(divider.bounds.width.rounded())) kept=\(String(format: "%.3f", sideShare)) shown=\(String(format: "%.3f", shownShare(width))) expanded=\(expanded) away=\(!transcriptHost.view.isUserInteractionEnabled) composerShare=\(String(format: "%.3f", transcriptShare)) keys=\(isFirstResponder) \(side) dividerAt=\(PreviewProbe.centre(divider))"
         guard line != probedSplit else { return }
         probedSplit = line
         PreviewProbe.say(line)
@@ -1078,10 +1186,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// its clock (the pane's layer at `speed` 0, `timeOffset` stepped from the
     /// slide's begin), then let go.
     private func scrubSlide() {
-        guard PreviewProbe.on, ProcessInfo.processInfo.arguments.contains("-split-scrub"), let preview else { return }
+        guard PreviewProbe.on, ProcessInfo.processInfo.arguments.contains("-split-scrub"), let beside else { return }
         CATransaction.flush()
         let pane = view.layer
-        let card = preview.view.layer
+        let card = beside.view.layer
         let begun = card.animationKeys()?.compactMap { card.animation(forKey: $0)?.beginTime }.first { $0 > 0 }
         let begin = begun ?? pane.convertTime(CACurrentMediaTime(), from: nil)
         pane.speed = 0
@@ -1113,15 +1221,11 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         guard let controller = preview else { return }
         preview = nil
         if controller.parent === self { unembed(controller) }
-        // Closing the preview ends the expansion: what opens next opens beside
-        // the conversation. Only a close counts: before the hub's first word
-        // after a launch there was no preview to close.
-        if expandAsked { keepExpanded(false) }
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
-        if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncPreview() }
+        if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncSide() }
     }
 
     /// The asks this conversation made: its own in arrival order, then those

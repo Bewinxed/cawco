@@ -103,6 +103,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "words/plan.ts", export: "planWords", as: "" }],
   },
   {
+    // What stands beside a conversation: the switch between its surfaces.
+    swift: "Side",
+    members: [{ file: "words/side.ts", export: "sideWords", as: "" }],
+  },
+  {
     // The artifact panel: its title menu, a sheet's stage, a sheet's inspector.
     swift: "Artifacts",
     members: [{ file: "words/artifacts.ts", export: "artifactWords", as: "" }],

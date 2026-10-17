@@ -295,7 +295,7 @@ const run = async (kit: Kit) => {
         fleet.api<{ state: Record<string, { value?: Place }> }>(
           `/api/instances/${session}/artifacts/${id}`
         ),
-      (answer) => !!answer.state.place?.value,
+      (page) => !!page.state.place?.value,
       30_000
     ).catch(() => undefined);
     const got = read?.state.place?.value;

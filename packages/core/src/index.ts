@@ -1839,6 +1839,7 @@ export * from "./words/place";
 export * from "./words/plan";
 export * from "./words/preview";
 export * from "./words/sheet";
+export * from "./words/side";
 export * from "./words/sidebar";
 export * from "./words/tailnet";
 export * from "./workflow";

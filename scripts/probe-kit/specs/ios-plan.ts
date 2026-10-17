@@ -3,13 +3,14 @@
  * gains a session scope … A plan document the harness wrote … is shown
  * read-only beside it"), read by the app from the hub's plan frames
  * (CawCoCore Tasks.swift `PlanFollows`; the `~/.claude/tasks` disk read is
- * gone) and drawn by Peek/TaskPanel.swift `PlanView` in the session's plan
- * sheet, its ring on the composer.
+ * gone) and drawn by Peek/TaskPanel.swift `PlanView`: in the session's plan
+ * sheet on an iPhone, beside the conversation on an iPad (Peek/PlanSide.swift,
+ * as SideSplit.svelte), its ring on the composer.
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) with "CawCo's to-dos" on, and the built app on an iPhone
- * simulator of its own. The session calls `todo_write` with four steps, one
- * nested under another, and a spec. Then:
+ * simulator, then an iPad one. The session calls `todo_write` with four
+ * steps, one nested under another, and a spec. Then:
  *
  * 1. The app, opened on the session with `-open-plan`, holds the plan the
  *    hub answers at `GET /api/instances/:id/plan`: the same ids, depths and
@@ -18,6 +19,14 @@
  * 3. The session ticks the step under way: the app's next `plan …` line,
  *    from the hub's delta, holds it completed, read back against the hub's
  *    `/plan`; how long after the tool's answer it landed is said.
+ * 4. On an iPad the ring opens the plan beside the conversation, not in a
+ *    sheet: the side holds the plan alone (`side … shown=plan`), the split
+ *    stands its card past the transcript (`split … card=plan`), the
+ *    composer over the transcript's share, the card titled Plan.
+ * 5. The session shows a page while the plan stands there: the preview
+ *    takes the front, Plan | Preview open (SideSplit.svelte "An agent
+ *    showing a preview brings it to the front"); the switch pressed
+ *    (`-side-switch`) brings the plan back, the switch in its head.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-plan
@@ -38,9 +47,15 @@ const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",
 };
+/** The kit's `ipad` viewport's simulator: the iPad Pro 13-inch (M4), portrait. */
+const IPAD = {
+  runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  device: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB",
+};
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const TODO_WRITE = "mcp__cawco__todo_write";
+const CREATE = "mcp__cawco__artifact_create";
 const SPEC = "# Cards\n\nThe card takes a tone, and the sheet shows each.";
 const STEPS = [
   { id: "read", content: "Read the card", status: "completed" },
@@ -48,6 +63,10 @@ const STEPS = [
   { id: "cut", content: "Cut the enum", status: "pending", depth: 1 },
   { id: "ship", content: "Ship it", status: "pending" },
 ];
+const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Notes</title></head>
+<body><h1>Notes</h1><p>The tone prop, drawn.</p></body></html>`;
+const SPLIT =
+  /^split pane=(-?\d+),(-?\d+),(\d+),(\d+) preview=(-?\d+),(-?\d+),(\d+),(\d+) transcript=(\d+) .* composerShare=([\d.]+) .*card=plan/;
 
 const pause = (ms: number) => Bun.sleep(ms);
 
@@ -123,6 +142,56 @@ interface HubPlan {
 const said = (plan: HubPlan) =>
   plan.steps.map((step) => `${step.id}:${step.depth}:${step.status}`).join(",");
 
+/** A simulator with the app installed, its Plan and Probe lines heard as they come. */
+async function openSim(
+  choice: typeof SIM,
+  app: string
+): Promise<{
+  at: number[];
+  heard: string[];
+  sim: MacSim;
+  stream: Subprocess;
+}> {
+  const sim = await macSim(choice);
+  const { udid } = sim;
+  console.log(`  simulator ${udid} (${choice.device})`);
+  await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
+  await sh(`xcrun simctl install ${udid} "${app}"`);
+  const heard: string[] = [];
+  const at: number[] = [];
+  const stream = Bun.spawn(
+    [
+      "bash",
+      "-c",
+      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Plan" OR category == "Probe")'`,
+    ],
+    { stdout: "pipe", stderr: "ignore" }
+  );
+  (async () => {
+    const decoder = new TextDecoder();
+    const reader = stream.stdout.getReader();
+    let rest = "";
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      rest += decoder.decode(value, { stream: true });
+      const split = rest.split("\n");
+      rest = split.pop() ?? "";
+      for (const line of split) {
+        if (line.includes("dev.cawco.app")) {
+          heard.push(line.replace(LOG_HEAD, ""));
+          at.push(Date.now());
+        }
+      }
+    }
+  })().catch(() => undefined);
+  await pause(1500);
+  return { sim, stream, heard, at };
+}
+
 const run = async (kit: Kit) => {
   const { path: app, problem } = freshApp(ROOT);
   if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
@@ -154,13 +223,13 @@ const run = async (kit: Kit) => {
   }
   const session = await fleet.spawn("claude", "Plan", fleet.repo);
   let n = 0;
-  const call = async (input: object) => {
+  const call = async (input: object, name = TODO_WRITE) => {
     n += 1;
     const marker = String(n);
-    asks.set(marker, { name: TODO_WRITE, input });
+    asks.set(marker, { name, input });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     await until(
-      `todo_write's answer (${marker})`,
+      `${name}'s answer (${marker})`,
       () => answered.get(marker),
       Boolean,
       240_000
@@ -180,52 +249,18 @@ const run = async (kit: Kit) => {
   ) {
     return;
   }
+  const dashboard = await fleet.dashboard();
+  await mkdir(keep, { recursive: true });
 
-  let sim: MacSim | undefined;
-  let stream: Subprocess | undefined;
-  const heard: string[] = [];
-  const heardAt: number[] = [];
-  const planLines = () =>
-    heard
-      .map((line, i) => ({ line, at: heardAt[i] }))
-      .filter(({ line }) => line.startsWith(`plan ${session} rev=`));
+  let phone: Awaited<ReturnType<typeof openSim>> | undefined;
   try {
-    sim = await macSim(SIM);
-    const { udid } = sim;
-    console.log(`  simulator ${udid}`);
-    await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
-    await sh(`xcrun simctl install ${udid} "${app}"`);
-    const child = Bun.spawn(
-      [
-        "bash",
-        "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Plan" OR category == "Probe")'`,
-      ],
-      { stdout: "pipe", stderr: "ignore" }
-    );
-    stream = child;
-    (async () => {
-      const decoder = new TextDecoder();
-      const reader = child.stdout.getReader();
-      let rest = "";
-      for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        rest += decoder.decode(value, { stream: true });
-        const split = rest.split("\n");
-        rest = split.pop() ?? "";
-        for (const line of split) {
-          if (line.includes("dev.cawco.app")) {
-            heard.push(line.replace(LOG_HEAD, ""));
-            heardAt.push(Date.now());
-          }
-        }
-      }
-    })().catch(() => undefined);
-    await pause(1500);
+    phone = await openSim(SIM, app);
+    const { heard, at: heardAt } = phone;
+    const { udid } = phone.sim;
+    const planLines = () =>
+      heard
+        .map((line, i) => ({ line, at: heardAt[i] }))
+        .filter(({ line }) => line.startsWith(`plan ${session} rev=`));
     await until(
       "the app launched",
       () =>
@@ -268,8 +303,6 @@ const run = async (kit: Kit) => {
     );
 
     // The plan's sheet beside the dashboard's, at the simulator's viewport, light and dark, for a later review.
-    await mkdir(keep, { recursive: true });
-    const dashboard = await fleet.dashboard();
     for (const theme of ["light", "dark"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
       await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
@@ -310,7 +343,6 @@ const run = async (kit: Kit) => {
       }
     }
     await sh(`xcrun simctl ui ${udid} appearance light`);
-    console.log(`  captures: ${keep}`);
 
     // 3. A tick: the step under way completed.
     const before = planLines().length;
@@ -333,10 +365,146 @@ const run = async (kit: Kit) => {
       `app ${ticked ? `+${ticked.at - tickedAt}ms after the tool answered: ${ticked.line}` : "nothing"}; hub: ${said(hubAfter)}`
     );
   } finally {
-    stream?.kill();
-    await sim?.release();
+    phone?.stream.kill();
+    await phone?.sim.release();
   }
+  await onIpad(kit, { app, base: fleet.base, call, dashboard, session });
 };
+
+/** Legs 4 and 5: the plan beside the conversation on an iPad, and the switch. */
+async function onIpad(
+  kit: Kit,
+  {
+    app,
+    base,
+    call,
+    dashboard,
+    session,
+  }: {
+    app: string;
+    base: string;
+    call: (input: object, name?: string) => Promise<number>;
+    dashboard: string;
+    session: string;
+  }
+): Promise<void> {
+  let pad: Awaited<ReturnType<typeof openSim>> | undefined;
+  try {
+    pad = await openSim(IPAD, app);
+    const { heard } = pad;
+    const { udid } = pad.sim;
+    const launch = (flags: string) =>
+      sh(
+        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${base} -open-session ${session} -preview-probe -open-plan ${flags} >/dev/null`
+      );
+    const sideAlone = `side ${session} shown=plan opened=plan regular=true`;
+
+    // The plan beside the conversation, beside the dashboard's at the iPad's viewport, light and dark.
+    for (const theme of ["light", "dark"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
+      await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
+      const mark = heard.length;
+      await until(
+        `the ${theme} launch`,
+        () => launch("").then(() => true),
+        Boolean,
+        60_000
+      );
+      await until(
+        `the ${theme} plan beside`,
+        () => heard.slice(mark).some((line) => SPLIT.test(line)),
+        Boolean,
+        120_000
+      ).catch(() => undefined);
+      await pause(2000);
+      await sh(
+        `xcrun simctl io ${udid} screenshot "${join(keep, `app-ipad-plan-${theme}.png`)}" >/dev/null`
+      );
+      try {
+        const page = await kit.page("ipad", { engine: "webkit", theme });
+        await page.goto(`${dashboard}/session/${session}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await page
+          .locator('[data-slot="plan-ring"]')
+          .first()
+          .click({ timeout: 30_000 });
+        await pause(1500);
+        await page.screenshot({
+          path: join(keep, `web-ipad-plan-${theme}.png`),
+        });
+        await page.close();
+      } catch (error) {
+        console.log(
+          `  the web ${theme} iPad plan wasn't captured: ${(error as Error).message.split("\n")[0]}`
+        );
+      }
+    }
+    await sh(`xcrun simctl ui ${udid} appearance light`);
+    console.log(`  captures: ${keep}`);
+
+    // 4. The ring opens the plan beside the conversation.
+    const mark = heard.length;
+    await launch("-side-switch");
+    const split = await until(
+      "the plan's card in the split",
+      () => heard.slice(mark).findLast((line) => SPLIT.test(line)),
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const box = split?.match(SPLIT)?.slice(1).map(Number);
+    const [paneW, cardX, cardW, transcript, share] = box
+      ? [box[2], box[4], box[6], box[8], box[9]]
+      : [0, 0, 0, 0, 1];
+    const lines = heard.slice(mark);
+    const opened = lines.find((line) => line.startsWith("plan opened"));
+    const titled = lines.findLast((line) =>
+      line.startsWith(`plan side ${session}`)
+    );
+    kit.check(
+      "4: on an iPad the ring opens the plan beside the conversation: the side holds it alone, its card past the transcript, the composer over the transcript's share",
+      opened === `plan opened ${session} beside` &&
+        lines.includes(sideAlone) &&
+        transcript > 0 &&
+        cardX >= transcript &&
+        cardX + cardW <= paneW &&
+        share < 1 &&
+        titled ===
+          `plan side ${session} title=Plan switcher=false expanded=false`,
+      `${opened ?? "not opened"}; ${lines.find((line) => line.startsWith(`side ${session}`)) ?? "no side line"}; ${split ?? "no split line"}; ${titled ?? "no plan side line"}`
+    );
+
+    // 5. A page shown: the preview takes the front, then the switch brings the plan back.
+    const shownAt = heard.length;
+    await call({ kind: "page", name: "notes", html: PAGE }, CREATE);
+    const both = `side ${session} shown=preview opened=plan,preview regular=true`;
+    const back = `side ${session} shown=plan opened=plan,preview regular=true`;
+    await until(
+      "the switch pressed back to the plan",
+      () => heard.slice(shownAt).includes(back),
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const after = heard.slice(shownAt);
+    const switched = after.findLast((line) =>
+      line.startsWith(`plan side ${session}`)
+    );
+    await sh(
+      `xcrun simctl io ${udid} screenshot "${join(keep, "app-ipad-plan-switch.png")}" >/dev/null`
+    );
+    kit.check(
+      "5: a page shown while the plan stands there takes the front, Plan | Preview open; the switch brings the plan back, the switch in its head",
+      after.indexOf(both) >= 0 &&
+        after.indexOf(back) > after.indexOf(both) &&
+        switched ===
+          `plan side ${session} title=Plan switcher=true expanded=false`,
+      `${after.filter((line) => line.startsWith(`side ${session}`)).join(" → ") || "no side lines"}; ${switched ?? "no plan side line"}`
+    );
+  } finally {
+    pad?.stream.kill();
+    await pad?.sim.release();
+  }
+}
 
 const spec: Spec = { name: "ios-plan", run };
 export default spec;

@@ -16,7 +16,7 @@ import WebKit
 /// which the overlay joins itself on the path the hello names (Projects spec
 /// §5.10); the overlay draws the person's pins on the page, and the app
 /// reads them through the hub (§5.7) for their list and the open pin's card.
-final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIPencilInteractionDelegate {
+final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIPencilInteractionDelegate, SideCard {
     private let hub: HubConnection
     let instanceId: String
 
@@ -694,6 +694,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         wellLeading.constant = expanded ? 0 : card
         wellTrailing.constant = expanded ? 0 : -card
         wellBottom.constant = expanded ? 0 : -card
+    }
+
+    /// The Plan | Preview switch at the head's start while the plan is open too (SideSurface.svelte `switcher`).
+    private weak var switcher: UIView?
+
+    func showSwitcher(_ next: UIView?) {
+        loadViewIfNeeded()
+        guard let head = dragArea as? UIStackView, next !== switcher || next?.superview !== head else { return }
+        // The one switch moves between the cards' heads: only its place in this head is taken down here.
+        if let switcher, switcher.superview === head { switcher.removeFromSuperview() }
+        switcher = next
+        if let next {
+            next.setContentHuggingPriority(.required, for: .horizontal)
+            next.setContentCompressionResistancePriority(.required, for: .horizontal)
+            head.insertArrangedSubview(next, at: 0)
+        }
     }
 
     /// Something in the preview has the keyboard: the page, or the card's reply field.
