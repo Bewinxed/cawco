@@ -127,3 +127,22 @@ export function attachedFiles(text: string): {
   );
   return files.length ? { typed: typed.trimEnd(), files } : { typed: text };
 }
+
+/** The clips a machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
+export const VIDEO_FILE = /\.(mp4|mov|webm)$/i;
+
+/** A video's captions: the `.vtt` of the same name beside it. */
+export const sidecarOf = (path: string): string =>
+  path.replace(VIDEO_FILE, ".vtt");
+
+/**
+ * What a `send_to_user` call shows under its row in the transcript:
+ * its attachments less each `.vtt` sent beside its video, which belongs to
+ * that video rather than standing as a file of its own.
+ */
+export function shownAttachments(paths: string[]): string[] {
+  const captions = new Set(
+    paths.filter((path) => VIDEO_FILE.test(path)).map(sidecarOf)
+  );
+  return paths.filter((path) => !captions.has(path));
+}

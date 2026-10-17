@@ -17,6 +17,7 @@ import {
   MESSAGES_READ,
   mcpGatewayPort,
 } from "@cawco/core";
+import { workspaceSpillDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
@@ -424,6 +425,12 @@ export async function spawnPi(
         : {}),
       // Its shells' git reaches the hub's remote as this session (git-credential.ts).
       ...sessionGitEnv(),
+      // In a workspace, the outputs its bash saves land in the session's own
+      // folder, which the boundary reads (`PiHarness.spill`); each command
+      // runs with the workspace's scratch as its `TMPDIR` all the same.
+      ...(ctx.boundary && ctx.workspace
+        ? { TMPDIR: workspaceSpillDir(ctx.workspace, ctx.instanceId) }
+        : {}),
     },
   });
   const proc = (await client.list()).procs.find(

@@ -4,7 +4,7 @@
    * phone home's, reading one remembered choice (work-tab). The header is the
    * session tabs' own folder tabs (ui/fluid-tabs, hosted the way PaneTabs
    * hosts them in a bar: no shelf, the chosen sheet the only mark), each a
-   * label and a count washed in its status ink.
+   * label and a count, a pill solid in its status hue.
    *
    * The rows under a machine's header change in a relay (motion/list-swap):
    * the old lines leave top down, and each new line arrives the moment the
@@ -91,6 +91,7 @@
     clock,
     home,
     instanceTitle,
+    isDelegate,
     lastAt,
     type MachineGroup,
     machineName,
@@ -378,8 +379,15 @@
   const more = $derived(moreOf(shown, workTab.shownWhole(shown)));
   /** The key of a machine's "N more" line. */
   const moreKey = (machineId: string): string => `more:${machineId}`;
-  /** Whether anything listed as finished failed: its numeral says so. */
-  const finishedFailed = $derived(rowsOf("finished").some(isFailed));
+  /**
+   * A tab's count: its top-level sessions, never their delegates, whatever
+   * the Delegates switch shows (owner: "the working count shouldn't count
+   * delegates").
+   */
+  const topOf = (tab: WorkTab): InstanceRow[] =>
+    allOf(tab).filter((row) => !isDelegate(row));
+  /** Whether a top-level session listed as finished failed: its numeral says so. */
+  const finishedFailed = $derived(topOf("finished").some(isFailed));
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -785,45 +793,34 @@
       >
         <TabsList aria-label="Sessions">
           {#each TABS as tab (tab.id)}
-            {@const count = rowsOf(tab.id).length}
-            {@const countTone =
-              (tab.id === "finished" && finishedFailed && "fail") ||
-              (tab.id === "finished" && "done") ||
-              "live"}
+            {@const count = topOf(tab.id).length}
             <TabItem label={tab.label} value={tab.id}>
               {#snippet trail()}
                 <!-- No count until it is read: a 0 here would be a claim. -->
                 {#if !waiting}
                   {#key count}
-                    <!-- The count, washed in its tab's status ink (the usage
-                         tints' strength), on the chosen tab only; the
-                         other's is a plain numeral, muted unless it says
-                         something failed. The wash and the ink come and go
-                         with the choice, as the tab's own sheet and title do,
-                         on its clock (ui/fluid-tabs, `--pick`): the wash as
-                         its background, the ink as the numeral again in it
-                         over the muted one, faded in. A press on the count is
-                         a press on its tab: it reaches the hit. -->
+                    <!-- The count, a pill solid in its tab's status hue
+                         (count-fill-*), chosen or not: it reads as a pill on
+                         whatever sheet it stands on, chosen, recessed,
+                         hovered or pressed, and its numeral (count-fill-ink)
+                         holds on it. A 6% wash of the ink read as a smudge
+                         on the sheet (owner: "the count background is styled
+                         in an unreadable way"). Something listed as finished
+                         failed: the pill says so, chosen or not. A press on
+                         the count is a press on its tab: it reaches the
+                         hit. -->
                     <!-- literal: 18px; 3px -->
                     <span
                       data-num
                       data-slot="count"
-                      class="pointer-events-none ms-space-1 me-(--count-end) inline-grid h-(--count-side) min-w-(--count-side) place-items-center rounded-xs bg-(--wash)/(--count-pick) px-(--count-pad) type-meta num text-ink-muted data-failed:text-(--ink)"
+                      class="pointer-events-none ms-space-1 me-(--count-end) inline-grid h-(--count-side) min-w-(--count-side) place-items-center rounded-xs bg-count-fill-live px-(--count-pad) type-meta num text-count-fill-ink data-[tab=finished]:not-data-failed:bg-count-fill-done data-failed:bg-count-fill-fail"
                       data-failed={(tab.id === "finished" && finishedFailed) ||
                         undefined}
                       data-flip="pop"
                       data-tab={tab.id}
                       style:--count-end="max(0px, 2px - var(--tight) * 0.06)"
-                      style:--count-pick="calc(var(--pick) * 100%)"
                       style:--count-pad="calc(3px - var(--tight) * 0.03)"
-                      style:--count-side="18px"
-                      style:--ink="var(--status-{countTone}-ink)"
-                      style:--wash="var(--count-wash-{countTone})"
-                      ><span class="col-start-1 row-start-1">{count}</span><span
-                        aria-hidden="true"
-                        class="col-start-1 row-start-1 text-(--ink) opacity-(--pick)"
-                        >{count}</span
-                      ></span
+                      style:--count-side="18px">{count}</span
                     >
                   {/key}
                 {/if}

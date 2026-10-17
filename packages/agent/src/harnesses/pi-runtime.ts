@@ -16,6 +16,7 @@ import {
   CONTROL_SUPPORTED_MODELS,
   INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
+  pricedRequest,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -372,19 +373,24 @@ class PiSession implements HarnessSession {
   /** What the turn's requests spent so far: its answers' and any compaction's. */
   #turnUsage: ModelTurnUsage[] = [];
 
-  /** One request's pi-ai `Usage` on `model` (`provider/id`). */
-  #spent(model: string, usage: Usage | undefined): void {
+  /** One request's pi-ai `Usage` on `model` (`provider/id`), priced at `at` (epoch ms). */
+  #spent(model: string, usage: Usage | undefined, at: number): void {
     if (usage) {
-      this.#turnUsage.push({
-        model,
-        input: usage.input,
-        output: usage.output,
-        cacheRead: usage.cacheRead,
-        cacheWrite: usage.cacheWrite,
-        ...(usage.cacheWrite1h === undefined
-          ? {}
-          : { cacheWrite1h: usage.cacheWrite1h }),
-      });
+      this.#turnUsage.push(
+        pricedRequest(
+          model,
+          {
+            input: usage.input,
+            output: usage.output,
+            cacheRead: usage.cacheRead,
+            cacheWrite: usage.cacheWrite,
+            ...(usage.cacheWrite1h === undefined
+              ? {}
+              : { cacheWrite1h: usage.cacheWrite1h }),
+          },
+          at
+        )
+      );
     }
   }
 
@@ -499,7 +505,11 @@ class PiSession implements HarnessSession {
         }
         if (role === "assistant") {
           const answer = event.message as AssistantMessage;
-          this.#spent(`${answer.provider}/${answer.model}`, answer.usage);
+          this.#spent(
+            `${answer.provider}/${answer.model}`,
+            answer.usage,
+            answer.timestamp
+          );
           queueMicrotask(() => {
             const blocks = toBlocks(content);
             if (blocks.length) {
@@ -540,10 +550,14 @@ class PiSession implements HarnessSession {
         }
         // pi summarizes with the session's model (`const model = this.model`
         // in AgentSession.compact and its auto-compaction).
-        if (this.#session.model) {
-          this.#spent(piModelValue(this.#session.model), event.result.usage);
-        }
         const leaf = this.#leaf();
+        if (this.#session.model) {
+          this.#spent(
+            piModelValue(this.#session.model),
+            event.result.usage,
+            Date.parse(leaf.timestamp)
+          );
+        }
         this.#ctx.frame({
           type: "system",
           subtype: "compact_boundary",

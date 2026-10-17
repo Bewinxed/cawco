@@ -12,6 +12,10 @@
  * - `--check`: write nothing; exit 1 when a file is not formatted.
  * - The options are `.prettierrc` (site/.prettierrc under site/), what Biome
  *   formatted with before; `.prettierignore` names what is left as written.
+ * - `formatText(path, text)`: the same formatter over text in memory, as it
+ *   would write a file at `path` (that path's options and ignores; a file no
+ *   parser reads comes back as given). A generator formats what it makes
+ *   with it, so what it writes is final and its check compares bytes.
  *
  * `bun fmt` is in Bun's main branch and docs, in no stable release yet (v1.4.3
  * lacks it). The canary comes from npm, where a version is immutable:
@@ -25,7 +29,7 @@
  */
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
-import { homedir } from "node:os";
+import { availableParallelism, homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
 const VERSION = "1.4.3-canary.20261014.1";
@@ -112,49 +116,110 @@ const canary = async (): Promise<string> => {
   return bin;
 };
 
-const args = process.argv.slice(2);
-const check = args.includes("--check");
-const changed = args.includes("--changed");
-// Paths are the caller's (a package script runs in its package); git takes them from the root.
-const paths = args
-  .filter((arg) => !arg.startsWith("--"))
-  .map((arg) => relative(ROOT, resolve(process.cwd(), arg)) || ".");
-const unknown = args.filter(
-  (arg) => arg.startsWith("--") && arg !== "--check" && arg !== "--changed"
-);
-if (unknown.length > 0) {
-  fail(`unknown flag ${unknown.join(", ")}`);
+/** How `bun fmt` says a file is no language it formats. */
+const NO_PARSER = "No parser could be inferred";
+/** Formatter processes at once: each is short, and a generator may hand over hundreds of files. */
+const AT_ONCE = Math.min(8, availableParallelism());
+let running = 0;
+const waiting: (() => void)[] = [];
+
+/** One formatter run over `text` as the file at `file` (absolute). */
+async function formatOne(file: string, text: string): Promise<string> {
+  const child = Bun.spawn([await canary(), "fmt", `--stdin-filepath=${file}`], {
+    cwd: ROOT,
+    stdin: Buffer.from(text),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code === 0) {
+    return out;
+  }
+  // A file run passes `--ignore-unknown` and leaves such a file as written;
+  // on standard input that flag prints nothing at all, so it is not passed.
+  if (err.includes(NO_PARSER)) {
+    return text;
+  }
+  throw new Error(`fmt ${file}: ${err.trim() || `exited ${code}`}`);
 }
 
-const seen = new Set(
-  git("ls-files", "-z", "-co", "--exclude-standard", "--", ...paths)
-);
-const files = changed
-  ? git(
-      "diff",
-      "-z",
-      "--name-only",
-      "--diff-filter=ACMR",
-      git("merge-base", "HEAD", "origin/main")[0]?.trim() ?? "",
-      "--",
-      ...paths
-    ).filter((file) => seen.has(file))
-  : [...seen];
-// `bun fmt` with no paths formats the whole directory: an empty list is done.
-if (files.length === 0) {
-  process.exit(0);
+/**
+ * `text` as the formatter writes the file at `path` (the caller's, like the
+ * command line's): its options, `.prettierignore`, and a file no parser
+ * reads left as given.
+ */
+export async function formatText(path: string, text: string): Promise<string> {
+  if (running < AT_ONCE) {
+    running += 1;
+  } else {
+    // A run that ends hands its place straight to the next in line.
+    await new Promise<void>((go) => waiting.push(go));
+  }
+  try {
+    return await formatOne(resolve(process.cwd(), path), text);
+  } finally {
+    const next = waiting.shift();
+    if (next) {
+      next();
+    } else {
+      running -= 1;
+    }
+  }
 }
 
-const child = Bun.spawn(
-  [
-    await canary(),
-    "fmt",
-    ...(check ? ["--check"] : []),
-    // The list is git's, so a file with no formatter is simply not ours to format.
-    "--ignore-unknown",
-    "--no-error-on-unmatched-pattern",
-    ...files,
-  ],
-  { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] }
-);
-process.exit(await child.exited);
+async function main(): Promise<number> {
+  const args = process.argv.slice(2);
+  const check = args.includes("--check");
+  const changed = args.includes("--changed");
+  // Paths are the caller's (a package script runs in its package); git takes them from the root.
+  const paths = args
+    .filter((arg) => !arg.startsWith("--"))
+    .map((arg) => relative(ROOT, resolve(process.cwd(), arg)) || ".");
+  const unknown = args.filter(
+    (arg) => arg.startsWith("--") && arg !== "--check" && arg !== "--changed"
+  );
+  if (unknown.length > 0) {
+    fail(`unknown flag ${unknown.join(", ")}`);
+  }
+
+  const seen = new Set(
+    git("ls-files", "-z", "-co", "--exclude-standard", "--", ...paths)
+  );
+  const files = changed
+    ? git(
+        "diff",
+        "-z",
+        "--name-only",
+        "--diff-filter=ACMR",
+        git("merge-base", "HEAD", "origin/main")[0]?.trim() ?? "",
+        "--",
+        ...paths
+      ).filter((file) => seen.has(file))
+    : [...seen];
+  // `bun fmt` with no paths formats the whole directory: an empty list is done.
+  if (files.length === 0) {
+    return 0;
+  }
+
+  const child = Bun.spawn(
+    [
+      await canary(),
+      "fmt",
+      ...(check ? ["--check"] : []),
+      // The list is git's, so a file with no formatter is simply not ours to format.
+      "--ignore-unknown",
+      "--no-error-on-unmatched-pattern",
+      ...files,
+    ],
+    { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] }
+  );
+  return await child.exited;
+}
+
+if (import.meta.main) {
+  process.exit(await main());
+}

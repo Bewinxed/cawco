@@ -1084,7 +1084,7 @@
         <Alert class="items-center" role="status" surface="card">
           <AlertDescription>{view.problem}</AlertDescription>
           {#if noMachine}
-            <AlertAction class="flex items-center" place="full-height">
+            <AlertAction>
               <Button
                 label="Check machines"
                 onclick={() => {

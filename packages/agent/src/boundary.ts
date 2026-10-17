@@ -96,6 +96,7 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
+import { HEAVY_RUN_HELD_ENV } from "@cawco/core/heavy-run";
 import {
   currentEndpoint,
   currentKeeper,
@@ -120,6 +121,7 @@ import {
   workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
+  workspaceSpillsFile,
   workspaceStateDir,
   workspacesDir,
   workspaceTmpDir,
@@ -161,9 +163,11 @@ import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
+import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
+  askedPushParameters,
   closeGitDoor,
   gitDoorEnv,
   gitDoorOf,
@@ -787,7 +791,8 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  * - `xcodebuild` gets the IDE defaults that turn off its package manifest and
  *   plugin sandboxes, as nixpkgs builds Xcode projects under its own sandbox,
  *   and `-disable-sandbox` in OTHER_SWIFT_FLAGS for macro plugin servers. Its
- *   DerivedData goes in the workspaces' cache through the
+ *   DerivedData goes in the workspaces' cache, `DerivedData.noindex` (a
+ *   name Spotlight never indexes), through the
  *   `IDECustomDerivedDataLocation` default, which every action takes, where
  *   `-derivedDataPath` is refused by some (`-showsdks`, exit 64); its
  *   package cache through `-packageCachePath`, which only a build or a
@@ -800,6 +805,13 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  *   workspace's build runs them inside the boundary. It runs with a home of its own
  *   ({@link writeXcodeHome}), so what Foundation puts under `~/Library/Caches`
  *   (SwiftPM's manifest cache among it) lands in the workspaces' cache.
+ * - A compile through either (`swift build`, `test` or `run`; an xcodebuild
+ *   `build`, `build-for-testing`, `test`, `archive`, `analyze` or `install`)
+ *   is one of the machine's heavy runs: it runs under the agent's own
+ *   `cawco heavy-run` (core heavy-run.ts), which starts it once a slot is
+ *   free and the machine has room, unless a run it is under already holds
+ *   one (`CAWCO_HEAVY_RUN_HELD`). `test-without-building` compiles nothing:
+ *   Maestro's runner, on a simulator whose slot holds the run.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -884,6 +896,10 @@ const writeShims = async (id: string, runtime: string): Promise<void> => {
   const { port, token } = logRelay();
   const cache = workspaceCacheDir();
   const swiftpm = shellQuote(join(cache, "swiftpm"));
+  // A compile is one of the machine's heavy runs (core heavy-run.ts), held by
+  // this agent's `cawco heavy-run` until it ends; one under a run already held
+  // (build-both.sh, mac-slot.sh, a probe kit run) takes none.
+  const heavyRunLine = `[ -n "\${${HEAVY_RUN_HELD_ENV}:-}" ] || exec ${cawcoCommand("heavy-run").map(shellQuote).join(" ")} "$(printf '%q ' "\${run[@]}")"`;
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
@@ -900,7 +916,9 @@ case "\${1:-}" in
       *" --scratch-path"* | *" --build-path"*) ;;
       *) scratch=(--scratch-path ${swiftpm}/build/"$(/sbin/md5 -q -s "$PWD")") ;;
     esac
-    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@"
+    run=("$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@")
+    ${heavyRunLine}
+    exec "\${run[@]}"
     ;;
 esac
 exec "$swift" "$@"
@@ -915,6 +933,7 @@ exec "$swift" "$@"
 xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
 flags=
 builds=
+compiles=
 packages=
 args=()
 for arg in "$@"; do
@@ -923,7 +942,12 @@ for arg in "$@"; do
       args+=("$arg -disable-sandbox")
       flags=1
       ;;
-    build | build-for-testing | test | test-without-building | archive | analyze | clean | install | installsrc | -resolvePackageDependencies)
+    build | build-for-testing | test | archive | analyze | install)
+      args+=("$arg")
+      builds=1
+      compiles=1
+      ;;
+    test-without-building | clean | installsrc | -resolvePackageDependencies)
       args+=("$arg")
       builds=1
       ;;
@@ -940,7 +964,9 @@ done
 # A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
 mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
 export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
-exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData"))} "\${args[@]}"
+run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}")
+[ -z "$compiles" ] || ${heavyRunLine}
+exec "\${run[@]}"
 `,
       0o755
     ),
@@ -1050,10 +1076,31 @@ const writeGuardShims = async (id: string, runtime: string): Promise<void> => {
     "upstream-shim.ts",
     "boundary/upstream-shim.ts"
   );
-  const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id)].map(shellQuote).join(" ")}`;
+  const door = githubDoorOf(id);
+  const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id), door].map(shellQuote).join(" ")}`;
+  // The judge's exit (upstream-shim.ts): 0 runs the program, 4 is a post
+  // held for the person (nothing runs), 3 sends curl through the GitHub door
+  // (each GitHub API URL in the clear: the door reads plain HTTP), anything
+  // else is the call's own exit.
+  const viaDoor = `args=()
+    for arg in "$@"; do
+      case "$arg" in
+        https://api.github.com* | https://uploads.github.com*) arg=http://\${arg#https://} ;;
+        api.github.com* | uploads.github.com*) arg=http://$arg ;;
+      esac
+      args+=("$arg")
+    done
+    exec "$real" --unix-socket ${shellQuote(door)} "\${args[@]}" ;;`;
   await Promise.all(
     GUARDED_PROGRAMS.map((program) => {
-      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null || exit $?`;
+      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null
+  judged=$?
+  case $judged in
+    0) ;;
+    4) exit 0 ;;
+    3) ${program === "curl" ? viaDoor : "exit 1 ;;"}
+    *) exit $judged ;;
+  esac`;
       return writeWhole(
         join(dir, program),
         `#!/bin/bash
@@ -1068,7 +1115,9 @@ if [ -z "$real" ]; then echo "${program}: command not found" >&2; exit 127; fi
 ${
   program === "curl"
     ? `case " $* " in
-  *api.github.com* | *uploads.github.com*) ${asks} ;;
+  *api.github.com* | *uploads.github.com*)
+  ${asks}
+  ;;
 esac`
     : asks
 }
@@ -1722,12 +1771,16 @@ export const hookMissing = (hook: LaunchedHook): string | undefined =>
  * started without it (a later session on another account) is handed over,
  * its form changed with its policy. The project a work item's session
  * belongs to is the workspace's ({@link setProject}), so a workspace cut
- * before it was kept reads its project's folder from its next item on.
+ * before it was kept reads its project's folder from its next item on. The
+ * session's `spill` folder, where its harness saves a tool result too large
+ * to hand the model, is added too ({@link addSpill}): a new session's hands
+ * the boundary over, its form changed with its policy.
  */
 export const boundaryFor = async (
   workspace: WorkspaceRef | undefined,
   account: string | undefined,
-  project?: string
+  project?: string,
+  spill?: string
 ): Promise<Boundary | undefined> => {
   if (!workspace) {
     return;
@@ -1738,7 +1791,36 @@ export const boundaryFor = async (
   if (project) {
     await setProject(workspace.id, project);
   }
+  if (spill) {
+    await addSpill(workspace.id, spill);
+  }
   return ensureBoundary(workspace);
+};
+
+/**
+ * Adds `dir` to the folders workspace `id`'s sessions save tool results in
+ * ({@link workspaceSpillsFile}), once, and makes it: srt binds a read allow
+ * back only where it exists as the sandbox starts, and the harness writes
+ * its first saved result long after. Made owner-only, as Claude Code makes
+ * its own; never taken away while the workspace lives, as a session's
+ * transcript names its saved results for as long as it is resumed.
+ */
+const addSpill = async (id: string, dir: string): Promise<void> => {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const file = workspaceSpillsFile(id);
+  const listed = await reported(
+    readRecord<unknown>(file).then((record = []) => {
+      if (!Array.isArray(record)) {
+        throw new DamagedRecord(file, "it is not a list");
+      }
+      return record as string[];
+    })
+  );
+  if (listed.includes(dir)) {
+    return;
+  }
+  await mkdir(stateDir(id), { recursive: true });
+  await writeWhole(file, `${JSON.stringify([...listed, dir])}\n`, 0o644);
 };
 
 /**
@@ -4043,17 +4125,23 @@ const GITHUB_TOKEN_ENV = [
  * (`GIT_LFS_SKIP_PUSH`: the door sends them). gh runs with the guarded
  * config dir ({@link guardedGhConfigOf}): its requests go through the
  * workspace's GitHub door, which signs in on the host to what it lets
- * through (github-door.ts).
+ * through (github-door.ts). Under `ask` (`asks`), every push to GitHub goes
+ * through the git door too (hub-git.ts `askedPushParameters`), which holds
+ * one to another person's repository for the person.
  */
-const guardedEnv = (id: string, clone: string): string[] => {
+const guardedEnv = (id: string, clone: string, asks: boolean): string[] => {
   const github = guardedGitParameters(clone);
-  const base = gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS;
+  const words = [
+    gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS,
+    github,
+    asks ? askedPushParameters() : undefined,
+  ].filter((each): each is string => Boolean(each));
   return [
     `unset ${GITHUB_TOKEN_ENV.join(" ")}`,
     `export GH_CONFIG_DIR=${shellQuote(guardedGhConfigOf(id))}`,
-    ...(github
+    ...(github || asks
       ? [
-          `export CAWCO_GIT_PARAMETERS=${shellQuote(base ? `${base} ${github}` : github)}`,
+          `export CAWCO_GIT_PARAMETERS=${shellQuote(words.join(" "))}`,
           "export GIT_LFS_SKIP_PUSH=1",
         ]
       : []),
@@ -4172,9 +4260,11 @@ fi
 ${linux ? mountCheck(id, held) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-# Kept off other people's repositories (upstreamGuarded): no GitHub token.
+# Kept off other people's repositories, or asking the person first
+# (upstream-guard.ts isGuarded): no GitHub token.
+posts=$(sed -n 's/.*"posts":"\\([a-z]*\\)".*/\\1/p' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null)
 guarded=
-if grep -q '"guarded":true' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null; then guarded=1; fi
+case "$posts" in off | ask) guarded=1 ;; esac
 ${ghToken(id, gh)}
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
@@ -4184,8 +4274,12 @@ pwd -P > "$req/cwd"
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
-  if [ -n "$guarded" ]; then
-${guardedEnv(id, held.path)
+  if [ "$posts" = ask ]; then
+${guardedEnv(id, held.path, true)
+  .map((line) => `    echo ${shellQuote(line)}`)
+  .join("\n")}
+  elif [ -n "$guarded" ]; then
+${guardedEnv(id, held.path, false)
   .map((line) => `    echo ${shellQuote(line)}`)
   .join("\n")}
   fi

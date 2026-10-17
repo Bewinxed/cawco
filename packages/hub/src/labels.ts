@@ -1,6 +1,6 @@
 /**
  * How the hub names a session, everywhere it names one: peer frames, reports,
- * delegate rosters, the delegation tree, Telegram, ask cards, work items.
+ * delegate rosters, the delegation tree, pushes, ask cards, work items.
  *
  * `name` is the leaf of the folder it was launched in, and `tag` is
  * `name#id8`. A session whose launch directory is unknown (its machine had no

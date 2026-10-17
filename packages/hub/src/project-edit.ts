@@ -17,6 +17,7 @@
  * projects of one name as readily (`POST /api/projects`).
  */
 import { LANDS_MODES, type LandsMode } from "@cawco/core";
+import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import type { DbShape, ProjectRow } from "./db";
 
 /** As long as a name `POST /api/projects` takes. */
@@ -30,8 +31,8 @@ export interface ProjectEdit {
   lands?: LandsMode;
   name?: string;
   review?: boolean;
-  /** Its sessions may post to other repositories; null: the fleet's answer. */
-  upstreamPosts?: boolean | null;
+  /** Whether its sessions may post to other repositories (off, ask first, on); null: the fleet's answer. */
+  upstreamPosts?: UpstreamPosts | null;
 }
 
 /** A change the hub refuses, in a sentence the person reads under the field. */

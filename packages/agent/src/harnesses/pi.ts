@@ -1,5 +1,6 @@
 /** Pi's agent adapter owns only custody and transport, never a running SDK turn. */
 import { resumeCursor, type SpawnPayload } from "@cawco/core";
+import { workspaceSpillDir } from "@cawco/core/paths";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import type { KeeperReading } from "../keepers";
 import { parseProcId, procIdFor } from "../proc-id";
@@ -28,6 +29,22 @@ const withAccountReads = (
 };
 
 export class PiHarness extends PiProfile implements Harness {
+  /**
+   * pi's bash saves the whole output of a command it cuts to its host's
+   * `TMPDIR` ("Full output: <tmpdir>/pi-bash-<id>.log", output-accumulator.js
+   * in 1.0.1), and its `read` sends the model to the shell for a line too
+   * long to show ("Use bash: sed -n …"). A workspace's pi host runs with the
+   * session's own folder as its `TMPDIR` ({@link spawnPi}).
+   */
+  // biome-ignore lint/suspicious/useAwait: implements Harness.spill's Promise contract
+  async spill(
+    spec: SpawnPayload,
+    _cwd: string,
+    workspace: string
+  ): Promise<{ dir: string; spec: SpawnPayload }> {
+    return { dir: workspaceSpillDir(workspace, spec.instanceId), spec };
+  }
+
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext

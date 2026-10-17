@@ -34,19 +34,28 @@ public enum Toast {
     /// `description`: a second line under the message, in muted ink.
     /// `sticky`: it stays until swiped away or its action is taken
     /// (`duration: Infinity`), for a toast that carries the way to recover.
-    public static func show(_ message: String, description: String? = nil, kind: Kind = .plain, action: Action? = nil, sticky: Bool = false, in view: UIView?) {
+    /// `id` (sonner's `id`): a toast with the same id still standing is
+    /// changed in place, keeping its place in the stack, its time restarted.
+    public static func show(_ message: String, description: String? = nil, kind: Kind = .plain, action: Action? = nil, sticky: Bool = false, id: String? = nil, in view: UIView?) {
         guard let scene = view?.window?.windowScene ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         let layer = layers[ObjectIdentifier(scene)] ?? {
             let made = ToastWindow(windowScene: scene)
             layers[ObjectIdentifier(scene)] = made
             return made
         }()
-        layer.add(message, description: description, kind: kind, action: action, sticky: sticky)
+        layer.add(message, description: description, kind: kind, action: action, sticky: sticky, id: id)
         UIAccessibility.post(notification: .announcement, argument: message)
         #if DEBUG
         // Every toast, for a simulator pass to count (probe-ios-catchup.ts).
-        Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("toast shown: \(message, privacy: .public). \(description ?? "", privacy: .public)")
+        Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("toast shown: \(message, privacy: .public). \(description ?? "", privacy: .public)\(id.map { " id \($0)" } ?? "", privacy: .public)")
         #endif
+    }
+
+    /// Takes the toast standing with `id` away (sonner's `toast.dismiss(id)`); nothing when none stands.
+    public static func dismiss(id: String, in view: UIView?) {
+        guard let scene = view?.window?.windowScene ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let layer = layers[ObjectIdentifier(scene)] else { return }
+        layer.dismiss(id: id)
     }
 
     private static var layers: [ObjectIdentifier: ToastWindow] = [:]
@@ -99,18 +108,28 @@ private final class ToastWindow: UIWindow {
     /// Up to 640pt a toast drops from the top, under the top bar; wider it sits in the bottom-right corner.
     private var narrow: Bool { bounds.width <= 640 }
 
-    func add(_ message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, sticky: Bool) {
+    func add(_ message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, sticky: Bool, id: String?) {
         guard let host = rootViewController?.view else { return }
         let toast = ToastView(message: message, description: description, kind: kind, action: action)
+        toast.id = id
         toast.onDismiss = { [weak self, weak toast] velocity in
             guard let self, let toast else { return }
             remove(toast, thrown: velocity)
         }
         host.addSubview(toast)
-        toasts.insert(toast, at: 0)
         let width = narrow ? bounds.width - 24 : 356
         let size = toast.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
         toast.bounds = CGRect(origin: .zero, size: CGSize(width: width, height: size.height))
+        if let id, let index = toasts.firstIndex(where: { $0.id == id }) {
+            // Changed in place: the new words take the standing one's place, no arrival.
+            toasts[index].removeFromSuperview()
+            toasts[index] = toast
+            toast.center = place(toast, at: index)
+            restack(except: toast)
+            expire(toast, sticky: sticky)
+            return
+        }
+        toasts.insert(toast, at: 0)
         let rest = place(toast, at: 0)
         #if DEBUG
         // Where it rests against the highest floor showing, for a simulator pass to read.
@@ -132,12 +151,22 @@ private final class ToastWindow: UIWindow {
             toast.center = rest
         }.startAnimation()
         restack(except: toast)
+        expire(toast, sticky: sticky)
+    }
+
+    /// After its lifetime a toast goes, unless it is sticky, under a finger, or already replaced.
+    private func expire(_ toast: ToastView, sticky: Bool) {
         guard !sticky else { return }
         Task { @MainActor [weak self, weak toast] in
             try? await Task.sleep(for: .seconds(Self.lifetime))
             guard let self, let toast, toast.superview != nil, !toast.held else { return }
             remove(toast, thrown: nil)
         }
+    }
+
+    func dismiss(id: String) {
+        guard let toast = toasts.first(where: { $0.id == id }) else { return }
+        remove(toast, thrown: nil)
     }
 
     /// Where the toast at `index` (0 nearest its edge) rests. On a desk, the
@@ -211,6 +240,8 @@ private final class PassThroughView: UIView {}
 
 private final class ToastView: UIView {
     var onDismiss: (CGFloat?) -> Void = { _ in }
+    /// Its `Toast.show` id, by which a later one changes it in place or dismisses it.
+    var id: String?
     /// Under a finger: it does not time out.
     private(set) var held = false
     private var start = CGPoint.zero

@@ -19,10 +19,18 @@
  * keeper shuts the simulator down, deletes it and frees the slot either way.
  * `release()` resolves once that is done.
  *
+ * On the Mac itself the simulator is a heavy run of this process
+ * (lib/heavy-run.ts `heavySlot`) from before it boots until it is deleted:
+ * mac-slot.sh takes none of its own under it, and a scratch fleet or build
+ * this process starts beside it counts the same run, where one mac-slot.sh
+ * took alone would wait on this process's own simulator.
+ *
  * Over SSH the slot script is build-both.sh's copy of apps/apple on the Mac
- * (~/build/cawco-apple/<build>/apps/apple), so a probe compiles first.
+ * (~/build/cawco-apple.noindex/<build>/apps/apple), so a probe compiles first; there
+ * mac-slot.sh holds the Mac's own heavy run, and this machine's is not taken.
  */
 import { basename, join, resolve } from "node:path";
+import { type HeavySlot, heavySlot } from "./heavy-run";
 
 const root = resolve(import.meta.dir, "..", "..");
 const home = process.env.HOME ?? "";
@@ -126,13 +134,15 @@ function slotScript(ssh: boolean): string {
     return join(root, "apps", "apple", "scripts", "mac-slot.sh");
   }
   const build = root === join(home, "cockpit") ? "main" : basename(root);
-  return `build/cawco-apple/${build}/apps/apple/scripts/mac-slot.sh`;
+  return `build/cawco-apple.noindex/${build}/apps/apple/scripts/mac-slot.sh`;
 }
 
 /** Takes a simulator slot (waiting for one, as mac-slot.sh prints); the booted simulator's UDID. */
 export async function macSim(choice: SimChoice = {}): Promise<MacSim> {
   const ssh = choice.ssh ?? process.platform !== "darwin";
   const { runtime, device } = await resolveChoice(ssh, choice);
+  // Taken before the spawn: mac-slot.sh inherits CAWCO_HEAVY_RUN_HELD.
+  const heavy: HeavySlot | undefined = ssh ? undefined : await heavySlot();
   const child = Bun.spawn(
     onMac(ssh, [
       "bash",
@@ -145,14 +155,17 @@ export async function macSim(choice: SimChoice = {}): Promise<MacSim> {
       "-c",
       HOLDER,
     ]),
-    // stderr carries mac-slot.sh's WAITING and SIMULATOR lines.
-    { stdin: "pipe", stdout: "pipe", stderr: "inherit" }
+    // stderr carries mac-slot.sh's WAITING and SIMULATOR lines. The env is
+    // named: Bun.spawn's default is process.env as this process launched,
+    // without the CAWCO_HEAVY_RUN_HELD heavySlot set since.
+    { stdin: "pipe", stdout: "pipe", stderr: "inherit", env: process.env }
   );
   let released: Promise<void> | undefined;
   const release = () => {
     released ??= (async () => {
       child.stdin.end();
       await child.exited;
+      heavy?.release();
     })();
     return released;
   };

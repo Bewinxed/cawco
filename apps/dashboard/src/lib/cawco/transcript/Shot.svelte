@@ -88,6 +88,24 @@
     }
     return null;
   }
+
+  /**
+   * A video's captions file, looked up once per URL for the page's life: its
+   * text as a blob URL the `<track>` reads, or null when there is none.
+   */
+  const sidecars = new Map<string, Promise<string | null>>();
+  export function sidecarCaptions(url: string): Promise<string | null> {
+    let found = sidecars.get(url);
+    if (!found) {
+      found = fetch(url)
+        .then(async (answer) =>
+          answer.ok ? URL.createObjectURL(await answer.blob()) : null
+        )
+        .catch(() => null);
+      sidecars.set(url, found);
+    }
+    return found;
+  }
 </script>
 
 <script lang="ts">
@@ -100,6 +118,8 @@
     src,
     alt,
     caption,
+    captions,
+    missing,
     path,
     size = "card",
     video = false,
@@ -107,11 +127,37 @@
     src: string;
     alt: string;
     caption?: string;
+    /** Where a video's sidecar `.vtt` would be served from. */
+    captions?: string;
+    /** What the box says it is when the file can't be read. */
+    missing?: string;
     path?: string;
     size?: "thumb" | "card";
     /** A clip rather than a picture: played in place, with the browser's own controls. */
     video?: boolean;
   } = $props();
+
+  /**
+   * The captions this video has: undefined while the lookup runs, so the
+   * video goes in with its `default` track already inside it.
+   */
+  let track = $state<{ for: string; url: string | null }>();
+  $effect(() => {
+    const url = captions;
+    if (!(video && url)) {
+      return;
+    }
+    let live = true;
+    sidecarCaptions(url).then((found) => {
+      if (live) {
+        track = { for: url, url: found };
+      }
+    });
+    return () => {
+      live = false;
+    };
+  });
+  const captionsReady = $derived(!captions || track?.for === captions);
 
   let image = $state<HTMLImageElement>();
   let loaded = $state<string>();
@@ -214,25 +260,39 @@
       data-slot="shot-box"
       class="relative flex items-center justify-start w-full h-(--cap) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)"
     >
-      <!-- biome-ignore lint/a11y/useMediaCaption: an agent's screen recording carries no caption track -->
-      <video
-        aria-label={alt}
-        class="block max-w-full max-h-(--cap) h-full object-contain"
-        controls
-        onerror={() => {
-          failed = src;
-        }}
-        playsinline
-        preload="metadata"
-        {src}
-      ></video>
+      {#if captionsReady}
+        <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. svelte-check and Biome read only an unconditional <track>. -->
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <!-- biome-ignore lint/a11y/useMediaCaption: the <track> is conditional on the sidecar .vtt, which Biome does not read -->
+        <video
+          aria-label={alt}
+          class="block max-w-full max-h-(--cap) h-full object-contain"
+          controls
+          onerror={() => {
+            failed = src;
+          }}
+          playsinline
+          preload="metadata"
+          {src}
+        >
+          {#if track?.url}
+            <track
+              default
+              kind="captions"
+              label="Captions"
+              src={track.url}
+              srclang="en"
+            />
+          {/if}
+        </video>
+      {/if}
     </div>
   {:else if failed === src}
     <div
       data-slot="shot-box"
       class="relative flex flex-col items-start justify-center w-full h-(--cap) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)"
     >
-      <span>{video ? "Video" : "Image"} not available</span>
+      <span>{missing ?? (video ? "Video" : "Image")} not available</span>
       {#if path}
         <span
           data-slot="path"

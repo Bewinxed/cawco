@@ -60,7 +60,6 @@ import type {
   WorkspaceArchived,
   WorkspaceCheckout,
   WorkspaceCommit,
-  WorkspaceCut,
   WorkspaceHolding,
   WorkspaceRef,
   WorkspaceUnlanded,
@@ -1092,8 +1091,8 @@ const messageOf = (
 });
 
 /**
- * Who may give finished work another turn: the reader (dashboard or
- * Telegram, their words or their Send on its artifact: core `byPerson`), the
+ * Who may give finished work another turn: the reader (dashboard or app,
+ * their words or their Send on its artifact: core `byPerson`), the
  * session that delegated it, or its project's lead (a co-parent of every
  * item of its project).
  */
@@ -1668,10 +1667,16 @@ type Landed =
       line: string;
       gate: GateRun;
       prUrl?: string;
-      cut?: WorkspaceCut;
     }
   | { kind: "refused"; line: string; gate: GateRun; prUrl?: string }
-  | { kind: "retry"; text: string };
+  | { kind: "retry"; text: string }
+  | { kind: "stopped"; text: string };
+
+/** A landing its item's stop ended before it pushed (landing.ts `Stopped`): nothing landed, nothing reported. */
+const stoppedLanding = (item: WorkItemRow): Landed => ({
+  kind: "stopped",
+  text: `${item.title} was stopped while it landed; nothing was landed or reported.`,
+});
 
 /** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
 const dirtyText = (files: string, where: string): string =>
@@ -1719,7 +1724,7 @@ const refusedLine = (
  * landed, the line on the outputs that did not arrive.
  */
 const failureOf = (
-  landing: Exclude<Landed, { kind: "retry" }>,
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
   collected: { ok: boolean; line: string }
 ): string | undefined => {
   if (landing.kind !== "done") {
@@ -1745,7 +1750,7 @@ const gateSection = (run: GateRun): string => {
  */
 const finishedReport = (
   summary: string,
-  landing: Exclude<Landed, { kind: "retry" }>,
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
   collected: { ok: boolean; line: string },
   tail: string
 ): string => {
@@ -1758,9 +1763,37 @@ const finishedReport = (
   return `${failure}\n\n${head}${landed}${tail}`;
 };
 
+/**
+ * What `finish_item` answers once a landing ended its item: done, or failed
+ * because it could not land or its outputs did not arrive. `gateSaid` is the
+ * landing gate's lines, `held` the words on a group's held report.
+ */
+const landedText = (
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>,
+  collected: { ok: boolean; line: string },
+  gateSaid: string,
+  held: string
+): { done: boolean; text: string } => {
+  if (landing.kind !== "done") {
+    return {
+      done: false,
+      text: `The work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+    };
+  }
+  return collected.ok
+    ? {
+        done: true,
+        text: `${landing.line}${collected.line}${gateSaid}\n\nThe item is done${held}. End your turn.`,
+      }
+    : {
+        done: false,
+        text: `${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+      };
+};
+
 /** A push to an item's own branch that did not happen, as its landing. */
 const unpushed = (
-  pushed: Exclude<BranchOutcome, { kind: "pushed" }>,
+  pushed: Exclude<BranchOutcome, { kind: "pushed" | "stopped" }>,
   workspace: WorkspaceRow,
   branch: string,
   lands: LandsMode,
@@ -2898,9 +2931,10 @@ export const createWorkItems = ({
    * ({@link WorkspaceUnlanded}), or with `discard` saved to a carry first
    * ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot write
    * one refuses); `skip`, its items' handed-over outputs. Archived, its
-   * places go with it and its row says so, with the carry; holding work
-   * (only a `keep` answers so) its row is held with what it holds, its clone
-   * and places standing.
+   * places go with it and its row says so, with the carry and where its
+   * clone's HEAD was ({@link recut} cuts it again there); holding work (only
+   * a `keep` answers so) its row is held with what it holds, its clone and
+   * places standing.
    */
   const closeWorkspace = async (
     workspace: WorkspaceRow,
@@ -2910,10 +2944,11 @@ export const createWorkItems = ({
     const discard = unlanded === "discard";
     const request: WorkspaceArchive = {
       ...refOf(workspace),
+      base: workspace.base,
       unlanded: discard ? "keep" : unlanded,
       skip,
     };
-    const { carry, held } = (await call(
+    const { carry, head, held } = (await call(
       workspace.machineId,
       discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
       [request]
@@ -2942,6 +2977,7 @@ export const createWorkItems = ({
         boundaryPid: null,
         holding: null,
         heldAt: null,
+        head: head ?? null,
         ...(carry ? { carry } : {}),
       }) ?? workspace;
     workspaceChanged?.(archived);
@@ -2958,7 +2994,9 @@ export const createWorkItems = ({
 
   /**
    * What holds a workspace whose items have all ended, in words, or nothing:
-   * a session of its items whose process may still run there (one asleep,
+   * the landing of one of its items still running (its run settles the
+   * workspace again as it ends, {@link settleLanding}), a session of its
+   * items whose process may still run there (one asleep,
    * stopped or failed has none), or an artifact, any session's, showing what
    * it serves (db artifacts.ts `previewing`: a port preview naming it, a
    * folder preview inside its clone). On 2026-10-15 a workspace was retired
@@ -2969,6 +3007,13 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
   ): string | undefined => {
+    // A stopped item's landing runs on in the clone until its next turn or
+    // push ends it (landing.ts `stopped`): closing the clone under it would
+    // cut its commands off mid-rebase.
+    const landing = items.find((item) => finishing.has(item.id));
+    if (landing) {
+      return `the landing of its item ${landing.id} still runs`;
+    }
     const rows = db.getInstancesByIds([
       ...new Set(items.map((item) => item.instanceId)),
     ]);
@@ -3143,7 +3188,7 @@ export const createWorkItems = ({
       const read = await command(
         workspace.machineId,
         workspace.path,
-        `${SAFE_GIT_SHELL}a=$(git rev-list --count HEAD --branches --not --remotes) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
+        `${SAFE_GIT_SHELL}a=$(git rev-list --count HEAD --branches --not --remotes=origin) && s=$(git status --porcelain${skip.length > 0 ? ` -- .${skip.join("")}` : ""}) && t=$(git stash list) && echo "$a" && ${lines("s")} && ${lines("t")}`,
         GIT_TIMEOUT_MS,
         refOf(workspace),
         { noWait: true }
@@ -3233,22 +3278,40 @@ export const createWorkItems = ({
 
   /**
    * Whether a workspace is retired and may be cut again: archived, not a
-   * gate workspace, and its work not discarded (a discard's carry holds
-   * it, and nothing on its remote does).
+   * gate workspace, its work not discarded (a discard's carry holds it, and
+   * nothing on its remote does), and its machine said where its clone's HEAD
+   * was as it deleted it ({@link closeWorkspace}). One with no such word (a
+   * clone already gone, a folder that was no clone, a retirement before the
+   * hub kept it) is not: any other commit could leave its commits behind.
    */
   const recuttable = (workspace: WorkspaceRow): boolean =>
     workspace.state === "archived" &&
     workspace.carry === null &&
+    workspace.head !== null &&
     !workspace.checksFor;
+
+  /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
+  const archivedWords = (workspace: WorkspaceRow): string => {
+    if (workspace.carry) {
+      return `its workspace ${workspace.id} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`;
+    }
+    if (workspace.checksFor) {
+      return `its workspace ${workspace.id} is archived: its clone and boundary are gone.`;
+    }
+    return `its workspace ${workspace.id} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
+  };
 
   /** Each workspace's cut under way ({@link recut}): one at a time. */
   const recutting = new Map<string, Promise<WorkspaceRow>>();
 
   /**
-   * A retired workspace cut again on its machine, at the same path (a
-   * function of its id) with the same id and branch, at the commit its last
-   * item landed ({@link CONTROL_WORKSPACE_CREATE}'s `at`; its default
-   * branch's tip when none landed one), its boundary started on the account
+   * A retired workspace ({@link recuttable}) cut again on its machine, at the
+   * same path (a function of its id) with the same id and branch, at the
+   * commit its clone's HEAD was on when it retired
+   * ({@link CONTROL_WORKSPACE_CREATE}'s `at`), never its default branch's
+   * tip: on 2026-10-17 a clone whose landing was stopped while queued came
+   * back at main, without its own commit. The machine refuses a commit the
+   * branch it was on no longer holds. Its boundary is started on the account
    * its latest item's session runs on: its delegate goes on in the same
    * session, on its transcript, in the same folder. Filed active again, one
    * of its project's places. Its installed dependencies are gone with the
@@ -3269,6 +3332,12 @@ export const createWorkItems = ({
           })
         : pending;
     }
+    const { head } = workspace;
+    if (!head) {
+      return Promise.reject(
+        new Error(`workspace ${workspace.id}: ${archivedWords(workspace)}`)
+      );
+    }
     const work = (async (): Promise<WorkspaceRow> => {
       notPaused(workspace.machineId);
       const [latest] = db.workItemsIn(workspace.id);
@@ -3282,7 +3351,7 @@ export const createWorkItems = ({
           workspace.id,
           projectId,
           session?.accountId ?? null,
-          workspace.landed ?? null,
+          head,
         ]
       )) as WorkspaceCheckout;
       const path = cutPath(workspace.machineId, checkout.path);
@@ -3310,7 +3379,7 @@ export const createWorkItems = ({
       onCut?.();
       workspaceChanged?.(again);
       console.log(
-        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${workspace.landed ? `${workspace.landed.commit.slice(0, 9)} on ${workspace.landed.branch}` : `the tip of ${checkout.base}`}, for its delegate to go on`
+        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
       );
       return again;
     })().finally(() => recutting.delete(workspace.id));
@@ -3377,9 +3446,7 @@ export const createWorkItems = ({
     if (workspace.state === "archived") {
       throw new WorkItemRefusal(
         409,
-        workspace.carry
-          ? `Workspace ${workspace.id} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone. Delegate without workspace to start a new one.`
-          : `Workspace ${workspace.id} is archived: its clone and boundary are gone. Delegate without workspace to start a new one.`
+        `Not continued: ${archivedWords(workspace)} Delegate without workspace to start a new one.`
       );
     }
     if (workspace.checksFor) {
@@ -4636,19 +4703,107 @@ export const createWorkItems = ({
     machineCalled(machineId, db.listAgents());
 
   /**
-   * The session's live item that `finish_item` may finish; the done result,
-   * when it is done already; or the refusal.
+   * Whether the landing `item` is in was stopped ({@link LandingDeps.stopped}):
+   * the item ended (a stop cancels it and clears its `landingSince`), or its
+   * row marks a landing other than the one `item` was read in.
    */
-  const finishable = (
+  const landingStopped = (item: WorkItemRow): (() => boolean) => {
+    const since = item.landingSince?.getTime();
+    return () => {
+      const now = db.workItem(item.id);
+      return !(
+        now &&
+        LIVE.has(now.state) &&
+        since !== undefined &&
+        now.landingSince?.getTime() === since
+      );
+    };
+  };
+
+  /**
+   * A finished item running again in the same session: its held workspace's
+   * hold ended, its result and end cleared. It ends again the usual way, with
+   * a new report to its parent.
+   */
+  const rerun = (item: WorkItemRow): WorkItemRow => {
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    if (workspace) {
+      continued(workspace);
+    }
+    return (
+      update(item.id, {
+        state: "running",
+        result: null,
+        error: null,
+        endedAt: null,
+        dismissedAt: null,
+        heldAt: null,
+      }) ?? item
+    );
+  };
+
+  /**
+   * Whether a done item's workspace holds work since it landed: commits no
+   * branch of `origin` has, or changes not committed (its outputs passed
+   * over). Its session made them after the item ended, on a word that
+   * reopened nothing (one sent while it was landing, {@link reopen}), and a
+   * `finish_item` lands them. A call repeated after its landing settled (a
+   * hub restarted under it) finds none: everything it landed is on `origin`.
+   * A held workspace holds such work by its record. Git inside its boundary,
+   * never waiting; a read git cannot answer throws its words.
+   */
+  const followsUp = async (item: WorkItemRow): Promise<boolean> => {
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    if (!workspace || workspace.state === "archived" || workspace.checksFor) {
+      return false;
+    }
+    if (isHeld(workspace)) {
+      return true;
+    }
+    const read = await command(
+      workspace.machineId,
+      workspace.path,
+      `${SAFE_GIT_SHELL}git rev-list --count HEAD --not --remotes=origin && ${statusCommand(item.outputs ?? [])} | wc -l`,
+      GIT_TIMEOUT_MS,
+      refOf(workspace),
+      { noWait: true }
+    );
+    const counts = read.stdout.trim().split(SPACES).map(Number);
+    if (
+      read.exitCode !== 0 ||
+      counts.length !== 2 ||
+      counts.some((count) => !Number.isInteger(count))
+    ) {
+      throw new Error(
+        `git in workspace ${workspace.id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+      );
+    }
+    return counts.some((count) => count > 0);
+  };
+
+  /**
+   * The session's live item that `finish_item` may finish; the done result,
+   * when it is done already with nothing since ({@link followsUp}); or the
+   * refusal. A done item whose workspace holds work since runs again
+   * ({@link rerun}), and this call lands that work: on 2026-10-17 a
+   * follow-up commit could not land, the call answering the old report.
+   */
+  const finishable = async (
     instanceId: string
-  ): { row: InstanceRow; item: WorkItemRow } | string => {
+  ): Promise<{ row: InstanceRow; item: WorkItemRow } | string> => {
     const [row] = db.getInstancesByIds([instanceId]);
     const item = row ? itemOf(row) : undefined;
     if (!(row && item)) {
       throw new WorkItemRefusal(409, "No work item is open on this session.");
     }
     if (item.state === "done") {
-      return `The item is done.\n\n${item.result ?? ""}\n\nEnd your turn.`;
+      if (!(await followsUp(item))) {
+        return `The item is done.\n\n${item.result ?? ""}\n\nEnd your turn.`;
+      }
+      console.log(
+        `[work-items] ${item.id}: finish_item on done work whose workspace holds work since it landed: it runs again to land it`
+      );
+      return { row, item: rerun(item) };
     }
     if (!LIVE.has(item.state)) {
       throw new WorkItemRefusal(
@@ -4660,6 +4815,14 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(
         409,
         "the landing gate is already running for this item; its outcome comes to you when it settles"
+      );
+    }
+    // A stop ends its landing at the next turn or push; a gate step running
+    // then runs to its end first, and one landing at a time per item.
+    if (finishing.has(item.id)) {
+      throw new WorkItemRefusal(
+        409,
+        "the landing this item's stop cut short is still ending (a landing gate step runs to its end); call finish_item again in a minute"
       );
     }
     return { row, item };
@@ -5284,16 +5447,18 @@ export const createWorkItems = ({
       },
       queue: landings,
       skip: item.outputs ?? [],
+      stopped: landingStopped(item),
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
     const { gate } = runs;
     switch (outcome.kind) {
+      case "stopped":
+        return stoppedLanding(item);
       case "landed":
         return {
           kind: "done",
           gate,
           line: landedLine(base, outcome, runs.turn, stepped),
-          cut: { branch: base, commit: outcome.sha },
         };
       case "nothing":
         return {
@@ -5401,8 +5566,12 @@ export const createWorkItems = ({
       turn: turnOf(item),
       queue: landings,
       skip: item.outputs ?? [],
+      stopped: landingStopped(item),
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
+    if (pushed.kind === "stopped") {
+      return stoppedLanding(item);
+    }
     if (pushed.kind !== "pushed") {
       return unpushed(
         pushed,
@@ -5414,17 +5583,14 @@ export const createWorkItems = ({
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
-    const cut: WorkspaceCut = { branch, commit: pushed.sha };
     if (item.lands !== "pr") {
       return {
         kind: "done",
         gate,
         line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
-        cut,
       };
     }
-    const opened = await pullRequestFor(workspace, item, summary, gate, at);
-    return opened.kind === "done" ? { ...opened, cut } : opened;
+    return pullRequestFor(workspace, item, summary, gate, at);
   };
 
   /** Opens the pull request for an item's pushed branch, or finds the open one. */
@@ -5579,13 +5745,6 @@ export const createWorkItems = ({
     }
   };
 
-  /** Where a landing put the item's commit, on its workspace's row: a retired workspace is cut again there ({@link recut}). */
-  const noteLanded = (workspace: WorkspaceRow, landing: Landed): void => {
-    if (landing.kind === "done" && landing.cut) {
-      db.updateWorkspace(workspace.id, { landed: landing.cut });
-    }
-  };
-
   /**
    * A finished item whose gate passed at finish_item, to its end: its
    * outputs must be in its workspace (else it is back to running, told which
@@ -5621,7 +5780,10 @@ export const createWorkItems = ({
       update(item.id, settled);
       return { done: false, text: landing.text };
     }
-    noteLanded(workspace, landing);
+    // Its stop settled the row already.
+    if (landing.kind === "stopped") {
+      return { done: false, text: landing.text };
+    }
     const collected =
       landing.kind === "done"
         ? await collectOutputs(workspace, item)
@@ -5647,21 +5809,7 @@ export const createWorkItems = ({
       ...settled,
     });
     const held = reportOrHold(row, ended, body, submission.headline);
-    if (landing.kind !== "done") {
-      return {
-        done: false,
-        text: `The work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
-      };
-    }
-    return collected.ok
-      ? {
-          done: true,
-          text: `${landing.line}${collected.line}${gateSaid}\n\nThe item is done${held}. End your turn.`,
-        }
-      : {
-          done: false,
-          text: `${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
-        };
+    return landedText(landing, collected, gateSaid, held);
   };
 
   /** The paths of the workspace's changes against its target that the Swift build reads (apple-gate.ts). */
@@ -5801,16 +5949,15 @@ export const createWorkItems = ({
         return { done: false, text: gateFailedText(run, "your commits") };
       }
       // The gate took its time: the item may have been stopped since.
-      const stopped = db.workItem(item.id) ?? item;
-      if (!LIVE.has(stopped.state)) {
-        update(item.id, settled);
+      const current = db.workItem(item.id) ?? item;
+      if (landingStopped(current)()) {
         return {
           done: false,
-          text: `${stopped.title} is ${stopped.state} now; nothing was landed or reported.`,
+          text: `${current.title} is ${current.state} now; nothing was landed or reported.`,
         };
       }
       return await landAndReport(
-        stopped,
+        current,
         row,
         workspace,
         steps,
@@ -5824,6 +5971,10 @@ export const createWorkItems = ({
       finishing.delete(item.id);
       // A wait an error cut short leaves no words behind it.
       landingWait(item.id, null);
+      // An item stopped while it landed was not settled for it ({@link holdOn}).
+      if (!LIVE.has((db.workItem(item.id) ?? item).state)) {
+        settleSoon(item.workspaceId);
+      }
     }
   };
 
@@ -6234,7 +6385,7 @@ export const createWorkItems = ({
       }
       recut(workspace, () => recutDone?.(instanceId)).catch(
         (error: unknown) => {
-          const reason = `Its workspace ${workspace.id} retired when its work landed and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
+          const reason = `Its workspace ${workspace.id} retired and could not be cut again: ${error instanceof Error ? error.message : String(error)}`;
           console.warn(`[workspaces] ${instanceId}: ${reason}`);
           recutFailed?.(instanceId, reason);
         }
@@ -6300,9 +6451,7 @@ export const createWorkItems = ({
         // A retired one is cut again for the send ({@link recutHold}).
         if (workspace?.state === "archived" && !recuttable(workspace)) {
           return {
-            reason: workspace.carry
-              ? `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`
-              : `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} is archived: its clone and boundary are gone.`,
+            reason: `${item.title} (${item.id}) is ${item.state}, and ${archivedWords(workspace)}`,
             refusal: {
               kind: "workspace-archived",
               itemId: item.id,
@@ -6349,19 +6498,7 @@ export const createWorkItems = ({
         item.endedAt !== null &&
         item.endedAt.getTime() <= sentAt.getTime()
       ) {
-        // Its held workspace's hold ends: the work is live again.
-        const [workspace] = db.workspacesNamed(item.workspaceId);
-        if (workspace) {
-          continued(workspace);
-        }
-        update(item.id, {
-          state: "running",
-          result: null,
-          error: null,
-          endedAt: null,
-          dismissedAt: null,
-          heldAt: null,
-        });
+        rerun(item);
       }
     },
 
@@ -6445,14 +6582,15 @@ export const createWorkItems = ({
      * and the item marked landing before the gate's first step starts, so a
      * hub that dies mid-run resumes it ({@link resumeLandings}); then
      * {@link settleLanding} runs it to its outcome. An item done already
-     * answers its done result; one landing already is refused. Answers what
-     * the tool returns.
+     * answers its done result, unless its workspace holds work since, which
+     * this lands ({@link finishable}); one landing already is refused.
+     * Answers what the tool returns.
      */
     async finishItem(
       instanceId: string,
       request: WorkItemSubmission
     ): Promise<string> {
-      const open = finishable(instanceId);
+      const open = await finishable(instanceId);
       if (typeof open === "string") {
         return open;
       }

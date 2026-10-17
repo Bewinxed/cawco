@@ -54,12 +54,26 @@ import type { CarrySessionRequest } from "./harness";
  *    (`token-color`, `token-size`, `token-font`), its names its `options`,
  *    and the sheet's page carries no project-wide token names. A page built
  *    for 9 reloads into the inspector that reads the kinds.
+ * 11: an artifact notice's row (`ui.system_note` `artifact_responses`) says
+ *    the words before the artifact's name (`artifactLead`: "Comments on",
+ *    "Changes saved to", "Fix tray handed you") in place of `artifactSaid`,
+ *    one per notice kind (core `ARTIFACT_NOTICES`). A page built for 10 would
+ *    draw every notice as "Responses on", so it reloads first.
+ * 12: the upstream choice has three answers, `off`, `ask` and `on`, where it
+ *    had a boolean: `GET`/`PUT /api/fleet/choices` `upstream`, a project's
+ *    `upstreamPosts`, the `fleet.upstream` frame. A page built for 11 sends
+ *    a boolean the hub refuses, so it reloads first.
+ * 13: an archived workspace's row (`POST /api/workspaces/:id/archive`) says
+ *    `head`, the commit its clone's HEAD was on when it retired and the
+ *    branch of `origin` that held it, where it is cut again, in place of
+ *    `landed`, the commit its last landing recorded. No page reads it; a
+ *    page built for 12 reloads first all the same.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 10;
+export const WIRE_PROTOCOL = 13;
 
 /**
  * What a session's stream carries: the changes each frame made to its

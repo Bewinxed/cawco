@@ -225,7 +225,6 @@ The owner thinks in these nouns. The old code is organised by its data sources: 
 7. **How far back does he search?** Months of transcripts on three machines, or mostly this week? Assumed: mostly the last few days, but September must stay reachable.
 8. **Which secrets need hiding:** only what matches known key and token shapes, or anything he marks? Assumed: known shapes, at index time.
 9. **Does the iPhone need T3 and T8 at all,** or only T1, T2, T4 and T5? Assumed all, with T1 and T4 first.
-10. **Is `@` from Telegram in scope?** Not mentioned. Assumed no.
 
 ---
 

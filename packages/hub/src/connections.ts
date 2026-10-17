@@ -66,6 +66,7 @@ import {
 import { Elysia, status, t } from "elysia";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
 import type { ConnectionSecret } from "./db/schema";
+import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
 import { connectionToolsFor, roleOf } from "./roles";
@@ -131,8 +132,25 @@ export interface ConnectionsDeps {
   readonly hubOrigin: () => string;
   readonly lifetime: HubLifetimeShape;
   readonly projectExists: (id: string) => boolean;
+  /**
+   * Moves a connection, its projects with it, into the hub's trash for its
+   * Undo (db/trash.ts); the entry's id, or undefined for no such connection.
+   */
+  readonly trash: (name: string) => number | undefined;
   /** The connections the delegate type a session runs as lists. */
   readonly typeConnections: (row: InstanceRow) => readonly string[];
+  /**
+   * The upstream guard on a session's call (server.ts, upstream-asks.ts): a
+   * GitHub connection's write tool to another person's repository is
+   * refused (off) or held for the person (ask), and this answers the
+   * session instead of the call; undefined when the call goes ahead.
+   */
+  readonly upstream: (
+    actor: InstanceRow,
+    connection: Pick<ConnectionRow, "account" | "name" | "service">,
+    tool: Tool,
+    args: Record<string, unknown>
+  ) => CallToolResult | undefined;
 }
 
 const problem = (message: string): never => {
@@ -997,6 +1015,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
         `${name} isn't available here: this session reads the outside world, so it gets only a connection's read-only tools.`
       );
     }
+    const guarded = deps.upstream(actor, row(parsed.connection), tool, args);
+    if (guarded) {
+      return guarded;
+    }
     console.info(
       `[connections] ${actor.id} calls ${parsed.connection}/${tool.name}`
     );
@@ -1228,13 +1250,27 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return view(row(r.name));
   };
 
-  const remove = (name: string) => {
+  /** Lets it go into the hub's trash (db/trash.ts); answers the entry its Undo names. */
+  const remove = (name: string): number => {
     const r = row(name);
     drop(r.id);
     listed.delete(r.id);
-    db.remove(r.id);
+    const restore =
+      deps.trash(name) ?? problem(`There is no connection ${name}.`);
     console.info(`[connections] removed ${name}`);
     deps.changed();
+    return restore;
+  };
+
+  /** Back from the trash, its key or tokens with it: looked at again, as at hub start. */
+  const returned = (name: string): ConnectionView => {
+    const r = row(name);
+    if (r.state !== "needs-sign-in") {
+      detach(probe(name), `connection ${name} back from the trash`);
+    }
+    console.info(`[connections] ${name} back from the trash`);
+    deps.changed();
+    return view(r);
   };
 
   deps.lifetime.onClose(() => {
@@ -1260,6 +1296,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     startSignIn,
     completeSignIn,
     remove,
+    returned,
     /** At hub start: each connection with a secret (or none needed) is looked at once, off the boot path. */
     start: () => {
       for (const r of db.list()) {
@@ -1366,8 +1403,7 @@ export const connectionRoutes = (connections: Connections) =>
     })
     .delete("/api/connections/:name", ({ params }) => {
       try {
-        connections.remove(params.name);
-        return { ok: true };
+        return undoable(connections.remove(params.name));
       } catch (error) {
         return refused(error);
       }

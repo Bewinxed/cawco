@@ -73,7 +73,7 @@ const remotesOf = (sourceRepo: string): string[] => {
  * (hub upstream.ts `upstreamRules`) when no workspace in no project holds one.
  */
 const heldRules = async (): Promise<UpstreamRules> => {
-  let fleet: UpstreamRule = { guarded: false, remotes: [] };
+  let fleet: UpstreamRule = { posts: "on", remotes: [] };
   const projects: Record<string, UpstreamRule> = {};
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   for (const id of ids) {
@@ -100,7 +100,7 @@ if (!process.env.CAWCO_SESSIOND_ENDPOINT) {
 }
 if (verb === "create" && first && second) {
   const project = `cawco-check-${second.slice(0, 8)}`;
-  const rule: UpstreamRule = { guarded: false, remotes: remotesOf(first) };
+  const rule: UpstreamRule = { posts: "on", remotes: remotesOf(first) };
   const held = await heldRules();
   await takeUpstreamRules({
     ...held,

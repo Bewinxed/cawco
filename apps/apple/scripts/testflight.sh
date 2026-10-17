@@ -134,14 +134,14 @@ while [[ -n $("${SSH[@]}" 'find ~/build/.mac-hold -mmin -25 2>/dev/null') ]]; do
   echo 'WAITING for the Mac quiet window'
   sleep 60
 done
-"${SSH[@]}" 'rm -rf ~/build/cawco-testflight/source; mkdir -p ~/build/cawco-testflight/source'
-git archive "$REV" | "${SSH[@]}" 'tar -xf - -C ~/build/cawco-testflight/source'
+"${SSH[@]}" 'rm -rf ~/build/cawco-testflight.noindex/source; mkdir -p ~/build/cawco-testflight.noindex/source'
+git archive "$REV" | "${SSH[@]}" 'tar -xf - -C ~/build/cawco-testflight.noindex/source'
 echo "ARCHIVING $REV $TRAIN"
 # The archive is an Xcode build: it holds the Mac build slot every build-both.sh
 # and mac-slot.sh caller shares. Export, upload and App Store Connect's
 # processing run after, with the slot free.
 ARCHIVE_LOG=$(mktemp)
-"${SSH[@]}" 'bash ~/build/cawco-testflight/source/apps/apple/scripts/mac-slot.sh build -- /usr/bin/python3 - --archive' "${PLATFORM[@]}" < apps/apple/scripts/testflight.py | tee "$ARCHIVE_LOG"
+"${SSH[@]}" 'bash ~/build/cawco-testflight.noindex/source/apps/apple/scripts/mac-slot.sh build -- /usr/bin/python3 - --archive' "${PLATFORM[@]}" < apps/apple/scripts/testflight.py | tee "$ARCHIVE_LOG"
 BUILD=$(awk '$1 == "BUILD_NUMBER" { print $3 }' "$ARCHIVE_LOG" | tail -n 1)
 rm -f "$ARCHIVE_LOG"
 [[ -n $BUILD ]] || { echo "The archive named no build number" >&2; exit 1; }

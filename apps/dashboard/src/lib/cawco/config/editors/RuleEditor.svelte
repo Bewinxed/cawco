@@ -36,14 +36,14 @@
   import RuleTester from "../../RuleTester.svelte";
   import { blankRule, createRule, draftOf, saveRule } from "../../rules";
   import Choice from "../Choice.svelte";
+  import { deleteRule } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
   import PickerChip from "../PickerChip.svelte";
   import ReadingWell from "../ReadingWell.svelte";
-  import { deleteRule } from "../rule-delete";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert, withStats } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
@@ -232,7 +232,7 @@
   }
 
   /**
-   * Delete: at once, with Undo in the toast (rule-delete.ts). Back to the
+   * Delete: at once, with Undo in the toast (deletes.ts). Back to the
    * list first, so the row is seen leaving it; a refusal stands in the
    * editor's head, the rule kept.
    */
@@ -265,9 +265,6 @@
     fade: true,
     gap: 8,
   };
-
-  /** Delete asks in this editor's own footer. */
-  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -277,7 +274,6 @@
   oncancel={cancel}
   ondelete={id ? remove : undefined}
   onsubmit={save}
-  {question}
   saveLabel={id ? "Save changes" : "Create rule"}
   saving={busy}
   title={id ? draft.name || "Rule" : "New rule"}

@@ -14,14 +14,14 @@
     DELEGATE_HARNESSES,
     type DelegateType,
     delegateTypeProblem,
-    removeDelegateType,
     saveDelegateType,
   } from "../../delegate-types";
   import { failureWords as message } from "../../hub-read";
   import ModelCombobox from "../../ModelCombobox.svelte";
   import Choice from "../Choice.svelte";
+  import { deleteDelegateType } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -153,38 +153,23 @@
     void goto("/config/delegate-types");
   }
 
-  async function askRemove() {
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  async function remove() {
     if (!name) {
       return;
     }
-    await question.ask({
-      title: `Delete ${draft.name || "this delegate type"}?`,
-      body: "A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.",
-      confirmLabel: "Delete delegate type",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        deleting = true;
-        try {
-          await removeDelegateType(name);
-          kept.drop();
-          // Back to the list first, so the row is seen leaving it.
-          await goto("/config/delegate-types");
-          if (store.types.value) {
-            store.types.value = store.types.value.filter(
-              (row) => row.name !== name
-            );
-          }
-        } catch (error) {
-          deleting = false;
-          throw error;
-        }
-      },
-    });
+    deleting = true;
+    failed = undefined;
+    try {
+      await deleteDelegateType(store, name, () => {
+        kept.drop();
+        return goto("/config/delegate-types");
+      });
+    } catch (error) {
+      deleting = false;
+      failed = message(error);
+    }
   }
-
-  /** Delete asks in this editor's own footer. */
-  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -192,9 +177,8 @@
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
-  ondelete={name ? askRemove : undefined}
+  ondelete={name ? remove : undefined}
   onsubmit={save}
-  {question}
   saveLabel={name ? "Save changes" : "Create delegate type"}
   saving={busy}
   title={name ? draft.name : "New delegate type"}

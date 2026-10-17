@@ -14,7 +14,7 @@ import { Db, type DbShape } from "./db";
  * waiter in this process, and goes with it.
  */
 export interface PendingShape {
-  /** A relaunch or a death answers every question its process had open. */
+  /** A relaunch or a death answers every question its process had open; a held post stays ({@link outlivesSession}). */
   readonly forget: (instanceId: string) => void;
   /** The parked ask itself, for whoever answers it away from a dashboard. */
   readonly get: (requestId: string) => Envelope | undefined;
@@ -69,6 +69,15 @@ export type SettledListener = (
 
 /** Stamps a parked ask's presentation onto its payload. */
 export type Presenter = (envelope: Envelope) => void;
+
+/**
+ * Whether an ask stays when its session's process ends: a post held for the
+ * person (upstream-asks.ts), which the hub holds and makes itself, so no
+ * process waits on it.
+ */
+export const outlivesSession = (envelope: Envelope): boolean =>
+  (envelope.payload as { upstreamPost?: unknown } | undefined)?.upstreamPost !==
+  undefined;
 
 const isPermissionAsk = (envelope: Envelope): boolean =>
   (envelope.payload as { kind?: unknown } | undefined)?.kind ===
@@ -215,7 +224,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     resolve,
     forget: (instanceId) => {
       for (const [requestId, envelope] of requests) {
-        if (envelope.instanceId === instanceId) {
+        if (envelope.instanceId === instanceId && !outlivesSession(envelope)) {
           resolve(requestId, "cancelled");
         }
       }

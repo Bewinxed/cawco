@@ -197,19 +197,21 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 spaced.pin(hung(why), insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
                 below.addArrangedSubview(spaced)
             case "ui.system_note" where block.string("subtype") == "artifact_responses":
-                // The person sent responses on one of the session's artifacts
-                // (core ARTIFACT_RESPONSES): one quiet line, its name the way
-                // to the artifact, and whether the agent has read them yet.
+                // One of CawCo's artifact notices to the session (core
+                // ARTIFACT_NOTICES, drawn as ARTIFACT_RESPONSES): one quiet
+                // line, its lead and the artifact's name, the way to it, and
+                // whether the agent has read it yet. Glyphs as SystemLine's.
                 responses = block.string("artifactId")
                 let glyph: Glyph = switch block.string("artifactKind") {
                 case "canvas": .toolWrite
                 case "preview": .window
+                case "sheet": .artifactSheet
                 default: .toolRead
                 }
                 set(glyph, title: "")
-                // Comments delivered by themselves (core artifactSaid) read "Comments on"; picks "Responses on".
-                let what = block.string("artifactSaid") == "comments" ? "Comments on " : "Responses on "
-                let said = NSMutableAttributedString(attributedString: words(what, ink: Palette.inkMuted))
+                // The notice's lead before the name (core artifactLead, ARTIFACT_NOTICES): "Comments on", "Fix tray handed you".
+                let lead = (block.string("artifactLead") ?? "") + " "
+                let said = NSMutableAttributedString(attributedString: words(lead, ink: Palette.inkMuted))
                 let name = NSMutableAttributedString(attributedString: words(block.string("artifactName") ?? "", ink: Palette.inkStrong))
                 name.addAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue,
                                     .underlineColor: Palette.inkStrong.withAlphaComponent(0.35)],

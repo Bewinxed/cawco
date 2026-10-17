@@ -95,6 +95,13 @@ export interface PageOptions {
   engine?: Engine;
   /** Scripts installed before the page's own, in order. */
   init?: (() => void)[];
+  /**
+   * Chromium only: every frame in the page's own process, its preview's
+   * included, as WebKit runs them and as Chromium does a frame of the same
+   * site it does not isolate. Unset, Playwright's Chromium keys a preview's
+   * origin to a process of its own (preview-bound's 2).
+   */
+  oneProcess?: boolean;
   /** Device pixels per css px, when a spec reads another device (an iPhone's 3). */
   scale?: number;
   theme?: Theme;
@@ -395,8 +402,12 @@ export class Run {
     return serve(how, hub);
   }
 
-  browser(engine: Engine, revision?: string): Promise<Browser> {
-    const key = revision ? `${engine}-${revision}` : engine;
+  browser(
+    engine: Engine,
+    revision?: string,
+    oneProcess = false
+  ): Promise<Browser> {
+    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}`;
     const known = this.browsers.get(key);
     if (known) {
       return known;
@@ -420,7 +431,16 @@ export class Run {
       chromium: () =>
         chromium.launch({
           headless: true,
-          args: ["--no-sandbox", "--disable-gpu"],
+          args: [
+            "--no-sandbox",
+            "--disable-gpu",
+            ...(oneProcess
+              ? [
+                  "--disable-site-isolation-trials",
+                  "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
+                ]
+              : []),
+          ],
           env,
         }),
     } satisfies Record<Engine, () => Promise<Browser>>;
@@ -538,7 +558,8 @@ export class Run {
         const v = VIEWS[view];
         const browser = await this.browser(
           options.engine ?? "chromium",
-          options.engine === "webkit" ? options.webkit : undefined
+          options.engine === "webkit" ? options.webkit : undefined,
+          options.oneProcess
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({

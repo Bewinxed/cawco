@@ -5,9 +5,16 @@
    * conversation then compacted there by Claude Code's own /compact after it
    * files its open items. The figure under the numbers plays that policy,
    * rebuilt as they change. Off, the numbers fold away with the figure and
-   * the terms.
+   * the terms. Under it, on or off, what a delegate's work does at its limit.
    */
-  import { type Account, type AtLimit, accountsWords } from "@cawco/core";
+  import {
+    type Account,
+    type AtLimit,
+    accountsWords,
+    DELEGATE_WORK,
+    type DelegateWork,
+  } from "@cawco/core";
+  import Choice from "#lib/cawco/config/Choice.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -120,4 +127,20 @@
       {/if}
     </div>
   {/if}
+  <div
+    class="flex flex-col gap-space-2 pt-space-3 pb-space-2 text-pretty text-ink-row"
+  >
+    <p>{words.delegateWork}</p>
+    <Choice
+      label={words.delegateWork}
+      onchange={(next) => {
+        atLimit.delegateWork = next as DelegateWork;
+      }}
+      options={DELEGATE_WORK.map((value) => ({
+        value,
+        label: words.delegateWorkChoices[value],
+      }))}
+      value={atLimit.delegateWork}
+    />
+  </div>
 </div>

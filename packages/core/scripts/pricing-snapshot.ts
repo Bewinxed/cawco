@@ -13,7 +13,7 @@ const response = await fetch(URL);
 if (!response.ok) {
   throw new Error(`${URL} answered ${response.status}`);
 }
-const { models } = filterModelsDev(await response.json());
+const { models, skippedTiers = [] } = filterModelsDev(await response.json());
 const sorted = Object.fromEntries(
   Object.keys(models)
     .sort()
@@ -24,4 +24,10 @@ await Bun.write(
   path,
   `${JSON.stringify({ generatedAt: new Date().toISOString(), models: sorted, source: URL }, null, 2)}\n`
 );
-console.log(`pricing: ${Object.keys(sorted).length} models → ${path}`);
+const tiered = Object.values(sorted).filter((m) => m.tiers).length;
+console.log(
+  `pricing: ${Object.keys(sorted).length} models, ${tiered} with context tiers → ${path}`
+);
+for (const skipped of skippedTiers) {
+  console.log(`pricing: tier skipped, ${skipped}`);
+}

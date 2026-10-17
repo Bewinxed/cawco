@@ -20,7 +20,9 @@
 # the last tree it compiled: the rsync below makes the root's apps/apple
 # that tree exactly (--checksum --delete; a changed file is written anew,
 # an unchanged one keeps its mtime), and Xcode's incremental build follows.
-# No probe reads that root; a workspace's own builds stay in its own.
+# No probe reads that root; a workspace's own builds stay in its own. Each
+# gate run's logs are a folder of their own there, logs/<commit>-<time>, so a
+# failure's log outlives the runs after it; the newest 20 stay.
 # Every build compiles against the SwiftPM versions committed in
 # apps/apple/Package.resolved, resolution off (-disableAutomaticPackageResolution;
 # a resolved file Package.swift no longer matches fails the build, saying so),
@@ -36,20 +38,29 @@
 # The builds run one after the other into one DerivedData: two xcodebuilds
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
-# Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
-# and logs; `--gate` builds in ~/build/cawco-apple/gate. Mac-side locks cover retirement, rsync and both builds; a
+# Each workspace owns ~/build/cawco-apple.noindex/<workspace>, including DerivedData
+# and logs; `--gate` builds in ~/build/cawco-apple.noindex/gate. Every build
+# root's name ends in .noindex, so Spotlight indexes none of what a build
+# writes (mds_stores and mdworker were among the Mac's top users while builds
+# ran). Mac-side locks cover retirement, rsync and both builds; a
 # second build of the same workspace, and builds from different
 # workspaces, wait their turn.
 # The Mac build slot (one Xcode build at a time) is one lock for every caller,
-# in ~/.cawco/workspace-cache/xdg/cawco-apple/.locks: workspaces, a person's
+# in ~/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks: workspaces, a person's
 # or the orchestrator's SSH, and TestFlight's archive all wait on it. Each
 # launch boots its simulator in one of the Mac's two simulator slots.
 # Simulators and builds outside build-both.sh go through mac-slot.sh.
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
+# Run on the Mac itself, the Mac side leads a process group of its own as
+# well, as mac-slot.sh's keeper does: a cut-off that KILLs this script's
+# group (a check's runner sends TERM, then KILL 4 s later) never reaches it,
+# so it reads the link's EOF and ends the build group with its whole grace.
+# In this script's group it was KILLed inside that grace, and the build group
+# it was stopping lived on under launchd.
 # Run on the Mac itself, the Mac side runs here through the same steps and
 # the same link, with no SSH, under one root for every caller,
-# ~/.cawco/workspace-cache/xdg/cawco-apple: a CawCo workspace's own cache,
+# ~/.cawco/workspace-cache/xdg/cawco-apple.noindex: a CawCo workspace's own cache,
 # where its boundary lets it write builds, and the same folder from the
 # owner's shell, so the app a probe finds is the one this script last built
 # (scripts/lib/apple-app.ts). Each simulator build leaves CawCo.app.tree
@@ -84,14 +95,14 @@ if [[ -n ${CAWCO_MAC_SLOT:-} ]]; then
   exit 2
 fi
 if [[ $(uname -s) == Darwin ]]; then
-  MAC=(bash --norc -c)
-  APPLE_ROOT=$HOME/.cawco/workspace-cache/xdg/cawco-apple
+  MAC=(perl -e 'setpgrp(0, 0); exec @ARGV or die "exec: $!\n"' bash --norc -c)
+  APPLE_ROOT=$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex
 elif [[ -n ${CAWCO_WORKSPACE:-} ]]; then
   echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios\", expect: \"LAUNCHED iOS 18.5\" }, or delegate the work to the Mac." >&2
   exit 2
 else
   MAC=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
-  # Empty: the Mac side's own ~/build/cawco-apple.
+  # Empty: the Mac side's own ~/build/cawco-apple.noindex.
   APPLE_ROOT=
 fi
 ROOT=$(git rev-parse --show-toplevel)
@@ -100,12 +111,15 @@ COMPILE_ONLY=${2:-}
 [[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only || $COMPILE_ONLY == --gate ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only|--gate]" >&2; exit 2; }
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
+# A gate run's logs folder: the commit it compiles (the item's last) and when.
+LOG_RUN=
 if [[ $COMPILE_ONLY == --gate ]]; then
   BUILD=gate
   COMPILE_ONLY=--compile-only
+  LOG_RUN=$(git rev-parse --short=12 HEAD)-$(date +%Y%m%d-%H%M%S)
 fi
 [[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
-REMOTE=build/cawco-apple/$BUILD/apps/apple
+REMOTE=build/cawco-apple.noindex/$BUILD/apps/apple
 
 # Every path below is the repo root's: a caller anywhere in the repo (a check
 # run from apps/apple) builds the same tree.
@@ -122,8 +136,8 @@ if [[ -n ${CAWCO_WORKSPACE:-} && $PLATFORM != ios ]]; then
   exit 2
 fi
 # Built on this Mac, the build is a heavy run here: one of this machine's slots
-# (scripts/lib/heavy-run.ts) for this shell's life. Over SSH the build is the
-# Mac's, behind its build slot.
+# (scripts/lib/heavy-run.ts) for this shell's life. Over SSH it is the Mac's:
+# the Mac side runs under the installed `cawco heavy-run` there (below).
 if [[ $(uname -s) == Darwin ]]; then
   # shellcheck source=../../../scripts/lib/heavy-run.sh
   source scripts/lib/heavy-run.sh
@@ -143,12 +157,12 @@ read -r -d '' PREPARE <<'EOF' || true
 set -euo pipefail
 BUILD=$1
 shift
-ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple}
+ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple.noindex}
 mkdir -p "$ROOT/.locks"
 LOCK="$ROOT/.locks/$BUILD"
 command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
 # The one build slot every caller shares (mac-slot.sh holds the same lock).
-SLOTS="$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks"
+SLOTS="$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks"
 mkdir -p "$SLOTS"
 MACHINE_LOCK="$SLOTS/.machine"
 MACHINE_OWNER="$SLOTS/.machine.owner"
@@ -268,6 +282,12 @@ eval "$DISK_ROOM"
 disk_room "$ROOT" "build-both.sh $PLATFORM ($BUILD)"
 mkdir -p "$ROOT/$BUILD/apps/apple"
 rm -f "$ROOT/$BUILD/tree"
+# A gate run's logs are a folder of their own (LOG_RUN): the newest 19 before
+# it stay, with it 20.
+if [[ -n $LOG_RUN ]]; then
+  mkdir -p "$ROOT/$BUILD/logs"
+  ls -1t "$ROOT/$BUILD/logs" | tail -n +20 | while IFS= read -r old; do rm -rf -- "${ROOT:?}/$BUILD/logs/$old"; done
+fi
 echo READY
 # The same SSH process keeps the locks while the caller rsyncs; GO starts the
 # build. A failed sync ends the caller, and its EOF releases the locks.
@@ -288,7 +308,7 @@ PLATFORM=$2
 BUILD=$3
 COMPILE_ONLY=$4
 DD="$5/$BUILD/DerivedData"
-LOGS="$5/$BUILD/logs"
+LOGS="$5/$BUILD/logs${LOG_RUN:+/$LOG_RUN}"
 mkdir -p "$LOGS"
 SETTLE=8
 # The apps/apple synced here, as the caller stamped it with GO.
@@ -430,9 +450,14 @@ if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
 DISK_ROOM=$(<scripts/lib/disk-room.sh)
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q LOG_RUN=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$LOG_RUN" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
+# Over SSH the Mac side is one of the Mac's heavy runs, held by its installed
+# `cawco heavy-run` until the Mac side ends; its queue lines come back here.
+if [[ -z $APPLE_ROOT ]]; then
+  printf -v COMMAND '"$HOME"/.local/bin/cawco heavy-run %q' "$COMMAND"
+fi
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
 # descriptors. Each FIFO is opened once and its name removed at once.
@@ -467,7 +492,7 @@ if [[ -n $APPLE_ROOT ]]; then
   echo "BUILD DIRECTORY $APPLE_ROOT/$BUILD"
   "${SYNC[@]}" apps/apple/ "$APPLE_ROOT/$BUILD/apps/apple/"
 else
-  echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
+  echo "BUILD DIRECTORY mac:~/build/cawco-apple.noindex/$BUILD"
   "${SYNC[@]}" -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" apps/apple/ "mac:$REMOTE/"
 fi
 if [[ $(bash apps/apple/scripts/tree-stamp.sh) != "$TREE" ]]; then

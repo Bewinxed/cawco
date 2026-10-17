@@ -115,20 +115,14 @@ export interface Call {
   readonly cwd: string;
   readonly harness: "claude" | "opencode" | "pi";
   readonly input: unknown;
-  /**
-   * OpenCode: the saved outputs this session may read back, each a file its
-   * server named in the hint it gave the session ("full output saved to
-   * <file>", with the file as the result's `metadata.outputPath`, 2.0.28) —
-   * the session's own and its parent sessions' (the hint can hand the file
-   * to a subagent). The bridge plugin records them as each call ends.
-   */
-  readonly savedOutputs?: readonly string[];
   readonly tool: string;
   /**
    * OpenCode: the dir its server saves a truncated tool output to
    * (`<data>/opencode/tool-output`, observed on 2.0.28). It holds every
    * session's on that server, named by tool-call id alone, so the session
-   * reads none of it but {@link savedOutputs}.
+   * reads none of it: the plugin copies each output into the session's own
+   * folder, which the policy reads, and names the copy (opencode-plugin.ts
+   * `spilled`).
    */
   readonly toolOutput?: string;
   /** Claude Code: the session's transcript, which says which `projects/<slug>/` dir is the session's own. */
@@ -326,28 +320,21 @@ const claudeSession = (
 
 /**
  * The policy an OpenCode session judges by: the workspace's, with its
- * server's saved-output dir denied ({@link Call.toolOutput}) and each output
- * it was told it saved ({@link Call.savedOutputs}) read back, a file deeper
- * than the dir. Every other file there is another session's.
+ * server's saved-output dir denied ({@link Call.toolOutput}), every session's
+ * on that server.
  */
 const opencodeSession = (policy: Policy, call: Call): Policy => ({
   ...policy,
   denyRead: call.toolOutput
     ? [...policy.denyRead, resolveDenied(call.toolOutput)]
     : policy.denyRead,
-  allowRead: [
-    ...policy.allowRead,
-    ...(call.savedOutputs ?? [])
-      .filter((path) => isAbsolute(path))
-      .map(resolveReal),
-  ],
 });
 
 /**
  * The policy a call is judged by: the workspace's, with what the harness
  * itself keeps for the session to read back. Claude: {@link claudeSession}.
- * OpenCode: {@link opencodeSession}. pi keeps its own in the host's temp dir,
- * which the policy already reads.
+ * OpenCode: {@link opencodeSession}. pi keeps its saved outputs in the
+ * session's own folder, which the policy already reads.
  */
 const sessionPolicy = (policy: Policy, call: Call): Policy => {
   if (call.harness === "claude") {
@@ -440,7 +427,7 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * what the hub does to the file on the session's behalf. Read: the hub
  * reads it and hands it to the person or a service, never back to the
  * session — `show_image`'s `path` (the dashboard renders it from disk),
- * `send_to_user`'s `attachments` (sent to Telegram), `artifact_create`'s
+ * `send_to_user`'s `attachments` (shown in the transcript), `artifact_create`'s
  * `dir` (a preview's folder served, or a page's page.html read) and
  * `generate_image`'s `reference_images` (uploaded with the prompt). Write:
  * `generate_image`'s `output_path`, the new PNG. Each is judged against the

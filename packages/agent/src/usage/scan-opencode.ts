@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { basename } from "node:path";
 import type { UsageTokens } from "@cawco/core";
-import { clockFactor, costForUsage, totalTokens } from "@cawco/core";
+import { costForUsage, totalTokens } from "@cawco/core";
 import type { ScannedRecord } from "./types";
 
 /**
@@ -11,12 +11,20 @@ import type { ScannedRecord } from "./types";
  * per OpenCode server: the machine's and each account's
  * ({@link opencodeDatabases}).
  *
- * What a request cost is on its message (`session_message.data`): an
- * assistant message's `model`, `cost` and `tokens`, filled when it completes
+ * What a request spent is on its message (`session_message.data`): an
+ * assistant message's `model` and `tokens`, filled when it completes
  * (`time.completed`); a compaction's, once it ended (`completed` or
  * `failed`), its model its own when it names one, else its session's. A 1.x
  * database is converted into these rows the first time 2.0 opens it, every
- * message with its id, times, tokens and cost.
+ * message with its id, times and tokens.
+ *
+ * Each message is priced by {@link costForUsage}, as the session's live turns
+ * are. The message's own `cost` is not read: it is OpenCode's estimate at its
+ * catalog's rates, "the local estimate shown in the TUI, not what the
+ * provider actually bills" (https://github.com/anomalyco/opencode/issues/44224),
+ * and 2.0 builds its context tiers from the legacy 200k price alone
+ * (packages/core/src/plugin/models-dev.ts `cost()`), so it misses every tier
+ * at another threshold.
  */
 
 interface MessageRow {
@@ -38,7 +46,6 @@ interface ModelRef {
 
 /** The part of a message's `data` the scan reads. */
 interface MessageData {
-  cost?: number;
   model?: ModelRef;
   status?: string;
   time?: { created?: number; completed?: number };
@@ -89,9 +96,7 @@ const recordOf = (
     cacheRead: t.cache?.read ?? 0,
     reasoning: t.reasoning ?? 0,
   };
-  const own =
-    typeof data.cost === "number" && !Number.isNaN(data.cost) ? data.cost : 0;
-  if (totalTokens(tokens) === 0 && own === 0) {
+  if (totalTokens(tokens) === 0) {
     return undefined;
   }
   const model = data.model ?? parse<ModelRef>(row.session_model);
@@ -101,12 +106,7 @@ const recordOf = (
   const provider = model.providerID ?? null;
   const ts = data.time?.created ?? row.time_created;
   const priced = provider ? `${provider}/${model.id}` : model.id;
-  // OpenCode prices a message at its catalog's rates (models.dev's, the
-  // off-peak ones for DeepSeek), so the provider's clock is applied to it.
-  const costUsd =
-    own === 0
-      ? costForUsage(priced, tokens, ts)
-      : own * clockFactor(priced, ts);
+  const costUsd = costForUsage(priced, tokens, ts) ?? 0;
   return {
     harness: "opencode",
     ts,

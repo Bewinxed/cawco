@@ -373,6 +373,7 @@ public final class HubConnection {
         fleet.projects = []
         fleet.resetPulses()
         fleet.catalogs = [:]
+        fleet.catalogLeftOut = [:]
         fleet.catalogsTried = []
         fleet.fleetRead = false
         fleet.liveRead = false
@@ -738,6 +739,36 @@ public final class HubConnection {
         fleet.projects = try await api.projects.list().ok.body.json
     }
 
+    /// Answers the fleet's upstream choice (`PUT /api/fleet/choices`,
+    /// client.svelte.ts `answerFleetUpstream`): every machine's workspaces
+    /// go by it from their next beat, and every client hears it
+    /// (`fleet.upstream`). A refusal throws the hub's words.
+    public func answerFleetUpstream(_ answer: Components.Schemas.FleetChoicesUpstream) async throws {
+        try await sendJSON("api/fleet/choices", method: "PUT", ["upstream": answer.rawValue])
+        fleet.upstream = .answered(answer)
+    }
+
+    /// A project's own upstream answer, nil for the fleet's (`PATCH
+    /// /api/projects/:id` `upstreamPosts`). Written as the JSON itself: the
+    /// generated body leaves a null out, and null is what names the fleet's.
+    /// The projects are read again before it returns.
+    public func setProjectUpstream(id: String, _ answer: Components.Schemas.FleetChoicesUpstream?) async throws {
+        try await sendJSON("api/projects/\(id)", method: "PATCH", ["upstreamPosts": answer?.rawValue ?? NSNull()])
+        fleet.projects = try await api.projects.list().ok.body.json
+    }
+
+    /// One JSON write to the hub, its refusal thrown in the hub's words.
+    private func sendJSON(_ path: String, method: String, _ body: [String: Any]) async throws {
+        guard let address else { throw ControlError(message: "No hub is connected.") }
+        var request = URLRequest(url: address.appending(path: path))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ControlError(message: Wire.reason(data, status: status)) }
+    }
+
     /// `readAccounts`, awaited: a write to the accounts routes reads them again
     /// before it returns (client.svelte.ts `accountsWrite`), since only a
     /// sign-in makes the hub say they moved.
@@ -969,6 +1000,10 @@ public final class HubConnection {
         async let moving = try? await client.getApiMoves().ok.body.json
         // Fleet watch's notices to you: frames keep them from here.
         async let watched = try? await client.getApiFleetWatchNotices().ok.body.json.notices
+        // The fleet's upstream answer: Needs you asks it while nobody has.
+        async let choices = try? await client.getApiFleetChoices().ok.body.json
+        // The approved actions waiting on you: frames keep them from here.
+        async let waiting = try? await client.getApiActionsWaiting().ok.body.json.actions
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -977,6 +1012,8 @@ public final class HubConnection {
             await (machinesRead, rowsRead, projectsRead, pending, limits, spend, carried)
         let readMoves = await moving
         let readWatched = await watched
+        let readUpstream = await choices.map { UpstreamAnswer($0.upstream) }
+        let readWaiting = await waiting
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -1045,6 +1082,12 @@ public final class HubConnection {
             if let readWatched {
                 hub.fleet.watchNotices = readWatched
             }
+            if let readUpstream {
+                hub.fleet.upstream = readUpstream
+            }
+            if let readWaiting {
+                hub.fleet.actions = readWaiting
+            }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
                 return false
@@ -1091,7 +1134,7 @@ public final class HubConnection {
     }
 
     /// Where the web dashboard is reached, as the hub says (`/health`
-    /// `dashboard`, the address its Telegram links open): where a project's
+    /// `dashboard`, the address its links open): where a project's
     /// custom views load from.
     public func dashboardAddress() async throws -> URL {
         guard let address else { throw URLError(.notConnectedToInternet) }
@@ -1172,16 +1215,25 @@ public final class HubConnection {
     public func reloadCatalog(_ machineId: String) async throws {
         defer { fleet.catalogsTried.insert(machineId) }
         let listing = try await listSessions(machineId: machineId)
-        for left in listing.unanswered {
-            log.notice("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) did not answer within \(left.after, privacy: .public) ms; its sessions are kept")
+        // The web's sentence names the machine as client.svelte.ts `machineName` does: its hostname, else its id.
+        let machine = fleet.machines.first { $0.machineId == machineId }.map(\.hostname).flatMap { $0.isEmpty ? nil : $0 } ?? machineId
+        let said = listing.unanswered.map {
+            Words.Catalog.harnessDidntAnswer(harness: $0.harness.rawValue, machine: machine, seconds: Int(($0.after / 1000).rounded()))
+        } + listing.failed.map {
+            Words.Catalog.harnessCouldntList(harness: $0.harness.rawValue, machine: machine, error: $0.error)
         }
-        for left in listing.failed {
-            log.error("listSessions on \(machineId, privacy: .public): \(left.harness.rawValue, privacy: .public) failed: \(left.error, privacy: .public); its sessions are kept")
+        for sentence in said {
+            log.notice("listSessions on \(machineId, privacy: .public): \(sentence, privacy: .public)")
         }
         let kept = Set(listing.unanswered.map(\.harness) + listing.failed.map(\.harness))
         let held = kept.isEmpty ? [] : (fleet.catalogs[machineId] ?? []).filter { kept.contains($0.harness) }
         fleet.catalogs[machineId] = listing.sessions + held
+        catalogLoads += 1
+        fleet.catalogLeftOut[machineId] = CatalogLeftOut(sentences: said, load: catalogLoads)
     }
+
+    /// Counts the catalog loads that answered, so each one's `CatalogLeftOut` is told from the last.
+    @ObservationIgnored private var catalogLoads = 0
 
     /// The background path reports a failed read without throwing out of its task.
     private func readCatalog(_ machineId: String) {
@@ -1385,8 +1437,12 @@ public final class HubConnection {
             for listener in projectStopListeners.values { listener(frame) }
         case let .watchNotices(notices):
             fleet.watchNotices = notices
+        case let .actions(actions):
+            fleet.actions = actions
         case let .lawsBroken(broken):
             fleet.lawsBroken = broken
+        case let .fleetUpstream(answer):
+            fleet.upstream = .answered(answer)
         case .ignored:
             break
         }

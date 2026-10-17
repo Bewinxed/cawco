@@ -32,7 +32,7 @@
  *      its install ask; the person's answer settles the ask;
  * (p5) an unpaired browser sees the pairing code; the paired browser
  *      approves it, and the new browser opens the app;
- * (p5b) a top-level navigation from another site (a Telegram link) renders
+ * (p5b) a top-level navigation from another site (a chat's link) renders
  *      the app on first paint, not the pairing screen;
  * (p5c) a cross-site POST to an owner route is refused, at the dashboard
  *      and at the hub, and changes nothing;

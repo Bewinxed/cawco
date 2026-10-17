@@ -24,17 +24,20 @@
  *   bun run tokens                          (with --ladder: print the theme's keys and values)
  *   bun scripts/build-tokens.ts --check     (part of `bun run lint`)
  *
- * `--check` builds the same in memory and writes nothing: it fails on a
- * value its type refuses (dtcg-validate.ts, before anything evaluates one)
- * and on any output unlike the committed file, a source file that would
- * settle included, and on a `font` shorthand utility (a type role,
- * `font-inherit` …) that Tailwind sorts after a font longhand utility
- * (role-order.ts). Outputs are compared as `bun run tokens` leaves them
- * formatted: JSON parsed, CSS and Swift with whitespace and numerals'
- * trailing zeros set aside (`bun fmt` rewrites `0.010` as `0.01`).
+ * Every output is made in memory and formatted as `bun fmt` writes that file
+ * (scripts/fmt.ts `formatText`), so what the build writes is final: no
+ * formatter runs after it.
+ *
+ * `--check` builds the same and writes nothing: it fails on a value its type
+ * refuses (dtcg-validate.ts, before anything evaluates one), on any output
+ * whose bytes differ from the committed file (a source file that would
+ * settle included, and a committed colour set no token makes), and on a
+ * `font` shorthand utility (a type role, `font-inherit` …) that Tailwind
+ * sorts after a font longhand utility (role-order.ts).
  */
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, rmSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import StyleDictionary from "style-dictionary";
 import type { TransformedToken } from "style-dictionary/types";
 import {
@@ -42,10 +45,10 @@ import {
   cssLeafName,
   tailwindThemeCss,
 } from "../../../packages/hub/src/design-tokens";
+import { formatText } from "../../../scripts/fmt";
 import {
   COLOUR_CATALOG,
   colourSetFiles,
-  colourSetsAction,
   swiftFormat,
 } from "./build-tokens-apple";
 import { fontOrderDrift } from "./role-order";
@@ -55,36 +58,24 @@ import { isProductToken } from "./token-groups";
 const CHECK = process.argv.includes("--check");
 /** The outputs unlike the committed files, in check mode. */
 const drift: string[] = [];
-/** How many outputs check mode held to the committed files. */
-let held = 0;
-const TRAILING_ZEROS = /(\d\.\d*?)0+(?!\d)/g;
-const BARE_POINT = /(\d)\.(?!\d)/g;
-const WHITESPACE = /\s+/g;
-const HEX_COLOUR = /#[0-9a-f]{3,8}\b/gi;
-/** A text output as its formatter leaves it equal to another: hex in lower case, numerals' trailing zeros and then all whitespace set aside. */
-const canonical = (text: string): string =>
-  text
-    .replace(HEX_COLOUR, (hex) => hex.toLowerCase())
-    .replace(TRAILING_ZEROS, "$1")
-    .replace(BARE_POINT, "$1")
-    .replace(WHITESPACE, "")
-    .replaceAll("'", '"');
-const sameOutput = (path: string, made: string, committed: string): boolean =>
-  path.endsWith(".json")
-    ? JSON.stringify(JSON.parse(made)) === JSON.stringify(JSON.parse(committed))
-    : canonical(made) === canonical(committed);
+/** How many outputs the build made. */
+let made = 0;
 
-/** Writes `content` to `path`, or in check mode holds it to the committed file. */
+/**
+ * An output as the build leaves it: formatted as `bun fmt` writes that file,
+ * so the bytes are final. The build writes them; check mode holds them to the
+ * committed file, byte for byte.
+ */
 async function emit(path: string, content: string): Promise<void> {
-  if (!CHECK) {
-    await Bun.write(path, content);
-    return;
-  }
-  held += 1;
+  made += 1;
+  const formatted = await formatText(path, content);
   const file = Bun.file(path);
-  if (!(await file.exists())) {
+  if (!CHECK) {
+    await mkdir(dirname(path), { recursive: true });
+    await Bun.write(path, formatted);
+  } else if (!(await file.exists())) {
     drift.push(`${path}: not committed`);
-  } else if (!sameOutput(path, content, await file.text())) {
+  } else if ((await file.text()) !== formatted) {
     drift.push(`${path}: unlike the committed file`);
   }
 }
@@ -212,12 +203,9 @@ const theme = tailwindThemeCss(built.view, {
   },
 });
 await Promise.all([
+  // A source file whose recipes settle to new values is rewritten with them.
   ...[...built.changed].map(([path, json]) =>
-    CHECK
-      ? drift.push(
-          `${join(DIR, path)}: settles to new values (run bun run tokens)`
-        )
-      : Bun.write(join(DIR, path), `${JSON.stringify(json, null, 2)}\n`)
+    emit(join(DIR, path), `${JSON.stringify(json, null, 2)}\n`)
   ),
   emit(OUT, built.css),
   emit(TYPES_OUT, built.types),
@@ -232,11 +220,11 @@ if (process.argv.includes("--ladder")) {
   await printLadder(theme, built.view);
 }
 
+// Style Dictionary only makes the Apple module's text here; emit writes it.
 const sd = new StyleDictionary({
   tokens: built.system.base,
   usesDtcg: true,
-  // Check mode writes nothing, so it says no file it "built".
-  log: { verbosity: CHECK ? "silent" : "verbose", warnings: "error" },
+  log: { verbosity: "silent", warnings: "error" },
   hooks: {
     transforms: {
       "name/css-leaf": {
@@ -245,7 +233,6 @@ const sd = new StyleDictionary({
       },
     },
     formats: { "swift/cawco-tokens": swiftFormat(built.view) },
-    actions: { "apple/cawco-colorsets": colourSetsAction(built.view) },
   },
   platforms: {
     apple: {
@@ -254,39 +241,42 @@ const sd = new StyleDictionary({
       files: [
         { destination: "Generated/Tokens.swift", format: "swift/cawco-tokens" },
       ],
-      actions: ["apple/cawco-colorsets"],
     },
   },
 });
 
+// A destination is under the platform's buildPath already.
+const swift = (await sd.formatPlatform("apple")).map(
+  ({ output, destination }) => emit(destination ?? "", String(output))
+);
+const catalog = join(APPLE_DIR, COLOUR_CATALOG);
+const sets = colourSetFiles(built.view, await sd.getPlatformTokens("apple"));
+await Promise.all([
+  ...swift,
+  ...[...sets].map(([path, content]) => emit(join(catalog, path), content)),
+]);
+// A colour set no token makes any more goes, folder and all.
+for (const set of readdirSync(catalog).filter((f) => f.endsWith(".colorset"))) {
+  if (sets.has(join(set, "Contents.json"))) {
+    continue;
+  }
+  if (CHECK) {
+    drift.push(`${join(catalog, set)}: committed, and no token makes it`);
+  } else {
+    rmSync(join(catalog, set), { recursive: true });
+  }
+}
+
 if (CHECK) {
-  // The Apple module's files, made as buildAllPlatforms makes them, held to the committed ones.
-  for (const { output, destination } of await sd.formatPlatform("apple")) {
-    // A destination is under the platform's buildPath already.
-    // biome-ignore lint/performance/noAwaitInLoops: one file at a time
-    await emit(destination ?? "", String(output));
-  }
-  const catalog = join(APPLE_DIR, COLOUR_CATALOG);
-  const sets = colourSetFiles(built.view, await sd.getPlatformTokens("apple"));
-  for (const [path, content] of sets) {
-    // biome-ignore lint/performance/noAwaitInLoops: one file at a time
-    await emit(join(catalog, path), content);
-  }
-  const committed = readdirSync(catalog).filter((f) => f.endsWith(".colorset"));
-  for (const set of committed) {
-    if (!sets.has(join(set, "Contents.json"))) {
-      drift.push(`${join(catalog, set)}: committed, and no token makes it`);
-    }
-  }
   // Every `font` shorthand utility sorts before every font longhand utility.
   for (const wrong of await fontOrderDrift(theme)) {
     drift.push(`${THEME_OUT}: ${wrong}`);
   }
   console.log(
     drift.length === 0
-      ? `tokens: the token source conforms and every output matches the committed files (${held} files)`
+      ? `tokens: the token source conforms and every output is byte for byte the committed file (${made} files)`
       : `tokens: ${drift.length} output(s) unlike the committed files (run bun run tokens):\n  ${drift.join("\n  ")}`
   );
   process.exit(drift.length === 0 ? 0 : 1);
 }
-await sd.buildAllPlatforms();
+console.log(`tokens: ${made} outputs written`);

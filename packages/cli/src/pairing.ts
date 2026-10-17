@@ -1,7 +1,7 @@
 /**
  * `cawco pairing off`: the way back when no paired device is left to turn
  * "Require paired devices" off (every paired browser lost its cookie, and
- * no Telegram chat is pinned). Run on the hub's own machine, as the user the
+ * the app is signed out). Run on the hub's own machine, as the user the
  * hub runs as: it writes the setting into the hub's database directly, as
  * the dashboard's switch does (hub db/hub-auth.ts `setPairingRequired`),
  * forgetting every paired device and machine key. The hub reads the setting

@@ -39,6 +39,7 @@ import {
   isSecretFileName,
   workspaceCacheDir,
   workspaceCarriesDir,
+  workspaceFleetDir,
   workspaceScratchDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -287,9 +288,10 @@ const readySource = (
  * layer, so the session's spawn finds its form unchanged and hands nothing
  * over (`boundaryFor`). `at` ({@link WorkspaceCut}) cuts a retired workspace
  * again at its own path (a function of its id): `ws/<id8>` at the commit its
- * last item landed, fetched from `origin`'s branch that holds it, tracking
- * the default branch as a first cut does. Something already at that path
- * refuses it, and is left as it is.
+ * clone's HEAD was on when it retired, fetched from `origin`'s branch that
+ * held it then, tracking the default branch as a first cut does. Something
+ * already at that path refuses it, and is left as it is; so does a commit
+ * that branch no longer holds, which a cut anywhere else would leave behind.
  */
 export const createWorkspace = async (
   cwd: unknown,
@@ -346,15 +348,8 @@ export const createWorkspace = async (
     // Written before the clone: archive-by-id survives a lost reply or an agent restart.
     await writeStateFile(join(state, "create.json"), JSON.stringify({ path }));
     const base = await prepareClone(repoRoot, path, authed, known);
-    if (cut && cut.branch !== base) {
-      await authed(
-        path,
-        "fetch",
-        "--quiet",
-        "--no-tags",
-        "origin",
-        `+refs/heads/${cut.branch}:refs/remotes/origin/${cut.branch}`
-      );
+    if (cut) {
+      await fetchCut(path, id, base, cut, authed);
     }
     const start = cut ? cut.commit : `origin/${base}`;
     // A hub branch's large files come down with the checkout, from the
@@ -402,6 +397,43 @@ export const createWorkspace = async (
     } satisfies WorkspaceArchive);
     throw error;
   }
+};
+
+/**
+ * A cut again's commit in the new clone at `path` ({@link WorkspaceCut}):
+ * `origin`'s branch that held it fetched, unless it is `base`, which the
+ * clone has; refused when that branch no longer holds it, since a cut
+ * anywhere else would leave the workspace's commits behind.
+ */
+const fetchCut = async (
+  path: string,
+  id: string,
+  base: string,
+  cut: WorkspaceCut,
+  git: Git
+): Promise<void> => {
+  if (cut.branch !== base) {
+    await git(
+      path,
+      "fetch",
+      "--quiet",
+      "--no-tags",
+      "origin",
+      `+refs/heads/${cut.branch}:refs/remotes/origin/${cut.branch}`
+    );
+  }
+  await git(
+    path,
+    "merge-base",
+    "--is-ancestor",
+    cut.commit,
+    `origin/${cut.branch}`
+  ).catch((error: Error) => {
+    throw new Error(
+      `workspace ${id} is not cut again: origin's ${cut.branch} no longer holds ${cut.commit.slice(0, 9)}, the commit its clone was on when it retired, and a cut anywhere else would leave its commits behind`,
+      { cause: error }
+    );
+  });
 };
 
 /**
@@ -732,7 +764,14 @@ const holding = async (
   const excluded = skip.map((path) => `:(exclude,literal)${path}`);
   const lines = (out: string): number => out.split("\n").filter(Boolean).length;
   const [ahead, status, stashes] = await Promise.all([
-    git(["rev-list", "--count", "HEAD", "--branches", "--not", "--remotes"]),
+    git([
+      "rev-list",
+      "--count",
+      "HEAD",
+      "--branches",
+      "--not",
+      "--remotes=origin",
+    ]),
     git([
       "status",
       "--porcelain",
@@ -745,6 +784,45 @@ const holding = async (
     dirty: lines(status),
     stashes: lines(stashes),
   };
+};
+
+/**
+ * Where a clone that holds nothing of its own ({@link holding}) is cut again
+ * once it is deleted ({@link WorkspaceCut}): its HEAD, on `origin`'s branch
+ * `base` when that holds it, else the one most recently committed to among
+ * those that do. Git on this host once its boundary is closed
+ * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone. A HEAD
+ * no branch of `origin` holds throws, and nothing is deleted: such a clone
+ * holds commits of its own, and {@link holding} said none.
+ */
+const headOnOrigin = async (
+  workspace: WorkspaceRef,
+  base: string | undefined
+): Promise<WorkspaceCut | undefined> => {
+  if (!(await lstat(join(workspace.path, ".git")).catch(() => undefined))) {
+    return;
+  }
+  const git = await closedCloneGit(workspace);
+  const commit = await git(["rev-parse", "--verify", "HEAD^{commit}"]);
+  const holders = (
+    await git([
+      "for-each-ref",
+      "--sort=-committerdate",
+      "--contains",
+      commit,
+      "--format=%(refname:lstrip=3)",
+      "refs/remotes/origin/",
+    ])
+  )
+    .split("\n")
+    .filter((name) => name && name !== "HEAD");
+  const branch = base && holders.includes(base) ? base : holders[0];
+  if (!branch) {
+    throw new Error(
+      `Workspace ${workspace.id} was not archived: its HEAD ${commit.slice(0, 9)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
+    );
+  }
+  return { branch, commit };
 };
 
 /** A folder's size on disk in bytes (`du -sk`), 0 when it cannot be read. */
@@ -789,24 +867,25 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
  * The folders in the workspaces' cache (paths.ts `workspaceCacheDir`) that
  * belong to the clone at `clone` alone, each built from it and read by
  * nothing else:
- * - its Apple build root, `xdg/cawco-apple/<clone's folder name>`, where
- *   build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and its lock;
+ * - its Apple build root, `xdg/cawco-apple.noindex/<clone's folder name>`,
+ *   where build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and
+ *   its lock;
  * - on macOS, Xcode's DerivedData folders whose `info.plist` names a project
  *   inside the clone (the boundary's xcodebuild puts every build's in
- *   `DerivedData/`), and SwiftPM's build dirs for each of the clone's
+ *   `DerivedData.noindex/`), and SwiftPM's build dirs for each of the clone's
  *   packages, `swiftpm/build/<md5 of the package dir>` (boundary.ts's swift
  *   shim names them so).
  * Read before the clone goes: its packages are found in it.
  */
 const cacheOfClone = async (clone: string): Promise<string[]> => {
   const cache = workspaceCacheDir();
-  const apple = join(cache, "xdg", "cawco-apple");
+  const apple = join(cache, "xdg", "cawco-apple.noindex");
   const name = basename(clone);
   const owned = [join(apple, name), join(apple, ".locks", name)];
   if (process.platform !== "darwin") {
     return owned;
   }
-  const derived = join(cache, "DerivedData");
+  const derived = join(cache, "DerivedData.noindex");
   const builds = await readdir(derived).catch(() => [] as string[]);
   const ofClone = await Promise.all(
     builds.map(async (build) => {
@@ -938,11 +1017,19 @@ const closeClone = async (
   const unread: WorkspaceUnlanded[] = ["check", "unmade"];
   const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
+  // A scratch fleet the workspace ran keeps its folders here on macOS,
+  // outside its scratch dir (core paths.ts `workspaceFleetDir`), and goes
+  // with it, beside the clone's DerivedData: "The Mac filled to 120 MB free
+  // on 2026-10-14 (a Catalyst link died with errno 28) because nothing
+  // removed a workspace once its work was over" (d31b2f5ac).
+  const fleet = await workspaceFleetDir(request.id);
   if (!path) {
     await Promise.all(
-      [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(
-        (dir) => rm(dir, { recursive: true, force: true })
-      )
+      [
+        join(workspacesDir(), request.id),
+        workspaceScratchDir(request.id),
+        ...(fleet ? [fleet] : []),
+      ].map((dir) => rm(dir, { recursive: true, force: true }))
     );
     return { carry: null };
   }
@@ -963,6 +1050,11 @@ const closeClone = async (
     );
     return { carry: null, held: kept };
   }
+  // Read before the clone goes: where it is cut again.
+  const head =
+    read && !holds && held.strays === undefined
+      ? await headOnOrigin(workspace, request.base)
+      : undefined;
   let carry: string | null = null;
   if (holds) {
     const words = holdingWords({ ...held, bytes: 0 });
@@ -990,16 +1082,16 @@ const closeClone = async (
       `[workspace] ${request.id}: ${words} in ${path} saved to the carry ${carry}`
     );
   }
-  const cached = await cacheOfClone(path);
+  const cached = [...(await cacheOfClone(path)), ...(fleet ? [fleet] : [])];
   await closeBoundary(workspace);
   await rm(workspace.path, { recursive: true, force: true });
   await Promise.all(
     cached.map((dir) => rm(dir, { recursive: true, force: true }))
   );
   console.info(
-    `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone`
+    `[workspace] ${request.id}: archived; its ${goneFolder(path, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is cut again at ${head.commit.slice(0, 9)} on origin's ${head.branch}` : ""}`
   );
-  return { carry };
+  return head ? { carry, head } : { carry };
 };
 
 /**

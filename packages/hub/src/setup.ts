@@ -16,7 +16,11 @@
  * - `place`: the machine and folder its work happens in (`cawco.pickPlace`).
  */
 import type { ChoiceEntry } from "@cawco/core";
-import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
+import {
+  UPSTREAM_POSTS,
+  UPSTREAM_WORDS,
+  type UpstreamPosts,
+} from "@cawco/core/upstream-guard";
 import { type StagesTemplate, templateText } from "./stages";
 
 /** The delegate types a template's work suggests, the ones its stages run first. */
@@ -39,7 +43,7 @@ export interface SetupApply {
   fleet: (choices: {
     delegates?: boolean;
     todos?: boolean;
-    upstream?: boolean;
+    upstream?: UpstreamPosts;
   }) => void;
   /** Adds the place picked as the project's checkout; a refusal throws. */
   place: (
@@ -91,7 +95,9 @@ export const applySetupPicks = async (
   }
   const delegates = onOff(state, "fleet-delegates");
   const todos = onOff(state, "fleet-todos");
-  const upstream = onOff(state, "fleet-upstream");
+  const asked: ChoiceEntry | undefined = state["fleet-upstream"];
+  const [picked] = asked?.options ?? [];
+  const upstream = UPSTREAM_POSTS.find((answer) => answer === picked);
   if (
     delegates !== undefined ||
     todos !== undefined ||
@@ -127,7 +133,7 @@ const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — 
 These two are the fleet's, asked once: say so on the cards.`;
 
 /** The onboarding step's words, the dashboard's own step and this card alike (WORDS.md `upstream`). */
-const upstreamCard = `- \`fleet-upstream\`: "Other people's repositories" — ${UPSTREAM_WORDS.risk} Options \`off\` labelled "${UPSTREAM_WORDS.keepOff}" (recommended) and \`on\` labelled "${UPSTREAM_WORDS.allow}". It is the fleet's, asked once, and each project can change it in its settings: say so on the card.`;
+const upstreamCard = `- \`fleet-upstream\`: "Other people's repositories" — ${UPSTREAM_WORDS.risk} Options \`off\` labelled "${UPSTREAM_WORDS.keepOff}" (recommended), \`ask\` labelled "${UPSTREAM_WORDS.ask}" (each post waits for the person's approval) and \`on\` labelled "${UPSTREAM_WORDS.allow}". It is the fleet's, asked once, and each project can change it in its settings: say so on the card.`;
 
 /** What Caw reads when a project is made for him to set up. */
 export const setupEvent = (ask: SetupAsk): string => {

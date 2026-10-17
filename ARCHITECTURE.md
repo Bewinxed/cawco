@@ -313,12 +313,12 @@ setting, "Require paired devices" (Configure › Devices):
   signs what it asks over HTTP (`packages/core/src/machine-key.ts`). A connection that
   proves nothing is held as waiting; one that names an admitted machine without its proof
   is refused, and never evicts the machine's own. Each owner client pairs once, in RFC
-  8628's shape, approved from a paired device or the pinned Telegram chat; the hub keeps
+  8628's shape, approved from a paired device; the hub keeps
   each token's sha256. The CLI's owner commands ask for one approval per run and keep the
   token in memory. Sessions keep their tools: their harnesses reach the hub through their
   machine's loopback gateway, which signs each call with the machine's key. The last paired
-  device cannot be removed; with none left that can turn it off (and no Telegram chat
-  pinned), `cawco pairing off` on the hub's own machine, as the hub's user, writes the
+  device cannot be removed; with none left that can turn it off, `cawco pairing off` on
+  the hub's own machine, as the hub's user, writes the
   setting into its database, which the hub reads on every request.
 
 What a session once did on the person's routes is its own tool now: `update_machines`,

@@ -43,7 +43,7 @@
  * is this tree's and it was built after it, scripts/lib/apple-app.ts
  * `macProbeApp`):
  *
- *   cd ~/.cawco/workspace-cache/xdg/cawco-apple/<checkout>/apps/apple &&
+ *   cd ~/.cawco/workspace-cache/xdg/cawco-apple.noindex/<checkout>/apps/apple &&
  *   bash <repo>/apps/apple/scripts/mac-slot.sh build -- xcodebuild \
  *     -project CawCo.xcodeproj -scheme CawCo \
  *     -destination "platform=macOS,variant=Mac Catalyst" \

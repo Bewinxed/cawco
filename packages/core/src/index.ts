@@ -64,7 +64,7 @@ export * from "./plan";
 // Which projects a session lists in: the rail and the hub's forget read one rule.
 export * from "./project-membership";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
-// the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
+// the dashboard, the app, a parent session's `answer_delegate`.
 // Shared because the tool's schema is unforgiving: the answers go back inside
 // the tool's own input or the call fails validation.
 export * from "./question";
@@ -742,11 +742,8 @@ export interface FsPayload {
 }
 
 /**
- * The most an `fs media` read carries: the Telegram Bot API's ceiling on what
- * a bot uploads, so a file read for `send_to_user` is one Telegram takes
- * (https://core.telegram.org/bots/api, sendVideo: "Bots can currently send
- * video files of up to 50 MB in size"; sendAnimation and sendDocument say the
- * same).
+ * The most an `fs media` read carries: one picture or video the transcript
+ * card reads off a machine in a single frame (`send_to_user`, `show_image`).
  */
 export const MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 
@@ -1459,6 +1456,7 @@ export type FramePayload =
   | import("./frames").SendFrame
   | import("./frames").RejectedFrame
   | import("./frames").HeldSendFrame
+  | import("./frames").TakenSendFrame
   | import("./frames").InstancesFrame
   | import("./frames").InstancesDeltaFrame
   | import("./frames").PermissionRequestFrame
@@ -1471,7 +1469,6 @@ export type FramePayload =
   | import("./frames").ErrorFrame
   | import("./frames").SessionAddressFrame
   | import("./frames").ScratchWorktreeFrame
-  | import("./frames").UserMessageFrame
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame
   | import("./frames").ProjectOfferFrame
@@ -1699,18 +1696,14 @@ export const CAWCO_ENV = {
    * it and every client dials it, so both ends must read the same variable.
    */
   sessiondEndpoint: "CAWCO_SESSIOND_ENDPOINT",
-  /** Where the links the bridge sends point. */
+  /** Where the links the hub hands out point. */
   dashboardUrl: "CAWCO_DASHBOARD_URL",
   /**
    * The port the dashboard's socket listens on, as the installer wrote it
    * into the hub's unit: the hub's preview ports never take it, and the
-   * bridge's composed links point at it.
+   * hub's composed links point at it.
    */
   dashboardPort: "CAWCO_DASHBOARD_PORT",
-  /** The bot the hub reaches its owner's Telegram on. */
-  telegramToken: "CAWCO_TELEGRAM_TOKEN",
-  /** Telegram's API origin, for pointing the bridge at a proxy. */
-  telegramApi: "CAWCO_TELEGRAM_API",
   /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
   githubApi: "CAWCO_GITHUB_API",
   /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
@@ -1723,9 +1716,6 @@ export const CAWCO_ENV = {
   startersPace: "CAWCO_STARTERS_PACE",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
-  telegramAsrUrl: "CAWCO_TELEGRAM_ASR_URL",
-  telegramAsrModel: "CAWCO_TELEGRAM_ASR_MODEL",
-  telegramAsrMode: "CAWCO_TELEGRAM_ASR_MODE",
   /** Where the hub's SQLite file lives, overriding the default data dir. */
   dbPath: "CAWCO_DB_PATH",
   /**
@@ -1804,8 +1794,10 @@ export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
+export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/helpers";
+export * from "./words/preview";
 export * from "./words/sidebar";
 export * from "./workflow";
 export * from "./workflow-compile";

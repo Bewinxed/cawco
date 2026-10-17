@@ -675,4 +675,48 @@ public enum Words {
         /// The projects list is empty while machines are joined.
         public static let noProjects = "No projects yet — name a checkout to group its sessions."
     }
+
+    public enum Upstream {
+        // packages/core/src/upstream-guard.ts `UPSTREAM_WORDS`
+        public static let title = "Other people's repositories"
+
+        public static let risk = "Agents can open issues and pull requests on other people's repositories under your GitHub account."
+
+        public static let keepOff = "Keep agents off other repositories"
+
+        /// Each post waits in Needs you for the person's Approve (owner: "why is there no option for them to ask me first").
+        public static let ask = "Ask me first"
+
+        public static let allow = "Let agents post upstream"
+
+        /// A project's settings: the fleet's answer stands until the project picks its own.
+        public static let inherit = "Same as the fleet"
+    }
+
+    public enum Catalog {
+        // packages/core/src/words/catalog.ts `catalogWords`
+        /// One harness on `machine` didn't list in time: its sessions are the ones it listed last.
+        public static func harnessDidntAnswer(harness: String, machine: String, seconds: Int) -> String {
+            "\(harness) on \(machine) didn't answer within \(seconds) s, so its stored sessions are the ones it listed last."
+        }
+
+        /// One harness on `machine` couldn't list (its listing threw), in harnessDidntAnswer's voice.
+        public static func harnessCouldntList(harness: String, machine: String, error: String) -> String {
+            "\(harness) on \(machine) couldn't list its stored sessions (\(error)), so they are the ones it listed last."
+        }
+    }
+
+    public enum Preview {
+        // packages/core/src/words/preview.ts `previewWords`
+        /// The page's content process ended a second time for the same page (the first reloads it by itself): the system ended it, most often over its memory. The app hears it from WebKit; a browser never tells the parent page.
+        public static let stoppedTitle = "This page stopped"
+
+        public static let stoppedLine = "It closed while it ran, most likely because it needed more memory than this device gives a page. Try again loads it again."
+
+        /// The state's way back: the page loaded afresh.
+        public static let tryAgain = "Try again"
+
+        /// Try again while the page loads.
+        public static let reloading = "Reloading…"
+    }
 }

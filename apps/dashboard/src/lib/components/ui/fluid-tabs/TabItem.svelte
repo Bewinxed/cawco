@@ -275,7 +275,11 @@
      marks the row it stands under), its ink is strong; a tap leaves no
      ghost behind to ink. A folder tab's chosen name is its strong ink layer
      (the label's `data-text` span): the muted one under it stays as it
-     was. -->
+     was. Under a swipe a folder tab takes no transition: the list
+     (TabsList) carries `data-ride` inside the folder root, and the variant
+     says them in that order, so it holds whether or not a tool lowers the
+     nesting (folder-ride spec), and outranks the folder's own transition
+     by its two attributes. -->
 <!-- literal: 6px -->
 <span
   data-tab-item-selected={selected || undefined}
@@ -288,6 +292,7 @@
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
     "motion-safe:dur-ghost motion-safe:transition-[color] motion-safe:ease-out",
     "in-variant-folder:motion-safe:[transition:color_var(--dur-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
+    "[[data-variant=folder]_[data-ride]_&]:transition-off",
     "hit-pressed:bg-press-fill in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
     className
   )}

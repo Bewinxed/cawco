@@ -51,7 +51,8 @@ bash apps/apple/scripts/build-both.sh ios     # the iOS Simulator only
 bash apps/apple/scripts/build-both.sh macos   # Mac Catalyst only
 ```
 
-It rsyncs `apps/apple` to `~/build/cawco-apple` (never the deploy clone),
+It rsyncs `apps/apple` to `~/build/cawco-apple.noindex` (never the deploy clone;
+every build root's name ends in `.noindex`, so Spotlight indexes no build output),
 runs `xcodegen generate`, and builds one destination after the other with
 `-skipPackagePluginValidation`, which the generator's build plugin needs on
 the command line. Each build is then launched and must still be running 8 s
@@ -68,7 +69,7 @@ Simulators and builds outside build-both.sh go through mac-slot.sh. The Mac
 runs at most one Xcode build (the build slot, which build-both.sh and
 TestFlight's archive also hold) and at most two booted simulators (two
 simulator slots, which build-both.sh's launches also take). The locks are
-in `~/.cawco/workspace-cache/xdg/cawco-apple/.locks`, one folder for every
+in `~/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks`, one folder for every
 caller. A waiter prints `WAITING ...` every 60 s.
 
 ```sh
@@ -124,10 +125,10 @@ Catalyst App Store 20261009` and `CawCo NotificationService Mac Catalyst App
 Store 20261009`, and its package is signed by the `3rd Party Mac Developer
 Installer` identity (a Mac Installer Distribution certificate in
 `anbar-ci.keychain-db`). Each platform keeps its archive, DerivedData and logs
-in `~/build/cawco-testflight/<ios|mac>`. `testflight.py [--mac] --dry-run`
+in `~/build/cawco-testflight.noindex/<ios|mac>`. `testflight.py [--mac] --dry-run`
 prints the archive command and export options without a key or App Store Connect.
 
-The upload owns `~/build/cawco-testflight` on the Mac and waits for other
+The upload owns `~/build/cawco-testflight.noindex` on the Mac and waits for other
 tracks' quiet windows. Build numbers come from App Store Connect: `yyyymmdd`,
 then `.2`, `.3`, and so on. Every upload waits for `VALID`, sets What to Test
 to that build's own notes (written as `docs/releases/README.md` says),

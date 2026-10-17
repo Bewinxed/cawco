@@ -90,7 +90,7 @@ final class StatusCell: HomeCell {
 // MARK: Work tabs
 
 /// The Working and Finished switch (WorkTabs.svelte's head): the folder tabs,
-/// each count washed in its status ink, and the delegates switch at the end,
+/// each count a pill in its status hue, and the delegates switch at the end,
 /// the section's seam under the row.
 final class TabsCell: HomeCell {
     let tabs = FolderTabs(HomeModel.Tab.allCases.map { FolderTabs.Tab(label: $0.label) }, selected: 0)
@@ -148,31 +148,21 @@ final class TabsCell: HomeCell {
 
     func configure(tab: HomeModel.Tab, working: Int, finished: Int, finishedFailed: Bool, delegatesOn: Bool) {
         tabs.select(tab == .working ? 0 : 1, animated: window != nil)
-        counts[0].configure(count: working, ink: Palette.statusLiveInk, wash: Palette.countWashLive, chosen: tab == .working, failed: false)
-        counts[1].configure(
-            count: finished,
-            ink: finishedFailed ? Palette.statusFailInk : Palette.statusDoneInk,
-            wash: finishedFailed ? Palette.countWashFail : Palette.countWashDone,
-            chosen: tab == .finished,
-            failed: finishedFailed
-        )
+        counts[0].configure(count: working, fill: Palette.countFillLive)
+        counts[1].configure(count: finished, fill: finishedFailed ? Palette.countFillFail : Palette.countFillDone)
         delegatesGlyph.glyph = delegatesOn ? .structureOn : .structure
         delegatesGlyph.tintColor = delegatesOn ? Palette.inkStrong : Palette.inkMuted
         delegates.accessibilityValue = delegatesOn ? "Shown" : "Hidden"
     }
 
-    /// The strip where a swipe has it: the sheet `progress` of the way from
-    /// `from` to `to`, each count washed while its tab is the nearer.
+    /// The strip where a swipe has it: the sheet `progress` of the way from `from` to `to`.
     func scrub(from: HomeModel.Tab, to: HomeModel.Tab, progress: Double) {
-        let a = from == .working ? 0 : 1
-        let b = to == .working ? 0 : 1
-        tabs.scrub(from: a, to: b, progress: progress)
-        counts[a].choose(progress < 0.5)
-        counts[b].choose(progress >= 0.5)
+        tabs.scrub(from: from == .working ? 0 : 1, to: to == .working ? 0 : 1, progress: progress)
     }
 }
 
-/// A tab's count, washed in its status ink on the chosen tab; it pops as it changes.
+/// A tab's count (WorkTabs.svelte `.count`): a pill solid in its status hue, chosen or
+/// not, its numeral in `count-fill-ink`; it pops as it changes.
 final class CountChip: UIView {
     private let figure = KitLabel(TypeScale.typeMeta)
     private var count = -1
@@ -193,6 +183,7 @@ final class CountChip: UIView {
         layer.cornerRadius = Radius.radiusXs
         layer.cornerCurve = .continuous
         figure.tabular = true
+        figure.ink = Palette.countFillInk
         figure.textAlignment = .center
         addSubview(figure)
         sides = [
@@ -211,16 +202,9 @@ final class CountChip: UIView {
         fatalError("CountChip is built in code")
     }
 
-    /// `wash`: its tab's `count-wash-*`, shown on the chosen tab only.
-    private var ink = Palette.inkMuted
-    private var wash = UIColor.clear
-    private var failed = false
-
-    func configure(count: Int, ink: UIColor, wash: UIColor, chosen: Bool, failed: Bool) {
-        self.ink = ink
-        self.wash = wash
-        self.failed = failed
-        choose(chosen)
+    /// `fill`: its tab's `count-fill-*`.
+    func configure(count: Int, fill: UIColor) {
+        backgroundColor = fill
         guard count != self.count else {
             return
         }
@@ -230,12 +214,6 @@ final class CountChip: UIView {
         if popping {
             Reflow.pop(figure)
         }
-    }
-
-    /// Washed in its status ink while its tab is chosen.
-    func choose(_ chosen: Bool) {
-        figure.ink = chosen || failed ? ink : Palette.inkMuted
-        backgroundColor = chosen ? wash : .clear
     }
 }
 

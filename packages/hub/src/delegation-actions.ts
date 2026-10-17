@@ -622,7 +622,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * take it, so it waits for a sign-in or a free account (`signin`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or an
  * interrupt holds its work item and only its parent, its lead or the person
- * wakes it (`held`); or its workspace retired when its work landed and the
+ * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
  * `recut`).
  */
@@ -659,7 +659,7 @@ export interface SendDelivery {
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
-    "Its workspace retired when its work landed, so the hub is cutting its clone again at the same path, at the commit it landed; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
+    "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
   update:
     "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
   build:
@@ -754,13 +754,11 @@ export interface HandoffDeps {
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
   /**
-   * `send_to_user`'s delivery, awaited: what did not reach the owner's
-   * Telegram and why, one line each; empty when everything did.
+   * `send_to_user`'s push to the person's paired devices (push.ts
+   * `userMessage`). The words and attachments themselves are the call's own
+   * row in the session's transcript.
    */
-  readonly sendToUser?: (
-    message: string,
-    attachments: string[]
-  ) => Promise<string[]>;
+  readonly sendToUser: (message: string) => void;
   /**
    * Why this session may not show the person one of `paths`: one in another
    * workspace's scratch dir or clone that is not its delegates'
@@ -954,7 +952,7 @@ export interface HandoffActions {
     inputs: Record<string, unknown>,
     options?: { workspace?: { path: string; machineId: string } }
   ) => Promise<{ runId: string }>;
-  /** Pushes a note to the owner's Telegram — no peer, no ask, fire-and-forget. */
+  /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   sendToUser(message: string, attachments?: string[]): Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
@@ -2227,25 +2225,17 @@ export const handoffActions = ({
       : `Answered your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`;
   },
 
+  // biome-ignore lint/suspicious/useAwait: the declared Promise return type is what the tool awaits; a refusal throws, which the async body turns into a rejection
   async sendToUser(message: string, attachments?: string[]): Promise<string> {
-    if (!sendToUser) {
-      throw new Error(
-        "Not sent: this hub has no Telegram bridge (CAWCO_TELEGRAM_TOKEN is unset)."
-      );
-    }
     const refusal = shownRefusal?.("send_to_user", attachments ?? []);
     if (refusal) {
       throw new Error(`${refusal} Nothing was sent.`);
     }
-    const problems = await sendToUser(message, attachments ?? []);
-    if (problems.length > 0) {
-      throw new Error(
-        `Not everything reached the user's Telegram. Not sent:\n${problems.map((line) => `- ${line}`).join("\n")}`
-      );
-    }
-    return attachments?.length
-      ? `Sent to the user's Telegram, with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}.`
-      : "Sent to the user's Telegram.";
+    sendToUser(message);
+    const shown = attachments?.length
+      ? `Shown to the user in this session's transcript, with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`
+      : "Shown to the user in this session's transcript";
+    return `${shown}; their paired devices get a push unless they have this session open.`;
   },
 
   showImage(path) {

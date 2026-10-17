@@ -49,6 +49,7 @@
     "./workspace-policy": "./src/workspace-policy.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
     "./upstream-guard": "./src/upstream-guard.ts",
+    "./upstream-post": "./src/upstream-post.ts",
     "./claude-dirs": "./src/claude-dirs.ts",
     "./boundary-nesting": "./src/boundary-nesting.ts",
     "./git-dir": "./src/git-dir.ts",

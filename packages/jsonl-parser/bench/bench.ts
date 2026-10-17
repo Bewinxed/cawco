@@ -78,7 +78,7 @@ rmSync(`${indexPath}-shm`, { force: true });
     "websocket reconnect",
     "permission prompt",
     "svelte rune",
-    "telegram bridge",
+    "push notification",
   ];
   for (const q of queries) {
     const t2 = performance.now();

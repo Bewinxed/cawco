@@ -36,7 +36,17 @@
  * `CAWCO-QUEUE held heavy` once it starts (core harness.ts `QUEUE_MARKER`; a
  * work item's check stands its clock while it waits). It re-measures the room
  * every {@link ROOM_POLL_MS}, never spinning.
+ *
+ * macOS has no PSI, so the Mac reads its own counterparts from the kernel
+ * ({@link macRoom}), each over the same last 10 s: the share of CPU time
+ * spent busy, the pages read back in from swap, the memory the kernel calls
+ * available, and its pressure level, refused only at critical. Before
+ * 2026-10-17 the Mac admitted a run only at pressure level 1 and a 1-minute
+ * load under its core count; its resting state with nothing heavy running is
+ * level 2 and a load of 7 to 16 (Colima, Brave, the sessions and their MCP
+ * servers), so it started nothing for hours while twenty gates waited.
  */
+import { dlopen, FFIType, ptr } from "bun:ffi";
 import {
   closeSync,
   ftruncateSync,
@@ -94,8 +104,36 @@ const CPU_STALL_MAX = 50;
  */
 const RESERVE_FLOOR = 16 * 1024 ** 3;
 const RESERVE_SHARE = 0.1;
-/** macOS: `kern.memorystatus_vm_pressure_level` 1, normal (2 is warn, 4 critical). */
-const MAC_PRESSURE_NORMAL = 1;
+/**
+ * macOS: `kern.memorystatus_vm_pressure_level` 4, critical (1 is normal, 2
+ * warn), refuses a run whatever the other readings say. Level 2 is this
+ * Mac's resting state (35% of memory available, nothing heavy running,
+ * 2026-10-17), so it holds nothing.
+ */
+const MAC_PRESSURE_CRITICAL = 4;
+/**
+ * macOS: the most of the last 10 s the CPUs spent busy (user, system and
+ * nice ticks over all ticks) that still admits a run, a percent: the Mac's
+ * reading of Linux's "CPU stall under 50". Our call: at rest (load 12 to 16,
+ * nothing heavy running, 2026-10-17) four 10 s windows read 34 to 38% busy,
+ * and a build or a booting simulator drives it to near 100; 75 leaves the
+ * resting Mac a run and refuses one onto CPUs that are already saturated.
+ * The 1-minute load is no measure here: it read 12 to 16 with 62 to 66% of
+ * CPU time idle.
+ */
+const MAC_CPU_BUSY_MAX = 75;
+/**
+ * macOS: the most memory read back in from swap over the last 10 s that
+ * still admits a run, in MiB: the Mac's reading of thrashing (Linux's memory
+ * stall). Our call: at rest, with 9 GiB of 10 GiB swap in use and pressure at
+ * level 2, six 10 s windows read 0 to 4 swap-ins (64 KiB at most); 128 MiB
+ * in 10 s is the kernel reading back what it pushed out as fast as work
+ * needs it, which no resting window comes near. Decompressions say less:
+ * they swung 9,000 to 36,000 pages a window at rest.
+ */
+const MAC_SWAPIN_MAX_MIB = 128;
+/** macOS: the window every rate reading spans, as Linux's PSI avg10 does. */
+const MAC_WINDOW_MS = 10_000;
 
 /**
  * Overrides of the thresholds above, for proving the gate holds and admits
@@ -106,7 +144,8 @@ const ROOM_ENV = {
   memoryStall: "CAWCO_HEAVY_MEMORY_STALL_MAX",
   cpuStall: "CAWCO_HEAVY_CPU_STALL_MAX",
   reserveGib: "CAWCO_HEAVY_RESERVE_GIB",
-  load: "CAWCO_HEAVY_LOAD_MAX",
+  cpuBusy: "CAWCO_HEAVY_CPU_BUSY_MAX",
+  swapInMib: "CAWCO_HEAVY_SWAPIN_MAX_MIB",
 } as const;
 
 /** How often a waiting run tries the slots, and a `hold` looks for its shell. */
@@ -168,8 +207,6 @@ export interface Room {
 
 const SOME_AVG10 = /^some avg10=([\d.]+)/m;
 const MEM_AVAILABLE = /^MemAvailable:\s+(\d+) kB$/m;
-const BRACES = /[{}]/g;
-const BLANKS = /\s+/;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
@@ -208,35 +245,186 @@ const linuxRoom = (): Room => {
   };
 };
 
-const macRoom = (): Room => {
-  const loadMax = threshold(ROOM_ENV.load, availableParallelism());
-  const asked = Bun.spawnSync(
-    ["sysctl", "-n", "vm.loadavg", "kern.memorystatus_vm_pressure_level"],
-    { stdout: "pipe", stderr: "pipe" }
+/**
+ * The Mac's readings, from the kernel through libSystem with no spawn (a
+ * synchronous spawn under Bun can wedge its caller's loop, process-identity.ts
+ * says why): `host_statistics`' `HOST_CPU_LOAD_INFO` (4 tick counters, idle at
+ * 2), `host_statistics64`'s `HOST_VM_INFO64` (`struct vm_statistics64`, 38
+ * integers, `swapins` at byte 112; <mach/vm_statistics.h>, checked against
+ * `vm_stat` on 2026-10-17), `host_page_size`, and `sysctlbyname` for
+ * `kern.memorystatus_level` (the percent of memory available, what
+ * `memory_pressure -Q` calls "free") and `kern.memorystatus_vm_pressure_level`.
+ */
+const openMach = () =>
+  dlopen("/usr/lib/libSystem.B.dylib", {
+    mach_host_self: { args: [], returns: FFIType.u32 },
+    host_statistics: {
+      args: [FFIType.u32, FFIType.i32, FFIType.ptr, FFIType.ptr],
+      returns: FFIType.i32,
+    },
+    host_statistics64: {
+      args: [FFIType.u32, FFIType.i32, FFIType.ptr, FFIType.ptr],
+      returns: FFIType.i32,
+    },
+    host_page_size: {
+      args: [FFIType.u32, FFIType.ptr],
+      returns: FFIType.i32,
+    },
+    sysctlbyname: {
+      args: [
+        FFIType.cstring,
+        FFIType.ptr,
+        FFIType.ptr,
+        FFIType.ptr,
+        FFIType.u64,
+      ],
+      returns: FFIType.i32,
+    },
+  });
+let mach: { host: number; lib: ReturnType<typeof openMach> } | undefined;
+const machHost = () => {
+  if (!mach) {
+    const lib = openMach();
+    // One send right for the process's life: each call of mach_host_self adds a reference.
+    mach = { lib, host: lib.symbols.mach_host_self() };
+  }
+  return mach;
+};
+const HOST_CPU_LOAD_INFO = 3;
+const CPU_STATE_IDLE = 2;
+const HOST_VM_INFO64 = 4;
+const VM_INFO64_COUNT = 38;
+const VM_SWAPINS = 112;
+
+/** One reading of the Mac's counters: CPU ticks busy and in all, pages swapped in since boot. */
+interface MacSample {
+  at: number;
+  busy: number;
+  swapins: bigint;
+  ticks: number;
+}
+
+const macSample = (): MacSample => {
+  const { lib, host } = machHost();
+  const cpu = new Uint32Array(4);
+  const cpuCount = new Uint32Array([4]);
+  const cpuCode = lib.symbols.host_statistics(
+    host,
+    HOST_CPU_LOAD_INFO,
+    ptr(cpu),
+    ptr(cpuCount)
   );
-  if (asked.exitCode !== 0) {
+  const vm = new BigUint64Array(VM_INFO64_COUNT / 2);
+  const vmCount = new Uint32Array([VM_INFO64_COUNT]);
+  const vmCode = lib.symbols.host_statistics64(
+    host,
+    HOST_VM_INFO64,
+    ptr(vm),
+    ptr(vmCount)
+  );
+  if (cpuCode !== 0 || vmCode !== 0) {
     throw new Error(
-      `sysctl -n vm.loadavg kern.memorystatus_vm_pressure_level exited ${asked.exitCode}: ${asked.stderr.toString().trim()}`
+      `host_statistics answered ${cpuCode} (CPU load) and host_statistics64 ${vmCode} (VM), not 0`
     );
   }
-  const [loadLine = "", levelLine = ""] = asked.stdout
-    .toString()
-    .trim()
-    .split("\n");
-  // vm.loadavg reads "{ 1.92 2.10 2.31 }".
-  const load = Number(loadLine.replace(BRACES, "").trim().split(BLANKS)[0]);
-  const level = Number(levelLine.trim());
-  if (!(Number.isFinite(load) && Number.isFinite(level))) {
+  const ticks = cpu.reduce((sum, each) => sum + each, 0);
+  return {
+    at: Date.now(),
+    busy: ticks - (cpu[CPU_STATE_IDLE] ?? 0),
+    ticks,
+    swapins: new DataView(vm.buffer).getBigUint64(VM_SWAPINS, true),
+  };
+};
+
+/** A 32-bit integer sysctl, by name. */
+const sysctlInt = (name: string): number => {
+  const value = new Int32Array(1);
+  const size = new BigUint64Array([4n]);
+  const code = machHost().lib.symbols.sysctlbyname(
+    new TextEncoder().encode(`${name}\0`),
+    ptr(value),
+    ptr(size),
+    null,
+    0
+  );
+  if (code !== 0) {
+    throw new Error(`sysctlbyname ${name} answered ${code}`);
+  }
+  return value[0] ?? 0;
+};
+
+/** The page size the VM counters count in. */
+const macPageSize = (): number => {
+  const size = new BigUint64Array(1);
+  const code = machHost().lib.symbols.host_page_size(
+    machHost().host,
+    ptr(size)
+  );
+  if (code !== 0) {
+    throw new Error(`host_page_size answered ${code}`);
+  }
+  return Number(size[0]);
+};
+
+/** This process's samples of the Mac's counters, the last minute of them. */
+const macSamples: MacSample[] = [];
+
+/** Records a sample; keeps those within six windows of it. */
+const recordMacSample = (): MacSample => {
+  const now = macSample();
+  macSamples.push(now);
+  while ((macSamples[0]?.at ?? now.at) < now.at - 6 * MAC_WINDOW_MS) {
+    macSamples.shift();
+  }
+  return now;
+};
+
+/** The newest sample at least a window before `now`, if this process has one. */
+const windowStart = (now: number): MacSample | undefined =>
+  macSamples.findLast((sample) => now - sample.at >= MAC_WINDOW_MS);
+
+/**
+ * Waits, once, until this process's samples span a window, so the Mac's
+ * rates can be read ({@link macRoom}); at once elsewhere, whose kernel keeps
+ * its own windows.
+ */
+const readyRoom = async (): Promise<void> => {
+  if (process.platform !== "darwin" || windowStart(Date.now())) {
+    return;
+  }
+  const first = macSamples[0] ?? recordMacSample();
+  await Bun.sleep(Math.max(0, first.at + MAC_WINDOW_MS - Date.now()));
+};
+
+const macRoom = (): Room => {
+  const busyMax = threshold(ROOM_ENV.cpuBusy, MAC_CPU_BUSY_MAX);
+  const swapInMax = threshold(ROOM_ENV.swapInMib, MAC_SWAPIN_MAX_MIB);
+  const reserve = threshold(ROOM_ENV.reserveGib, 0) * GIB;
+  const now = recordMacSample();
+  const then = windowStart(now.at);
+  if (!then) {
     throw new Error(
-      `sysctl answered "${loadLine}" and "${levelLine}", not a load and a pressure level`
+      `its readings span less than the last ${MAC_WINDOW_MS / 1000} s so far`
     );
   }
-  const loadOk = load < loadMax;
-  const levelOk = level === MAC_PRESSURE_NORMAL;
+  const seconds = Math.round((now.at - then.at) / 1000);
+  const busy =
+    now.ticks > then.ticks
+      ? (100 * (now.busy - then.busy)) / (now.ticks - then.ticks)
+      : 0;
+  const swappedIn =
+    (Number(now.swapins - then.swapins) * macPageSize()) / 1024 ** 2;
+  const free = (sysctlInt("kern.memorystatus_level") / 100) * totalmem();
+  const level = sysctlInt("kern.memorystatus_vm_pressure_level");
+  const needs = SLOT_MEMORY + reserve;
+  const busyOk = busy < busyMax;
+  const swapOk = swappedIn < swapInMax;
+  const freeOk = free >= needs;
+  const levelOk = level < MAC_PRESSURE_CRITICAL;
   const mark = (ok: boolean) => (ok ? "" : " ✗");
   return {
-    ok: loadOk && levelOk,
-    words: `this machine's measured room: 1-minute load ${load.toFixed(2)} (a run starts under ${loadMax})${mark(loadOk)}, memory pressure level ${level} (starts at ${MAC_PRESSURE_NORMAL}, normal)${mark(levelOk)}`,
+    ok: busyOk && swapOk && freeOk && levelOk,
+    words: `this machine's measured room: CPU busy ${busy.toFixed(0)}% of the last ${seconds} s (a run starts under ${busyMax})${mark(busyOk)}, ${swappedIn.toFixed(1)} MiB read back from swap (under ${swapInMax})${mark(swapOk)}, ${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person` : ""})${mark(freeOk)}, memory pressure level ${level} (refused at ${MAC_PRESSURE_CRITICAL}, critical)${mark(levelOk)}`,
   };
 };
 
@@ -394,6 +582,7 @@ export async function takeHeavySlot(
   const count = slotCount();
   const dir = slotsDir();
   mkdirSync(dir, { recursive: true });
+  await readyRoom();
   let said: Behind["kind"] | undefined;
   let room: Room | undefined;
   let measuredAt = 0;
@@ -430,6 +619,8 @@ export async function takeHeavySlot(
 /** Lets a taken slot go. */
 export const releaseHeavySlot = (fd: number): void => unlock(fd);
 
-/** `heavy-run.ts count`'s line: the ceiling, and the room now. */
-export const heavyRunsSaid = (): string =>
-  `${slotCount()} heavy runs at most (${HEAVY_RUNS_ENV}=${process.env[HEAVY_RUNS_ENV] || "unset"}; this machine: ${availableParallelism()} cores / ${SLOT_CORES}, ${Math.floor(totalmem() / GIB)} GiB / ${SLOT_MEMORY / GIB} → ${machineRuns()}); ${measureRoom().words}`;
+/** `heavy-run.ts count`'s line: the ceiling, and the room over the last window. */
+export const heavyRunsSaid = async (): Promise<string> => {
+  await readyRoom();
+  return `${slotCount()} heavy runs at most (${HEAVY_RUNS_ENV}=${process.env[HEAVY_RUNS_ENV] || "unset"}; this machine: ${availableParallelism()} cores / ${SLOT_CORES}, ${Math.floor(totalmem() / GIB)} GiB / ${SLOT_MEMORY / GIB} → ${machineRuns()}); ${measureRoom().words}`;
+};

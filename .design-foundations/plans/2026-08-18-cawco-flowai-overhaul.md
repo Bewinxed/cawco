@@ -17,8 +17,8 @@
 Caw&Co (UI wordmark "CawCo") is a self-hosted fleet control plane for AI coding agents. A
 `cawco` daemon runs on each machine, joins a hub over tailnet/LAN via mDNS, and a browser
 dashboard gives one board across every machine, project, and running agent session — what each is
-doing, what needs a human, and what it costs. Harnesses: Claude Code, OpenCode, pi. A Telegram
-bridge lets the operator approve permissions from a phone.
+doing, what needs a human, and what it costs. Harnesses: Claude Code, OpenCode, pi. The iOS
+app's push lets the operator approve permissions from a phone.
 
 **Surface inventory:** 7 routes, ~433 `.svelte` files (327 shadcn `ui/`, ~106 custom). The routes
 are thin (7–541 lines); the product lives in a handful of very large components — `SessionPane`
@@ -227,7 +227,7 @@ Design phases have something concrete to lay out.
   spec's Error state must cover WebSocket drop and reconnect, since the dashboard is a thin client
   over a hub that may be off, unreachable, or mid-restart.
 - Agent runs are open-ended and routinely exceed the `10s+` tier → determinate progress plus
-  out-of-band notification (the Telegram bridge already exists as that channel).
+  out-of-band notification (the iOS app's push is that channel).
 - First-use empty state is the highest-stakes of the four types (first-use · user-cleared ·
   no-results · error): a fresh install has zero machines joined and every surface is empty at once.
 - Destructive and irreversible actions (interrupt a run, delete a rule, revoke a machine) must be
@@ -975,7 +975,7 @@ measured with `ui-observer` against a rendered page; the rest are reviewed again
    contradict DW-3.13. Inks remain the exception: superseded by the AA gate where they conflict.
 2. **No user research will be conducted.** JOURNEY.md will therefore carry `UNGROUNDED` and
    `NOT VALIDATED` honestly rather than fabricating a basis.
-3. **The Telegram bridge remains the out-of-band notification channel** for the `10s+` feedback tier.
+3. **The iOS app's push is the out-of-band notification channel** for the `10s+` feedback tier.
 4. **The data/runtime libraries stay** — `layerchart`, `virtua`, `xyflow`, `shiki`,
    `svelte-streamdown`. Only their presentation is redesigned.
 5. **`ui-observer` can attach to a running dev server** for the measurement-based done-when items. If

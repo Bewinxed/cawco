@@ -306,6 +306,7 @@
 @custom-variant slot-caw-panel-empty (&[data-slot="caw-panel-empty"]);
 @custom-variant slot-caw-seat (&[data-slot="caw-seat"]);
 @custom-variant slot-cell (&[data-slot="cell"]);
+@custom-variant slot-cell-d (&[data-slot="cell-d"]);
 @custom-variant slot-cell-link (&[data-slot="cell-link"]);
 @custom-variant slot-check (&[data-slot="check"]);
 @custom-variant slot-checkbox-group (&[data-slot="checkbox-group"]);
@@ -564,6 +565,7 @@
 @custom-variant slot-who (&[data-slot="who"]);
 @custom-variant slot-word (&[data-slot="word"]);
 @custom-variant slot-words (&[data-slot="words"]);
+@custom-variant slot-work-tabs-rows (&[data-slot="work-tabs-rows"]);
 @custom-variant slot-workflow-row (&[data-slot="workflow-row"]);
 @custom-variant slot-x (&[data-slot="x"]);
 @custom-variant state-active (&[data-state="active"]);

@@ -1,7 +1,7 @@
 /**
  * What a permission prompt says, in plain words, on every surface: the
- * dashboard's composer card, the iOS parked prompt, the Telegram message and
- * the attention rails. The hub reads each ask once, as it parks it, and stamps
+ * dashboard's composer card, the iOS parked prompt, the push and the
+ * attention rails. The hub reads each ask once, as it parks it, and stamps
  * the result on the `permission_request` frame ({@link PermissionPresentation});
  * every surface renders that and reads nothing of the tool's input itself, so
  * no two of them can word the same ask two ways.
@@ -14,6 +14,7 @@
 import { type MemoryScope, scopeWords } from "./fleet";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
+import { UPSTREAM_POST_TOOL } from "./upstream-post";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
 export interface PermissionChange {
@@ -182,13 +183,6 @@ function statWords(stat: LineStat): string {
     ? `${amount} across ${plural(sections.length, "section")}`
     : amount;
 }
-
-/** The short form Telegram carries: "+3 −1". */
-export const changeStat = (changes: PermissionChange[]): string => {
-  const added = changes.reduce((sum, each) => sum + each.added, 0);
-  const removed = changes.reduce((sum, each) => sum + each.removed, 0);
-  return `+${added} −${removed}`;
-};
 
 const changeOf = (
   path: string,
@@ -1121,6 +1115,37 @@ function designProposal(input: Record<string, unknown>): Presented {
   };
 }
 
+const VOWEL_FIRST = /^[aeiou]/i;
+
+/** "an issue", "a comment": a kind with its article. */
+const withArticle = (kind: string): string =>
+  `${VOWEL_FIRST.test(kind) ? "an" : "a"} ${kind}`;
+
+/**
+ * A post to another person's repository held for the person (core
+ * upstream-post.ts `UpstreamAskInput`): where it lands and what it is as the
+ * summary, the account it posts as under it, its title and body as fields,
+ * and the post itself, whole, as the command CawCo makes once approved.
+ */
+function upstreamPost(input: Record<string, unknown>): Presented {
+  const kind = text(input.kind) ?? "post";
+  const repo = text(input.repo) ?? "another repository";
+  const account = text(input.account);
+  const title = typeof input.title === "string" ? input.title : undefined;
+  const body = typeof input.body === "string" ? input.body : undefined;
+  const command = text(input.command);
+  return {
+    summary: `Post ${withArticle(kind)} on ${repo}`,
+    ...(account ? { detail: `As ${account} on GitHub` } : {}),
+    changes: [],
+    ...(command ? { command } : {}),
+    fields: [
+      ...(title === undefined ? [] : [{ key: "title", value: title }]),
+      ...(body === undefined ? [] : [{ key: "body", value: body }]),
+    ],
+  };
+}
+
 /** The tool name a project's Caw changes his own project's settings by (hub project-settings.ts). */
 export const PROJECT_SETTINGS_TOOL = "mcp__cawco__project_settings";
 
@@ -1453,6 +1478,9 @@ export function presentPermission(
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
     return { ...who, ...projectSettings(input) };
+  }
+  if (toolName === UPSTREAM_POST_TOOL) {
+    return { ...who, ...upstreamPost(input) };
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.

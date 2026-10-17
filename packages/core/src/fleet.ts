@@ -127,6 +127,17 @@ export const CAWCO_OAUTH_URL = "https://cawco.dev/oauth";
 export const MCP_OAUTH_RETURN_PATH = "/oauth/mcp";
 
 /**
+ * What every config delete answers (JOURNEY.md Flow 5: "an undo affordance
+ * after the fact rather than a confirm dialog before it"): the item is in
+ * the hub's trash, `restore` is the entry `POST /api/trash/:id/restore`
+ * brings back, and `restorableForMs` how long it waits there.
+ */
+export interface Deleted {
+  restorableForMs: number;
+  restore: number;
+}
+
+/**
  * One linked plugin marketplace. `source` is whatever
  * `claude plugin marketplace add` accepts — `owner/repo`, a git URL, a
  * marketplace.json URL — passed through verbatim.

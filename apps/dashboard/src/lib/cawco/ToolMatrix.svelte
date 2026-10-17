@@ -115,7 +115,7 @@
         >
       </Badge>
       <span
-        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 min-[48rem]:opacity-0"
+        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
       >
         <Button
           disabled={!online}

@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// The home (home/Home.svelte, its phone page): a status line and the
@@ -391,6 +392,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var asks: SessionAsks? { sessionMenus?()?.asks }
 
     #if DEBUG
+    /// Each build's tab counts, for a probe to read off the app's log.
+    static let probeLog = Logger(subsystem: "dev.cawco.app", category: "HomeProbe")
+
     /// Session `id`'s row on screen in this home, and the list's place for its questions.
     func probeRow(_ id: String) -> (place: String, row: SessionRowView, item: Item)? {
         guard isViewLoaded, view.window != nil else { return nil }
@@ -714,7 +718,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let board = home.board(for: tab)
         let working = board.working
         let finished = board.finished
-        counts = (working.count, finished.count, finished.contains(where: \.isFailed))
+        counts = board.counts
+        #if DEBUG
+        Self.probeLog.notice("home counts: working=\(self.counts.working) finished=\(self.counts.finished) failed=\(self.counts.finishedFailed)")
+        #endif
         rows = [:]
         groups = [:]
         echoing = [:]

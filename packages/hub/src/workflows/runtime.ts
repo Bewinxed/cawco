@@ -86,7 +86,8 @@ export interface WorkflowRuntimeDeps {
   halt: (machineId: string, instanceId: string) => Promise<void>;
   /** Runs each step attempt's deadline until the hub closes (steps.ts). */
   lifetime: HubLifetimeShape;
-  notifyUser: (text: string) => void;
+  /** A run with no supervisor said `notify`: the person hears of it (push.ts `workflowNote`). */
+  notifyPerson: (runId: string, text: string) => void;
   online: (machineId: string) => boolean;
   park: (envelope: Envelope) => void;
   /** The graph's authoring problems: a workflow with any cannot run (§9.3). */
@@ -1294,7 +1295,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         if (run.supervisorInstanceId) {
           notify(run, text);
         } else {
-          deps.notifyUser(text);
+          deps.notifyPerson(run.id, String(args.text));
         }
         return null;
       }
@@ -1766,8 +1767,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       });
     },
     /**
-     * A question answered through the pending ledger — a dashboard card,
-     * Telegram, or a supervisor's `answer_delegate`. An answer the question
+     * A question answered through the pending ledger — a dashboard card, the
+     * app, or a supervisor's `answer_delegate`. An answer the question
      * cannot take throws here, before anything is settled, so whoever sent it
      * is told why and the question stays open.
      */

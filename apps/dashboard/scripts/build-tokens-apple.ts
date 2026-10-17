@@ -23,14 +23,9 @@
  * appearance). Transitions are CSS composites with no Apple counterpart (the
  * motion tokens they are built from are emitted) and are not emitted.
  */
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type Color from "colorjs.io";
-import type {
-  Dictionary,
-  PlatformConfig,
-  TransformedToken,
-} from "style-dictionary/types";
+import type { Dictionary, TransformedToken } from "style-dictionary/types";
 import {
   CssEvaluator,
   call,
@@ -176,24 +171,6 @@ export function colourSetFiles(
   }
   return files;
 }
-
-/** Rewrites the asset catalog: one colour set per colour token, Any and Dark. */
-export const colourSetsAction = (view: TokenView) => ({
-  do: (dictionary: Dictionary, platform: PlatformConfig): void => {
-    const catalog = join(platform.buildPath ?? "", CATALOG);
-    rmSync(catalog, { recursive: true, force: true });
-    for (const [path, content] of colourSetFiles(view, dictionary)) {
-      mkdirSync(dirname(join(catalog, path)), { recursive: true });
-      writeFileSync(join(catalog, path), content);
-    }
-  },
-  undo: (_dictionary: Dictionary, platform: PlatformConfig) => {
-    rmSync(join(platform.buildPath ?? "", CATALOG), {
-      recursive: true,
-      force: true,
-    });
-  },
-});
 
 // MARK: - Swift
 

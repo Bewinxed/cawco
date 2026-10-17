@@ -65,8 +65,24 @@
  *     unguarded within a beat and I, A again, runs; the desk's ⋯ names the
  *     fleet's new answer beside "Same as the fleet".
  * (f) ⋯ › "Keep agents off other repositories" at the desk: the project's
- *     own `false` over the fleet's yes; its rule turns guarded within a
+ *     own `off` over the fleet's `on`; its rule turns guarded within a
  *     beat, and K, A again, is refused.
+ * (g) ⋯ › "Ask me first" at the desk: the project's own `ask`; its rule
+ *     reads `ask` within a beat. Then (hub upstream-asks.ts):
+ *     S1 `gh issue create -R someone/else --title 'Probe deny' --body …`:
+ *       not run in the workspace; the session reads that it waits in the
+ *       owner's Needs you, and exit 0;
+ *     S2 the same again: the session reads it is already waiting, and no
+ *       second ask parks;
+ *     S3 the same with --title 'Probe approve': a second ask.
+ *     Each parks as the delegate's permission ask (`UPSTREAM_POST_TOOL`),
+ *     its card naming the repository, the kind, the title, the body, the
+ *     account (the host's gh login) and the command; the workspace's gh
+ *     never ran either. Deny on S1's row in the desk's Needs you: the
+ *     host's gh never runs it, and the session is told it was denied.
+ *     Approve on S3's row on the phone: the host's gh runs it exactly once
+ *     (`GH_REPO` someone/else, in no checkout), and the session is told
+ *     what it said.
  *
  *   bun scripts/probe-kit/run.ts upstream-guard
  */
@@ -75,7 +91,11 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { UPSTREAM_WORDS } from "../../../packages/core/src/upstream-guard";
+import {
+  UPSTREAM_WORDS,
+  type UpstreamPosts,
+} from "../../../packages/core/src/upstream-guard";
+import { UPSTREAM_POST_TOOL } from "../../../packages/core/src/upstream-post";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 
@@ -100,9 +120,19 @@ const TOKEN_COUNT = (id: string) => new RegExp(`TOKENVARS-${id}=(\\d+)`);
 const MUTATION_NO_REPO = `gh api graphql -f 'query=mutation { addComment(input: {subjectId: "X", body: "hi"}) { clientMutationId } }'`;
 const MUTATION_OWN = `gh api graphql -F owner=probe-owner -F name=probe-repo -f 'query=mutation($owner: String!, $name: String!) { r: repository(owner: $owner, name: $name) { id } }'`;
 const ELSEWHERE = "gh issue create -R someone/else --title t --body b";
-/** Waits inside the boundary until the workspace's rule reads `guarded`. */
-const RULE_READS = (guarded: boolean) =>
-  `until grep -q '"guarded":${guarded}' "$HOME/.cawco/workspaces/$CAWCO_WORKSPACE/ro/upstream.json"; do sleep 1; done`;
+/** Waits inside the boundary until the workspace's rule reads `posts`. */
+const RULE_READS = (posts: UpstreamPosts) =>
+  `until grep -q '"posts":"${posts}"' "$HOME/.cawco/workspaces/$CAWCO_WORKSPACE/ro/upstream.json"; do sleep 1; done`;
+/** Step S's posts under Ask: one to deny (asked twice), one to approve. */
+const DENIED =
+  "gh issue create -R someone/else --title 'Probe deny' --body 'Denied body'";
+const APPROVED =
+  "gh issue create -R someone/else --title 'Probe approve' --body 'Approved body'";
+/** What the session reads as its post is held (upstream-guard.ts `heldWords`). */
+const HELD = "was not posted yet: it waits in the owner's Needs you";
+const AGAIN = "is already waiting for the owner's answer";
+/** The host's gh login, as the fake answers `gh api user`. */
+const PERSON = "probe-person";
 
 /** Each step's command, in order; each ends by echoing its marker and the exit. */
 const STEPS = [
@@ -125,22 +155,28 @@ const STEPS = [
   },
   // Each wait holds until the probe has pressed the next choice, then until
   // that choice has reached the workspace's rule.
-  { id: "W", command: RULE_READS(false) },
+  { id: "W", command: RULE_READS("on") },
   { id: "E", command: ELSEWHERE },
   { id: "U", command: TOKEN_VARS("U") },
-  { id: "V", command: RULE_READS(true) },
+  { id: "V", command: RULE_READS("off") },
   { id: "F", command: ELSEWHERE },
-  { id: "Y", command: RULE_READS(false) },
+  { id: "Y", command: RULE_READS("on") },
   { id: "I", command: ELSEWHERE },
-  { id: "Q", command: RULE_READS(true) },
+  { id: "Q", command: RULE_READS("off") },
   { id: "K", command: ELSEWHERE },
+  { id: "R", command: RULE_READS("ask") },
+  { id: "1", command: `${DENIED} 2>&1` },
+  { id: "2", command: `${DENIED} 2>&1` },
+  { id: "3", command: `${APPROVED} 2>&1` },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
 /** The waits, each let go once the probe has pressed the choice it waits on. */
-const WAITS: readonly StepId[] = ["W", "V", "Y", "Q"];
+const WAITS: readonly StepId[] = ["W", "V", "Y", "Q", "R"];
 const released = new Set<StepId>();
 const marker = (id: StepId) => `STEP-${id}-END`;
-const EXIT = /STEP-([A-Z])-END exit=(\d+)/g;
+const EXIT = /STEP-([A-Z0-9])-END exit=(\d+)/g;
+/** The transcript as the model last read it, whatever it was answering: the hub's word on an answered post lands after the last step. */
+let seen = "";
 /** Where step `id`'s marker came back, its exit with it. */
 const endOf = (text: string, id: StepId) =>
   text.search(new RegExp(`STEP-${id}-END exit=\\d`));
@@ -154,6 +190,7 @@ const respond = (request: Seen): Reply => {
   if (!(request.tools && request.all.includes(TAG))) {
     return { everyMs: 5, words: ["ok"] };
   }
+  seen = request.all;
   for (const step of STEPS) {
     if (request.all.includes(marker(step.id))) {
       outputs[step.id] ??= request.all;
@@ -208,9 +245,17 @@ const said = (from: StepId, id: StepId): string => {
 };
 
 const FAKE_GH = `#!/bin/sh
-# The probe's stand-in for gh: the host's token, or the call recorded with the
-# token it ran with where the probe reads it.
+# The probe's stand-in for gh: the host's token and login, or the call
+# recorded with the token it ran with where the probe reads it: a workspace's
+# in its TMPDIR, the host's (an approved post, upstream-posts.ts) in
+# PROBE_HOST_GH_LOG with the repository it was pinned to and where it ran.
 if [ "$1 $2" = "auth token" ]; then echo probe-host-token; exit 0; fi
+if [ "$1 $2" = "api user" ]; then echo ${PERSON}; exit 0; fi
+if [ -z "$CAWCO_WORKSPACE" ]; then
+  printf '%s repo=%s cwd=%s\\n' "$*" "\${GH_REPO:-none}" "$(pwd)" >> "$PROBE_HOST_GH_LOG"
+  echo "FAKE-GH-HOST-RAN $*"
+  exit 0
+fi
 case "$(cat "$GH_CONFIG_DIR/config.yml" 2>/dev/null)" in *http_unix_socket*) door=yes ;; *) door=no ;; esac
 printf '%s token=%s door=%s\\n' "$*" "\${GH_TOKEN:-none}" "$door" >> "$TMPDIR/fake-gh.log"
 echo "FAKE-GH-RAN $*"
@@ -238,6 +283,8 @@ const press = async (page: Page, view: View, selector: string) => {
 
 const NEEDS_ROW =
   ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) :is([data-slot="row"], [data-task-table-row], [data-project-spend-row], [data-view-routines-row], [data-view-table-row], [data-layout-row], [data-account-name-row], [data-session-row-row])[data-kind="choice"]';
+/** A permission ask's row in Caw's Needs you: a held post's. */
+const ASK_ROW = NEEDS_ROW.replace('[data-kind="choice"]', '[data-kind="ask"]');
 const OPEN_MENU = "[data-slot='dropdown-menu-content'][data-state='open']";
 const OPEN_SUB = "[data-slot='dropdown-menu-sub-content'][data-state='open']";
 const SUB_TRIGGER = `${OPEN_MENU} [data-slot='dropdown-menu-sub-trigger'][data-probe-upstream]`;
@@ -403,6 +450,9 @@ const run = async (kit: Kit) => {
   await chmod(join(fakeBin, "gh"), 0o755);
   fleet.env.PATH = `${fakeBin}:${fleet.env.PATH}`;
   fleet.env.GH_TOKEN = "probe-caller-token";
+  // Where the host's gh records an approved post it made (FAKE_GH).
+  const hostLog = join(fleet.sandbox, "host-gh.log");
+  fleet.env.PROBE_HOST_GH_LOG = hostLog;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -433,19 +483,17 @@ const run = async (kit: Kit) => {
     caw: false,
   });
   /** The project's own answer at the hub: null while it takes the fleet's. */
-  const projectPosts = () => {
-    const [row] = fleet.query<{ upstream_posts: number | null }>(
+  const projectPosts = (): UpstreamPosts | null => {
+    const [row] = fleet.query<{ upstream_posts: UpstreamPosts | null }>(
       "SELECT upstream_posts FROM projects WHERE id = ?",
       project.id
     );
-    return row?.upstream_posts === null || row === undefined
-      ? null
-      : row.upstream_posts === 1;
+    return row?.upstream_posts ?? null;
   };
   const fleetAnswer = async () =>
     (
       (await (await fetch(`${fleet.base}/api/fleet/choices`)).json()) as {
-        upstream?: boolean | null;
+        upstream?: UpstreamPosts | null;
       }
     ).upstream;
 
@@ -469,7 +517,7 @@ const run = async (kit: Kit) => {
     await page
       .locator(NEEDS_ROW)
       .screenshot({ path: join(kit.out, `needs-row-${view}.png`) });
-    const [keep, allow] = read?.buttons ?? [];
+    const [keep, ask, allow] = read?.buttons ?? [];
     check(
       `a, ${view}: Needs you asks it in one row: its title, its risk, onboarding's line, and opens nothing`,
       read?.name === UPSTREAM_WORDS.title &&
@@ -479,17 +527,22 @@ const run = async (kit: Kit) => {
       JSON.stringify(read && { ...read, buttons: undefined })
     );
     check(
-      `a, ${view}: its two options are peers (one width, one height, one fill), keep off first, inside the row, each the hit test's at its centre; nothing scrolls sideways`,
+      `a, ${view}: its three options are peers (one width, one height, one fill), keep off first, then ask me first, inside the row, each the hit test's at its centre; nothing scrolls sideways`,
       Boolean(
         read &&
         keep &&
+        ask &&
         allow &&
-        read.buttons.length === 2 &&
+        read.buttons.length === 3 &&
         keep.label === UPSTREAM_WORDS.keepOff &&
+        ask.label === UPSTREAM_WORDS.ask &&
         allow.label === UPSTREAM_WORDS.allow &&
-        Math.abs(keep.width - allow.width) <= 0.5 &&
-        Math.abs(keep.height - allow.height) <= 0.5 &&
-        keep.fill === allow.fill &&
+        [ask, allow].every(
+          (other) =>
+            Math.abs(keep.width - other.width) <= 0.5 &&
+            Math.abs(keep.height - other.height) <= 0.5 &&
+            keep.fill === other.fill
+        ) &&
         read.buttons.every(
           (button) =>
             button.hits &&
@@ -521,8 +574,8 @@ const run = async (kit: Kit) => {
     )
   );
   check(
-    "a: the phone's “Keep agents off other repositories” answers the fleet's choice (false), and the row leaves the phone and the desk",
-    answered === false && gone.every(Boolean),
+    "a: the phone's “Keep agents off other repositories” answers the fleet's choice (off), and the row leaves the phone and the desk",
+    answered === "off" && gone.every(Boolean),
     `GET ${JSON.stringify(answered)}; row gone: desk ${gone[0]}, phone ${gone[1]}`
   );
   // The remote a GitHub checkout's origin would give it (projects.remote).
@@ -550,12 +603,15 @@ const run = async (kit: Kit) => {
     );
     const fleetsKeepOff = `${UPSTREAM_WORDS.inherit} · ${UPSTREAM_WORDS.keepOff}`;
     check(
-      `m, ${view}: three radio items in UPSTREAM_WORDS' words, “${fleetsKeepOff}” the one checked (the fleet's answer its own second line), each whole and the hit test's at its centre`,
+      `m, ${view}: four radio items in UPSTREAM_WORDS' words, “${fleetsKeepOff}” the one checked (the fleet's answer its own second line), each whole and the hit test's at its centre`,
       menu.items.map((item) => item.name).join(" | ") ===
-        [fleetsKeepOff, UPSTREAM_WORDS.keepOff, UPSTREAM_WORDS.allow].join(
-          " | "
-        ) &&
-        menu.items.map((item) => item.lines).join() === "2,1,1" &&
+        [
+          fleetsKeepOff,
+          UPSTREAM_WORDS.keepOff,
+          UPSTREAM_WORDS.ask,
+          UPSTREAM_WORDS.allow,
+        ].join(" | ") &&
+        menu.items.map((item) => item.lines).join() === "2,1,1,1" &&
         menu.items.filter((item) => item.checked).length === 1 &&
         menu.items[0]?.checked === true &&
         menu.items.every((item) => item.hits && item.whole),
@@ -641,7 +697,7 @@ const run = async (kit: Kit) => {
   const rule = await readFile(ruleFile, "utf8").catch(() => "");
   check(
     "b: the workspace's rule is guarded, the project inheriting the fleet's answer the onboarding row gave",
-    rule.includes('"guarded":true') &&
+    rule.includes('"posts":"off"') &&
       rule.includes(`github.com/${OWN}`) &&
       projectPosts() === null,
     rule
@@ -726,9 +782,9 @@ const run = async (kit: Kit) => {
     (await until(
       "c: the project's own answer",
       projectPosts,
-      (now) => now === true,
+      (now) => now === "on",
       15_000
-    ).catch(projectPosts)) === true,
+    ).catch(projectPosts)) === "on",
     `project ${JSON.stringify(projectPosts())}`
   );
   await stepRan("U", 300_000);
@@ -772,7 +828,7 @@ const run = async (kit: Kit) => {
   const turned = await fetch(`${fleet.base}/api/fleet/choices`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ upstream: true }),
+    body: JSON.stringify({ upstream: "on" }),
   });
   released.add("Y");
   await stepRan("I", 300_000);
@@ -803,9 +859,9 @@ const run = async (kit: Kit) => {
     (await until(
       "f: the project's own answer",
       projectPosts,
-      (now) => now === false,
+      (now) => now === "off",
       15_000
-    ).catch(projectPosts)) === false,
+    ).catch(projectPosts)) === "off",
     `project ${JSON.stringify(projectPosts())}`
   );
   await stepRan("K", 300_000);
@@ -818,7 +874,147 @@ const run = async (kit: Kit) => {
       (await elsewhereRan()) === 2,
     `exit ${exitOf("K")}; fake gh calls:\n${await logged()}`
   );
+
+  // (g)
+  await choose("desk", UPSTREAM_WORDS.ask);
+  released.add("R");
+  check(
+    "g: the desk's ⋯ › “Ask me first” sets the project's own answer",
+    (await until(
+      "g: the project's own answer",
+      projectPosts,
+      (now) => now === "ask",
+      15_000
+    ).catch(projectPosts)) === "ask",
+    `project ${JSON.stringify(projectPosts())}`
+  );
+  await stepRan("3", 300_000);
+  const hostLogged = async (): Promise<string> =>
+    await readFile(hostLog, "utf8").catch(() => "");
+  const heldAsks = async () =>
+    (await fleet.api<HeldAsk[]>("/api/pending")).filter(
+      (one) => one.payload.toolName === UPSTREAM_POST_TOOL
+    );
+  const parked = await until(
+    "g: both posts parked",
+    heldAsks,
+    (all) => all.length >= 2,
+    30_000
+  ).catch(heldAsks);
+  const titled = (title: string) =>
+    parked.find((one) => one.payload.input.title === title);
+  const deniedAsk = titled("Probe deny");
+  const approvedAsk = titled("Probe approve");
+  const inWorkspace = await logged();
+  check(
+    "g: S1 is held, not run: the session reads that it waits in the owner's Needs you, it exits 0, and the workspace's gh never ran it",
+    exitOf("1") === 0 &&
+      said("R", "1").includes(HELD) &&
+      !inWorkspace.includes("Probe"),
+    `exit ${exitOf("1")}; said:\n${said("R", "1")}\nworkspace gh:\n${inWorkspace}`
+  );
+  check(
+    "g: S2, the same post again, is that one ask: the session reads it is already waiting, and two asks park in all",
+    exitOf("2") === 0 && said("1", "2").includes(AGAIN) && parked.length === 2,
+    `exit ${exitOf("2")}; ${parked.length} asks; said:\n${said("1", "2")}`
+  );
+  check(
+    "g: each post is one permission ask whose card names the repository, the kind, the title, the body, the account it posts as and the command",
+    Boolean(
+      deniedAsk &&
+      approvedAsk &&
+      [deniedAsk, approvedAsk].every(
+        (one) =>
+          one.payload.input.repo === "github.com/someone/else" &&
+          one.payload.input.kind === "issue" &&
+          one.payload.input.account === `@${PERSON}` &&
+          one.payload.presentation?.summary ===
+            "Post an issue on github.com/someone/else" &&
+          one.payload.presentation.detail === `As @${PERSON} on GitHub` &&
+          (one.payload.presentation.command ?? "").startsWith(
+            "gh issue create -R someone/else --title 'Probe"
+          )
+      ) &&
+      deniedAsk.payload.input.body === "Denied body" &&
+      approvedAsk.payload.input.body === "Approved body"
+    ),
+    JSON.stringify(
+      parked.map((one) => ({
+        input: one.payload.input,
+        presentation: one.payload.presentation,
+      }))
+    )
+  );
+  /** A held post's row in Caw's Needs you, its button `name` pressed as `view`'s hand presses it. */
+  const answerRow = async (view: View, title: string, name: string) => {
+    const page = pages[view];
+    await openNeeds(page, view, base);
+    const row = page.locator(ASK_ROW).filter({ hasText: title });
+    await row.first().waitFor({ timeout: 30_000 });
+    await row
+      .first()
+      .getByRole("button", { name: new RegExp(`^${name} `) })
+      .evaluate((button) => button.setAttribute("data-probe-pick", ""));
+    await press(page, view, "[data-probe-pick]");
+    await settle(page, 300);
+  };
+  await answerRow("desk", "Probe deny", "Deny");
+  const toldDenied = await until(
+    "g: the session hears the denial",
+    () => seen,
+    (heard) => heard.includes("The owner denied"),
+    120_000
+  ).then(
+    () => true,
+    () => false
+  );
+  check(
+    "g: Deny on S1's row at the desk: nothing is posted (the host's gh never ran it), and the session is told",
+    toldDenied &&
+      !(await hostLogged()).includes("Probe deny") &&
+      !(await heldAsks()).some((one) => one.requestId === deniedAsk?.requestId),
+    `told ${toldDenied}; host gh:\n${await hostLogged()}`
+  );
+  await answerRow("phone", "Probe approve", "Approve");
+  const toldApproved = await until(
+    "g: the session hears it was posted",
+    () => seen,
+    (heard) => heard.includes("The owner approved"),
+    120_000
+  ).then(
+    () => true,
+    () => false
+  );
+  // Posted once: a second run would land within the wait.
+  await Bun.sleep(5000);
+  const made = (await hostLogged())
+    .split("\n")
+    .filter((line) =>
+      line.startsWith(
+        "issue create -R someone/else --title Probe approve --body Approved body"
+      )
+    );
+  check(
+    "g: Approve on S3's row on the phone: the host's gh posts exactly that once, pinned to someone/else in no checkout, and the session is told what it said",
+    toldApproved &&
+      made.length === 1 &&
+      (made[0] ?? "").includes("repo=someone/else") &&
+      (made[0] ?? "").includes("/upstream-posts/") &&
+      seen.includes("FAKE-GH-HOST-RAN issue create -R someone/else"),
+    `told ${toldApproved}; host gh:\n${await hostLogged()}`
+  );
   kit.note(`captures: ${kit.out}`);
 };
+
+/** A post held for the person, as `/api/pending` lists it. */
+interface HeldAsk {
+  instanceId: string;
+  payload: {
+    input: Record<string, unknown>;
+    presentation?: { command?: string; detail?: string; summary?: string };
+    toolName: string;
+  };
+  requestId: string;
+}
 
 export default { name: "upstream-guard", run } satisfies Spec;

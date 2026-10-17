@@ -984,7 +984,7 @@
     <!-- What will happen and why, then the command or the change itself: a
          grant is made on what runs, never on a sentence about it alone. The
          words are the hub's (core permission-presentation.ts), the same on
-         iOS and Telegram; secrets in the fields are already hidden. -->
+         iOS; secrets in the fields are already hidden. -->
     <div
       data-slot="body"
       class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"

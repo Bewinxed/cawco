@@ -44,7 +44,7 @@ grep -qx "BUILT iOS" "$BUILD_LOG" || { echo "no BUILT iOS line in $BUILD_LOG" >&
 ROOT=$(git rev-parse --show-toplevel)
 BUILD=$(basename "$ROOT")
 [[ $ROOT == "$HOME/cockpit" ]] && BUILD=main
-APP=${XDG_CACHE_HOME:-$HOME/Library/Caches}/cawco-apple/$BUILD/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app
+APP=${XDG_CACHE_HOME:-$HOME/Library/Caches}/cawco-apple.noindex/$BUILD/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app
 [[ -d $APP ]] || { echo "no app at $APP" >&2; exit 1; }
 
 UDIDS=()

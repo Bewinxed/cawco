@@ -1502,8 +1502,9 @@
              `shadow-tab-end`, in `tab-shade`), so each reads as its own
              folder, rimmed or not. Only sideways: not from the strip's first
              tab's leading side or its last tab's trailing side
-             (`--lone-start`/`--lone-end`), and nothing above a tab's top or
-             below the shelf's line. The chosen tab's cast (`data-chosen`)
+             (`--lone-start`/`--lone-end`) unless it is lifted
+             (`data-lifted`), standing over the strip, and nothing above a
+             tab's top or below the shelf's line. The chosen tab's cast (`data-chosen`)
              comes and goes with the choice, on its clock. The edge is cast
              by boxes of their own under the tab's shape, in its stack: the
              tab's box less its 1px slope, square sides and rounded
@@ -1524,10 +1525,10 @@
           style:--cast-end="calc(var(--flare) + var(--slope-end))"
           style:--cast-r="var(--radius) var(--radius) 0 0"
           ><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-start, 0))"
           ></span><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-end, 0))"
           ></span></span
         >

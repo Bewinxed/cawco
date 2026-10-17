@@ -7,10 +7,21 @@ export type UsageHarness = "claude" | "opencode";
 
 export interface UsageTokens {
   cacheCreation: number; // Claude: see cacheCreationCount() rule in tokens.ts
+  /**
+   * The part of `cacheCreation` written with a 1-hour lifetime, priced at its
+   * own rate; absent when the source does not split it, so every write is
+   * priced as a 5-minute one.
+   */
+  cacheCreation1h?: number;
   cacheRead: number;
   input: number;
   output: number;
-  reasoning: number; // opencode only; 0 for Claude
+  /**
+   * OpenCode only, 0 for Claude: reasoning tokens, which OpenCode counts apart
+   * from `output` and which bill at the output rate ("charge reasoning tokens
+   * at the same rate as output tokens", OpenCode's `Session.getUsage`).
+   */
+  reasoning: number;
 }
 
 /**
@@ -172,7 +183,8 @@ export interface UsageSummary {
  * `/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every
  * "today" in CawCo reads.
  *
- * Real money is opencode's own per-message cost; Claude is a subscription
+ * Real money is opencode's messages, each priced by CawCo at its provider's
+ * rates and its prompt's tier (`costForUsage`); Claude is a subscription
  * whose constraint is a percentage, so its API-price estimate is never added
  * in. The days are the hub's: `todayStart` is local midnight and `weekStart`
  * this Monday's midnight in `timeZone`, the hub's own zone (IANA name).

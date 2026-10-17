@@ -9,7 +9,7 @@
  * Each delegate of one parent commits a file and leaves a folder in its
  * TMPDIR (as a scratch fleet a SIGKILL cut short leaves one); the probe gives
  * L's and K's clones an Apple build root in the workspaces' cache, as
- * build-both.sh makes one (`xdg/cawco-apple/<clone's folder>` and its lock),
+ * build-both.sh makes one (`xdg/cawco-apple.noindex/<clone's folder>` and its lock),
  * as each starts. Each calls finish_item and the hub lands its commit; K
  * calls it blocked, so its item fails with its commit on no remote.
  *
@@ -35,6 +35,20 @@
  *     the same session goes on there (same work item, same transcript): its
  *     shell reads that path and M's landed file. It finishes again and its
  *     workspace retires again.
+ * (q) Q commits a file and a package.json whose typecheck sleeps, then
+ *     passes; pushes its commit to origin's `probe-keep-Q` (as the conductor
+ *     pushed K1's by hand on 2026-10-17), and calls finish_item; its parent
+ *     stops it while its landing gate runs. The stop ends the landing: the
+ *     gate passes and nothing is pushed to main all the same. Its workspace
+ *     retires once the landing has ended (not under it), and its row records
+ *     its head as that commit on `probe-keep-Q`. A handoff cuts its clone
+ *     again there, not at main: the same session's shell reads the same path,
+ *     HEAD at that commit, not on origin's main, and Q's file; it speeds its
+ *     gate up and lands.
+ * (o) O commits and finishes, done; in the same turn, on no new word, it
+ *     commits again and calls finish_item again: the hub runs the item again
+ *     and lands the second commit (its report lists it) rather than
+ *     answering the first report.
  * (p) P's workspace, shown in the parent's preview artifact, stays active
  *     after its work lands and its session sleeps, a sweep naming the
  *     artifact; deleting the artifact retires it, with no sweep or archive
@@ -100,7 +114,7 @@ const requestWithin = async (
   }
 };
 
-const TAG = /PROBE-RETIRE-([LKMPBHGS])/;
+const TAG = /PROBE-RETIRE-([LKMQOPBHGS])/;
 /** A size in words (core `sizeWords`), alone and as the 409 places it before the clone's path. */
 const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
 const SIZE_AT = /\(\d+(\.\d)? (GB|MB|KB) at /;
@@ -111,6 +125,18 @@ const RECUT = "PROBE-RECUT-M";
 const RECUT_PWD = /RECUT-PWD=([^\s\\"]+)/;
 const RECUT_FILE = /RECUT-FILE:([^\n\\"]*)/;
 const RECUT_RAN = "RECUT-42";
+/** The parent's handoff to Q once its stopped landing's workspace retired, and what Q's shell prints there. */
+const RECUT_Q = "PROBE-RECUT-Q";
+const Q_PWD = /Q-PWD=([^\s\\"]+)/;
+const Q_HEAD = /Q-HEAD=([0-9a-f]{40})/;
+const Q_FILE = /Q-FILE:([^\n\\"]*)/;
+const Q_RAN = "Q-RECUT-42";
+/** The branch of origin Q pushes its commit to, and the gate its commit carries: it sleeps, then passes, so only the stop keeps it off main. */
+const Q_KEEP = "probe-keep-Q";
+const Q_GATE = '{"scripts":{"typecheck":"sleep 30"}}';
+const Q_ON_MAIN = /Q-ON-MAIN=(yes|no)/;
+/** What finish_item answers an item that landed and is done. */
+const ITEM_DONE = "The item is done";
 /** A free-space threshold no disk meets. */
 const UNREACHABLE_GB = "100000";
 const REFUSAL = new RegExp(
@@ -119,15 +145,96 @@ const REFUSAL = new RegExp(
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;
 
-/** What each delegate runs in its workspace: a folder left in its TMPDIR, a commit. */
+const COMMIT =
+  "git -c user.name=Delegate -c user.email=d@probe.test commit -qm";
+
+/**
+ * What each delegate runs in its workspace: a folder left in its TMPDIR, a
+ * commit. Q's commit also carries its failing gate, and goes to origin's
+ * {@link Q_KEEP} from inside its boundary (hub-git.ts: a session's own push).
+ */
 const commitCommand = (tag: string) =>
   [
     `mkdir -p "$TMPDIR/scratch-fleet-left-${tag}" && echo left > "$TMPDIR/scratch-fleet-left-${tag}/file"`,
     `echo 'made by ${tag}' > retire-${tag}.txt`,
-    `git add retire-${tag}.txt`,
-    `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
+    ...(tag === "Q" ? [`printf '%s\\n' '${Q_GATE}' > package.json`] : []),
+    `git add -A retire-${tag}.txt${tag === "Q" ? " package.json" : ""}`,
+    `${COMMIT} 'Delegate commit ${tag}'`,
+    ...(tag === "Q" ? [`git push -q origin HEAD:refs/heads/${Q_KEEP}`] : []),
     `echo DONE-COMMIT-${tag}`,
   ].join(" && ");
+
+/** What Q's shell read in its clone cut again. */
+const qSeen: { pwd?: string; head?: string; file?: string; onMain?: string } =
+  {};
+
+/** Q, handed off after its stopped landing's workspace retired: its shell in the clone cut again, its gate sped up, then finish_item again. */
+const qRecutTurn = (
+  request: Seen,
+  step: { againFinish?: boolean; againSearched?: boolean }
+): Reply => {
+  if (!request.all.includes(Q_RAN)) {
+    return tool("Bash", {
+      command: [
+        `printf 'Q-PWD=%s\\n' "$(pwd)"`,
+        `printf 'Q-HEAD=%s\\n' "$(git rev-parse HEAD)"`,
+        `printf 'Q-FILE:%s\\n' "$(cat retire-Q.txt 2>&1)"`,
+        "git fetch -q origin main",
+        `printf 'Q-ON-MAIN=%s\\n' "$(git merge-base --is-ancestor HEAD origin/main && echo yes || echo no)"`,
+        `printf '%s\\n' '{"scripts":{"typecheck":"true"}}' > package.json`,
+        "git add package.json",
+        `${COMMIT} 'Q gate passes'`,
+        "echo Q-RECUT-$((40+2))",
+      ].join("; "),
+      description: "Where am I, and speed the gate up",
+    });
+  }
+  qSeen.pwd = Q_PWD.exec(request.all)?.[1];
+  qSeen.head = Q_HEAD.exec(request.all)?.[1];
+  qSeen.file = Q_FILE.exec(request.all)?.[1];
+  qSeen.onMain = Q_ON_MAIN.exec(request.all)?.[1];
+  return finishing(
+    request,
+    {
+      finished: step.againFinish === true,
+      searched: step.againSearched === true,
+    },
+    () => {
+      step.againFinish = true;
+    },
+    () => {
+      step.againSearched = true;
+    },
+    {
+      headline: "Went on in the clone cut again, its gate sped up.",
+      summary: "Went on in the clone cut again, its gate sped up.",
+    }
+  );
+};
+
+/** O, its item done: in the same turn a second commit, then finish_item again. */
+const followUpTurn = (
+  request: Seen,
+  step: { againFinish?: boolean }
+): Reply => {
+  if (!request.all.includes(ITEM_DONE)) {
+    return text("done");
+  }
+  if (!request.all.includes("DONE-COMMIT-O2")) {
+    return tool("Bash", {
+      command: `echo 'made by O again' > retire-O2.txt && git add retire-O2.txt && ${COMMIT} 'Delegate commit O2' && echo DONE-COMMIT-O2`,
+      description: "Commit a follow-up",
+    });
+  }
+  if (!step.againFinish) {
+    step.againFinish = true;
+    return tool(FINISH, {
+      headline: "Committed retire-O2.txt as a follow-up.",
+      summary: "Committed retire-O2.txt as a follow-up.",
+    });
+  }
+  return text("done");
+};
 
 const steps: Record<
   string,
@@ -218,6 +325,12 @@ const respond = (request: Seen): Reply => {
   }
   if (tag === "M" && step.finish && request.all.includes(RECUT)) {
     return recutTurn(request, step);
+  }
+  if (tag === "Q" && step.finish && request.all.includes(RECUT_Q)) {
+    return qRecutTurn(request, step);
+  }
+  if (tag === "O" && step.finish) {
+    return followUpTurn(request, step);
   }
   return finishing(
     request,
@@ -337,7 +450,7 @@ interface Scene {
   /** Deletes the parent's artifact: its status. */
   closePreview: (id: string) => Promise<number>;
   delegate: (
-    tag: "L" | "K" | "M" | "P" | "B" | "H" | "G" | "S",
+    tag: "L" | "K" | "M" | "O" | "P" | "B" | "H" | "G" | "S",
     onStart?: (workspace: Workspace) => Promise<void> | void
   ) => Promise<Delegated>;
   fleet: Fleet;
@@ -345,6 +458,8 @@ interface Scene {
   parentId: string;
   /** A preview artifact of the parent's naming the workspace's server: its id. */
   showPreview: (workspace: Workspace, name: string) => string;
+  /** The project's repository every delegate is cut from. */
+  src: string;
   /** The workspace's row once its state is `state`, or as it stands when that does not come. */
   stateBecomes: (id: string, state: string) => Promise<Workspace>;
   workspaceOf: (id: string) => Workspace;
@@ -596,6 +711,171 @@ const recutPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     "(r) with its work over again, the workspace retires again: row archived, clone gone",
     again.state === "archived" && !existsSync(wm.path),
     `${again.state}; clone ${existsSync(wm.path) ? "stands" : "gone"}`
+  );
+};
+
+/** An item's row as these phases read it. */
+interface ItemRow {
+  error: string | null;
+  landing_since: number | null;
+  result: string | null;
+  state: string;
+}
+
+const itemRow = (fleet: Fleet, id: string): ItemRow | undefined =>
+  fleet.query<ItemRow>(
+    "SELECT state, error, result, landing_since FROM work_items WHERE id = ?",
+    id
+  )[0];
+
+/** (q) A landing stopped mid-gate: its workspace retires with its head recorded, and a handoff cuts the clone again there, not at main. */
+const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const { fleet, workspaceOf, stateBecomes, callAsParent } = scene;
+  const started = await fleet.api<{
+    instanceId: string;
+    workItemId: string;
+    workspaceId: string;
+  }>("/api/work-items", {
+    parentInstanceId: scene.parentId,
+    title: "Commit and end Q",
+    prompt: "PROBE-RETIRE-Q: commit a file.",
+    harness: "claude",
+    model: "claude-haiku-4-5",
+    cwd: scene.src,
+  });
+  const wq = workspaceOf(started.workspaceId);
+  const landing = await until(
+    "Q's landing gate running",
+    () => itemRow(fleet, started.workItemId),
+    (row) => Boolean(row?.landing_since),
+    300_000
+  ).catch(() => itemRow(fleet, started.workItemId));
+  const sha = (
+    await Bun.$`git -C ${wq.path} rev-parse HEAD`.quiet().nothrow()
+  ).stdout
+    .toString()
+    .trim();
+  const stopped = await callAsParent("stop_delegate", {
+    target: started.instanceId,
+  });
+  const cancelled = await until(
+    "Q's item cancelled",
+    () => itemRow(fleet, started.workItemId),
+    (row) => row?.state === "cancelled",
+    60_000
+  ).catch(() => itemRow(fleet, started.workItemId));
+  check(
+    "(q) Q pushed its commit to probe-keep-Q and called finish_item; stopped while its landing gate ran, its item is cancelled",
+    Boolean(landing?.landing_since) &&
+      stopped.status === 200 &&
+      cancelled?.state === "cancelled",
+    `${JSON.stringify(landing)}; stop ${stopped.status} ${stopped.text.slice(0, 400)}; ${JSON.stringify(cancelled)}`
+  );
+  const kept = fleet.query<{ state: string }>(
+    "SELECT state FROM workspaces WHERE id = ?",
+    wq.id
+  )[0]?.state;
+  const retired = await stateBecomes(wq.id, "archived");
+  const head = JSON.parse(
+    fleet.query<{ head: string | null }>(
+      "SELECT head FROM workspaces WHERE id = ?",
+      wq.id
+    )[0]?.head ?? "null"
+  ) as { branch: string; commit: string } | null;
+  const hub = await fleet.logs("hub");
+  check(
+    "(q) its workspace stays while the landing runs, then retires: row archived, clone gone, head recorded as Q's commit on probe-keep-Q",
+    kept === "active" &&
+      retired.state === "archived" &&
+      !existsSync(wq.path) &&
+      sha.length === 40 &&
+      head?.commit === sha &&
+      head.branch === Q_KEEP,
+    `right after the stop ${kept}; ${retired.state}; clone ${existsSync(wq.path) ? "stands" : "gone"}; HEAD was ${sha}; head ${JSON.stringify(head)}; ${hub
+      .split("\n")
+      .filter((line) => line.includes(wq.id))
+      .slice(-8)
+      .join(" | ")}`
+  );
+  const message = `${RECUT_Q}: go on in your workspace and say where you are.`;
+  let handed = await callAsParent("handoff", {
+    target: started.instanceId,
+    message,
+  });
+  if (!handed.text.includes("cutting its clone again")) {
+    handed = await callAsParent("handoff", {
+      target: started.instanceId,
+      message,
+    });
+  }
+  check(
+    "(q) the handoff waits at the hub while Q's clone is cut again, and says so",
+    handed.status === 200 && handed.text.includes("cutting its clone again"),
+    `${handed.status} ${handed.text.slice(0, 800)}`
+  );
+  const ended = await until(
+    "Q's reopened item ended again",
+    () => itemRow(fleet, started.workItemId),
+    (row) =>
+      row !== undefined &&
+      qSeen.head !== undefined &&
+      ["done", "failed"].includes(row.state),
+    300_000
+  ).catch(() => itemRow(fleet, started.workItemId));
+  if (ended?.state !== "done") {
+    await sayLogs(kit, fleet, "Q again", started.instanceId);
+  }
+  check(
+    "(q) the same session went on in a clone cut again at Q's commit, not at main: same path, HEAD at that commit, Q's file there",
+    qSeen.pwd === wq.path && qSeen.head === sha && qSeen.file === "made by Q",
+    JSON.stringify({ seen: qSeen, path: wq.path, sha })
+  );
+  check(
+    "(q) the stop ended Q's landing though its gate passed: its commit is not on origin's main",
+    qSeen.onMain === "no",
+    JSON.stringify({ seen: qSeen, path: wq.path, sha })
+  );
+  check(
+    "(q) with its gate sped up on top of Q's commit there, Q's reopened item lands on main and is done",
+    ended?.state === "done" &&
+      (ended.result ?? "").includes("Q gate passes") &&
+      (ended.result ?? "").includes("Landed on main"),
+    `${ended?.state} ${ended?.error ?? ""} ${(ended?.result ?? "").slice(0, 1200)}`
+  );
+};
+
+/** (o) A done item's session commits again and calls finish_item: the follow-up lands. */
+const followUpPhase = async (kit: Kit, scene: Scene): Promise<void> => {
+  const { check } = kit;
+  const { fleet } = scene;
+  const o = await scene.delegate("O");
+  const landed = await until(
+    "O's follow-up landed",
+    () => itemRow(fleet, o.workItemId),
+    (row) =>
+      row?.state === "done" &&
+      (row.result ?? "").includes("Delegate commit O2"),
+    300_000
+  ).catch(() => itemRow(fleet, o.workItemId));
+  const reran = (await fleet.logs("hub"))
+    .split("\n")
+    .filter(
+      (line) =>
+        line.includes(o.workItemId) && line.includes("it runs again to land it")
+    );
+  check(
+    "(o) O's first finish_item lands and it is done",
+    o.item.state === "done",
+    `${o.item.state} ${o.item.error ?? ""}`
+  );
+  check(
+    "(o) its follow-up commit, made after the item was done, lands on a second finish_item: the item ran again and its report lists the second commit",
+    landed?.state === "done" &&
+      (landed.result ?? "").includes("Delegate commit O2") &&
+      (landed.result ?? "").includes("Landed on main") &&
+      reran.length === 1,
+    `${landed?.state} ${landed?.error ?? ""}; ${reran.join(" | ") || "no rerun line"}; ${(landed?.result ?? "").slice(0, 1200)}`
   );
 };
 
@@ -861,7 +1141,13 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
   const { check } = kit;
   const { fleet, workspaceOf, stateBecomes } = scene;
   const { home } = fleet;
-  const apple = join(home, ".cawco", "workspace-cache", "xdg", "cawco-apple");
+  const apple = join(
+    home,
+    ".cawco",
+    "workspace-cache",
+    "xdg",
+    "cawco-apple.noindex"
+  );
   // Each clone's Apple build root, as build-both.sh leaves one, as it starts.
   const buildRoot = async (workspace: Workspace) => {
     await mkdir(join(apple, basename(workspace.path), "DerivedData"), {
@@ -959,6 +1245,10 @@ const spec: Spec = {
     }
     recutSeen.pwd = undefined;
     recutSeen.file = undefined;
+    qSeen.pwd = undefined;
+    qSeen.head = undefined;
+    qSeen.file = undefined;
+    qSeen.onMain = undefined;
     launchTimes.length = 0;
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
@@ -1004,6 +1294,7 @@ const spec: Spec = {
     const scene: Scene = {
       fleet,
       parentId: parent,
+      src,
       workspaceOf,
       stateBecomes: (id, state) =>
         until(
@@ -1106,6 +1397,8 @@ const spec: Spec = {
     const wk = await landedAndFailed(kit, scene);
     await archivePhase(kit, scene, wk);
     await recutPhase(kit, scene);
+    await stoppedLandingPhase(kit, scene);
+    await followUpPhase(kit, scene);
     await previewPhase(kit, scene);
     await unstartablePhase(kit, scene);
     await huskPhase(kit, scene);

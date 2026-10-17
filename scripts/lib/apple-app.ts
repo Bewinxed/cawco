@@ -3,7 +3,7 @@
  *
  * One rule on the Mac, from a CawCo workspace or a person's shell alike:
  * build-both.sh builds into the workspaces' cache,
- * `~/.cawco/workspace-cache/xdg/cawco-apple/<build>` (a workspace's own
+ * `~/.cawco/workspace-cache/xdg/cawco-apple.noindex/<build>` (a workspace's own
  * XDG_CACHE_HOME, and where the Mac build slot's locks already are), and
  * `<build>` is the checkout's folder name (`main` for ~/cockpit). Each
  * simulator build leaves `CawCo.app.tree` beside the app: the stamp of
@@ -15,13 +15,13 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
-/** Where build-both.sh builds on the Mac. */
+/** Where build-both.sh builds on the Mac (.noindex: Spotlight indexes none of it). */
 export const APPLE_BUILDS = join(
   homedir(),
   ".cawco",
   "workspace-cache",
   "xdg",
-  "cawco-apple"
+  "cawco-apple.noindex"
 );
 
 const TRAILING_SLASH = /\/$/;
@@ -80,16 +80,38 @@ export function staleApp(
 
 /**
  * The checkout's simulator app, or `PROBE_IOS_APP` when a run names
- * another; either way only when it was built from this tree.
+ * another; either way only when it was built from this tree. A checkout
+ * whose own app is missing or was built from another tree builds it first
+ * (`build-both.sh ios`): a host check runs an ios-* spec in a fresh
+ * checkout of its own, where only the compile check would have built it,
+ * and a compile check that passed earlier is not run again. An app a run
+ * names is never built over; its problem is said.
  */
 export function freshApp(top: string): { path: string; problem?: string } {
-  const path = process.env.PROBE_IOS_APP ?? simulatorApp(top);
+  const named = process.env.PROBE_IOS_APP;
+  const path = named ?? simulatorApp(top);
+  const problem = staleApp(top, path);
+  if (!problem || named) {
+    return { path, problem };
+  }
+  const root = top.replace(TRAILING_SLASH, "");
+  console.log(`${problem}: building it`);
+  const build = Bun.spawnSync(
+    ["bash", "apps/apple/scripts/build-both.sh", "ios"],
+    { cwd: root, stdout: "inherit", stderr: "inherit" }
+  );
+  if (build.exitCode !== 0) {
+    return {
+      path,
+      problem: `bash apps/apple/scripts/build-both.sh ios exited ${build.exitCode} in ${root}`,
+    };
+  }
   return { path, problem: staleApp(top, path) };
 }
 
 /**
  * A probe that reaches the Mac as `ssh mac` (a Linux shell's): build-both.sh
- * builds there into `~/build/cawco-apple/<build>`, which is the app it
+ * builds there into `~/build/cawco-apple.noindex/<build>`, which is the app it
  * names. Run on the Mac itself, build-both.sh builds into APPLE_BUILDS
  * instead, so such a probe refuses to start there and says where to go.
  */
@@ -110,7 +132,7 @@ export function sshOnly(probe: string): void {
 export const macSideApp = (top: string): string =>
   process.platform === "darwin"
     ? simulatorApp(top)
-    : `$HOME/build/cawco-apple/${buildName(top)}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+    : `$HOME/build/cawco-apple.noindex/${buildName(top)}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
 
 /**
  * Why that app cannot be run against the checkout at `top`, its stamp read

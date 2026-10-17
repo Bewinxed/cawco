@@ -1547,7 +1547,7 @@
     const count = renderedRows.length;
     const { leaving: folding, settled } = presentation;
     const kept = Array.from(
-      { length: Math.min(TAIL_MOUNTED, count) },
+      { length: Math.min(Math.max(TAIL_MOUNTED, staged), count) },
       (_, i) => count - 1 - i
     );
     // A row folding shut stands after the settled rows (`withLeaving`).
@@ -1588,41 +1588,120 @@
    * are measured.
    */
   let unwinding = false;
+  /** Each far landing's number: whose rows a let-go in hand is letting go (`catchUpRest`). */
+  let landings = 0;
   function landFar(was: number): void {
     // Before the reveal nothing is painted: the first landing has no screen to keep.
     if (!(list && shown && renderedRows.length > 0)) {
       return;
     }
-    // virtua's own range as it stands, read off its sizes: the view and a
-    // screen either side.
-    const from = list.findItemIndex(Math.max(0, was - viewHeight));
-    const to = list.findItemIndex(was + 2 * viewHeight);
+    // virtua's own range as it stands, read off its sizes: the view and its
+    // buffer either side (virtua's `$getRange`), what is mounted now. A pane
+    // just shown again still has none (`unseen`): read as a screen either
+    // side, the rows a hidden pane never mounted were mounted here, three
+    // screens of them in the landing's frame (65ms, tab-return's 3 min).
+    const from = list.findItemIndex(Math.max(0, was - buffer));
+    const to = list.findItemIndex(was + viewHeight + buffer);
     lingering = Array.from({ length: to - from + 1 }, (_, i) => from + i);
     narrow = true;
     unwinding = false;
+    landings += 1;
     // The landing's scroll comes in the next frame (`onscroll`); past it,
     // the rest follows even if nothing scrolled.
     requestAnimationFrame(() =>
       setTimeout(() => requestAnimationFrame(() => setTimeout(catchUpRest)))
     );
   }
-  /** After the landing's frame has painted: the screen above, then the rows left behind. */
+  /**
+   * After the landing's frame has painted: the screen above, then the rows
+   * left behind, `STAGE_ROWS` a task (a view's worth let go in one, a far
+   * landing's last step took 34ms, 27ms of it the rows' removal: tab-return's
+   * 3 min), then the far landing's built rows, by now in virtua's range.
+   */
   function catchUpRest(): void {
     if (!narrow || unwinding) {
       return;
     }
     unwinding = true;
+    // A far landing made meanwhile (`landFar`) holds rows of its own: this
+    // one lets go of nothing more.
+    const own = landings;
+    const release = () =>
+      requestAnimationFrame(() =>
+        setTimeout(() => {
+          if (own !== landings) {
+            return;
+          }
+          lingering = lingering.slice(STAGE_ROWS);
+          if (lingering.length > 0) {
+            release();
+            return;
+          }
+          staged = 0;
+          unwinding = false;
+        })
+      );
     requestAnimationFrame(() =>
       setTimeout(() => {
         narrow = false;
-        requestAnimationFrame(() =>
-          setTimeout(() => {
-            lingering = [];
-            unwinding = false;
-          })
-        );
+        release();
       })
     );
+  }
+
+  /**
+   * A FAR LANDING'S ROWS ARE BUILT BEFORE IT, A FEW A TASK.
+   *
+   * The tail a far landing goes to is rows the view has never drawn: a pane
+   * shown again after minutes away holds the view it left and its last few
+   * rows, nothing between. Landed at once, every row of the new view was
+   * built, styled and laid out in the one task its scroll set off (19 rows,
+   * 853 elements, 34ms, tab-return's 3 min). So the rows from the end are
+   * kept mounted (`staged`, in `keepMounted`) `STAGE_ROWS` a task, each step
+   * once a frame has painted and measured the last, under the view the
+   * reader still sees, until they fill a view by virtua's sizes; the pin
+   * lands then, among rows already measured (web.dev, "Optimize long tasks":
+   * break a long task up and yield between the parts). A reader who scrolls
+   * meanwhile keeps the view, and the staged rows go with the landing's.
+   */
+  const STAGE_ROWS = 6;
+  /** How many rows from the end a far landing still being built keeps mounted; 0 when none is. */
+  let staged = $state(0);
+  /** The far landing's rows fill a view: the pin's next far write lands. */
+  let stagedReady = false;
+  let staging = false;
+  function stageFar(): void {
+    if (staging) {
+      return;
+    }
+    staging = true;
+    const step = () =>
+      requestAnimationFrame(() =>
+        setTimeout(() => {
+          if (!(staging && list && atBottom)) {
+            staging = false;
+            staged = 0;
+            return;
+          }
+          // The rows from the end that fill a view, by virtua's sizes: each
+          // step's rows measured by now, the rest at `ROW_ESTIMATE`.
+          const count = renderedRows.length;
+          let need = 0;
+          for (let height = 0; need < count && height < viewHeight; need += 1) {
+            height += list.getItemSize(count - 1 - need);
+          }
+          if (staged >= need) {
+            staging = false;
+            stagedReady = true;
+            pinBottom();
+            stagedReady = false;
+            return;
+          }
+          staged = Math.min(need, staged + STAGE_ROWS);
+          step();
+        })
+      );
+    step();
   }
 
   function left(key: string): void {
@@ -2485,6 +2564,12 @@
     if (Math.abs(scroller.scrollTop - bottom) > 0.5) {
       const was = scroller.scrollTop;
       if (bottom - was > scroller.clientHeight) {
+        // Drawn already: its rows are built first (`stageFar`), and the
+        // pin lands once they are.
+        if (list && shown && renderedRows.length > 0 && !stagedReady) {
+          stageFar();
+          return;
+        }
         landFar(was);
       }
       scroller.scrollTop = bottom;

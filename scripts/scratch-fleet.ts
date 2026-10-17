@@ -37,7 +37,10 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
-import { socketPathProblem } from "../packages/core/src/paths";
+import {
+  socketPathProblem,
+  workspaceFleetDir,
+} from "../packages/core/src/paths";
 import { ensureDeps } from "./lib/deps";
 import { type HeavySlot, heavySlot } from "./lib/heavy-run";
 import { welcomed } from "./lib/keeper-dial";
@@ -150,6 +153,20 @@ export interface Reply {
    * makes one turn park two asks at once. With `tool`, `tool` comes first.
    */
   tools?: ToolCall[];
+  /**
+   * The tokens the request reports: `prompt` with its `cached` part inside
+   * it, `completion` with its `reasoning` part inside it. A chat completion
+   * carries them as OpenAI's `usage` does; Anthropic messages as its own
+   * (the uncached input, the cache read, the output; no reasoning split).
+   * None: 10 in, 2 out (chat completions), 10 in and the words out
+   * (Anthropic messages).
+   */
+  usage?: {
+    cached?: number;
+    completion: number;
+    prompt: number;
+    reasoning?: number;
+  };
   words: string[];
 }
 
@@ -351,10 +368,13 @@ const sseStream = (events: string[], everyMs: number) => {
 const anthropicEvents = (
   words: string[],
   calls: ToolCall[],
-  cache?: Reply["cache"]
+  cache?: Reply["cache"],
+  spent?: Reply["usage"]
 ): string[] => {
   const ev = (type: string, data: object) =>
     `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+  // Anthropic counts the uncached input apart from the cache read.
+  const read = spent?.cached ?? 0;
   const start = ev("message_start", {
     message: {
       id: `msg_${crypto.randomUUID()}`,
@@ -365,8 +385,11 @@ const anthropicEvents = (
       stop_reason: null,
       stop_sequence: null,
       usage: {
-        input_tokens: 10,
+        input_tokens: spent ? spent.prompt - read : 10,
         output_tokens: 1,
+        ...(spent?.cached === undefined
+          ? {}
+          : { cache_read_input_tokens: read }),
         ...(cache
           ? {
               cache_read_input_tokens: cache.read,
@@ -423,7 +446,7 @@ const anthropicEvents = (
       ]),
       ev("message_delta", {
         delta: { stop_reason: "tool_use", stop_sequence: null },
-        usage: { output_tokens: 5 },
+        usage: { output_tokens: spent?.completion ?? 5 },
       }),
       ev("message_stop", {}),
     ];
@@ -443,16 +466,37 @@ const anthropicEvents = (
     ev("content_block_stop", { index: 0 }),
     ev("message_delta", {
       delta: { stop_reason: "end_turn", stop_sequence: null },
-      usage: { output_tokens: words.length },
+      usage: { output_tokens: spent?.completion ?? words.length },
     }),
     ev("message_stop", {}),
   ];
 };
 
-const chatEvents = (words: string[], calls: ToolCall[]): string[] => {
+const chatEvents = (
+  words: string[],
+  calls: ToolCall[],
+  spent: Reply["usage"] = { prompt: 10, completion: 2 }
+): string[] => {
   const chunk = (delta: object, finish: string | null) =>
     `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
-  const usage = `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })}\n\n`;
+  const usage = `data: ${JSON.stringify({
+    id: "c",
+    object: "chat.completion.chunk",
+    created: 0,
+    model: "mock",
+    choices: [],
+    usage: {
+      prompt_tokens: spent.prompt,
+      completion_tokens: spent.completion,
+      total_tokens: spent.prompt + spent.completion,
+      ...(spent.cached === undefined
+        ? {}
+        : { prompt_tokens_details: { cached_tokens: spent.cached } }),
+      ...(spent.reasoning === undefined
+        ? {}
+        : { completion_tokens_details: { reasoning_tokens: spent.reasoning } }),
+    },
+  })}\n\n`;
   if (calls.length > 0) {
     return [
       ...(words.length > 0
@@ -510,17 +554,42 @@ const chatEvents = (words: string[], calls: ToolCall[]): string[] => {
  * the services' HOME and runtime dirs two hex under TMPDIR as named (on
  * macOS a short link to it, for sockets' sake). Elsewhere both are under the
  * cache root (`~/.cache`, 22 bytes).
+ *
+ * On macOS a workspace's fleet keeps its sandbox and its services' HOMEs in
+ * the workspace's fleet folder instead (core paths.ts `workspaceFleetDir`,
+ * `$(getconf DARWIN_USER_TEMP_DIR)cawco-<id8>`, which its archive removes):
+ * OpenCode resolves every folder above a location, Bun's realpath on macOS
+ * opens a folder `O_RDONLY` and asks `fcntl(F_GETPATH)` (oven-sh/bun#44606,
+ * open; fix PRs #38365 and #42374, unmerged as of Bun 1.4.2), and the
+ * boundary lets a folder above one under home answer a lookup alone, never
+ * an open: under home, OpenCode answered 500 to every location read ("EPERM
+ * … lstat '/Users/…/.cawco/tmp'"). This branch goes once OpenCode ships a Bun
+ * with that fix. Its runtime dirs, where the agent binds its sockets, and
+ * sessiond's socket stay on the short link (`homes` is where a HOME goes).
  */
-function fleetRoots(): { scratch: string; short: string } {
+async function fleetRoots(): Promise<{
+  homes: string;
+  scratch: string;
+  short: string;
+}> {
+  const workspace = process.env.CAWCO_WORKSPACE;
   const workspaceTmp =
-    process.env.CAWCO_WORKSPACE && process.env.TMPDIR
-      ? process.env.TMPDIR
-      : undefined;
+    workspace && process.env.TMPDIR ? process.env.TMPDIR : undefined;
   const cache =
     process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache");
+  const short = workspaceTmp ?? cache;
+  const fleet = workspaceTmp
+    ? await workspaceFleetDir(workspace as string)
+    : undefined;
+  if (fleet) {
+    await mkdir(fleet, { recursive: true, mode: 0o700 });
+    const real = realpathSync(fleet);
+    return { scratch: real, homes: real, short };
+  }
   return {
     scratch: workspaceTmp ? realpathSync(workspaceTmp) : cache,
-    short: workspaceTmp ?? cache,
+    homes: short,
+    short,
   };
 }
 
@@ -752,9 +821,9 @@ async function heldByLive(dir: string): Promise<boolean> {
  * starts. Answers the folders removed.
  */
 export async function sweepDeadFleets(): Promise<string[]> {
-  const { scratch, short } = fleetRoots();
+  const { homes, scratch, short } = await fleetRoots();
   const removed: string[] = [];
-  for (const root of new Set([scratch, short])) {
+  for (const root of new Set([scratch, homes, short])) {
     // biome-ignore lint/performance/noAwaitInLoops: one root at a time
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
@@ -790,6 +859,13 @@ export const MODEL: Record<Harness, string> = {
   opencode: "mockoc/mock-oc",
   pi: "mockpi/mock-pi",
 };
+
+/**
+ * An OpenCode model CawCo's pricing lists, served by the mock: OpenCode Zen's
+ * catalog id (`opencode`) and Claude Haiku 5.5, whose price steps up over a
+ * 100k prompt. A spec reading what a turn cost spawns on it.
+ */
+export const PRICED_OPENCODE_MODEL = "opencode/claude-haiku-5-5";
 
 const ENTRY = {
   hub: "packages/hub/src/index.ts",
@@ -902,7 +978,7 @@ async function standUp(
   heavy: HeavySlot
 ) {
   const root = resolve(import.meta.dir, "..");
-  const { scratch, short: shortRoot } = fleetRoots();
+  const { homes, scratch, short: shortRoot } = await fleetRoots();
   const sandbox = await dirs.own(
     join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
   );
@@ -912,16 +988,15 @@ async function standUp(
   // loaded this module awaited it before importing it; this is that same run.
   await ensureDeps();
   // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
-  // sandbox, two hex under the shortest root (`fleetRoots`). Mode 700, as a
-  // runtime dir is. The agent keeps a workspace's sockets out of its HOME
-  // (paths.ts `workspaceDoorDir`) and refuses one under it that does not fit
-  // (`scratchSocketProblem`); the longest under the runtime dir is a
-  // preview's bridge (preview-bridge.ts `bridgeDir`),
-  // `/cawco/previews/<instance id>.sock`, checked here.
-  const home = await dirs.short(shortRoot);
+  // sandbox, two hex under their roots (`fleetRoots`): the runtime dir under
+  // the shortest. Mode 700, as a runtime dir is. The agent keeps a
+  // workspace's sockets out of its HOME (paths.ts `workspaceDoorDir`) and
+  // refuses one under it that does not fit (`scratchSocketProblem`); the
+  // longest under the runtime dir is a preview's bridge (preview-bridge.ts
+  // `bridgeDir`), `/cawco/previews/<instance id>.sock`, checked here.
+  const home = await dirs.short(homes);
   // In a folder of its own: a workspace boundary hides the database's folder.
   const dbPath = join(sandbox, "hub", "hub.db");
-  const sessiondSocket = join(sandbox, "sessiond.sock");
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
   // Claude Code's own temp root (its Bash tool's cwd file, a background
@@ -931,6 +1006,9 @@ async function standUp(
   const claudeTmp = join(sandbox, "claude-tmp");
   await mkdir(claudeTmp, { recursive: true });
   const runtime = await dirs.short(shortRoot);
+  // In the runtime dir, as every added machine's is: never in a fleet folder
+  // the boundary keeps sockets out of reach in (`fleetRoots`).
+  const sessiondSocket = join(runtime, "sessiond.sock");
   const bridge = socketPathProblem(
     join(runtime, "cawco", "previews", `${crypto.randomUUID()}.sock`),
     "The scratch agent's longest socket under its runtime dir, a preview's bridge,"
@@ -1036,8 +1114,13 @@ async function standUp(
       }
       return sseStream(
         chat
-          ? chatEvents(reply.words, callsOf(reply))
-          : anthropicEvents(reply.words, callsOf(reply), reply.cache),
+          ? chatEvents(reply.words, callsOf(reply), reply.usage)
+          : anthropicEvents(
+              reply.words,
+              callsOf(reply),
+              reply.cache,
+              reply.usage
+            ),
         reply.everyMs
       );
     },
@@ -1102,6 +1185,23 @@ async function standUp(
                 name: "Mock OC",
                 capabilities: { tools: true },
                 limit: { context: 100_000, output: 4000 },
+              },
+            },
+          },
+          // PRICED_OPENCODE_MODEL, on the mock. OpenCode speaks Anthropic
+          // messages to Zen's Claude models, whatever the package says.
+          opencode: {
+            name: "Mock Zen",
+            package: "@ai-sdk/openai-compatible",
+            settings: {
+              baseURL: `${mockBase}/v1`,
+              apiKey: "fake-opencode-key",
+            },
+            models: {
+              "claude-haiku-5-5": {
+                name: "Mock Haiku",
+                capabilities: { tools: true },
+                limit: { context: 1_000_000, output: 4000 },
               },
             },
           },
@@ -1641,7 +1741,7 @@ async function standUp(
    * the hub names them all by its hostname. It runs under the fleet's slot.
    */
   const launchMachine = async (machineId: string): Promise<Machine> => {
-    const machineHome = await dirs.short(shortRoot);
+    const machineHome = await dirs.short(homes);
     const machineRuntime = await dirs.short(shortRoot);
     await furnish(machineHome);
     const socketPath = join(machineRuntime, "sessiond.sock");

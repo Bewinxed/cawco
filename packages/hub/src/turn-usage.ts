@@ -1,8 +1,4 @@
-import {
-  type ClaudeModelUsage,
-  costForTurn,
-  type NeutralResultMessage,
-} from "@cawco/core";
+import type { ClaudeModelUsage, NeutralResultMessage } from "@cawco/core";
 import type { TurnUsageRow } from "./db/turn-usage";
 
 const FIELDS = [
@@ -62,8 +58,10 @@ interface Session {
  * conversation's cost-state), the result only sets the baseline.
  *
  * OpenCode and pi: the per-model sums their result frame carries
- * ({@link NeutralResultMessage.turnUsage}), each `provider/model`, priced at
- * that provider's rates when the turn ended (`at`).
+ * ({@link NeutralResultMessage.turnUsage}), each `provider/model`, with the
+ * cost the agent summed from each request's own price. A summed turn is
+ * never priced here: it cannot be tiered, so a sum that arrives with no cost
+ * (an agent from before requests were priced) is stored unpriced.
  */
 export const turnUsageOf = (
   session: Session,
@@ -125,17 +123,8 @@ export const turnUsageOf = (
         cacheReadTokens: usage.cacheRead,
         cacheWriteTokens: usage.cacheWrite,
         cacheWrite1hTokens: usage.cacheWrite1h ?? null,
-        costUsd: costForTurn(
-          usage.model,
-          {
-            input: usage.input,
-            output: usage.output,
-            cacheRead: usage.cacheRead,
-            cacheWrite5m: usage.cacheWrite - (usage.cacheWrite1h ?? 0),
-            cacheWrite1h: usage.cacheWrite1h ?? 0,
-          },
-          at
-        ),
+        // An agent from before requests were priced sends no costUsd.
+        costUsd: usage.costUsd ?? null,
       })
     ),
   };

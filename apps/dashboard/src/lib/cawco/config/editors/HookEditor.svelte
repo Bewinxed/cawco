@@ -48,7 +48,6 @@
     type HookVersion,
     hooksOf,
     loadHookVersions,
-    removeHook,
     restoreHookVersion,
     saveHook,
   } from "../../hooks";
@@ -59,8 +58,9 @@
   import RowFault from "../../RowFault.svelte";
   import { orderMachines } from "../../rail.svelte";
   import Choice from "../Choice.svelte";
+  import { deleteHook } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -334,34 +334,22 @@
     void goto("/config/hooks");
   }
 
-  async function askRemove() {
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  async function remove() {
     if (!id) {
       return;
     }
-    await question.ask({
-      title: `Delete ${draft.name || "this hook"}?`,
-      body: "This removes it from every machine that has it — not just switches it off. There's no undo.",
-      confirmLabel: "Delete hook",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        deleting = true;
-        try {
-          await removeHook(id, draft.name);
-          kept.drop();
-          // Back to the list first, so the row is seen leaving it.
-          await goto("/config/hooks");
-          if (store.hooks.value) {
-            store.hooks.value = store.hooks.value.filter(
-              (row) => row.id !== id
-            );
-          }
-        } catch (error) {
-          deleting = false;
-          throw error;
-        }
-      },
-    });
+    deleting = true;
+    failed = undefined;
+    try {
+      await deleteHook(store, { id, name: hook?.name ?? draft.name }, () => {
+        kept.drop();
+        return goto("/config/hooks");
+      });
+    } catch (error) {
+      deleting = false;
+      failed = message(error);
+    }
   }
 
   // ── per machine ──────────────────────────────────────────────────────
@@ -469,9 +457,6 @@
     failed: "Not applied",
     removed: "Taken off",
   };
-
-  /** Delete asks in this editor's own footer. */
-  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -479,9 +464,8 @@
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
-  ondelete={id ? askRemove : undefined}
+  ondelete={id ? remove : undefined}
   onsubmit={save}
-  {question}
   saveLabel={id ? `Write to ${reachCount}` : `Create on ${reachCount}`}
   saving={busy}
   settling={versionsLoading}

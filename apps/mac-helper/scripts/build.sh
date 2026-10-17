@@ -21,7 +21,8 @@
 # `build` waits for the load gate (1-minute load average under 60), then takes
 # the Mac build slot that apps/apple/scripts/build-both.sh uses, and gives it
 # back before notarising: waiting on Apple uses no Mac. Each workspace builds
-# in ~/build/cawco-mac-helper/<workspace>. Run on the Mac itself, the same
+# in ~/build/cawco-mac-helper.noindex/<workspace> (.noindex: Spotlight indexes
+# no build output). Run on the Mac itself, the same
 # steps run here with no SSH.
 set -euo pipefail
 
@@ -45,7 +46,7 @@ BUILD=$3
 # The signing identity, in the anbar-ci keychain.
 IDENTITY="Developer ID Application: Petra Solutions LLC (FN5LJSPX2R)"
 KEYCHAIN=$HOME/Library/Keychains/anbar-ci.keychain-db
-DIR=$HOME/build/cawco-mac-helper/$BUILD
+DIR=$HOME/build/cawco-mac-helper.noindex/$BUILD
 APP="CawCo Helper.app"
 DEST=$HOME/Applications/$APP
 # How long one run waits on Apple. A team's first submissions can be "held for
@@ -53,7 +54,7 @@ DEST=$HOME/Applications/$APP
 # (developer.apple.com/forums/thread/802183); a later run resumes the wait.
 NOTARY_WAIT=20m
 # The one Mac build slot every caller shares (apps/apple/scripts/mac-slot.sh).
-LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks
+LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks
 
 release_slot() {
   rm -f "$LOCKS/.machine.owner" "$LOCKS/.machine"
@@ -264,11 +265,11 @@ if [[ $STEP == build ]]; then
   SYNC=(rsync -rlpD --checksum --delete --exclude DerivedData --exclude notary --exclude build.log
     --exclude .product --exclude CawCoHelper.xcodeproj --exclude Helper/Info.plist)
   if [[ -n ${RUN:-} ]]; then
-    mkdir -p "$HOME/build/cawco-mac-helper/$BUILD"
-    "${SYNC[@]}" apps/mac-helper/ "$HOME/build/cawco-mac-helper/$BUILD/"
+    mkdir -p "$HOME/build/cawco-mac-helper.noindex/$BUILD"
+    "${SYNC[@]}" apps/mac-helper/ "$HOME/build/cawco-mac-helper.noindex/$BUILD/"
   else
-    "${SSH[@]}" "mkdir -p build/cawco-mac-helper/$BUILD"
-    "${SYNC[@]}" -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" apps/mac-helper/ "mac:build/cawco-mac-helper/$BUILD/"
+    "${SSH[@]}" "mkdir -p build/cawco-mac-helper.noindex/$BUILD"
+    "${SYNC[@]}" -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" apps/mac-helper/ "mac:build/cawco-mac-helper.noindex/$BUILD/"
   fi
 fi
 if [[ -n ${RUN:-} ]]; then

@@ -204,9 +204,10 @@
   --color-meter-share: var(--meter-share);
   --color-meter-wash-near: var(--meter-wash-near);
   --color-meter-wash-over: var(--meter-wash-over);
-  --color-count-wash-live: var(--count-wash-live);
-  --color-count-wash-done: var(--count-wash-done);
-  --color-count-wash-fail: var(--count-wash-fail);
+  --color-count-fill-live: var(--count-fill-live);
+  --color-count-fill-done: var(--count-fill-done);
+  --color-count-fill-fail: var(--count-fill-fail);
+  --color-count-fill-ink: var(--count-fill-ink);
   --color-presence-online: var(--presence-online);
   --color-presence-away: var(--presence-away);
   --color-presence-off: var(--presence-off);

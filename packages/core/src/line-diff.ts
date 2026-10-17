@@ -1,7 +1,7 @@
 /**
  * Lines and the line diff of two texts, as a diff draws them: one model for
  * every count the surfaces show (a tool row's "+2 −1", a permission card's
- * "3 lines changed", Telegram's "+3 −1"), so none of them can count what
+ * "3 lines changed"), so none of them can count what
  * DiffView, DiffView.swift or @pierre/diffs would not draw.
  *
  * A line keeps its terminator. A trailing newline therefore ends the last

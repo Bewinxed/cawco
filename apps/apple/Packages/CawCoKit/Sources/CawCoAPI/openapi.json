@@ -825,7 +825,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiDelegateTypesByName200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -911,7 +911,12 @@
                     "type": "boolean"
                   },
                   "upstream": {
-                    "type": "boolean"
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "ask",
+                      "on"
+                    ]
                   }
                 }
               }
@@ -10632,7 +10637,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiConnectionsByName200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -18929,7 +18934,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMcpByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMcpByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -19358,7 +19373,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiRulesById200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiRulesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -19366,7 +19391,7 @@
         }
       }
     },
-    "/api/rules/{id}/restore": {
+    "/api/trash/{id}/restore": {
       "post": {
         "parameters": [
           {
@@ -19374,28 +19399,55 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
-        "operationId": "postApiRulesByIdRestore",
+        "operationId": "postApiTrashByIdRestore",
         "responses": {
           "200": {
-            "description": "postApiRulesByIdRestore 200",
+            "description": "postApiTrashByIdRestore 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiRulesByIdRestore200"
+                  "$ref": "#/components/schemas/postApiTrashByIdRestore200"
                 }
               }
             }
           },
           "404": {
-            "description": "postApiRulesByIdRestore 404",
+            "description": "postApiTrashByIdRestore 404",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiTrashByIdRestore 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiTrashByIdRestore 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -19992,7 +20044,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMarketplacesByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMarketplacesByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20132,7 +20194,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetPluginsById200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetPluginsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20364,7 +20436,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetSkillsByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetSkillsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20698,7 +20780,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetAgentsByName200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetAgentsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20788,7 +20880,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMemory200"
+                  "$ref": "#/components/schemas/Undoable"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiFleetMemory 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20927,7 +21029,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMemoryDocs200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -21483,7 +21585,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetHooksById200"
+                  "$ref": "#/components/schemas/Undoable"
                 }
               }
             }
@@ -22165,8 +22267,13 @@
                   },
                   "upstreamPosts": {
                     "type": [
-                      "boolean",
+                      "string",
                       "null"
+                    ],
+                    "enum": [
+                      "off",
+                      "ask",
+                      "on"
                     ]
                   }
                 }
@@ -24291,17 +24398,6 @@
           "types"
         ]
       },
-      "deleteApiDelegateTypesByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "deleteApiProjectsByIdTasksByTaskId200": {
         "type": "object",
         "properties": {
@@ -24725,17 +24821,6 @@
         },
         "required": [
           "connections"
-        ]
-      },
-      "deleteApiConnectionsByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
         ]
       },
       "postApiConnectionsByNameSignIn200": {
@@ -26660,17 +26745,6 @@
           "unpushable"
         ]
       },
-      "deleteApiFleetMcpByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "postApiFleetMcpOauthComplete200": {
         "type": "object",
         "properties": {
@@ -26809,112 +26883,17 @@
           "templates"
         ]
       },
-      "deleteApiRulesById200": {
+      "postApiTrashByIdRestore200": {
         "type": "object",
         "properties": {
-          "ok": {
-            "type": "boolean"
+          "kind": {
+            "$ref": "#/components/schemas/TrashKind"
           },
-          "restorableForMs": {
-            "type": "number"
-          }
+          "row": {}
         },
         "required": [
-          "ok",
-          "restorableForMs"
-        ]
-      },
-      "postApiRulesByIdRestore200": {
-        "type": "object",
-        "properties": {
-          "stats": {
-            "$ref": "#/components/schemas/RuleStats"
-          },
-          "orphaned": {
-            "type": "object",
-            "properties": {
-              "machineId": {
-                "type": "string"
-              },
-              "name": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "removedAt": {
-                "type": [
-                  "null",
-                  "number"
-                ]
-              }
-            },
-            "required": [
-              "machineId",
-              "name",
-              "removedAt"
-            ]
-          },
-          "caseSensitive": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "number"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "matchKind": {
-            "$ref": "#/components/schemas/RuleMatchKind"
-          },
-          "name": {
-            "description": "What the rule is called in the list, and in the reply the session reads.",
-            "type": "string"
-          },
-          "pattern": {
-            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
-            "type": "string"
-          },
-          "repeat": {
-            "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
-            "type": "boolean"
-          },
-          "reply": {
-            "description": "What the session is sent when the rule fires.",
-            "type": "string"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/RuleScope"
-          },
-          "timing": {
-            "$ref": "#/components/schemas/RuleTiming"
-          },
-          "watch": {
-            "$ref": "#/components/schemas/RuleWatch"
-          },
-          "wholeWord": {
-            "description": "Phrase mode only: refuse matches that sit inside a longer word.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "caseSensitive",
-          "createdAt",
-          "enabled",
-          "id",
-          "matchKind",
-          "name",
-          "pattern",
-          "repeat",
-          "reply",
-          "scope",
-          "stats",
-          "timing",
-          "watch",
-          "wholeWord"
+          "kind",
+          "row"
         ]
       },
       "getApiRulesByIdActivity200": {
@@ -27182,39 +27161,6 @@
           "notices"
         ]
       },
-      "deleteApiFleetMarketplacesByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiFleetPluginsById200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiFleetSkillsByName200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "getApiFleetSkillsHistory200": {
         "type": "array",
         "items": {
@@ -27222,17 +27168,6 @@
         }
       },
       "postApiFleetSkillsByNamePush200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiFleetAgentsByName200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -27301,17 +27236,6 @@
           "updatedAt"
         ]
       },
-      "deleteApiFleetMemory200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "putApiFleetMemoryDocs409": {
         "type": "object",
         "properties": {
@@ -27338,17 +27262,6 @@
           "hash",
           "path",
           "updatedAt"
-        ]
-      },
-      "deleteApiFleetMemoryDocs200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
         ]
       },
       "postApiFleetMemoryAdopt200": {
@@ -27523,17 +27436,6 @@
           "hash",
           "id",
           "name"
-        ]
-      },
-      "deleteApiFleetHooksById200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
         ]
       },
       "getApiFleetHooksHistory200": {
@@ -27731,10 +27633,7 @@
               "type": "boolean"
             },
             "upstreamPosts": {
-              "type": [
-                "null",
-                "boolean"
-              ]
+              "$ref": "#/components/schemas/FleetChoicesUpstream"
             },
             "createdAt": {
               "type": "string",
@@ -27768,8 +27667,7 @@
             "review",
             "reviewLimit",
             "runsOn",
-            "tracker",
-            "upstreamPosts"
+            "tracker"
           ]
         }
       },
@@ -27977,10 +27875,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28016,8 +27911,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "getApiProjectsByIdRunning200": {
@@ -28210,10 +28104,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28247,8 +28138,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "deleteApiProjectsById200": {
@@ -28463,10 +28353,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28502,8 +28389,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "putApiProjectsByIdAccounts200": {
@@ -28668,10 +28554,7 @@
             "type": "boolean"
           },
           "upstreamPosts": {
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
           "createdAt": {
             "type": "string",
@@ -28705,8 +28588,7 @@
           "review",
           "reviewLimit",
           "runsOn",
-          "tracker",
-          "upstreamPosts"
+          "tracker"
         ]
       },
       "deleteApiProjectsByIdPlacesByPlaceId200": {
@@ -28782,7 +28664,7 @@
             "type": "string",
             "format": "date-time"
           },
-          "landed": {
+          "head": {
             "$ref": "#/components/schemas/WorkspaceCut"
           },
           "path": {
@@ -30011,6 +29893,9 @@
             "$ref": "#/components/schemas/HeldSendFrame"
           },
           {
+            "$ref": "#/components/schemas/TakenSendFrame"
+          },
+          {
             "$ref": "#/components/schemas/InstancesFrame"
           },
           {
@@ -30045,9 +29930,6 @@
           },
           {
             "$ref": "#/components/schemas/ScratchWorktreeFrame"
-          },
-          {
-            "$ref": "#/components/schemas/UserMessageFrame"
           },
           {
             "$ref": "#/components/schemas/PulseFrame"
@@ -30130,6 +30012,7 @@
             "send": "#/components/schemas/SendFrame",
             "rejected": "#/components/schemas/RejectedFrame",
             "held_send": "#/components/schemas/HeldSendFrame",
+            "taken_send": "#/components/schemas/TakenSendFrame",
             "instances": "#/components/schemas/InstancesFrame",
             "instances_delta": "#/components/schemas/InstancesDeltaFrame",
             "permission_request": "#/components/schemas/PermissionRequestFrame",
@@ -30142,7 +30025,6 @@
             "error": "#/components/schemas/ErrorFrame",
             "session_address": "#/components/schemas/SessionAddressFrame",
             "scratch_worktree": "#/components/schemas/ScratchWorktreeFrame",
-            "user_message": "#/components/schemas/UserMessageFrame",
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
             "project_offer": "#/components/schemas/ProjectOfferFrame",
@@ -31370,6 +31252,27 @@
           "name"
         ]
       },
+      "Undoable": {
+        "description": "What a config delete answers: core's {@link Deleted}, the entry the dashboard's Undo names.",
+        "type": "object",
+        "properties": {
+          "ok": {
+            "description": "Always true: what every delete has answered since before the trash.",
+            "type": "boolean"
+          },
+          "restorableForMs": {
+            "type": "number"
+          },
+          "restore": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ok",
+          "restorableForMs",
+          "restore"
+        ]
+      },
       "DelegateCatalog": {
         "type": "object",
         "properties": {
@@ -31506,11 +31409,8 @@
             "description": "What each choice denies, per harness."
           },
           "upstream": {
-            "description": "Sessions may post to other people's repositories; null while nobody has answered.",
-            "type": [
-              "null",
-              "boolean"
-            ]
+            "$ref": "#/components/schemas/FleetChoicesUpstream",
+            "description": "Sessions may post to other people's repositories; null while nobody has answered."
           }
         },
         "required": [
@@ -31518,8 +31418,7 @@
           "deniedTools",
           "setAt",
           "todos",
-          "tools",
-          "upstream"
+          "tools"
         ]
       },
       "FolderListing": {
@@ -40889,7 +40788,7 @@
             "description": "Set when `approval` is a step: what \"Move it\" does, for its card and its step's words."
           },
           "askId": {
-            "description": "While `approval` waits on a yes nobody gave in New session (a\ndelegate's, a task's or the API's move): the ask parked through the\nsame channel as every permission ask (dashboards, push, Telegram), on\nthe session's own row ({@link targetInstanceId}, which reads \"Needs\nyou\"), an `AskUserQuestion` whose options are \"Don't move\" and \"Move\nit\", answered like any question at `/api/pending`.",
+            "description": "While `approval` waits on a yes nobody gave in New session (a\ndelegate's, a task's or the API's move): the ask parked through the\nsame channel as every permission ask (dashboards, push), on\nthe session's own row ({@link targetInstanceId}, which reads \"Needs\nyou\"), an `AskUserQuestion` whose options are \"Don't move\" and \"Move\nit\", answered like any question at `/api/pending`.",
             "type": "string"
           },
           "bytes": {
@@ -41907,13 +41806,12 @@
             "$ref": "#/components/schemas/ArtifactKind",
             "description": "That artifact's kind, which picks its line's glyph."
           },
-          "artifactName": {
-            "description": "That artifact's name, as its line says it.",
+          "artifactLead": {
+            "description": "The words its line says before the artifact's name, by the notice it draws (core `ARTIFACT_NOTICES`): \"Comments on\", \"Fix tray handed you\".",
             "type": "string"
           },
-          "artifactSaid": {
-            "description": "What its line says came: the person's comments (\"Comments on\"); none, their picks (\"Responses on\").",
-            "const": "comments",
+          "artifactName": {
+            "description": "That artifact's name, as its line says it.",
             "type": "string"
           },
           "askLabel": {
@@ -45137,6 +45035,23 @@
           "wholeWord"
         ]
       },
+      "TrashKind": {
+        "description": "What a config delete can move into {@link configTrash}.",
+        "type": "string",
+        "enum": [
+          "agent",
+          "connection",
+          "delegateType",
+          "hook",
+          "marketplace",
+          "mcp",
+          "memory",
+          "memoryDoc",
+          "plugin",
+          "rule",
+          "skill"
+        ]
+      },
       "FleetWatchSettings": {
         "description": "Fleet watch's settings and facts, as Settings reads them.",
         "type": "object",
@@ -45942,7 +45857,7 @@
         ]
       },
       "WorkspaceHolding": {
-        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref has (`git rev-list\n--count HEAD --branches --not --remotes`: landed work was pushed, whether\nonto the base or to a branch of its own), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
+        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
         "type": "object",
         "properties": {
           "ahead": {
@@ -45970,7 +45885,7 @@
         ]
       },
       "WorkspaceCut": {
-        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its last item landed, on `origin`'s branch `branch`\n(the default branch for work that landed there, the item's own branch for\none that landed as a branch or a pull request), fetched as the clone is.",
+        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its clone's HEAD was on when it retired, on `origin`'s\nbranch `branch` that held it then (its base when the base held it), read\nby its machine's archive ({@link WorkspaceArchived} `head`) and fetched as\nthe clone is. Never the base's tip: a landing stopped while queued leaves\ncommits no landing recorded, and a cut at the tip left them behind\n(2026-10-17).",
         "type": "object",
         "properties": {
           "branch": {
@@ -47077,7 +46992,7 @@
         ]
       },
       "UsageSpend": {
-        "description": "The fleet's real spend, as the hub reckons it and serves it at\n`/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every\n\"today\" in CawCo reads.\n\nReal money is opencode's own per-message cost; Claude is a subscription\nwhose constraint is a percentage, so its API-price estimate is never added\nin. The days are the hub's: `todayStart` is local midnight and `weekStart`\nthis Monday's midnight in `timeZone`, the hub's own zone (IANA name).",
+        "description": "The fleet's real spend, as the hub reckons it and serves it at\n`/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every\n\"today\" in CawCo reads.\n\nReal money is opencode's messages, each priced by CawCo at its provider's\nrates and its prompt's tier (`costForUsage`); Claude is a subscription\nwhose constraint is a percentage, so its API-price estimate is never added\nin. The days are the hub's: `todayStart` is local midnight and `weekStart`\nthis Monday's midnight in `timeZone`, the hub's own zone (IANA name).",
         "type": "object",
         "properties": {
           "all": {
@@ -48639,7 +48554,7 @@
         ]
       },
       "ModelTurnUsage": {
-        "description": "What one model spent in one turn. `cacheWrite` is every cache write;\n`cacheWrite1h` the part of it written with a 1-hour lifetime, absent when\nthe harness does not split it.",
+        "description": "What one model spent in one turn. `cacheWrite` is every cache write;\n`cacheWrite1h` the part of it written with a 1-hour lifetime, absent when\nthe harness does not split it. `costUsd` is the sum of each request's own\nprice (`pricedRequest`, at its prompt's tier and its time), null when\nthe model's provider lists no price for it; a summed turn is never priced.",
         "type": "object",
         "properties": {
           "cacheRead": {
@@ -48650,6 +48565,12 @@
           },
           "cacheWrite1h": {
             "type": "number"
+          },
+          "costUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
           },
           "input": {
             "type": "number"
@@ -48664,6 +48585,7 @@
         "required": [
           "cacheRead",
           "cacheWrite",
+          "costUsd",
           "input",
           "model",
           "output"
@@ -49794,6 +49716,29 @@
           }
         ]
       },
+      "TakenSendFrame": {
+        "description": "Daemon-originated: a send handed over again that its session has taken\nalready (agent taken-sends.ts). No turn started on it; its record is read,\nand no turn follows that read.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "taken_send"
+            ]
+          },
+          "uuid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "uuid"
+        ]
+      },
       "InstancesFrame": {
         "type": "object",
         "properties": {
@@ -50569,7 +50514,7 @@
           },
           "via": {
             "$ref": "#/components/schemas/AskAnswerVia",
-            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); Telegram; another session; or the harness\nitself, in its own interface."
+            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); another session; or the harness itself, in\nits own interface."
           }
         },
         "required": [
@@ -50924,36 +50869,6 @@
           "root"
         ]
       },
-      "UserMessageFrame": {
-        "type": "object",
-        "properties": {
-          "attachments": {
-            "description": "Absolute paths of images on the session's machine to send alongside.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "instanceId": {
-            "type": "string"
-          },
-          "kind": {
-            "description": "Daemon-originated: a session pushing text straight to the owner's Telegram.",
-            "type": "string",
-            "enum": [
-              "user_message"
-            ]
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "instanceId",
-          "kind",
-          "text"
-        ]
-      },
       "PulseFrame": {
         "type": "object",
         "properties": {
@@ -51235,8 +51150,8 @@
             ]
           },
           "upstream": {
-            "description": "Whether agents may post to other people's repositories.",
-            "type": "boolean"
+            "$ref": "#/components/schemas/FleetChoicesUpstream",
+            "description": "Whether agents may post to other people's repositories: off, ask the person first, or on."
           }
         },
         "required": [
@@ -51462,6 +51377,7 @@
       "Law": {
         "type": "string",
         "enum": [
+          "artifact-notice-drawn",
           "caw-ask-stored-before-sent",
           "live-workspace-judge-answers",
           "owed-send-machine-has-deadline",
@@ -52085,8 +52001,7 @@
           "app",
           "harness",
           "page",
-          "session",
-          "telegram"
+          "session"
         ]
       },
       "BinaryUpdateLandingOutcome": {
@@ -52287,6 +52202,14 @@
           "delegate",
           "session",
           "spin-off"
+        ]
+      },
+      "FleetChoicesUpstream": {
+        "type": "string",
+        "enum": [
+          "ask",
+          "off",
+          "on"
         ]
       },
       "FleetItemStateState": {

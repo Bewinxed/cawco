@@ -729,9 +729,17 @@ export function endedUnseen(row: InstanceRow): boolean {
 /** When each working session joined Working this stint (see `working`). */
 const enteredWorking = new Map<string, number>();
 
+/**
+ * Work another session started: a row whose parent the fleet still holds
+ * (tree.ts `hasParent`). The one test the Delegates switch and the tabs'
+ * counts both read.
+ */
+export const isDelegate = (row: InstanceRow): boolean =>
+  hasParent(row, (id) => cawco.instanceIndex.byId.has(id));
+
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
 const listed = (row: InstanceRow): boolean =>
-  rail.delegates || !hasParent(row, (id) => cawco.instanceIndex.byId.has(id));
+  rail.delegates || !isDelegate(row);
 
 /* ── The machines ──────────────────────────────────────────────────── */
 

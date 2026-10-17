@@ -1,4 +1,9 @@
-import type { FleetHook, FleetItemState, HookDraft } from "@cawco/core";
+import type {
+  Deleted,
+  FleetHook,
+  FleetItemState,
+  HookDraft,
+} from "@cawco/core";
 import type { Machine } from "./client.svelte";
 
 /**
@@ -106,14 +111,13 @@ export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
     `save ${draft.name || "the hook"}`
   );
 
-export const removeHook = async (id: string, name: string): Promise<void> => {
-  const response = await fetch(`/api/fleet/hooks/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error(`Could not delete ${name} — ${await said(response)}.`);
-  }
-};
+/** Deletes a hook everywhere, into the hub's trash for its Undo (config/undo.ts). */
+export const removeHook = (id: string, name: string): Promise<Deleted> =>
+  send<Deleted>(
+    `/api/fleet/hooks/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+    `delete ${name}`
+  );
 
 /** What this hook used to be, newest first — the hub keeps a version on every
  *  save or delete over one that already existed. */

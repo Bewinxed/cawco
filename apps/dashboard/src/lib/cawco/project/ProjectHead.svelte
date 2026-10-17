@@ -39,6 +39,7 @@
    * instead (picks.md), and his slot here closes.
    */
   import { machineLabel } from "@cawco/core";
+  import type { UpstreamPosts } from "@cawco/core/upstream-guard";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
@@ -251,7 +252,7 @@
   }
 
   /** The project's own upstream answer, or null for the fleet's (UpstreamMenu). */
-  async function setUpstream(posts: boolean | null): Promise<void> {
+  async function setUpstream(posts: UpstreamPosts | null): Promise<void> {
     try {
       await editProject(project.id, { upstreamPosts: posts });
     } catch (error) {
@@ -464,8 +465,13 @@
             >
           </button>
           {#if checkouts > 1}
+            <!-- Words on the mark line, so the line's recipe trims them to
+                 their x-height and gives the room back as block padding
+                 (app.css .mark-line): only the inline padding is the
+                 button's to take away. `p-0` took the recipe's too, and left
+                 a 7px box round a 15px line of words. -->
             <button
-              class="flex-none cursor-pointer rounded-xs border-none border-current bg-transparent p-0 font-inherit text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+              class="flex-none cursor-pointer rounded-xs border-none border-current bg-transparent px-0 font-inherit text-ink-muted transition-[background-color] dur-control ease-out hover:bg-surface-hover"
               data-places-line
               onclick={() => openDetails(true)}
               type="button">· {checkouts} places</button

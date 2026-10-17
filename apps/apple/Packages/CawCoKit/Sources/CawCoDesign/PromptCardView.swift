@@ -521,7 +521,7 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
     /// Who asks and where ("Caw · cockpit"), what will happen and why, how
     /// much changes, the command on one line until opened, then the change
     /// and the fields, open (Prompt.svelte's permission body). The words are
-    /// the hub's, the same on the web and in Telegram.
+    /// the hub's, the same on the web and in the push.
     private func buildPermission(diff: (PermissionChange) -> UIView) {
         let presentation = ask.presentation
         let top = head(ask.askerLine)

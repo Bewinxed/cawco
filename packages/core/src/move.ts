@@ -88,7 +88,7 @@ export interface MoveJob {
   /**
    * While `approval` waits on a yes nobody gave in New session (a
    * delegate's, a task's or the API's move): the ask parked through the
-   * same channel as every permission ask (dashboards, push, Telegram), on
+   * same channel as every permission ask (dashboards, push), on
    * the session's own row ({@link targetInstanceId}, which reads "Needs
    * you"), an `AskUserQuestion` whose options are "Don't move" and "Move
    * it", answered like any question at `/api/pending`.

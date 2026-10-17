@@ -80,16 +80,16 @@ const FINISHED = 14;
  * How much slower the owner's CPU is taken to be than this machine's: a
  * mid-tier laptop against 48 server cores. Our own call.
  */
-const SLOWER = 4;
+export const SLOWER = 4;
 /** A long task: the frame budget each phase's longest is noted against. */
-const LONG_TASK_MS = 50;
+export const LONG_TASK_MS = 50;
 /**
  * How much longer two panes' longest cold switch may be than one pane's: the
  * owner's regression was a second pane making switching five times the work
  * (40.8s against 8.0s, wall clock, 4x throttled). Our own call.
  */
 const COLD_SHARE = 1.25;
-const INPUT_MS = 100;
+export const INPUT_MS = 100;
 /** Older pages read into each long transcript, a scroll to its top apiece. */
 const PAGES = 6;
 const START_TOOL = "mcp__cawco__start_session";
@@ -105,9 +105,9 @@ type Phase = (typeof PHASES)[number];
  * a tab and pressing it, the focus resting a beat before Enter. Our own call,
  * a short dwell: a frame is all the warming needs (warm.svelte.ts).
  */
-const REACH_MS = 300;
+export const REACH_MS = 300;
 /** How long after a switch its tasks are its own: the glide, the catch-up behind it. */
-const SETTLE_MS = 900;
+export const SETTLE_MS = 900;
 /** How long after a switch the view is read frame by frame (`viewFrames`): the brief's 300ms. */
 const LANDING_MS = 300;
 /** Between two ways of switching: every pane a reach warmed has gone cold (warm.svelte.ts `COOL_MS`). */
@@ -186,7 +186,7 @@ interface Changed {
   was: string | null;
 }
 
-interface Cost {
+export interface Cost {
   /** Each Event Timing entry an interaction marks: start, duration, event, its `interactionId`. */
   events: [number, number, string, number][];
   frames: Frame[];
@@ -200,7 +200,7 @@ interface Cost {
  * (Long Animation Frames: the scripts that ran in each, by what invoked
  * them, and the style and layout they forced), from before its own scripts.
  */
-function watchCost(): void {
+export function watchCost(): void {
   const w = window as unknown as { __cost: Cost };
   w.__cost = { tasks: [], events: [], frames: [], messages: [] };
   // Each hub message timed from its handler to the microtasks behind it,
@@ -353,7 +353,7 @@ async function readOlder(page: Page): Promise<void> {
  * how many rows virtua has mounted there), and the biggest of everything
  * else, by the box it stands in on the way to the list.
  */
-const census = (page: Page): Promise<string> =>
+export const census = (page: Page): Promise<string> =>
   page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>('[data-slot="pane"][data-pane]')]
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialized into the page whole, so it cannot lean on helpers out here
@@ -806,7 +806,7 @@ const LEG_SAMPLE_MS = 1000;
 const LEG_TRIES = 3;
 
 /** This process's cgroup's `cpu.pressure` file, read off `/proc/self/cgroup` (v2's `0::` line). */
-function pressureFile(): string {
+export function pressureFile(): string {
   const line = readFileSync("/proc/self/cgroup", "utf8")
     .split("\n")
     .find((one) => one.startsWith("0::"));
@@ -819,7 +819,7 @@ function pressureFile(): string {
 }
 const PRESSURE = /^some avg10=([\d.]+)/m;
 /** The spec's own `some avg10`; throws when it cannot be read: there is no other gate. */
-function cpuPressure(file: string): number {
+export function cpuPressure(file: string): number {
   let text: string;
   try {
     text = readFileSync(file, "utf8");
@@ -858,7 +858,7 @@ async function uncontended(file: string): Promise<string> {
  * Says the leg's readings: PSI at start, middle and end, the try kept, the
  * wait, and the load average beside them for reference.
  */
-async function quietLeg(
+export async function quietLeg(
   name: string,
   file: string,
   run: () => Promise<void>
@@ -929,7 +929,7 @@ function noteInputToShown(
 }
 
 /** A switch's work, counted: from its input to the end of the frame that shows its pane. */
-interface SwitchWork {
+export interface SwitchWork {
   /** Its passes by what ran them: the script that forced one (its own frame), or "the frame". */
   by: Map<string, number>;
   /** Layout passes that laid out anything. */
@@ -948,7 +948,7 @@ interface SwitchWork {
  * to the end of the task holding the frame that shows its pane
  * (`two-pane:shown:<n>`).
  */
-function workOf(
+export function workOf(
   own: MainTask[],
   markAt: (mark: string) => number | undefined
 ): SwitchWork[] {
@@ -982,7 +982,7 @@ function workOf(
 }
 
 /** A switch phase's work as a line: each switch's style and layout passes and elements restyled. */
-const workLine = (work: SwitchWork[]): string =>
+export const workLine = (work: SwitchWork[]): string =>
   work
     .map(
       (one) =>
@@ -1074,7 +1074,7 @@ function noteWork(kit: Kit, where: string, work: SwitchWork[]): void {
  * interaction marks from its input (`made`, the page's clock) to
  * `SETTLE_MS` after; nothing for a phase that made no switch.
  */
-const inputsOf = (
+export const inputsOf = (
   events: Cost["events"],
   made: number[] | undefined
 ): string[] =>

@@ -1682,45 +1682,23 @@
         }
       }
     },
-    "count-wash-live": {
+    "count-fill-live": {
       "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.30336, 0.050045, 253.667746],
-        "alpha": 0.06
-      },
-      "$description": "The chosen work tab's count, washed in its status ink at the usage tints' strength.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-live-ink} 6%, transparent)"
-        }
-      }
+      "$value": "{color.status-live-glyph}",
+      "$description": "A work tab's count pill (WorkTabs, the app's CountChip): solid in its status hue, chosen or not, so the pill reads against any sheet it stands on (3:1 non-text or more on the chosen sheet, the recess, hover and press, in both themes) and its numeral in count-fill-ink holds 4.5:1 or more on it. The 6% and 10% washes it replaces measured about 1.05:1 against the sheet and read as a smudge."
     },
-    "count-wash-done": {
+    "count-fill-done": {
       "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.32768, 0.059271, 120.073986],
-        "alpha": 0.06
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-done-ink} 6%, transparent)"
-        }
-      }
+      "$value": "{color.status-done-glyph}"
     },
-    "count-wash-fail": {
+    "count-fill-fail": {
       "$type": "color",
-      "$value": {
-        "colorSpace": "oklch",
-        "components": [0.3444, 0.084999, 16.325323],
-        "alpha": 0.06
-      },
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)"
-        }
-      }
+      "$value": "{color.status-fail-glyph}"
+    },
+    "count-fill-ink": {
+      "$type": "color",
+      "$value": "{color.neutral-1}",
+      "$description": "A count pill's numeral: the lightest neutral by day, the darkest at night, against the status fill."
     },
     "presence-online": {
       "$type": "color",

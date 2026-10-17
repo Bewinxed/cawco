@@ -65,6 +65,10 @@ const parseClaudeRecord = (
     cacheRead: message.usage.cache_read_input_tokens ?? 0,
     reasoning: 0,
   };
+  const write1h = message.usage.cache_creation?.ephemeral_1h_input_tokens;
+  if (write1h !== undefined) {
+    tokens.cacheCreation1h = write1h;
+  }
 
   return {
     harness: "claude",
@@ -75,7 +79,7 @@ const parseClaudeRecord = (
     model: message.model,
     provider: null,
     tokens,
-    costUsd: costForUsage(message.model, tokens, ts),
+    costUsd: costForUsage(message.model, tokens, ts) ?? 0,
     messageId: message.id,
     requestId,
     isSidechain: line.isSidechain === true,

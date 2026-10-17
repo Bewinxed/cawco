@@ -7,10 +7,10 @@
  * foreground, visible and focused (`POST /api/presence`). Only a focused
  * foreground client counts: Matrix's push bugs came from a backgrounded app
  * counting as viewing. A notification about a session (a finished turn, an
- * ask, a task's attempt, fleet watch's notice; push or Telegram) shows in
+ * ask, a task's attempt, fleet watch's notice, a session's message) shows in
  * that session, so the owner saw it if some client was active on the session
- * at any moment from when it landed to when it is offered: the gate drops it,
- * on every outlet, and never sends it later. The hub settles this from the
+ * at any moment from when it landed to when it is offered: the gate drops it
+ * and never sends it later. The hub settles this from the
  * presence it holds, not from a client remembering to post a look. Anything
  * else goes at once. Items that land while nobody is in front keep Zulip's
  * hold-then-recheck in their outlet: a finished turn waits a grace and goes
@@ -27,10 +27,9 @@
  * Only what was shown is cleared, so
  * looking at a session no notification named sends nothing anywhere. Each
  * clear is written down (`notification_cleared`, kept three days) and goes
- * out at once on the socket (`notificationsCleared`); the outlets that showed
- * it hear it too: the push outlet queues a background push per device and
- * carries the cleared ids on every visible push, Telegram deletes its
- * message. iOS cannot remove a delivered notification without waking the
+ * out at once on the socket (`notificationsCleared`); the push outlet hears
+ * it too: it queues a background push per device and carries the cleared ids
+ * on every visible push. iOS cannot remove a delivered notification without waking the
  * app, which is why the clear goes every way at once.
  */
 import { createHash } from "node:crypto";
@@ -72,12 +71,18 @@ const collapseOf = (prefix: string, id: string): string =>
     ? `${prefix}-${id}`
     : `${prefix}-${createHash("sha256").update(id).digest("hex").slice(0, 40)}`;
 
-/** An ask's collapse id, the same on every device and in Telegram. */
+/** An ask's collapse id, the same on every device. */
 export const askCollapseId = (requestId: string): string =>
   collapseOf("ask", requestId);
 /** A session's finished turn: one per session, a newer turn replaces the older. */
 export const turnCollapseId = (instanceId: string): string =>
   collapseOf("turn", instanceId);
+/** A session's message to the person (`send_to_user`): one per session, a newer replaces the older. */
+export const messageCollapseId = (instanceId: string): string =>
+  collapseOf("message", instanceId);
+/** A workflow run's note to the person: one per run, a newer replaces the older. */
+export const runCollapseId = (runId: string): string =>
+  collapseOf("run", runId);
 /** A task waiting on the owner: its move and its failed attempt are one notification. */
 export const taskCollapseId = (projectId: string, taskId: string): string =>
   collapseOf("task", `${projectId}:${taskId}`);
@@ -85,19 +90,13 @@ export const taskCollapseId = (projectId: string, taskId: string): string =>
 export const needsCollapseId = (firstAt: number): string =>
   collapseOf("needs", firstAt.toString(36));
 
-/** Where a notification is shown. */
-type Outlet = "push" | "telegram";
-
-/** One notification about a session, offered to the gate by its outlet. */
+/** One notification about a session, offered to the gate by the push outlet. */
 export interface Offer {
   readonly collapseId: string;
   /** The session it is about; null goes at once, nobody can be reading it. */
   readonly instanceId: string | null;
   /** When it happened in its session (a turn's end, an ask parking), epoch ms on the hub's clock. */
   readonly landedAt: number;
-  readonly outlet: Outlet;
-  /** Shows it; the outlet calls {@link Notifications.shown} once it has. */
-  readonly send: () => void;
 }
 
 /** Why ids cleared: a device's own `via`, an ask settling, or its session looked at. */
@@ -141,10 +140,10 @@ export const createNotifications = ({
    * The gate's word on one notification: false, said in the log, when a
    * client was active on its session at any moment since it landed.
    */
-  const passes = (offer: Omit<Offer, "send">): boolean => {
+  const passes = (offer: Offer): boolean => {
     if (offer.instanceId && inFrontSince(offer.instanceId, offer.landedAt)) {
       console.log(
-        `[notify] ${offer.outlet} ${offer.collapseId}: dropped, ${offer.instanceId} was in front since it landed ${Math.round((Date.now() - offer.landedAt) / 1000)}s ago`
+        `[notify] push ${offer.collapseId}: dropped, ${offer.instanceId} was in front since it landed ${Math.round((Date.now() - offer.landedAt) / 1000)}s ago`
       );
       return false;
     }
@@ -262,17 +261,10 @@ export const createNotifications = ({
     },
 
     /**
-     * The one way a notification about a session goes out: dropped when a
-     * client was active on its session at any moment since it landed (the
-     * owner saw it there), sent now otherwise.
+     * The gate: false when a client was active on the notification's session
+     * at any moment since it landed (the owner saw it there). Push asks it
+     * for each item of a burst as the burst goes out (push.ts `arrive`).
      */
-    offer(offer: Offer): void {
-      if (passes(offer)) {
-        offer.send();
-      }
-    },
-
-    /** The gate alone, for an outlet that sends several at once (push.ts, a burst). */
     passes,
 
     /** An outlet showed this notification: it is outstanding until it clears, and no longer cleared. */

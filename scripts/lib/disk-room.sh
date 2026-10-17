@@ -30,8 +30,8 @@ disk_room() {
   fi
   free=$(awk -v kb="$free_kb" 'BEGIN { printf "%.1f", kb * 1024 / 1e9 }')
   # Folders a boundary hides from its workspace are left out (du cannot read them).
-  biggest=$(du -sk "$HOME"/.worktrees/* "$HOME"/.cawco/workspace-cache/xdg/cawco-apple/* \
-    "$HOME"/.cawco/workspace-cache/DerivedData/* "$HOME"/.cawco/tmp/* "$HOME"/build/cawco-apple/* 2>/dev/null |
+  biggest=$(du -sk "$HOME"/.worktrees/* "$HOME"/.cawco/workspace-cache/xdg/cawco-apple.noindex/* \
+    "$HOME"/.cawco/workspace-cache/DerivedData.noindex/* "$HOME"/.cawco/tmp/* "$HOME"/build/cawco-apple.noindex/* 2>/dev/null |
     sort -rn | head -5 |
     awk -v home="$HOME" '{ path = $2; if (index(path, home) == 1) path = "~" substr(path, length(home) + 1); printf "%s%s (%.1f GB)", (NR > 1 ? ", " : ""), path, $1 * 1024 / 1e9 }') || true
   echo "$what did not start: $mount has $free GB free, under the $min GB a heavy run or Apple build needs to start (CAWCO_MIN_FREE_GB); the biggest folders under CawCo's workspace roots here are ${biggest:-none this shell can read}." >&2

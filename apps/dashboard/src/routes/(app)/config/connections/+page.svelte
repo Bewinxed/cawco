@@ -74,9 +74,9 @@
    * its way in: Sign in (OAuth, in a tab of its own, the row turning signed
    * in when the hub says so) or Set key (a field under the row, emptied the
    * moment the hub has the key). ⋯ holds Projects… (a checklist) and Remove,
-   * which asks on the row (The Open Page Rule).
+   * which goes through at once with Undo in its toast (JOURNEY.md Flow 5).
    */
-  import type { ConnectionView } from "@cawco/core";
+  import type { ConnectionView, Deleted } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -86,6 +86,7 @@
     type RowNote,
   } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { offerUndo } from "#lib/cawco/config/undo.js";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { json, send } from "#lib/cawco/project-tasks.js";
@@ -346,21 +347,25 @@
     await read();
   }
 
-  // --- Remove: asked on the row it removes (The Open Page Rule) ---
+  // --- Remove: at once, with Undo in the toast (config/undo.ts) ---
 
+  /** The connection whose removal the hub is taking. */
   let removing = $state<string | null>(null);
-  let removePending = $state(false);
   async function remove(row: ConnectionView) {
-    removePending = true;
+    removing = row.name;
     delete problems[row.name];
     try {
-      await send(path(row.name), { method: "DELETE" });
-      removing = null;
+      const deleted = await send<Deleted>(path(row.name), { method: "DELETE" });
       stopWatching(row.name);
+      // The hub puts it back whole, key and projects with it; the list is
+      // read again, as after every change here.
+      offerUndo(`deleted:${row.name}`, `Removed ${labelOf(row)}`, deleted, () =>
+        read()
+      );
     } catch (error) {
       problems[row.name] = failureWords(error);
     } finally {
-      removePending = false;
+      removing = null;
     }
     await read();
   }
@@ -578,9 +583,8 @@
               label: "Remove",
               icon: IconTrash,
               destructive: true,
-              onselect: () => {
-                removing = row.name;
-              },
+              disabled: removing === row.name,
+              onselect: () => remove(row),
             },
           ]}
           meta={row.account}
@@ -636,38 +640,6 @@
                   variant="ghost"
                 />
               </form>
-            {/if}
-            {#if removing === row.name}
-              <fieldset
-                data-slot="row-ask"
-                aria-label="Remove {labelOf(row)}"
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current p-0 type-meta text-ink-strong"
-                transition:unfold
-              >
-                <span
-                  >Remove {labelOf(row)}? The hub forgets its key for {row.account};
-                  routines that use it stop at their next run until it is signed
-                  in again.</span
-                >
-                <Button
-                  press="pressable"
-                  label="Remove connection"
-                  onclick={() => remove(row)}
-                  pending={removePending}
-                  pendingLabel="Removing…"
-                  size="xs"
-                  variant="destructive"
-                />
-                <Button
-                  press="pressable"
-                  label="Cancel"
-                  onclick={() => {
-                    removing = null;
-                  }}
-                  size="xs"
-                  variant="ghost"
-                />
-              </fieldset>
             {/if}
           {/snippet}
           {#snippet badge()}

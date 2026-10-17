@@ -1,4 +1,10 @@
-import type { RULE_TEMPLATES, Rule, RuleDraft, RuleRow } from "@cawco/core";
+import type {
+  Deleted,
+  RULE_TEMPLATES,
+  Rule,
+  RuleDraft,
+  RuleRow,
+} from "@cawco/core";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -101,26 +107,12 @@ export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
     `save ${draft.name || "the rule"}`
   );
 
-/**
- * Delete: the rule stops at once, and the hub keeps it whole for the
- * milliseconds it answers with (0 when it held no such rule), the window
- * {@link restoreRule} can bring it back in.
- */
-export const removeRule = async (id: string, name: string): Promise<number> => {
-  const { restorableForMs } = await send<{ restorableForMs: number }>(
+/** Delete: the rule stops at once, into the hub's trash for its Undo (config/undo.ts). */
+export const removeRule = (id: string, name: string): Promise<Deleted> =>
+  send<Deleted>(
     `/api/rules/${encodeURIComponent(id)}`,
     { method: "DELETE" },
     `delete ${name}`
-  );
-  return restorableForMs;
-};
-
-/** Undo a delete: the rule back whole, its history with it, as the list reads it. */
-export const restoreRule = (id: string, name: string): Promise<RuleRow> =>
-  send<RuleRow>(
-    `/api/rules/${encodeURIComponent(id)}/restore`,
-    { method: "POST" },
-    `bring back ${name}`
   );
 
 /** A blank rule, on the defaults that make the common case one field of typing. */

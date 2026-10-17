@@ -86,6 +86,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var pages: [ShellDestination: UIViewController] = [:]
     private var watcher: ShellWatcher!
     private var lookWatcher: ShellWatcher!
+    private var catalogWatcher: ShellWatcher!
 
     private static let railKey = "cawco-rail-width"
     static let railMin = 216.0
@@ -213,6 +214,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let self, home.live else { return }
             hub.needs.answer(ask, answer)
         }
+        // The fleet's upstream choice, answered on its Needs you row; the hub's refusal said there.
+        cawPanel.onUpstream = { [weak self] answer in
+            guard let self else { return }
+            try await hub.answerFleetUpstream(answer)
+        }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
         cawPanel.onAcknowledge = { [weak self] ids in self?.home.acknowledge(ids) }
         cawPanel.onAct = { [weak self] notice in
@@ -262,6 +268,32 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         // Apart from the bars: a pulse of a conversation in front wakes only this read.
         lookWatcher = ShellWatcher(hub: hub, home: home) { [weak self] in self?.lookAtFront() }
+        catalogWatcher = ShellWatcher(hub: hub, home: home) { [weak self] in self?.sayCatalogLeftOut() }
+    }
+
+    /// The load of each machine's stored sessions last said here.
+    private var saidCatalogLoads: [String: Int] = [:]
+
+    /// The harnesses a machine's listing left out, said in one warning toast
+    /// per machine, changed in place by each load and dismissed once a load
+    /// leaves none out (client.svelte.ts `loadCatalog`: `toast.warning(said.join(" "),
+    /// { id: "catalog-unread-<machine>" })`). Said in this window once it is
+    /// on screen; until then each load waits for `viewDidAppear`.
+    private func sayCatalogLeftOut() {
+        let leftOut = hub.fleet.catalogLeftOut
+        guard isViewLoaded, view.window != nil else { return }
+        for (machineId, left) in leftOut where saidCatalogLoads[machineId] != left.load {
+            saidCatalogLoads[machineId] = left.load
+            let id = "catalog-unread-\(machineId)"
+            if left.sentences.isEmpty {
+                Toast.dismiss(id: id, in: view)
+            } else {
+                Toast.show(left.sentences.joined(separator: " "), kind: .warning, id: id, in: view)
+            }
+            #if DEBUG
+            Logger(subsystem: "dev.cawco.app", category: "Probe").notice("probe catalog left out: machine \(machineId, privacy: .public) load \(left.load) \(left.sentences.isEmpty ? "dismissed" : "said", privacy: .public) \(left.sentences.count) harness(es)")
+            #endif
+        }
     }
 
     // MARK: Landing
@@ -557,6 +589,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         if let scene = view.window?.windowScene { MacWindow.takeOverMoves(of: scene) }
         #endif
         applyLanding()
+        sayCatalogLeftOut()
         #if DEBUG
         openProbeForm()
         runMacProbe()
@@ -1348,6 +1381,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .ask(ask): openSession(ask.paneId)
         case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
+        // Answered on its row; it opens nothing.
+        case .choice: break
         }
     }
 

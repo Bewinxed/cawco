@@ -3,8 +3,8 @@
  * read/write and writes ask you"). Whatever door an `admin_*_write` call
  * comes in by — MCP from any harness, the REST door, `cawco tool` — the hub
  * parks it as the calling session's ask: a `permission_request` naming the
- * exact tool and arguments, through the same pending ledger, dashboards,
- * Telegram and push that a session's own asks and a workflow's questions go
+ * exact tool and arguments, through the same pending ledger, dashboards
+ * and push that a session's own asks and a workflow's questions go
  * through. The call waits, as a parked permission does. Approved, it runs
  * once, with the arguments that were shown; denied, the caller gets the
  * refusal with the person's reason; withdrawn (the session ended, the hub
@@ -49,7 +49,7 @@ export const askRefusal = (
 export interface AdminAsksDeps {
   /**
    * Parks an ask for the person, kept across a hub restart: the pending
-   * ledger, every dashboard, Telegram, push.
+   * ledger, every dashboard, push.
    */
   readonly park: (envelope: Envelope) => void;
   /** The parked ask by request id, while it is pending (kept ones included). */

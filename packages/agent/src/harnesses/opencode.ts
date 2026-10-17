@@ -68,6 +68,7 @@ import {
   opencodeDatabases,
   opencodeDataDir,
   workspaceScratchDir,
+  workspaceSpillDir,
   workspaceStateDir,
   xdgDataHome,
 } from "@cawco/core/paths";
@@ -4304,6 +4305,22 @@ export class OpencodeHarness implements Harness {
       }
       return opened;
     });
+  }
+
+  /**
+   * OpenCode saves a tool output it cuts in its server's data dir, every
+   * session's together ("[showing … of M; full output saved to <file>]",
+   * 2.0.29), and its `read` cuts each line at 2000 characters, so the model
+   * reads a long one by the shell. CawCo's plugin copies each into the
+   * session's own folder and names the copy (opencode-plugin.ts `spilled`).
+   */
+  // biome-ignore lint/suspicious/useAwait: implements Harness.spill's Promise contract
+  async spill(
+    spec: SpawnPayload,
+    _cwd: string,
+    workspace: string
+  ): Promise<{ dir: string; spec: SpawnPayload }> {
+    return { dir: workspaceSpillDir(workspace, spec.instanceId), spec };
   }
 
   spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {

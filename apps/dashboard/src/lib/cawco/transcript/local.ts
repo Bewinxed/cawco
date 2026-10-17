@@ -97,7 +97,6 @@ export function answeredNote(
   const where = {
     page: answer.name ? `from ${answer.name}` : "from another tab",
     app: answer.name ? `from ${answer.name}` : "from the app",
-    telegram: "from Telegram",
     session: answer.name ? `by ${answer.name}` : "by another session",
     harness: `in ${harness}`,
   }[answer.via];

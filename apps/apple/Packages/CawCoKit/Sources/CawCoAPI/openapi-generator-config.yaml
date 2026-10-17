@@ -62,6 +62,7 @@ typeOverrides:
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
     FindLiveState: OpenEnums.FindLiveState
+    FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
     FleetItemStateState: OpenEnums.FleetItemStateState
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
@@ -153,6 +154,7 @@ typeOverrides:
     TranscriptBlockState: OpenEnums.TranscriptBlockState
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
+    TrashKind: OpenEnums.TrashKind
     Verb: OpenEnums.Verb
     ViewAskedCaw: OpenEnums.ViewAskedCaw
     WaitReason: OpenEnums.WaitReason

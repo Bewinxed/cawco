@@ -3,9 +3,11 @@
  * not its project's own (owner, 2026-10-15: "Don't submit on my behalf",
  * after agents had filed issues and pull requests on other people's
  * repositories under his account). The person picks it once for the fleet
- * (onboarding) and may pick it again per project; while it keeps sessions
- * off, a call that writes to another repository does not run, and the
- * refusal tells the session to put its draft in its report.
+ * (onboarding) and may pick it again per project, one of three answers
+ * ({@link UPSTREAM_POSTS}): while it keeps sessions off, a call that writes
+ * to another repository does not run, and the refusal tells the session to
+ * put its draft in its report; while it asks first, the call's post is held
+ * for the person, and CawCo makes it once they approve (upstream-post.ts).
  *
  * What it judges is one program's argv as it starts, never a shell line:
  * every workspace's commands run with a shim for `gh`, `hub`, `glab` and
@@ -42,18 +44,51 @@ export const UPSTREAM_WORDS = {
   title: "Other people's repositories",
   risk: "Agents can open issues and pull requests on other people's repositories under your GitHub account.",
   keepOff: "Keep agents off other repositories",
+  /** Each post waits in Needs you for the person's Approve (owner: "why is there no option for them to ask me first"). */
+  ask: "Ask me first",
   allow: "Let agents post upstream",
   /** A project's settings: the fleet's answer stands until the project picks its own. */
   inherit: "Same as the fleet",
 } as const;
 
-/** One project's rule, or the fleet's: whether its sessions are kept off other repositories, and the repositories that are its own. */
+/**
+ * The choice's three answers: `off`, a write to another repository does not
+ * run; `ask`, each one waits for the person's answer and CawCo makes it once
+ * approved (hub upstream-asks.ts); `on`, sessions post as they like.
+ */
+export const UPSTREAM_POSTS = ["off", "ask", "on"] as const;
+export type UpstreamPosts = (typeof UPSTREAM_POSTS)[number];
+
+/** An answer's words, as every surface names it. */
+export const upstreamPostsWords = (posts: UpstreamPosts): string => {
+  if (posts === "off") {
+    return UPSTREAM_WORDS.keepOff;
+  }
+  return posts === "ask" ? UPSTREAM_WORDS.ask : UPSTREAM_WORDS.allow;
+};
+
+/** One project's rule, or the fleet's: whether its sessions may post to other repositories, and the repositories that are its own. */
 export interface UpstreamRule {
-  /** On: a write to a repository not in {@link remotes} does not run. */
-  readonly guarded: boolean;
+  /** `off` and `ask` guard the workspace: no GitHub token inside, and a write to a repository not in {@link remotes} does not run there. */
+  readonly posts: UpstreamPosts;
   /** Its own repositories, each `host/owner/repo` ({@link normaliseRemote}). */
   readonly remotes: readonly string[];
 }
+
+/** Whether a rule guards its workspace: no GitHub token inside, its posts judged (`off` and `ask`). */
+export const isGuarded = (rule: Pick<UpstreamRule, "posts">): boolean =>
+  rule.posts !== "on";
+
+/** A rule as a file holds it, read back; undefined when it is none. */
+export const readUpstreamRule = (value: unknown): UpstreamRule | undefined => {
+  const rule = value as Partial<UpstreamRule> | null;
+  return rule &&
+    typeof rule === "object" &&
+    (UPSTREAM_POSTS as readonly unknown[]).includes(rule.posts) &&
+    Array.isArray(rule.remotes)
+    ? (rule as UpstreamRule)
+    : undefined;
+};
 
 /** Every rule the hub hands a machine: the fleet's, for a workspace in no project, and each project's. */
 export interface UpstreamRules {
@@ -486,6 +521,21 @@ const commandWords = (
             (first ?? -1) + 1
           ),
   };
+};
+
+/** A gh call's command and subcommand, and for `gh api` its endpoint, as the guard reads them. */
+export const ghWords = (
+  args: readonly string[]
+): { command: string; endpoint?: string; sub: string } => {
+  const { command, sub } = commandWords(args);
+  if (command !== "api") {
+    return { command, sub };
+  }
+  const endpoint = endpointOf(
+    args.slice(args.indexOf("api") + 1),
+    GH_API_VALUED
+  );
+  return { command, sub, ...(endpoint ? { endpoint } : {}) };
 };
 
 /** A GraphQL document that changes something: an operation of type `mutation` (the GraphQL spec's OperationType). */
@@ -1016,22 +1066,331 @@ export const upstreamWrite = (call: UpstreamCall): UpstreamWrite | undefined =>
   PROGRAMS[programName(call.program)]?.(call);
 
 /** Whether `repo` is one of `remotes`: hosts and owners compare without case, as GitHub's do. */
-const owns = (remotes: readonly string[], repo: string): boolean =>
+export const owns = (remotes: readonly string[], repo: string): boolean =>
   remotes.some((remote) => remote.toLowerCase() === repo.toLowerCase());
 
 /**
  * Why `call` does not run under `rule`, in the words the session reads; none
  * when it runs: the rule lets sessions post upstream, the call writes to no
- * repository, or the one it writes to is the project's own.
+ * repository, or the one it writes to is the project's own. Under `ask` a
+ * post is held for the person instead ({@link ghPost}); this is `off`'s word.
  */
 export const upstreamRefusal = (
   rule: UpstreamRule,
   call: UpstreamCall
 ): string | undefined => {
-  if (!rule.guarded) {
+  if (!isGuarded(rule)) {
     return;
   }
   return writeRefusal(rule, upstreamWrite(call));
+};
+
+/**
+ * The write a call makes to another repository under `rule`: what `ask`
+ * holds for the person. None when it writes to none, or to the project's own.
+ */
+export const otherWrite = (
+  rule: UpstreamRule,
+  write: UpstreamWrite | undefined
+): UpstreamWrite | undefined =>
+  write && !(write.repo !== undefined && owns(rule.remotes, write.repo))
+    ? write
+    : undefined;
+
+/**
+ * Why a post under `ask` cannot wait for the person as it stands, in the
+ * words the session reads: `why`, and what to do instead. Nothing was posted.
+ */
+export const askRefusal = (what: string, why: string): string =>
+  `cawco: \`${what}\` did not run: ${why}. Posts to other people's repositories wait here for the owner's answer (their choice: Ask me first), and CawCo makes each one exactly as the owner approved it, so it must say everything it posts in the command itself.`;
+
+/**
+ * What the session reads once a post is held: CawCo asked the person, and
+ * the session hears the answer in a message of its own.
+ */
+export const heldWords = (
+  what: string,
+  repo: string,
+  again: boolean
+): string =>
+  again
+    ? `cawco: \`${what}\` to ${repo} is already waiting for the owner's answer; nothing more was asked. Don't run it again: you will be told here when they answer.`
+    : `cawco: \`${what}\` to ${repo} was not posted yet: it waits in the owner's Needs you (their choice: Ask me first). If they approve, CawCo posts it exactly as written, once, under their account; if they deny, nothing is posted. You will be told here either way. Don't run it again, and carry on with the rest of your work.`;
+
+/**
+ * A gh write held for the person (hub upstream-asks.ts): its argv as the
+ * host's gh runs it once approved, every file it read already in it, the
+ * repository it acts on pinned (`GH_REPO`, `GH_HOST`), and what it reads on
+ * stdin (`--input -`).
+ */
+export interface GhPost {
+  readonly args: readonly string[];
+  /** The GitHub host, as gh's `GH_HOST`. */
+  readonly host: string;
+  /** `owner/repo`, as gh's `GH_REPO`: the repository the call resolved to inside the workspace. */
+  readonly repo: string;
+  readonly stdin?: string;
+  readonly via: "gh";
+}
+
+/** gh's flags that read a file the host's gh would read on its own disk, by what each takes instead. */
+const GH_FILE_FLAGS: Readonly<Record<string, string>> = {
+  "-F": "--body",
+  "--body-file": "--body",
+  "--notes-file": "--notes",
+};
+/** gh's flags that open a browser or an editor, or read a file by a name of their own: none can run for a person who is not there. */
+const GH_UNHELD: ReadonlySet<string> = new Set([
+  "-w",
+  "--web",
+  "-e",
+  "--editor",
+  "--recover",
+  "-f",
+  "--fill",
+  "--fill-first",
+  "--fill-verbose",
+]);
+/** The flags whose value is the post's title and body. */
+const TITLE_FLAGS = { short: "-t", long: "--title" };
+const BODY_FLAGS = { short: "-b", long: "--body" };
+
+/** A flag and its value from one word or two: `--long=VALUE`, `--long VALUE`, `-xVALUE`, `-x VALUE`. */
+const flagAt = (
+  args: readonly string[],
+  index: number,
+  flags: readonly string[]
+): { flag: string; value: string | undefined; words: number } | undefined => {
+  const arg = args[index] as string;
+  for (const flag of flags) {
+    if (arg === flag) {
+      return { flag, value: args[index + 1], words: 2 };
+    }
+    if (flag.startsWith("--") && arg.startsWith(`${flag}=`)) {
+      return { flag, value: arg.slice(flag.length + 1), words: 1 };
+    }
+    if (
+      !flag.startsWith("--") &&
+      arg.startsWith(flag) &&
+      !arg.startsWith("--") &&
+      arg.length > flag.length
+    ) {
+      return { flag, value: arg.slice(flag.length), words: 1 };
+    }
+  }
+};
+
+/** A gh command's argv with every file it names read into it; or why it cannot be. */
+const inlineGhCommand = (
+  call: UpstreamCall,
+  words: { command: string; sub: string }
+): { args: string[] } | { problem: string } => {
+  const args: string[] = [];
+  const named = Object.keys(GH_FILE_FLAGS);
+  for (let index = 0; index < call.args.length; index += 1) {
+    const arg = call.args[index] as string;
+    if (arg === "--") {
+      args.push(...call.args.slice(index));
+      break;
+    }
+    if (GH_UNHELD.has(arg.split("=")[0] as string)) {
+      return {
+        problem: `it uses ${arg.split("=")[0]}, which needs a browser, an editor or the checkout`,
+      };
+    }
+    const file = flagAt(call.args, index, named);
+    if (!file) {
+      args.push(arg);
+      continue;
+    }
+    const text =
+      file.value === undefined ? undefined : fileText(call, file.value);
+    if (text === undefined) {
+      return {
+        problem: `${file.flag} ${file.value ?? ""} could not be read (stdin is not read here)`,
+      };
+    }
+    // `gh release create -F` is its notes' file.
+    args.push(
+      words.command === "release" && file.flag === "-F"
+        ? "--notes"
+        : (GH_FILE_FLAGS[file.flag] as string),
+      text
+    );
+    index += file.words - 1;
+  }
+  if (
+    words.command === "release" &&
+    (words.sub === "upload" ||
+      (words.sub === "create" &&
+        commandWords(args).rest.filter((arg) => !arg.startsWith("-")).length >
+          1))
+  ) {
+    return {
+      problem: "a release's assets are files the owner's gh cannot read",
+    };
+  }
+  return { args };
+};
+
+/** `gh api`'s argv with every `@file` field and `--input` read into it; or why it cannot be. */
+const inlineGhApi = (
+  call: UpstreamCall
+): { args: string[]; stdin?: string } | { problem: string } => {
+  const args: string[] = [];
+  let stdin: string | undefined;
+  for (let index = 0; index < call.args.length; index += 1) {
+    const arg = call.args[index] as string;
+    const input = flagAt(call.args, index, ["--input"]);
+    if (input) {
+      const text =
+        input.value === undefined || input.value === "-"
+          ? undefined
+          : fileText(call, input.value);
+      if (text === undefined) {
+        return {
+          problem: `--input ${input.value ?? ""} could not be read (stdin is not read here)`,
+        };
+      }
+      stdin = text;
+      args.push("--input", "-");
+      index += input.words - 1;
+      continue;
+    }
+    const field = flagAt(call.args, index, ["-F", "--field"]);
+    const value = field?.value;
+    const at = value?.indexOf("=") ?? -1;
+    if (field && value?.slice(at + 1).startsWith("@")) {
+      const text = fileText(call, value.slice(at + 2));
+      if (text === undefined) {
+        return {
+          problem: `${field.flag} ${value} could not be read (stdin is not read here)`,
+        };
+      }
+      args.push("-f", `${value.slice(0, at)}=${text}`);
+      index += field.words - 1;
+      continue;
+    }
+    args.push(arg);
+  }
+  return { args, ...(stdin === undefined ? {} : { stdin }) };
+};
+
+/**
+ * A gh write as it is held for the person under `ask`: the call's argv with
+ * every file it names read in (`--body-file` as `--body`, `-F k=@file` as
+ * `-f k=…`, `--input file` as stdin), a `pr create` given the branch it was
+ * run on (`--head`), and the repository it resolved to here pinned, so the
+ * host's gh, run approved in no checkout, posts exactly this to exactly
+ * there. Or why it cannot wait for the person as it stands (a browser, an
+ * editor, a file only stdin holds, a create with no title or body).
+ */
+export const ghPost = (
+  call: UpstreamCall,
+  write: UpstreamWrite,
+  branch: () => string | undefined
+): { post: GhPost } | { problem: string } => {
+  if (programName(call.program) !== "gh") {
+    return {
+      problem: `${programName(call.program)} cannot hand its post to the owner; gh can, so run it with gh`,
+    };
+  }
+  if (write.unread) {
+    return {
+      problem:
+        "its query comes from stdin or a file the guard cannot open, so what it posts is unknown",
+    };
+  }
+  if (write.repo === undefined) {
+    return {
+      problem:
+        "it names no repository (a mutation acts on node ids), so the owner could not be shown where it posts",
+    };
+  }
+  const words = commandWords(call.args);
+  const inlined =
+    words.command === "api" ? inlineGhApi(call) : inlineGhCommand(call, words);
+  if ("problem" in inlined) {
+    return inlined;
+  }
+  let { args } = inlined;
+  if (words.sub === "create" && ["issue", "pr"].includes(words.command)) {
+    if (
+      lastValue(args, TITLE_FLAGS.short, TITLE_FLAGS.long) === undefined ||
+      lastValue(args, BODY_FLAGS.short, BODY_FLAGS.long) === undefined
+    ) {
+      return {
+        problem:
+          "the owner reads its title and body before anything is posted: give --title and --body (or --body-file)",
+      };
+    }
+    if (
+      words.command === "pr" &&
+      lastValue(args, "-H", "--head") === undefined
+    ) {
+      const head = branch();
+      if (!head) {
+        return { problem: "name the branch it opens from with --head" };
+      }
+      args = [...args, "--head", head];
+    }
+  }
+  const [host = GITHUB, ...path] = write.repo.split("/");
+  const stdin: string | undefined =
+    "stdin" in inlined ? (inlined.stdin as string | undefined) : undefined;
+  return {
+    post: {
+      via: "gh",
+      args,
+      host,
+      repo: path.join("/"),
+      ...(stdin === undefined ? {} : { stdin }),
+    },
+  };
+};
+
+/**
+ * Why the host must not run a held gh post as it is: it is no write to a
+ * repository, or still names something only the workspace could read or
+ * the person cannot see (a file, a browser, an editor). What {@link ghPost}
+ * makes always passes; the host checks again what it is handed.
+ */
+export const ghPostProblem = (post: GhPost): string | undefined => {
+  const words = commandWords(post.args);
+  if (!(words.command === "api" || GH_WRITES[words.command]?.has(words.sub))) {
+    return `gh ${words.command} ${words.sub} is not a post the guard holds`;
+  }
+  for (const [index, arg] of post.args.entries()) {
+    if (arg === "--") {
+      break;
+    }
+    const flag = arg.split("=")[0] as string;
+    if (words.command === "api") {
+      const input = flagAt(post.args, index, ["--input"]);
+      if (input && input.value !== "-") {
+        return "--input reads a file";
+      }
+      const field = flagAt(post.args, index, ["-F", "--field"]);
+      const value = field?.value ?? "";
+      if (field && value.slice(value.indexOf("=") + 1).startsWith("@")) {
+        return `${field.flag} ${value} reads a file`;
+      }
+    } else if (
+      GH_UNHELD.has(flag) ||
+      flagAt(post.args, index, Object.keys(GH_FILE_FLAGS))
+    ) {
+      return `${flag} reads a file or opens a browser or an editor`;
+    }
+  }
+  const write = upstreamWrite({
+    program: "gh",
+    args: post.args,
+    env: { GH_REPO: post.repo, GH_HOST: post.host },
+    cwdRemotes: () => [],
+  });
+  return write?.repo === undefined
+    ? "it writes to no repository the guard can name"
+    : undefined;
 };
 
 /**

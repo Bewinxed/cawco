@@ -2442,7 +2442,7 @@ export const createCaw = ({
 
     /**
      * Your words sent straight to Caw's session (server.ts `deliverSend`):
-     * his session's composer in the app, a push's Reply, Telegram, a relay.
+     * his session's composer in the app, a push's Reply, a relay.
      * Everything you say to him is a thread's, so they go into the thread he
      * is in ({@link threadOfLead}, a new one when the project has none) by
      * the thread's own path, and wake him from there under the send's uuid:

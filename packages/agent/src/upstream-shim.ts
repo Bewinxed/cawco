@@ -1,8 +1,11 @@
 /**
- * `upstream-shim.ts RULE PROGRAM [ARG…]`: the upstream guard's judge for one
- * program start inside a workspace's boundary. Each of the workspace's
- * shims for `gh`, `hub`, `glab` and `curl` (boundary.ts `writeGuardShims`)
- * runs it before the real program, which it runs only when this exits 0.
+ * `upstream-shim.ts RULE DOOR PROGRAM [ARG…]`: the upstream guard's judge
+ * for one program start inside a workspace's boundary. Each of the
+ * workspace's shims for `gh`, `hub`, `glab` and `curl` (boundary.ts
+ * `writeGuardShims`) runs it before the real program, and reads its exit:
+ * 0 runs the program; {@link HELD} means the post is held for the person
+ * and the shim exits 0 without running it; {@link VIA_DOOR} runs curl
+ * through the workspace's GitHub door; anything else is the call's exit.
  *
  * RULE is the workspace's rule as the agent last wrote it (`upstream.json`
  * in the part of its state dir a command reads, `UpstreamRule`). The call is
@@ -12,6 +15,13 @@
  * unjudged. A file the call names for its body (a GraphQL query's
  * `-F query=@file`, `--input`, curl's `-d @file`) is read here, as the
  * program would read it.
+ *
+ * Under `ask` (the person's "Ask me first"), a gh write to another
+ * repository does not run here: its post, every file it reads already in it
+ * (`ghPost`), goes to DOOR, the workspace's GitHub door on the host, which
+ * asks the person through the hub; what the door answers is what the
+ * session reads. A curl write goes to the door itself, which holds it the
+ * same way. hub and glab cannot hand a post over, and are refused saying so.
  *
  * In a guarded workspace no command holds a GitHub token (boundary.ts
  * `guardedEnv`): gh reaches GitHub through the workspace's GitHub door,
@@ -30,27 +40,37 @@ type Guard = typeof import("@cawco/core/upstream-guard");
 type GitRemote = import("@cawco/core/upstream-guard").GitRemote;
 type UpstreamRule = import("@cawco/core/upstream-guard").UpstreamRule;
 
-const [ruleFile, program, ...args] = process.argv.slice(2);
+const [ruleFile, door, program, ...args] = process.argv.slice(2);
+
+/** The exit that tells the shim the post is held: it exits 0 and runs nothing. */
+const HELD = 4;
+/** The exit that tells curl's shim to send the call through the GitHub door. */
+const VIA_DOOR = 3;
 
 const refuse = (reason: string, status: number): never => {
   process.stderr.write(`${reason}\n`);
   process.exit(status);
 };
 
-if (!(ruleFile && program)) {
-  refuse("usage: upstream-shim.ts RULE PROGRAM [ARG...]", 2);
+if (!(ruleFile && door && program)) {
+  refuse("usage: upstream-shim.ts RULE DOOR PROGRAM [ARG...]", 2);
 }
 
-const { upstreamRefusal } = (await import(
-  join(import.meta.dir, "upstream-guard.ts")
-)) as Guard;
+const {
+  askRefusal,
+  ghPost,
+  otherWrite,
+  readUpstreamRule,
+  upstreamWrite,
+  writeRefusal,
+} = (await import(join(import.meta.dir, "upstream-guard.ts"))) as Guard;
 
 const readRule = (file: string): UpstreamRule => {
-  const rule = JSON.parse(readFileSync(file, "utf8")) as Partial<UpstreamRule>;
-  if (typeof rule.guarded !== "boolean" || !Array.isArray(rule.remotes)) {
+  const rule = readUpstreamRule(JSON.parse(readFileSync(file, "utf8")));
+  if (!rule) {
     throw new Error(`${file} is not an upstream rule`);
   }
-  return rule as UpstreamRule;
+  return rule;
 };
 
 /** `remote.<name>.<key> <value>`, as `git config --get-regexp` prints each. */
@@ -108,13 +128,55 @@ const readFile = (path: string): string | undefined => {
   }
 };
 
-const refusal = upstreamRefusal(ruleOrRefuse(), {
+/** The branch the cwd's checkout is on; none when it is on none (a detached HEAD) or is no checkout. */
+const branch = (): string | undefined => {
+  const read = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    encoding: "utf8",
+  });
+  const name = (read.stdout ?? "").trim();
+  return read.status === 0 && name && name !== "HEAD" ? name : undefined;
+};
+
+const call = {
   program: program as string,
   args,
   env: process.env,
   cwdRemotes,
   readFile,
-});
-if (refusal) {
-  refuse(refusal, 1);
+};
+const rule = ruleOrRefuse();
+if (rule.posts === "off") {
+  const refusal = writeRefusal(rule, upstreamWrite(call));
+  if (refusal) {
+    refuse(refusal, 1);
+  }
+} else if (rule.posts === "ask") {
+  const write = otherWrite(rule, upstreamWrite(call));
+  if (write && program === "curl") {
+    process.exit(VIA_DOOR);
+  }
+  if (write) {
+    const built = ghPost(call, write, branch);
+    if ("problem" in built) {
+      refuse(askRefusal(write.what, built.problem), 1);
+    } else {
+      const answer = await fetch("http://cawco/upstream/ask", {
+        unix: door as string,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ post: built.post, what: write.what }),
+      }).catch((error: unknown) =>
+        refuse(
+          `cawco: \`${write.what}\` did not run: this workspace's GitHub door could not be reached (${error instanceof Error ? error.message : String(error)}), so the owner could not be asked. Nothing was posted.`,
+          1
+        )
+      );
+      const said = await answer.text();
+      if (!answer.ok) {
+        refuse(said.trim(), 1);
+      }
+      process.stderr.write(`${said.trim()}\n`);
+      process.exit(HELD);
+    }
+  }
 }

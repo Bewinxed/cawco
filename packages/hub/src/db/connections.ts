@@ -16,7 +16,6 @@ export interface ConnectionsDb {
   readonly namesForProject: (projectId: string) => string[];
   /** The projects that grant a connection, by its id. */
   readonly projectsOf: (id: string) => string[];
-  readonly remove: (id: string) => void;
   /** The projects that grant it, all at once. */
   readonly setProjects: (id: string, projectIds: string[]) => void;
   readonly update: (
@@ -58,9 +57,6 @@ export const connectionsDb = (db: BunSQLiteDatabase): ConnectionsDb => ({
       .where(eq(connectionProjects.connectionId, id))
       .all()
       .map((row) => row.projectId),
-  remove: (id) => {
-    db.delete(connections).where(eq(connections.id, id)).run();
-  },
   setProjects: (id, projectIds) => {
     db.transaction((tx) => {
       tx.delete(connectionProjects)

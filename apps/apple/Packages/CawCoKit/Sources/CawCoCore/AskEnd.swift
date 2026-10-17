@@ -25,7 +25,6 @@ enum AskEnd {
         let place: String? = switch answer.via {
         case .page: name.map { "from \($0)" } ?? "from another tab"
         case .app: name.map { "from \($0)" } ?? "from the app"
-        case .telegram: "from Telegram"
         case .session: name.map { "by \($0)" } ?? "by another session"
         case .harness: "in \(harness)"
         case .unrecognized: nil

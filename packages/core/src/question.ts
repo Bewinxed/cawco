@@ -11,7 +11,7 @@ const looksLikeQuestion = (value: unknown): value is UserQuestion =>
  * What a parked tool call is really asking the reader, when it is asking rather
  * than requesting permission: null for every other tool, and for an
  * {@link ASK_USER_QUESTION} whose input does not carry questions to render.
- * The one reading the dashboard, the Telegram bridge and a lead's thread share.
+ * The one reading the dashboard, the app and a lead's thread share.
  */
 export function questionsOf(
   toolName: string,
@@ -61,7 +61,7 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 /**
  * One answer in the shape its own question reads: a multi-select answer is a
  * list even when a single option was picked, which is what the dashboard's
- * cards and the Telegram bridge both send. A remote answerer only ever knows
+ * cards and the app's push both send. A remote answerer only ever knows
  * the option label it chose, so the `multiSelect` flag it never saw is applied
  * here, from the question the harness actually parked.
  */

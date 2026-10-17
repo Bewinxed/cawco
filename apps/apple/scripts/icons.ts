@@ -70,6 +70,7 @@ const SOLAR_ICONS = [
   "branching-paths-down-bold-duotone", // IconSubagent
   "scale-bold-duotone", // IconJev
   "window-frame-bold-duotone", // IconWindow
+  "widget-4-bold-duotone", // IconArtifactSheet
   "shield-check-bold-duotone", // IconRules
   "clipboard-check-bold-duotone", // IconReport
   "clipboard-remove-bold-duotone", // IconReportFailed

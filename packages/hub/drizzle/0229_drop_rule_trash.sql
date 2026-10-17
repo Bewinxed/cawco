@@ -1,0 +1,1 @@
+DROP TABLE `rule_trash`;

@@ -98,6 +98,10 @@ import {
   STAGE_WRITE,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
+import {
+  CONTROL_UPSTREAM_POST,
+  isUpstreamPost,
+} from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -194,6 +198,7 @@ import {
   stopStages,
   writeSheet,
 } from "./stage";
+import { makeUpstreamPost } from "./upstream-posts";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
 const takeUpstream = (
@@ -2897,6 +2902,16 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) => {
       stopStages((ref as { id?: string } | null)?.id);
       return discardWorkspace(ref);
+    });
+    // A post to another person's repository the person approved, made once
+    // with this machine's GitHub sign-in (upstream-posts.ts).
+    supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {
+      if (!(typeof id === "string" && isUpstreamPost(post))) {
+        return Promise.reject(
+          new Error("upstreamPost takes a workspace id and a post")
+        );
+      }
+      return makeUpstreamPost(id, post);
     });
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
     setStageSink((frame) =>

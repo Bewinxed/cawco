@@ -27,7 +27,6 @@ export async function hubInProcess(dbPath: string, home: string) {
             registry: yield* Registry,
             db,
             pending: yield* Pending,
-            telegram: undefined,
             lifetime,
           },
           { background: false }

@@ -20,19 +20,18 @@
     mcpNameProblem,
     pairsToRecord,
     recordToPairs,
-    removeMcpServer,
     saveMcpServer,
     splitArgs,
     suggestMcpName,
   } from "../../fleet";
   import KeyValueRows from "../../KeyValueRows.svelte";
   import Choice from "../Choice.svelte";
+  import { deleteMcpServer } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
-  import { holders } from "../holders";
   import McpSignIn from "../McpSignIn.svelte";
   import PickerChip from "../PickerChip.svelte";
   import RolloutChip from "../RolloutChip.svelte";
@@ -213,40 +212,23 @@
     void goto("/config/mcp");
   }
 
-  async function askRemove() {
+  /** Remove: at once, with Undo in the toast (deletes.ts). */
+  async function remove() {
     if (!server) {
       return;
     }
-    await question.ask({
-      title: `Remove ${server.name} everywhere?`,
-      body: "It leaves the fleet and every machine that holds it. It can't be undone.",
-      confirmLabel: "Remove everywhere",
-      destructive: true,
-      items: () => holders(cawco.machines, "mcp", server.name),
-      pendingLabel: "Removing…",
-      run: async () => {
-        deleting = true;
-        try {
-          await removeMcpServer(server.name);
-          kept.drop();
-          // Back to the list first, so the row is seen leaving it.
-          await goto("/config/mcp");
-          const fleet = store.fleet.value;
-          if (fleet) {
-            fleet.config.mcp = fleet.config.mcp.filter(
-              (row) => row.name !== server.name
-            );
-          }
-        } catch (error) {
-          deleting = false;
-          throw error;
-        }
-      },
-    });
+    deleting = true;
+    failed = undefined;
+    try {
+      await deleteMcpServer(store, server.name, () => {
+        kept.drop();
+        return goto("/config/mcp");
+      });
+    } catch (error) {
+      deleting = false;
+      failed = failureWords(error);
+    }
   }
-
-  /** Delete asks in this editor's own footer. */
-  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -255,9 +237,8 @@
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
-  ondelete={server ? askRemove : undefined}
+  ondelete={server ? remove : undefined}
   onsubmit={save}
-  {question}
   saveLabel={server ? "Save changes" : "Add server"}
   saving={busy}
   title={server ? server.name : "New MCP server"}

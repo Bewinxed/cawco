@@ -66,6 +66,7 @@ import {
 import { ownIdentity } from "@cawco/core/process-identity";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import {
   and,
   asc,
@@ -126,7 +127,6 @@ import {
   connectionProjects,
   connectorPolls,
   continuations,
-  credentials,
   delegateEvents,
   eventRoutes,
   fleetAgents,
@@ -190,7 +190,6 @@ import {
   routines,
   ruleState,
   rules,
-  ruleTrash,
   type SessionLineKind,
   sentMessages,
   sessionIdentities,
@@ -226,6 +225,7 @@ import {
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
 import { type StartersDb, startersDb } from "./starters";
+import { type TrashDb, trashDb } from "./trash";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
@@ -675,7 +675,6 @@ export interface DbShape {
     sessionId: string;
   }[];
   readonly clearEndConfirmation: (id: string) => void;
-  readonly clearFleetMemory: () => void;
   /** Forget the OpenRouter key. */
   readonly clearOpenRouterConnection: () => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
@@ -739,8 +738,6 @@ export interface DbShape {
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
   readonly deleteContinuation: (id: string) => void;
-  readonly deleteFleetAgent: (name: string) => void;
-  readonly deleteFleetHook: (id: string) => void;
   readonly deleteFleetMemoryDoc: (path: string) => void;
   /**
    * Forgets a machine's entry, its places and its current limit reading;
@@ -755,16 +752,12 @@ export interface DbShape {
   readonly deleteMachine: (machineId: string) => {
     instanceIds: string[];
   };
-  readonly deleteMarketplace: (name: string) => void;
   readonly deleteMcpOauth: (name: string) => void;
-  readonly deleteMcpServer: (name: string) => void;
   /** A fleet MCP relay session closed: its `initialize` params go. */
   readonly deleteMcpSession: (id: string) => void;
   readonly deleteMove: (id: string) => void;
-  readonly deletePlugin: (id: string) => void;
   /** The project and its places; the sessions started from it stay, unattached. */
   readonly deleteProject: (id: string) => void;
-  readonly deleteSkill: (name: string) => void;
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
@@ -851,7 +844,6 @@ export interface DbShape {
   readonly formerIds: () => Record<string, string>;
   /** When a session last started again fresh; null when it never did. */
   readonly freshStartOf: (id: string) => number | null;
-  readonly getCredential: (id: string) => Record<string, unknown> | undefined;
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () =>
@@ -980,6 +972,8 @@ export interface DbShape {
   readonly keepAliveInstances: () => PublicInstanceRow[];
   /** Keeps a pending send whole, as its machine was handed it. */
   readonly keepEnvelope: (uuid: string, envelope: string) => void;
+  /** A skill about to be deleted: its files kept in its history first, as a hook's are. */
+  readonly keepSkillVersion: (name: string) => void;
   /**
    * The directory a row was launched in, which every spawn of it uses;
    * `"unknown"` when its machine had no record of its conversation; undefined
@@ -1285,7 +1279,7 @@ export interface DbShape {
   readonly noteTurnEnded: (id: string, at: Date) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
-  /** What a device or Telegram was shown and what has been cleared, by collapse id (notifications.ts). */
+  /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
   readonly notifications: {
     /** Shown under this collapse id: outstanding again, and no longer cleared. */
     readonly sent: (collapseId: string, at: Date) => void;
@@ -1532,7 +1526,6 @@ export interface DbShape {
     /** What Cawrier said to the last push for a device: taken (no error) or refused with a reason. */
     readonly noteResult: (pairingId: string, error: string | null) => void;
   };
-  readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
     name: string;
@@ -1780,8 +1773,8 @@ export interface DbShape {
   /**
    * Keeps a skill's version that is about to be replaced or destroyed: the
    * fleet's own row on a change or a delete (which `putSkill` and
-   * `deleteSkill` do themselves), or a machine's edited copy an overwrite is
-   * taking off it (`source` `machine:<machineId>`).
+   * `keepSkillVersion` do themselves), or a machine's edited copy an
+   * overwrite is taking off it (`source` `machine:<machineId>`).
    */
   readonly recordFleetSkill: (version: {
     name: string;
@@ -1853,12 +1846,6 @@ export interface DbShape {
     held: string[],
     complete: boolean
   ) => void;
-  /**
-   * Brings a rule deleted at `at` − {@link RULE_UNDO_MS} or later back
-   * whole, with every session's standing as it stood; undefined once its
-   * window has passed, or its project went meanwhile.
-   */
-  readonly restoreRule: (id: string, at: number) => Rule | undefined;
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
@@ -2059,7 +2046,7 @@ export interface DbShape {
   ) => boolean;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
-  readonly setUpstreamPosts: (posts: boolean) => void;
+  readonly setUpstreamPosts: (posts: UpstreamPosts) => void;
   /** Replaces the sessions an ending run waits on; one the hub keeps no row for is not waited on. */
   readonly setWorkflowPendingEnds: (
     runId: string,
@@ -2158,12 +2145,8 @@ export interface DbShape {
   readonly touchInstanceActivity: (id: string) => void;
   /** A fleet MCP relay session was used now. */
   readonly touchMcpSession: (id: string) => void;
-  /**
-   * Deletes the rule and every session's standing with it, kept whole in the
-   * trash for {@link RULE_UNDO_MS} (`restoreRule`); what waited there longer
-   * goes for good. False when there is no such rule.
-   */
-  readonly trashRule: (id: string, at: number) => boolean;
+  /** Deleted config items, kept whole for their Undo (trash.ts). */
+  readonly trash: TrashDb;
   /**
    * What a session's delegate tray can still show, oldest first: of the
    * items it delegated and the items of the projects in `ledProjectIds` (it
@@ -2291,7 +2274,7 @@ export interface DbShape {
       >
     >
   ) => WorkItemRow | undefined;
-  /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its last item landed. */
+  /** Records what the workspace's machine says of its boundary, its archive, what it holds, or where its clone's HEAD was when it retired. */
   readonly updateWorkspace: (
     id: string,
     change: Partial<
@@ -2301,9 +2284,9 @@ export interface DbShape {
         | "boundaryPid"
         | "branch"
         | "carry"
+        | "head"
         | "heldAt"
         | "holding"
-        | "landed"
         | "state"
         | "tmp"
       >
@@ -2327,7 +2310,7 @@ export interface DbShape {
     home?: string;
   }) => void;
   /** The fleet's upstream answer (schema `upstreamSettings`): null while nobody has answered. */
-  readonly upstreamPosts: () => boolean | null;
+  readonly upstreamPosts: () => UpstreamPosts | null;
   /**
    * One harness's recorded cost since each boundary and in all, in one SQL
    * pass. A bucket counts toward a boundary when it starts at or after it;
@@ -2495,13 +2478,6 @@ const ruleValues = (rule: Rule): typeof rules.$inferInsert => ({
   updatedAt: new Date(),
 });
 
-/**
- * How long a deleted rule can be brought back whole: past the life of the
- * dashboard's Undo toast (sonner's 4 s, paused while a pointer rests on it
- * or the tab is hidden), which closes when this runs out.
- */
-export const RULE_UNDO_MS = 60_000;
-
 /** And a standing row, with the dates flattened to the numbers the wire carries. */
 const ruleStateOf = (row: typeof ruleState.$inferSelect): RuleState => ({
   ruleId: row.ruleId,
@@ -2657,7 +2633,7 @@ const folderOf = (path: string | null | undefined): string | undefined =>
   (path ?? "").split("/").filter(Boolean).pop();
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
-const MEMORY_ID = "memory";
+export const MEMORY_ID = "memory";
 
 /** The one row the fleet's choices ever take — same precedent as `MEMORY_ID`. */
 const SUPERVISOR_CONFIG_ID = "supervisor";
@@ -6059,22 +6035,12 @@ const make = async (path: string): Promise<DbShape> => {
         ...(runsOn ? { platforms: runsOn } : {}),
       };
     },
-    deleteMcpServer: (name) => {
-      db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
-      db.delete(fleetMcpSessions)
-        .where(eq(fleetMcpSessions.server, name))
-        .run();
-      db.delete(mcpServers).where(eq(mcpServers.name, name)).run();
-    },
     putMarketplace: ({ name, source }) => {
       db.insert(marketplaces)
         .values({ name, source })
         .onConflictDoUpdate({ target: marketplaces.name, set: { source } })
         .run();
       return { name, source };
-    },
-    deleteMarketplace: (name) => {
-      db.delete(marketplaces).where(eq(marketplaces.name, name)).run();
     },
     renameMarketplace: (from, to) =>
       db.transaction((tx) => {
@@ -6163,9 +6129,6 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
       return plugin;
-    },
-    deletePlugin: (id) => {
-      db.delete(plugins).where(eq(plugins.id, id)).run();
     },
     listSkills: () =>
       db
@@ -6289,7 +6252,7 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(skills).set(next).where(eq(skills.name, name)).run();
       return skillMeta({ ...stored, ...next });
     },
-    deleteSkill: (name) => {
+    keepSkillVersion: (name) => {
       // A delete takes a final snapshot, as a hook's does.
       const stored = db
         .select()
@@ -6305,7 +6268,6 @@ const make = async (path: string): Promise<DbShape> => {
           source: "fleet",
         });
       }
-      db.delete(skills).where(eq(skills.name, name)).run();
     },
     recordFleetSkill,
     listFleetSkillHistory: (name) =>
@@ -6357,9 +6319,6 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
       return agentFile(row);
     },
-    deleteFleetAgent: (name) => {
-      db.delete(fleetAgents).where(eq(fleetAgents.name, name)).run();
-    },
     listFleetHooks: () =>
       db.select().from(fleetHooks).orderBy(fleetHooks.name).all().map(hookOf),
     getFleetHook: (id) => {
@@ -6406,9 +6365,6 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
       return hookOf(values);
-    },
-    deleteFleetHook: (id) => {
-      db.delete(fleetHooks).where(eq(fleetHooks.id, id)).run();
     },
     recordFleetHook: (version) => {
       db.insert(fleetHookHistory)
@@ -6494,9 +6450,6 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
       return { content: row.content, hash: row.hash, updatedAt: row.updatedAt };
-    },
-    clearFleetMemory: () => {
-      db.delete(fleetMemory).where(eq(fleetMemory.id, MEMORY_ID)).run();
     },
     listFleetMemoryDocs,
     getFleetMemoryDoc,
@@ -8316,17 +8269,6 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(projects).where(eq(projects.id, dupId)).run();
         return { places, sessions, threads, workItems: items.length };
       }),
-    getCredential: (id) =>
-      db.select().from(credentials).where(eq(credentials.id, id)).get()?.blob,
-    putCredential: (id, blob) => {
-      db.insert(credentials)
-        .values({ id, blob })
-        .onConflictDoUpdate({
-          target: credentials.id,
-          set: { blob, updatedAt: new Date() },
-        })
-        .run();
-    },
     recordSend: (send) =>
       db.insert(sentMessages).values(send).returning().get(),
     sendRecord: (uuid) =>
@@ -9736,78 +9678,7 @@ const make = async (path: string): Promise<DbShape> => {
       return rule;
     },
 
-    trashRule: (id, at) =>
-      db.transaction((tx) => {
-        tx.delete(ruleTrash)
-          .where(lt(ruleTrash.deletedAt, new Date(at - RULE_UNDO_MS)))
-          .run();
-        const row = tx.select().from(rules).where(eq(rules.id, id)).get();
-        if (!row) {
-          return false;
-        }
-        const states = tx
-          .select()
-          .from(ruleState)
-          .where(eq(ruleState.ruleId, id))
-          .all()
-          .map(ruleStateOf);
-        tx.insert(ruleTrash)
-          .values({
-            ruleId: id,
-            scopeProjectId: row.scopeProjectId,
-            rule: ruleOf(row),
-            states,
-            deletedAt: new Date(at),
-          })
-          .onConflictDoUpdate({
-            target: ruleTrash.ruleId,
-            set: { rule: ruleOf(row), states, deletedAt: new Date(at) },
-          })
-          .run();
-        tx.delete(rules).where(eq(rules.id, id)).run();
-        tx.delete(ruleState).where(eq(ruleState.ruleId, id)).run();
-        return true;
-      }),
-
-    restoreRule: (id, at) =>
-      db.transaction((tx) => {
-        const kept = tx
-          .select()
-          .from(ruleTrash)
-          .where(
-            and(
-              eq(ruleTrash.ruleId, id),
-              gte(ruleTrash.deletedAt, new Date(at - RULE_UNDO_MS))
-            )
-          )
-          .get();
-        if (!kept) {
-          return;
-        }
-        tx.delete(ruleTrash).where(eq(ruleTrash.ruleId, id)).run();
-        tx.insert(rules).values(ruleValues(kept.rule)).run();
-        if (kept.states.length > 0) {
-          tx.insert(ruleState)
-            .values(
-              kept.states.map((state) => ({
-                id: `${state.ruleId}:${state.instanceId}`,
-                ruleId: state.ruleId,
-                instanceId: state.instanceId,
-                status: state.status,
-                fireCount: state.fireCount,
-                totalFires: state.totalFires,
-                lastFiredAt:
-                  state.lastFiredAt === null
-                    ? null
-                    : new Date(state.lastFiredAt),
-                ackedAt:
-                  state.ackedAt === null ? null : new Date(state.ackedAt),
-              }))
-            )
-            .run();
-        }
-        return kept.rule;
-      }),
+    trash: trashDb(db),
 
     ruleStats: () => {
       const rows = db

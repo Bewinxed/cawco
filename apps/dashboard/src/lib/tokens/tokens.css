@@ -374,19 +374,12 @@
       color-mix(in oklch, var(--status-fail-ink) 6%, transparent),
       color-mix(in oklch, var(--status-fail-ink) 10%, transparent)
     );
-    /* The chosen work tab's count, washed in its status ink at the usage tints' strength. */
-    --count-wash-live: light-dark(
-      color-mix(in oklch, var(--status-live-ink) 6%, transparent),
-      color-mix(in oklch, var(--status-live-ink) 10%, transparent)
-    );
-    --count-wash-done: light-dark(
-      color-mix(in oklch, var(--status-done-ink) 6%, transparent),
-      color-mix(in oklch, var(--status-done-ink) 10%, transparent)
-    );
-    --count-wash-fail: light-dark(
-      color-mix(in oklch, var(--status-fail-ink) 6%, transparent),
-      color-mix(in oklch, var(--status-fail-ink) 10%, transparent)
-    );
+    /* A work tab's count pill (WorkTabs, the app's CountChip): solid in its status hue, chosen or not, so the pill reads against any sheet it stands on (3:1 non-text or more on the chosen sheet, the recess, hover and press, in both themes) and its numeral in count-fill-ink holds 4.5:1 or more on it. The 6% and 10% washes it replaces measured about 1.05:1 against the sheet and read as a smudge. */
+    --count-fill-live: var(--status-live-glyph);
+    --count-fill-done: var(--status-done-glyph);
+    --count-fill-fail: var(--status-fail-glyph);
+    /* A count pill's numeral: the lightest neutral by day, the darkest at night, against the status fill. */
+    --count-fill-ink: var(--neutral-1);
     --presence-online: light-dark(oklch(62.7% 0.17 149), oklch(74% 0.17 149));
     --presence-away: light-dark(oklch(70.5% 0.187 47.6), oklch(76% 0.187 47.6));
     --presence-off: var(--neutral-8);

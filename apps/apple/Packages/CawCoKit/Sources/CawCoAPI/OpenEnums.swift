@@ -328,7 +328,6 @@ public enum OpenEnums {
         case harness
         case page
         case session
-        case telegram
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -338,7 +337,6 @@ public enum OpenEnums {
             case "harness": self = .harness
             case "page": self = .page
             case "session": self = .session
-            case "telegram": self = .telegram
             default: self = .unrecognized(rawValue)
             }
         }
@@ -349,7 +347,6 @@ public enum OpenEnums {
             case .harness: "harness"
             case .page: "page"
             case .session: "session"
-            case .telegram: "telegram"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -358,7 +355,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.app, .harness, .page, .session, .telegram]
+        public static let allCases: [Self] = [.app, .harness, .page, .session]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -2277,6 +2274,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/FleetChoicesUpstream`.
+    public enum FleetChoicesUpstream: OpenEnum {
+        case ask
+        case off
+        case on
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "ask": self = .ask
+            case "off": self = .off
+            case "on": self = .on
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .ask: "ask"
+            case .off: "off"
+            case .on: "on"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.ask, .off, .on]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FleetItemStateState`.
     public enum FleetItemStateState: OpenEnum {
         case applied
@@ -3392,6 +3430,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/Law`.
     public enum Law: OpenEnum {
+        case artifactNoticeDrawn
         case cawAskStoredBeforeSent
         case liveWorkspaceJudgeAnswers
         case owedSendMachineHasDeadline
@@ -3402,6 +3441,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "artifact-notice-drawn": self = .artifactNoticeDrawn
             case "caw-ask-stored-before-sent": self = .cawAskStoredBeforeSent
             case "live-workspace-judge-answers": self = .liveWorkspaceJudgeAnswers
             case "owed-send-machine-has-deadline": self = .owedSendMachineHasDeadline
@@ -3413,6 +3453,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .artifactNoticeDrawn: "artifact-notice-drawn"
             case .cawAskStoredBeforeSent: "caw-ask-stored-before-sent"
             case .liveWorkspaceJudgeAnswers: "live-workspace-judge-answers"
             case .owedSendMachineHasDeadline: "owed-send-machine-has-deadline"
@@ -3426,7 +3467,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.cawAskStoredBeforeSent, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
+        public static let allCases: [Self] = [.artifactNoticeDrawn, .cawAskStoredBeforeSent, .liveWorkspaceJudgeAnswers, .owedSendMachineHasDeadline, .registerSpawnedNothing, .runningSessionMachineConnected]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -6397,6 +6438,71 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.text, .thinking, .tool]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TrashKind`.
+    public enum TrashKind: OpenEnum {
+        case agent
+        case connection
+        case delegateType
+        case hook
+        case marketplace
+        case mcp
+        case memory
+        case memoryDoc
+        case plugin
+        case rule
+        case skill
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "agent": self = .agent
+            case "connection": self = .connection
+            case "delegateType": self = .delegateType
+            case "hook": self = .hook
+            case "marketplace": self = .marketplace
+            case "mcp": self = .mcp
+            case "memory": self = .memory
+            case "memoryDoc": self = .memoryDoc
+            case "plugin": self = .plugin
+            case "rule": self = .rule
+            case "skill": self = .skill
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .agent: "agent"
+            case .connection: "connection"
+            case .delegateType: "delegateType"
+            case .hook: "hook"
+            case .marketplace: "marketplace"
+            case .mcp: "mcp"
+            case .memory: "memory"
+            case .memoryDoc: "memoryDoc"
+            case .plugin: "plugin"
+            case .rule: "rule"
+            case .skill: "skill"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.agent, .connection, .delegateType, .hook, .marketplace, .mcp, .memory, .memoryDoc, .plugin, .rule, .skill]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

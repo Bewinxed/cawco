@@ -230,6 +230,9 @@ public final class HomeModel {
             case ask(ParkedAsk)
             case run(BoardRun)
             case watch(Components.Schemas.FleetWatchNotice)
+            /// An onboarding choice nobody answered: the fleet's upstream
+            /// choice, its three answers on the row (NeedsCard.svelte `choice`).
+            case choice
         }
 
         public let id: String
@@ -252,7 +255,7 @@ public final class HomeModel {
             switch kind {
             case let .ask(ask): ask.instanceId
             case let .watch(notice): notice.instanceId
-            case .run: nil
+            case .run, .choice: nil
             }
         }
     }
@@ -272,10 +275,10 @@ public final class HomeModel {
             // One whose machine it cannot reach (`unknown`) may still be
             // waiting: its asks stay, marked stale, so Needs you is never a
             // false negative (PRODUCT.md).
-            if let row, !(row.isLive || row.isStale) {
-                continue
-            }
-            for ask in asks where ask.routedTo != "parent" {
+            let ended = row.map { !($0.isLive || $0.isStale) } ?? false
+            // A post to another person's repository held for you outlives its
+            // session (hub upstream-asks.ts): the hub makes it once you approve.
+            for ask in asks where ask.routedTo != "parent" && (!ended || ask.toolName == Self.upstreamPostTool) {
                 // An ask no session row stands behind (a memory proposal) is
                 // on the machine its envelope named, titled by who asked
                 // (home-state.svelte.ts).
@@ -319,8 +322,22 @@ public final class HomeModel {
             item.cwd = row?.cwd ?? ""
             items.append(item)
         }
+        // Asked until it is answered; unread, it waits for the read (home-state.svelte.ts `unanswered`).
+        if fleet.upstream == .unanswered {
+            items.append(NeedsItem(
+                id: "choice:upstream",
+                kind: .choice,
+                machineId: "",
+                title: Words.Upstream.title,
+                place: "Onboarding",
+                raisedAt: nil
+            ))
+        }
         return items.sorted { ($0.raisedAt ?? .infinity, $0.id) < ($1.raisedAt ?? .infinity, $1.id) }
     }
+
+    /// The tool a post held for the person is parked under (core upstream-post.ts `UPSTREAM_POST_TOOL`).
+    static let upstreamPostTool = "mcp__cawco__upstream_post"
 
     /// How long a run that has ended stays on the board: the hub's own window
     /// for a session that stopped moving (workflow-runs.ts `BOARD_MS`).
@@ -755,6 +772,12 @@ public final class HomeModel {
         return rows.filter { kept.contains($0.id) || $0.isFailed }
     }
 
+    /// Work another session started: its parent is a row the fleet holds
+    /// (tree.ts `hasParent`). What the tabs' counts leave out.
+    public func isDelegate(_ row: InstanceRow) -> Bool {
+        row.parentInstanceId.map { fleet.byId[$0] != nil } ?? false
+    }
+
     public func lines(_ tab: Tab) -> [TreeLine<InstanceRow>] {
         lines(tab, rows: rows(tab))
     }
@@ -770,6 +793,9 @@ public final class HomeModel {
         /// Each tab's own rows (`rows(_:)`).
         public let working: [InstanceRow]
         public let finished: [InstanceRow]
+        /// Each tab's count: its top-level sessions, never their delegates,
+        /// whatever the switch shows; and whether one of Finished's failed.
+        public let counts: (working: Int, finished: Int, finishedFailed: Bool)
         /// The chosen tab's lines by machine, each session followed by its delegates.
         public let groups: [MachineGroup]
         public let recent: [RecentItem]
@@ -780,9 +806,11 @@ public final class HomeModel {
         let finished = finished
         let workingRows = rows(of: working)
         let finishedRows = rows(of: finished)
+        let finishedTops = finished.filter { !isDelegate($0) }
         return Board(
             working: workingRows,
             finished: finishedRows,
+            counts: (working.filter { !isDelegate($0) }.count, finishedTops.count, finishedTops.contains(where: \.isFailed)),
             groups: groups(tab, lines: lines(tab, rows: tab == .working ? workingRows : finishedRows)),
             recent: recent(working: working, finished: finished)
         )

@@ -287,12 +287,8 @@ export function createDelegationMcp(options: {
     input: Record<string, unknown>,
     toolUseId?: string
   ) => Promise<void>;
-  /** `send_to_user` through the Telegram bridge: what did not arrive, and why (telegram.ts `deliver`). */
-  sendToUser?: (
-    actor: InstanceRow,
-    message: string,
-    attachments: string[]
-  ) => Promise<string[]>;
+  /** `send_to_user`'s push to the person's paired devices (push.ts `userMessage`); its transcript row is the call itself. */
+  sendToUser: (actor: InstanceRow, message: string) => void;
   /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */
   shownRefusal?: (
     actor: InstanceRow,
@@ -381,6 +377,9 @@ export function createDelegationMcp(options: {
           throw new Error("Discovery cannot execute tools");
         },
         emit: () => {
+          throw new Error("Discovery cannot execute tools");
+        },
+        sendToUser: () => {
           throw new Error("Discovery cannot execute tools");
         },
         spawn: () =>
@@ -606,6 +605,9 @@ export function createDelegationMcp(options: {
         emit: () => {
           throw new Error("Reading the catalog emits nothing");
         },
+        sendToUser: () => {
+          throw new Error("Reading the catalog sends nothing");
+        },
         spawn: () =>
           Promise.reject(new Error("Reading the catalog starts nothing")),
       }).find((tool) => tool.name === name);
@@ -809,7 +811,6 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult> => {
     const emitted: Envelope[] = [];
     const tree = options.delegationTree;
-    const toUser = options.sendToUser;
     const entry = tools({
       instanceId: actor.id,
       instanceById: options.instanceById,
@@ -828,9 +829,7 @@ export function createDelegationMcp(options: {
       workflowRunId: actor.workflowRunId ?? undefined,
       projectId: actor.projectId ?? undefined,
       delegateList: tree ? (include) => tree(actor, include) : undefined,
-      sendToUser: toUser
-        ? (message, attachments) => toUser(actor, message, attachments)
-        : undefined,
+      sendToUser: (message) => options.sendToUser(actor, message),
       shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
       instancesByShortId: options.instancesByShortId,
       threads: options.threads,
@@ -992,6 +991,9 @@ export function createDelegationMcp(options: {
           throw new Error("Instructions send nothing");
         },
         emit: () => undefined,
+        sendToUser: () => {
+          throw new Error("Instructions send nothing");
+        },
         spawn: () => Promise.reject(new Error("Instructions start nothing")),
       },
       listableOf(bound)

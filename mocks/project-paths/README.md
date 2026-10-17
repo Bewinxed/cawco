@@ -66,7 +66,6 @@ does with an IntersectionObserver.
 | brandkit | A knowledge project's brand kit being read |
 | routines | Routines with countdown and run history |
 | inbound | Inbound events, matched or dropped |
-| telegram | Project topics on a phone (Telegram is pending) |
 | skills | `/to-tickets` output becoming linked tasks |
 | scope | Project skills reaching every place |
 | xsetup | X example: setting up a project by talking to Caw |

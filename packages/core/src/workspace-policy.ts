@@ -20,9 +20,10 @@
  *   the config dir of each account the workspace's sessions run on
  *   (`accountLayers`), and what the fleet sync writes for every harness
  *   (`fleetSyncedPaths`). On the hub's machine, its project's folder there
- *   (`projectFolder`). A Claude session also
- *   reads its own `projects/<slug>/` dir, which the judge adds from the
- *   transcript the CLI names.
+ *   (`projectFolder`). Each session's own folder of saved tool results, the
+ *   one its harness tells the model to read (`spillDirs`). A Claude session's
+ *   file tools also read its own `projects/<slug>/` dir, which the judge adds
+ *   from the transcript the CLI names.
  * - Writes: the clone, the scratch dir and the workspace caches only; never
  *   the clone's git config, hooks or submodule dirs, or the harness project
  *   config the host loads at the next session, outside any boundary
@@ -46,6 +47,7 @@ import { binaryRoot } from "./binary-installation";
 import type { WorkspaceRef } from "./harness";
 import {
   accountConfigDir,
+  claudeConfigDirs,
   claudeHome,
   credentialStores,
   darwinDeveloperBundle,
@@ -65,6 +67,8 @@ import {
   workspaceProjectFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
+  workspaceSpillDir,
+  workspaceSpillsFile,
   xdgDataHome,
 } from "./paths";
 import { DamagedRecord, readRecord } from "./state-file";
@@ -740,6 +744,61 @@ const accountLayers = async (id: string): Promise<string[]> => {
     });
 };
 
+/** A Claude Code session id: a UUID, as CawCo mints it for a launch (`spill` in harnesses/claude.ts) and the CLI keeps it. */
+const SESSION_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** A CawCo instance id as one path component: never `.` or `..`. */
+const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
+ * Whether `dir` is one session's spill folder: Claude Code's
+ * `<config dir>/projects/<slug>/<session id>/tool-results` under a config dir
+ * of this machine's, or a pi or OpenCode session's {@link workspaceSpillDir}
+ * of this workspace. Nothing else in the record opens.
+ */
+const isSpillDir = (id: string, dir: string): boolean => {
+  if (!isAbsolute(dir) || dir.split("/").includes("..")) {
+    return false;
+  }
+  if (workspaceSpillDir(id, basename(dir)) === dir) {
+    return INSTANCE_ID.test(basename(dir));
+  }
+  const session = dirname(dir);
+  const projects = dirname(dirname(session));
+  return (
+    basename(dir) === "tool-results" &&
+    SESSION_UUID.test(basename(session)) &&
+    basename(projects) === "projects" &&
+    claudeConfigDirs().includes(dirname(projects))
+  );
+};
+
+/**
+ * Each folder a session of the workspace was launched with for its harness's
+ * saved tool results ({@link workspaceSpillsFile}), as a real path, read only.
+ * A harness saves a result too large to hand the model to a file and tells
+ * the model to read it, by the shell for one too long a line for its file
+ * tool: Claude Code "Slice by character range via Bash instead — e.g.
+ * python3 -c …" under its config dir, which is a credential store
+ * (`accountsRoot`), pi "Use bash: sed -n …" from its host's `TMPDIR`, and
+ * OpenCode cuts each line its `read` shows at 2000 characters. So each
+ * session's own folder opens, the deeper entry deciding; it holds that
+ * session's tool output alone, never a credential or another session's.
+ */
+const spillDirs = async (id: string): Promise<string[]> => {
+  const file = workspaceSpillsFile(id);
+  const listed = (await readRecord<unknown>(file)) ?? [];
+  if (!Array.isArray(listed)) {
+    throw new DamagedRecord(file, "it is not a list");
+  }
+  return listed
+    .filter(
+      (dir): dir is string => typeof dir === "string" && isSpillDir(id, dir)
+    )
+    .map(resolveReal);
+};
+
 /** A project id as the hub mints and accepts it (hub project-folder.ts `PROJECT_ID`). */
 const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -827,6 +886,7 @@ export const workspacePolicy = async (
     ]),
     ...(await accountLayers(workspace.id)),
     ...(await projectFolder(workspace.id)),
+    ...(await spillDirs(workspace.id)),
   ]);
   // A lead's place: what only its owner may read in it is hidden from the
   // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).

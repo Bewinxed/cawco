@@ -967,8 +967,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "send_to_user",
-      "Show the user a message on their Telegram: progress, partial results, or content they must see exactly as written before the task finishes. " +
-        "The call fails, naming each one, when anything did not reach the user.",
+      "Show the user a message in this session's transcript, pushed to their phone: progress, partial results, or content they must see exactly as written before the task finishes.",
       {
         message: z
           .string()
@@ -977,7 +976,7 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Absolute paths of image or video files on this machine (png, jpg, gif, webp, avif, bmp, mp4, mov, webm; up to 50 MB each, Telegram's limit), read off it as the message is sent: you need not read them yourself."
+            "Absolute paths of image or video files on this machine (png, jpg, gif, webp, avif, bmp, mp4, mov, webm; up to 50 MB each), shown under the message: you need not read them yourself."
           ),
       },
       async ({ message, attachments }) => ({

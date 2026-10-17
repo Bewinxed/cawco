@@ -33,11 +33,13 @@
 # macOS bash 3.2: no flock, so shlock.
 set -euo pipefail
 
-LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks
+LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple.noindex/.locks
 usage() {
   echo "usage: mac-slot.sh build -- <cmd...> | mac-slot.sh sim [--runtime <id>] [--device <type name or id>] -- <cmd...>" >&2
   exit 2
 }
+# As called, for the heavy run below to start it again.
+ARGS=("$@")
 MODE=${1:-}
 case $MODE in
   build | sim) shift ;;
@@ -61,6 +63,18 @@ case ${CAWCO_MAC_SLOT:-}:$MODE in
     exit 2 ;;
 esac
 command -v shlock >/dev/null || { echo "shlock is required" >&2; exit 2; }
+# Either slot is a heavy run on this Mac (core heavy-run.ts) for this
+# script's life: a booted simulator loads it as a build does, and from 11:29
+# to 11:57 on 2026-10-17 a second simulator beside a held build, booted by a
+# probe that held no run, drove the 1-minute load past 200 on 10 cores. The
+# script runs again under the installed `cawco heavy-run`, which holds the
+# run until it ends; that serves a checkout and build-both.sh's copy of
+# apps/apple (no scripts/lib, reached over SSH from Linux) alike. A caller
+# that holds a run (build-both.sh, a probe kit run, mac-sim.ts) passes
+# CAWCO_HEAVY_RUN_HELD and takes none here.
+if [[ -z ${CAWCO_HEAVY_RUN_HELD:-} ]]; then
+  exec "$HOME/.local/bin/cawco" heavy-run "$(printf '%q ' bash "$0" "${ARGS[@]}")"
+fi
 LABEL="$(basename "$PWD") $(basename "$1") (pid $$)"
 
 read -r -d '' KEEPER <<'EOF' || true
@@ -85,6 +99,12 @@ for devices in json.load(sys.stdin)["devices"].values():
         if d["name"] == sys.argv[1]:
             print(d["udid"])
 ' "CawCo slot $SLOT"); do
+    # Maestro's runner on it (scripts/lib/sim-touch.ts): the `xcodebuild
+    # test-without-building` its `maestro hierarchy` leaves up, which nothing
+    # else ends and which outlives its simulator's deletion, idle under
+    # launchd (three, 1.5 days old, on 2026-10-17). In a workspace the
+    # boundary's xcodebuild shim puts its flags between the two words.
+    pkill -f "[x]codebuild .*test-without-building .*-destination id=$udid( |$)" || true
     xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
     xcrun simctl delete "$udid" >/dev/null 2>&1 || true
     echo "mac-slot: deleted simulator CawCo slot $SLOT $udid" >&2

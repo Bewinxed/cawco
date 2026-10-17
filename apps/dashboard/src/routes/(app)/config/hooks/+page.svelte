@@ -1,8 +1,7 @@
 <script lang="ts">
   import { hookSentence } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { deleteHook } from "#lib/cawco/config/deletes.js";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -14,13 +13,13 @@
     draftOf,
     type FleetHook,
     HOOK_TEMPLATES,
-    removeHook,
     saveHook,
   } from "#lib/cawco/hooks.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
@@ -56,29 +55,16 @@
     }
   }
 
-  /**
-   * A hook is executable material on every machine — never a bare click. The
-   * question stands under its row, in the page.
-   */
-  const asks = new Asker<AskHereRequest>();
-  async function askRemove(row: FleetHook) {
-    await asks.ask({
-      at: row.id,
-      title: `Delete ${row.name}?`,
-      body: "This hook stops running and is removed from every machine that had it. You can always write it again, but there's no undo.",
-      confirmLabel: "Delete hook",
-      destructive: true,
-      pendingLabel: "Deleting…",
-      run: async () => {
-        busy[row.id] = true;
-        try {
-          await removeHook(row.id, row.name);
-          store.hooks.value = hooks.filter((other) => other.id !== row.id);
-        } finally {
-          delete busy[row.id];
-        }
-      },
-    });
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
+  async function remove(row: FleetHook) {
+    busy[row.id] = true;
+    try {
+      await deleteHook(store, row);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      delete busy[row.id];
+    }
   }
 
   async function useTemplate(template: (typeof HOOK_TEMPLATES)[number]) {
@@ -165,7 +151,7 @@
               label: "Delete hook",
               icon: IconTrash,
               destructive: true,
-              onselect: () => askRemove(row),
+              onselect: () => remove(row),
             },
           ]}
           enabled={row.enabled}
@@ -187,7 +173,6 @@
             />
           {/snippet}
           {#snippet below()}
-            <AskHere asker={asks} at={row.id} />
             <RowFault
               again={() => toggle(row, !row.enabled)}
               reason={toggleFailed[row.id]}

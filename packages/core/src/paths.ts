@@ -459,6 +459,13 @@ export const sessionWakeupsDir = (): string =>
   join(cawcoDataDir(), "session-wakeups");
 
 /**
+ * The sends each session has taken, one file per session named by its
+ * instance id, kept until the session is stopped (agent `taken-sends.ts`).
+ */
+export const sessionTakenDir = (): string =>
+  join(cawcoDataDir(), "session-taken");
+
+/**
  * This machine's Claude Code version as its last `claude --version` answered,
  * with the binary it was read from (agent `claude-version.ts`), so an agent's
  * restart, which every update is, starts knowing it.
@@ -772,6 +779,28 @@ export const workspaceAccountsFile = (id: string): string =>
   join(workspaceStateDir(id), "accounts.json");
 
 /**
+ * The folders a workspace's sessions' harnesses save a tool result too large
+ * to hand the model in, a JSON list of absolute paths the agent adds to as
+ * each session spawns there (`boundaryFor`), one per session, so the
+ * workspace reads each (`workspacePolicy`). In the state dir, which nothing
+ * inside the boundary writes.
+ */
+export const workspaceSpillsFile = (id: string): string =>
+  join(workspaceStateDir(id), "spills.json");
+
+/** The dir in a workspace's state dir that holds each {@link workspaceSpillDir}. */
+export const SPILLS_DIR_NAME = "spills";
+
+/**
+ * Where workspace `id`'s pi or OpenCode session `instanceId` keeps its
+ * harness's saved tool results ({@link workspaceSpillsFile}): in the state
+ * dir, which nothing inside the boundary writes, so a command reads them and
+ * never puts a file or a link there for the host to write through.
+ */
+export const workspaceSpillDir = (id: string, instanceId: string): string =>
+  join(workspaceStateDir(id), SPILLS_DIR_NAME, instanceId);
+
+/**
  * The project a workspace's work belongs to, a JSON string of its id the
  * agent writes as the workspace is cut and as each work item's session
  * spawns there (`boundaryFor`), so the workspace reads that project's folder
@@ -866,6 +895,32 @@ export const darwinUserDirs = async (): Promise<string[]> =>
         })
       )
     : [];
+
+/**
+ * macOS: where a scratch fleet that workspace `id` runs (scripts/
+ * scratch-fleet.ts) keeps its sandbox and its services' HOMEs, in the user's
+ * temp folder, `cawco-<id8>`; none elsewhere. Not the workspace's scratch
+ * dir: OpenCode resolves every folder above a location (its config
+ * discovery, 2.0.29 to 2.0.32), and Bun resolves a folder on macOS by
+ * opening it, which the boundary refuses for every folder above one under
+ * home, where a folder answers a lookup alone (boundary-policy.ts
+ * `seatbeltProfile`): "EPERM … lstat '/Users/…/.cawco/tmp'", and every
+ * location read answered 500. Nothing above the user's temp folder is
+ * refused. No socket goes here: the boundary keeps the host's sockets in it
+ * out of reach. The workspace's archive removes it (agent workspace.ts).
+ *
+ * Bun's realpath on macOS opens the folder `O_RDONLY` and asks
+ * `fcntl(F_GETPATH)` (oven-sh/bun#44606, open; fixed by PR #38365, which
+ * calls realpath(3), or #42374, which asks `getattrlist(ATTR_CMN_FULLPATH)`,
+ * neither merged as of Bun 1.4.2). Once OpenCode ships a Bun with that fix,
+ * the fleet goes back to the scratch dir and this folder goes.
+ */
+export const workspaceFleetDir = async (
+  id: string
+): Promise<string | undefined> => {
+  const [temp] = await darwinUserDirs();
+  return temp ? join(temp, `cawco-${id.slice(0, 8)}`) : undefined;
+};
 
 /**
  * Where the impeccable skill's engine is installed on the host, one folder
@@ -1045,7 +1100,7 @@ export const workspaceCacheEnv = (): Record<string, string> => {
 
 /**
  * The name of a file that holds secrets wherever it lies: `.env`,
- * `.env.local`, `.envrc`, `tunnel.env`, `telegram.env.bak`. A basename
+ * `.env.local`, `.envrc`, `tunnel.env`, `hub.env.bak`. A basename
  * pattern without anchors, in the syntax JavaScript, Perl and POSIX extended
  * regexes share: Seatbelt matches it as `/(…)$` on a path. No workspace reads
  * one outside its own clone; its own repository's are copied into its clone
@@ -1084,7 +1139,7 @@ export const credentialStores = (): string[] => {
     accountsRoot(),
     // Session credentials, OpenCode's bridge credentials, redaction values.
     sessionIdentityDir(),
-    // The hub's env file (its Telegram token), the release signing key, the
+    // The hub's env file, the release signing key, the
     // machine's key the hub admitted it with (machine-key.ts).
     cawcoConfigDir(),
     // The hub's database (fleet MCP OAuth tokens, API keys, push device

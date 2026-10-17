@@ -37,10 +37,8 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   RoutineMadeEvent,
-  Rule,
   RuleMatchKind,
   RuleScope,
-  RuleState,
   RuleTiming,
   RuleWatch,
   SendAttachment,
@@ -75,6 +73,7 @@ import type {
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
+import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
 import type {
   AuthorizationServerMetadata,
   OAuthClientInformationFull,
@@ -597,11 +596,11 @@ export const projects = sqliteTable("projects", {
     .default(false),
   /**
    * Whether its sessions may post to repositories that are not its own
-   * (core upstream-guard.ts): off keeps them off, and a write to another
-   * repository does not run. Null: the fleet's answer
-   * ({@link upstreamSettings}).
+   * (core upstream-guard.ts `UpstreamPosts`): `off` keeps them off, `ask`
+   * holds each post for the person, `on` lets them. Null: the fleet's
+   * answer ({@link upstreamSettings}).
    */
-  upstreamPosts: integer("upstream_posts", { mode: "boolean" }),
+  upstreamPosts: text("upstream_posts", { enum: UPSTREAM_POSTS }),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1284,11 +1283,13 @@ export const workspaces = sqliteTable("workspaces", {
   /** When {@link workspaces.holding} was read. */
   heldAt: timestamp("held_at"),
   /**
-   * The commit its last item landed, on `origin`'s branch that holds it: a
-   * retired workspace is cut again there for its delegate to go on. Null
-   * until an item lands a commit.
+   * The commit its clone's HEAD was on when it retired, on `origin`'s branch
+   * that held it then, as its machine read it right before deleting the
+   * clone (agent workspace.ts `headOnOrigin`): a retired workspace is cut
+   * again there for its delegate to go on, and one with none is not cut
+   * again (work-items.ts `recuttable`). Null until it retires.
    */
-  landed: text("landed", { mode: "json" }).$type<WorkspaceCut>(),
+  head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
    * The carry its discard wrote on its machine, the person letting its
    * unlanded work go: such a workspace is never cut again.
@@ -2011,19 +2012,6 @@ export const fleetMemoryHistory = sqliteTable("fleet_memory_history", {
     .$defaultFn(() => new Date()),
 });
 
-/** Small settings the hub keeps by id: the Telegram bridge's chat. */
-export const credentials = sqliteTable("credentials", {
-  id: text("id").primaryKey(),
-  /** The setting, as JSON. */
-  blob: text("blob", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .notNull(),
-  expiresAt: timestamp("expires_at"),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
 /**
  * One (session, model, quarter hour) bucket of usage the agent reports
  * (USAGE-SPEC.md §6.1). The id is the full `${machineId}:${harness}:
@@ -2436,7 +2424,9 @@ export const turnUsage = sqliteTable(
     outputTokens: integer("output_tokens").notNull(),
     /**
      * Claude: the change in its `modelUsage[model].costUSD`, Claude Code's own
-     * price. OpenCode and pi: the model's list rates. Null when unpriced.
+     * price. OpenCode and pi: the sum of each request's own price at the
+     * model's list rates and its prompt's tier, as the agent sent it. Null
+     * when unpriced.
      */
     costUsd: real("cost_usd"),
     keepAlive: integer("keep_alive", { mode: "boolean" }).notNull(),
@@ -2553,19 +2543,46 @@ export const ruleState = sqliteTable(
   ]
 );
 
+/** What a config delete can move into {@link configTrash}. */
+export type TrashKind =
+  | "rule"
+  | "hook"
+  | "skill"
+  | "plugin"
+  | "marketplace"
+  | "agent"
+  | "mcp"
+  | "delegateType"
+  | "memory"
+  | "memoryDoc"
+  | "connection";
+
+/** One table's rows, as the driver reads them: every column, sealed ones still sealed. */
+export interface TrashedRows {
+  rows: Record<string, string | number | null>[];
+  table: string;
+}
+
 /**
- * A deleted rule, kept whole for its undo window (rules-trash.ts): the rule
- * and every session's standing with it, as they stood. Out of `rules` and
- * `rule_state`, so nothing that reads them sees it while it waits. It goes
- * with its project, as the rule itself does.
+ * A deleted config item, kept whole for its undo window (JOURNEY.md Flow 5:
+ * "an undo affordance after the fact rather than a confirm dialog before
+ * it"): its row and every row that hangs off it (a rule's sessions'
+ * standing, an MCP server's sign-in, a document's projects), as the driver
+ * read them, so a restore puts back every column, dates and sealed secrets
+ * as they were. Out of the live tables, so nothing that reads them sees it
+ * while it waits. One bound to a project goes with its project, as the item
+ * itself does. The id is what the dashboard's Undo names.
  */
-export const ruleTrash = sqliteTable("rule_trash", {
-  ruleId: text("rule_id").primaryKey(),
-  scopeProjectId: text("scope_project_id").references(() => projects.id, {
+export const configTrash = sqliteTable("config_trash", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").$type<TrashKind>().notNull(),
+  /** The item's own key: a rule's id, a skill's name, a document's path. */
+  key: text("key").notNull(),
+  projectId: text("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
-  rule: text("rule", { mode: "json" }).$type<Rule>().notNull(),
-  states: text("states", { mode: "json" }).$type<RuleState[]>().notNull(),
+  /** The item's own table first, then what hangs off it, in insert order. */
+  rows: text("rows", { mode: "json" }).$type<TrashedRows[]>().notNull(),
   deletedAt: timestamp("deleted_at").notNull(),
 });
 
@@ -2749,13 +2766,14 @@ export const fleetWatchSettings = sqliteTable("fleet_watch_settings", {
  * The fleet's upstream choice (core upstream-guard.ts), asked once in
  * onboarding — one row, keyed `'upstream'`, following the
  * {@link spendSettings} precedent: whether sessions may post to repositories
- * that are not their project's, where the project sets nothing. No row, or a
- * null `posts`, is never answered: sessions may, and the dashboard asks.
+ * that are not their project's, where the project sets nothing: `off`, `ask`
+ * or `on`. No row, or a null `posts`, is never answered: sessions may, and
+ * the dashboard asks.
  */
 export const upstreamSettings = sqliteTable("upstream_settings", {
   /** Always `'upstream'`. */
   id: text("id").primaryKey(),
-  posts: integer("posts", { mode: "boolean" }),
+  posts: text("posts", { enum: UPSTREAM_POSTS }),
   answeredAt: timestamp("answered_at"),
 });
 
@@ -3086,7 +3104,7 @@ export const machineKeys = sqliteTable("machine_keys", {
 });
 
 /**
- * Notifications a device or Telegram was shown and nobody has cleared yet
+ * Notifications a device was shown and nobody has cleared yet
  * (notifications.ts), by collapse id: a look or a settle clears only what
  * was sent, so looking at a session no notification named sends nothing.
  * Pruned after three days.
@@ -3686,8 +3704,8 @@ export const cawTurns = sqliteTable(
     }),
     /**
      * The harness whose own result said what the turn cost: Claude Code's
-     * `total_cost_usd`, OpenCode's assistant messages' `cost` (the agent's
-     * adapter sums them into the same field). Turns booked before it was
+     * `total_cost_usd`, or the agent's OpenCode adapter's, which sums each
+     * request's CawCo price (`costForUsage`) into the same field. Turns booked before it was
      * recorded take their project's Caw harness then (migration 0096).
      */
     harness: text("harness"),

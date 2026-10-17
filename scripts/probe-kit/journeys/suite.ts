@@ -251,7 +251,7 @@ export async function bootFleet(
   const chose = await fetch(`${fleet.base}/api/fleet/choices`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ upstream: false }),
+    body: JSON.stringify({ upstream: "off" }),
   });
   if (!chose.ok) {
     throw new Error(

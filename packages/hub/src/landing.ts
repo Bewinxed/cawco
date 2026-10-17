@@ -66,11 +66,20 @@ export interface Refusal {
   tries?: number;
 }
 
+/**
+ * A landing whose item was stopped before it pushed
+ * ({@link LandingDeps.stopped}): nothing went anywhere.
+ */
+export interface Stopped {
+  kind: "stopped";
+}
+
 /** What a landing came to. `F` is how the caller describes a failed gate. */
 export type LandingOutcome<F> =
   | { kind: "landed"; sha: string; rebased: boolean }
   | { kind: "nothing" }
   | { kind: "no-remote" }
+  | Stopped
   | { kind: "dirty"; files: string }
   | { kind: "conflict"; files: string }
   | Failed<F>
@@ -131,6 +140,13 @@ export interface LandingDeps<F> {
    * the hub collects rather than lands, committed or not.
    */
   skip?: string[];
+  /**
+   * Whether the item this lands was stopped since the landing began: asked
+   * before each turn and right before each push, so a stop ends a landing
+   * that queued or gated before it ({@link Stopped}). Before 2026-10-17 a
+   * landing stopped while queued still pushed when its turn came.
+   */
+  stopped?: () => boolean;
   /** This landing in the queue: how others name it, and how it hears its wait. */
   turn?: LandingTurn;
 }
@@ -361,6 +377,9 @@ export async function land<F>(
   }
   const key = `${deps.repo ?? start.remote}#${base}`;
   for (;;) {
+    if (deps.stopped?.()) {
+      return { kind: "stopped" };
+    }
     // biome-ignore lint/performance/noAwaitInLoops: an item that stepped out of its turn gates again before it queues again
     const gated = await onBase(base, deps, false);
     if (gated.kind !== "on-base") {
@@ -468,9 +487,15 @@ async function attempt<F>(
 ): Promise<LandingOutcome<F>> {
   const run = (cmd: string, timeoutMs: number) =>
     deps.run(cmd, timeoutMs, true);
+  if (deps.stopped?.()) {
+    return { kind: "stopped" };
+  }
   const gated = await onBase(base, deps, true);
   if (gated.kind !== "on-base") {
     return gated;
+  }
+  if (deps.stopped?.()) {
+    return { kind: "stopped" };
   }
   const { head: after, rebased } = gated;
   const pushed = await run(
@@ -504,6 +529,7 @@ export type BranchOutcome =
   | { kind: "nothing" }
   | { kind: "no-remote" }
   | { kind: "dirty"; files: string }
+  | Stopped
   | Refusal;
 
 /** The workspace's HEAD and its remote, as both landings start: only commits go anywhere. */
@@ -538,7 +564,10 @@ async function ready(
 export async function pushBranch(
   base: string,
   branch: string,
-  deps: Pick<LandingDeps<unknown>, "queue" | "repo" | "run" | "skip" | "turn">
+  deps: Pick<
+    LandingDeps<unknown>,
+    "queue" | "repo" | "run" | "skip" | "stopped" | "turn"
+  >
 ): Promise<BranchOutcome> {
   const { run } = deps;
   const start = await ready(run, deps.skip);
@@ -548,6 +577,9 @@ export async function pushBranch(
   return await deps.queue(
     `${deps.repo ?? start.remote}#${branch}`,
     async () => {
+      if (deps.stopped?.()) {
+        return { kind: "stopped" };
+      }
       const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
       if (fetched.exitCode !== 0) {
         return refusal("fetch", fetched);
@@ -563,6 +595,9 @@ export async function pushBranch(
         return { kind: "nothing" };
       }
       const sha = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
+      if (deps.stopped?.()) {
+        return { kind: "stopped" };
+      }
       const refused = await leasedPush(run, `refs/heads/${branch}`, 1);
       return refused && !(await holds(run, `refs/heads/${branch}`, sha))
         ? refused

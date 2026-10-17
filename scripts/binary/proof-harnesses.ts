@@ -140,8 +140,9 @@ function session(
     // A turn, as far as a session with no model takes one: the message goes
     // to its process through the keeper that holds it (the write is acked
     // only by a keeper that answers and holds that child alive), the session
-    // makes the tool calls the message names ({@link toolCalls}), answers
-    // with the words it was sent and what each call said, and ends the turn.
+    // says it read it as it starts the turn, as a real harness does, makes
+    // the tool calls the message names ({@link toolCalls}), answers with the
+    // words it was sent and what each call said, and ends the turn.
     send: (message) => {
       const text =
         typeof message.message.content === "string"
@@ -150,15 +151,17 @@ function session(
       ctx.busy(true);
       client
         .write(procId, `${text}\n`)
-        .then(() => tookTurn(instanceId, message.uuid, text))
+        .then(() => {
+          ctx.frame({
+            type: "system",
+            subtype: MESSAGES_READ,
+            read: [message.uuid],
+          });
+          return tookTurn(instanceId, message.uuid, text);
+        })
         .then(() => toolCalls(procId, text))
         .then(
           (said) => {
-            ctx.frame({
-              type: "system",
-              subtype: MESSAGES_READ,
-              read: [message.uuid],
-            });
             const answer = [`proof answered: ${text}`, ...said].join("\n");
             ctx.frame({
               type: "assistant",

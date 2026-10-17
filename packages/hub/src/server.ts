@@ -346,8 +346,18 @@ import {
   type StageOpened,
   type StageState,
 } from "@cawco/core/stage";
-import type { UpstreamRules } from "@cawco/core/upstream-guard";
+import {
+  otherWrite,
+  type UpstreamRules,
+  writeRefusal,
+} from "@cawco/core/upstream-guard";
+import {
+  CONTROL_UPSTREAM_POST,
+  isUpstreamPost,
+  type PostMade,
+} from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
+import { isLeadPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
@@ -434,6 +444,7 @@ import {
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
+import { dashboardUrl, secureDashboardUrl } from "./dashboard-url";
 import type {
   AgentAuth,
   BoardInstanceRow,
@@ -453,13 +464,14 @@ import {
   checkoutOf,
   hashHookMaterial,
   listedAt,
-  RULE_UNDO_MS,
+  MEMORY_ID,
   TURN_UNRECORDED,
 } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
-import type { PriorConversation } from "./db/schema";
+import type { PriorConversation, TrashKind } from "./db/schema";
+import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
   createDecisions,
@@ -486,6 +498,7 @@ import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
   setFleetChoices,
+  UPSTREAM_POSTS_SCHEMA,
 } from "./fleet-choices";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
@@ -550,16 +563,20 @@ import { createNoticesSeen } from "./notices";
 import {
   askCollapseId,
   createNotifications,
+  messageCollapseId,
   notificationRoutes,
+  runCollapseId,
   turnCollapseId,
 } from "./notifications";
 import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
-import type { AnswerFrom, PendingShape } from "./pending";
 import {
+  type AnswerFrom,
   answerPermission,
   answerWorkflow,
   onPermissionAnswer,
   onWorkflowAnswer,
+  outlivesSession,
+  type PendingShape,
   workflowRunOf,
 } from "./pending";
 import { createPlaceRepos } from "./place-repo";
@@ -665,12 +682,6 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import {
-  dashboardUrl,
-  type MediaReader,
-  secureDashboardUrl,
-  type TelegramBridge,
-} from "./telegram";
 import { createThreadRepair } from "./thread-repair";
 import {
   createTranscripts,
@@ -680,7 +691,8 @@ import {
 } from "./transcripts";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
-import { upstreamRules } from "./upstream";
+import { upstreamRuleOf, upstreamRules } from "./upstream";
+import { createUpstreamAsks, heldPostOf } from "./upstream-asks";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
@@ -1028,6 +1040,8 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
+const UPSTREAM_POST_MS = 6 * 60_000;
 
 /**
  * Statuses a session's row holds once its process has ended, or once its end
@@ -1332,8 +1346,6 @@ export interface HubServices {
   readonly lifetime: HubLifetimeShape;
   readonly pending: PendingShape;
   readonly registry: RegistryShape;
-  /** Absent unless the hub was given a bot token; every call site guards for it. */
-  readonly telegram?: TelegramBridge;
 }
 
 const isEnvelope = (value: unknown): value is Envelope =>
@@ -2510,7 +2522,7 @@ export interface ServerOptions {
 }
 
 export const createServer = (
-  { build: hubBuild, registry, db, pending, telegram, lifetime }: HubServices,
+  { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { background = true }: ServerOptions = {}
 ) => {
   // Honest ground, before anything is served. A fresh process holds no agent
@@ -2661,7 +2673,7 @@ export const createServer = (
   };
 
   // An ask that leaves the hub's pending list is over on every screen: one
-  // frame, whichever path settled it (an answer from any device, Telegram, a
+  // frame, whichever path settled it (an answer from any device, a
   // parent session or a workflow; a harness settling it itself; a timeout; its
   // process ending). Without it every other client kept a card nobody could
   // answer until it reconnected. An answer in flight carries what it says and
@@ -2677,7 +2689,6 @@ export const createServer = (
   // client had the session in front since it landed, cleared on every device
   // once it is over.
   const notifications = createNotifications({ db, lifetime, registry });
-  telegram?.setNotifications(notifications);
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
     db,
@@ -2688,7 +2699,7 @@ export const createServer = (
   /**
    * An ask the hub itself raises for the person — a workflow's question, an
    * admin write — parked like a session's own: on the pending ledger, to every
-   * dashboard, and to Telegram and push the first time.
+   * dashboard, and to push the first time.
    */
   const parkForPerson = (envelope: Envelope, outlivesHub = false): void => {
     if (!envelope.requestId) {
@@ -2705,7 +2716,6 @@ export const createServer = (
           !existed &&
           (envelope.payload as { routedTo?: string }).routedTo !== "parent"
         ) {
-          telegram?.onAsk(envelope);
           push.onAsk(envelope);
         }
       }
@@ -2756,28 +2766,110 @@ export const createServer = (
         .join("\n")
         .trim();
     },
-    tell: (instanceId, text) => {
-      const [row] = db.getInstancesByIds([instanceId]);
-      if (!row) {
-        return;
-      }
-      deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: text },
-            parent_tool_use_id: null,
-            origin: { kind: "system", name: "admin" },
-          },
-        },
-      });
-    },
+    tell: (instanceId, text) => tellSession(instanceId, text, "admin"),
     // A project's Caw asks in his thread (caw.ts, made further down).
+    threadOf: (actor) => lead?.askThread(actor),
+  });
+  /** Says something to a session, as the hub (`origin` names who). */
+  const tellSession = (instanceId: string, text: string, name: string) => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content: text },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name },
+        },
+      },
+    });
+  };
+  /**
+   * The session a workspace's held post is its ask: a project's Caw for his
+   * place (caw.ts `leadPlaceRef`), else the session of the workspace's
+   * newest work item. On `machineId` alone when a machine raised it.
+   */
+  const upstreamAsker = (
+    workspaceId: string,
+    machineId: string | undefined
+  ): InstanceRow | undefined => {
+    const on = (row: InstanceRow) => !machineId || row.machineId === machineId;
+    if (isLeadPlace(workspaceId)) {
+      return db
+        .listInstances()
+        .find((row) => on(row) && leadPlaceRef(row)?.id === workspaceId);
+    }
+    const workspace = db
+      .workspacesNamed(workspaceId)
+      .find((one) => one.id === workspaceId);
+    if (!workspace || (machineId && workspace.machineId !== machineId)) {
+      return;
+    }
+    for (const item of db.workItemsIn(workspaceId)) {
+      const [row] = db.getInstancesByIds([item.instanceId]);
+      if (row) {
+        return row;
+      }
+    }
+  };
+  // Posts to other people's repositories held for the person under "Ask me
+  // first" (upstream-asks.ts): kept across a restart, and past the session's
+  // process, since the hub makes each one itself once approved.
+  const upstreamAsks = createUpstreamAsks({
+    park: (envelope) => parkForPerson(envelope, true),
+    parked: (requestId) => pending.get(requestId),
+    pending: () => pending.list(),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+    make: async (machineId, workspaceId, post) => {
+      const made = await callAgent(
+        machineId,
+        CONTROL_UPSTREAM_POST,
+        [workspaceId, post],
+        UPSTREAM_POST_MS
+      );
+      if (made.kind === "unanswered") {
+        return {
+          ok: false,
+          said:
+            made.reason === "dead"
+              ? `${machineName(machineId)} is not connected, so nothing was posted.`
+              : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
+        };
+      }
+      return made.value.ok
+        ? (made.value.result as PostMade)
+        : {
+            ok: false,
+            said: made.value.error ?? "The machine refused the post.",
+          };
+    },
+    callConnection: async (post, requestId) => {
+      const called = await connections.callOnce(
+        post.connection,
+        post.tool,
+        { ...post.args },
+        { "dev.cawco/idempotency-key": requestId, "idempotency-key": requestId }
+      );
+      if (called.kind !== "answered") {
+        return { ok: false, said: called.error };
+      }
+      const said = (called.result.content ?? [])
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("\n")
+        .trim();
+      return { ok: called.result.isError !== true, said };
+    },
+    tell: (instanceId, text) => tellSession(instanceId, text, "upstream"),
     threadOf: (actor) => lead?.askThread(actor),
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
@@ -2873,7 +2965,7 @@ export const createServer = (
     const answer =
       outcome === "answered" ? (answering?.answer ?? said?.answer) : undefined;
     push.onSettled(parked.requestId);
-    // Over on every device: its push taken down, its Telegram message deleted.
+    // Over on every device: its push taken down.
     notifications.clear([askCollapseId(parked.requestId)], "settled");
     // An admin write whose ask left unanswered (its session ended) is refused.
     if (outcome === "cancelled") {
@@ -2911,8 +3003,11 @@ export const createServer = (
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
     // A move's approval is kept on its `moving` row, which no process holds;
     // the move settles one no job waits on (moves.ts `resume`).
+    // A post held for the person stays whatever its session is doing
+    // (upstream-asks.ts): the hub makes it.
     if (!(
-      row && ["running", "starting", "unknown", "moving"].includes(row.status)
+      outlivesSession(parked) ||
+      (row && ["running", "starting", "unknown", "moving"].includes(row.status))
     )) {
       droppedAtStart.push(parked);
       pending.forget(parked.instanceId ?? "");
@@ -4076,8 +4171,8 @@ export const createServer = (
 
   /**
    * Drops a dead process's parked questions, telling whoever carried them
-   * elsewhere that they are over — a Telegram message whose buttons still work
-   * after the session behind them is gone is a message that lies.
+   * elsewhere that they are over — a push whose buttons still work after the
+   * session behind them is gone is a notification that lies.
    */
   const forgetPending = (
     instanceId: string,
@@ -4096,7 +4191,11 @@ export const createServer = (
       // What it had asked the person is asked again if it runs again.
       if (keep === "all") {
         noteWithdrawn(
-          pending.list().filter((ask) => ask.instanceId === instanceId)
+          pending
+            .list()
+            .filter(
+              (ask) => ask.instanceId === instanceId && !outlivesSession(ask)
+            )
         );
       }
       pending.forget(instanceId);
@@ -4251,8 +4350,8 @@ export const createServer = (
   /**
    * A session just died — a parent, or a project's lead — while an ask routed
    * to it was still parked. The user is the fallback: re-broadcast the ask
-   * untagged so it returns to the attention queue, and let Telegram and push
-   * hear it like any other. A routed ask must never sit unanswerable and
+   * untagged so it returns to the attention queue, and let push hear it like
+   * any other. A routed ask must never sit unanswerable and
    * invisible.
    */
   const escalateRoutedAsks = (recipientId: string): void => {
@@ -4267,7 +4366,6 @@ export const createServer = (
         `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
       );
       registry.broadcast(clientCopy(parked));
-      telegram?.onAsk(parked);
       push.onAsk(parked);
     }
   };
@@ -5176,6 +5274,22 @@ export const createServer = (
     if (signal.kind === "read") {
       takeRead(instanceId, signal.read);
     }
+  };
+
+  /**
+   * A send handed over again that its machine says the session took already
+   * (agent taken-sends.ts): no turn started on it, so it is read with none to
+   * follow. One settled meanwhile stands.
+   */
+  const takeTaken = (instanceId: string, uuid: string): void => {
+    const row = db.sendRecord(uuid);
+    if (row?.instanceId !== instanceId || row.state !== "pending") {
+      return;
+    }
+    console.log(
+      `[hub] send ${uuid} to ${instanceId} read: its session took it already`
+    );
+    readSend(row, false);
   };
 
   /**
@@ -10695,7 +10809,7 @@ export const createServer = (
 
   /**
    * Every summariser session this hub has started, its rows' kind: internal
-   * workers no rule, fleet watch, usage count, hand-back or Telegram hears, and
+   * workers no rule, fleet watch, usage count or hand-back hears, and
    * no board lists. Seeded from the rows, so a hub restart still knows them.
    */
   const summarisers = new Set(
@@ -13843,8 +13957,6 @@ export const createServer = (
   };
 
   hubAuth.setHooks({
-    asked: (request) => telegram?.askPairing(request),
-    settled: (code, verdict) => telegram?.settlePairing(code, verdict),
     changed: (frame) =>
       registry.broadcast({
         verb: "frames",
@@ -13891,10 +14003,6 @@ export const createServer = (
       }
     },
   });
-  // The pinned chat approves a pairing as a paired device does.
-  telegram?.setPairingAnswer((code, approve) =>
-    hubAuth.answer(code, approve, "via Telegram")
-  );
   // A hub that requires paired devices keys its own machine at every start,
   // so its agent never waits for a click.
   const keyAtStart = () => {
@@ -14455,8 +14563,6 @@ export const createServer = (
       behavior === "deny" ? "denied" : "answered"
     );
   };
-  // Telegram's replies use the same recorded send path as every other device.
-  telegram?.setSender((envelope) => deliverSend(envelope)?.state !== "failed");
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
     for (const install of pendingInstalls.values()) {
@@ -14913,17 +15019,20 @@ export const createServer = (
     }
   };
 
-  /** A document leaving the set, kept whole — nothing else has a copy of it. */
-  const keepRemovedDoc = (doc: {
-    path: string;
+  /**
+   * The main file or a document leaving the fleet, kept in its history —
+   * nothing else has a copy of it once the trash lets it go.
+   */
+  const keepRemovedMemory = (row: {
+    path?: string;
     content: string;
     hash: string;
   }): void => {
     db.recordFleetMemory({
-      content: doc.content,
-      hash: doc.hash,
+      content: row.content,
+      hash: row.hash,
       source: "fleet",
-      path: doc.path,
+      ...(row.path === undefined ? {} : { path: row.path }),
     });
   };
 
@@ -14981,18 +15090,26 @@ export const createServer = (
 
   /**
    * One picture or video off a machine's disk, read the moment someone looks
-   * at it: the transcript card and the Telegram bridge both point at the path
-   * an agent named, and nothing is copied anywhere in between. A file the
+   * at it: the transcript card points at the path an agent named, and
+   * nothing is copied anywhere in between. A file the
    * machine will not hand over (moved, not a picture or video, over the size
    * limit) answers with the machine's own reason.
    */
-  const readMachineMedia: MediaReader = async (machineId, path) => {
+  const readMachineMedia = async (
+    machineId: string,
+    path: string
+  ): Promise<
+    | { bytes: Uint8Array<ArrayBuffer>; mediaType: string }
+    | "offline"
+    | "timeout"
+    | { refused: string }
+  > => {
     const agent = registry.agent(machineId);
     if (!agent) {
       return "offline";
     }
     const answer = await callFs(machineId, agent, { op: "media", path });
-    // MediaReader's own words for no answer (telegram.ts): "offline", "timeout".
+    // Its own words for no answer: "offline", "timeout".
     switch (answer.kind) {
       case "unanswered":
         return answer.reason === "dead" ? "offline" : "timeout";
@@ -15012,9 +15129,6 @@ export const createServer = (
     const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
     return { bytes, mediaType };
   };
-
-  // Registered here, after the reader exists — same shape as the answer recorder.
-  telegram?.setMediaReader(readMachineMedia);
 
   /**
    * Writes every fleet subagent into the user layer's `agents/` on one machine
@@ -15585,7 +15699,7 @@ export const createServer = (
    * would report the same outcome twice in two dialects.
    */
   /**
-   * One answer transaction for dashboards, Telegram and parent tools. The
+   * One answer transaction for dashboards, the app and parent tools. The
    * machine's receipt and the ledger's settlement must both precede success.
    * `from` is where it was given, said to every screen with the ask's end.
    */
@@ -15633,6 +15747,7 @@ export const createServer = (
       if (
         answerWorkflow(pending, requestId, result) ||
         adminAsks.answer(requestId, result) ||
+        upstreamAsks.answer(requestId, result) ||
         moves.answer(requestId, result)
       ) {
         if (receipt.outcome !== "answered") {
@@ -16874,6 +16989,7 @@ export const createServer = (
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     lifetime,
+    laws,
     readHistory,
     build: (machineId) =>
       db.listAgents().find((agent) => agent.machineId === machineId)?.build
@@ -17681,14 +17797,7 @@ export const createServer = (
         workflowId,
         resolveWorkflow: db.getWorkflow,
       }),
-    notifyUser: (text) => {
-      telegram?.onUserMessage({
-        verb: "frames",
-        machineId: "hub",
-        instanceId: "workflow",
-        payload: { kind: "user_message", instanceId: "workflow", text },
-      });
-    },
+    notifyPerson: (runId, text) => push.workflowNote(runId, text),
     supervisor: async (type, cwd, machineId, title, prompt) => {
       const preset = delegateTypes.list().find((entry) => entry.name === type);
       if (!preset) {
@@ -18739,6 +18848,8 @@ export const createServer = (
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
+    trash: (name) =>
+      db.trash.put({ kind: "connection", key: name }, Date.now()),
     typeConnections: (row) =>
       row.delegateType
         ? (projectTypes.resolveTypeFor(
@@ -18747,6 +18858,49 @@ export const createServer = (
           )?.connections ?? [])
         : [],
     changed: () => toolsMayHaveChanged(),
+    // A GitHub connection's write tool (github-mcp-server marks each read
+    // `ReadOnlyHint: true`, pkg/github/issues.go) naming another person's
+    // `owner`/`repo`: refused under off, held for the person under ask.
+    upstream: (actor, connection, tool, args) => {
+      const { owner, repo } = args;
+      if (
+        connection.service.trim().toLowerCase() !== "github" ||
+        tool.annotations?.readOnlyHint === true ||
+        typeof owner !== "string" ||
+        typeof repo !== "string"
+      ) {
+        return;
+      }
+      const rule = upstreamRuleOf(db, actor.projectId);
+      const write = otherWrite(rule, {
+        what: `${connection.name} ${tool.name}`,
+        repo: `github.com/${owner}/${repo}`,
+      });
+      if (rule.posts === "on" || !write?.repo) {
+        return;
+      }
+      if (rule.posts === "off") {
+        return {
+          isError: true,
+          content: [{ type: "text", text: writeRefusal(rule, write) ?? "" }],
+        };
+      }
+      const text = upstreamAsks.ask(
+        actor,
+        {
+          post: {
+            via: "mcp",
+            connection: connection.name,
+            tool: tool.name,
+            args,
+          },
+          repo: write.repo,
+          what: write.what,
+        },
+        `${connection.account || connection.name} (connection ${connection.name})`
+      );
+      return { content: [{ type: "text", text }] };
+    },
   });
   // Ingress (ingress.ts): events from GitHub and polled connections, each
   // stored once and routed to a routine or the lead's next wake.
@@ -18932,10 +19086,7 @@ export const createServer = (
     triageTools: (actor) => watch?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
       adminAsks.ask(actor, name, input, toolUseId),
-    sendToUser: telegram
-      ? (actor, message, attachments) =>
-          telegram.deliver(actor.machineId, actor.id, message, attachments)
-      : undefined,
+    sendToUser: (actor, message) => push.userMessage(actor.id, message),
     shownRefusal: (actor, tool, paths) =>
       shownRefusal(shownDeps, {
         instanceId: actor.id,
@@ -19110,6 +19261,12 @@ export const createServer = (
           throw new WorkItemRefusal(
             403,
             "That ask is a fleet-settings change waiting on the person; only they answer it."
+          );
+        }
+        if (heldPostOf(pending.get(answer.requestId))) {
+          throw new WorkItemRefusal(
+            403,
+            "That ask is a post to another person's repository waiting on the person (Ask me first); only they answer it."
           );
         }
         if (leadGate.owns(answer.requestId)) {
@@ -19899,7 +20056,8 @@ export const createServer = (
    * its parent told why, as every row in `error` takes its item
    * (work-items `followSessions`, on this publish) — and what it was sent
    * and never read waits, owed, for the session's next start, or fails with
-   * it when its conversation is gone.
+   * it when its conversation is gone. The owner's own session pushes that
+   * it failed (push.ts `sessionFailed`).
    */
   const processFailed = (
     machineId: string,
@@ -19912,9 +20070,7 @@ export const createServer = (
     workflowRuntime.observe(instanceId, reason);
     losePending(instanceId, reason !== CLAUDE_CONVERSATION_GONE, reason);
     escalateRoutedAsks(instanceId);
-    if (!summarisers.has(instanceId)) {
-      telegram?.onError(instanceId, reason);
-    }
+    push.sessionFailed(instanceId, reason);
     publishInstances(machineId);
   };
 
@@ -20833,6 +20989,56 @@ export const createServer = (
     publishInstances(message.machineId);
   };
 
+  /**
+   * A config item the trash just put back (db/trash.ts): what its delete
+   * stopped, started again, and the item as its list reads it.
+   */
+  const returned = async (kind: TrashKind, key: string): Promise<unknown> => {
+    switch (kind) {
+      case "rule": {
+        ruleEngine.reload();
+        const rule = db.getRule(key);
+        return rule ? ruleRowsOf([rule])[0] : null;
+      }
+      case "hook":
+        fanOutFleet();
+        return db.getFleetHook(key) ?? null;
+      case "skill":
+        fanOutFleet();
+        return db.listSkills().find((row) => row.name === key) ?? null;
+      case "plugin":
+        fanOutFleet();
+        return db.listPlugins().find((row) => row.id === key) ?? null;
+      case "marketplace":
+        fanOutFleet();
+        return (
+          db.fleetConfig().marketplaces.find((row) => row.name === key) ?? null
+        );
+      case "agent":
+        fanOutAgents();
+        return db.listFleetAgents().find((row) => row.name === key) ?? null;
+      case "mcp":
+        await fleetMcp.probe(key);
+        announceMcp();
+        return db.fleetConfig().mcp.find((row) => row.name === key) ?? null;
+      case "delegateType":
+        return delegateTypes.get(key) ?? null;
+      case "memory":
+        fanOutFleet();
+        return {
+          memory: db.getFleetMemory() ?? null,
+          docs: db.listFleetMemoryDocs(),
+        };
+      case "memoryDoc":
+        fanOutFleet();
+        return db.getFleetMemoryDoc(key) ?? null;
+      case "connection":
+        return connections.returned(key);
+      default:
+        throw unreachable(kind);
+    }
+  };
+
   // Everything is made: a hub that serves starts its work off the boot path.
   // One built only to be read starts none of it.
   if (background) {
@@ -20897,7 +21103,9 @@ export const createServer = (
         websocket(),
         hubAuth.routes(),
         dashboardErrorsRoutes(),
-        delegateTypesRoutes(delegateTypes),
+        delegateTypesRoutes(delegateTypes, (name) =>
+          db.trash.put({ kind: "delegateType", key: name }, Date.now())
+        ),
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)
         ),
@@ -21154,6 +21362,54 @@ export const createServer = (
           return { ok: true };
         }
       )
+      // A post to another person's repository a workspace held under "Ask me
+      // first" (agent github-door.ts, hub-git.ts), raised by its machine as
+      // the person's ask (upstream-asks.ts); answers what the session reads.
+      .post(
+        "/api/upstream/asks",
+        {
+          ...hidden,
+          body: t.Object({
+            workspaceId: t.String({ minLength: 1 }),
+            post: t.Any(),
+            repo: t.String({ minLength: 1 }),
+            account: t.String(),
+            what: t.String(),
+          }),
+        },
+        ({ body, request, server, status }) => {
+          const caller = hubAuth.callerOf(request, addressOf(server, request));
+          const { post, repo, what, workspaceId } = body;
+          if (!isUpstreamPost(post) || post.via === "mcp") {
+            return status(
+              400,
+              `cawco: \`${what}\` did not run: its post is not one a workspace holds.`
+            );
+          }
+          const actor = upstreamAsker(
+            workspaceId,
+            caller.kind === "machine" ? caller.machineId : undefined
+          );
+          if (!actor) {
+            return status(
+              404,
+              `cawco: \`${what}\` did not run: the hub holds no session of this workspace, so the owner could not be asked. Nothing was posted.`
+            );
+          }
+          const rule = upstreamRuleOf(db, actor.projectId);
+          if (rule.posts !== "ask" || !otherWrite(rule, { what, repo })) {
+            return status(
+              409,
+              `cawco: \`${what}\` did not run: this project's choice changed since the call (${writeRefusal(rule, { what, repo }) ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
+            );
+          }
+          return upstreamAsks.ask(
+            actor,
+            { post, repo, what, workspaceId, machineId: actor.machineId },
+            body.account
+          );
+        }
+      )
       .post(
         "/api/session-identities/install",
         {
@@ -21247,10 +21503,10 @@ export const createServer = (
       )
       // The hub's own build rides along (NEW.md §12), so a machine's can be read
       // against something rather than taken on faith. `dashboard` is where the
-      // web dashboard is reached (the one a Telegram link opens): the app
-      // takes a person there for what it has no screen of its own for yet.
-      // `secureDashboard` is its https address, or null: where the app's
-      // OpenRouter sign-in returns (telegram.ts `secureDashboardUrl`).
+      // web dashboard is reached: the app takes a person there for what it
+      // has no screen of its own for yet. `secureDashboard` is its https
+      // address, or null: where the app's OpenRouter sign-in returns
+      // (dashboard-url.ts `secureDashboardUrl`).
       .get("/health", hidden, async () => ({
         ok: true,
         version: HUB_VERSION,
@@ -22333,12 +22589,15 @@ export const createServer = (
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, runIds, at);
           if (body.kind === "look") {
-            // Looked at: its finished turn and its asks are read, so their
+            // Looked at: a session's finished turn or failure, its message
+            // and its asks, and a run's note, are read, so their
             // notifications come down.
             const looked = new Set(instanceIds);
             notifications.clear(
               [
                 ...instanceIds.map((id) => turnCollapseId(id)),
+                ...instanceIds.map((id) => messageCollapseId(id)),
+                ...runIds.map((id) => runCollapseId(id)),
                 ...pending
                   .list()
                   .flatMap((parked) =>
@@ -22587,11 +22846,18 @@ export const createServer = (
           return saved;
         }
       )
-      .delete("/api/fleet/mcp/:name", ({ params }) => {
-        db.deleteMcpServer(params.name);
+      // Into the trash with its sign-in, off every machine at once.
+      .delete("/api/fleet/mcp/:name", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "mcp", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no MCP server ${params.name}`);
+        }
         fleetMcp.forget(params.name);
         announceMcp();
-        return { ok: true };
+        return undoable(trashed);
       })
       .post("/api/fleet/mcp/:name/sign-in", async ({ params, status }) => {
         try {
@@ -22682,30 +22948,42 @@ export const createServer = (
         ruleEngine.reload();
         return rule;
       })
-      /**
-       * A delete is undone, not confirmed (JOURNEY.md Flow 5: "an undo
-       * affordance after the fact rather than a confirm dialog before it"):
-       * the rule stops at once and waits whole in the trash for
-       * `restorableForMs`, the window the dashboard's Undo stands for.
-       */
-      .delete("/api/rules/:id", ({ params }) => {
-        const trashed = db.trashRule(params.id, Date.now());
-        ruleEngine.reload();
-        return { ok: true, restorableForMs: trashed ? RULE_UNDO_MS : 0 };
-      })
-      /** Undo: the deleted rule back whole, as the list reads it. */
-      .post("/api/rules/:id/restore", ({ params, status }) => {
-        const rule = db.restoreRule(params.id, Date.now());
-        if (!rule) {
-          return status(
-            404,
-            "That rule can no longer be brought back: its undo has run out."
-          );
+      // The rule stops at once, into the trash with every session's standing.
+      .delete("/api/rules/:id", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "rule", key: params.id },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `there is no rule ${params.id}`);
         }
         ruleEngine.reload();
-        const [row] = ruleRowsOf([rule]);
-        return row;
+        return undoable(trashed);
       })
+      /**
+       * Undo, for every config delete (db/trash.ts): the item back whole,
+       * what its putting back sets going (a fan-out, a probe, the rule engine)
+       * set going, and the item as its list reads it, under `row`.
+       */
+      .post(
+        "/api/trash/:id/restore",
+        { params: t.Object({ id: t.Numeric() }) },
+        async ({ params, status }) => {
+          const back = db.trash.take(params.id, Date.now());
+          if (!back.ok) {
+            return back.why === "taken"
+              ? status(
+                  409,
+                  "Something of the same name was made while it waited, and that one stays."
+                )
+              : status(
+                  404,
+                  "It can no longer be brought back: its undo has run out."
+                );
+          }
+          return { kind: back.kind, row: await returned(back.kind, back.key) };
+        }
+      )
       /**
        * What a rule has actually been doing, per session: fires, and whether
        * each session is still pending on it. A session never sees the rule's
@@ -22916,10 +23194,16 @@ export const createServer = (
         { body: t.Object({ source: t.String({ minLength: 1 }) }) },
         ({ body }): MarketplaceLink => linkMarketplace(body.source.trim())
       )
-      .delete("/api/fleet/marketplaces/:name", ({ params }) => {
-        db.deleteMarketplace(params.name);
+      .delete("/api/fleet/marketplaces/:name", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "marketplace", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet links no marketplace ${params.name}`);
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       .put(
         "/api/fleet/plugins/:id",
@@ -22975,10 +23259,16 @@ export const createServer = (
         );
         return pluginRow(row);
       })
-      .delete("/api/fleet/plugins/:id", ({ params }) => {
-        db.deletePlugin(params.id);
+      .delete("/api/fleet/plugins/:id", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "plugin", key: params.id },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet installs no plugin ${params.id}`);
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // A plain skill is resolved here, once for the whole fleet: the hub
       // downloads it, and the machines are handed the files (NEW.md §11). The
@@ -23163,11 +23453,19 @@ export const createServer = (
         detach(fetchSkill(stored.name, stored.source), "skill refresh");
         return skillRow(stored);
       })
-      .delete("/api/fleet/skills/:name", ({ params }) => {
-        db.deleteSkill(params.name);
+      // Its files kept in its history, then into the trash, off every machine.
+      .delete("/api/fleet/skills/:name", ({ params, status }) => {
+        db.keepSkillVersion(params.name);
+        const trashed = db.trash.put(
+          { kind: "skill", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no skill ${params.name}`);
+        }
         skillChoices.delete(params.name);
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // What one skill used to be, newest first, without its files.
       .get(
@@ -23309,9 +23607,15 @@ export const createServer = (
       // read and write and no delete, so every machine keeps the file until Phase
       // B's daemon-side sync can take it away. Discovery then shows the leftover
       // as unmanaged, which is the truth rather than a comforting silence.
-      .delete("/api/fleet/agents/:name", ({ params }) => {
-        db.deleteFleetAgent(params.name);
-        return { ok: true };
+      .delete("/api/fleet/agents/:name", ({ params, status }) => {
+        const trashed = db.trash.put(
+          { kind: "agent", key: params.name },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no subagent ${params.name}`);
+        }
+        return undoable(trashed);
       })
       // The click for a machine that was asleep when a definition was written, and
       // for one whose home the hub could only work out later. Awaited, so the
@@ -23359,17 +23663,30 @@ export const createServer = (
       // it — a linked document with no main file to link it is not a memory, and
       // the machines would keep converging on documents nothing points at.
       // A scoped document is loaded on its own, linked by nothing, so it stays.
-      .delete("/api/fleet/memory", () => {
-        for (const doc of db.listFleetMemoryDocs()) {
-          if (doc.scope) {
-            continue;
-          }
-          keepRemovedDoc(doc);
-          db.deleteFleetMemoryDoc(doc.path);
+      // Each is kept in the history, and the set goes into the trash together.
+      .delete("/api/fleet/memory", ({ status }) => {
+        const main = db.getFleetMemory();
+        if (!main) {
+          return status(404, "the fleet keeps no memory");
         }
-        db.clearFleetMemory();
+        const linked = db.listFleetMemoryDocs().filter((doc) => !doc.scope);
+        keepRemovedMemory(main);
+        for (const doc of linked) {
+          keepRemovedMemory(doc);
+        }
+        const trashed = db.trash.put(
+          {
+            kind: "memory",
+            key: MEMORY_ID,
+            docs: linked.map((doc) => doc.path),
+          },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, "the fleet keeps no memory");
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // One document. Same save as the main file's, keyed by its path —
       // `models/claude-opus-5.md` is the same string on every machine, which
@@ -23453,10 +23770,16 @@ export const createServer = (
             return status(404, `the fleet keeps no ${body.path}`);
           }
 
-          keepRemovedDoc(current);
-          db.deleteFleetMemoryDoc(body.path);
+          keepRemovedMemory(current);
+          const trashed = db.trash.put(
+            { kind: "memoryDoc", key: body.path },
+            Date.now()
+          );
+          if (trashed === undefined) {
+            return status(404, `the fleet keeps no ${body.path}`);
+          }
           fanOutFleet();
-          return { ok: true };
+          return undoable(trashed);
         }
       )
       // What one machine really has, without touching anything: the read behind
@@ -23545,7 +23868,7 @@ export const createServer = (
               if (theirs.has(doc.path) || doc.scope) {
                 continue;
               }
-              keepRemovedDoc(doc);
+              keepRemovedMemory(doc);
               db.deleteFleetMemoryDoc(doc.path);
             }
           }
@@ -23765,9 +24088,15 @@ export const createServer = (
         }
 
         keepHookVersion(current);
-        db.deleteFleetHook(params.id);
+        const trashed = db.trash.put(
+          { kind: "hook", key: params.id },
+          Date.now()
+        );
+        if (trashed === undefined) {
+          return status(404, `the fleet keeps no hook ${params.id}`);
+        }
         fanOutFleet();
-        return { ok: true };
+        return undoable(trashed);
       })
       // What one hook used to be, newest first, without the material. `?hookId=`
       // narrows to that hook's own history; nothing named lists every hook's,
@@ -24087,7 +24416,9 @@ export const createServer = (
             appleGate: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
             // Null: the fleet's answer (upstream.ts).
-            upstreamPosts: t.Optional(t.Union([t.Boolean(), t.Null()])),
+            upstreamPosts: t.Optional(
+              t.Union([UPSTREAM_POSTS_SCHEMA, t.Null()])
+            ),
           }),
         },
         async ({ params, body, status }) => {
@@ -26287,6 +26618,15 @@ export const createServer = (
                 takeBack(message.machineId, message.instanceId, send);
                 break;
               }
+              // A send handed over again that the session took already: read,
+              // and no turn follows ({@link takeTaken}).
+              if (kind === "taken_send" && message.instanceId) {
+                const { uuid } = message.payload as FramePayload & {
+                  kind: "taken_send";
+                };
+                takeTaken(message.instanceId, uuid);
+                break;
+              }
               if (kind === "stopped" && message.instanceId) {
                 const ended = ownedSession;
                 if (
@@ -26905,7 +27245,7 @@ export const createServer = (
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after
                 // every register) refreshes the parked copy without a second
-                // Telegram message or a second routing decision.
+                // push or a second routing decision.
                 const parkedBefore = pending.get(message.requestId);
                 const alreadyParked = parkedBefore !== undefined;
                 // A project lead's question, or a call of his on your card,
@@ -27004,7 +27344,6 @@ export const createServer = (
                     "parent";
                   deliverDelegateAsk(sender, parent, clientCopy(message));
                 } else if (!internal) {
-                  telegram?.onAsk(message);
                   push.onAsk(message);
                 }
               }
@@ -27018,7 +27357,7 @@ export const createServer = (
               // goes no further.
               if (kind === "permission_settled") {
                 // Most of these echo an answer the hub relayed and has already
-                // settled; only one still parked is news to Telegram.
+                // settled; only one still parked is news here.
                 const parked = message.requestId
                   ? pending.get(message.requestId)
                   : undefined;
@@ -27502,11 +27841,6 @@ export const createServer = (
                     `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`
                 );
               }
-              // A session's message to the owner, pushed without an ask: straight
-              // to the bridge, tracked so a reply reaches the session that wrote it.
-              if (kind === "user_message" && !internal) {
-                telegram?.onUserMessage(message);
-              }
               // An install answering, whoever asked for it: the cell is the hub's
               // to keep, and the reply still goes wherever it was going.
               const install = message.requestId
@@ -27882,7 +28216,7 @@ export const createServer = (
           }
           registry.addDashboard(ws, older);
           // The one moment the hub learns a URL that reaches its own dashboard:
-          // this browser just used one. See `dashboardUrl` in telegram.ts.
+          // this browser just used one. See `dashboardUrl` in dashboard-url.ts.
           registry.noteDashboardOrigin(page);
           // Its previews may be framed from it, and from no other origin.
           noteParent(page);

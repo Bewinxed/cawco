@@ -624,10 +624,9 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   var G = ["Front door","Work","Time and events","Knowledge","Agents","Judgments"];
   var NODES = [
     {id:"dash",band:"clients",kind:"you",t:"Dashboard",s:"board, threads, settings",d:"Where you read the board, talk to Caw and approve.",talks:["api"]},
-    {id:"ios",band:"clients",kind:"you",t:"iOS and Mac app",s:"push, threads, approvals",d:"The phone path now that Telegram is pending. Needs push first.",talks:["api","apns"]},
+    {id:"ios",band:"clients",kind:"you",t:"iOS and Mac app",s:"push, threads, approvals",d:"The phone path: push, then the app fetches the details.",talks:["api","apns"]},
     {id:"cli",band:"clients",kind:"you",t:"cawco CLI",s:"admin, same role checks",d:"Admin for people and for the overseer, under the same role checks as MCP.",talks:["api"]},
-    {id:"tg",band:"clients",kind:"pending",t:"Telegram",s:"pending",d:"Paused. Topics per project come back if you turn it on.",talks:["api"]},
-    {id:"api",band:"hub",grp:"Front door",kind:"code",t:"API + socket",s:"one ledger for every client",d:"Every client and every action rides the same ledger; nothing is posted optimistically.",talks:["dash","ios","cli","tg","proj","board","disp","daemon","apns"]},
+    {id:"api",band:"hub",grp:"Front door",kind:"code",t:"API + socket",s:"one ledger for every client",d:"Every client and every action rides the same ledger; nothing is posted optimistically.",talks:["dash","ios","cli","proj","board","disp","daemon","apns"]},
     {id:"mcp",band:"hub",grp:"Front door",kind:"code",t:"MCP · cawco",s:"one toolset per role",d:"One server; the session's credential picks its role and toolset.",talks:["sess","board","mem","cred","dtypes"]},
     {id:"cred",band:"hub",grp:"Front door",kind:"store",t:"Credentials",s:"Jev key, connector keys",d:"Keys stay here. Sessions call tools; they never see tokens.",talks:["mcp","act","jev","ingress"]},
     {id:"proj",band:"hub",grp:"Work",kind:"store",t:"Projects and places",s:"remote, checkouts, folder",d:"One identity with many places: checkouts on any machine, workspaces, the hub folder.",talks:["folder","board","dtypes","api"]},
@@ -873,11 +872,11 @@ The tray chip overflows at 320px wide…</pre>
       <p class="a">CawCo's board and dispatcher replace the plumbing. Three slim skills, any harness: interview to a spec, spec to tasks with edges and checks, and triage.</p>
     </article>
     <article class="ans">
-      <header><span class="did">D11</span><h3>Telegram pending; the iOS app first</h3></header>
-      <p class="q">Only if Telegram is enabled. Disable Telegram for now, put it in pending; focus on the iOS app to push more users there.</p>
+      <header><span class="did">D11</span><h3>The iOS app is the phone path</h3></header>
+      <p class="q">We want to push the iOS app.</p>
       <div class="twin">
         <figure class="pane mech" style="margin:0"><span class="cap">What the app needs first</span><div class="dg" role="img" aria-label="iOS push: the hub sends a content-free push through Apple, the phone wakes the app, and the app fetches the details from the hub over the tailnet."><div class="node code"><span class="k">code</span><span class="t">Hub</span><span class="s">something needs you</span></div><div class="edge"><i class="ln"></i><span class="lb">content-free payload</span><i class="ln"></i><i class="ar"></i></div><div class="node ext"><span class="k">outside</span><span class="t">Apple push service</span><span class="s">"site needs you", nothing else</span></div><div class="edge"><i class="ln"></i><i class="ar"></i></div><div class="node you"><span class="k">you</span><span class="t">Your phone</span><span class="s">CawCo app</span></div><div class="edge"><i class="ln"></i><span class="lb">fetches details over the tailnet</span><i class="ln"></i><i class="ar"></i></div><div class="node code"><span class="k">code</span><span class="t">Hub</span><span class="s">the ask, the diff, the draft</span></div></div></figure>
-        <div class="tog" style="align-self:start"><b style="font-size:13px;font-weight:500">Found in apps/apple</b><span class="fine">Home, sessions, delegate tray, new project and the assistant panel are there. Push notifications are not: no <code>UNUserNotification</code> or APNs anywhere. Telegram is what reaches you today when the app is closed.</span><span class="fine">So, in order: push from the hub (content-free, an Apple push key on the hub), then Caw's project threads, then approvals in the app. Telegram topics wait in pending.</span></div>
+        <div class="tog" style="align-self:start"><b style="font-size:13px;font-weight:500">Found in apps/apple</b><span class="fine">Home, sessions, delegate tray, new project and the assistant panel are there. Push notifications are not: no <code>UNUserNotification</code> or APNs anywhere.</span><span class="fine">So, in order: push from the hub (content-free, an Apple push key on the hub), then Caw's project threads, then approvals in the app.</span></div>
       </div>
     </article>
     <article class="ans">
@@ -1249,7 +1248,7 @@ Never post; drafts go to Needs you.
   one catch-up, newest slot
 <span class="k">output</span>
   NO_REPLY           silent
-  AUTOMATION_FAILED  retry, Telegram
+  AUTOMATION_FAILED  retry, push
   anything else      the deliverable</pre>
       </figure>
     </div>
@@ -1296,27 +1295,6 @@ Never post; drafts go to Needs you.
     </div>
   </article>
 
-  <article class="dec" id="d11">
-    <header><span class="did">D11</span><h3>The project, from your phone</h3><span class="state" data-for="phone">Not picked</span></header>
-    <p class="why">Telegram today only answers asks. A topic per project gives Caw a place to talk.</p>
-    <div class="show">
-      <figure class="pane look"><span class="cap">How it would look</span>{{MK:telegram}}</figure>
-      <figure class="pane mech"><span class="cap">The group</span>
-<pre class="v">CawCo  <span class="c">(topics on)</span>
-├── # fleet       <span class="c">needs-you, stalls, spend</span>
-├── # site        <span class="c">recaps · reply to steer</span>
-└── # launch-q4   <span class="c">reviews: Approve · Changes</span></pre>
-      </figure>
-    </div>
-    <div class="opts" role="radiogroup" data-group="phone" data-label="D11 Phone">
-      <button class="opt" type="button" role="radio" data-opt="reply"><b>Reply-only</b><span>As today.</span></button>
-      <button class="opt" type="button" role="radio" data-opt="dm"><b>One DM with Caw</b><span>Routes by project name.</span></button>
-      <button class="opt" type="button" role="radio" data-opt="topics"><b>A topic per project</b><span>Recaps and reviews in place.</span><span class="tag">Recommended</span></button>
-    </div>
-    <div class="foot">
-      <label class="note">Note <input id="note-phone" data-note="phone" type="text" placeholder="Anything to add"></label>
-    </div>
-  </article>
 </section>
 
 <section class="chap" id="face">
@@ -1825,14 +1803,14 @@ read_choices("hero options")
 <section class="chap" id="order">
   <header><span class="eyebrow">Roadmap</span><h2>With your picks</h2></header>
   <div class="pane mech" style="padding:18px 12px">
-    <div class="road anim" role="img" aria-label="Six phases with your picks: admin gap, words and landing; projects, tasks as files, stages and the dispatcher; Caw lead, role toolsets and iOS push; routines and ingress; knowledge, skills and the design canvas; fleet watch. Telegram is pending.">
+    <div class="road anim" role="img" aria-label="Six phases with your picks: admin gap, words and landing; projects, tasks as files, stages and the dispatcher; Caw lead, role toolsets and iOS push; routines and ingress; knowledge, skills and the design canvas; fleet watch.">
       <span class="fill"></span>
       <div class="ph"><span class="n">0</span><div><b>Admin gap, words, landing</b><br><span>Role-gate admin; task, plan, attempt, routine; hub-owned landing.</span></div></div>
       <div class="ph"><span class="n">1</span><div><b>Projects, tasks as files</b><br><span>Places, hub folder, tracker setting, stages file, dispatcher with all nine upgrades.</span></div></div>
       <div class="ph"><span class="n">2</span><div><b>Caw lead, iOS</b><br><span>Per-project lead, role toolsets, onboarding as a decision page, iOS push and threads.</span></div></div>
       <div class="ph"><span class="n">3</span><div><b>Routines, ingress</b><br><span>Effect Cron, output contract, connector poller, relay, approved actions.</span></div></div>
       <div class="ph"><span class="n">4</span><div><b>Knowledge, skills, canvas</b><br><span>Memory tiers, Jev optional, brand kit, grill, to-tasks, triage, design canvas.</span></div></div>
-      <div class="ph"><span class="n">5</span><div><b>Fleet watch</b><br><span>Detectors, Jev gate, triage; retire the old three. Telegram: pending.</span></div></div>
+      <div class="ph"><span class="n">5</span><div><b>Fleet watch</b><br><span>Detectors, Jev gate, triage; retire the old three.</span></div></div>
     </div>
   </div>
 </section>

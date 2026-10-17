@@ -13,7 +13,7 @@
  *
  * The steps run on the machines (agent move.ts); the hub decides, asks the
  * person when it must (the approval, through the same ask channel as every
- * permission: dashboards, push, Telegram), and starts the session through
+ * permission: dashboards, push), and starts the session through
  * the same spawn every hub-started session takes.
  */
 

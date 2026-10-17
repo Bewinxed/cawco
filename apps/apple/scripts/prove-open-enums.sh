@@ -28,7 +28,7 @@ set -euo pipefail
 ROOT=$(git rev-parse --show-toplevel)
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
-APP="build/cawco-apple/$BUILD/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
+APP="build/cawco-apple.noindex/$BUILD/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
 AXE=/opt/homebrew/bin/axe
 OUT=${OUT:-$(mktemp -d "${TMPDIR:-/tmp}/prove-open-enums.XXXXXX")}
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/prove-open-enums-hub.XXXXXX")
@@ -142,7 +142,7 @@ echo "== 4. simulator"
 # Its stdin and stdout are two FIFOs on fds 7 (to it) and 8 (from it).
 LINK=$(mktemp -d "${TMPDIR:-/tmp}/prove-open-enums-slot.XXXXXX")
 mkfifo "$LINK/in" "$LINK/out"
-"${MAC[@]}" "bash build/cawco-apple/$BUILD/apps/apple/scripts/mac-slot.sh sim -- sh -c 'echo \"\$CAWCO_SIM_UDID\"; exec cat >/dev/null'" \
+"${MAC[@]}" "bash build/cawco-apple.noindex/$BUILD/apps/apple/scripts/mac-slot.sh sim -- sh -c 'echo \"\$CAWCO_SIM_UDID\"; exec cat >/dev/null'" \
   <"$LINK/in" >"$LINK/out" &
 HOLDER_PID=$!
 exec 7>"$LINK/in" 8<"$LINK/out"

@@ -918,9 +918,14 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
   readonly #queue: SDKUserMessage[] = [];
   #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
   #ended = false;
+  #closed = false;
 
-  /** Hands one turn to the SDK, or keeps it for the SDK's next pull. */
+  /** Hands one turn to the SDK, or keeps it for the SDK's next pull; none once {@link close}d. */
   push(message: SDKUserMessage): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #closed is set true by close() elsewhere in this class; the checker doesn't see that cross-method mutation
+    if (this.#closed) {
+      return;
+    }
     const waiting = this.#waiting;
     if (waiting) {
       this.#waiting = null;
@@ -930,7 +935,18 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
     this.#queue.push(message);
   }
 
+  /**
+   * Takes no more turns, and keeps the CLI's stdin open: the SDK closes it
+   * once the stream {@link end}s and the run has ended ("Calling
+   * transport.endInput() to close stdin to CLI process", sdk.mjs 0.3.302),
+   * and a control request still unanswered then is never answered.
+   */
+  close(): void {
+    this.#closed = true;
+  }
+
   end(): void {
+    this.#closed = true;
     this.#ended = true;
     this.#waiting?.({ done: true, value: undefined });
     this.#waiting = null;
@@ -2060,8 +2076,24 @@ class ClaudeSession implements HarnessSession {
    * `getSettings` is on the `Query` at runtime but missing from its type.
    * A CLI that does not report the field says nothing, so the session reads
    * as not yet known rather than as sending none.
+   *
+   * Each read is kept until it lands ({@link #effortReads}): a stop lets
+   * them land before it closes the query, which otherwise refuses them
+   * ("Query closed before response received"). The interrupted turn's end
+   * sets one off in the middle of every stop.
    */
-  async #readEffort(): Promise<void> {
+  #readEffort(): Promise<void> {
+    const reading = this.#readEffortNow();
+    this.#effortReads.add(reading);
+    // biome-ignore lint/complexity/noVoid: the read says its own failure; this only lets go of it
+    void reading.finally(() => this.#effortReads.delete(reading));
+    return reading;
+  }
+
+  /** The effort reads not yet answered ({@link #readEffort}). Each settles: its failure is said, never thrown. */
+  readonly #effortReads = new Set<Promise<void>>();
+
+  async #readEffortNow(): Promise<void> {
     try {
       const settings = await (
         this.#handle as unknown as {
@@ -3545,7 +3577,9 @@ class ClaudeSession implements HarnessSession {
   }
 
   async stop(): Promise<void> {
-    this.#input.end();
+    // No turn starts from here on; the stream ends, and the CLI's stdin with
+    // it, only once the effort reads below have landed.
+    this.#input.close();
     for (const resolve of this.#permissions.values()) {
       resolve({ behavior: "deny", message: "session stopped" });
     }
@@ -3569,6 +3603,26 @@ class ClaudeSession implements HarnessSession {
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
+    // The interrupted turn's end read the effort: it lands while the query
+    // is open. A CLI that answers nothing within the turn's own wait gets
+    // the close, and the read says it failed.
+    const read = await readWithin(SETTLE_TIMEOUT_MS, () =>
+      Promise.all(this.#effortReads)
+    );
+    switch (read.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        console.warn(
+          `[claude] ${this.instanceId}: its effort read was still unanswered ${read.after} ms into the stop; the stop closes it`
+        );
+        break;
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    this.#input.end();
     this.#handle.close();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — stop() already tore everything down; only a pump that was still mid-await needs waiting for
     await this.#pump.catch(() => {});
@@ -3785,6 +3839,39 @@ export class ClaudeHarness implements Harness {
         `[claude] removing the MCP configs of ended children failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  /**
+   * Claude Code saves a tool result too large to hand the model under the
+   * session's own folder in its config dir, and tells the model to read it
+   * there: "Output has been saved to <config dir>/projects/<slug>/<session
+   * id>/tool-results/mcp-crw-crw_scrape-….txt … Slice by character range via
+   * Bash instead" (seen on 2026-10-17). So the session's id is known
+   * before its boundary starts: a resume goes on under its own; a new
+   * session or a fork takes one minted here, the SDK's `sessionId` ("Use a
+   * specific session ID … when `forkSession` is also set", sdk.d.ts
+   * 0.3.301). The config dir and slug are the ones {@link spawn} runs it in.
+   */
+  async spill(
+    spec: SpawnPayload,
+    cwd: string
+  ): Promise<{ dir: string; spec: SpawnPayload }> {
+    const goesOn = spec.resume && !spec.resume.fork ? spec.resume : undefined;
+    const sessionId = goesOn ? goesOn.sessionKey : crypto.randomUUID();
+    const account = await launchAccountOf(spec);
+    const real = await realpath(cwd).catch(() => cwd);
+    return {
+      dir: join(
+        sessionConfigDir({ accountId: account ?? null }),
+        "projects",
+        projectSlug(real),
+        sessionId,
+        "tool-results"
+      ),
+      spec: goesOn
+        ? spec
+        : { ...spec, options: { ...(spec.options ?? {}), sessionId } },
+    };
   }
 
   async spawn(

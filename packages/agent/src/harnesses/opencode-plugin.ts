@@ -16,8 +16,9 @@
  *   included (settled #1: "plugin tool hooks on nested Code Mode calls —
  *   YES, both fire"). A throw refuses the call; assigning `input` replaces
  *   what the tool receives.
- * - `ctx.tool.hook("execute.after")`: the outputs a workspace session was told
- *   it saved, and what each call of a Code Mode program answered, written
+ * - `ctx.tool.hook("execute.after")`: each output a workspace session is told
+ *   was saved, copied into the session's own folder and named there
+ *   (`spilled`), and what each call of a Code Mode program answered, written
  *   onto the program's own result as `metadata.calls` (2.0 keeps each call's
  *   name, input and status on the program, `metadata.toolCalls`, never what
  *   it returned). A program that throws still ends `completed`, with
@@ -58,7 +59,11 @@ import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CAWCO_ENV, CODE_MODE_TOOL } from "@cawco/core";
-import { WORKSPACE_POLICY_NAME, workspacesDir } from "@cawco/core/paths";
+import {
+  SPILLS_DIR_NAME,
+  WORKSPACE_POLICY_NAME,
+  workspacesDir,
+} from "@cawco/core/paths";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
@@ -96,9 +101,6 @@ export const CHROME_DEVTOOLS = "chrome-devtools";
 /** The mark in a workspace's state dir that turns OpenCode's plan agent off in its clone. */
 export const PLAN_AGENT_OFF = "opencode-plan-agent-off";
 
-/** The dir in a workspace's state dir where the plugin records each session's saved outputs, a file per session. */
-export const SAVED_OUTPUTS = "opencode-saved-outputs";
-
 /** The plugin's own tools, which take no session credential: they ask the hub as the session's step. */
 const WORKFLOW_TOOLS = [
   "cawco_submit_result",
@@ -125,9 +127,9 @@ const HOST_SHELL_DESCRIPTION =
 export const buildPluginSource =
   (): string => `// CawCo's OpenCode 2.0 plugin, written by the CawCo agent. Do not edit.
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 // This server's password authenticates every request to it: no shell or MCP
 // server it starts inherits it.
@@ -202,8 +204,7 @@ const boundaryOf = (id, root) => {
 
 // Judges a call of workspace \`id\`'s session by the workspace's policy, and
 // throws its refusal. A judge or policy that cannot be read refuses it too.
-// \`saved\` is every output the session may read back.
-const judgeIn = async (id, tool, input, directory, saved) => {
+const judgeIn = async (id, tool, input, directory) => {
   const state = cawcoWorkspaces + "/" + id;
   let judge;
   let policy;
@@ -213,40 +214,33 @@ const judgeIn = async (id, tool, input, directory, saved) => {
   } catch (error) {
     throw new Error("cawco: " + tool + " was refused: workspace " + id + "'s file policy could not be read (" + said(error) + ").");
   }
-  const verdict = judge.judgeCall(policy, { harness: "opencode", tool, input, cwd: directory, toolOutput, savedOutputs: saved });
+  const verdict = judge.judgeCall(policy, { harness: "opencode", tool, input, cwd: directory, toolOutput });
   if (!verdict.ok) throw new Error(verdict.reason);
 };
 
-// The outputs this server saved for each session of workspace \`id\`, one file
-// per session in the workspace's state dir, which the session's tools never
-// write: the server's tool-output dir holds every session's, by call id
-// alone, so a session reads back only what it was told it saved.
-const SESSION_ID = /^[A-Za-z0-9_-]+$/;
-const savedFile = (id, sessionID) => {
-  if (!SESSION_ID.test(sessionID)) throw new Error("session id " + JSON.stringify(sessionID) + " names no file");
-  return cawcoWorkspaces + "/" + id + "/" + ${JSON.stringify(SAVED_OUTPUTS)} + "/" + sessionID;
-};
 // The file a call's result says this server saved: its metadata names it
 // (\`truncated\`, \`outputPath\`) and its content's hint names it again
 // ("full output saved to <file>"), in this server's tool-output dir.
+const contentOf = (result) => (Array.isArray(result.content) ? result.content : [{ type: "text", text: String(result.content ?? "") }]);
 const savedOutputOf = (result) => {
   const file = result?.metadata?.outputPath;
   if (result?.metadata?.truncated !== true || typeof file !== "string" || dirname(file) !== toolOutput) return undefined;
-  const content = Array.isArray(result.content) ? result.content : [{ type: "text", text: String(result.content ?? "") }];
-  return content.some((block) => block?.type === "text" && block.text.includes("full output saved to " + file)) ? file : undefined;
+  return contentOf(result).some((block) => block?.type === "text" && block.text.includes("full output saved to " + file)) ? file : undefined;
 };
-const recordSaved = (id, sessionID, file) => {
-  const record = savedFile(id, sessionID);
-  mkdirSync(dirname(record), { recursive: true });
-  appendFileSync(record, file + "\\n");
-};
-const savedBy = (id, sessionID) => {
-  try {
-    return readFileSync(savedFile(id, sessionID), "utf8").split("\\n").filter(Boolean);
-  } catch (error) {
-    if (error?.code === "ENOENT") return [];
-    throw error;
-  }
+// The result with the output it saved copied into its session's own folder
+// in workspace \`id\` (the agent's workspaceSpillDir, made as the session
+// spawned), and the copy named in its place: the server's tool-output dir
+// holds every session's, by call id alone, and no workspace reads it; the
+// session's folder is its own, and its boundary reads it, its shell too (a
+// line longer than \`read\` shows is read by the shell). One whose folder is
+// not there (a session CawCo did not launch) is left as it is.
+const spilled = (id, instanceId, result, file) => {
+  const folder = cawcoWorkspaces + "/" + id + "/" + ${JSON.stringify(SPILLS_DIR_NAME)} + "/" + instanceId;
+  if (!existsSync(folder)) return result;
+  const copy = folder + "/" + basename(file);
+  copyFileSync(file, copy);
+  const content = contentOf(result).map((block) => (block?.type === "text" ? { ...block, text: block.text.replaceAll(file, copy) } : block));
+  return { ...result, content, metadata: { ...result.metadata, outputPath: copy } };
 };
 
 // Each session's CawCo identity, by OpenCode session id, as the agent records
@@ -385,8 +379,8 @@ export default {
       return !held || held.workspace === workspace;
     };
 
-    // Each session's parent, as its server keeps it: a subagent reads back
-    // what its parents saved too. A session's parent never changes.
+    // Each session's parent, as its server keeps it: a subagent's outputs are
+    // the CawCo session's that started it. A session's parent never changes.
     const parents = new Map();
     const parentOf = async (sessionID) => {
       if (parents.has(sessionID)) return parents.get(sessionID);
@@ -394,10 +388,16 @@ export default {
       parents.set(sessionID, typeof session.parentID === "string" ? session.parentID : undefined);
       return parents.get(sessionID);
     };
-    const savedFor = async (id, sessionID) => {
-      const lineage = [];
-      for (let at = sessionID; at && !lineage.includes(at); at = await parentOf(at)) lineage.push(at);
-      return lineage.flatMap((one) => savedBy(id, one));
+    // The CawCo session a session is, or a subagent of: the first of its
+    // lineage the agent recorded.
+    const instanceOf = async (sessionID) => {
+      const seen = [];
+      for (let at = sessionID; at && !seen.includes(at); at = await parentOf(at)) {
+        const held = sessionHeld(at);
+        if (typeof held?.instanceId === "string") return held.instanceId;
+        seen.push(at);
+      }
+      return undefined;
     };
     const cawcoStep = async (sessionID) => {
       const response = await fetch(cawcoBase + "/api/instances");
@@ -481,13 +481,7 @@ export default {
     // Judges the call and stamps a CawCo call with its session's credential.
     const admit = async (event) => {
       if (workspace && bounded(event.sessionID)) {
-        let saved;
-        try {
-          saved = await savedFor(workspace, event.sessionID);
-        } catch (error) {
-          throw new Error("cawco: " + event.tool + " was refused: the outputs this session saved could not be read (" + said(error) + ").");
-        }
-        await judgeIn(workspace, event.tool, event.input, directory, saved);
+        await judgeIn(workspace, event.tool, event.input, directory);
       }
       if (event.tool.startsWith("cawco_") && !workflowTools.includes(event.tool)) {
         const credential = sessionHeld(event.sessionID)?.credential;
@@ -523,7 +517,8 @@ export default {
     await ctx.tool.hook("execute.after", async (event) => {
       if (workspace && bounded(event.sessionID) && event.status === "completed") {
         const saved = savedOutputOf(event.result);
-        if (saved) recordSaved(workspace, event.sessionID, saved);
+        const instanceId = saved ? await instanceOf(event.sessionID) : undefined;
+        if (saved && instanceId) event.result = spilled(workspace, instanceId, event.result, saved);
       }
       if (event.tool === "shell") {
         const left = shells.findIndex((one) => one.sessionID === event.sessionID && one.command === event.input?.command);

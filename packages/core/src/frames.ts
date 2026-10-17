@@ -251,6 +251,17 @@ export interface HeldSendFrame {
   send: import("./index").SendPayload;
 }
 
+/**
+ * Daemon-originated: a send handed over again that its session has taken
+ * already (agent taken-sends.ts). No turn started on it; its record is read,
+ * and no turn follows that read.
+ */
+export interface TakenSendFrame {
+  instanceId: string;
+  kind: "taken_send";
+  uuid: string;
+}
+
 export interface RejectedFrame {
   error: string;
   instanceId: string;
@@ -368,10 +379,10 @@ export interface AskAnswer {
   name?: string;
   /**
    * Where it was answered: a dashboard page; the app (a client that is no
-   * page: the iOS and Mac app); Telegram; another session; or the harness
-   * itself, in its own interface.
+   * page: the iOS and Mac app); another session; or the harness itself, in
+   * its own interface.
    */
-  via: "page" | "app" | "telegram" | "session" | "harness";
+  via: "page" | "app" | "session" | "harness";
 }
 
 export interface PermissionSettledFrame {
@@ -487,15 +498,6 @@ export interface ScratchWorktreeFrame {
   worktree: import("./index").ScratchWorktree;
 }
 
-export interface UserMessageFrame {
-  /** Absolute paths of images on the session's machine to send alongside. */
-  attachments?: string[];
-  instanceId: string;
-  /** Daemon-originated: a session pushing text straight to the owner's Telegram. */
-  kind: "user_message";
-  text: string;
-}
-
 export interface PulseFrame {
   instanceId: string;
   /** Daemon-originated: a session's coarse now-state, throttled to about once per second. */
@@ -584,8 +586,8 @@ export interface ProjectsChangedFrame {
 export interface FleetUpstreamFrame {
   instanceId?: undefined;
   kind: "fleet.upstream";
-  /** Whether agents may post to other people's repositories. */
-  upstream: boolean;
+  /** Whether agents may post to other people's repositories: off, ask the person first, or on. */
+  upstream: import("./upstream-guard").UpstreamPosts;
 }
 
 /**

@@ -1,9 +1,7 @@
 <script lang="ts">
   import { type RuleRow, ruleSentence } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { deleteRule } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
-  import { deleteRule } from "#lib/cawco/config/rule-delete.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -67,8 +65,7 @@
     }
   }
 
-  const asks = new Asker<AskHereRequest>();
-  /** Delete: at once, with Undo in the toast (rule-delete.ts). */
+  /** Delete: at once, with Undo in the toast (deletes.ts). */
   async function remove(row: RuleRow) {
     busy[row.id] = true;
     try {
@@ -208,7 +205,6 @@
             {/if}
           {/snippet}
           {#snippet below()}
-            <AskHere asker={asks} at={row.id} />
             <RowFault
               again={() => toggle(row, !row.enabled)}
               reason={toggleFailed[row.id]}

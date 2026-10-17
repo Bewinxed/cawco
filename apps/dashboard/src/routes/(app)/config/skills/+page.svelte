@@ -6,11 +6,13 @@
     type MarketplacePluginInfo,
     machineLabel,
   } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import {
+    deleteMarketplace,
+    deletePlugin,
+    deleteSkill,
+  } from "#lib/cawco/config/deletes.js";
   import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
-  import { holders } from "#lib/cawco/config/holders.js";
   import { hubDown } from "#lib/cawco/config/hub.svelte.js";
   import LinkMarketplacePopover from "#lib/cawco/config/LinkMarketplacePopover.svelte";
   import PreviousVersions, {
@@ -29,9 +31,6 @@
     marketplaceCatalog,
     refreshPlugin,
     refreshSkill,
-    removeMarketplace,
-    removePlugin,
-    removeSkill,
     restoreSkillVersion,
     skillHistory,
     switchPlugin,
@@ -258,37 +257,19 @@
   }
 
   /**
-   * Removing a skill or a plugin everywhere asks under its row, in the page,
-   * naming the machines that hold it, each with whether it has it now. The
-   * hub knows which machine holds what, not which session uses it, so the
-   * machines are the reach it names.
+   * Removing a skill, a marketplace or a plugin goes through at once, with
+   * Undo in the toast (deletes.ts). A refused removal is said under its row.
    */
-  const asks = new Asker<AskHereRequest>();
-
-  async function askForget(row: FleetSkillMeta) {
-    if (!fleet) {
-      return;
+  async function remove(key: string, removal: () => Promise<void>) {
+    busy[key] = true;
+    delete rowFaults[key];
+    try {
+      await removal();
+    } catch (err) {
+      refusedOn(key, err, () => remove(key, removal));
+    } finally {
+      delete busy[key];
     }
-    await asks.ask({
-      at: `skill:${row.name}`,
-      title: `Remove ${row.name} everywhere?`,
-      body: "The skill leaves the fleet and every machine that holds it. It can't be undone.",
-      confirmLabel: "Remove everywhere",
-      destructive: true,
-      items: () => holders(machines, "skills", row.name),
-      pendingLabel: "Removing…",
-      run: async () => {
-        busy[row.name] = true;
-        try {
-          await removeSkill(row.name);
-          fleet.skills = fleet.skills.filter(
-            (other) => other.name !== row.name
-          );
-        } finally {
-          delete busy[row.name];
-        }
-      },
-    });
   }
 
   async function browse(row: FleetMarketplace) {
@@ -312,32 +293,12 @@
     }
   }
 
-  async function askUnlink(name: string) {
-    if (!fleet) {
-      return;
-    }
-    await asks.ask({
-      at: `marketplace:${name}`,
-      title: `Unlink ${name}?`,
-      body: "The fleet and every machine tracking it stop tracking this marketplace. Plugins already installed from it stay installed.",
-      confirmLabel: "Unlink",
-      destructive: true,
-      items: () => holders(machines, "marketplaces", name),
-      pendingLabel: "Unlinking…",
-      run: async () => {
-        busy[name] = true;
-        try {
-          await removeMarketplace(name);
-          fleet.config.marketplaces = fleet.config.marketplaces.filter(
-            (row) => row.name !== name
-          );
-          if (browsing === name) {
-            browsing = null;
-          }
-        } finally {
-          delete busy[name];
-        }
-      },
+  function unlink(name: string) {
+    return remove(name, async () => {
+      await deleteMarketplace(store, name);
+      if (browsing === name) {
+        browsing = null;
+      }
     });
   }
 
@@ -366,32 +327,6 @@
     } finally {
       delete busy[id];
     }
-  }
-
-  async function askUninstall(id: string) {
-    if (!fleet) {
-      return;
-    }
-    await asks.ask({
-      at: `plugin:${id}`,
-      title: `Remove ${id} everywhere?`,
-      body: "The plugin leaves the fleet and every machine that holds it. It can't be undone.",
-      confirmLabel: "Remove everywhere",
-      destructive: true,
-      items: () => holders(machines, "plugins", id),
-      pendingLabel: "Removing…",
-      run: async () => {
-        busy[id] = true;
-        try {
-          await removePlugin(id);
-          fleet.config.plugins = fleet.config.plugins.filter(
-            (row) => row.id !== id
-          );
-        } finally {
-          delete busy[id];
-        }
-      },
-    });
   }
 </script>
 
@@ -483,7 +418,8 @@
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.name] === true,
-                onselect: () => askForget(row),
+                onselect: () =>
+                  remove(row.name, () => deleteSkill(store, row.name)),
               },
             ]}
             enabled={row.enabled}
@@ -507,7 +443,6 @@
               />
             {/snippet}
             {#snippet below()}
-              <AskHere asker={asks} at="skill:{row.name}" />
               <RowFault
                 again={rowFaults[row.name]?.again}
                 reason={rowFaults[row.name]?.reason}
@@ -582,7 +517,7 @@
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.name] === true,
-                onselect: () => askUnlink(row.name),
+                onselect: () => unlink(row.name),
               },
             ]}
             hue={HUE}
@@ -611,7 +546,10 @@
               </Button>
             {/snippet}
             {#snippet below()}
-              <AskHere asker={asks} at="marketplace:{row.name}" />
+              <RowFault
+                again={rowFaults[row.name]?.again}
+                reason={rowFaults[row.name]?.reason}
+              />
               <RowFaults
                 key={row.name}
                 kind="marketplaces"
@@ -751,7 +689,8 @@
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.id] === true,
-                onselect: () => askUninstall(row.id),
+                onselect: () =>
+                  remove(row.id, () => deletePlugin(store, row.id)),
               },
             ]}
             enabled={row.enabled}
@@ -774,7 +713,6 @@
               />
             {/snippet}
             {#snippet below()}
-              <AskHere asker={asks} at="plugin:{row.id}" />
               <RowFault
                 again={rowFaults[row.id]?.again}
                 reason={rowFaults[row.id]?.reason}
