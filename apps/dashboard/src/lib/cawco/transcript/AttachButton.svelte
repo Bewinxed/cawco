@@ -36,7 +36,7 @@
 
 <input
   data-slot="hidden-file"
-  class="hidden-file"
+  class="hidden"
   multiple
   onchange={onpick}
   type="file"
@@ -47,9 +47,10 @@
     <DropdownMenu.Trigger
       data-att-btn
       aria-label="Attach or draw"
-      class="att-btn touch-hit"
+      class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale)"
+      style="--hit-edge: 1px; --att-radius: calc(var(--radius-lg) - var(--c-composer-inset))"
     >
-      <IconPlus />
+      <IconPlus class="size-icon-md" />
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align="start" side="top">
       <DropdownMenu.Item onSelect={() => input?.click()}>
@@ -67,54 +68,12 @@
   <button
     data-slot="att-btn"
     aria-label="Attach a file or image"
-    class="att-btn touch-hit"
+    class="touch-hit size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-(--att-radius) border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,transform] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale)"
     onclick={() => input?.click()}
+    style:--hit-edge="1px"
+    style:--att-radius="calc(var(--radius-lg) - var(--c-composer-inset))"
     type="button"
   >
-    <IconPlus />
+    <IconPlus class="size-icon-md" />
   </button>
 {/if}
-
-<style>
-  .hidden-file {
-    display: none;
-  }
-  .att-btn {
-    --hit-edge: 1px;
-    width: var(--c-composer-field);
-    height: var(--c-composer-field);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    /* Concentric with the shell: outer radius less the inset that seats it. */
-    border-radius: calc(var(--radius-lg) - var(--c-composer-inset));
-    border: 1px solid var(--border-control);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-  }
-  .att-btn :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .att-btn:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .att-btn:active {
-      transform: scale(var(--press-scale));
-    }
-  }
-</style>

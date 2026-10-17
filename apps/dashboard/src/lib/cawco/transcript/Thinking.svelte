@@ -179,7 +179,12 @@
   );
 </script>
 
-<div data-slot="rail-row" class="think rail-row">
+<!-- literal: 70ch -->
+<div
+  data-slot="rail-row"
+  class="rail-row max-w-(--measure)"
+  style:--measure="70ch"
+>
   <ThinkingSteps
     onOpenChange={(value) => {
       expanded = value;
@@ -187,24 +192,40 @@
     open={expanded}
     size="default"
   >
-    <ThinkingStepsHeader disabled={!text.trim()}>
+    <ThinkingStepsHeader class="w-full" disabled={!text.trim()}>
       {#snippet after()}
         {#if !expanded && tail}
-          <span class="tail" in:tailIn out:tailOut><span>{tail}</span></span>
+          <span
+            data-slot="tail"
+            class="flex justify-end flex-auto min-w-0 overflow-hidden text-ink-muted text-size-meta font-normal whitespace-nowrap"
+            in:tailIn
+            out:tailOut><span class="flex-none">{tail}</span></span
+          >
         {/if}
       {/snippet}
-      <span data-slot="thinking-label" class="label" bind:this={cell}>
+      <span
+        data-slot="thinking-label"
+        class="relative flex flex-none items-center"
+        bind:this={cell}
+      >
         {#if liveLabel}
-          <span class="face" in:faceIn out:faceOut
+          <span
+            class="flex items-center inset-y-0 whitespace-nowrap"
+            in:faceIn
+            out:faceOut
             ><ThinkingIndicator
               aria-live={announce ? "polite" : "off"}
-              class="rail-indicator"
+              class="p-0 gap-(--indicator-gap)"
+              style="--indicator-gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph)); --thinking-icon-size: var(--w-glyph)"
             /></span
           >
         {:else}
-          <span class="face identity rail-line" in:faceIn out:faceOut
-            ><span data-slot="rail-cell" class="icon rail-cell"
-              ><IconCpu /></span
+          <span
+            class="flex items-center inset-y-0 whitespace-nowrap rail-line text-size-label font-medium"
+            in:faceIn
+            out:faceOut
+            ><span data-slot="rail-cell" class="rail-cell"
+              ><IconCpu class="size-icon-md" /></span
             ><span>Reasoning</span></span
           >
         {/if}
@@ -226,60 +247,11 @@
 </div>
 
 <style>
-  .think {
-    max-inline-size: 70ch;
-
-    /* The live face: its mark in the rail cell, its word at the text column. */
-    & :global(.rail-indicator) {
-      padding: 0;
-      gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
-      --thinking-icon-size: var(--w-glyph);
-    }
-    /* The header spans the row so the tail has the width to read into. */
-    & :global(.thinking-header) {
-      inline-size: 100%;
-    }
-  }
-  /* The label's cell: a label leaving is drawn over it, out of the flow. */
-  .label {
-    position: relative;
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-  }
-  .face {
-    display: flex;
-    align-items: center;
-    inset-block: 0;
-    white-space: nowrap;
-  }
-  .identity {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  .icon {
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-  }
+  /* residual: unmapped */
   /* One line past the chevron, pinned to its end so the newest words show;
      the start fades out rather than cutting. Quieter than a tool row's text,
      so the fold reads as an aside and not as the next step. */
-  .tail {
-    display: flex;
-    justify-content: flex-end;
-    flex: 1 1 auto;
-    min-inline-size: 0;
-    overflow: hidden;
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    white-space: nowrap;
-    mask-image: linear-gradient(to right, transparent, oklch(0% 0 0) 30%);
-
-    & > span {
-      flex: 0 0 auto;
-    }
+  [data-slot="tail"] {
+    mask-image: linear-gradient(to right, transparent, var(--mask-opaque) 30%);
   }
 </style>

@@ -50,57 +50,23 @@
 <div
   data-floating={floating || undefined}
   data-slot="behind"
-  class={["behind", floating && "floating"]}
+  class="flex flex-wrap items-center justify-center gap-x-space-2 p-space-2 text-size-meta font-normal text-ink-muted text-center data-floating:max-w-full data-floating:px-space-3 data-floating:border data-floating:border-border-hairline data-floating:rounded-md data-floating:bg-surface-raised data-floating:shadow-overlay data-floating:pointer-events-auto"
   role="status"
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
   {#if reconnectingNow(fault)}
-    <p>
-      <span data-slot="name" class="name">{machine}</span>
+    <p class="min-w-0 text-balance">
+      <span data-slot="name" class="whitespace-nowrap">{machine}</span>
       is reconnecting. The rest comes in once it's back.
     </p>
   {:else if fault.reason === "offline"}
-    <p>
-      Not caught up: <span data-slot="name" class="name">{machine}</span> is offline.
+    <p class="min-w-0 text-balance">
+      Not caught up: <span data-slot="name" class="whitespace-nowrap">{machine}</span> is offline.
       The rest comes in once it's back.
     </p>
   {:else}
-    <p>Not caught up</p>
+    <p class="min-w-0 text-balance">Not caught up</p>
     <Button onclick={onretry} size="sm" variant="ghost">Try again</Button>
   {/if}
 </div>
-
-<style>
-  .behind {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    column-gap: var(--space-2);
-    padding: var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    text-align: center;
-
-    & p {
-      min-inline-size: 0;
-      text-wrap: balance;
-    }
-  }
-  /* A machine's name breaks before it, never inside it at its hyphens. */
-  .name {
-    white-space: nowrap;
-  }
-  /* The dock's raised surface (CatchUp, Latest): the line floats over rows. */
-  .floating {
-    max-inline-size: 100%;
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-    pointer-events: auto;
-  }
-</style>

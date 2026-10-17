@@ -60,7 +60,7 @@
   }
 </script>
 
-<div class="offer rail-hang" data-design-offer={offer.projectId}>
+<div class="rail-hang flex flex-wrap items-center gap-space-2 mt-space-2" data-design-offer={offer.projectId}>
   {#if now?.answer === "open"}
     <Button
       label="Build"
@@ -79,36 +79,14 @@
       variant="ghost"
     />
   {:else if now?.answer === "built"}
-    <span class="said">Filed</span>
+    <span class="text-size-meta font-normal text-ink-muted">Filed</span>
     {#if href}
       <Button {href} label="Open" size="xs" variant="ghost" />
     {/if}
   {:else if now?.answer === "dismissed"}
-    <span class="said">Not now</span>
+    <span class="text-size-meta font-normal text-ink-muted">Not now</span>
   {/if}
   {#if problem}
-    <p class="problem">{problem}</p>
+    <p class="basis-full m-0 text-size-meta font-normal text-status-fail-ink">{problem}</p>
   {/if}
 </div>
-
-<style>
-  .offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .said {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .problem {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-  }
-</style>
