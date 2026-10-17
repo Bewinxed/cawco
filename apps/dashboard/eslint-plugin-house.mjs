@@ -1337,21 +1337,67 @@ function recipeOf(config, base) {
   return { classes: worn, defaults };
 }
 
+const MAX_DEPTH = 4;
+
+function recipePattern(name) {
+  return new RegExp(
+    `\\b(?:const|let)\\s+${name.replace("$", "\\$")}\\s*=\\s*(tv|cva)\\(`
+  );
+}
+
+/**
+ * Where a module defines the recipe it exports as `name`: in its own text,
+ * or through a barrel's `export { name } from "…"`.
+ */
+function exportedRecipe(file, name, depth) {
+  const text = fs.readFileSync(file, "utf8");
+  const match = recipePattern(name).exec(text);
+  if (match || depth > MAX_DEPTH || SVELTE_FILE.test(file)) {
+    return match ? { text, match } : null;
+  }
+  for (const statement of parseModule(text, { range: true }).body) {
+    const source = statement.source?.value;
+    for (const specifier of source ? (statement.specifiers ?? []) : []) {
+      const exported = specifier.exported?.name ?? specifier.exported?.value;
+      const target = svelteFile(source, file) ?? moduleFile(source, file);
+      if (exported === name && target) {
+        const local = specifier.local.name ?? specifier.local.value;
+        return exportedRecipe(target, local, depth + 1);
+      }
+    }
+  }
+  return null;
+}
+
+/** Where the recipe a component calls as `name` is defined: here, or where it is imported from. */
+function recipeDefinition(name, text, file, imports) {
+  const match = recipePattern(name).exec(text);
+  if (match) {
+    return { text, match };
+  }
+  const binding = imports.get(name);
+  const target =
+    binding?.kind === "named"
+      ? (svelteFile(binding.source, file) ?? moduleFile(binding.source, file))
+      : null;
+  return target ? exportedRecipe(target, binding.imported, 0) : null;
+}
+
 /** The classes of the `tv`/`cva` recipes a class expression calls. */
-function recipeClasses(expression, text) {
+function recipeClasses(expression, text, file, imports) {
   return [...expression.matchAll(CALLED)].flatMap(([, name]) => {
-    const recipe = new RegExp(
-      `\\b(?:const|let)\\s+${name.replace("$", "\\$")}\\s*=\\s*(tv|cva)\\(`
-    ).exec(text);
-    if (!recipe) {
+    const found = recipeDefinition(name, text, file, imports);
+    if (!found) {
       return [];
     }
-    const open = recipe.index + recipe[0].length - 1;
-    const call = parseModule(`f(${parenthesised(text, open)})`, {
+    const open = found.match.index + found.match[0].length - 1;
+    const call = parseModule(`f(${parenthesised(found.text, open)})`, {
       range: true,
     }).body[0]?.expression;
     const [first, second] = call?.arguments ?? [];
-    return [recipe[1] === "tv" ? recipeOf(first) : recipeOf(second, first)];
+    return [
+      found.match[1] === "tv" ? recipeOf(first) : recipeOf(second, first),
+    ];
   });
 }
 
@@ -1380,44 +1426,115 @@ function svelteNodes(node, visit) {
   }
 }
 
+/** A component's own imports, from its instance and module scripts. */
+function componentImports(ast) {
+  const bindings = new Map();
+  for (const script of [ast.instance, ast.module]) {
+    for (const statement of script?.content.body ?? []) {
+      if (statement.type === "ImportDeclaration") {
+        importBinding(statement, bindings);
+      }
+    }
+  }
+  return bindings;
+}
+
+/** One root element that wears the `class` prop: its classes, and the component it is, if one. */
+function rootOf(node, attribute, text, file, imports) {
+  const expression = text
+    .slice(attribute.start, attribute.end)
+    .replace(CLASS_EQUALS, "");
+  const recipes = recipeClasses(expression, text, file, imports);
+  return {
+    line: text.slice(0, attribute.start).split("\n").length,
+    classes: [
+      ...quotedClasses(expression).map((name) => ({ name, when: {} })),
+      ...recipes.flatMap((recipe) => recipe.classes),
+    ],
+    defaults: Object.assign({}, ...recipes.map((r) => r.defaults)),
+    // A root that is a component passes the class on to its own root.
+    component:
+      node.type === "Component"
+        ? { name: node.name, chosen: compiledChoice(node) }
+        : null,
+  };
+}
+
 const roots = new Map();
 /**
  * The elements of a component that wear its `class` prop, each with its
- * line and the classes it carries itself (its strings and its recipes').
+ * line and the classes it carries itself (its strings and its recipes'),
+ * and the component's imports.
  */
 function componentRoots(file) {
   if (!roots.has(file)) {
     const text = fs.readFileSync(file, "utf8");
     const binding = text.match(PROPS_BINDING)?.[1].match(CLASS_PROP)?.[1];
+    const ast = binding ? parseSvelte(text, { modern: true }) : null;
+    const imports = ast ? componentImports(ast) : new Map();
     const found = [];
-    if (binding) {
-      const uses = new RegExp(`\\b${binding.replace("$", "\\$")}\\b`);
-      svelteNodes(parseSvelte(text, { modern: true }).fragment, (node) => {
-        const attribute = node.attributes?.find(
-          (a) => a.type === "Attribute" && a.name === "class"
-        );
-        const expression = attribute
-          ? text.slice(attribute.start, attribute.end).replace(CLASS_EQUALS, "")
-          : "";
-        if (attribute && uses.test(expression)) {
-          const recipes = recipeClasses(expression, text);
-          found.push({
-            line: text.slice(0, attribute.start).split("\n").length,
-            classes: [
-              ...quotedClasses(expression).map((name) => ({ name, when: {} })),
-              ...recipes.flatMap((recipe) => recipe.classes),
-            ],
-            defaults: Object.assign({}, ...recipes.map((r) => r.defaults)),
-          });
-        }
-      });
-    }
-    roots.set(file, found);
+    const uses = binding
+      ? new RegExp(`\\b${binding.replace("$", "\\$")}\\b`)
+      : null;
+    svelteNodes(ast?.fragment, (node) => {
+      const attribute = node.attributes?.find(
+        (a) => a.type === "Attribute" && a.name === "class"
+      );
+      const expression = attribute
+        ? text.slice(attribute.start, attribute.end).replace(CLASS_EQUALS, "")
+        : "";
+      if (attribute && uses.test(expression)) {
+        found.push(rootOf(node, attribute, text, file, imports));
+      }
+    });
+    roots.set(file, { roots: found, imports });
   }
   return roots.get(file);
 }
 
+/**
+ * The looks a class passed to a component meets: each root's classes under
+ * the values the tag picks, and, where a root is itself a component, that
+ * component's roots under the values it is given there.
+ */
+function rootLooks(file, chosen, depth = 0) {
+  const { roots: found, imports } = componentRoots(file);
+  return found.flatMap((root) => {
+    const names = root.classes
+      .filter((c) => wears(c.when, chosen, root.defaults))
+      .map((c) => c.name);
+    const look = {
+      file,
+      where: `${path.relative(HERE, file)}:${root.line}`,
+      names: [...new Set(names)],
+    };
+    const inner =
+      root.component && depth < MAX_DEPTH
+        ? componentFile(root.component.name, imports, file)
+        : null;
+    return inner
+      ? [look, ...rootLooks(inner, root.component.chosen, depth + 1)]
+      : [look];
+  });
+}
+
 const ANY = Symbol("any value");
+
+/** The values a component tag picks, read from Svelte's own AST. */
+function compiledChoice(node) {
+  const props = new Map();
+  let spread = false;
+  for (const attribute of node.attributes) {
+    if (attribute.type === "SpreadAttribute") {
+      spread = true;
+    } else if (attribute.type === "Attribute") {
+      const parts = Array.isArray(attribute.value) ? attribute.value : [];
+      const literal = parts.length === 1 && parts[0].type === "Text";
+      props.set(attribute.name, literal ? parts[0].data : ANY);
+    }
+  }
+  return { props, spread };
+}
 
 /**
  * The recipe values a component tag picks: a literal prop is its value; a
@@ -1502,14 +1619,9 @@ const variantOrder = {
     /** A class passed to a component against each class on its root. */
     const reportPassed = ({ tag, entries }) => {
       const file = componentFile(tagName(tag.parent), imports, from);
-      const chosen = chosenVariants(tag);
-      for (const root of file ? componentRoots(file) : []) {
-        const where = `${path.relative(HERE, file)}:${root.line}`;
-        const worn = root.classes
-          .filter((c) => wears(c.when, chosen, root.defaults))
-          .map((c) => c.name);
+      for (const look of file ? rootLooks(file, chosenVariants(tag)) : []) {
         for (const entry of entries) {
-          reportAcross(entry, [...new Set(worn)], where, file);
+          reportAcross(entry, look.names, look.where, look.file);
         }
       }
     };

@@ -36,13 +36,20 @@ In JoinedRow and Who the two states come from one value (`line.hue`, and `you`/`
 
 ## A class passed to a component, against its root
 
-The rule itself now checks this; it is no longer a one-off sweep. For `<Component class=…>`, it resolves the component through the file's imports: a default import of a `.svelte` file, or a named or namespace import through a `.ts` barrel's `export { default as X } from "./x.svelte"`. It then finds the elements in the component whose `class` uses the `$props()` `class: x` binding. It pairs each class passed with each class on those elements: their string literals, plus the classes of any `tv`/`cva` recipe they call. A recipe class is counted only when the tag's props pick its value. A literal prop picks that value; a missing prop picks the recipe's `defaultVariants`; a prop given by expression, or any prop under a spread, may pick any value. A hit reports at the passed class, naming the root as file:line (`"…", passed here, and "…", on the root of <file>:<line>, …`).
+The rule itself now checks this; it is no longer a one-off sweep. For `<Component class=…>`, it resolves the component through the file's imports: a default import of a `.svelte` file, or a named or namespace import through a `.ts` barrel's `export { default as X } from "./x.svelte"`. It then finds the elements in the component whose `class` uses the `$props()` `class: x` binding. It pairs each class passed with each class on those elements: their string literals, plus the classes of any `tv`/`cva` recipe they call. The recipe is read where it is defined: in the component, or in the module it is imported from, through barrels (`popover-trigger` calls Button's `buttonVariants`). A root that is itself a component (`input-group-button`'s `<Button>`, `copy-button`'s `<Button>`, `field-label`'s `<Label>`) passes the class on, so that component's roots count too, under the props given there, up to 4 levels. A recipe class is counted only when the tag's props pick its value. A literal prop picks that value; a missing prop picks the recipe's `defaultVariants`; a prop given by expression, or any prop under a spread, may pick any value. A hit reports at the passed class, naming the root as file:line (`"…", passed here, and "…", on the root of <file>:<line>, …`).
 
-Scratch proof: a component whose recipe has `tone: { plain: "hover:bg-surface-hover", loud: "aria-pressed:bg-brand-wash" }` (default `plain`) and four consumers passing a tied `data-[state=open]:bg-surface-fill`. `tone="loud"` pairs only with the loud class. No `tone` pairs only with plain's. `tone={which}` pairs with both. Passing the root's own class pairs with nothing.
+Scratch proofs:
+- **Recipe values.** A component whose recipe has `tone: { plain: "hover:bg-surface-hover", loud: "aria-pressed:bg-brand-wash" }` (default `plain`), with four consumers passing a tied `data-[state=open]:bg-surface-fill`. `tone="loud"` pairs only with the loud class; no `tone` pairs only with plain's; `tone={which}` pairs with both; passing the root's own class pairs with nothing.
+- **Imported recipe and nested root.** The same recipe defined in a `.ts` module and re-exported through a barrel that the component imports. A `Wrapper` passes its `class` to `<Chip tone="loud">`. `<Wrapper class=…>` meets the loud class on Chip's root; `<Chip class=…>` meets the default plain one.
 
-On this branch: **21 pairs at 10 sites**: set 3 has 13, set 5 has 6 and set 7 has 2; the kit has none, and no file outside the sets has any. These are the 14 the sweep found, plus 7 through Button's recipe, which the sweep could not see. Every consumer is in a set file and every root in the kit, so none is fixed here; the fix goes on the loser, in whichever file its owner holds.
+On this branch: **23 pairs at 11 sites**. Set 3 has 13, set 5 has 6 and set 7 has 4; the kit has none, and no file outside the sets has any. They are:
+- the 14 the sweep found;
+- 7 through Button's recipe, which the sweep could not see;
+- 2 through `popover-trigger`'s imported `buttonVariants`.
 
-At ac7b79de8 every consumer class here, the 7 new ones included, came from the consumer's own scoped `<style>` (unlayered). Every root class was a utility in the kit's `cn(…)`/`tv(…)` (`@layer utilities`). By the layer step above, **the source winner in all 21 is the consumer's class**, whatever the specificity. Tailwind today picks the root's class in 17 of them.
+Following nested roots adds none on this branch. Every consumer is in a set file and every root in the kit, so none is fixed here; the fix goes on the loser, in whichever file its owner holds.
+
+At ac7b79de8 every consumer class here, the 9 new ones included, came from the consumer's own scoped `<style>` (unlayered). Every root class was a utility in the kit's `cn(…)`/`tv(…)` (`@layer utilities`). By the layer step above, **the source winner in all 23 is the consumer's class**, whatever the specificity. Tailwind today picks the root's class in 19 of them.
 
 | consumer site | root | class passed (source winner) | root class | property | Tailwind's pick |
 |---|---|---|---|---|---|
@@ -51,6 +58,7 @@ At ac7b79de8 every consumer class here, the 7 new ones included, came from the c
 | `src/lib/cawco/home/MovedLogins.svelte:119` (set 5) `<Button>` | `ui/button/button.svelte:154` | `aria-expanded:bg-transparent` | `hover:bg-[var(--surface-hover)]` | background-color | the consumer's, as the source |
 | `src/lib/cawco/tasks/TaskFields.svelte:115` (set 3) `<Button>` | `ui/button/button.svelte:154` | `group-hover/value:opacity-100`, `focus-visible:opacity-100` | `disabled:opacity-50` | opacity (2 pairs) | the root's, reversed |
 | `src/lib/cawco/tasks/TodoList.svelte:238` (set 3) `<Button>` | `ui/button/button.svelte:154` | `can-hover:group-hover:opacity-100`, `can-hover:focus-visible:opacity-100` | `disabled:opacity-50` | opacity (2 pairs) | the consumer's, as the source |
+| `src/lib/cawco/UsageMeter.svelte:1159` (set 7) `<Popover.Trigger>` | `ui/popover/popover-trigger.svelte:18` (Button's `buttonVariants`); source rule `.strip[data-variant="home"] :global(.strip-hit)` (UsageMeter.svelte:973 at T) | `group-variant-home/strip:px-space-4` | `has-data-[icon=inline-end]:pr-space-1`, `has-data-[icon=inline-start]:pl-space-1` | padding-right, padding-left (2 pairs) | the root's, reversed |
 
 The 14 the sweep had already found, with their source rules:
 
@@ -64,7 +72,7 @@ The 14 the sweep had already found, with their source rules:
 
 ## Left in set and kit files
 
-68 flagged pairs remain: 47 within one element (33 in set files, 14 in the kit), listed here, and the 21 classes passed to a component, listed above. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step.
+70 flagged pairs remain: 47 within one element (33 in set files, 14 in the kit), listed here, and the 23 classes passed to a component, listed above. The sets and K1/K2 fix their own when they merge this branch. The table names Tailwind's pick, not the source winner: each owner reads that at ac7b79de8. Where one class of a pair came from a converted `<style>` and the other was already a utility in the markup at T, the converted one won, by the layer step.
 - `field-description`'s `nth-last-2:`/`last:` pair is no longer flagged: the rule reads `last:` as `:nth-last-child(1)`, which can't be the same element as `:nth-last-child(2)`. Its two pairs against `[[data-variant=legend]+&]:` remain.
 - `switch`'s `data-unchecked:` against `data-[state=checked]:` is flagged correctly: `data-unchecked` also matches a bare `[data-unchecked]`, so by selector the two can hold together. K1/K2 make them exclusive like any other pair.
 
