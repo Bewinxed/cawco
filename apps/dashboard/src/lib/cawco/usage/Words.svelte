@@ -22,35 +22,26 @@
 {#key key}
   <!-- mark-line: a line of text; an account's dot stands in it on
        vertical-align: middle, the x-height's middle -->
-  <span data-slot="words" class="words" in:wordsIn
+  <span data-slot="words" in:wordsIn
     >{#each parts as part, i (i)}
       {#if typeof part === "string"}
         {part}
       {:else if "strong" in part}
-        <b>{part.strong}</b>
+        <b class="font-medium text-ink-strong">{part.strong}</b>
       {:else if "figure" in part}
-        <b class="mono-figure">{part.figure}</b>
+        <b class="mono-figure font-medium text-ink-strong">{part.figure}</b>
       {:else}
-        <span data-slot="dot" class="dot" style:--c={part.color}></span><b
+        <!-- literal: 6px, 50% -->
+        <span
+          data-slot="dot"
+          class="me-space-1 inline-block size-(--dot) rounded-(--dot-r) bg-(color:--c) align-middle"
+          style:--c={part.color}
+          style:--dot="6px"
+          style:--dot-r="50%"
+        ></span><b class="font-medium text-ink-strong"
           >{part.account}</b
         >
       {/if}
     {/each}</span
   >
 {/key}
-
-<style>
-  b {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .dot {
-    display: inline-block;
-    inline-size: 6px;
-    block-size: 6px;
-    margin-inline-end: 4px;
-    border-radius: 50%;
-    background: var(--c);
-    vertical-align: middle;
-  }
-</style>

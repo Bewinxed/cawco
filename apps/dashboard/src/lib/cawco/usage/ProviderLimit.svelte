@@ -22,9 +22,14 @@
   );
 </script>
 
-<div class="limit" data-provider-limit>
-  <span class="stat-label">{label}</span>
-  <span class="stat-bar" title={pace}>
+<div
+  class="flex flex-none flex-wrap items-center gap-x-space-2 gap-y-space-1"
+  data-provider-limit
+  style:--row-paint="var(--surface-raised)"
+>
+  <span class="flex-none whitespace-nowrap text-ink-muted">{label}</span>
+  <!-- literal: 64px -->
+  <span class="w-(--bar-w) flex-none" style:--bar-w="64px" title={pace}>
     <LimitBar
       elapsed={meter.elapsed}
       {label}
@@ -34,33 +39,8 @@
       used={meter.used}
     />
   </span>
-  <span class="stat-figure" data-limit-left
+  <span class="flex-none whitespace-nowrap" data-limit-left
     ><span class="mono-figure">{left}%</span>
     left</span
   >
 </div>
-
-<style>
-  /* One unit of the strip, sized by its content: a word, the bar, the
-     figure; the bar's pace gap shows the strip's own surface. */
-  .limit {
-    --row-paint: var(--surface-raised);
-    display: flex;
-    flex: none;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-2);
-  }
-  .stat-label,
-  .stat-figure {
-    flex: none;
-    white-space: nowrap;
-  }
-  .stat-label {
-    color: var(--ink-muted);
-  }
-  .stat-bar {
-    flex: none;
-    width: 64px;
-  }
-</style>
