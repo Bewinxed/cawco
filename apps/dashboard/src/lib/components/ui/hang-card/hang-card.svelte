@@ -168,7 +168,8 @@
     if (!span) {
       return null;
     }
-    const right = left + (width || node.offsetWidth);
+    const across = width || node.offsetWidth;
+    const right = left + across;
     const flare = flaring ? span.flare : 0;
     const flushStart = Math.abs(left - span.left) <= 1;
     const flushEnd = Math.abs(right - span.right) <= 1;
@@ -178,11 +179,19 @@
     } else if (flushEnd) {
       flush = "end";
     }
+    // The cut lies on the card's own top edge: the anchor's span as far as
+    // it is over the card, and a flare as far as the card reaches past the
+    // anchor's edge. A card standing anywhere but under it (Caw's panel shut
+    // at the screen's leading margin, the glass at its trailing edge) had a
+    // cut running on past its own side, to the glass and a flare beyond, and
+    // the page scrolled sideways by it.
+    const start = Math.min(Math.max(span.left - left, 0), across);
+    const end = Math.min(Math.max(span.right - left, start), across);
     return {
-      start: span.left - left,
-      end: span.right - left,
-      flareStart: flushStart ? 0 : flare,
-      flareEnd: flushEnd ? 0 : flare,
+      start,
+      end,
+      flareStart: flushStart ? 0 : Math.min(flare, start),
+      flareEnd: flushEnd ? 0 : Math.min(flare, across - end),
       flush,
     };
   }
