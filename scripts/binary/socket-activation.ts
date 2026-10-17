@@ -2,6 +2,8 @@ import { dlopen, FFIType, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 
 /** The first descriptor systemd passes (sd_listen_fds(3) `SD_LISTEN_FDS_START`). */
 const SD_LISTEN_FDS_START = 3;
+/** sd_listen_fds(3)'s name for a descriptor the service manager named none. */
+const UNNAMED = "unknown";
 /** launch_activate_socket(3): "[ENOENT] The socket name specified does not exist in the caller's launchd.plist(5)." */
 const ENOENT = 2;
 
@@ -24,11 +26,14 @@ function collect(name: string): number[] {
         "Dashboard requires the sockets its service manager passes it, and was passed none"
       );
     }
-    const names = process.env.LISTEN_FDNAMES?.split(":");
+    // A descriptor with no name in LISTEN_FDNAMES is named "unknown"
+    // (sd_listen_fds(3), Special names: "The process received no name for the
+    // specific file descriptor from the service manager"), never every name.
+    const names = process.env.LISTEN_FDNAMES?.split(":") ?? [];
     const fds = Array.from(
       { length: count },
       (_, index) => SD_LISTEN_FDS_START + index
-    ).filter((_, index) => names === undefined || names[index] === name);
+    ).filter((_, index) => (names[index] ?? UNNAMED) === name);
     if (fds.length === 0) {
       throw noSocket(
         `Dashboard was passed no socket named ${name} (LISTEN_FDNAMES=${process.env.LISTEN_FDNAMES})`
