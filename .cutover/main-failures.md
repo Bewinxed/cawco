@@ -12,7 +12,7 @@ Commits on this branch, by kind:
 | 7157a9575, 6f506e004 | **product fix** | apps/dashboard/src/lib/cawco/find/MentionField.svelte |
 | f579f774e | **product fix** | apps/dashboard/src/lib/cawco/client.svelte.ts |
 | 75ec4ebf3 | spec fix | scripts/probe-kit/specs/web/safari-blurs.ts |
-| (composer-canvas lint) | spec | scripts/probe-kit/specs/composer-canvas.ts |
+| 638048f70 | spec (lint) | scripts/probe-kit/specs/composer-canvas.ts |
 | 4c4ae98ad | **product fix** | apps/dashboard/src/lib/cawco/home/UpdateCard.svelte, DESIGN.md, scripts/probe-kit/specs/web/safari-blurs.ts (header) |
 | ec3b7e966 | spec fix | scripts/probe-kit/specs/two-pane-perf.ts |
 
