@@ -1668,16 +1668,6 @@ def judge_cost(scope_groups, tpc):
     return calls, inp, 0, out, (inp * PRICE["in"] + out * PRICE["out"]) / 1e6
 
 
-def spent_so_far():
-    """What this measurement's earlier runs spent, which the budget covers across reruns: every ledger row's cost of the
-    scope incremental's calls (a failed call's too; the 10-16 run's 1,168 failed rows reported $0). Other scopes run
-    without a carried-over spend."""
-    if SCOPE != "incremental":
-        return 0.0
-    mine = ("build/inc-", "answer/tree-A/", "answer/tree-B/", f"judge/{SCOPE}/")
-    return sum(d.get("cost_usd") or 0 for d in ledger_rows() if d["key"].startswith(mine))
-
-
 def plan():
     global SCOPE
     tpc, kinds = measured()
@@ -1774,10 +1764,7 @@ def plan():
             else:
                 planned_calls["build"] = btot[0]
     SCOPE = chosen
-    prior = spent_so_far()
-    verdict = ("over it: run refuses (exit 2)" if prior + chosen_total > BUDGET else "within it")
-    out += ["", f"Chosen scope {chosen}: about ${chosen_total:.2f} still to spend, ${prior:.2f} already spent by this measurement, "
-            f"${prior + chosen_total:.2f} in all; the budget is ${BUDGET:.0f} (EVAL_BUDGET): {verdict}.",
+    out += ["", f"Chosen scope {chosen}: about ${chosen_total:.2f} still to spend; the budget is ${BUDGET:.0f} (EVAL_BUDGET).",
             "", "Prices: $2 input, $2.50 5-minute cache write, $0.10 cache read, $10 output per MTok "
             "(https://platform.claude.com/docs/en/about-claude/pricing). On a subscription the run uses up usage allowance rather than dollars."]
     return "\n".join(out), planned_calls, chosen_total
@@ -1885,10 +1872,16 @@ def main():
             return 75
         return 0
     text, planned_calls, total = plan()
+    # the budget covers this measurement across reruns: what its earlier runs spent counts (every ledger row's
+    # reported cost, a failed call's too; the 10-16 run's 1,168 failed rows reported $0)
+    mine = ("build/inc-", "answer/tree-A/", "answer/tree-B/", f"judge/{SCOPE}/")
+    prior = sum(d.get("cost_usd") or 0 for d in ledger_rows() if d["key"].startswith(mine)) if SCOPE == "incremental" else 0.0
+    over = prior + total > BUDGET
+    text += (f"\n\nBudget: ${prior:.2f} already spent by this measurement plus the plan's ${total:.2f} is ${prior + total:.2f} "
+             f"of ${BUDGET:.0f} (EVAL_BUDGET): " + ("over, so run refuses (exit 2)." if over else "within it."))
     print(text, flush=True)
     open(os.path.join(OUT, "plan.txt"), "w").write(text + "\n")
-    prior = spent_so_far()
-    if prior + total > BUDGET:
+    if over:
         log(f"NOT RUN: ${prior:.2f} spent so far plus the plan's ${total:.2f} is over the ${BUDGET:.0f} budget (EVAL_BUDGET)")
         return 2
     if a.cmd == "plan":
