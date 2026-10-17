@@ -352,24 +352,6 @@
 </div>
 
 <style>
-  /* deferred to integration: GlassCard FRAME.caw */
-  /* css-scope .caw-pop: GlassCard names its Caw face with it; this panel draws that face's frame */
-  /* The panel hangs from his glass (a HangCard on the glass: `kit-hang`
-     and `glass-card` in app.css draw its edge, its cut, its hung shadow and
-     its phone's square trailing side). Its rows stand 7px in from its drawn
-     edge. On a phone it keeps the phone's 12px margin on its leading side. */
-  :global(.kit-pop.caw-pop) {
-    width: min(var(--c-panel-w), calc(100vw - 24px));
-    padding: 7px;
-  }
-  @media (max-width: 899px) {
-    :global(.kit-pop.caw-pop) {
-      width: min(
-        var(--c-panel-w),
-        calc(100vw - 12px - env(safe-area-inset-right, 0px))
-      );
-    }
-  }
   /* residual: unmapped — while the update's footer holds at the list's foot
      (UpdateCard `data-stuck`), it draws the foot's fade itself, above it:
      the list's own fade at the foot gives way, and its head's stays. A mask

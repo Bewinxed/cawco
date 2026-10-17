@@ -109,7 +109,7 @@
             if (
               !focused ||
               focused === document.body ||
-              focused.closest(".ns-pop")
+              focused.closest("[data-ns-pop]")
             ) {
               shown?.trigger?.focus();
             }
@@ -160,7 +160,7 @@
                   class="ns-morph h-(--h)"
                   style:--h={height ? `${height}px` : undefined}
                 >
-                  <div class="ns-measure" bind:offsetHeight={height}>
+                  <div bind:offsetHeight={height}>
                     {#key shown?.id}
                       <div
                         class="ns-panel-set"

@@ -121,7 +121,6 @@
   import Segmented from "./Segmented.svelte";
   import SessionFooter from "./SessionFooter.svelte";
   import { effortNotExposed } from "./ToolChips.svelte";
-  import "./ns-theme.css";
 
   let {
     open,
@@ -1966,11 +1965,12 @@
             {#if sourceProject}
               <span
                 data-slot="ns-chip-btn"
-                class="ns-chip-btn static"
+                data-variant="static"
+                class="ns-chip-btn"
                 title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
               >
                 <Files class="text-hue-amber-500" />
-                <span data-slot="chip-label" class="chip-label"
+                <span data-slot="chip-label"
                   >Starts in {sourceProject.name}</span
                 >
               </span>

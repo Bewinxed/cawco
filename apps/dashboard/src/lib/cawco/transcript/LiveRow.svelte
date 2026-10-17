@@ -58,7 +58,12 @@
      * the change that sends this face out also restyles its rail, and the
      * fading reasoning block dropped 14px under the answer coming in.
      */
-    rail: string | null;
+    rail: Rail | null;
+  }
+  /** A rail's gap and head, as the row's custom properties hold them. */
+  interface Rail {
+    gap: string;
+    head: string;
   }
 
   let serial = 0;
@@ -72,12 +77,12 @@
     },
   ]);
 
-  /** The rail the row draws right now, as inline custom properties. */
-  function railNow(live: HTMLElement): string {
+  /** The rail the row draws right now (`--rail-gap`, `--rail-head`). */
+  function railNow(live: HTMLElement): Rail {
     const style = getComputedStyle(live);
     const gap = style.getPropertyValue("--rail-gap").trim();
     const head = style.getPropertyValue("--rail-head").trim();
-    return `--rail-gap: ${gap || "var(--space-4)"}; --rail-head: ${head || "var(--rail)"}`;
+    return { gap: gap || "var(--space-4)", head: head || "var(--rail)" };
   }
   let box = $state<HTMLElement>();
   let tweening = $state(false);
@@ -220,8 +225,8 @@
   {#each faces as face (face.id)}
     <!-- A face contains its content's top margin (flow-root), so the row's
          height is the same whichever face draws it — and the same as the
-         settled row it becomes. Its style is the rail it keeps (railNow):
-         only --rail-gap and --rail-head, one string the script builds. -->
+         settled row it becomes. A leaving face keeps the rail it was drawn
+         with (railNow): its --rail-gap and --rail-head. -->
     <div
       aria-hidden={face.leaving ? true : undefined}
       class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none"
@@ -229,7 +234,8 @@
       data-leaving={face.leaving !== null || undefined}
       inert={face.leaving !== null}
       onanimationend={(event) => settle(face, event)}
-      style={face.rail /* eslint-disable-line shadcn/no-inline-styles -- railNow's string: --rail-gap and --rail-head only */}
+      style:--rail-gap={face.rail?.gap}
+      style:--rail-head={face.rail?.head}
     >
       {@render body(face.leaving ?? row, face.phase)}
     </div>

@@ -22,7 +22,9 @@
 import { Glob } from "bun";
 
 const OUT = "src/lib/tokens/variants.css";
-const SOURCES = new Glob("src/**/*.svelte");
+/** The components, and the shared sheets beside them (spawn/ns-theme.css, workflows.css): every selector a state is read in. */
+const SOURCES = new Glob("src/lib/**/*.{svelte,css}");
+const ROUTES = new Glob("src/routes/**/*.svelte");
 const PAIR = /\[(data|aria)-([a-z-]+)=["']?([a-z0-9-]+)["']?\]/g;
 const WRITTEN =
   /@custom-variant [a-z0-9-]+ \(&\[(data|aria)-([a-z-]+)="([a-z0-9-]+)"\]\);/g;
@@ -190,7 +192,10 @@ const pairsIn = (text: string): Pair[] =>
 
 /** The pairs the tree's selectors read. */
 async function treePairs(): Promise<Pair[]> {
-  const paths = await Array.fromAsync(SOURCES.scan("."));
+  const paths = [
+    ...(await Array.fromAsync(SOURCES.scan("."))),
+    ...(await Array.fromAsync(ROUTES.scan("."))),
+  ].filter((path) => !path.startsWith("src/lib/tokens/"));
   const texts = await Promise.all(paths.map((path) => Bun.file(path).text()));
   return texts.flatMap(pairsIn);
 }

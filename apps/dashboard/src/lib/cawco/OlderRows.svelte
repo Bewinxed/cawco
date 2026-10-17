@@ -61,7 +61,7 @@
     tall = false,
     flip = true,
     still = false,
-    style,
+    motion,
   }: {
     /** The parent whose older rows these are: a project's id, a session's. */
     id: string;
@@ -84,8 +84,8 @@
     flip?: boolean;
     /** A copy on its way out of a list: the row alone, taking no press. */
     still?: boolean;
-    /** The row's own motion, where the list gives its rows one. */
-    style?: string;
+    /** The row's own motion, as an `animation` value, where the list gives its rows one. */
+    motion?: string;
   } = $props();
 
   /** How the box opens and folds: off each row's mark, as every tree. */
@@ -211,11 +211,11 @@
            to the kit's spinner, as a pending Button's icon does. -->
       <button
         {...props}
-        class="{props.class} mark-line"
+        class={[props.class, "mark-line", motion && "animate-(--swap-anim)"]}
         aria-busy={pending || undefined}
         aria-expanded={out}
         onclick={toggle}
-        {style}
+        style:--swap-anim={motion}
         type="button"
       >
         <TreeMark

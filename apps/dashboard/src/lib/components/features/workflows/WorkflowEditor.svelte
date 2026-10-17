@@ -802,15 +802,17 @@
                   data-slot="filters"
                   class="wf-row"
                   {@attach highlight({
-                    rows: ".wf-btn",
+                    rows: '[data-slot="run-filter"]',
                     selected: '[aria-pressed="true"]',
                     axis: "x",
                   })}
                 >
                   {#each [{ value: "all", label: "All" }, { value: "waiting", label: "Needs you" }, { value: "failed", label: "Failed" }] as item (item.value)}
                     <button
+                      data-slot="run-filter"
                       aria-pressed={filter === item.value}
-                      class="wf-btn bg-transparent"
+                      class="wf-btn"
+                      data-variant="quiet"
                       onclick={() => {
                         filter = item.value;
                       }}
@@ -908,9 +910,5 @@
       ) {
       transition: flex-grow var(--dur-panel) var(--ease-in-out);
     }
-  }
-  /* residual: unmapped */
-  [data-slot="filters"] button {
-    filter: none;
   }
 </style>

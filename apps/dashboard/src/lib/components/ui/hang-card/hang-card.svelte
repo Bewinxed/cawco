@@ -59,6 +59,21 @@
   import { cn } from "#lib/utils.js";
   import { outlineLayer } from "./hang-outline.js";
 
+  /** The glass card's faces (GlassCard's `Card`). */
+  type Frame = "caw" | "machines" | "jump";
+  /**
+   * Each face's frame, read off what its custom properties hold (on the card,
+   * below): Caw's panel `c-panel-w` wide with its rows 7px in; the machines
+   * 20rem; Jump `c-find-w` wide and its foot clear of the screen's, a full
+   * sheet on a phone. On a phone each keeps the phone's 12px margin on its
+   * leading side (app.css `.glass-card` squares the trailing one).
+   */
+  const FRAMES: Record<Frame, string> = {
+    caw: "w-(--frame-w) max-desk:w-(--frame-w-narrow) gap-0 p-space-2",
+    machines: "w-(--frame-w) gap-0",
+    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-desk:h-(--frame-h) max-desk:w-(--frame-w-narrow)",
+  };
+
   type Props = Omit<
     PopoverPrimitive.ContentProps & ContextMenuPrimitive.ContentProps,
     "child" | "children"
@@ -74,6 +89,11 @@
     flared?: boolean;
     /** It hangs from the top bar's glass. */
     glass?: boolean;
+    /**
+     * The glass card's face it frames (GlassCard): Caw's panel, the
+     * machines or Jump, each its own width, padding and height.
+     */
+    frame?: Frame;
     /**
      * It hangs from a folder tab (the session card, the tab's menu): one
      * silhouette with it, grown out of its foot (motion/hang-shape,
@@ -98,6 +118,7 @@
     as: Content = PopoverContent,
     flared = true,
     glass = false,
+    frame,
     tab = false,
     joined = $bindable(false),
     ref = $bindable(null),
@@ -366,6 +387,7 @@
     "kit-pop kit-hang",
     glass && "glass-card",
     tab && "tab-hang",
+    frame && FRAMES[frame],
     className
   )}
   forceMount
@@ -374,8 +396,24 @@
   {#snippet child({ props, wrapperProps, open })}
     {#if forceMount || drawn(props)}
       <div {...wrapperProps} style:pointer-events={pressable(open)}>
+        <!-- literal: 24px, 12px (the screen's margins), 20rem (the machines) -->
         <div
           {...own(props)}
+          style:--frame-w={frame === "caw"
+            ? "min(var(--c-panel-w), calc(100vw - 24px))"
+            : frame === "machines"
+              ? "min(20rem, calc(100vw - 16px))"
+              : frame === "jump"
+                ? "min(var(--c-find-w), calc(100vw - 24px))"
+                : undefined}
+          style:--frame-w-narrow={frame === "caw"
+            ? "min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))"
+            : frame === "jump"
+              ? "calc(100vw - 12px - env(safe-area-inset-right, 0px))"
+              : undefined}
+          style:--frame-h={frame === "jump"
+            ? "calc(100dvh - var(--c-top-bar-h) - 24px)"
+            : undefined}
           style:pointer-events={pressable(open)}
           {@attach hung}
           {@attach kept}

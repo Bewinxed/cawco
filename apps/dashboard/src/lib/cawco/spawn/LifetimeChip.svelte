@@ -65,10 +65,10 @@
           class="size-icon-md flex-none text-(--hue)"
           style={`--hue:${current.hue}`}
         />
-        <span data-slot="chip-label" class="chip-label">{current.name}</span>
+        <span data-slot="chip-label">{current.name}</span>
       </span>
     {/key}
-    <Down class="chevron" />
+    <Down data-slot="chevron" />
   {/snippet}
   {#each OPTIONS as option, index (option.name)}
     {@const Icon = option.icon}

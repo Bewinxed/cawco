@@ -1981,11 +1981,13 @@
         style:--skeleton-col="minmax(15rem, 22rem)"
         style:--skeleton-col-phone="calc(100% - var(--space-8))" out:crossOut>
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
+          <!-- literal: 54px (a card's height) -->
           <div class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--hairline-ring)"
-            style:--hairline-ring="inset 0 0 0 1px var(--border-hairline)">
+            style:--hairline-ring="inset 0 0 0 1px var(--border-hairline)"
+            style:--card-h="54px">
             <Skeleton class="h-space-4 w-3/5" />
-            <Skeleton class="h-[54px] w-full rounded-sm" />
-            <Skeleton class="h-[54px] w-full rounded-sm" />
+            <Skeleton class="h-(--card-h) w-full rounded-sm" />
+            <Skeleton class="h-(--card-h) w-full rounded-sm" />
           </div>
         {/each}
       </div>

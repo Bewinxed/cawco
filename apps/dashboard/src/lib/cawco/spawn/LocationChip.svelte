@@ -82,11 +82,11 @@
     {/if}
     <span
       data-slot="chip-label"
-      class="chip-label data-mono:font-mono"
+      class="data-mono:font-mono"
       data-mono={!empty || undefined}
       title={mode === "repo" ? repo : dir}>{label}</span
     >
-    <Down class="chevron" />
+    <Down data-slot="chevron" />
   {/snippet}
   <LocationSection
     {dir}

@@ -30,7 +30,7 @@
     line,
     current = null,
     flip = true,
-    styleOf,
+    motionOf,
   }: {
     view: TreeView;
     row: InstanceRow;
@@ -42,14 +42,15 @@
     current?: string | null;
     /** Its box is reflow's to move (motion/rows); not while a list drives it. */
     flip?: boolean;
-    /** A line's own motion, where the list gives its rows one. */
-    styleOf?: (key: string) => string;
+    /** A line's own motion, as an `animation` value, where the list gives its rows one. */
+    motionOf?: (key: string) => string | undefined;
   } = $props();
 
   /** How a parent's rows open and fold (motion/branch): off each row's mark. */
   const TREE: BranchOptions = { glyph: '[data-slot="tree-mark"]' };
 
   const shape = $derived(view.shapeOf(row.id));
+  const motion = $derived(motionOf?.(row.id));
   const older = $derived(view.olderOf(row.id));
   const kids = $derived(
     view.under(rows, row.id).filter((kid) => !older?.tops.has(kid.id))
@@ -63,9 +64,9 @@
 >
   <div
     data-slot="tree-line"
-    class="relative"
+    class={["relative", motion && "animate-(--swap-anim)"]}
     data-key={row.id}
-    style={styleOf?.(row.id)}
+    style:--swap-anim={motion}
   >
     {#if shape?.parent && shape.depth > 0}
       {@const above = shape.parent}
@@ -102,7 +103,7 @@
       {@attach nestFrom('[data-slot="tree-mark"]')}
     >
       {#each kids as kid (kid.id)}
-        <Self {current} {flip} {line} row={kid} {rows} {styleOf} {view} />
+        <Self {current} {flip} {line} {motionOf} row={kid} {rows} {view} />
       {/each}
       {#if older}
         <!-- It arrives with the last row over it, in a change of the list;
@@ -116,7 +117,7 @@
           id={row.id}
           keyOf={(kid) => kid.id}
           list={view.list}
-          style={styleOf?.(kids.at(-1)?.id ?? row.id)}
+          motion={motionOf?.(kids.at(-1)?.id ?? row.id)}
           tall
           trees={view
             .under(view.boxed, row.id)
@@ -127,9 +128,9 @@
               {current}
               {flip}
               {line}
+              {motionOf}
               row={kid}
               rows={view.boxed}
-              {styleOf}
               {view}
             />
           {/snippet}

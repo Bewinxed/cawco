@@ -52,7 +52,8 @@
     data-slot="primary"
     aria-busy={busy || undefined}
     aria-disabled={busy || undefined}
-    class="ns-btn primary touch-hit min-w-(--min-w)"
+    class="ns-btn touch-hit min-w-(--min-w)"
+    data-variant="primary"
     data-share="session:new"
     data-share-ttl="8000"
     {disabled}

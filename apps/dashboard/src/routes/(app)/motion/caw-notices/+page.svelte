@@ -360,8 +360,7 @@
         align="end"
         anchor={glass}
         aria-label="Needs you"
-        class="gap-0"
-        data-slot="caw-pop"
+        frame="caw"
         collisionPadding={placement.collisionPadding}
         customAnchor={glass}
         escapeKeydownBehavior="ignore"

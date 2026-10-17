@@ -25,12 +25,14 @@
     trigger,
     children,
     width = 320,
+    fit = false,
     gap = 0,
     align = "start",
     trapFocus = true,
     anchor = null,
     label,
     triggerClass = "",
+    triggerData = {},
     triggerTone,
     haspopup,
     rows,
@@ -47,12 +49,25 @@
     trigger?: Snippet;
     children: Snippet;
     width?: number;
+    /**
+     * The surface takes its content's width, `width` at the least and the
+     * viewport less its margins at the most, and its height uncapped: a list
+     * sized to its widest row and scrolled in whole rows (SessionDetails'
+     * model list).
+     */
+    fit?: boolean;
     gap?: number;
     align?: "start" | "end" | "center";
     trapFocus?: boolean;
     anchor?: { getBoundingClientRect: () => DOMRect } | HTMLElement | null;
     label?: string;
     triggerClass?: string;
+    /**
+     * The trigger's own hooks, as data attributes the caller's neighbours
+     * read: `data-tool` (a tool's chip, which a tools row sizes),
+     * `data-account-chip` (the account's, which keeps its chevron).
+     */
+    triggerData?: Partial<Record<`data-${string}`, true>>;
     /** A trigger that reads off its neighbours: quiet (nothing chosen), or a failing pick. */
     triggerTone?: keyof typeof TONES;
     /** What the trigger opens, when it is not a dialog. */
@@ -125,6 +140,7 @@
       aria-label={label}
       class={["touch-hit", triggerClass, triggerTone && TONES[triggerTone]]}
       data-ns-popover-trigger-class={triggerClass}
+      {...triggerData}
       data-state={open ? "open" : "closed"}
       {id}
       onclick={toggle}
@@ -141,6 +157,7 @@
         aria-label={label}
         class={["touch-hit", triggerClass, triggerTone && TONES[triggerTone]]}
         data-ns-popover-trigger-class={triggerClass}
+        {...triggerData}
         {id}
       >
         {#snippet child({ props })}
@@ -154,6 +171,7 @@
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         data-ns-pop
+        data-fit={fit || undefined}
         {align}
         aria-label={rest["aria-label"]}
         class="ns-theme ns-pop"
@@ -179,10 +197,7 @@
           <!-- Closing, it lets presses through to the page (floating-presence). -->
           <div
             {...wrapperProps}
-            class={[
-              "ns-pop-shell",
-              open ? "pointer-events-auto" : "pointer-events-none",
-            ]}
+            class={open ? "pointer-events-auto" : "pointer-events-none"}
           >
             <div
               {...props}

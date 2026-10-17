@@ -69,12 +69,13 @@
       }}
       {open}
       rows="[data-account-option]"
-      triggerClass="ns-chip-btn tool account-chip max-w-full min-w-0"
+      triggerClass="ns-chip-btn max-w-full min-w-0"
+      triggerData={{ "data-tool": true, "data-account-chip": true }}
       width={320}
     >
       {#snippet trigger()}
         {@render face()}
-        <Down data-slot="account-switch-chevron" />
+        <Down data-slot="chevron" />
       {/snippet}
       <div
         data-slot="list"
@@ -131,7 +132,9 @@
     <span
       data-tool
       data-slot="ns-chip-btn"
-      class="static max-w-full min-w-0"
+      data-account-chip
+      data-variant="static"
+      class="ns-chip-btn max-w-full min-w-0"
     >
       <span class="sr-only">Account:</span>
       {@render face()}

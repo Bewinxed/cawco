@@ -72,7 +72,8 @@
   {onchange}
   {open}
   rows="[data-account-option]"
-  triggerClass="ns-chip-btn tool"
+  triggerClass="ns-chip-btn"
+  triggerData={{ "data-tool": true }}
   width={360}
 >
   {#snippet trigger()}
@@ -86,10 +87,8 @@
         style:--round="50%"
       ></span>
     {/if}
-    <span data-slot="chip-label" class="chip-label" data-account-chip
-      >{label}</span
-    >
-    <Down class="chevron" />
+    <span data-slot="chip-label" data-account-chip>{label}</span>
+    <Down data-slot="chevron" />
   {/snippet}
   <div
     data-slot="list"

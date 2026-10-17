@@ -1,32 +1,53 @@
-.wf {
+/*
+ * The workflow pages' and every flow canvas's shared sheet, as Tailwind
+ * utilities under the names its consumers write (`wf`, `wf-btn`,
+ * `wf-row`…), imported by app.css. This sheet won its ties: it loaded after
+ * its consumers. So its utilities keep the weight they had (`.wf .wf-btn`,
+ * (0,2,0)), over a component's own (0,1,0). Two declarations go to zero, for
+ * the one place a component out-weighed the sheet: a wf-btn's display (W1)
+ * and its min-height (W4). The rules into elements (headings, fields, the
+ * disabled button, Svelte Flow's attribution) stay plain CSS, over every kit
+ * utility as they were, with two exclusions so they no longer reach what a
+ * shared utility styles (X1, X2), and the attribution under `.svelte-flow`
+ * so it still beats @xyflow's own sheet, which now loads after it (X3). The
+ * cascade, row by row: .cutover/shared-sheets.md §3.
+ */
+@utility wf {
   color: var(--ink-strong);
   font-size: var(--text-body);
   font-weight: var(--weight-body);
   min-width: 0;
 }
+/* foreign-dom */
 .wf h1 {
   font-size: var(--text-title);
   font-weight: var(--weight-strong);
   color: var(--ink-strong);
 }
+/* foreign-dom */
 .wf h2 {
   font-size: var(--text-label);
   font-weight: var(--weight-strong);
   color: var(--ink-strong);
 }
+/* foreign-dom */
 .wf h3 {
   font-size: var(--text-label);
   font-weight: var(--weight-strong);
   color: var(--ink-strong);
 }
+/* foreign-dom — X1: a check's row is wf-check's. */
 .wf label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
   color: var(--ink-muted);
   font-size: var(--text-label);
   font-weight: var(--weight-strong);
 }
+.wf label:where(:not(.wf-check)) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* foreign-dom — X2: a mono field's face is wf-mono's. */
 .wf input:not([type="checkbox"]),
 .wf select,
 .wf textarea {
@@ -37,162 +58,218 @@
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   color: var(--ink-strong);
-  font: inherit;
   min-height: 36px;
 }
-/* A select is one line and never grows, and Safari sizes one to its content
-   whatever `min-height` says (37px for the 44 asked under a finger): its
-   height is set outright. */
+.wf input:not([type="checkbox"]),
+.wf select,
+.wf textarea:where(:not(.wf-mono)) {
+  font: inherit;
+}
+/* foreign-dom — a select is one line and never grows, and Safari sizes one
+   to its content whatever `min-height` says (37px for the 44 asked under a
+   finger): its height is set outright. */
 .wf select {
   height: 36px;
 }
+/* foreign-dom */
 .wf textarea {
   resize: vertical;
   min-height: 90px;
 }
+/* foreign-dom */
 .wf input[type="checkbox"] {
   accent-color: var(--brand-solid);
   width: 24px;
   height: 24px;
 }
-/* The canvas's attribution link sits in its corner, flush with the clip:
-   its ring goes on its own box. */
-/* Svelte Flow's attribution on every graph canvas, in the meta role, on
-   the canvas's own ground in the subtle ink: Svelte Flow's grey wash and
-   grey link read as a stray box in dark. */
-.svelte-flow__attribution {
+/* foreign-dom — X3: Svelte Flow's attribution on every graph canvas, in the
+   meta role, on the canvas's own ground in the subtle ink (Svelte Flow's
+   grey wash and grey link read as a stray box in dark). The link sits in
+   its corner, flush with the clip: its ring goes on its own box. */
+.svelte-flow .svelte-flow__attribution {
   --xy-attribution-background-color: transparent;
   font-size: var(--text-meta);
   font-weight: var(--weight-body);
 }
-.svelte-flow__attribution a {
+.svelte-flow .svelte-flow__attribution a {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
   color: var(--ink-subtle);
 }
-.svelte-flow__attribution a:focus-visible {
+.svelte-flow .svelte-flow__attribution a:focus-visible {
   outline-offset: var(--focus-ring-inset);
 }
-.wf .wf-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  --btn-gap: var(--space-2);
-  --btn-icon: 16px;
-  min-height: 36px;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-control);
-  background: var(--surface-raised);
-  color: var(--ink-strong);
-  font-size: var(--text-label);
-  font-weight: var(--weight-strong);
-  cursor: pointer;
-  text-decoration: none;
-  transition: transform var(--dur-toggle) var(--ease-out);
-}
-/* The press, as .pressable gives every other compact control. */
-@media (prefers-reduced-motion: no-preference) {
-  .wf .wf-btn:active:not(:disabled, [aria-busy="true"]) {
-    transform: scale(var(--press-scale));
+
+/* A pressed toggle (the Editor/Program/Runs tabs, the run filters, the
+   Steps/Canvas tabs, Select/Pan) is said so only to a screen reader:
+   selection rides the surface and the edge, never a hue. A quiet one (the
+   run filters, `data-variant="quiet"`) draws no surface, pressed or not.
+   The press scales as .pressable gives every other compact control. */
+@utility wf-btn {
+  /* W1, W4: a component's own display and min-height win. */
+  :where(.wf) :where(&) {
+    display: inline-flex;
+    min-height: 36px;
+  }
+  .wf & {
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    --btn-gap: var(--space-2);
+    --btn-icon: 16px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-control);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform var(--dur-toggle) var(--ease-out);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .wf &:active:not(:disabled, [aria-busy="true"]) {
+      transform: scale(var(--press-scale));
+    }
+  }
+  .wf &[aria-pressed="true"] {
+    background: var(--surface-fill);
+    border-color: var(--border-control);
+    color: var(--ink-strong);
+  }
+  /* W2 */
+  .wf &[data-variant="quiet"] {
+    background: transparent;
+    filter: none;
+  }
+  @media (hover: hover) {
+    .wf &:hover:not(:disabled) {
+      filter: brightness(0.96);
+    }
+  }
+  @media (max-width: 1023px), (pointer: coarse) {
+    :where(.wf) :where(&) {
+      min-height: 44px;
+    }
+    .wf & {
+      min-width: 44px;
+    }
   }
 }
-.wf .wf-primary {
-  color: var(--on-brand);
-  background: var(--action-surface);
-  border-color: transparent;
-}
-@media (hover: hover) {
-  .wf .wf-primary:not(:disabled):hover {
-    background: var(--action-surface-hover);
+@utility wf-primary {
+  .wf & {
+    color: var(--on-brand);
+    background: var(--action-surface);
+    border-color: transparent;
+  }
+  @media (hover: hover) {
+    .wf &:not(:disabled):hover {
+      background: var(--action-surface-hover);
+    }
   }
 }
-/* A pressed toggle — the Editor/Program/Runs tabs, the run filters, the
-   Steps/Canvas tabs, Select/Pan — said so only to a screen reader. Selection
-   rides the surface and the edge, never a hue. */
-.wf .wf-btn[aria-pressed="true"] {
-  background: var(--surface-fill);
-  border-color: var(--border-control);
-  color: var(--ink-strong);
-}
+/* foreign-dom */
 .wf button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.wf .wf-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+@utility wf-row {
+  .wf & {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
 }
-.wf .wf-spread {
-  justify-content: space-between;
+@utility wf-spread {
+  .wf & {
+    justify-content: space-between;
+  }
 }
-.wf .wf-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-width: 0;
+@utility wf-stack {
+  .wf & {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+  }
 }
-.wf .wf-well {
-  background: var(--surface-recess);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+@utility wf-well {
+  .wf & {
+    background: var(--surface-recess);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
 }
-.wf .wf-error {
-  color: var(--error-11);
-  background: var(--error-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  overflow-wrap: anywhere;
+@utility wf-error {
+  .wf & {
+    color: var(--error-11);
+    background: var(--error-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    overflow-wrap: anywhere;
+  }
 }
-.wf .wf-muted {
-  color: var(--ink-muted);
-  font-size: var(--text-meta);
-  font-weight: var(--weight-body);
+@utility wf-muted {
+  .wf & {
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+  }
 }
-.wf .wf-mono,
+@utility wf-mono {
+  .wf & {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+/* foreign-dom */
 .wf pre {
   font-family: var(--font-mono);
   font-size: var(--text-label);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.wf .wf-check {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 36px;
-}
-.wf .wf-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-@media (hover: hover) {
-  .wf .wf-btn:hover:not(:disabled) {
-    filter: brightness(0.96);
+@utility wf-check {
+  .wf & {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 36px;
   }
 }
+@utility wf-fields {
+  .wf & {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+  @media (max-width: 1023px), (pointer: coarse) {
+    .wf & {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+/* foreign-dom — under a finger and on a narrow screen, fields are 44px tall
+   and set at 16px. */
 @media (max-width: 1023px), (pointer: coarse) {
-  .wf .wf-fields {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .wf .wf-btn {
-    min-height: 44px;
-    min-width: 44px;
-  }
   .wf input:not([type="checkbox"]),
   .wf select,
   .wf textarea {
-    font-size: 16px;
     min-height: 44px;
+  }
+  .wf input:not([type="checkbox"]),
+  .wf select,
+  .wf textarea:where(:not(.wf-mono)) {
+    font-size: 16px;
   }
   .wf select {
     height: 44px;

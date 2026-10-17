@@ -68,7 +68,7 @@
     setPeeked,
     submitCommand,
   } from "./client.svelte";
-  import { identityVar } from "./folder-prefs.svelte";
+  import { folderPrefs } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
   import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
@@ -276,7 +276,7 @@
             {#if cwd}
               <IconFolder
                 class="identity-ink size-icon-md shrink-0"
-                style={identityVar(cwd)}
+                style="--identity-h: {folderPrefs.hue(cwd)}"
               />
             {/if}
             <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"

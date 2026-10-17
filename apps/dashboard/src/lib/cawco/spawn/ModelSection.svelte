@@ -319,7 +319,7 @@
         axis="y"
         class="grid content-start gap-(--rail-gap) rounded-l-md border-r border-border-hairline bg-surface-recess p-(--rail-pad)"
         itemClass="ns-in touch-hit press-tint grid size-(--rail-radio) place-items-center"
-        itemStyle={(i: number) => `--delay:${i * 30}ms`}
+        stagger={30}
         items={railItems}
         label="Harness"
         onpick={(id: string) => onharness(id as HarnessKind)}
@@ -480,7 +480,8 @@
           >
             <span
               data-slot="tile"
-              class="ns-tile ink size-(--tile)"
+              class="ns-tile size-(--tile)"
+              data-variant="ink"
               style:--tile="26px"><Code class="size-icon-md" /></span
             >
             <span data-slot="text" class="min-w-0 flex-1">
@@ -641,7 +642,7 @@
     }
   }
   /* residual: foreign-dom */
-  [data-slot="tools"] :global(.ns-chip-btn.tool) {
+  [data-slot="tools"] :global(.ns-chip-btn[data-tool]) {
     height: var(--chip-h);
     background: var(--surface-raised);
   }

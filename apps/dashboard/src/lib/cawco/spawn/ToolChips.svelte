@@ -110,7 +110,7 @@
 
 {#snippet effortChip()}
   <Tuning class="text-hue-orange-500" />
-  <span data-slot="chip-label" class="chip-label capitalize"
+  <span data-slot="chip-label" class="capitalize"
     >{tools.effort ?? "Default"}</span
   >
 {/snippet}
@@ -121,20 +121,20 @@
       data-tool
       data-slot="ns-chip-btn"
       aria-disabled="true"
-      class={[
-        "ns-chip-btn tool off cursor-not-allowed opacity-55 hover:bg-surface-raised data-static:hover:bg-surface-recess",
-        readonly && "static",
-      ]}
-      data-static={readonly || undefined}
+      class="ns-chip-btn cursor-not-allowed opacity-55 hover:bg-surface-raised variant-static:hover:bg-surface-recess"
+      data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >
       <Tuning class="text-hue-orange-500" />
-      <span data-slot="chip-label" class="chip-label">{effortOff.label}</span>
+      <span data-slot="chip-label">{effortOff.label}</span>
       <span class="sr-only">: {effortOff.reason}</span>
     </span>
   {:else}
-    <span data-tool data-slot="ns-chip-btn" class="ns-chip-btn tool static"
-      >{@render effortChip()}</span
+    <span
+      data-tool
+      data-slot="ns-chip-btn"
+      data-variant="static"
+      class="ns-chip-btn">{@render effortChip()}</span
     >
   {/if}
 {/snippet}
@@ -142,7 +142,7 @@
   {#if look}
     {@const Icon = look.icon}
     <Icon class="text-(--hue)" style={`--hue:${look.hue}`} />
-    <span data-slot="chip-label" class="chip-label">{look.name}</span>
+    <span data-slot="chip-label">{look.name}</span>
   {/if}
 {/snippet}
 
@@ -160,7 +160,8 @@
         <span
           data-tool
           data-slot="ns-chip-btn"
-          class={["ns-chip-btn tool static", fullSend && FULL_SEND]}
+          data-variant="static"
+          class={["ns-chip-btn", fullSend && FULL_SEND]}
           title={look?.desc || undefined}>{@render permissionChip()}</span
         >
       {/if}
@@ -185,12 +186,13 @@
               pop = value ? "effort" : null;
             }}
             open={pop === "effort"}
-            triggerClass="ns-chip-btn tool"
+            triggerClass="ns-chip-btn"
+            triggerData={{ "data-tool": true }}
             width={300}
           >
             {#snippet trigger()}
               {@render effortChip()}
-              <Down class="chevron" />
+              <Down data-slot="chevron" />
             {/snippet}
             <!-- literal: 8px 6px 6px padding -->
             <div
@@ -219,12 +221,16 @@
               pop = value ? "permission" : null;
             }}
             open={pop === "permission"}
-            triggerClass={`ns-chip-btn tool${fullSend ? ` ${FULL_SEND}` : ""}`}
+            triggerClass={fullSend ? `ns-chip-btn ${FULL_SEND}` : "ns-chip-btn"}
+            triggerData={{ "data-tool": true }}
             width={340}
           >
             {#snippet trigger()}
               {@render permissionChip()}
-              <Down class={["chevron", fullSend && "text-status-attn-ink"]} />
+              <Down
+                class={fullSend ? "text-status-attn-ink" : undefined}
+                data-slot="chevron"
+              />
             {/snippet}
             <PermissionSection
               embedded

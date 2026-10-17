@@ -88,12 +88,11 @@
     { card: "caw", leaving: false },
   ]);
   const shown = $derived(faces.find((face) => !face.leaving)?.card ?? "caw");
-  /** Each card's own frame: its width, its padding (their components). */
+  /** Each card's own frame (HangCard's `frame`), named on the card for the probes. */
   const FRAME = {
-    caw: "caw-pop gap-0",
-    /* literal: min(20rem, calc(100vw - 16px)), set on the card as --machines-frame-w */
-    machines: "machines-pop w-(--machines-frame-w) gap-0",
-    jump: "jump-pop gap-0",
+    caw: "caw-pop",
+    machines: "machines-pop",
+    jump: "jump-pop",
   } as const satisfies Record<Card, string>;
   const LABEL = {
     caw: "Needs you",
@@ -407,11 +406,9 @@
     align="end"
     anchor={glass}
     aria-label={LABEL[shown]}
-    class={[FRAME[shown], rehearsing && "invisible"]}
+    class={[rehearsing && "invisible"]}
     data-glass-card-frame={FRAME[shown]}
-    style={shown === "machines"
-      ? "--machines-frame-w: min(20rem, calc(100vw - 16px))"
-      : undefined}
+    frame={shown}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
     escapeKeydownBehavior={shown === "jump" ? "ignore" : "close"}

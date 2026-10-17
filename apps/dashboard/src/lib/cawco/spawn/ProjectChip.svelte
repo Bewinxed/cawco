@@ -93,7 +93,7 @@
   {#snippet trigger()}
     <Files class="text-hue-amber-500" />
     {#key project?.id}
-      <span data-slot="swap" data-chip-label class="chip-label swap"
+      <span data-slot="chip-label" class="swap"
         >{project?.name ?? "No project"}</span
       >
     {/key}
@@ -120,7 +120,7 @@
         title="Clear project"><Clear class="size-icon-sm" /></span
       >
     {:else}
-      <Down class="chevron" />
+      <Down data-slot="chevron" />
     {/if}
   {/snippet}
   {#if draft}
@@ -187,7 +187,8 @@
           role="alert">{createError}</span
         >
         <button
-          class="ns-btn sm touch-hit"
+          class="ns-btn touch-hit"
+          data-size="sm"
           onclick={() => {
             draft = null;
           }}
@@ -199,7 +200,9 @@
           data-slot="primary"
           aria-busy={creating || undefined}
           aria-disabled={creating || undefined}
-          class="ns-btn sm primary touch-hit"
+          class="ns-btn touch-hit"
+          data-size="sm"
+          data-variant="primary"
           disabled={!(draft.name.trim() && draft.path.trim())}
           onclick={whileIdle(() => creating, create)}
           type="button"
@@ -272,7 +275,8 @@
     >
       <span
         data-slot="tile"
-        class="ns-tile dashed size-(--tile)"
+        class="ns-tile size-(--tile)"
+        data-variant="dashed"
         style:--tile="24px"><Add class="size-icon-md" /></span
       >
       <span data-slot="name" class="type-label block">New project…</span>

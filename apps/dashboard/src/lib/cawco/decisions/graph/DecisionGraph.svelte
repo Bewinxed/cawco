@@ -18,7 +18,6 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
-  import "#lib/components/features/workflows/workflows.css";
   import { onMount, untrack } from "svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";

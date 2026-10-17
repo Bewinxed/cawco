@@ -22,7 +22,6 @@
   import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
-  import "../spawn/ns-theme.css";
   import DevicePanel from "./DevicePanel.svelte";
   import { DeviceFlow } from "./device.svelte";
   import KeyPanel from "./KeyPanel.svelte";

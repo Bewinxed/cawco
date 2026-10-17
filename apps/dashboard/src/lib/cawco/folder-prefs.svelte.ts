@@ -102,11 +102,3 @@ export const folderPrefs = {
     edit(cwd, { hue });
   },
 };
-
-/**
- * Inline style assigning the directory's identity hue — the override where
- * there is one. Every surface that colours by identity goes through this.
- */
-export function identityVar(cwd: string): string {
-  return `--identity-h: ${folderPrefs.hue(cwd)}`;
-}

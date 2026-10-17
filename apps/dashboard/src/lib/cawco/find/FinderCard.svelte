@@ -142,7 +142,13 @@
   }
 </script>
 
+<!-- The glass's Jump face is `c-find-w` wide, right-aligned under the bar,
+     its foot clear of the screen's (HangCard's `jump` frame). On a phone it
+     is the sheet the wireframe draws, always its full height, and the finder
+     fills it: the field stays at its foot over the keyboard and the best
+     match nearest it however many rows the words leave. -->
 <Finder
+  class="max-desk:flex-1"
   {finder}
   {onclose}
   onmachine={machine}
@@ -150,30 +156,3 @@
   onopenwaiting={openedWaiting}
   {phone}
 />
-
-<style>
-  /* css-scope .jump-pop: GlassCard names its Jump face with it; the finder draws that face's frame */
-  /* The glass's card showing Find: `c-find-w` wide, right-aligned under the
-     bar, its foot clear of the screen's (the wireframe's desk card). */
-  :global(.kit-pop.jump-pop) {
-    width: min(var(--c-find-w), calc(100vw - 24px));
-    max-height: calc(100dvh - var(--c-top-bar-h) - 24px);
-    padding: 0;
-  }
-  /* On a phone it keeps the phone's 12px margin on its leading side; its
-     trailing side is the screen's edge (app.css `.glass-card`). It is the
-     sheet the wireframe draws: always its full height, the finder filling
-     it, so the field stays at its foot over the keyboard and the best match
-     nearest it however many rows the words leave (it never rides up the
-     screen as results narrow). */
-  @media (max-width: 899px) {
-    :global(.kit-pop.jump-pop) {
-      width: calc(100vw - 12px - env(safe-area-inset-right, 0px));
-      height: calc(100dvh - var(--c-top-bar-h) - 24px);
-    }
-    :global(.jump-pop .finder) {
-      flex: 1;
-      min-height: 0;
-    }
-  }
-</style>

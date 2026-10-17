@@ -445,7 +445,9 @@
             >
             <button
               data-slot="primary"
-              class="ns-btn sm primary touch-hit max-phone:min-h-(--min-h) flex-none whitespace-nowrap max-phone:w-full"
+              class="ns-btn touch-hit max-phone:min-h-(--min-h) flex-none whitespace-nowrap max-phone:w-full"
+              data-size="sm"
+              data-variant="primary"
               onclick={useFolder}
               style:--min-h="44px"
               type="button"

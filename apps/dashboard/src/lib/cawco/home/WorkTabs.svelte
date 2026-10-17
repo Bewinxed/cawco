@@ -551,34 +551,38 @@
     );
   }
 
-  const enterAnim = (key: string): string => {
+  /**
+   * A row's arrival in the swap, as an `animation` value (the element reads
+   * it as `--swap-anim`); none when it does not move.
+   */
+  const enterAnim = (key: string): string | undefined => {
     const at = plan?.enter.get(key);
-    return at ? `animation:${swap.rowAnim(at.i, at.notBefore)}` : "";
+    return at ? swap.rowAnim(at.i, at.notBefore) : undefined;
   };
   /**
    * A header's motion: arriving with a new machine, leaving with a gone
-   * one, or, gone before it ever arrived (a switch mid-change), unseen.
+   * one; gone before it ever arrived (a switch mid-change), it has none and
+   * is unseen (`headUnseen`).
    */
-  const headStyle = (kind: "stay" | "new" | "gone", id: string): string => {
+  const headAnim = (
+    kind: "stay" | "new" | "gone",
+    id: string
+  ): string | undefined => {
     const key = `head:${id}`;
-    if (kind !== "gone") {
-      return enterAnim(key);
-    }
-    return plan?.leave.has(key) ? leaveAnim(key) : "opacity:0";
+    return kind === "gone" ? leaveAnim(key) : enterAnim(key);
   };
-  const leaveAnim = (key: string): string => {
-    const at = plan?.leave.get(key);
-    return at === undefined ? "" : `animation:${swap.leaveAnim(at)}`;
-  };
+  const headUnseen = (kind: "stay" | "new" | "gone", id: string): boolean =>
+    kind === "gone" && !plan?.leave.has(`head:${id}`);
   /**
-   * A leaving row's exit, for the nesting line that joins it to its parent.
-   * The line is the list item's pseudo-elements, which the row's own
-   * animation does not reach: left alone, the rows went and their lines
-   * stood over the incoming list until the leaving layer was taken down.
+   * A row's exit in the swap, as an `animation` value. A leaving row's
+   * nesting line (the list item's pseudo-elements, which the row's own
+   * animation does not reach) takes the same as `--leave`: left alone, the
+   * rows went and their lines stood over the incoming list until the
+   * leaving layer was taken down.
    */
-  const leaveLine = (key: string): string => {
+  const leaveAnim = (key: string): string | undefined => {
     const at = plan?.leave.get(key);
-    return at === undefined ? "" : `--leave:${swap.leaveAnim(at)}`;
+    return at === undefined ? undefined : swap.leaveAnim(at);
   };
 
   /** A working row's line: its project, then what it is doing now. */
@@ -610,15 +614,19 @@
   }
 </script>
 
-{#snippet header(group: Group, style: string)}
+{#snippet header(group: Group, anim: string | undefined, unseen: boolean)}
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
   <!-- literal: 22px -->
   <h3
     data-slot="machine"
-    class="mark-line mx-0 mt-space-2 mb-space-1 flex min-h-(--machine-min) items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted"
+    class={[
+      "mark-line mx-0 mt-space-2 mb-space-1 flex min-h-(--machine-min) items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted",
+      anim && "animate-(--swap-anim)",
+      unseen && "opacity-0",
+    ]}
     data-key="head:{group.machineId}"
-    {style}
+    style:--swap-anim={anim}
     style:--machine-min="22px"
   >
     <OsMark class="size-space-4" os={group.os} />
@@ -670,10 +678,15 @@
     (other) => other.row && shapeOf(other.tab, other.key)?.parent === line.key
   )}
   {@const older = olderOf(line.tab, line.key)}
+  {@const leave = leaveAnim(line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
-  <li data-slot="tree-node" class="relative" style={leaveLine(line.key)}>
-    <div data-slot="tree-line" class="relative" style={leaveAnim(line.key)}>
+  <li data-slot="tree-node" class="relative" style:--leave={leave}>
+    <div
+      data-slot="tree-line"
+      class={["relative", leave && "animate-(--swap-anim)"]}
+      style:--swap-anim={leave}
+    >
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
@@ -692,8 +705,8 @@
             failed={older.failed}
             id={line.key}
             list={views[line.tab].list}
+            motion={leaveAnim(kids.at(-1)?.key ?? line.key)}
             still
-            style={leaveAnim(kids.at(-1)?.key ?? line.key)}
             tall
           />
         {/if}
@@ -891,7 +904,11 @@
               <hr
                 class="kit-seam absolute inset-x-0 top-0 bottom-auto opacity-0 transition-[opacity] dur-fade ease-out"
               />
-              {@render header(entry.group, headStyle(entry.kind, id))}
+              {@render header(
+                entry.group,
+                headAnim(entry.kind, id),
+                headUnseen(entry.kind, id)
+              )}
               <div class="rows relative">
                 {#if plan?.layered.has(id) && entry.gone.length}
                   <!-- The rows this machine had, leaving in the places the new
@@ -913,8 +930,8 @@
                       flip={!plan}
                       {line}
                       {row}
+                      motionOf={enterAnim}
                       rows={entry.rows}
-                      styleOf={enterAnim}
                       view={views[shown]}
                     />
                   {/each}
@@ -928,17 +945,21 @@
                line, inside its machine's box. -->
               {#if entry.kind !== "gone" && more.get(id)}
                 {@const line = more.get(id) as More}
+                {@const arrive = enterAnim(moreKey(id))}
                 <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
                 <!-- literal: 28px; 0.3em -->
                 <button
                   data-slot="more"
-                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
+                  class={[
+                    "focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted",
+                    arrive && "animate-(--swap-anim)",
+                  ]}
                   data-flip={plan ? undefined : ""}
                   data-key={moreKey(id)}
                   data-rail-row
                   onclick={() => fold(id)}
-                  style={enterAnim(moreKey(id))}
+                  style:--swap-anim={arrive}
                   style:--more-min="28px"
                   type="button"
                 >
@@ -951,12 +972,16 @@
                   {/if}
                 </button>
               {:else if plan?.more.get(id)}
+                {@const leave = leaveAnim(moreKey(id))}
                 <!-- literal: 28px -->
                 <span
                   data-slot="more"
                   aria-hidden="true"
-                  class="mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
-                  style={leaveAnim(moreKey(id))}
+                  class={[
+                    "mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted",
+                    leave && "animate-(--swap-anim)",
+                  ]}
+                  style:--swap-anim={leave}
                   style:--more-min="28px">{plan.more.get(id)}</span
                 >
               {/if}
@@ -1060,10 +1085,9 @@
   :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="hit"]) {
     flex-shrink: 0;
   }
-  /* residual: pseudo — the trees' own measures are the shared tree's
-     (SessionTree). A leaving row's nesting line (the list item's
+  /* residual: pseudo — a leaving row's nesting line (the list item's
      pseudo-elements, app.css .kit-nest) goes out on the row's own exit
-     (`leaveLine`). */
+     (`--leave`, the row's `leaveAnim`). */
   [data-leaving] :global([data-slot="tree-node"])::before,
   [data-leaving] :global([data-slot="tree-node"])::after {
     animation: var(--leave, none);

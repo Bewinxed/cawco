@@ -46,7 +46,6 @@
     effortNotExposed,
     NO_EFFORT_MODEL,
   } from "../spawn/ToolChips.svelte";
-  import "../spawn/ns-theme.css";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
   import ProviderLimit from "../usage/ProviderLimit.svelte";
@@ -524,7 +523,7 @@
 
 {#snippet modelChip()}
   <ProviderLogo model={model ?? ""} size={15} />
-  <span data-slot="chip-label" class="chip-label"
+  <span data-slot="chip-label"
     >{model
       ? modelName(model, modelInfo?.displayName).name
       : "Model not reported"}</span
@@ -702,22 +701,20 @@
                 browsing = undefined;
               }}
               open={modelOpen}
-              triggerClass="ns-chip-btn model-chip"
+              fit
+              triggerClass="ns-chip-btn"
+              triggerData={{ "data-model-chip": true }}
               width={360}
             >
               {#snippet trigger()}
                 {@render modelChip()}
-                <Down class="chevron" />
+                <Down data-slot="chevron" />
               {/snippet}
               <!-- The model list, sized to its widest row and scrolled in
                    whole rows: five whole rows, 4px padding, five 44px rows,
                    four 2px gaps. -->
               <!-- literal: 232px -->
-              <div
-                data-slot="model-pop"
-                class="model-pop"
-                style:--list-max="232px"
-              >
+              <div data-slot="model-pop" style:--list-max="232px">
                 <ModelSection
                   harness={shownHarness}
                   installed={kept ? keptHarnesses : [harness]}
@@ -747,7 +744,8 @@
               data-tool
               data-slot="ns-chip-btn"
               data-model-chip
-              class="ns-chip-btn static model-chip"
+              data-variant="static"
+              class="ns-chip-btn"
               >{@render modelChip()}</span
             >
           {/if}
@@ -871,7 +869,9 @@
   >
     <button
       data-slot="primary"
-      class="ns-btn primary xs cursor-pointer"
+      class="ns-btn cursor-pointer"
+      data-size="xs"
+      data-variant="primary"
       onclick={() => {
         onclose();
         continueInNewSession(continueSourceOf(sessionId, title));
@@ -937,7 +937,7 @@
     flex: none;
     color: var(--status-done-glyph);
   }
-  [data-slot="settings"] :global(.model-chip) {
+  [data-slot="settings"] :global([data-model-chip]) {
     flex: 0 1 auto;
     min-width: 0;
   }
@@ -982,20 +982,9 @@
     /* A bordered chip already reads as tappable; its chevron is the room
        the model's name needs. The account chip keeps its own: it is the
        only hint that it opens anything. */
-    [data-slot="settings"] :global(.ns-chip-btn:not(.account-chip) > svg.chevron) {
+    [data-slot="settings"]
+      :global(.ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"]) {
       display: none;
     }
-  }
-  /* residual: foreign-dom — DEFERRED (delta Q contract), as the foundation
-     had it: NsPopover's portalled popup, sized by the list inside it. Its
-     literals cannot ride a custom property from this file (no element here
-     is its ancestor). The model list, sized to its widest row and scrolled
-     in whole rows. */
-  :global(.ns-theme.ns-pop:has(> .model-pop)) {
-    width: max-content;
-    min-width: min(360px, calc(100vw - 24px));
-    max-width: calc(100vw - 24px);
-    max-height: none;
-    overflow: visible;
   }
 </style>

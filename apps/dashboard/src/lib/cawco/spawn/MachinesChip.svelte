@@ -78,8 +78,8 @@
 >
   {#snippet trigger()}
     <Server class="text-hue-cyan-500" />
-    <span data-slot="chip-label" class="chip-label">{label}</span>
-    <Down class="chevron" />
+    <span data-slot="chip-label">{label}</span>
+    <Down data-slot="chevron" />
   {/snippet}
   {#if pairing}
     <!-- literal: 10px gap -->
@@ -99,7 +99,8 @@
       <CheckInStatus>
         {#snippet trail()}
           <button
-            class="ns-btn sm touch-hit"
+            class="ns-btn touch-hit"
+            data-size="sm"
             onclick={() => {
               pairing = null;
             }}
@@ -174,7 +175,8 @@
     >
       <span
         data-slot="tile"
-        class="ns-tile dashed size-(--tile)"
+        class="ns-tile size-(--tile)"
+        data-variant="dashed"
         style:--icon="14px"
         style:--tile="26px"><Add class="size-(--icon)" /></span
       >

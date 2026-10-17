@@ -22,7 +22,6 @@
   import { IconWorkflow } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
-  import "#lib/components/features/workflows/workflows.css";
 
   let busy = $state(false);
   let errorMessage = $state("");
@@ -113,8 +112,10 @@
 {/snippet}
 
 <!-- literal: 24px, 44px, 64px, minmax(180px, 1fr) 110px 110px 60px 70px -->
+<!-- At 760px and under (`workflow-cards:`) the table becomes cards: each row
+     its name over its age, its actions at the end of the second line. -->
 <div
-  class="wf flex flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7"
+  class="wf flex flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 workflow-cards:px-space-4 workflow-cards:py-space-4"
   data-slot="list-page"
 >
   <header class="wf-row wf-spread">
@@ -139,14 +140,15 @@
       class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
       role="status"
       style:--cols="minmax(180px, 1fr) 110px 110px 60px 70px"
+      style:--cols-cards="1fr auto"
       style:--name-min="24px"
       style:--name-min-coarse="44px"
       style:--row-min="64px"
       out:crossOut
     >
-      <thead>
+      <thead class="workflow-cards:block workflow-cards:w-full">
         <tr
-          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted"
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden!"
           data-slot="heading"
         >
           <th class="font-medium" scope="col">Name</th>
@@ -156,32 +158,37 @@
           <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
-      <tbody aria-hidden="true">
+      <tbody aria-hidden="true" class="workflow-cards:block workflow-cards:w-full">
         {#each [0, 1, 2] as index (index)}
           <tr
-            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3"
+            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
             data-slot="workflow-row"
           >
             <td
               data-slot="name"
-              class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong"
+              class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
               ><Skeleton class="h-icon-md w-40" /></td
             >
             <td><Skeleton class="h-icon-lg w-16" /></td>
-            <td data-slot="age"><Skeleton class="h-icon-md w-20" /></td>
-            <td data-slot="count" class="num"
+            <td data-slot="age" class="workflow-cards:col-1"
+              ><Skeleton class="h-icon-md w-20" /></td
+            >
+            <td data-slot="count" class="num workflow-cards:hidden"
               ><Skeleton class="h-icon-md w-6" /></td
             >
-            <td><Skeleton class="h-space-8 w-14" /></td>
+            <td class="workflow-cards:col-2 workflow-cards:row-2"
+              ><Skeleton class="h-space-8 w-14" /></td
+            >
           </tr>
         {/each}
       </tbody>
     </table>
   {:else if !rows.length}
     {#if !workflowState.error}
-      <div in:crossIn>
+      <!-- literal: 420px -->
+      <div in:crossIn style:--empty-max="420px">
         <EmptyState
-          class="mx-auto w-full max-w-[420px]"
+          class="mx-auto w-full max-w-(--empty-max)"
           icon={IconWorkflow}
           line="A workflow is a graph of steps that run one after another across your fleet."
           title="No workflows yet"
@@ -197,14 +204,15 @@
       aria-label="Workflows"
       class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
       style:--cols="minmax(180px, 1fr) 110px 110px 60px 70px"
+      style:--cols-cards="1fr auto"
       style:--name-min="24px"
       style:--name-min-coarse="44px"
       style:--row-min="64px"
       in:crossIn
     >
-      <thead>
+      <thead class="workflow-cards:block workflow-cards:w-full">
         <tr
-          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted"
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden!"
           data-slot="heading"
         >
           <th class="font-medium" scope="col">Name</th>
@@ -214,16 +222,16 @@
           <th class="font-medium" scope="col">Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody class="workflow-cards:block workflow-cards:w-full">
         {#each rows as { workflow, runs, last } (workflow.id)}
           <tr
-            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3"
+            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
             data-slot="workflow-row"
           >
             <td>
               <a
                 data-slot="name"
-                class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong"
+                class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
                 href="/workflows/{workflow.id}"
                 >{workflow.name}
                 <span class="wf-muted">{workflow.description}</span></a
@@ -236,16 +244,18 @@
                 <span class="wf-muted">No runs</span>
               {/if}
             </td>
-            <td data-slot="age" class="wf-muted">
+            <td data-slot="age" class="wf-muted workflow-cards:col-1">
               {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
-              <span class="hidden" data-slot="mobile"
+              <span class="hidden workflow-cards:inline" data-slot="mobile"
                 >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
               >
             </td>
-            <td data-slot="count" class="num">{runs.length}</td>
-            <td>
+            <td data-slot="count" class="num workflow-cards:hidden"
+              >{runs.length}</td
+            >
+            <td class="workflow-cards:col-2 workflow-cards:row-2">
               <button
-                class="wf-btn"
+                class="wf-btn workflow-cards:hidden!"
                 data-slot="desktop"
                 disabled={!live}
                 onclick={(event) => {
@@ -258,10 +268,10 @@
               >
                 Run
               </button>
-              <details class="hidden" data-slot="mobile">
+              <details class="hidden workflow-cards:block" data-slot="mobile">
                 <summary
                   aria-label="Actions for {workflow.name}"
-                  class="pressable"
+                  class="pressable workflow-cards:flex workflow-cards:min-h-(--summary-min) workflow-cards:items-center"
                   style:--summary-min="44px"
                 >
                   Actions
@@ -296,50 +306,3 @@
     workflow={launch.workflow}
   />
 {/if}
-
-<style>
-  /* residual: unmapped */
-  /* A 760px query: no variant carries it (needs variant: max-width 760px).
-     DESIGN.md: 44px under a coarse pointer at any width. */
-  @media (max-width: 760px) {
-    [data-slot="heading"],
-    [data-slot="desktop"] {
-      display: none !important;
-    }
-    span[data-slot="mobile"] {
-      display: inline;
-    }
-    details[data-slot="mobile"] {
-      display: block;
-    }
-    [data-slot="count"] {
-      display: none;
-    }
-    thead,
-    tbody {
-      display: block;
-      width: 100%;
-    }
-    [data-slot="workflow-row"] {
-      grid-template-columns: 1fr auto;
-    }
-    [data-slot="name"] {
-      grid-column: 1;
-    }
-    [data-slot="age"] {
-      grid-column: 1;
-    }
-    [data-slot="workflow-row"] > :last-child {
-      grid-column: 2;
-      grid-row: 2;
-    }
-    summary {
-      min-height: var(--summary-min);
-      display: flex;
-      align-items: center;
-    }
-    [data-slot="list-page"] {
-      padding: var(--space-4);
-    }
-  }
-</style>

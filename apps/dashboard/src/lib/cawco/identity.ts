@@ -8,9 +8,10 @@
  * clear of the reserved state hues' *roles*: identity renders as glyph ink
  * — never as a status dot.
  *
- * Usage: set `style={identityVar(cwd)}` on the element — from
- * `folder-prefs.svelte.ts`, which lets a hand-picked hue win over the hash —
- * then color through the `identity-ink` utility in app.css, which reads
+ * Usage: set `--identity-h` to `folderPrefs.hue(cwd)` on the element
+ * (`style:--identity-h={…}`; on a component, `style="--identity-h: {…}"`) —
+ * `folder-prefs.svelte.ts` lets a hand-picked hue win over the hash — then
+ * color through the `identity-ink` utility in app.css, which reads
  * `--identity-h` and tunes lightness per appearance.
  */
 

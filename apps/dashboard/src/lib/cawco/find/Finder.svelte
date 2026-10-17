@@ -59,9 +59,12 @@
     onmachine,
     onclose,
     field = $bindable(null),
+    class: className,
   }: {
     finder: FinderState;
     phone?: boolean;
+    /** Where it stands in its host (FinderCard: it fills Jump's sheet on a phone). */
+    class?: string;
     /** ↵ on a session, a thread or a thing: open it (at a moment, when there is one). */
     onopen: (opening: Opening) => void;
     onopenwaiting: (item: WaitingItem) => void;
@@ -838,7 +841,10 @@
 <!-- literal: 44px, 52px, 16px, 36px, 28px, 11px, 24px, 32px, 9px, 12px, 2px, 15px, 20px, 0.25em, 0.35em, 40px, 54px, 8px -->
 <div
   data-slot="finder"
-  class="group/finder flex flex-col min-h-0 max-h-full text-ink-strong"
+  class={[
+    "group/finder flex flex-col min-h-0 max-h-full text-ink-strong",
+    className,
+  ]}
   data-phone={phone || undefined}
   style:--field-h="44px"
   style:--field-h-phone="52px"

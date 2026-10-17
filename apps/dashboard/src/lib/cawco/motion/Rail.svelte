@@ -30,7 +30,7 @@
     label,
     class: className = "",
     itemClass = "",
-    itemStyle,
+    stagger,
     item,
     tipExtra,
     labelled = false,
@@ -43,7 +43,8 @@
     label: string;
     class?: string;
     itemClass?: string;
-    itemStyle?: (index: number) => string;
+    /** Each item's entrance delay is this many ms per place (`--delay`, read by `ns-in`). */
+    stagger?: number;
     /** What an item draws: its mark, and whatever else it carries. */
     item: Snippet<[Item, number]>;
     /** Said after the name in the travelling label ("soon"). */
@@ -215,7 +216,7 @@
         }
       }}
       role="radio"
-      style={itemStyle?.(i)}
+      style:--delay={stagger === undefined ? undefined : `${i * stagger}ms`}
       tabindex={entry.id === value ? 0 : -1}
       type="button"
     >
