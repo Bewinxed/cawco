@@ -198,7 +198,7 @@
           <!-- literal: 12rem -->
           <pre
             data-slot="args"
-            class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well text-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
+            class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
             style:--args-max="12rem">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
@@ -319,7 +319,7 @@
           {#each blockers as id (id)}
             <li class="flex items-center gap-space-2 min-w-0">
               <span
-                class="flex-none text-meta font-mono liga-none text-ink-muted"
+                class="flex-none type-meta font-mono liga-none text-ink-muted"
                 >{id}</span
               >
               <span

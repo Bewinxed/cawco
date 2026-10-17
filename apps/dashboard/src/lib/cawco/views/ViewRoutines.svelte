@@ -1008,7 +1008,7 @@
                 <span
                   data-sub
                   data-slot="code"
-                  class="block truncate type-code text-ink-muted"
+                  class="block truncate type-code liga-none text-ink-muted"
                   >{eventOf(route)}</span
                 >
               </Table.Cell>
@@ -1055,8 +1055,9 @@
                 <span
                   data-slot="sub"
                   class="block truncate type-meta text-ink-muted"
-                  >{#if poll.tool}<span data-slot="code" class="type-code"
-                      >{poll.tool}</span
+                  >{#if poll.tool}<span
+                      data-slot="code"
+                      class="type-code liga-none">{poll.tool}</span
                     >{" · "}{/if}{everyOf(poll)}</span
                 >
               </Table.Cell>

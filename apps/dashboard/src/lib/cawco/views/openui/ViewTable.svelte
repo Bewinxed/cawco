@@ -64,7 +64,7 @@
           {#each group.headers as header (header.id)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-c-toolbar-ctl px-space-3 tracking-caps text-ink-muted uppercase"
+              class="h-c-toolbar-ctl px-space-3 type-label tracking-caps text-ink-muted uppercase"
               scope="col">{header.column.columnDef.header}</Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the head above -->

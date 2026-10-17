@@ -109,7 +109,7 @@
   >
     {#if mention.answer.state === "unreached"}
       <p
-        class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
         data-flip
       >
         Can't reach the hub. Nothing can be named until it's back.
@@ -121,7 +121,7 @@
       </p>
     {:else if mention.answer.state === "refused"}
       <p
-        class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
         data-flip
       >
         {mention.answer.detail}
@@ -143,7 +143,7 @@
       {/each}
     {:else if mention.current && mention.answer.state === "ok"}
       <p
-        class="m-0 px-space-3 py-space-2 font-body text-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
         data-flip
       >
         No sessions for “{mention.words}”

@@ -115,7 +115,7 @@
               {#if faults > 0}
                 <span
                   data-slot="num"
-                  class="flex-none min-w-space-5 h-space-5 px-(--fault-pad) rounded-xs bg-status-attn-bg font-body text-size-meta font-normal leading-(--fault-h) text-center text-status-attn-ink num"
+                  class="flex-none min-w-space-5 h-space-5 px-(--fault-pad) rounded-xs bg-status-attn-bg type-meta leading-(--fault-h) text-center text-status-attn-ink num"
                   title={waiting
                     ? words.badgeWaiting(faults)
                     : words.badgeFailing(faults)}

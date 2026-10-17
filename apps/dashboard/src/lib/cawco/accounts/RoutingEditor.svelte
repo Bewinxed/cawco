@@ -148,7 +148,9 @@
     <ProviderMark {provider} />
   {/snippet}
   {#snippet header()}
-    <h1 data-slot="title" class="type-title text-ink-strong">{title}</h1>
+    <h1 data-slot="title" class="type-title tracking-title text-ink-strong">
+      {title}
+    </h1>
     {#if refused}
       <p class="type-meta text-status-fail-ink" role="alert" in:appear>
         {refused}

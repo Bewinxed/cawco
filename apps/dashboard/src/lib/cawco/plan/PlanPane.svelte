@@ -223,7 +223,7 @@
     {#if steps.length > 0}
       {#if stepsHeaded}
         <h3
-          class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+          class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
         >
           Steps
         </h3>
@@ -233,7 +233,7 @@
 
     {#if plan?.spec}
       <h3
-        class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+        class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
       >
         Spec
       </h3>
@@ -243,7 +243,7 @@
     {#if showsTodos && plan?.taskId}
       {#if !onlyTodos}
         <h3
-          class="m-0 text-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+          class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
         >
           To-dos <span class="type-code text-ink-subtle">{plan.taskId}</span>
         </h3>

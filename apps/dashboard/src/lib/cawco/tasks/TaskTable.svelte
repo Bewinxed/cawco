@@ -340,7 +340,7 @@
                   }}
                 />
               {:else if cell.column.id === "id"}
-                <span data-slot="id" class="type-code text-ink-subtle"
+                <span data-slot="id" class="type-code liga-none text-ink-subtle"
                   >{task.id}</span
                 >
               {:else if cell.column.id === "title"}

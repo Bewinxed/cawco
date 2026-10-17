@@ -203,7 +203,7 @@
         <!-- literal: 2ch, 1lh -->
         <span
           data-slot="num"
-          class="num inline-grid place-items-center w-(--num-w) h-(--num-h) font-body text-size-meta font-normal leading-none contain-layout contain-size"
+          class="num inline-grid place-items-center w-(--num-w) h-(--num-h) type-meta leading-none contain-layout contain-size"
           style:--num-w="2ch"
           style:--num-h="1lh"><MorphText text={shown} /></span
         >

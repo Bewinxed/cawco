@@ -64,7 +64,7 @@
         {#if stage.kind === "waiting"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             Pair this browser
           </h1>
@@ -79,7 +79,7 @@
           <p
             data-num
             data-slot="code"
-            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 font-(family-name:--font-mono) text-size-kpi leading-none font-medium text-ink-stat select-all"
+            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-stat select-all"
           >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
@@ -95,7 +95,7 @@
         {:else if stage.kind === "denied"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             Pairing was denied
           </h1>
@@ -111,7 +111,7 @@
         {:else if stage.kind === "expired"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             The code expired
           </h1>
@@ -126,7 +126,7 @@
         {:else if stage.kind === "failed"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             Pairing didn't start
           </h1>
@@ -138,7 +138,7 @@
         {:else}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
           >
             Pair this browser
           </h1>

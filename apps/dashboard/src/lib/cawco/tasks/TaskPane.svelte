@@ -476,7 +476,7 @@
           />
         </form>
       {:else}
-        <h2 data-slot="title" class="m-0 type-title">
+        <h2 data-slot="title" class="m-0 type-title tracking-title">
           <button
             class="block w-full -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
             disabled={!shown}
@@ -739,7 +739,7 @@
         <IconChevronLeft />
         <span>{backLabel}</span>
       </Button>
-      <span class="ms-auto text-meta font-mono liga-none text-ink-subtle"
+      <span class="ms-auto type-meta font-mono liga-none text-ink-subtle"
         >{taskId}</span
       >
     </header>

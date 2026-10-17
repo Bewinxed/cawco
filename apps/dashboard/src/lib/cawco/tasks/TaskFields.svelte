@@ -75,7 +75,9 @@
       style:--cols="6rem minmax(0, 1fr)"
     >
       {#each Object.entries(fields) as [key, value] (key)}
-        <dt class="type-code wrap-anywhere pt-space-1 text-ink-muted">{key}</dt>
+        <dt class="type-code liga-none wrap-anywhere pt-space-1 text-ink-muted">
+          {key}
+        </dt>
         <dd
           data-slot="value"
           class="group/value m-0 flex min-w-0 items-center gap-space-1"

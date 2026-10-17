@@ -2330,11 +2330,18 @@
 @utility rounded-inherit {
   border-radius: inherit;
 }
+/* A `font` shorthand utility files itself (`--tw-sort`, Tailwind's own
+   marker) where the type roles do, before every font longhand utility, so
+   one beside it wins (scripts/role-order.ts holds it). */
 @utility font-inherit {
+  --tw-sort: vertical-align;
   font: inherit;
 }
 @utility font-family-inherit {
   font-family: inherit;
+}
+@utility text-size-inherit {
+  font-size: inherit;
 }
 @utility gap-inherit {
   gap: inherit;
@@ -2423,6 +2430,7 @@
 /* The meta size in the mono face as the `font` shorthand sets it: line
    height normal, every other font subproperty reset. */
 @utility font-mono-meta {
+  --tw-sort: vertical-align;
   font: var(--text-meta) var(--font-mono);
 }
 /* The box keywords Tailwind does not write (its `items-start` is

@@ -14,6 +14,24 @@ const utilities = (prefix: string): string[] =>
     ...theme.matchAll(new RegExp(`^@utility ${prefix}-([a-z0-9-]+) \\{`, "gm")),
   ].map(([, name]) => name);
 const durations = keys("duration");
+/** What a `font` shorthand class resets: every font longhand group, and the other shorthands. */
+const fontResets = [
+  "type-role",
+  "font-shorthand",
+  "font-family",
+  "font-features",
+  "font-size",
+  "font-stretch",
+  "font-style",
+  "font-weight",
+  "fvn-normal",
+  "fvn-ordinal",
+  "fvn-slashed-zero",
+  "fvn-figure",
+  "fvn-spacing",
+  "fvn-fraction",
+  "leading",
+] as const;
 /** A value written in brackets or parentheses (`clip-path-(--clip)`). */
 const arbitrary = [validators.isArbitraryVariable, validators.isArbitraryValue];
 
@@ -113,6 +131,15 @@ const twMergeConfig = {
       "rail-step": [{ "rail-step": arbitrary }],
       "prompt-fs": [{ "prompt-fs": arbitrary }],
       "fade-inset-end": [{ "fade-inset-end": arbitrary }],
+    },
+    // A `font` shorthand class (a type role, `font-inherit`) resets every
+    // font longhand, so it replaces an earlier class that set one, as a
+    // later `font:` declaration did (`type-meta` on a Badge drops its
+    // `text-label leading-none`). A longhand class after it is kept: it
+    // sorts after the shorthand and wins (scripts/role-order.ts).
+    conflictingClassGroups: {
+      "type-role": [...fontResets],
+      "font-shorthand": [...fontResets],
     },
   },
 };

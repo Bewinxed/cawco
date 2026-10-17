@@ -514,7 +514,7 @@
     </div>
     <h1
       data-slot="title"
-      class="text-size-title leading-ui font-medium font-(family-name:--font-mono) tracking-title wrap-anywhere text-ink-strong"
+      class="type-title font-(family-name:--font-mono) tracking-title wrap-anywhere text-ink-strong"
     >
       {label}
     </h1>

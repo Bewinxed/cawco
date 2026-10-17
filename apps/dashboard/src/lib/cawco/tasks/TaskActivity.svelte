@@ -207,8 +207,7 @@
       <span class="flex items-baseline gap-space-2 type-meta"
         ><span
           data-slot="who"
-          class="font-body leading-label font-medium text-ink-strong"
-          >{each.who}</span
+          class="type-label text-size-inherit text-ink-strong">{each.who}</span
         >
         <time
           class="type-meta whitespace-nowrap text-ink-subtle"
@@ -236,8 +235,7 @@
       <span data-slot="what" class="min-w-0 wrap-anywhere"
         ><span
           data-slot="who"
-          class="font-body leading-label font-medium text-ink-strong"
-          >{each.who}</span
+          class="type-label text-size-inherit text-ink-strong">{each.who}</span
         >
         {each.text}</span
       >

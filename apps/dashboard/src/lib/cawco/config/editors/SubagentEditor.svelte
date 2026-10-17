@@ -161,7 +161,7 @@ You are a <role>, working in one repository at a time.
   {#snippet header()}
     <h1
       data-slot="title"
-      class="text-size-title leading-ui font-medium font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+      class="type-title font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
     >
       {agent ? agent.name : front.name || "New subagent"}
     </h1>

@@ -1,26 +1,22 @@
 /**
- * Holds the type roles' place in Tailwind's utility order. A `type-<role>`
- * utility is the `font` shorthand (packages/hub/src/design-tokens.ts), so
- * every utility that writes a font longhand on the same element (`num`,
+ * Holds the `font` shorthand utilities' place in Tailwind's utility order. A
+ * `type-<role>` utility is the `font` shorthand (packages/hub/src/
+ * design-tokens.ts), as are app.css's `font-inherit` and `font-mono-meta`,
+ * so every utility that writes a font longhand on the same element (`num`,
  * `font-medium`, `leading-*`, `tracking-*`, `text-size-*` …) must come after
  * it, as a declaration after the shorthand did in a component's rule.
- * Tailwind's property order has no slot for `font`; the roles take one
- * through `--tw-sort`, Tailwind's own marker, which a release could change.
- * This compiles app.css with the dashboard's Tailwind and answers each pair
- * in the wrong order. `bun scripts/build-tokens.ts --check` runs it.
+ * Tailwind's property order has no slot for `font`; these take one through
+ * `--tw-sort`, Tailwind's own marker, which a release could change. This
+ * compiles app.css with the dashboard's Tailwind and answers each shorthand
+ * placed after a longhand. `bun scripts/build-tokens.ts --check` runs it.
  */
 import { dirname, resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
 import type { TailwindTheme } from "../../../packages/hub/src/design-tokens";
 
 const APP_CSS = "src/app.css";
-/** The font utilities no theme key names: Tailwind's family form, and app.css's own. */
-const FONT_UTILITIES = [
-  "font-(family-name:--font-mono)",
-  "num",
-  "liga-none",
-  "mono-figure",
-];
+/** Tailwind's own family form, which no key or `@utility` names. */
+const TAILWIND_FONT_UTILITIES = ["font-(family-name:--font-mono)"];
 /** The theme namespaces whose keys make font longhand utilities, by prefix. */
 const FONT_NAMESPACES: Record<string, string> = {
   font: "font-",
@@ -28,35 +24,49 @@ const FONT_NAMESPACES: Record<string, string> = {
   leading: "leading-",
   tracking: "tracking-",
 };
+/** A top-level `@utility` block: its name and body. */
+const UTILITY = /^@utility ([\w-]+) \{\n([\s\S]*?)^\}/gm;
+const SHORTHAND = /^\s*font:/m;
+const LONGHAND = /^\s*(font-[a-z-]+|line-height|letter-spacing):/m;
 const NOT_IDENT = /[^a-zA-Z0-9_-]/g;
 const selector = (candidate: string) =>
   `.${candidate.replace(NOT_IDENT, (ch) => `\\${ch}`)} {`;
 
-/** Every `type-<role>` that the compiled CSS places after a font longhand utility, as "role after utility". */
-export async function roleOrderDrift(theme: TailwindTheme): Promise<string[]> {
-  const roles = theme.utilities.filter((u) => u.startsWith("type-"));
+/** Every `font` shorthand utility that the compiled CSS places after a font longhand utility. */
+export async function fontOrderDrift(theme: TailwindTheme): Promise<string[]> {
+  const appCss = await Bun.file(APP_CSS).text();
+  const own = [...appCss.matchAll(UTILITY)];
+  const shorthands = [
+    ...theme.utilities.filter((u) => u.startsWith("type-")),
+    ...own.filter(([, , body]) => SHORTHAND.test(body)).map(([, name]) => name),
+  ];
   const longhands = [
-    ...FONT_UTILITIES,
-    ...theme.utilities.filter((u) => u.startsWith("text-size-")),
+    ...TAILWIND_FONT_UTILITIES,
+    ...theme.utilities.filter(
+      (u) => u.startsWith("text-size-") || u === "liga-none"
+    ),
     ...Object.entries(FONT_NAMESPACES).flatMap(([ns, prefix]) =>
       (theme.keys.get(ns) ?? []).map(({ key }) => `${prefix}${key}`)
     ),
+    ...own
+      .filter(([, , body]) => !SHORTHAND.test(body) && LONGHAND.test(body))
+      .map(([, name]) => name),
   ];
-  const compiler = await compile(await Bun.file(APP_CSS).text(), {
+  const compiler = await compile(appCss, {
     base: resolve(dirname(APP_CSS)),
     onDependency: () => undefined,
   });
-  const css = compiler.build([...roles, ...longhands]);
+  const css = compiler.build([...shorthands, ...longhands]);
   const at = (candidate: string) => css.indexOf(selector(candidate));
-  const missing = [...roles, ...longhands].filter((c) => at(c) < 0);
+  const missing = [...shorthands, ...longhands].filter((c) => at(c) < 0);
   if (missing.length > 0) {
     return [`no rule compiled for ${missing.join(", ")}`];
   }
   const firstLonghand = Math.min(...longhands.map(at));
-  return roles
-    .filter((role) => at(role) > firstLonghand)
+  return shorthands
+    .filter((short) => at(short) > firstLonghand)
     .map(
-      (role) =>
-        `${role} sorts after ${longhands.filter((l) => at(l) < at(role)).join(", ")}`
+      (short) =>
+        `${short} sorts after ${longhands.filter((l) => at(l) < at(short)).join(", ")}`
     );
 }

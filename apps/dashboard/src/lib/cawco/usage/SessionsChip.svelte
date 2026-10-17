@@ -174,7 +174,7 @@
   <Popover.Trigger
     aria-label={label}
     badge
-    class="pressable touch-hit h-icon-md min-w-icon-md flex-none cursor-pointer overflow-visible px-space-1 font-body text-ink-row text-meta leading-none num"
+    class="pressable touch-hit h-icon-md min-w-icon-md flex-none cursor-pointer overflow-visible px-space-1 text-ink-row type-meta leading-none num"
     data-sessions-chip
     onkeydown={() => {
       byPointer = false;
@@ -205,7 +205,7 @@
     <div data-slot="sessions-chip-card" class="flex flex-col" bind:this={card}>
       <p
         data-slot="head"
-        class="px-space-3 pt-space-2 pb-space-1 font-body text-ink-strong text-meta font-medium"
+        class="px-space-3 pt-space-2 pb-space-1 text-ink-strong type-meta font-medium"
         data-flyover-head
       >
         {name}

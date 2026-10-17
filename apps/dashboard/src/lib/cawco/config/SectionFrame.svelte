@@ -114,7 +114,9 @@
       style:--head-gap="12px"
     >
       <div class="flex min-w-0 flex-col gap-space-1">
-        <h1 data-slot="title" class="type-title text-ink-strong">{title}</h1>
+        <h1 data-slot="title" class="type-title tracking-title text-ink-strong">
+          {title}
+        </h1>
         {#if purpose}
           <!-- literal: 8px -->
           <p

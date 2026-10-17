@@ -94,7 +94,7 @@
         <span
           data-slot="code"
           aria-hidden="true"
-          class="type-code flex select-all gap-space-3 tracking-(--code-track) text-ink-strong"
+          class="type-code liga-none flex select-all gap-space-3 tracking-(--code-track) text-ink-strong"
           style:--code-track="0.08em"
         >
           {#each groups as group, at (at)}
