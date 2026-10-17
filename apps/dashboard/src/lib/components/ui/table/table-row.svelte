@@ -23,9 +23,13 @@
         /** A row that keeps a hairline under it on a phone, but the last. */
         "stacks-ruled":
           "max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none max-phone:[&:is(tbody>tr):last-child]:border-b-none",
-        /** A pickable row: unruled at a desk, a picked, ruled grid on a phone. */
+        /**
+         * A pickable row: unruled at a desk, a picked, ruled grid on a phone.
+         * Its picked fill outranks the base's selected one where both hold,
+         * as the ledger's unlayered row rule did.
+         */
         "picks-stacks":
-          "border-b-none max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:border-b max-phone:border-b-border-hairline max-phone:px-space-3 max-phone:py-space-2 data-picked:max-phone:bg-selected-bg max-phone:last:border-b-none [&:is(tbody>tr):last-child]:border-b-none",
+          "border-b-none max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:border-b max-phone:border-b-border-hairline max-phone:px-space-3 max-phone:py-space-2 data-picked:max-phone:bg-selected-bg data-[state=selected]:data-picked:max-phone:bg-selected-bg max-phone:last:border-b-none [&:is(tbody>tr):last-child]:border-b-none",
       },
       /** A row whose subject is away (an offline machine). */
       inactive: { true: "opacity-50" },

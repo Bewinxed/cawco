@@ -44,9 +44,8 @@
       rule: {
         /** A hairline over the cell. */
         top: "border-t border-t-border-hairline",
-        /** A hairline over every row's cells but the first's (`group/row`). */
-        between:
-          "group-not-first/row:border-t group-not-first/row:border-t-border-hairline",
+        /** A hairline over the cells of every row after another. */
+        between: "[tr+tr>&]:border-t [tr+tr>&]:border-t-border-hairline",
       },
     },
   });

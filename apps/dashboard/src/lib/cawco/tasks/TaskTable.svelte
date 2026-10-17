@@ -314,7 +314,7 @@
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
               class={cell.column.id === "created"
-                ? "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto"
+                ? "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:@max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto"
                 : [
                     cell.column.id === "pick" &&
                       "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-(--pick-row) max-phone:col-start-1",

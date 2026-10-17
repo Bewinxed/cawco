@@ -16,7 +16,7 @@
           fading in and out; held still while hidden. */
       reveal: {
         "glyph-busy":
-          "motion-safe:dur-control group-not-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:ease-out",
+          "motion-safe:dur-control not-group-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:ease-out",
       },
     },
   });
