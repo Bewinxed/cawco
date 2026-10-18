@@ -2251,6 +2251,7 @@ public enum OpenEnums {
     public enum ErrorFrameLastErrorKind: OpenEnum {
         case conversationGone
         case restartLost
+        case startRefused
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -2258,6 +2259,7 @@ public enum OpenEnums {
             switch rawValue {
             case "conversation-gone": self = .conversationGone
             case "restart-lost": self = .restartLost
+            case "start-refused": self = .startRefused
             default: self = .unrecognized(rawValue)
             }
         }
@@ -2266,6 +2268,7 @@ public enum OpenEnums {
             switch self {
             case .conversationGone: "conversation-gone"
             case .restartLost: "restart-lost"
+            case .startRefused: "start-refused"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -2274,7 +2277,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.conversationGone, .restartLost]
+        public static let allCases: [Self] = [.conversationGone, .restartLost, .startRefused]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -1151,10 +1151,14 @@ export const CLAUDE_CONVERSATION_GONE =
  * - `conversation-gone` — the conversation it would resume is gone
  *   ({@link CLAUDE_CONVERSATION_GONE}): it never runs on it again;
  * - `restart-lost` — its daemon restarted and it left nothing to resume from
- *   ({@link RESTART_LOST}).
+ *   ({@link RESTART_LOST});
+ * - `start-refused` — the hub would not restore it: its account or its
+ *   settings cannot run on its machine (hub server.ts `restore`). It stays
+ *   so, unrestored, until they can.
  * A failure no producer typed has none.
  */
-export type LastErrorKind = "conversation-gone" | "restart-lost";
+export type LastErrorKind =
+  "conversation-gone" | "restart-lost" | "start-refused";
 
 /** An error that carries its {@link LastErrorKind} from where it is made to the row it fails. */
 export class KindedError extends Error {
@@ -1170,10 +1174,21 @@ export class KindedError extends Error {
 export const conversationGone = (): KindedError =>
   new KindedError("conversation-gone", CLAUDE_CONVERSATION_GONE);
 
+/**
+ * Whether a row the hub refused to restore still stands refused: filed
+ * `error` with the kind `start-refused`, whatever words its refusal said
+ * then or says now. Its restore fails it once, not on every boot.
+ */
+export const startRefused = (row: {
+  lastErrorKind?: LastErrorKind | null;
+  status: string;
+}): boolean => row.status === "error" && row.lastErrorKind === "start-refused";
+
 /** Every {@link LastErrorKind}, for a reader of one off the wire. */
 const LAST_ERROR_KINDS: ReadonlySet<string> = new Set<LastErrorKind>([
   "conversation-gone",
   "restart-lost",
+  "start-refused",
 ]);
 
 /** `value` as a {@link LastErrorKind}, when it is one. */

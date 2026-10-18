@@ -1135,6 +1135,13 @@ export interface NeutralResultMessage {
   /** Read from stored history during recovery, rather than a newly completed turn. */
   recovered?: boolean;
   result?: string;
+  /**
+   * OpenCode: the server the turn ran in stopped before it finished
+   * (`session.execution.interrupted` reason `shutdown`, or a reattach that
+   * finds the turn unfinished): cut, not ended, so the hub hands it back.
+   * `errors` carries the same in words (core `SERVER_STOPPED_MID_TURN`).
+   */
+  serverStopped?: true;
   session_id?: string;
   stop_reason?: string | null;
   subtype: string;

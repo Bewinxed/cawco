@@ -29998,6 +29998,9 @@
                       },
                       "error": {
                         "type": "string"
+                      },
+                      "failure": {
+                        "$ref": "#/components/schemas/CompactionFailure"
                       }
                     },
                     "required": [
@@ -31082,6 +31085,11 @@
             "type": "number"
           },
           "firstPrompt": {
+            "description": "The first prompt as its harness listed it, raw: kept for the shipped app; a reader names the session by {@link firstTitle}.",
+            "type": "string"
+          },
+          "firstTitle": {
+            "description": "The first prompt as a title, derived once where the listing is answered\n(agent session.ts, core `deriveTitleFromFirstMessage`): what a reader\nnames a session with no given title by, never parsing the prompt itself.",
             "type": "string"
           },
           "gitBranch": {
@@ -32513,7 +32521,7 @@
           },
           "mover": {
             "$ref": "#/components/schemas/TaskHistoryActorMover",
-            "description": "The mover the change was checked as; null for a commit the hub's task code did not make (a hand edit, folder_write, the folder editor)."
+            "description": "The mover the change was checked as; null, unknown, for a commit with no `CawCo-Mover` trailer (a hand edit, folder_write, the folder editor, one made before the hub wrote trailers)."
           },
           "name": {
             "description": "The commit's author: you, Caw, the session's title as it was, hub, approved action.",
@@ -41268,7 +41276,7 @@
           },
           "hooks": {
             "type": "object",
-            "description": "The fleet's hooks, by the same id the hub keeps them under. Absent from a\ndaemon that predates them. `failed` covers three different machine-local\nfacts — a hand-edited script, a validation the hub already passed but this\nrow failed again, or a project hook with no checkout here — and `detail`\nis what tells them apart."
+            "description": "The fleet's hooks, by the same id the hub keeps them under. Absent from a\nharness's own report when it converges none (OpenCode's, pi's); a\nmachine's merged report always carries it. `failed` covers three different machine-local\nfacts — a hand-edited script, a validation the hub already passed but this\nrow failed again, or a project hook with no checkout here — and `detail`\nis what tells them apart."
           },
           "marketplaces": {
             "type": "object"
@@ -41292,27 +41300,117 @@
             "description": "Per-harness runtime truth, before the machine row's worst-state aggregation."
           },
           "memory": {
-            "$ref": "#/components/schemas/FleetItemState",
-            "description": "The user-scope memory (CLAUDE.md). Absent from a daemon that predates it;\n`failed` is how a machine says its own copy was edited and was not\noverwritten."
+            "description": "The user-scope memory (CLAUDE.md). Absent when neither the fleet nor this\nmachine's record has one; `failed` is how a machine says its own copy was\nedited and was not overwritten.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "cause": {
+                    "$ref": "#/components/schemas/FleetFaultCause"
+                  },
+                  "detail": {
+                    "description": "What the write or the CLI said — the tail of it.",
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "failed"
+                    ]
+                  }
+                },
+                "required": [
+                  "cause",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "detail": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "applied",
+                      "disabled",
+                      "needs-auth",
+                      "pending",
+                      "removed",
+                      "unsupported"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            ]
           },
           "memoryDocs": {
             "type": "object",
-            "description": "The linked documents, by the same path the set keyed them under. Absent\nfrom a daemon that predates the set; one drifted document says so on its\nown row, with the main file still `applied` beside it."
+            "description": "The linked documents, by the same path the set keyed them under. Absent\nfrom a harness's own report when it converges none; one drifted document\nsays so on its own row, with the main file still `applied` beside it."
           },
           "memoryHook": {
-            "$ref": "#/components/schemas/FleetItemState",
-            "description": "The model-memory SessionStart hook an earlier cawco registered, while a\nmachine has not managed to take it back (agent fleet.ts\n`retireMemoryHook`): always `failed`, with why. Absent once it is gone."
+            "description": "Never sent. The retired model-memory hook's row, kept in the wire schema\nonly while an installable TestFlight build reads it (hub scripts\nwire-compat.ts); it goes with the last of them (20261018).",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "cause": {
+                    "$ref": "#/components/schemas/FleetFaultCause"
+                  },
+                  "detail": {
+                    "description": "What the write or the CLI said — the tail of it.",
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "failed"
+                    ]
+                  }
+                },
+                "required": [
+                  "cause",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "detail": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "applied",
+                      "disabled",
+                      "needs-auth",
+                      "pending",
+                      "removed",
+                      "unsupported"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            ]
           },
           "plugins": {
             "type": "object"
           },
           "skills": {
             "type": "object",
-            "description": "Absent from a daemon that predates directly-fetched skills."
+            "description": "Absent from a harness's own report when it converges none."
           },
           "toolchain": {
             "$ref": "#/components/schemas/FleetToolchain",
-            "description": "The CLIs this sync leaned on, so a failure can be attributed to a binary\nrather than to the machine as a whole. Absent from a daemon that predates\nit, and from one that found nothing to report."
+            "description": "The CLIs this sync leaned on, so a failure can be attributed to a binary\nrather than to the machine as a whole. Absent from a machine that found\nnothing to report."
           }
         },
         "required": [
@@ -41322,20 +41420,23 @@
           "plugins"
         ]
       },
-      "FleetItemState": {
-        "description": "What one desired entry came to on one machine. `removed` is a success: the\nrow was disabled or deleted and the machine no longer has it — reported\nonce so the dashboard can say so, gone from the next report.",
-        "type": "object",
-        "properties": {
-          "detail": {
-            "description": "`failed`: what the write or the CLI said — the tail of it.",
-            "type": "string"
-          },
-          "state": {
-            "$ref": "#/components/schemas/FleetItemStateState"
-          }
-        },
-        "required": [
-          "state"
+      "FleetFaultCause": {
+        "description": "Why one entry did not converge on a machine, named where it failed:\n- `cli-too-old`: the claude CLI the sync ran is older than\n  `CLAUDE_VERSION_FLOOR` (agent claude-version.ts), by its version;\n- `cli-missing`: the machine has no claude CLI to run;\n- `marketplace-unlinked`: a plugin's marketplace is not linked here;\n- `hub-only`: a plugin of a marketplace that is a directory on the hub's\n  machine, which the hub could not carry;\n- `drifted`: the machine edited the copy CawCo wrote;\n- `absent`: what CawCo recorded writing is no longer there;\n- `unparsable`, `unwritable`: a config file it could not read, or write;\n- `timed-out`: a run or a server that did not answer in time;\n- `no-checkout`: bound to a project this machine has no checkout of;\n- `missing-bytes`: the hub named a version and sent no files for it;\n- `unsafe-path`: a file the hub sent names a path outside its directory;\n- `unknown`: anything else, said as it was in `detail`.",
+        "type": "string",
+        "enum": [
+          "absent",
+          "cli-missing",
+          "cli-too-old",
+          "drifted",
+          "hub-only",
+          "marketplace-unlinked",
+          "missing-bytes",
+          "no-checkout",
+          "timed-out",
+          "unknown",
+          "unparsable",
+          "unsafe-path",
+          "unwritable"
         ]
       },
       "FleetToolchain": {
@@ -42982,6 +43083,10 @@
           "compactError": {
             "type": "string"
           },
+          "compactFailure": {
+            "$ref": "#/components/schemas/CompactionFailure",
+            "description": "{@link compactError} typed, as its harness typed the error ({@link import (\"./harness\").CompactionFailure})."
+          },
           "compactResult": {
             "$ref": "#/components/schemas/BlockMetadataCompactResult",
             "description": "A compaction boundary read back from a harness that stores how it ended\n(opencode): `failed` with the harness's words in `compactError`."
@@ -43361,6 +43466,10 @@
           "workflowEvent": {
             "description": "Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`.",
             "type": "string"
+          },
+          "workflowRunId": {
+            "description": "The workflow run a block is about, as its producer stamped it: a\nworkflow's notice, by its tag; a `workflow_run` call, by the run its\nresult started.",
+            "type": "string"
           }
         }
       },
@@ -43523,6 +43632,53 @@
           "mediaType",
           "name",
           "size"
+        ]
+      },
+      "CompactionFailure": {
+        "description": "How a compaction failed, as its harness typed the error it failed on:\n`kind`, the harness's own sort of it (OpenCode's error `type`, as\n`provider.timeout`), or `unknown` when it gave none; `status`, the\nprovider's HTTP status when there was one; `message`, its words as said.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ]
+      },
+      "HarnessNote": {
+        "description": "A notice the harness put in the user's role, as its agent's normaliser\nread it (agent claude-transcript.ts `harnessNoteOf`): Claude Code's\n`<task-notification>` block (`task-notification`) and its `[SYSTEM\nNOTIFICATION …]` line, and a whole `<system-reminder>` block\n(`system-reminder`). `title` is what a fold says closed, `status` the\ntask's (`completed`, `failed`, `stopped`; empty when it said none), `body`\nthe rest, as markdown. Never the reader's words.",
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HarnessNoteKind"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolUseId": {
+            "description": "A task notification's Task call, when it names one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "kind",
+          "status",
+          "title"
         ]
       },
       "BlockTooling": {
@@ -43733,6 +43889,9 @@
               },
               "error": {
                 "type": "string"
+              },
+              "failure": {
+                "$ref": "#/components/schemas/CompactionFailure"
               }
             },
             "required": [
@@ -46405,7 +46564,7 @@
         ]
       },
       "MachineMemorySet": {
-        "description": "A machine's own memory set: the user CLAUDE.md and whatever is under\n`~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a\npeek and an adoption read. A daemon that predates the set answers without\n`docs`, which reads as a machine that keeps none.",
+        "description": "A machine's own memory set: the user CLAUDE.md and whatever is under\n`~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a\npeek and an adoption read.",
         "type": "object",
         "properties": {
           "content": {
@@ -46423,6 +46582,7 @@
         },
         "required": [
           "content",
+          "docs",
           "hash"
         ]
       },
@@ -48113,11 +48273,15 @@
         "type": "object",
         "properties": {
           "error": {
-            "description": "Why there are no windows: nothing on the account has reported any yet.",
+            "description": "Why there are no windows, in words. Kept beside {@link errorKind} for the\nshipped app, which compares it to \"not signed in\"; a reader decides on\n`errorKind`.",
             "type": [
               "null",
               "string"
             ]
+          },
+          "errorKind": {
+            "$ref": "#/components/schemas/ClaudeLimitsErrorKind",
+            "description": "Why there are no windows, typed: `not-signed-in`, no account on the\nmachine is signed in to Claude; `no-reading`, nothing on the account has\nreported any yet. Null when there are windows."
           },
           "extraUsage": {
             "description": "Extra usage as the last `rate_limit_event` said; null: it never said.",
@@ -49003,7 +49167,6 @@
         ]
       },
       "NeutralUserMessage": {
-        "description": "A user-role message. Two things wear this shape: what the harness says in\nthe user's role (tool results, its own notices), and a message SENT to the\nsession — which always carries `origin` and `uuid` ({@link SentMessage}),\nand nothing else does.",
         "type": "object",
         "properties": {
           "compactSummary": {
@@ -49016,6 +49179,7 @@
             "type": "boolean"
           },
           "message": {
+            "description": "`harnessNote`: the message is a notice of the harness's, typed where its normaliser read it ({@link HarnessNote}).",
             "type": "object",
             "properties": {
               "role": {
@@ -49036,6 +49200,10 @@
                     "type": "string"
                   }
                 ]
+              },
+              "harnessNote": {
+                "$ref": "#/components/schemas/HarnessNote",
+                "description": "A notice the harness put in the user's role, as its agent's normaliser\nread it (agent claude-transcript.ts `harnessNoteOf`): Claude Code's\n`<task-notification>` block (`task-notification`) and its `[SYSTEM\nNOTIFICATION …]` line, and a whole `<system-reminder>` block\n(`system-reminder`). `title` is what a fold says closed, `status` the\ntask's (`completed`, `failed`, `stopped`; empty when it said none), `body`\nthe rest, as markdown. Never the reader's words."
               }
             },
             "required": [
@@ -49693,6 +49861,11 @@
       "NeutralResultMessage": {
         "type": "object",
         "properties": {
+          "atLimit": {
+            "description": "pi and OpenCode: the provider refused the turn at its account's limit,\nby the structured refusal its harness handed over (core\n`atProviderLimit`). Claude's is its assistant frame's `error`.",
+            "const": true,
+            "type": "boolean"
+          },
           "cache": {
             "description": "Prompt-cache tokens the turn read from / wrote to, when the harness reports them.",
             "type": "object",
@@ -49749,6 +49922,11 @@
           },
           "result": {
             "type": "string"
+          },
+          "serverStopped": {
+            "description": "OpenCode: the server the turn ran in stopped before it finished\n(`session.execution.interrupted` reason `shutdown`, or a reattach that\nfinds the turn unfinished): cut, not ended, so the hub hands it back.\n`errors` carries the same in words (core `SERVER_STOPPED_MID_TURN`).",
+            "const": true,
+            "type": "boolean"
           },
           "session_id": {
             "type": "string"
@@ -49850,7 +50028,12 @@
             }
           },
           "compact_error": {
+            "description": "A failed compaction's words; {@link compact_failure} is what a reader decides on.",
             "type": "string"
+          },
+          "compact_failure": {
+            "$ref": "#/components/schemas/CompactionFailure",
+            "description": "How a compaction failed, typed ({@link CompactionFailure}); with `compact_result: \"failed\"`."
           },
           "compact_metadata": {
             "type": "object",
@@ -49866,6 +50049,10 @@
               },
               "error": {
                 "type": "string"
+              },
+              "failure": {
+                "$ref": "#/components/schemas/CompactionFailure",
+                "description": "How a compaction failed, as its harness typed the error it failed on:\n`kind`, the harness's own sort of it (OpenCode's error `type`, as\n`provider.timeout`), or `unknown` when it gave none; `status`, the\nprovider's HTTP status when there was one; `message`, its words as said."
               }
             }
           },
@@ -50306,9 +50493,13 @@
             "type": "string"
           },
           "retry": {
-            "description": "provider_retry ({@link PROVIDER_RETRY}): the provider's own message, and\nwhen the harness makes its next attempt (ms epoch) if it said.",
+            "description": "provider_retry ({@link PROVIDER_RETRY}): the provider's own message,\nwhen the harness makes its next attempt (ms epoch) if it said, and\n`atLimit` when the refusal it retries is the account's limit (core\n`atProviderLimit`).",
             "type": "object",
             "properties": {
+              "atLimit": {
+                "const": true,
+                "type": "boolean"
+              },
               "message": {
                 "type": "string"
               },
@@ -51193,7 +51384,7 @@
             "$ref": "#/components/schemas/KeepAlive"
           },
           "kind": {
-            "description": "`scratch` for a spin-off; absent from a hub that predates the column.",
+            "description": "`mainline`, `scratch` for a spin-off, or `summariser`, never on the board.",
             "type": "string"
           },
           "lastError": {
@@ -51379,6 +51570,7 @@
           "cwd",
           "harness",
           "id",
+          "kind",
           "launchDir",
           "machineId",
           "sessionId",
@@ -51983,6 +52175,7 @@
         "type": "object",
         "properties": {
           "error": {
+            "description": "A refusal's words, as said; {@link refusal} is what a reader decides on.",
             "type": "string"
           },
           "failed": {
@@ -52004,6 +52197,65 @@
           },
           "ok": {
             "type": "boolean"
+          },
+          "refusal": {
+            "description": "Why the machine's agent refused the call, typed; absent on an answer, and on a refusal the hub made itself.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "not-running"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "missing"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "unknown"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ]
+              }
+            ]
           },
           "requestId": {
             "type": "string"
@@ -53660,6 +53912,13 @@
           "turn"
         ]
       },
+      "ClaudeLimitsErrorKind": {
+        "type": "string",
+        "enum": [
+          "no-reading",
+          "not-signed-in"
+        ]
+      },
       "CommandAckOutcome": {
         "type": "string",
         "enum": [
@@ -53772,7 +54031,8 @@
         "type": "string",
         "enum": [
           "conversation-gone",
-          "restart-lost"
+          "restart-lost",
+          "start-refused"
         ]
       },
       "FindConversationOutcome": {
@@ -53798,18 +54058,6 @@
           "ask",
           "off",
           "on"
-        ]
-      },
-      "FleetItemStateState": {
-        "type": "string",
-        "enum": [
-          "applied",
-          "disabled",
-          "failed",
-          "needs-auth",
-          "pending",
-          "removed",
-          "unsupported"
         ]
       },
       "FleetMcpServerMode": {
@@ -53840,6 +54088,13 @@
         "enum": [
           "dir",
           "file"
+        ]
+      },
+      "HarnessNoteKind": {
+        "type": "string",
+        "enum": [
+          "system-reminder",
+          "task-notification"
         ]
       },
       "HomeCredentialKind": {

@@ -302,20 +302,32 @@ const refusalStep = (refusal: TunnelRefusal): string => {
 const DOWNLOAD_MAX_S = 60;
 
 /**
- * curl's own exits for an address it could not reach (`curl: (6)` the name
- * did not resolve, `(7)` the connection failed, `(28)` it timed out); any
- * other `curl: (` is the hub answering, and the download step's failure.
+ * curl's exit statuses for an address it could not reach (curl(1) EXIT
+ * CODES: 6 the name did not resolve, 7 the connection failed, 28 it timed
+ * out); any other is the hub answering, and the download step's failure.
  */
-const UNREACHED = /curl: \((?:6|7|28)\)/;
+const UNREACHED = new Set([6, 7, 28]);
+
+/**
+ * The line the install command prints when the machine's curl fails, its exit
+ * status after it: CawCo's own, so the status is read off it, never curl's
+ * words. Not a step line ({@link INSTALL_STEP_PREFIX}): the step it failed on
+ * is still the download.
+ */
+const CURL_EXIT = "cawco-curl-exit: ";
 
 /**
  * The install, once signed in: its step line, then the script from the hub
  * at `hubUrl`, the port on the machine's loopback the hub's connection
- * carries to it. The script names the hub as its `Host` header did, so the
- * agent it installs joins at that address too.
+ * carries to it, fetched whole (a few kilobytes, held in a shell variable,
+ * so an assignment's status is curl's own and the machine needs nothing
+ * beyond sh and curl) and handed to `sh`. A curl that fails says its exit
+ * status on a {@link CURL_EXIT} line, and the command ends failed. The
+ * script names the hub as its `Host` header did, so the agent it installs
+ * joins at that address too. It holds no single quote ({@link remoteCommand}).
  */
-const installCommand = (hubUrl: string): string =>
-  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} ${hubUrl}/install.sh | sh`;
+export const installCommand = (hubUrl: string): string =>
+  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && if script=$(curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} ${hubUrl}/install.sh); then printf "%s\\n" "$script" | sh; else echo "${CURL_EXIT}$?"; false; fi`;
 
 /**
  * What `ssh-copy-id` does on the machine, run by a password add's one
@@ -369,20 +381,26 @@ const remoteCommand = (body: string): string =>
 const SIGN_IN_STEP = "signing in over SSH";
 
 /**
- * What went wrong once `ssh` ran, off its exit and the step lines the remote
- * command printed (CawCo's own): the download through the hub's connection,
- * a machine that never came online, or the step it stopped on. Whether the
+ * What went wrong once `ssh` ran, off its exit and the lines the remote
+ * command printed that are CawCo's own (its step lines, curl's exit status
+ * on {@link CURL_EXIT}): the download through the hub's connection, a
+ * machine that never came online, or the step it stopped on. Whether the
  * machine was reachable, and its host key, are settled before `ssh` runs
  * ({@link beforeSsh}), never read off ssh's words.
  */
-const problemOf = (
+export const problemOf = (
   lines: readonly string[],
   exitCode: number,
   machineId: string | null
 ): SshJoinProblem => {
   const steps = lines.filter((line) => line.startsWith(INSTALL_STEP_PREFIX));
   const last = steps.at(-1)?.slice(INSTALL_STEP_PREFIX.length);
-  if (last?.startsWith(DOWNLOAD_STEP) && UNREACHED.test(lines.join("\n"))) {
+  const curled = lines.findLast((line) => line.startsWith(CURL_EXIT));
+  if (
+    last?.startsWith(DOWNLOAD_STEP) &&
+    curled !== undefined &&
+    UNREACHED.has(Number(curled.slice(CURL_EXIT.length)))
+  ) {
     return { kind: "download" };
   }
   if (exitCode === 0 && machineId) {

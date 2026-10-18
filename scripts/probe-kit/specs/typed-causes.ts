@@ -34,6 +34,12 @@
  *   alone, never by `lastError`'s words.
  * - I, words sent mid-turn: indexed as the person's from Claude Code's
  *   `queued_command` record by the search index, with no English stripped.
+ * - J, an OpenCode turn its server stopped: its result carries
+ *   `serverStopped`, which the hub hands the turn back by.
+ * - K, a refused restore: it stands refused by the kind `start-refused`,
+ *   never by its refusal's words matching again.
+ * - L, an install whose curl cannot reach the hub: the download, by curl's
+ *   exit status on CawCo's own line, while curl speaks German.
  *
  * git speaks German through a stand-in on PATH that runs the real git and
  * gives its stderr in German words (as the scratch fleet's mock stands in
@@ -755,11 +761,18 @@ const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
   const sqlite = new Database(dbPath, { readwrite: true });
   const ids = sqlite
     .query<{ id: string }, []>(
-      "SELECT id FROM instances WHERE session_id IS NOT NULL AND end_intent IS NULL AND machine_removed = 0 AND status != 'discarded' ORDER BY id LIMIT 4"
+      "SELECT id FROM instances WHERE session_id IS NOT NULL AND end_intent IS NULL AND machine_removed = 0 AND status != 'discarded' ORDER BY id LIMIT 6"
     )
     .all()
     .map(({ id }) => id);
-  const [gone = "", restarted = "", typed = "", worded = ""] = ids;
+  const [
+    gone = "",
+    restarted = "",
+    typed = "",
+    worded = "",
+    refused = "",
+    refusedInWords = "",
+  ] = ids;
   sqlite
     .query("UPDATE instances SET status = 'error', last_error = ? WHERE id = ?")
     .run(CLAUDE_CONVERSATION_GONE, gone);
@@ -832,9 +845,151 @@ const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
         relaunch: byWords && relaunchOf(byWords),
       })
     );
+    // K: a restore the hub refused stands refused by its kind, not by
+    // whether the refusal's words are the same again.
+    const core = (await import("../../../packages/core/src/index")) as {
+      startRefused?: (row: object) => boolean;
+    };
+    const refusalWords = "Das Konto ist auf diesem Rechner abgemeldet.";
+    (db.failInstance as (id: string, error: string, kind?: string) => void)(
+      refused,
+      refusalWords,
+      "start-refused"
+    );
+    db.failInstance(refusedInWords, refusalWords);
+    const standing = row(refused);
+    const worded2 = row(refusedInWords);
+    kit.check(
+      "K: a session the hub refused to restore stands refused by its kind start-refused, whatever its refusal says now",
+      standing !== undefined && core.startRefused?.(standing) === true,
+      JSON.stringify({
+        status: standing?.status,
+        lastErrorKind: standing?.lastErrorKind,
+      })
+    );
+    kit.check(
+      "K: a session failed in a refusal's words with no kind is no standing refusal: words decide nothing",
+      worded2 !== undefined && core.startRefused?.(worded2) === false,
+      JSON.stringify({
+        status: worded2?.status,
+        lastErrorKind: worded2?.lastErrorKind,
+      })
+    );
   } finally {
     lifetime.close();
   }
+};
+
+/**
+ * J: an OpenCode turn cut by its server stopping is typed where the agent
+ * finds it: OpenCode's `session.execution.interrupted` with reason
+ * `shutdown`, handed to the agent's own session (`OpencodeSession.handle`),
+ * ends the turn with a result carrying `serverStopped`, which the hub reads
+ * to hand the turn back; `errors` keeps the words for a person.
+ */
+const serverStopped = async (kit: Kit): Promise<void> => {
+  const { OpencodeSession } =
+    await import("../../../packages/agent/src/harnesses/opencode-session");
+  const frames: Record<string, unknown>[] = [];
+  const ctx = {
+    busy: () => undefined,
+    emit: () => undefined,
+    failed: (error: unknown) =>
+      kit.note(`J: the session failed: ${String(error)}`),
+    frame: (message: Record<string, unknown>) => {
+      frames.push(message);
+    },
+    keeperRefused: () => undefined,
+    permission: () => undefined,
+    rejected: () => undefined,
+    session: () => undefined,
+  };
+  const session = new OpencodeSession({
+    instanceId: "probe-typed-causes-opencode",
+    sessionId: "ses_probe_typed_causes",
+    ctx,
+    ready: Promise.resolve([]),
+    applied: {},
+    deniedRules: [],
+    directory: process.env.TMPDIR ?? tmpdir(),
+    liveSessions: () => new Set<string>(),
+    isConfigGateHeld: () => false,
+    readActivity: () => Promise.resolve(false),
+    prepareDispatch: () => Promise.resolve(),
+    onRelease: () => undefined,
+    registerChild: () => undefined,
+    turnOutcome: () => undefined,
+    lead: false,
+    fence: false,
+  } as never);
+  session.handle({
+    type: "session.execution.interrupted",
+    data: { sessionID: "ses_probe_typed_causes", reason: "shutdown" },
+  } as never);
+  const result = frames.find((frame) => frame.type === "result");
+  kit.check(
+    "J: an OpenCode turn its server stopped ends with a result typed serverStopped, which the hub hands back by",
+    result?.serverStopped === true,
+    JSON.stringify(result ?? frames).slice(0, 300)
+  );
+};
+
+/**
+ * curl, its stderr in German and without its `curl: (N)` code: a stand-in
+ * for a curl whose words CawCo did not make.
+ */
+const GERMAN_CURL = String.raw`#!/bin/sh
+err=$(mktemp)
+/usr/bin/curl "$@" 2>"$err"
+code=$?
+sed -e 's/^curl: ([0-9]*) Failed to connect to \([^ ]*\).*/curl: Verbindung zu \1 fehlgeschlagen/' "$err" >&2
+rm -f "$err"
+exit $code
+`;
+
+/**
+ * L: an SSH add's install whose curl cannot reach the hub through its
+ * connection is the download, by curl's exit status, never its words: the
+ * hub's own install command (`installCommand`) run by `sh` against a port
+ * nothing listens on, with a German curl first on PATH, its lines read by the
+ * hub's `problemOf`.
+ */
+const curlExit = async (kit: Kit, scratch: string): Promise<void> => {
+  const join_ = (await import("../../../packages/hub/src/join")) as {
+    installCommand?: (hubUrl: string) => string;
+    problemOf?: (
+      lines: readonly string[],
+      exitCode: number,
+      machineId: string | null
+    ) => { kind: string };
+  };
+  if (!(join_.installCommand && join_.problemOf)) {
+    kit.check(
+      "L: an install whose curl cannot reach the hub is the download, by curl's exit status, whatever curl says",
+      false,
+      "hub join.ts exports no installCommand and problemOf"
+    );
+    return;
+  }
+  const bin = join(scratch, "german-curl");
+  await mkdir(bin, { recursive: true });
+  await writeFile(join(bin, "curl"), GERMAN_CURL);
+  await chmod(join(bin, "curl"), 0o755);
+  const ran = await shell(
+    scratch,
+    {
+      ...(process.env as Record<string, string>),
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+    },
+    join_.installCommand(`http://127.0.0.1:${closedPort()}`)
+  );
+  const lines = `${ran.stdout}${ran.stderr}`.split("\n").filter(Boolean);
+  const problem = join_.problemOf(lines, ran.exitCode, null);
+  kit.check(
+    "L: an install whose curl cannot reach the hub is the download, by curl's exit status, whatever curl says",
+    problem.kind === "download",
+    `${JSON.stringify(problem)}; exit ${ran.exitCode}; ${JSON.stringify(lines)}`
+  );
 };
 
 /** Words a person sent while a turn ran, in the language CawCo did not write: what leg I searches for. */
@@ -921,6 +1076,8 @@ const spec: Spec = {
       await credential(kit);
       await lastErrorKinds(kit, scratch);
       await midTurn(kit, scratch);
+      await serverStopped(kit);
+      await curlExit(kit, scratch);
       await trailerless(kit, scratch);
       await sshJoin(kit, scratch);
     } finally {

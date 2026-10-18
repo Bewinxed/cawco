@@ -290,7 +290,6 @@ import {
   reportMarker,
   ruleProblem,
   runDoing,
-  SERVER_STOPPED_MID_TURN,
   SESSION_DIR_READ,
   STREAM_SO_FAR,
   type StoppedCommands,
@@ -298,6 +297,7 @@ import {
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
+  startRefused,
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
@@ -14218,12 +14218,13 @@ export const createServer = (
       return;
     }
     const refuse = (refusal: string): void => {
-      // Custody also inspects failed OpenCode handles. A recorded refusal
-      // stays failed until its settings change, rather than failing each boot.
-      if (row.status === "error" && row.lastError === refusal) {
+      // Custody also inspects failed OpenCode handles. A row the hub already
+      // refused to start stays failed until its account or settings can run,
+      // rather than failing each boot.
+      if (startRefused(row)) {
         return;
       }
-      db.failInstance(row.id, refusal);
+      db.failInstance(row.id, refusal, "start-refused");
       forgetPending(row.id, refusal);
       console.warn(`[hub] not restoring ${row.id}: ${refusal}`);
     };
@@ -20835,7 +20836,7 @@ export const createServer = (
    *   a send still pending, owed or handed is its turn instead (a keep-alive
    *   ping is no turn of its own).
    * - `serverStopped`: its harness said the server its turn ran in stopped
-   *   before finishing it ({@link SERVER_STOPPED_MID_TURN}), on a session it
+   *   before finishing it (its result's `serverStopped`), on a session it
    *   reattached to the server running now; cut whenever it was heard, the
    *   process up, a pending send its turn instead.
    * - `killed`: a signal killed its process just now ({@link diedOnSignal}),
@@ -28003,7 +28004,7 @@ export const createServer = (
                   if (claimed) {
                     recordTurnUsage(claimed, neutral, false);
                   }
-                  if (neutral.errors?.includes(SERVER_STOPPED_MID_TURN)) {
+                  if (neutral.serverStopped === true) {
                     // Cut, not ended: the server it ran in stopped. Handed
                     // back once this result is taken in like any other.
                     const cutId = message.instanceId;

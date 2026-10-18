@@ -535,6 +535,7 @@ interface TurnClosing {
   atLimit?: true;
   errors?: string[];
   is_error: boolean;
+  serverStopped?: true;
   subtype: string;
 }
 
@@ -1407,19 +1408,22 @@ export class OpencodeSession implements HarnessSession {
         });
         break;
       case "session.execution.interrupted":
-        this.#turnEnded(
-          event.data.reason === "user"
-            ? { subtype: "aborted", is_error: false }
-            : {
-                subtype: "error_during_execution",
-                is_error: true,
-                errors: [
-                  event.data.reason === "shutdown"
-                    ? SERVER_STOPPED_MID_TURN
-                    : `OpenCode interrupted the turn (${event.data.reason}).`,
-                ],
-              }
-        );
+        if (event.data.reason === "user") {
+          this.#turnEnded({ subtype: "aborted", is_error: false });
+        } else if (event.data.reason === "shutdown") {
+          this.#turnEnded({
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: [SERVER_STOPPED_MID_TURN],
+            serverStopped: true,
+          });
+        } else {
+          this.#turnEnded({
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: [`OpenCode interrupted the turn (${event.data.reason}).`],
+          });
+        }
         break;
       case "permission.asked":
         this.#asked(event.data);
@@ -1760,6 +1764,7 @@ export class OpencodeSession implements HarnessSession {
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
       ...(result?.atLimit ? { atLimit: true } : {}),
+      ...(result?.serverStopped ? { serverStopped: true } : {}),
       total_cost_usd: this.#costBase + turnCost,
       turnUsage,
       cache: {
@@ -2375,6 +2380,7 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [SERVER_STOPPED_MID_TURN],
+          serverStopped: true,
         });
       } else {
         this.#turnEnded(ending);
