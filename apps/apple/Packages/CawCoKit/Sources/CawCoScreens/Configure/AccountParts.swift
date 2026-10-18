@@ -85,21 +85,32 @@ final class PasteSignin {
     }
 }
 
-/// One account signing in on one machine with its provider's device code
-/// (accounts/device.svelte.ts): the machine starts the provider's own sign-in
-/// and answers a code, the person enters it on any device, and the hub waits
-/// (a minute at a time) for the machine to say who it signed in as. A code is
-/// only ever minted by a press: nothing starts on open.
+/// One account signing in on one machine through its provider's own sign-in
+/// (accounts/device.svelte.ts): the machine starts it and answers what it
+/// shows first. A question it asks is answered here and the machine answers
+/// the next step; a device code is entered on any device while the hub waits
+/// (a minute at a time) for the machine to say who it signed in as; a link is
+/// opened and what its page ends on pasted back. Only ever started by a
+/// press: nothing starts on open.
 @MainActor
 @Observable
 final class DeviceSignin {
-    enum Phase: Equatable { case idle, starting, waiting, expired, signedIn, mismatch }
+    enum Phase: Equatable {
+        case idle, starting, asking, answering, waiting, linked, checking, expired, signedIn, mismatch
+
+        /// A sign-in under way: Start does nothing then.
+        var underWay: Bool {
+            [.starting, .asking, .answering, .waiting, .linked, .checking].contains(self)
+        }
+    }
 
     private(set) var phase = Phase.idle
+    /// The question the sign-in asks now.
+    private(set) var prompt: SigninStart.Prompt?
     private(set) var code: String?
     private(set) var url: URL?
-    /// When the code lapses, epoch ms.
-    private(set) var expiresAt = 0.0
+    /// When the code lapses, epoch ms; nil when the provider gave no expiry.
+    private(set) var expiresAt: Double?
     private(set) var email: String?
     /// The hub's refusal, in its own words.
     private(set) var problem: String?
@@ -119,47 +130,96 @@ final class DeviceSignin {
         self.account = account
     }
 
-    /// Mints a code on the machine and waits for it to be entered.
+    /// Starts the sign-in on the machine and shows what it asks first.
     func start() async {
-        guard phase != .starting, phase != .waiting, let hub else { return }
+        guard !phase.underWay, let hub else { return }
         round += 1
         let mine = round
         phase = .starting
         problem = nil
+        await step(mine) { id in try await hub.beginSignin(id, machineId: self.machineId) }
+    }
+
+    /// Answers the question it asks: an option's id, or the text typed.
+    func answer(_ value: String) async {
+        guard phase == .asking, let hub else { return }
+        let mine = round
+        phase = .answering
+        problem = nil
+        await step(mine) { id in try await hub.answerSignin(id, machineId: self.machineId, answer: value) }
+    }
+
+    /// Sends the code or address the link's page ended on.
+    func paste(_ pasted: String) async {
+        let code = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard phase == .linked, !code.isEmpty else { return }
+        let mine = round
+        phase = .checking
+        problem = nil
         do {
             let id = try await account()
-            let challenge = try await hub.beginSignin(id, machineId: machineId)
-            guard mine == round else { return }
-            guard let userCode = challenge.userCode, let expires = challenge.expiresAt else {
-                phase = .idle
-                problem = Words.Accounts.Device.notACode
-                return
-            }
-            code = userCode
-            url = challenge.verificationUrl.flatMap(URL.init(string:))
-            expiresAt = expires
-            phase = .waiting
-            clock(true)
-            while mine == round {
-                let answer = try await hub.completeSignin(id, machineId: machineId)
-                guard mine == round else { return }
-                if answer.state == "pending" {
-                    if Date.now.timeIntervalSince1970 * 1000 >= expiresAt {
-                        end(.expired)
-                        return
-                    }
-                    continue
-                }
-                if answer.state == "signed-in" || answer.state == "mismatch" { email = answer.who }
-                end(answer.state == "signed-in" ? .signedIn : answer.state == "mismatch" ? .mismatch : .expired)
-                return
-            }
+            try await wait(id, mine, code: code)
         } catch {
+            failed(mine, error)
+        }
+    }
+
+    /// Asks the machine for the next step and shows it; a device code is then waited on.
+    private func step(_ mine: Int, _ ask: (String) async throws -> SigninStart) async {
+        do {
+            let id = try await account()
+            let challenge = try await ask(id)
             guard mine == round else { return }
-            clock(false)
+            if let asked = challenge.prompt {
+                prompt = asked
+                phase = .asking
+                return
+            }
+            prompt = nil
+            if let link = challenge.url {
+                code = nil
+                url = URL(string: link)
+                expiresAt = nil
+                phase = .linked
+                return
+            }
+            code = challenge.userCode
+            url = challenge.verificationUrl.flatMap(URL.init(string:))
+            expiresAt = challenge.expiresAt
+            phase = .waiting
+            clock(expiresAt != nil)
+            try await wait(id, mine)
+        } catch {
+            failed(mine, error)
+        }
+    }
+
+    private func failed(_ mine: Int, _ error: Error) {
+        guard mine == round else { return }
+        clock(false)
+        prompt = nil
+        code = nil
+        phase = .idle
+        problem = error.localizedDescription
+    }
+
+    private func wait(_ id: String, _ mine: Int, code pasted: String? = nil) async throws {
+        guard let hub else { return }
+        var code = pasted
+        while mine == round {
+            let answer = try await hub.completeSignin(id, machineId: machineId, code: code)
             code = nil
-            phase = .idle
-            problem = error.localizedDescription
+            guard mine == round else { return }
+            if answer.state == "pending" {
+                if let expiresAt, Date.now.timeIntervalSince1970 * 1000 >= expiresAt {
+                    end(.expired)
+                    return
+                }
+                continue
+            }
+            if answer.state == "signed-in" || answer.state == "mismatch" { email = answer.who }
+            end(answer.state == "signed-in" ? .signedIn : answer.state == "mismatch" ? .mismatch : .expired)
+            return
         }
     }
 
@@ -178,7 +238,7 @@ final class DeviceSignin {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self, !Task.isCancelled else { return }
                 now = Date.now.timeIntervalSince1970 * 1000
-                if phase == .waiting, now >= expiresAt {
+                if phase == .waiting, let expiresAt, now >= expiresAt {
                     round += 1
                     end(.expired)
                 }

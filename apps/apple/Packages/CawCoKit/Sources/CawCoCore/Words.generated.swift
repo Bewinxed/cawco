@@ -318,6 +318,14 @@ public enum Words {
             }
 
             public static let notACode = "The machine answered a sign-in link, not a code. Update CawCo on it, then start again."
+
+            /// The text answer to a question the provider's sign-in asks.
+            public static let answer = "Continue"
+
+            public static let answering = "Continuing…"
+
+            /// Under a sign-in link: what to paste back once the page is done.
+            public static let linked = "Sign in at the link, then paste the code or the address the page ends on."
         }
 
         public enum Key {

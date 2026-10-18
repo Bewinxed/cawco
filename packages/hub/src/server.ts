@@ -2173,21 +2173,6 @@ const mcpProblem = (
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
 const SKILL_NAME = /^[A-Za-z0-9._-]+$/;
 
-/** Whether a machine's last report says it still has anything of the fleet's on it. */
-const holdsFleet = (report: FleetSyncReport | undefined): boolean =>
-  report !== undefined &&
-  ([
-    report.mcp,
-    report.marketplaces,
-    report.plugins,
-    report.skills,
-    report.memoryDocs,
-    report.hooks,
-  ].some((states) =>
-    Object.values(states ?? {}).some((item) => item.state !== "removed")
-  ) ||
-    (report.memory !== undefined && report.memory.state !== "removed"));
-
 /** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
 type MachineMemory = MachineMemorySet | null;
 
@@ -14886,12 +14871,6 @@ export const createServer = (
    * machine to converge on and report back. Sent when a machine reports what
    * its harnesses can do (once per connection) and after any change, so a
    * machine that joins tomorrow needs nobody to remember it.
-   *
-   * A fleet nobody has configured is not sent at all — there is nothing to
-   * converge on, and a sync that writes nothing is still a file read and a
-   * report stored on every connection in the fleet. Unless the machine still has
-   * something of ours: the last row being deleted is exactly when a machine most
-   * needs telling, and its own last report is what says it has anything to lose.
    */
   const pushFleetConfig = (
     machineId: string,
@@ -15109,26 +15088,9 @@ export const createServer = (
       return;
     }
 
-    const config = db.fleetConfig();
-    const empty = !(
-      config.mcp.length ||
-      config.marketplaces.length ||
-      config.plugins.length ||
-      config.skills?.length ||
-      config.hooks?.length ||
-      config.placedMemory?.length ||
-      config.memory
-    );
-    if (
-      empty &&
-      !holdsFleet(
-        db.listAgents().find((row) => row.machineId === machineId)?.fleet
-      )
-    ) {
-      return;
-    }
-
-    pushFleetConfig(machineId, agent, config);
+    // Always sent, a fleet with no rows too: it carries the denied tools, and
+    // a machine spawns nothing until it has heard them.
+    pushFleetConfig(machineId, agent, db.fleetConfig());
   };
 
   /**
