@@ -13,6 +13,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { MessageMetadata } from "../types";
+  import OfferActs from "./OfferActs.svelte";
 
   let { offer }: { offer: NonNullable<MessageMetadata["lfsOffer"]> } = $props();
 
@@ -34,6 +35,14 @@
     });
   });
 
+  /** What was answered, once it was: the commit Track made, or Not now. */
+  const said = $derived.by(() => {
+    if (now?.answer === "tracked" && now.commit) {
+      return lfsWords.tracked(now.commit);
+    }
+    return now?.answer === "dismissed" ? lfsWords.notNow : null;
+  });
+
   const MB = 1024 * 1024;
   const size = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
 
@@ -53,11 +62,15 @@
   }
 </script>
 
-<div class="offer rail-hang" data-lfs-offer={offer.id}>
+<div
+  class="lfs-offer rail-hang"
+  data-answer={now?.answer}
+  data-lfs-offer={offer.id}
+>
   {#if now}
-    <ul class="rows">
+    <ul class="patterns">
       {#each now.rows as row (row.pattern)}
-        <li class="row" data-lfs-pattern={row.pattern}>
+        <li class="pattern-line" data-lfs-pattern={row.pattern}>
           <code class="pattern">{row.pattern}</code>
           <span class="count num"
             >{lfsWords.row(row.count, size(row.bytes))}</span
@@ -66,7 +79,7 @@
       {/each}
     </ul>
   {/if}
-  <div class="acts">
+  <OfferActs {problem} {said}>
     {#if now?.answer === "open"}
       <Button
         label={lfsWords.track}
@@ -86,34 +99,24 @@
         variant="ghost"
         disabled={acting === "track"}
       />
-    {:else if now?.answer === "tracked" && now.commit}
-      <span class="said">{lfsWords.tracked(now.commit)}</span>
-    {:else if now?.answer === "dismissed"}
-      <span class="said">{lfsWords.notNow}</span>
     {/if}
-  </div>
-  {#if problem}
-    <p class="problem">{problem}</p>
-  {/if}
+  </OfferActs>
 </div>
 
 <style>
-  .offer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
+  .lfs-offer {
     min-inline-size: 0;
+    margin-block-start: var(--space-2);
   }
-  .rows {
+  .patterns {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .row {
+  .pattern-line {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -126,22 +129,12 @@
     color: var(--ink-strong);
     overflow-wrap: anywhere;
   }
-  .count,
-  .said {
+  .count {
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
-  .acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .problem {
-    margin: 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
+  .num {
+    font-variant-numeric: tabular-nums;
   }
 </style>

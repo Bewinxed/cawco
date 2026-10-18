@@ -19719,16 +19719,23 @@ export const createServer = (
   const lfsMachineProject = (
     id: string,
     caller: Caller
-  ): { row: ProjectRow } | { refused: string; status: 403 | 404 } => {
-    if (caller.kind !== "machine") {
+  ):
+    | { machineId: string | null; row: ProjectRow }
+    | { refused: string; status: 403 | 404 } => {
+    // The route's rule lets in a machine or the owner (hub-auth.ts): an
+    // agent with no proof is the owner on a trusted hub, and names no machine.
+    if (caller.kind !== "machine" && caller.kind !== "owner") {
       return { status: 403, refused: "Only a machine asks this." };
     }
     const row = db.project(id);
     if (!row) {
       return { status: 404, refused: `There is no project ${id}.` };
     }
+    if (caller.kind === "owner") {
+      return { row, machineId: null };
+    }
     return row.places.some((place) => place.machineId === caller.machineId)
-      ? { row }
+      ? { row, machineId: caller.machineId }
       : {
           status: 403,
           refused: `This machine holds no place of ${row.name}.`,
@@ -22763,6 +22770,9 @@ export const createServer = (
           body: t.Object({
             root: t.String({ minLength: 1, maxLength: 4096 }),
             endpoint: t.String({ minLength: 1, maxLength: 2000 }),
+            // The asking machine's own word for itself, for a trusted hub's
+            // caller, which proves none.
+            machineId: t.String({ minLength: 1, maxLength: 200 }),
           }),
         },
         ({ body, params, request, server, status }) => {
@@ -22772,20 +22782,21 @@ export const createServer = (
             return status(project.status, project.refused);
           }
           const said = `${params.id}\n${body.endpoint}`;
-          if (lfsRefusalsNoted.has(said) || caller.kind !== "machine") {
+          if (lfsRefusalsNoted.has(said)) {
             return { ok: true };
           }
           lfsRefusalsNoted.add(said);
+          const machineId = project.machineId ?? body.machineId;
           caw.notice(params.id, db.newestConversation(params.id)?.id ?? null, {
             title: "Large files left as pointers: an undeclared LFS server",
             event: {
               kind: "repo",
               root: body.root,
-              machineId: caller.machineId,
+              machineId,
               commit: null,
               lfsRefused: body.endpoint,
             },
-            body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineCalled(caller.machineId, db.listAgents())} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
+            body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineCalled(machineId, db.listAgents())} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
           });
           return { ok: true };
         }

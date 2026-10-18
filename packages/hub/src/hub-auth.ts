@@ -114,6 +114,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],
   // A workspace's post held for the person (upstream-asks.ts), raised by its machine.
   ["POST", /^\/api\/upstream\/asks$/, "machine"],
+  // Where a project's large files live, and a .lfsconfig its git-lfs refused (agent host-lfs.ts).
+  ["GET", /^\/api\/lfs\/projects\/[^/]+$/, "machine"],
+  ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/, "machine"],
   ["POST", /^\/api\/session-identities\/install$/, "machine-proof"],
 ];
 
@@ -520,6 +523,9 @@ export const createHubAuth = ({
     });
   };
 
+  /** Each request's caller as the gate classified it, for its handler ({@link callerOf}). */
+  const gated = new WeakMap<Request, Caller>();
+
   /**
    * The gate every request passes once it is no cross-site one: undefined to
    * go on, or the refusal. The address is the one the request came from, or
@@ -534,6 +540,7 @@ export const createHubAuth = ({
       path,
       clientAddress(header, address)
     );
+    gated.set(request, caller);
     if (allows(caller, request.method, path, modeFor(header))) {
       return;
     }
@@ -781,8 +788,17 @@ export const createHubAuth = ({
     return true;
   };
 
-  /** The caller of a route handler, read again from its request. */
+  /**
+   * The caller of a route handler: as the gate classified its request, else
+   * read again from it. Read again, a machine's proof is one the gate already
+   * spent (`machineOf`, against replay), so the handler would see an owner on
+   * a trusted hub, or no one.
+   */
   const callerOf = (request: Request, address: string | null): Caller => {
+    const known = gated.get(request);
+    if (known) {
+      return known;
+    }
     const header: Headers = (name) => request.headers.get(name);
     return classify(
       header,

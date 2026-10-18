@@ -1917,6 +1917,12 @@ export interface PlaceLfsMade {
   commit: string;
   /** The left-out files it committed through LFS. */
   files: number;
+  /**
+   * Whether git-lfs's hooks went into the folder's own git, so the person's
+   * own push sends the large files; false when a pre-push hook of the
+   * folder's own was there, which git-lfs does not overwrite.
+   */
+  hooks: boolean;
   patterns: string[];
 }
 

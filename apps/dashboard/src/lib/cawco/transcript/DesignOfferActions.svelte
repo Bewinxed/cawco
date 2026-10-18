@@ -15,9 +15,13 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { MessageMetadata } from "../types";
+  import OfferActs from "./OfferActs.svelte";
 
   let { offer }: { offer: NonNullable<MessageMetadata["designOffer"]> } =
     $props();
+
+  /** What was answered, once it was. */
+  const SAID = { built: offerWords.filed, dismissed: offerWords.notNow };
 
   let now = $state<DesignOfferState | null>(null);
   let problem = $state<string | null>(null);
@@ -60,7 +64,13 @@
   }
 </script>
 
-<div class="offer rail-hang" data-design-offer={offer.projectId}>
+<OfferActs
+  class="rail-hang"
+  data-answer={now?.answer}
+  data-design-offer={offer.projectId}
+  {problem}
+  said={now && now.answer !== "open" ? SAID[now.answer] : null}
+>
   {#if now?.answer === "open"}
     <Button
       label={offerWords.build}
@@ -78,37 +88,7 @@
       size="xs"
       variant="ghost"
     />
-  {:else if now?.answer === "built"}
-    <span class="said">{offerWords.filed}</span>
-    {#if href}
-      <Button {href} label={offerWords.open} size="xs" variant="ghost" />
-    {/if}
-  {:else if now?.answer === "dismissed"}
-    <span class="said">{offerWords.notNow}</span>
+  {:else if now?.answer === "built" && href}
+    <Button {href} label={offerWords.open} size="xs" variant="ghost" />
   {/if}
-  {#if problem}
-    <p class="problem">{problem}</p>
-  {/if}
-</div>
-
-<style>
-  .offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .said {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .problem {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-  }
-</style>
+</OfferActs>

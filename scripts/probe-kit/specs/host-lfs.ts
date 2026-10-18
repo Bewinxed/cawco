@@ -23,10 +23,17 @@
  * - D, a plain folder with a 60 MiB file: its first commit leaves it out,
  *   the note carries an offer of `*.bin` (1 file); Track with LFS commits
  *   it as an LFS pointer in a second commit, `.gitignore` no longer names
- *   it, and the folder's `git status` is clean.
+ *   it, the folder's `git status` is clean with no global git config (its
+ *   own names git-lfs's filters), and its own git runs git-lfs's pre-push.
+ * - E, the hub's side, a real hub in this process: the person declares the
+ *   project's Large files (plain http refused); a machine with a place of
+ *   the project, by its proof, is answered the endpoint and the
+ *   connection's key; a machine with none, and a session, are refused; a
+ *   machine's word of a refused `.lfsconfig` lands in the project's thread.
  *
  * On main the same steps run main's own code for them (A's `hostGitEnv()`,
- * B's and C's plain checkout, D's first commit), so each leg fails there.
+ * B's and C's plain checkout, D's first commit, E's routes), so each leg
+ * fails there.
  *
  *   bun scripts/probe-kit/run.ts host-lfs
  */
@@ -192,7 +199,7 @@ const random = (size: number): Uint8Array => {
 };
 
 const agent = (file: string) => `../../../packages/agent/src/${file}`;
-const hub = (file: string) => `../../../packages/hub/src/${file}`;
+const hubSource = (file: string) => `../../../packages/hub/src/${file}`;
 
 /** A: a committed `.lfsconfig`'s `lfs.pushurl` cannot move a host push. */
 const pushLeg = async (kit: Kit, root: string): Promise<void> => {
@@ -415,7 +422,7 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
     (...args: unknown[]) => Promise<unknown>
   >;
   const { createPlaceRepos } = (await import(
-    hub("place-repo")
+    hubSource("place-repo")
   )) as typeof import("../../../packages/hub/src/place-repo");
   const notes: { event: Record<string, unknown>; title: string }[] = [];
   const offers = new Map<string, Record<string, unknown>>();
@@ -470,8 +477,9 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
   if (!offerId) {
     return;
   }
-  const lfsOffers = (await import(hub("lfs-offers")).catch(() => undefined)) as
-    typeof import("../../../packages/hub/src/lfs-offers") | undefined;
+  const lfsOffers = (await import(hubSource("lfs-offers")).catch(
+    () => undefined
+  )) as typeof import("../../../packages/hub/src/lfs-offers") | undefined;
   if (!lfsOffers) {
     kit.check("D: Track with LFS exists", false);
     return;
@@ -500,16 +508,226 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
     `${answered.answer}: ${pointer.slice(0, 60)}`
   );
   const ignore = await readFile(join(dir, ".gitignore"), "utf8");
-  const status = git(dir, "status", "--porcelain");
+  // The folder's own git alone: no global or system config naming
+  // git-lfs's filters, as on a machine where `git lfs install` never ran.
+  const own = Bun.spawnSync(["git", "status", "--porcelain"], {
+    cwd: dir,
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const status = `${own.stdout.toString().trim()}${own.stderr.toString().trim()}`;
   kit.check(
-    "D: .gitignore no longer names it, .gitattributes tracks *.bin, and the folder's status is clean",
+    "D: .gitignore no longer names it, .gitattributes tracks *.bin, and the folder's status is clean with no global git config",
     !ignore.includes("/media/big.bin") &&
       (await readFile(join(dir, ".gitattributes"), "utf8")).includes(
         "*.bin filter=lfs"
       ) &&
+      own.exitCode === 0 &&
       status === "",
     `${ignore}\n${status}`
   );
+  const prePush = await readFile(
+    join(dir, ".git", "hooks", "pre-push"),
+    "utf8"
+  ).catch(() => "");
+  kit.check(
+    "D: the folder's own git runs git-lfs's pre-push, so the person's own push sends the large file",
+    prePush.includes("git lfs pre-push"),
+    prePush || "no pre-push hook"
+  );
+};
+
+/** A hub request, as JSON when it has a body, with `headers`. */
+const asked = (
+  path: string,
+  init: {
+    body?: unknown;
+    headers?: Record<string, string>;
+    method?: string;
+  } = {}
+) =>
+  new Request(`http://127.0.0.1${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      ...(init.body === undefined
+        ? {}
+        : { "content-type": "application/json" }),
+      ...init.headers,
+    },
+    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  });
+
+/**
+ * E: the hub's side, a real hub in this process. The person declares the
+ * project's Large files with a connection that holds a key; a machine with
+ * a place of the project, by its proof, is answered the endpoint and that
+ * key as Basic; a machine with no place, and a session, are refused; the
+ * machine's word of a refused `.lfsconfig` lands in the project's thread.
+ */
+const hubLeg = async (kit: Kit, root: string): Promise<void> => {
+  const home = join(root, "e");
+  const homeWas = process.env.HOME;
+  const { hubInProcess } =
+    await import("../../../packages/hub/scripts/hub-in-process");
+  const { db, hub, lifetime } = await hubInProcess(
+    join(home, "cawco.db"),
+    home
+  );
+  try {
+    const { hubId } = await import("../../../packages/hub/src/hub-id");
+    const { httpProof } =
+      await import("../../../packages/core/src/machine-key");
+    const { MACHINE_PROOF_HEADER } = await import("../../../packages/core/src");
+    const proven = (
+      machineId: string,
+      key: string,
+      method: string,
+      route: string
+    ) => {
+      const at = Date.now();
+      const nonce = crypto.randomUUID();
+      return {
+        [MACHINE_PROOF_HEADER]: `${machineId} ${at} ${nonce} ${httpProof(key, { at, hubId: hubId(), machineId, method, nonce, path: route })}`,
+      };
+    };
+    const keyOf = {
+      place: "probe-key-place-0123456789",
+      none: "probe-key-none-0123456789",
+    };
+    db.hubAuth.putMachineKey("probe-place", keyOf.place);
+    db.hubAuth.putMachineKey("probe-none", keyOf.none);
+    db.createProject({
+      id: "probe-project",
+      name: "probe",
+      checkout: { machineId: "probe-place", path: "/srv/probe" as never },
+      remote: null,
+    });
+    const said = async (response: Response) =>
+      `${response.status} ${(await response.text()).slice(0, 300)}`;
+    const made = await hub.handle(
+      asked("/api/connections", {
+        method: "POST",
+        body: {
+          name: "probe-store",
+          service: "github",
+          account: "@probe",
+          transport: "http",
+          url: "http://127.0.0.1:9/mcp",
+          auth: "bearer",
+        },
+      })
+    );
+    const keyed = await hub.handle(
+      asked("/api/connections/probe-store/key", {
+        method: "PUT",
+        body: { key: "probe-connection-key" },
+      })
+    );
+    kit.note(`E: connection ${await said(made)}; key ${keyed.status}`);
+    const plain = await hub.handle(
+      asked("/api/projects/probe-project", {
+        method: "PATCH",
+        body: {
+          lfs: {
+            url: "http://lfs.example.com/o/r.git",
+            connection: "probe-store",
+          },
+        },
+      })
+    );
+    kit.check(
+      "E: a Large files URL over plain http is refused",
+      plain.status === 400,
+      await said(plain)
+    );
+    const declared = await hub.handle(
+      asked("/api/projects/probe-project", {
+        method: "PATCH",
+        body: {
+          lfs: {
+            url: "https://lfs.example.com/o/r.git",
+            connection: "probe-store",
+          },
+        },
+      })
+    );
+    const row = (await declared
+      .clone()
+      .json()
+      .catch(() => ({}))) as {
+      lfsConnection?: string;
+      lfsUrl?: string;
+    };
+    kit.check(
+      "E: the person declares the project's Large files, the clone URL read as its LFS endpoint",
+      declared.status === 200 &&
+        row.lfsUrl === "https://lfs.example.com/o/r.git/info/lfs" &&
+        row.lfsConnection === "probe-store",
+      await said(declared)
+    );
+    const path = "/api/lfs/projects/probe-project";
+    const answer = await hub.handle(
+      asked(path, { headers: proven("probe-place", keyOf.place, "GET", path) })
+    );
+    const read = (await answer
+      .clone()
+      .json()
+      .catch(() => ({}))) as {
+      declared?: { basic: string; endpoint: string };
+    };
+    kit.check(
+      "E: a machine holding a place of the project, by its proof, is answered the endpoint and the connection's key",
+      answer.status === 200 &&
+        read.declared?.endpoint ===
+          "https://lfs.example.com/o/r.git/info/lfs" &&
+        read.declared.basic === btoa("x-access-token:probe-connection-key"),
+      await said(answer)
+    );
+    const stranger = await hub.handle(
+      asked(path, { headers: proven("probe-none", keyOf.none, "GET", path) })
+    );
+    const session = await hub.handle(
+      asked(path, { headers: { authorization: "Bearer probe-session" } })
+    );
+    kit.check(
+      "E: a machine with no place of the project, and a session, are refused",
+      stranger.status === 403 && session.status === 403,
+      `${await said(stranger)} / ${await said(session)}`
+    );
+    const refusedPath = `${path}/refused`;
+    const endpoint = "https://third.example.com/x.git/info/lfs";
+    const told = await hub.handle(
+      asked(refusedPath, {
+        method: "POST",
+        headers: proven("probe-place", keyOf.place, "POST", refusedPath),
+        body: { root: "/srv/probe", endpoint, machineId: "probe-place" },
+      })
+    );
+    // A project nobody has talked in yet gets the note in a thread of its own.
+    const note = db
+      .projectThreads("probe-project")
+      .flatMap((thread) => db.threadMessages(thread.id))
+      .find(
+        (message) =>
+          message.event?.kind === "repo" &&
+          message.event.lfsRefused === endpoint
+      );
+    kit.check(
+      "E: the machine's word of a refused .lfsconfig lands in the project's thread, naming the endpoint and how to declare it",
+      told.status === 200 &&
+        (note?.body ?? "").includes(endpoint) &&
+        (note?.body ?? "").includes("Project details › Large files"),
+      `${await said(told)}; ${note?.body ?? "no note"}`
+    );
+  } finally {
+    lifetime.close();
+    process.env.HOME = homeWas;
+  }
 };
 
 const spec: Spec = {
@@ -519,6 +737,8 @@ const spec: Spec = {
       join(process.env.TMPDIR ?? tmpdir(), "host-lfs-")
     );
     try {
+      // First: the hub reads HOME and its database path once, as its modules load.
+      await hubLeg(kit, root);
       await pushLeg(kit, root);
       await undeclaredLeg(kit, root);
       await declaredLeg(kit, root);

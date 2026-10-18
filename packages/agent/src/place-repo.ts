@@ -998,7 +998,11 @@ const under = (path: string, root: string): boolean =>
  * --renormalize`). Only those paths are committed (`--only`): whatever else
  * the person has changed or staged is left as it was. Each file is scanned
  * for a credential first, as the first commit's were. git-lfs's filters are
- * named here, whatever this machine's own config names.
+ * named here, whatever this machine's own config names, and set up in the
+ * folder's own git as `git lfs install --local` sets them: its filters,
+ * then git-lfs's hooks, so the person's own push sends the large files with
+ * it. A pre-push hook of the folder's own is left as it is, and said
+ * (`hooks` false), as git-lfs itself refuses to overwrite it.
  */
 export const placeLfs = async (
   path: unknown,
@@ -1041,6 +1045,10 @@ export const placeLfs = async (
     );
   }
   await git(root, "lfs", "track", "--", ...patterns);
+  // The folder's own git cleans and smudges what it tracks now, whatever
+  // this machine's global config names: without the filters there, every
+  // tracked file reads as changed in the person's `git status`.
+  await git(root, "lfs", "install", "--local", "--skip-repo");
   const ignorePath = join(root, ".gitignore");
   const ignore = await readFile(ignorePath, "utf8").catch(() => undefined);
   if (ignore !== undefined) {
@@ -1104,8 +1112,39 @@ export const placeLfs = async (
     await rm(scratch, { recursive: true, force: true });
   }
   const commit = (await git(root, "rev-parse", "HEAD")).trim();
-  console.info(
-    `[place-repo] ${root}: ${files.length} large files committed through Git LFS in ${commit.slice(0, 9)}, tracked as ${patterns.join(" ")}`
+  const hooks = await git(
+    root,
+    "-c",
+    `core.hooksPath=${await hooksDir(root, git)}`,
+    "lfs",
+    "install",
+    "--local"
+  ).then(
+    () => true,
+    () => false
   );
-  return { commit, files: files.length, bytes, patterns };
+  console.info(
+    `[place-repo] ${root}: ${files.length} large files committed through Git LFS in ${commit.slice(0, 9)}, tracked as ${patterns.join(" ")}${hooks ? "" : "; git-lfs's hooks not installed, the folder has its own"}`
+  );
+  return { commit, files: files.length, bytes, patterns, hooks };
+};
+
+/**
+ * Where the folder's own git runs its hooks: its `core.hooksPath` (its own
+ * config's, else the person's global one), or `.git/hooks`. Read from those
+ * files, not as CawCo's git sees it, which runs none (`safe-git.ts`).
+ */
+const hooksDir = async (root: string, git: Git): Promise<string> => {
+  const named = (scope: string) =>
+    git(root, "config", scope, "--get", "core.hooksPath").then(
+      (out) => out.trim(),
+      () => ""
+    );
+  const set = (await named("--local")) || (await named("--global"));
+  if (!set) {
+    return join(root, ".git", "hooks");
+  }
+  return set.startsWith("~/")
+    ? join(homedir(), set.slice(2))
+    : resolve(root, set);
 };

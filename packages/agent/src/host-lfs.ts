@@ -18,6 +18,7 @@
  */
 import { CAWCO_ENV } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -215,7 +216,7 @@ export const noteRefused = async (
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ root, endpoint }),
+      body: JSON.stringify({ root, endpoint, machineId: await machineId() }),
     },
     "it told the project's thread"
   ).catch((error: unknown) =>

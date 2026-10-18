@@ -88,7 +88,7 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
         machineId: row.machineId,
         commit: made.commit,
       },
-      body: `${row.root} tracks ${made.patterns.map((pattern) => `\`${pattern}\``).join(", ")} with Git LFS now, and commit ${made.commit.slice(0, 9)} holds the ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB) its first commit left out. Nothing was pushed: they go to the project's LFS with its next push.`,
+      body: `${row.root} tracks ${made.patterns.map((pattern) => `\`${pattern}\``).join(", ")} with Git LFS now, and commit ${made.commit.slice(0, 9)} holds the ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB) its first commit left out. Nothing was pushed: they go to the project's LFS with its next push.${made.hooks ? "" : "\n\nThe folder has a pre-push hook of its own, so git-lfs's was not put beside it: a push from there sends the large files only with `git lfs push origin --all`, or once the hooks are merged (`git lfs update --manual` says how)."}`,
     });
     return stateOf(answerable(row.id));
   };
