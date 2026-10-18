@@ -1,0 +1,12 @@
+# The isolated linker's shared fallback directory, node_modules/.bun/node_modules,
+# lets an undeclared import reach whichever copy the last install task wrote
+# (oven-sh/bun#40355). svelte-eslint-parser declares no typescript and loads the
+# newest it can reach, which there is the API-less TS 7. Without the directory an
+# undeclared import fails, and TS 6 at the root is the only typescript reachable.
+# https://bun.com/docs/pm/isolated-installs
+#
+# A store package's own undeclared import is declared in the root package.json,
+# the one node_modules above the store, until bun ships packageExtensions
+# (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130).
+[install]
+hoist = false

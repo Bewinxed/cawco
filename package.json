@@ -35,7 +35,7 @@
     "words:check": "bun scripts/words-swift.ts --check"
   },
   "overrides": {
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.3",
     "oniguruma-to-es": "^4.3.6",
     "vite": "^8.3.4"
   },
@@ -44,13 +44,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.3",
     "@types/multicast-dns": "^7.2.4",
     "@types/node": "^26.6.4",
     "@types/pngjs": "^6.0.5",
     "@types/ssh2": "^1.15.6",
     "@typescript/native": "npm:typescript@~7.0.2",
     "axe-core": "^4.14.0",
+    "bits-ui": "^2.19.5",
     "multicast-dns": "7.2.5",
     "pixelmatch": "^8.0.0",
     "playwright-core": "^1.64.1",
