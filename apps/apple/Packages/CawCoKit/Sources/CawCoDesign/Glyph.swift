@@ -165,6 +165,13 @@ public enum Glyph: String, CaseIterable, Sendable {
     // The task sheet's result kinds (tasks/ResultView.svelte).
     case dataLayers = "layers-bold-duotone" // IconLayers
     case fileTable = "clipboard-list-bold-duotone" // IconFileTable
+    // A project's pages (ViewRoutines.svelte, Block.svelte, StarterCards.svelte).
+    case hourglass = "hourglass-bold-duotone" // IconHourglass
+    case arrowDownLine = "arrow-down-linear" // IconArrowDown
+    case calendar = "calendar-bold-duotone" // IconCalendar
+    case columns = "widget-2-bold-duotone" // IconColumns
+    case rulerPen = "ruler-cross-pen-bold-duotone" // IconRulerPen
+    case mic = "microphone-bold-duotone" // IconMic
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

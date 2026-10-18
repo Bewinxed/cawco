@@ -10,6 +10,7 @@
    * preview-access.ts); a lapsed pass enters again once.
    */
   import {
+    decisionsWords,
     PREVIEW_LOCKED_MESSAGE,
     PREVIEW_PING_PATH,
     type PreviewAddress,
@@ -102,7 +103,7 @@
         location
       );
       if (!route) {
-        problem = "The hub named no address for this page.";
+        problem = decisionsWords.noAddress;
         return;
       }
       const reached = await fetch(`${route.origin}${PREVIEW_PING_PATH}`, {
@@ -116,7 +117,7 @@
         return;
       }
       if (!reached) {
-        problem = `Pages are served at ${new URL(route.origin).host}, which this browser can't reach.`;
+        problem = decisionsWords.unreached(new URL(route.origin).host);
         return;
       }
       ({ origin } = route);
@@ -179,8 +180,7 @@
       } else if (type === PREVIEW_LOCKED_MESSAGE && src) {
         turnedAway += 1;
         if (turnedAway > 1) {
-          problem =
-            "This page turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open it again.";
+          problem = decisionsWords.turnedAway;
           return;
         }
         enter(origin, true, place);

@@ -10,6 +10,7 @@
    * and the writer's Recommended mark. Nothing shows a card, option or page
    * id.
    */
+  import { decisionsWords as words } from "@cawco/core";
   import type { RecordCard } from "@cawco/core/decisions";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import type { StageKind } from "#lib/cawco/project-tasks.js";
@@ -44,9 +45,7 @@
     card.options.filter((option) => !card.chosen.includes(option.id))
   );
   const foldWords = $derived(
-    open
-      ? "Hide other options"
-      : `${others.length} other ${others.length === 1 ? "option" : "options"}`
+    open ? words.hideOthers : words.others(others.length)
   );
   /** A task's chip wears its state's hue: done or failed; the sheet says the word. */
   const variantOf = (kind: StageKind | null | undefined) => {
@@ -80,7 +79,7 @@
         </p>
       {/each}
     {:else}
-      <p data-slot="open-card" class="open-card">Left open</p>
+      <p data-slot="open-card" class="open-card">{words.leftOpen}</p>
     {/if}
     {#if card.dials.length > 0}
       <p class="dials">
@@ -170,7 +169,7 @@
                   >
                 </span>
                 {#if option.recommended}
-                  <span data-slot="tag" class="tag">Recommended</span>
+                  <span data-slot="tag" class="tag">{words.recommended}</span>
                 {/if}
                 {#if option.line}
                   <span class="line">{option.line}</span>

@@ -29,6 +29,17 @@
  *     comes back, and the hub lists it no more;
  *  e. a task tapped in Probe week opens the app's task sheet on that task.
  *
+ * Then the Projects tabs (prd-audit B3), on a second project seeded with the
+ * decision pages the dashboard's preview uses (scripts/decisions-preview
+ * seed: landing 5 of 12 picked, pricing decided, onboarding 2 of 5 picked),
+ * each written by a session of its own on a scratch machine:
+ *
+ *  decisions. The strip's Decisions tab counts the pages waiting on picks as
+ *     the hub lists them; its grid's tiles say each page's figure ("5 of 12
+ *     picked"); a tile opens its page in place, live, with I'm done picking;
+ *     I'm done picking reaches the page's writer session (the hub answers
+ *     `to: session`), and the hub then holds the page as sent.
+ *
  * On the iPhone each view is chosen from the ⋯ menu (the strip is wider
  * than the screen), on the iPad from the strip.
  *
@@ -40,9 +51,10 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { seedDecisions } from "../../decisions-preview/seed";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
-import { type Reply, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
@@ -76,9 +88,22 @@ title = Text("${words}", "title")
 table = Table(tasks.rows, [{label: "Task", field: "title"}])`;
 /** The strip as every reading of it starts: the fixed tabs, the kept view, the drafts. */
 const WANTED_STRIP =
-  "Board,Table,Pipeline,Probe week,Probe draft+draft,Probe scrap+draft";
+  "Board,Table,Pipeline,Decisions,Probe week,Probe draft+draft,Probe scrap+draft";
 const WANTED_MENU =
-  "Board*,Table,Pipeline,Probe week,Probe draft+draft,Probe scrap+draft";
+  "Board*,Table,Pipeline,Decisions,Probe week,Probe draft+draft,Probe scrap+draft";
+/** The tab's own items before the views: how many the strip must list before a reading counts. */
+const FIXED_TABS = 4;
+const DECISIONS_PROJECT = "Decisions probe";
+/** The page each device sends on: one still picked on, so each device's send is its own. */
+const SENDS_ON: Record<string, string> = {
+  iPhone: "landing",
+  iPad: "onboarding",
+};
+const DECISIONS_PANE = /decisions pane what=(\S+) waiting=(\d+) tiles=(.*)$/;
+const DECISIONS_PAGE =
+  /decisions page name=(\S+) state=(\S*) figure=(.*?) pill=(.*?) body=(\S+) act=(.*)$/;
+const DECISIONS_SENT = /decisions sent (\S+) to=(\S+)/;
+const TAB_COUNT = /#(\d+)$/;
 /** The count tile over the tasks: the `stages` tool's total, as the page's words read. */
 const ALL_THREE = /All tasks\s*\|?\s*3/;
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
@@ -106,7 +131,13 @@ interface Node {
 /** `views strip …`: the chosen tab, whether it is a phone, each item's words and centre, the menu's list. */
 interface Strip {
   chosen: string;
-  items: { at: [number, number]; draft: boolean; label: string }[];
+  items: {
+    at: [number, number];
+    /** The count after its name (Decisions: the pages waiting on picks); null with none. */
+    count: number | null;
+    draft: boolean;
+    label: string;
+  }[];
   menu: string[];
   /** ⋯'s centre in the window, on a phone. */
   more?: [number, number];
@@ -149,11 +180,15 @@ function stripOf(line: string): Strip | undefined {
     return;
   }
   const items = (match[5] ?? "").split(";").map((part) => {
-    const [words = "", at = "0,0"] = part.split("@");
+    const [said = "", at = "0,0"] = part.split("@");
     const [x = 0, y = 0] = at.split(",").map(Number);
+    // `<label>[+draft][#<count>]`: a draft's tag, or the count after the name (Decisions).
+    const counted = TAB_COUNT.exec(said);
+    const words = counted ? said.slice(0, counted.index) : said;
     return {
       label: words.replace("+draft", ""),
       draft: words.endsWith("+draft"),
+      count: counted ? Number(counted[1]) : null,
       at: [x, y] as [number, number],
     };
   });
@@ -190,6 +225,8 @@ interface Device {
   ) => Promise<T>;
   /** A view chosen as a person does here: on the iPhone from ⋯, on the iPad from the strip. */
   pick: (label: string) => Promise<void>;
+  /** The app launched again, onto another project. */
+  relaunch: (projectId: string) => Promise<void>;
   tag: string;
   tap: (point: [number, number]) => Promise<string>;
 }
@@ -266,7 +303,7 @@ async function theStrip(kit: Kit, device: Device): Promise<boolean> {
   const first = await stripSince(
     device,
     0,
-    (strip) => strip.items.length >= 6,
+    (strip) => strip.items.length >= FIXED_TABS + 3,
     "the strip lists the views"
   ).catch(() => undefined);
   kit.check(
@@ -605,16 +642,158 @@ async function launch(
     await tap(centre(entry?.frame as NonNullable<Node["frame"]>));
   };
 
-  await until(
-    `${tag}: the app launched`,
-    () =>
-      sh(
-        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hub} -open-project ${projectId} -views-probe >/dev/null`
-      ).then(() => true),
-    Boolean,
-    60_000
+  const relaunch = async (project: string) => {
+    await until(
+      `${tag}: the app launched onto ${project}`,
+      () =>
+        sh(
+          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hub} -open-project ${project} -views-probe >/dev/null`
+        ).then(() => true),
+      Boolean,
+      60_000
+    );
+  };
+  await relaunch(projectId);
+  return { device: { tag, heard, next, pick, relaunch, tap }, stream };
+}
+
+// ── decisions: the tab, a tile, its page, I'm done picking ───────────────
+interface Tile {
+  at: [number, number] | null;
+  figure: string;
+  name: string;
+  state: string;
+}
+
+const tilesOf = (said: string): Tile[] =>
+  said
+    .split(";")
+    .filter(Boolean)
+    .map((part) => {
+      const [named = "", rest = ""] = part.split("=", 2) as [string, string];
+      const [words = "", at = "none"] = rest.split("@");
+      const [figure = "", state = ""] = words.split("|");
+      const point = POINT.exec(at);
+      return {
+        name: named,
+        figure,
+        state,
+        at: point ? [Number(point[1]), Number(point[2])] : null,
+      };
+    });
+
+interface DecisionsHub {
+  pages: { name: string; picked: number; cards: number; state: string }[];
+}
+
+async function decisionsLeg(
+  kit: Kit,
+  device: Device,
+  projectId: string,
+  read: <T>(path: string) => Promise<T>
+): Promise<void> {
+  const page = SENDS_ON[device.tag] ?? "landing";
+  let since = device.heard.length;
+  await device.relaunch(projectId);
+  await stripSince(
+    device,
+    since,
+    (one) => one.items.length >= FIXED_TABS,
+    "the decisions project's strip"
+  ).catch(() => undefined);
+  const listed = await read<DecisionsHub>(
+    `/api/projects/${projectId}/decisions`
   );
-  return { device: { tag, heard, next, pick, tap }, stream };
+  const waiting = listed.pages.filter((one) => one.state === "picking").length;
+  since = device.heard.length;
+  await device.pick("Decisions");
+  const pane = await device
+    .next("the Decisions grid with its tiles", since, (line) => {
+      const match = DECISIONS_PANE.exec(line);
+      const tiles = match ? tilesOf(match[3] ?? "") : [];
+      return match?.[1] === "grid" &&
+        tiles.length === listed.pages.length &&
+        tiles.every((each) => each.at)
+        ? { waiting: Number(match[2]), tiles }
+        : undefined;
+    })
+    .catch(() => undefined);
+  const strip = await device
+    .next("the strip at Decisions", 0, (line) => {
+      const found = stripOf(line);
+      return found?.chosen === "Decisions" ? found : undefined;
+    })
+    .catch(() => undefined);
+  const tab = strip?.items.find((item) => item.label === "Decisions");
+  const landing = pane?.tiles.find((each) => each.name === "landing");
+  const hubLanding = listed.pages.find((one) => one.name === "landing");
+  kit.check(
+    `${device.tag} decisions: the tab counts the ${waiting} pages waiting on picks, and the tiles say the hub's figures ("5 of 12 picked")`,
+    pane !== undefined &&
+      pane.waiting === waiting &&
+      tab !== undefined &&
+      tab.count === (waiting === 0 ? null : waiting) &&
+      landing?.figure ===
+        `${hubLanding?.picked} of ${hubLanding?.cards} picked` &&
+      landing.figure === "5 of 12 picked",
+    `pane ${pane ? `waiting ${pane.waiting}, ${pane.tiles.map((each) => `${each.name}=${each.figure}|${each.state}`).join("; ")}` : device.heard.slice(-4).join(" / ")}; strip ${tab ? `${tab.label} ${tab.count ?? "no count"}` : "no Decisions"}; hub waiting ${waiting}`
+  );
+  const tile = pane?.tiles.find((one) => one.name === page);
+  if (!tile?.at) {
+    return;
+  }
+  since = device.heard.length;
+  await device.tap(tile.at);
+  const opened = await device
+    .next(`${page}'s page, live, with I'm done picking`, since, (line) => {
+      const match = DECISIONS_PAGE.exec(line);
+      return match?.[1] === page &&
+        match[2] === "picking" &&
+        match[5] === "live" &&
+        match[6]?.startsWith("I'm done picking@")
+        ? { body: match[5] ?? "", act: match[6] ?? "" }
+        : undefined;
+    })
+    .catch(() => undefined);
+  const point = opened ? POINT.exec(opened.act.split("@")[1] ?? "") : null;
+  if (!(
+    kit.check(
+      `${device.tag} decisions: a tile opens its page in place, live from its session's preview, with I'm done picking`,
+      opened !== undefined && point !== null,
+      opened
+        ? `body ${opened.body}, act ${opened.act}`
+        : device.heard.slice(-4).join(" / ")
+    ) && point
+  )) {
+    return;
+  }
+  since = device.heard.length;
+  await device.tap([Number(point[1]), Number(point[2])]);
+  const sent = await device
+    .next("the hub's answer to I'm done picking", since, (line) => {
+      const match = DECISIONS_SENT.exec(line);
+      return match?.[1] === page ? match[2] : undefined;
+    })
+    .catch(() => undefined);
+  const after = await device
+    .next(`${page}'s page, sent`, since, (line) => {
+      const match = DECISIONS_PAGE.exec(line);
+      return match?.[1] === page && match[2] === "sent"
+        ? (match[4] ?? "")
+        : undefined;
+    })
+    .catch(() => undefined);
+  const hubPage = await read<{ state: string; sentAt: string | null }>(
+    `/api/projects/${projectId}/decisions/${page}`
+  );
+  kit.check(
+    `${device.tag} decisions: I'm done picking reaches ${page}'s writer session, and the hub holds the page as sent`,
+    sent === "session" &&
+      after !== undefined &&
+      hubPage.state === "sent" &&
+      hubPage.sentAt !== null,
+    `heard by ${sent}; page pill ${after}; hub ${hubPage.state}, sent at ${hubPage.sentAt}`
+  );
 }
 
 async function run(kit: Kit): Promise<void> {
@@ -623,6 +802,9 @@ async function run(kit: Kit): Promise<void> {
     return;
   }
   const fleet = await kit.fleet(respond);
+  // A machine for the decision pages' writer sessions.
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
   // The hub names the dashboard in `/health` as it starts: served first, then the hub again with its address.
@@ -643,6 +825,17 @@ async function run(kit: Kit): Promise<void> {
   ) {
     return;
   }
+
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+  // The decision pages, each published by a session of its own (scripts/decisions-preview).
+  const decisions = await seedDecisions(fleet, {
+    cwd: fleet.repo,
+    machineId: MACHINE,
+    name: DECISIONS_PROJECT,
+  });
 
   const made = await fleet.api<{ id: string }>("/api/projects", {
     name: PROJECT,
@@ -717,6 +910,9 @@ async function run(kit: Kit): Promise<void> {
         await discardInPlace(kit, device, project);
         await taskOpens(kit, device, project);
       }
+      await decisionsLeg(kit, device, decisions.projectId, (path) =>
+        fleet.api(path)
+      );
     } finally {
       await writeFile(
         join(kit.out, `${tag}.log`),

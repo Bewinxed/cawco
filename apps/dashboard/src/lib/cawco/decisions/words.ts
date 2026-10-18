@@ -1,14 +1,12 @@
 /**
- * What the Decisions tab says of a page, in one place (WORDS.md; the
- * decided record's copy): its progress figure, its notes, its state pill
- * and a decided page's meta line. Nothing here names a card, an option or a
- * page by its id.
+ * What the Decisions tab says of a page: its progress figure, its notes, its
+ * state pill and a decided page's meta line, put together from core's words
+ * (`decisionsWords`, which the native app reads as `Words.Decisions`).
+ * Nothing here names a card, an option or a page by its id.
  */
+import { decisionsWords as words } from "@cawco/core";
 import type { DecisionPageSummary } from "@cawco/core/decisions";
 import { formatAgeShort } from "#lib/utils/time.js";
-
-const plural = (n: number, one: string, many: string): string =>
-  `${n} ${n === 1 ? one : many}`;
 
 /** Whether a page shows its record: Make tasks wrote it. */
 export const isDecided = (page: Pick<DecisionPageSummary, "state">): boolean =>
@@ -26,20 +24,15 @@ export function progressWords(
   >
 ): string {
   if (!isDecided(page)) {
-    return `${page.picked} of ${page.cards} picked`;
+    return words.picked(page.picked, page.cards);
   }
-  const decided =
-    page.decided === page.cards
-      ? `${page.decided} decided`
-      : `${page.decided} of ${page.cards} decided`;
-  return page.tasks > 0
-    ? `${decided} · ${plural(page.tasks, "task", "tasks")}`
-    : decided;
+  const decided = words.decided(page.decided, page.cards);
+  return page.tasks > 0 ? words.decidedTasks(decided, page.tasks) : decided;
 }
 
 /** `· 3 notes` after a page's figure while it is picked on; nothing with none. */
 export const notesWords = (notes: number): string | null =>
-  notes > 0 ? `· ${plural(notes, "note", "notes")}` : null;
+  notes > 0 ? words.notes(notes) : null;
 
 /** A decided page's head meta: its figure and when it was decided, `12 decided · 14 tasks · 3d ago`. */
 export function decidedMeta(
@@ -47,8 +40,10 @@ export function decidedMeta(
   madeAt: string,
   now: number
 ): string {
-  const age = formatAgeShort(Date.parse(madeAt), now);
-  return `${progressWords(page)} · ${age === "now" ? "now" : `${age} ago`}`;
+  return words.decidedAt(
+    progressWords(page),
+    formatAgeShort(Date.parse(madeAt), now)
+  );
 }
 
 /** A page's state pill: none while it is picked on (Idle Has No Fill). */
@@ -75,20 +70,30 @@ export function pillOf(
     return null;
   }
   if (page.state === "decided") {
-    return { tone: "done", word: "Decided", who: null, title: "Decided" };
+    return {
+      tone: "done",
+      word: words.decidedPill,
+      who: null,
+      title: words.decidedPill,
+    };
   }
   const { writer } = page;
   if (!writer || writer.ended) {
-    return { tone: "live", word: "Sent", who: "Caw", title: "Sent · Caw" };
+    return {
+      tone: "live",
+      word: words.sent,
+      who: words.caw,
+      title: words.pillTitle(words.sent, words.caw),
+    };
   }
-  const whole = `${writer.title} working`;
+  const whole = words.workingWhole(writer.title);
   if (!working) {
-    return { tone: "live", word: "Sent", who: null, title: "Sent" };
+    return { tone: "live", word: words.sent, who: null, title: words.sent };
   }
   return {
     tone: "live",
-    word: "Sent",
-    who: short ? "working" : whole,
-    title: `Sent · ${whole}`,
+    word: words.sent,
+    who: short ? words.working : whole,
+    title: words.pillTitle(words.sent, whole),
   };
 }

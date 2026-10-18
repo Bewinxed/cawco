@@ -19,10 +19,12 @@ import UIKit
 final class ProjectViewController: ObservedViewController {
     enum Tab: Hashable {
         case board, table, pipeline
+        /// The project's decision pages, always: an empty one starts Caw on one.
+        case decisions
         /// A project's own view, by its name.
         case custom(String)
 
-        static let fixed: [Tab] = [.board, .table, .pipeline]
+        static let fixed: [Tab] = [.board, .table, .pipeline, .decisions]
 
         /// The tab's name (`viewLabel`: a view's name as a stage's is said).
         var label: String {
@@ -30,6 +32,7 @@ final class ProjectViewController: ObservedViewController {
             case .board: "Board"
             case .table: "Table"
             case .pipeline: "Pipeline"
+            case .decisions: Words.Decisions.tab
             case let .custom(name): TaskWords.stage(name)
             }
         }
@@ -91,6 +94,8 @@ final class ProjectViewController: ObservedViewController {
     private let table = TaskTableView()
     private let pipeline = PipelineView()
     private var custom: ProjectViewPane!
+    /// The Decisions tab: its grid of pages, or the page open in it.
+    private var decisionsPane: DecisionsPane!
     private let tableAdd = UIView()
     private var boardForm: NewTaskForm!
     private var tableForm: NewTaskForm!
@@ -160,10 +165,12 @@ final class ProjectViewController: ObservedViewController {
             MainActor.assumeIsolated {
                 guard let self, self.view.window != nil else { return }
                 Task { await self.store.refresh() }
+                Task { await self.decisionsPane.decisions.read() }
             }
         }
         if context.hub.state == .connected {
             Task { await store.refresh() }
+            Task { await decisionsPane.decisions.read() }
         }
     }
 
@@ -346,6 +353,20 @@ final class ProjectViewController: ObservedViewController {
         custom.isHidden = true
         pane.addSubview(custom)
 
+        decisionsPane = DecisionsPane(hub: context.hub, home: context.home, projectId: projectId)
+        decisionsPane.onChange = { [weak self] in self?.requestRefresh() }
+        decisionsPane.openCaw = { [weak self] from, words in self?.openCaw(from: from, ask: words) }
+        decisionsPane.newSession = { [weak self] in
+            guard let self else { return }
+            context.startSession(nil, nil, projectId)
+        }
+        decisionsPane.openTask = { [weak self] id in self?.open(id) }
+        decisionsPane.taskOf = { [weak self] id in
+            self?.store.tasks.first { $0.id == id }.map { ($0.kind, $0.title) }
+        }
+        decisionsPane.isHidden = true
+        pane.addSubview(decisionsPane)
+
         board.translatesAutoresizingMaskIntoConstraints = false
         pane.addSubview(board)
         scroller.translatesAutoresizingMaskIntoConstraints = false
@@ -360,6 +381,10 @@ final class ProjectViewController: ObservedViewController {
             custom.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             custom.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
             custom.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
+            decisionsPane.topAnchor.constraint(equalTo: pane.topAnchor),
+            decisionsPane.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            decisionsPane.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            decisionsPane.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
             board.topAnchor.constraint(equalTo: pane.topAnchor),
             board.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             board.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
@@ -395,6 +420,8 @@ final class ProjectViewController: ObservedViewController {
         showNotices(project)
         showStrip()
         showPane()
+        // He stands over the empty Decisions tab at 80 instead of sitting in the head: one Caw.
+        seat.isHidden = shownTab == .decisions && decisionsPane.cawStands
     }
 
     private func showHead(_ project: ProjectRow, fleet: FleetStore) {
@@ -439,12 +466,17 @@ final class ProjectViewController: ObservedViewController {
         cawWords.isEnabled = words?.threadId != nil
     }
 
-    private func openCaw() {
+    /// His panel over the page from whichever seat stands (CawFloat): the
+    /// head's, or his 80pt one over an empty tab; a starter's words in his field.
+    private func openCaw(from source: UIView? = nil, ask: String? = nil) {
         guard let project else { return }
-        let panel = ProjectCawPanel(lead: lead, hub: context.hub, projectName: project.name,
+        let panel = ProjectCawPanel(lead: lead, hub: context.hub, projectName: project.name, ask: ask,
                                     openThread: { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) })
-        KitPopover.present(panel, from: seat, in: self, align: .start)
+        KitPopover.present(panel, from: source ?? seat, in: self, align: .start)
     }
+
+    /// You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it.
+    private var canTalk: Bool { lead.view != nil && lead.view?.problem == nil }
 
     /// His question, as a link: its thread, the card on its composer.
     private func openAsk() {
@@ -480,9 +512,14 @@ final class ProjectViewController: ObservedViewController {
 
     private func showStrip() {
         stripTabs = Tab.fixed + views.map { Tab.custom($0.name) }
+        let waitingPages = decisionsPane.decisions.waiting
         let items = stripTabs.map { tab in
             if case let .custom(name) = tab, views.first(where: { $0.name == name })?.draft == true {
                 return SegmentedTabs.Item(tab.label, badge: "draft")
+            }
+            // Decisions counts the pages waiting on your picks.
+            if tab == .decisions, waitingPages > 0 {
+                return SegmentedTabs.Item(tab.label, count: waitingPages)
             }
             return SegmentedTabs.Item(tab.label)
         }
@@ -522,6 +559,12 @@ final class ProjectViewController: ObservedViewController {
             what = "view:\(name)"
             surface = custom
             custom.show(shown, projectId: projectId)
+        } else if shownTab == .decisions {
+            what = "decisions"
+            surface = decisionsPane
+            decisionsPane.show(canTalk: canTalk, lead: lead,
+                               starters: context.hub.startersOf(projectId, .decisions, read: store.stages?.decisionStarters),
+                               projectName: project?.name ?? "")
         } else if store.list == nil {
             if let problem = store.listProblem {
                 what = "unread"
@@ -544,7 +587,7 @@ final class ProjectViewController: ObservedViewController {
                                                     line: "Add a task, or turn Caw on to plan it with him.", action: first))
         } else {
             switch shownTab {
-            case .board, .custom:
+            case .board, .custom, .decisions:
                 what = "board"
                 surface = board
                 boardForm.stage = store.newIn ?? ""
@@ -574,7 +617,7 @@ final class ProjectViewController: ObservedViewController {
             shown = what
             let showing = surface
             let place: @MainActor @Sendable () -> Void = {
-                for each in [self.board, self.scroller, self.custom!] as [UIView] { each.isHidden = each !== showing }
+                for each in [self.board, self.scroller, self.custom!, self.decisionsPane!] as [UIView] { each.isHidden = each !== showing }
             }
             if !first, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
                 UIView.transition(with: pane, duration: Motion.durFade, options: [.transitionCrossDissolve, .allowUserInteraction], animations: place)
@@ -622,6 +665,7 @@ final class ProjectViewController: ObservedViewController {
         let leading = wide ? Space.space7 : Space.space5, trailing = wide ? Space.space6 : Space.space5
         board.inset = leading
         custom.inset(leading: leading, trailing: trailing)
+        decisionsPane.inset(leading: leading, trailing: trailing)
         NSLayoutConstraint.deactivate(edgeConstraints)
         edgeConstraints = [
             column.leadingAnchor.constraint(equalTo: scroller.frameLayoutGuide.leadingAnchor, constant: leading),
@@ -704,6 +748,9 @@ final class ProjectViewController: ObservedViewController {
                 let action = UIAction(title: each.label) { [weak self] _ in self?.choose(each) }
                 if case let .custom(name) = each, self.views.first(where: { $0.name == name })?.draft == true {
                     action.subtitle = "draft"
+                }
+                if each == .decisions, decisionsPane.decisions.waiting > 0 {
+                    action.subtitle = "\(decisionsPane.decisions.waiting)"
                 }
                 action.state = each == shown ? .on : .off
                 return action
@@ -828,7 +875,7 @@ final class ProjectViewController: ObservedViewController {
         view.layoutIfNeeded()
         let items = tabs.items.enumerated().map { index, item in
             let box = tabs.frame(ofItem: index, in: nil) ?? .zero
-            return "\(item.label)\(item.badge.map { "+\($0)" } ?? "")@\(Int(box.midX.rounded())),\(Int(box.midY.rounded()))"
+            return "\(item.label)\(item.badge.map { "+\($0)" } ?? "")\(item.count.map { "#\($0)" } ?? "")@\(Int(box.midX.rounded())),\(Int(box.midY.rounded()))"
         }.joined(separator: ";")
         let room = tabsScroll.convert(tabsScroll.bounds, to: nil)
         var line = "views strip chosen=\(shownTab.label) phone=\(phone) room=\(Int(room.minX.rounded()))-\(Int(room.maxX.rounded())) items=\(items)"

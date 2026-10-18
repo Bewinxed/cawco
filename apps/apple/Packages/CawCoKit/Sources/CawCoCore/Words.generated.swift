@@ -1140,4 +1140,122 @@ public enum Words {
             "CawCo updated\((version ?? "").count > 0 ? " to \(version ?? "")" : "")."
         }
     }
+
+    public enum Decisions {
+        // packages/core/src/words/decisions.ts `decisionsWords`
+        /// The tab's name in the project's strip, and ‹ back to its list.
+        public static let tab = "Decisions"
+
+        /// The figure beside the ring while a page is picked on: `12 of 20 picked`.
+        public static func picked(picked: Int, cards: Int) -> String {
+            "\(picked) of \(cards) picked"
+        }
+
+        /// A decided page's figure: `12 decided`, or `8 of 12 decided` when some were left open.
+        public static func decided(decided: Int, cards: Int) -> String {
+            decided == cards ? "\(decided) decided" : "\(decided) of \(cards) decided"
+        }
+
+        /// What a decided page made, after its figure: `12 decided · 14 tasks`.
+        public static func decidedTasks(figure: String, tasks: Int) -> String {
+            "\(figure) · \(tasks) \(tasks == 1 ? "task" : "tasks")"
+        }
+
+        /// `· 3 notes` after a page's figure while it is picked on.
+        public static func notes(notes: Int) -> String {
+            "· \(notes) \(notes == 1 ? "note" : "notes")"
+        }
+
+        /// A decided page's head meta: its figure and when it was decided, `12 decided · 3d ago`.
+        public static func decidedAt(figure: String, age: String) -> String {
+            "\(figure) · \(age == "now" ? "now" : "\(age) ago")"
+        }
+
+        /// A page's state pill: sent to its session or Caw, then decided.
+        public static let sent = "Sent"
+
+        public static let decidedPill = "Decided"
+
+        /// Who has a sent page once its session ended.
+        public static let caw = "Caw"
+
+        /// A tile, short of room, says who works on it in one word.
+        public static let working = "working"
+
+        /// The head says the session's name with it.
+        public static func workingWhole(title: String) -> String {
+            "\(title) working"
+        }
+
+        /// The pill's whole state, for a pointer that rests on it.
+        public static func pillTitle(word: String, who: String) -> String {
+            "\(word) · \(who)"
+        }
+
+        /// The page's one coral act while it is picked on, and while it runs.
+        public static let done = "I'm done picking"
+
+        public static let sending = "Sending…"
+
+        /// Its act once sent: the record written and its session asked to file the tasks.
+        public static let makeTasks = "Make tasks"
+
+        public static let making = "Making tasks…"
+
+        /// The docked note for the session that wrote the page.
+        public static let note = "Add a note…"
+
+        public static let noteLabel = "Add a note for the session"
+
+        public static let send = "Send"
+
+        /// The page's read was refused.
+        public static func unread(problem: String) -> String {
+            "This page didn't read: \(problem)"
+        }
+
+        /// The live page's own failures (PageFrame): the hub named nowhere, the origin unreached, the pass refused twice.
+        public static let noAddress = "The hub named no address for this page."
+
+        public static func unreached(host: String) -> String {
+            "Pages are served at \(host), which this browser can't reach."
+        }
+
+        public static let turnedAway = "This page turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open it again."
+
+        /// A page whose writer the hub no longer holds.
+        public static let gone = "This page's session is gone from the hub, so the page can't be shown here."
+
+        /// A decided card with nothing picked.
+        public static let leftOpen = "Left open"
+
+        /// The writer's mark on the option it recommended.
+        public static let recommended = "Recommended"
+
+        /// A decided card's fold: the options turned down.
+        public static func others(count: Int) -> String {
+            "\(count) other \(count == 1 ? "option" : "options")"
+        }
+
+        public static let hideOthers = "Hide other options"
+
+        /// The list could not be read.
+        public static let unavailable = "Decisions are not available"
+
+        public static func unavailableLine(project: String, problem: String) -> String {
+            "The decision pages for \(project) could not be read: \(problem)"
+        }
+
+        public static let retry = "Retry"
+
+        /// The empty tab, with Caw able to start: his starters under him.
+        public static let empty = "No decisions yet"
+
+        public static let emptyCaw = "Caw writes a decision page: the choices this project needs you to make, each with its options."
+
+        /// The empty tab while Caw can't start: a session writes one.
+        public static let emptySession = "A session writes decision pages; start one and ask for a page."
+
+        public static let newSession = "New session"
+    }
 }

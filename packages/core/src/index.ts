@@ -1963,6 +1963,7 @@ export * from "./words/artifacts";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/connection";
+export * from "./words/decisions";
 export * from "./words/helpers";
 export * from "./words/offers";
 export * from "./words/pairing";

@@ -2494,17 +2494,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return ""
     }
 
-    /// Stands in for the dashboard's window, the overlay's `window.parent`:
-    /// what the page posts goes to the app, and what the app hands the page
-    /// arrives at its message listeners from that same parent, on its own
-    /// origin, as the overlay checks.
     /// The page lays out at the panel's width, scale 1, as the web's iframe
     /// lays it out: a page naming no viewport would otherwise stand at
     /// Safari's default 980px and be drawn shrunk to the panel (Apple's
     /// "Configuring the Viewport": "The default width is 980 pixels"). A
     /// viewport the page names itself is parsed after this one and wins; a
     /// re-publish's morph keeps this one (preview-overlay page.ts `kept`).
-    private static let viewport = """
+    /// A decision page opened in its tab (DecisionPageFrame) lays out the same way.
+    static let viewport = """
     (() => {
       const meta = document.createElement("meta");
       meta.setAttribute("data-cawco-host", "");
@@ -2514,7 +2511,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     })();
     """
 
-    private static let host = """
+    /// Stands in for the dashboard's window, the overlay's `window.parent`:
+    /// what the page posts goes to the app, and what the app hands the page
+    /// arrives at its message listeners from that same parent, on its own
+    /// origin, as the overlay checks. A decision page opened in its tab
+    /// (DecisionPageFrame) stands in the same host.
+    static let host = """
     (() => {
       const listeners = new Set();
       const host = {
@@ -2934,8 +2936,8 @@ public enum PreviewKeys {
     public static var pageHolds: Bool { PreviewController.pageHoldsKeys }
 }
 
-/// Holds the preview weakly: a content controller retains its handlers.
-private final class WeakHandler: NSObject, WKScriptMessageHandler {
+/// Holds the preview (or a decision page's frame) weakly: a content controller retains its handlers.
+final class WeakHandler: NSObject, WKScriptMessageHandler {
     weak var target: (any WKScriptMessageHandler)?
     init(_ target: any WKScriptMessageHandler) { self.target = target }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {

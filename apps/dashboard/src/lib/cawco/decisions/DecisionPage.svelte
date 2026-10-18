@@ -10,6 +10,7 @@
    * Make tasks, then none. A refusal stays the page as it was and says why
    * in the composer's line.
    */
+  import { decisionsWords as words } from "@cawco/core";
   import type {
     DecisionPageRead,
     DecisionPageSummary,
@@ -140,14 +141,14 @@
     }
     if (shown.state === "picking") {
       return {
-        label: "I'm done picking",
-        pendingLabel: "Sending…",
+        label: words.done,
+        pendingLabel: words.sending,
         act: "send" as const,
       };
     }
     return {
-      label: "Make tasks",
-      pendingLabel: "Making tasks…",
+      label: words.makeTasks,
+      pendingLabel: words.making,
       act: "tasks" as const,
     };
   });
@@ -172,14 +173,14 @@
   }
 
   async function sendNote() {
-    const words = note.trim();
-    if (!words || sendingNote) {
+    const said = note.trim();
+    if (!said || sendingNote) {
       return;
     }
     sendingNote = true;
     refusal = null;
     try {
-      await sendDecision(projectId, name, words);
+      await sendDecision(projectId, name, said);
       note = "";
       await load();
     } catch (error) {
@@ -215,7 +216,7 @@
       <div class="head-row">
         <Button class="back" onclick={onback} size="sm" variant="ghost">
           <IconChevronLeft />
-          <span>Decisions</span>
+          <span>{words.tab}</span>
         </Button>
         <div data-slot="what" class="what">
           <span
@@ -253,7 +254,7 @@
     </div>
 
     {#if unread && !read}
-      <p class="problem" role="alert">This page didn't read: {unread}</p>
+      <p class="problem" role="alert">{words.unread(unread)}</p>
     {:else if read?.record}
       <div class="records">
         {#each read.record.cards as each (each.id)}
@@ -270,10 +271,7 @@
         title={read.title}
       />
     {:else if read}
-      <p class="problem">
-        This page's session is gone from the hub, so the page can't be shown
-        here.
-      </p>
+      <p class="problem">{words.gone}</p>
     {:else}
       <div aria-hidden="true" class="opening">
         <span
@@ -302,7 +300,7 @@
     <div data-slot="cin" class="cin kit-dock-shell">
       <Textarea
         data-note
-        aria-label="Add a note for the session"
+        aria-label={words.noteLabel}
         class="note"
         oninput={() => {
           refusal = null;
@@ -313,12 +311,12 @@
             sendNote();
           }
         }}
-        placeholder="Add a note…"
+        placeholder={words.note}
         rows={1}
         bind:value={note}
       />
       <Button
-        aria-label="Send"
+        aria-label={words.send}
         class="ctl"
         disabled={!note.trim()}
         icon={IconSend}

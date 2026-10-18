@@ -1030,8 +1030,9 @@ final class PromptBar: UIControl {
 /// of them), it is one full-width row: the keycap leading at the label's
 /// top, the label at the strong weight, and the description under it in
 /// the meta role and muted ink, wrapping in full, never cut. Picked, the
-/// same edge, fill and keycap, at the same size.
-final class OptionChip: UIControl {
+/// same edge, fill and keycap, at the same size. A decided record's card
+/// draws its options with it too, inert (RecordCardView).
+public final class OptionChip: UIControl {
     private let keycap = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
     private let cap = UIView()
     private let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
@@ -1043,7 +1044,7 @@ final class OptionChip: UIControl {
     var probeDetail: Int { detail.isHidden ? 0 : (detail.text ?? "").count }
     #endif
 
-    init(key: Int, label: String, detail words: String? = nil, listed: Bool = false) {
+    public init(key: Int, label: String, detail words: String? = nil, listed: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusSm
@@ -1115,11 +1116,11 @@ final class OptionChip: UIControl {
     }
 
     @available(*, unavailable)
-    required init?(coder _: NSCoder) {
+    public required init?(coder _: NSCoder) {
         fatalError("OptionChip is built in code")
     }
 
-    func configure(selected: Bool, live: Bool, enabled: Bool) {
+    public func configure(selected: Bool, live: Bool, enabled: Bool) {
         selectedNow = selected
         isEnabled = enabled
         cap.alpha = selected || live ? 1 : 0.45
@@ -1135,7 +1136,7 @@ final class OptionChip: UIControl {
         keycap.ink = selectedNow ? Palette.chipChosenInk : Palette.inkStrong
     }
 
-    override var isHighlighted: Bool {
+    override public var isHighlighted: Bool {
         didSet { paint() }
     }
 }

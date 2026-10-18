@@ -128,6 +128,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
       { file: "words/connection.ts", export: "connectionWords", as: "" },
     ],
   },
+  {
+    // A project's Decisions tab: its tiles, a page's head, acts and record.
+    swift: "Decisions",
+    members: [{ file: "words/decisions.ts", export: "decisionsWords", as: "" }],
+  },
 ];
 
 /** The helpers a word may call, and their Swift twins. */

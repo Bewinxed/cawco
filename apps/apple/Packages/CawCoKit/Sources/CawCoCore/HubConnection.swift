@@ -221,6 +221,24 @@ public final class HubConnection {
     /// changes (`thread.upsert`): Caw drafts a view in a thread, so the
     /// project's views are read again when it moves, as the web's are.
     public private(set) var threadsMoved: [String: Int] = [:]
+    /// A count per project that moves each time its decision pages change
+    /// (`decisions.changed`: one built, picked on or sent, its record
+    /// written): the Decisions tab and its strip count read them again.
+    public private(set) var decisionsChanged: [String: Int] = [:]
+    /// A count per project that moves each time its arrangement of blocks
+    /// changes (`blocks.changed`), here or on another screen: its pages read it again.
+    public private(set) var blocksChanged: [String: Int] = [:]
+    /// Each project's starters by place, as the hub last wrote them since
+    /// this connection (`starters.changed`): a set written after a page read
+    /// its stages replaces the one they carried (client.svelte.ts `startersOf`).
+    public private(set) var starters: [String: [Components.Schemas.ProjectStarter]] = [:]
+
+    /// A project's starters for `place`: the hub's newest set, else the one its stages read carried.
+    public func startersOf(_ projectId: String, _ place: Components.Schemas.StarterPlace,
+                           read: [Components.Schemas.ProjectStarter]?) -> [Components.Schemas.ProjectStarter] {
+        starters["\(place.rawValue):\(projectId)"] ?? read ?? []
+    }
+
     /// Every project's threads with its Caw, and the messages of those opened here.
     public private(set) var threads: ThreadsStore!
     /// The plans followed beside the sessions streamed: a thread's lead's.
@@ -1597,6 +1615,12 @@ public final class HubConnection {
             fleet.moves = jobs
         case let .tasksChanged(projectId):
             tasksChanged[projectId, default: 0] += 1
+        case let .decisionsChanged(projectId):
+            decisionsChanged[projectId, default: 0] += 1
+        case let .blocksChanged(projectId):
+            blocksChanged[projectId, default: 0] += 1
+        case let .startersChanged(frame):
+            starters["\(frame.place.rawValue):\(frame.projectId)"] = frame.starters
         case .projectsChanged:
             readProjects()
         case let .projectStop(frame):

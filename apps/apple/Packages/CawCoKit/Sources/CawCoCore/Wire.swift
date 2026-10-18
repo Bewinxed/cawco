@@ -248,6 +248,12 @@ enum Frame {
     case moves([Components.Schemas.MoveJob])
     /// A project's tasks changed, by anyone: whatever shows them reads them again.
     case tasksChanged(projectId: String)
+    /// A project's decision pages changed: the Decisions tab reads them again.
+    case decisionsChanged(projectId: String)
+    /// A project's arrangement of blocks changed: its pages read it again.
+    case blocksChanged(projectId: String)
+    /// A project's starters for one place, whole, written again.
+    case startersChanged(Components.Schemas.StartersChangedFrame)
     /// The projects changed (one made, renamed or forgotten, a place come or gone): read them again.
     case projectsChanged
     /// One session a forget asked to stop: stopped as its machine confirmed, refused, or owed to its machine's return.
@@ -309,6 +315,12 @@ enum Frame {
             self = .moves(frame.moves)
         case .tasks_changed(let frame):
             self = .tasksChanged(projectId: frame.projectId)
+        case .decisions_changed(let frame):
+            self = .decisionsChanged(projectId: frame.projectId)
+        case .blocks_changed(let frame):
+            self = .blocksChanged(projectId: frame.projectId)
+        case .starters_changed(let frame):
+            self = .startersChanged(frame)
         case .projects_changed:
             self = .projectsChanged
         case .project_stop(let frame):

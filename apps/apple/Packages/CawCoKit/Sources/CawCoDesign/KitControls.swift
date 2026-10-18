@@ -15,10 +15,14 @@ public final class SegmentedTabs: UIControl {
         public let glyph: Glyph?
         /// A secondary badge after the name, `space-1` from it.
         public let badge: String?
-        public init(_ label: String, glyph: Glyph? = nil, badge: String? = nil) {
+        /// A count after the name (the project strip's `.tab-num`: the
+        /// decision pages waiting on picks), `space-1` from it.
+        public let count: Int?
+        public init(_ label: String, glyph: Glyph? = nil, badge: String? = nil, count: Int? = nil) {
             self.label = label
             self.glyph = glyph
             self.badge = badge
+            self.count = count
         }
     }
 
@@ -147,7 +151,13 @@ public final class SegmentedTabs: UIControl {
             label.text = item.label
             let badge = item.badge.map { KitBadge($0, variant: .secondary) }
             badge?.isAccessibilityElement = false
-            let row = UIStackView(arrangedSubviews: [glyph, label, badge].compactMap(\.self))
+            let count = item.count.map { value in
+                let number = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+                number.text = "\(value)"
+                number.tabular = true
+                return number
+            }
+            let row = UIStackView(arrangedSubviews: [glyph, label, badge ?? count].compactMap(\.self))
             row.spacing = 6
             row.setCustomSpacing(Space.space1, after: label)
             row.alignment = .center
@@ -161,7 +171,7 @@ public final class SegmentedTabs: UIControl {
             ])
             addTarget(self, action: #selector(tapped), for: .touchUpInside)
             isAccessibilityElement = true
-            accessibilityLabel = [item.label, item.badge].compactMap(\.self).joined(separator: ", ")
+            accessibilityLabel = [item.label, item.badge, item.count.map(String.init)].compactMap(\.self).joined(separator: ", ")
             addInteraction(UIPointerInteraction(delegate: nil))
         }
 

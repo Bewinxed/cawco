@@ -169,6 +169,14 @@ const SOLAR_ICONS = [
   // The task sheet's result kinds (tasks/ResultView.svelte).
   "layers-bold-duotone", // IconLayers: data
   "clipboard-list-bold-duotone", // IconFileTable: table
+  // A project's pages: the Routines ledger, blocks and Caw's starters
+  // (views/ViewRoutines.svelte, blocks/Block.svelte, project/StarterCards.svelte).
+  "hourglass-bold-duotone", // IconHourglass: a routine turning itself off
+  "arrow-down-linear", // IconArrowDown: Move down
+  "calendar-bold-duotone", // IconCalendar
+  "widget-2-bold-duotone", // IconColumns
+  "ruler-cross-pen-bold-duotone", // IconRulerPen
+  "microphone-bold-duotone", // IconMic
 ];
 
 /**
