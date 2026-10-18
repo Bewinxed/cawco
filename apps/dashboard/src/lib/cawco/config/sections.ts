@@ -14,6 +14,7 @@ import {
   IconDollar,
   IconDownload,
   IconExternal,
+  IconGlobe,
   IconHook,
   IconLock,
   IconPhone,
@@ -58,6 +59,7 @@ const GLYPHS: Record<string, Component> = {
   "smartphone-bold-duotone": IconPhone,
   "lock-keyhole-minimalistic-bold-duotone": IconLock,
   "square-top-down-bold-duotone": IconExternal,
+  "global-bold-duotone": IconGlobe,
   "download-bold-duotone": IconDownload,
 };
 

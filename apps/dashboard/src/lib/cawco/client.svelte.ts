@@ -3283,6 +3283,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "browsers") {
     return;
   }
+  // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
+  if (frame.kind === "stream_relay") {
+    return;
+  }
   // A place's stage clone travels machine → hub only; the hub files it as a workspace.
   if (frame.kind === "stage-clone") {
     return;

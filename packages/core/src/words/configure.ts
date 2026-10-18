@@ -42,6 +42,7 @@ export type ConfigSlug =
   | "phone"
   | "devices"
   | "previews"
+  | "browsers"
   | "updates";
 
 /**
@@ -227,6 +228,17 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "square-top-down-bold-duotone",
     hue: "hue-cyan-400",
+  },
+  {
+    slug: "browsers",
+    group: "Hub",
+    label: "Browsers",
+    purpose:
+      "The stream relay a browser's take-over reaches you through, from any network",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "global-bold-duotone",
+    hue: "hue-blue-500",
   },
   {
     slug: "updates",

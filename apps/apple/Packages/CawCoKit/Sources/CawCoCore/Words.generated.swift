@@ -110,6 +110,7 @@ public enum Words {
             Section(slug: "phone", group: "Hub", label: "Phone", purpose: "Pushes to the CawCo app when something needs you", counted: false, badge: "fleet-faults", icon: "smartphone-bold-duotone", hue: "hue-green-500"),
             Section(slug: "devices", group: "Hub", label: "Devices", purpose: "Which browsers, apps and machines may run your fleet", counted: false, badge: "fleet-faults", icon: "lock-keyhole-minimalistic-bold-duotone", hue: "hue-orange-500"),
             Section(slug: "previews", group: "Hub", label: "Previews", purpose: "How a session's previews are reached, each on an origin of its own", counted: false, badge: "fleet-faults", icon: "square-top-down-bold-duotone", hue: "hue-cyan-400"),
+            Section(slug: "browsers", group: "Hub", label: "Browsers", purpose: "The stream relay a browser's take-over reaches you through, from any network", counted: false, badge: "fleet-faults", icon: "global-bold-duotone", hue: "hue-blue-500"),
             Section(slug: "updates", group: "Hub", label: "Updates", purpose: "The builds your machines run, and when they install them", counted: false, badge: "updates-waiting", icon: "download-bold-duotone", hue: "hue-blue-500"),
         ]
     }
