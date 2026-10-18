@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import Docker from "dockerode";
+import { colimaHome } from "./media-forwarding";
 
 /** A container runtime that answered. */
 export interface Runtime {
@@ -88,7 +89,7 @@ const usualSockets = (): string[] => {
   const runtimeDir = process.env.XDG_RUNTIME_DIR;
   return [
     ...(runtimeDir ? [join(runtimeDir, "podman", "podman.sock")] : []),
-    join(home, ".colima", "default", "docker.sock"),
+    join(colimaHome(), "default", "docker.sock"),
     join(home, ".orbstack", "run", "docker.sock"),
     join(home, ".docker", "run", "docker.sock"),
     "/var/run/docker.sock",

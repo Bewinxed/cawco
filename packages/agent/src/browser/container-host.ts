@@ -4,7 +4,11 @@
  * `cawco-browser-<slug>`, so a project's sign-ins outlive the container.
  * neko's HTTP and Chromium's DevTools are published on 127.0.0.1 alone; the
  * media port, UDP and TCP, on every address, advertised with the machine's
- * own addresses so a screen on the LAN or the tailnet connects directly.
+ * own addresses so a screen on the LAN or the tailnet connects directly. On
+ * a runtime that forwards no UDP (Colima on its ssh forwarder) the media port
+ * is TCP alone and neko's UDP mux is left unset: with a TCP mux and no
+ * ephemeral range, neko enables only TCP network types (webrtc/manager.go),
+ * so it advertises no UDP candidate nobody could reach.
  */
 import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
@@ -13,6 +17,7 @@ import type { BrowserRelay } from "@cawco/core/browser";
 import { browserSlug } from "@cawco/core/browser";
 import type Docker from "dockerode";
 import { ensureImage } from "./image";
+import { mediaForwarding } from "./media-forwarding";
 import type { Runtime } from "./runtime";
 import {
   type BrowserHost,
@@ -89,7 +94,8 @@ const containerName = (record: BrowserRecord): string =>
 const nekoEnv = (
   record: BrowserRecord,
   passwords: { admin: string; user: string },
-  relay: BrowserRelay | undefined
+  relay: BrowserRelay | undefined,
+  udp: boolean
 ): string[] => {
   const { media } = portsOf(record);
   const addresses = machineAddresses();
@@ -108,7 +114,7 @@ const nekoEnv = (
     "NEKO_SESSION_MERCIFUL_RECONNECT=true",
     "NEKO_CAPTURE_VIDEO_CODEC=vp8",
     "NEKO_WEBRTC_ICELITE=false",
-    `NEKO_WEBRTC_UDPMUX=${media}`,
+    ...(udp ? [`NEKO_WEBRTC_UDPMUX=${media}`] : []),
     `NEKO_WEBRTC_TCPMUX=${media}`,
     // A list, space-separated: viper hands the env's string to cast's
     // ToStringSlice, which splits it with strings.Fields.
@@ -149,9 +155,12 @@ export class ContainerHost implements BrowserHost {
   readonly kind = "container";
   readonly viewer = "neko";
   readonly #docker: Docker;
+  /** The runtime's socket: what it forwards is read from it at each start. */
+  readonly #endpoint: string;
 
   constructor(runtime: Runtime) {
     this.#docker = runtime.docker;
+    this.#endpoint = runtime.endpoint;
   }
 
   devtoolsUrl(record: BrowserRecord): string {
@@ -199,15 +208,17 @@ export class ContainerHost implements BrowserHost {
         });
       });
     const kept = record.container;
-    // The same image, and its relay credential good for a day more (or no
-    // relay asked for): the container as it is. Otherwise a new one on the
-    // same volume, with the credential just minted.
+    const forwarding = await mediaForwarding(this.#endpoint);
+    // The same image, the media port published for what the runtime forwards
+    // now, and its relay credential good for a day more (or no relay asked
+    // for): the container as it is. Otherwise a new one on the same volume,
+    // with the credential just minted.
     const relayHolds =
       !options.relay ||
       (record.relayUrls?.join(" ") === options.relay.urls.join(" ") &&
         (record.relayExpiresAt ?? 0) > Date.now() + RELAY_RENEW_MS);
     const reuse =
-      kept && kept.image === image && relayHolds
+      kept && kept.image === image && kept.udp === forwarding.udp && relayHolds
         ? await this.#docker
             .getContainer(kept.id)
             .inspect()
@@ -224,7 +235,18 @@ export class ContainerHost implements BrowserHost {
     let container = kept && reuse ? kept : undefined;
     if (!container) {
       await this.#removeContainer(record);
-      container = await this.#create(record, image, volume, options.relay);
+      if (!forwarding.udp) {
+        console.info(
+          `[browser] ${record.key}: media on TCP alone. ${forwarding.advice}`
+        );
+      }
+      container = await this.#create(
+        record,
+        image,
+        volume,
+        options.relay,
+        forwarding.udp
+      );
     }
     const handle = this.#docker.getContainer(container.id);
     const state = await handle.inspect();
@@ -264,27 +286,34 @@ export class ContainerHost implements BrowserHost {
     record: BrowserRecord,
     image: string,
     volume: string,
-    relay: BrowserRelay | undefined
+    relay: BrowserRelay | undefined,
+    udp: boolean
   ): Promise<NonNullable<BrowserRecord["container"]>> {
     const { http, devtools, media } = portsOf(record);
     const passwords = { admin: password(), user: password() };
+    const mediaProtos = udp ? ["udp", "tcp"] : ["tcp"];
     const created = await this.#docker.createContainer({
       name: containerName(record),
       Image: image,
       Labels: { [BROWSER_LABEL]: record.key },
-      Env: nekoEnv(record, passwords, relay),
+      Env: nekoEnv(record, passwords, relay, udp),
       ExposedPorts: {
         "8080/tcp": {},
         "9222/tcp": {},
-        [`${media}/udp`]: {},
-        [`${media}/tcp`]: {},
+        ...Object.fromEntries(
+          mediaProtos.map((proto) => [`${media}/${proto}`, {}])
+        ),
       },
       HostConfig: {
         PortBindings: {
           "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
           "9222/tcp": [{ HostIp: "127.0.0.1", HostPort: String(devtools) }],
-          [`${media}/udp`]: [{ HostIp: "0.0.0.0", HostPort: String(media) }],
-          [`${media}/tcp`]: [{ HostIp: "0.0.0.0", HostPort: String(media) }],
+          ...Object.fromEntries(
+            mediaProtos.map((proto) => [
+              `${media}/${proto}`,
+              [{ HostIp: "0.0.0.0", HostPort: String(media) }],
+            ])
+          ),
         },
         Mounts: [
           {
@@ -300,6 +329,7 @@ export class ContainerHost implements BrowserHost {
     return {
       id: created.id,
       image,
+      udp,
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,

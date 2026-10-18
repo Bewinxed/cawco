@@ -9,8 +9,10 @@ import type {
 } from "@cawco/core/capabilities";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import { mediaForwarding } from "./browser/media-forwarding";
 import {
   findRuntime,
+  type Runtime,
   runtimeInstallCommand,
   runtimeMissing,
 } from "./browser/runtime";
@@ -202,6 +204,23 @@ async function readVersion(item: MachineCapability): Promise<void> {
   }
 }
 
+/**
+ * A found runtime's report: its socket and version, and whether it forwards
+ * UDP to the browser's media port; when it does not, `reason` tells the
+ * person how to get UDP back.
+ */
+async function foundRuntimeFacts(
+  runtime: Runtime
+): Promise<Pick<MachineCapability, "path" | "reason" | "udp" | "version">> {
+  const forwarding = await mediaForwarding(runtime.endpoint);
+  return {
+    path: runtime.endpoint,
+    version: `${runtime.kind} ${runtime.version}`,
+    udp: forwarding.udp,
+    ...(forwarding.udp ? {} : { reason: forwarding.advice }),
+  };
+}
+
 /** Presence is read fresh on registration and every explicit probe. */
 export async function probeCapabilities(): Promise<MachineCapabilities> {
   probeStarted();
@@ -220,6 +239,10 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . "$HOME/.nvm/nvm.sh" && nvm install 24';
   const opencode = await opencodeBinary();
   const runtime = await findRuntime();
+  const runtimeFacts =
+    "missing" in runtime
+      ? { reason: runtimeMissing() }
+      : await foundRuntimeFacts(runtime);
   const addresses = publicAddresses();
   const opencodeAdvice = await installAdvice("opencode");
   const items: MachineCapability[] = [
@@ -276,12 +299,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       id: "container-runtime",
       available: !("missing" in runtime),
       installCommand: runtimeInstallCommand(),
-      ...("missing" in runtime
-        ? { reason: runtimeMissing() }
-        : {
-            path: runtime.endpoint,
-            version: `${runtime.kind} ${runtime.version}`,
-          }),
+      ...runtimeFacts,
     },
     {
       id: "public-address",

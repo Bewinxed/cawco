@@ -41247,6 +41247,10 @@
           "reason": {
             "type": "string"
           },
+          "udp": {
+            "description": "`container-runtime` only: the runtime forwards UDP to the browser's media port. False, `reason` says how to get it back.",
+            "type": "boolean"
+          },
           "version": {
             "type": "string"
           }

@@ -2,8 +2,10 @@
  * A project's browser on this machine (Projects spec §5.11, build item 1):
  * the container runtime found, our image built, a browser started cold and
  * warm on the container host with its profile kept, the media port
- * published for UDP and TCP on every address, its idle RAM, and the local
- * host (a headless Chromium) when the runtime is hidden. Each start and the
+ * published for UDP and TCP on every address (TCP alone where the runtime
+ * forwards no UDP, as Colima on ssh) with the capability saying the same, its
+ * idle RAM, and the local host (a headless Chromium) when the runtime is
+ * hidden. Each start and the
  * RAM are the measurement table's rows: cold ≤ 15 s on Linux, ≤ 25 s on a
  * Mac; warm ≤ 6 s; idle RAM ≤ 1.2 GB; the local host ≤ 4 s.
  *
@@ -153,10 +155,34 @@ const containerHost = async (
   const tcp = listeners("tcp", media);
   const everywhere = (line: string): boolean =>
     line.includes(`0.0.0.0:${media}`) || line.includes(`*:${media}`);
+  const tool = MAC ? "lsof" : "ss -lunp / ss -ltnp";
+  const bound = `udp: ${udp || "nothing"}; tcp: ${tcp || "nothing"}`;
+  const { mediaForwarding } =
+    await import("../../../packages/agent/src/browser/media-forwarding");
+  const forwarding = await mediaForwarding(runtime.endpoint);
+  if (forwarding.udp) {
+    kit.check(
+      `media ${media} bound udp and tcp on 0.0.0.0 (${tool})`,
+      everywhere(udp) && everywhere(tcp),
+      bound
+    );
+  } else {
+    kit.check(
+      `media ${media} bound tcp on 0.0.0.0 and udp nowhere, the runtime forwarding no UDP (${tool})`,
+      everywhere(tcp) && !udp,
+      bound
+    );
+    kit.note(forwarding.advice);
+  }
+  const { probeCapabilities } =
+    await import("../../../packages/agent/src/capabilities");
+  const capability = (await probeCapabilities()).items.find(
+    (item) => item.id === "container-runtime"
+  );
   kit.check(
-    `media ${media} bound udp and tcp on 0.0.0.0 (${MAC ? "lsof" : "ss -lunp / ss -ltnp"})`,
-    everywhere(udp) && everywhere(tcp),
-    `udp: ${udp || "nothing"}; tcp: ${tcp || "nothing"}`
+    `container-runtime capability udp=${capability?.udp} matches udp bound=${everywhere(udp)}`,
+    capability?.udp === everywhere(udp),
+    JSON.stringify(capability)
   );
 
   const first = await recordOf(data, CONTAINER_KEY);

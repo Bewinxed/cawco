@@ -21,6 +21,8 @@ export interface MachineCapability {
   installCommand: string;
   path?: string;
   reason?: string;
+  /** `container-runtime` only: the runtime forwards UDP to the browser's media port. False, `reason` says how to get it back. */
+  udp?: boolean;
   version?: string;
 }
 export interface MachineCapabilities {
